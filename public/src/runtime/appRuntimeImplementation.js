@@ -5,10 +5,10 @@ import { get, writable } from "svelte/store";
 import { installAuthenticatedFetch } from "./authClient.js";
 import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
-import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./transcriptRuntime.js";
-import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./eventControllers.js";
-import { createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, runCanonicalReload } from "./eventStream.js";
+import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./transcriptRuntime.js";
+import { processEventMessage, runCanonicalReload } from "./eventStream.js";
 import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
+import { createPlatformEventDispatch } from "../platform/createPlatformEventDispatch.js";
 import { installDebugHooks } from "./debugHooks.js";
 import { createDelayedTaskRegistry } from "./delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
@@ -104,13 +104,14 @@ export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history } = browser;
   void stores;
 
+let platformEvents;
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => ({
     runner: currentRunner,
     sessionId: state?.sessionId ?? null,
-    replaying,
+    replaying: platformEvents?.snapshot().replaying ?? true,
     transcriptGateRequired,
-    replayDoneSeen,
+    replayDoneSeen: platformEvents?.snapshot().replayDoneSeen ?? false,
     connected,
   }),
 });
@@ -464,14 +465,14 @@ const managedConnection = createManagedEventConnection({
   requireToken,
   setGate: setTranscriptGateRequired,
   setReplaying,
-  setReplayDoneSeen: (value) => { replayDoneSeen = value; },
-  setReplayBuffer: (value) => { replayBufferedEvents = value; },
+  setReplayDoneSeen: (value) => platformEvents.markReplayDone(value),
+  setReplayBuffer: (value) => platformEvents.setReplayBuffer(value),
   getSkipTranscriptGate: () => currentRunner && emptySessionRunners.has(currentRunner),
   getRunner: () => currentRunner,
   log: lifecycleLog,
   onOpen: async ({ replay, skipTranscriptGate, started }) => {
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); managedConnection.state.opened();
-    await runCanonicalReload({ skipTranscriptGate, isReplaying: () => replaying, setReplaying, refreshState, reloadTranscript,
+    await runCanonicalReload({ skipTranscriptGate, isReplaying: () => platformEvents.isReplaying(), setReplaying, refreshState, reloadTranscript,
       onError: (error) => { if (!String(error.message).includes("unauthorized")) addToast(`init failed: ${error.message}`, "error"); }, });
   },
   onError: () => { managedConnection.state.reconnecting(); probeTokenValidity(); },
@@ -482,15 +483,6 @@ const managedConnection = createManagedEventConnection({
 const { coordinator: connectionCoordinator, watchdog: teardownReconnectWatchdog } = managedConnection;
 const connect = connectionCoordinator.connect;
 
-// True from (re)connect until the canonical transcript's tail is rendered.
-// This covers BOTH the SSE replay buffer and the live events of a busy
-// runner: rendering either before reloadTranscript() has rebuilt the
-// transcript would paint duplicates onto the preview and fight its scroll
-// position. reloadTranscript() lifts the gate the moment the tail is in the
-// DOM (live events append below it just fine while history backfills above).
-let replaying = true;
-let replayDoneSeen = false;
-let replayBufferedEvents = [];
 let transcriptGateRequired = true;
 const isDuplicateSseEvent = createLoggedSseDeduper({ log: lifecycleLog });
 const emptySessionRunners = new Set();
@@ -499,152 +491,37 @@ function setTranscriptGateRequired(value) {
   transcriptGateRequired = !!value;
   updateAppSession({ transcriptGateRequired });
 }
-const composerReadyForSend = () => isComposerReadyForSend({ connected, replaying, transcriptGateRequired });
-function setReplaying(value, phase = null) {
-  const next = !!value;
-  if (replaying !== next || phase) lifecycleLog("setReplaying", { from: replaying, to: next, phase });
-  replaying = next;
-  updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
-}
-const flushReplayBufferedEvents = createReplayBufferFlusher({
+function setReplaying(value, phase = null) { platformEvents.setReplaying(value, phase); }
+function handleEvent(msg) { return platformEvents.dispatch(msg); }
+const composerReadyForSend = () => platformEvents.isComposerReady(connected, transcriptGateRequired);
+platformEvents = createPlatformEventDispatch({
   log: lifecycleLog,
+  updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
   assistantAlreadyRendered,
-  dispatch: handleEvent,
-});
-
-const extensionUiEvent = createExtensionUiEventController({ handleRequest: (message) => handleExtensionUI(message) });
-const replayDoneEvent = createReplayDoneEventController({
-  markReplayDone: () => { replayDoneSeen = true; },
-  isReplaying: () => replaying,
-  setReplaying,
+  handleExtensionUI: (message) => handleExtensionUI(message),
   setRunner,
   setRunners: setRunnersNow,
   setWorkdir,
   refreshHublots: () => loadHublots(),
   refreshRoutines: loadRoutines,
-});
-const runnerPingEvent = createRunnerPingEventController({
-  currentRunners: () => runnersNow,
-  setRunners: setRunnersNow,
+  getRunners: () => runnersNow,
   onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
   refreshTree: refreshTreeIfOpen,
-});
-const runnersUpdate = createRunnersUpdateController({ setRunners: setRunnersNow, onRunnersChanged: (runners) => onRunnersUpdate?.(runners), refreshTree: refreshTreeIfOpen });
-const routineEvent = createRoutineStreamEventController({ isReplaying: () => replaying, update: (...args) => routineSidebarController.update(...args), toast: addToast });
-const hublotEvent = createHublotEventController({
-  isReplaying: () => replaying,
+  updateRoutine: (...args) => routineSidebarController.update(...args),
   toast: addToast,
-  refreshHublots: () => loadHublots(),
   scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
   openUrl: (url) => window.open(url, "_blank"),
-});
-const responseEvent = createResponseEventController({ handleResponse, refreshRequired: stateRefreshRequired, refreshState });
-const codeReload = createCodeReloadController({ isReplaying: () => replaying, toast: addToast, reloadPage: () => location.reload() });
-const piStarted = createPiStartedController({ isReplaying: () => replaying, toast: addToast, reloadTranscript: () => reloadTranscript() });
-const runnerUnhealthy = createRunnerUnhealthyController({ isReplaying: () => replaying, toast: addToast, setBusy });
-const piError = createPiErrorController({ isReplaying: () => replaying, toast: addToast });
-const runnerExit = createRunnerExitController({
-  isReplaying: () => replaying,
-  toast: addToast,
+  handleResponse,
+  refreshState,
+  reloadPage: () => location.reload(),
+  reloadTranscript: () => reloadTranscript(),
   setBusy,
-});
-
-const replayEventGate = createReplayEventGate({
-  isReplaying: () => replaying,
   isGateRequired: () => transcriptGateRequired,
-  isReplayDone: () => replayDoneSeen,
-  buffer: (message) => replayBufferedEvents.push(message),
-  gatedTypes: REPLAY_GATED_EVENT_TYPES,
-  log: lifecycleLog,
+  agentStart: () => agentStart(),
+  agentCompletion: () => agentCompletion(),
+  transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
 });
-
-function handleEvent(msg) {
-  if (eventLifecycleLogged(msg.type)) {
-    lifecycleLog("sse:event", { type: msg.type, command: msg.command, sseId: msg._sseId, role: msg.message?.role, runner: msg.runner });
-  }
-  // While the SSE replay buffer is being re-delivered, ignore old transcript-
-  // rendering events: reloadTranscript() rebuilds the canonical state, so
-  // rendering replayed copies would duplicate messages/tool cards. Once the
-  // server has sent replay_done, any further events are live events that can
-  // arrive while reloadTranscript() is still awaiting get_state/get_messages;
-  // buffer those and flush them after the canonical tail is on screen. Without
-  // this, a response that finishes during reconnect can be dropped until the
-  // user refreshes the page.
-  if (replayEventGate(msg)) return;
-  switch (msg.type) {
-    case "ping":
-      // Pings carry authoritative runner liveness via the runtime controller.
-      runnerPingEvent(msg);
-      return;
-
-    case "replay_done":
-      // The canonical transcript render, not this event, opens the live gate.
-      replayDoneEvent(msg);
-      return;
-
-    case "runners_update":
-      runnersUpdate(msg);
-      return;
-
-    case "response":
-      responseEvent(msg);
-      return;
-
-    case "agent_start":
-      agentStart();
-      return;
-
-    case "agent_end":
-      agentCompletion();
-      return;
-
-    case "message_start":
-    case "message_update":
-    case "message_end":
-    case "tool_execution_start":
-    case "tool_execution_update":
-    case "tool_execution_end":
-      transcriptFeature.dispatch(msg);
-      return;
-
-    case "extension_ui_request":
-      extensionUiEvent(msg);
-      return;
-
-    case "pi_exit":
-      runnerExit();
-      return;
-
-    case "pi_started":
-      piStarted(msg);
-      return;
-
-    case "pi_error":
-      piError(msg);
-      return;
-
-    case "runner_unhealthy":
-      runnerUnhealthy(msg);
-      return;
-
-    case "ui_reload":
-    case "code_reloaded":
-    case "code_reload_failed":
-      codeReload(msg);
-      return;
-
-    case "tunnel_opened":
-    case "hublot_ready":
-    case "hublot_failed":
-    case "tunnel_closed":
-      hublotEvent(msg);
-      return;
-
-    case "routine_update":
-      routineEvent(msg);
-      return;
-  }
-}
+const flushReplayBufferedEvents = platformEvents.flushBufferedEvents;
 
 const afterTranscriptRender = createTranscriptAfterRenderController({
   annotate: () => annotateTranscriptEntries(),
@@ -666,17 +543,13 @@ const reloadTranscript = createCanonicalTranscriptController({
   log: lifecycleLog,
   render: renderTranscript,
   setReplaying,
-  takeBufferedEvents: () => {
-    const buffered = replayBufferedEvents;
-    replayBufferedEvents = [];
-    return buffered;
-  },
+  takeBufferedEvents: platformEvents.takeBufferedEvents,
   flushBufferedEvents: flushReplayBufferedEvents,
   afterRender: afterTranscriptRender,
 });
 
 const transcriptSyncScheduler = createTranscriptSyncScheduler({
-  isReplaying: () => replaying,
+  isReplaying: () => platformEvents.isReplaying(),
   hasRunner: () => Boolean(currentRunner),
   reload: reloadTranscript,
   onError: (label, error) => {
@@ -1560,13 +1433,13 @@ const detachRuntimeEventAdapters = () => {
 };
 const runtimeTeardown = createRuntimeCleanup({
   closeEventStream: () => connectionCoordinator.disconnect(),
-  clearEventSource: () => { es = null; },
+  clearEventSource: () => {},
   disposeRpc: disposeRpcClient,
   stopWatchdog: teardownReconnectWatchdog,
   detachEventAdapters: detachRuntimeEventAdapters,
   detachAttachments: () => runtimeAttachments.detach(),
   cancelDelayedTasks: () => delayedTasks.cancelAll(),
-  loseConnection: () => connectionState.lost(),
+  loseConnection: () => managedConnection.state.lost(),
 });
 
 const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
