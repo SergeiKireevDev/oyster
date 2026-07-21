@@ -89,6 +89,10 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
  *   require runtime-owned transport or session lifecycle coordination.
  */
 
+export function createApplicationRuntimeDependencies(browser, stores = {}) {
+  const { window, document, location, history } = browser;
+  void stores;
+
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => ({
     runner: currentRunner,
@@ -1757,7 +1761,6 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   applyCarousel: () => carouselController.apply(),
 });
 
-export function createAppRuntimeDependencies() {
   return assembleRuntimeLifecycleDependencies({
     attachAuthenticatedFetch: runtimeAttachments.attachAuthenticatedFetch,
     attachEventAdapters: runtimeEventAdapters.attach,
@@ -1765,5 +1768,10 @@ export function createAppRuntimeDependencies() {
     start: runtimeStarter,
     teardown: runtimeTeardown,
   });
+}
+
+/** @deprecated Use createApplicationRuntimeDependencies with explicit adapters. */
+export function createAppRuntimeDependencies() {
+  return createApplicationRuntimeDependencies({ window, document, location, history });
 }
 

@@ -6,11 +6,11 @@ export function createAppRuntimeStarter({ browser, stores, loadDependencies }) {
 
   return async function startAppRuntime() {
     if (!runtime) {
-      const { createAppRuntimeDependencies } = await loadDependencies();
+      const { createApplicationRuntimeDependencies } = await loadDependencies();
       runtime = createAppRuntime({
         browser,
         stores,
-        createRuntime: () => createAppRuntimeDependencies(),
+        createRuntime: ({ browser, stores }) => createApplicationRuntimeDependencies(browser, stores),
       });
     }
     runtime.start();

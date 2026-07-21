@@ -126,9 +126,7 @@ Move module-level mutable construction in
 `appRuntimeImplementation.js` behind a factory, initially without moving
 features.
 
-- Create `createApplicationRuntimeDependencies(browser, stores)` (or move the
-  implementation behind an equivalent factory) so all state is per runtime
-  instance.
+- [x] Create `createApplicationRuntimeDependencies(browser, stores)` (or move the implementation behind an equivalent factory) so all state is per runtime instance.
 - Pass browser adapters (`window`, `document`, `location`, `history`, fetch,
   timers, storage) through the factory rather than reading globals during
   construction.

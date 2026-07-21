@@ -38,7 +38,7 @@ test("application runtime starter creates fresh dependencies after teardown", as
       dependencyInstances += 1;
       const instance = dependencyInstances;
       return {
-        createAppRuntimeDependencies() {
+        createApplicationRuntimeDependencies() {
           return {
             attachAuthenticatedFetch: () => calls.push(`auth:${instance}`),
             attachEventAdapters: () => calls.push(`adapters:${instance}`),
