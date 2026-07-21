@@ -188,6 +188,7 @@ After several migrations:
 - ✅ Moved the latest-message checkpoint iceberg’s placement and busy rendering into `checkpointMarker` store state and Svelte transcript components. Legacy retains only checkpoint API/model-picker orchestration.
 - ✅ Moved per-message checkpoint frozen styling, rollback arrows, and rollback busy rendering into `checkpointRestores` store state and Svelte transcript components. Legacy retains checkpoint lookup/alignment and rollback API orchestration.
 - ✅ Moved transcript-root item ownership to `transcriptItems` store and keyed `Transcript.svelte` rendering; removed imperative per-message Svelte mounting, unmounting, DOM clearing, and prepend/reorder operations from `legacy.js`. Legacy retains stream assembly, tail-first chunk scheduling, and scroll correction.
+- ✅ Isolated transcript item construction, streaming item updates, and tail-first backfill scheduling in importable transcript action modules; legacy supplies orchestration callbacks and SSE/RPC timing only.
 
 Keep doing this periodically after further migrations:
 
@@ -217,10 +218,6 @@ For visual/interactive changes, optionally run:
 cd tests/e2e && E2E_VIDEO=1 npm test
 ```
 
-## Recommended Next Target
+## Migration Status
 
-Move remaining transcript orchestration helpers into an action/store boundary:
-
-- Keep SSE/RPC ownership in `legacy.js` initially, but isolate transcript item construction, streaming updates, and backfill operations behind an importable transcript action module.
-- Preserve `#messages`, transcript selectors, tail-first backfill, scroll correction, and existing e2e behavior.
-- Reduce direct legacy knowledge of transcript component props before migrating another feature domain.
+All planned Svelte rendering and store-migration steps are complete. Legacy retains deliberate orchestration responsibilities (SSE/RPC lifecycle, session switching, API calls, and scroll timing); further work should target action-module extraction and bridge reduction only when it improves a concrete behavior or maintainability concern.
