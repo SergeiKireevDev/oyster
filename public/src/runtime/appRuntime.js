@@ -29,7 +29,7 @@ export function startAppRuntime() {
   browserStarter ??= createAppRuntimeStarter({
     browser: { window, document, location, history, find: (id) => document.getElementById(id) },
     stores: {},
-    loadDependencies: () => import("./appRuntimeImplementation.js"),
+    loadDependencies: () => import("./appComposition.js"),
   });
   return browserStarter();
 }

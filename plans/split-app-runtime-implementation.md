@@ -306,7 +306,7 @@ lines. Complete the remaining migration in small verified commits:
   blocks into feature factories with teardown ownership.
 - [x] Remove obsolete event-controller imports and compatibility adapters only
   after an `rg` no-reference check and focused regression coverage.
-- [ ] Rename or replace `appRuntimeImplementation.js` with a thin composition
+- [x] Rename or replace `appRuntimeImplementation.js` with a thin composition
   module. Its responsibilities are limited to adapter creation, feature
   construction order, cross-feature interfaces, `start`, and `teardown`.
 - [ ] Add a regression guard that the composition root has no feature-local

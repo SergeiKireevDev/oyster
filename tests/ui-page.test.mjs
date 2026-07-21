@@ -29,7 +29,7 @@ test("Svelte entry module is wired from index.html", () => {
 
 test("app runtime explicitly starts the application composition root", () => {
   assert.match(appRuntime, /import \{ createAppRuntime \} from "\.\/createAppRuntime\.js";/);
-  assert.match(appRuntime, /loadDependencies: \(\) => import\("\.\/appRuntimeImplementation\.js"\)/);
+  assert.match(appRuntime, /loadDependencies: \(\) => import\("\.\/appComposition\.js"\)/);
   assert.match(appRuntime, /runtime\.start\(\);/);
   assert.match(appRuntime, /runtime = null;/);
   assert.doesNotMatch(runtimeImplementation, /if \(!token\) requireToken\(\);\nelse boot\(\);/);
