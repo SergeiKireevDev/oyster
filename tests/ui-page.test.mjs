@@ -14,6 +14,7 @@ const src = join(root, "public", "src");
 const html = readFileSync(join(root, "public", "index.html"), "utf8");
 const js = readFileSync(join(src, "legacy.js"), "utf8");
 const entry = readFileSync(join(src, "main.js"), "utf8");
+const appRuntime = readFileSync(join(src, "runtime", "appRuntime.js"), "utf8");
 const svelteFiles = [
   join(src, "App.svelte"),
   ...readdirSync(join(src, "components")).filter((f) => f.endsWith(".svelte")).map((f) => join(src, "components", f)),
@@ -24,6 +25,13 @@ test("Svelte entry module is wired from index.html", () => {
   assert.match(html, /<script\s+type="module"\s+src="\/src\/main\.js"><\/script>/);
   assert.match(entry, /import App from "\.\/App\.svelte";/);
   assert.match(entry, /mount\(App, \{ target: document\.body \}\);/);
+});
+
+test("app runtime explicitly starts the deferred legacy bootstrap", () => {
+  assert.match(appRuntime, /const \{ startLegacyRuntime \} = await import\("\.\.\/legacy\.js"\);/);
+  assert.match(appRuntime, /startLegacyRuntime\(\);/);
+  assert.match(js, /export function startLegacyRuntime\(\)/);
+  assert.doesNotMatch(js, /if \(!token\) requireToken\(\);\nelse boot\(\);/);
 });
 
 test("legacy UI module parses (node --check)", () => {

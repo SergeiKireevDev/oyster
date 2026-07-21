@@ -2136,5 +2136,12 @@ async function boot() {
   connect();
 }
 
-if (!token) requireToken();
-else boot();
+let started = false;
+
+/** Start legacy-owned transport and session boot only after Svelte has mounted. */
+export function startLegacyRuntime() {
+  if (started) return;
+  started = true;
+  if (!token) requireToken();
+  else boot();
+}
