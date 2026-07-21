@@ -1,14 +1,14 @@
 <script>
-  import { derived } from "svelte/store";
   import ToolCard from "./ToolCard.svelte";
+  import { subscribeStoreGroup } from "../../lib/storeGroup.js";
 
   let { blocks = [] } = $props();
 
-  const cardsStore = $derived(derived(
+  let cards = $state([]);
+  $effect(() => subscribeStoreGroup(
     blocks.map((block) => block.cardStore),
-    (cards) => cards,
+    (values) => { cards = values; },
   ));
-  const cards = $derived($cardsStore);
   const running = $derived(cards.filter((card) => card.status === "running").length);
   const failed = $derived(cards.filter((card) => card.status === "error").length);
   const toolSummary = $derived(summarizeTools(cards));
