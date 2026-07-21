@@ -775,6 +775,20 @@ export function init(state) {
     return rec;
   }
 
+  /** Forked sessions are born with the placeholder name "\u23EA <hash>"; the
+   *  first prompt sent to one replaces it with a short title based on that
+   *  message, so forks read like what they went on to do. */
+  function autoTitleFork(runner, cmd) {
+    if (cmd.type !== "prompt" || typeof cmd.message !== "string") return;
+    if (!/^\u23EA [0-9a-f]{4,12}$/.test(runner.sessionName ?? "")) return;
+    const title = cmd.message.replace(/\s+/g, " ").trim();
+    if (!title) return;
+    const short = title.length > 42 ? title.slice(0, 41).trimEnd() + "\u2026" : title;
+    sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${short}` }, { autostart: false });
+    runner.sessionName = `\u23EA ${short}`; // optimistic until get_state confirms
+    runnersChanged();
+  }
+
   /** Deterministic session fork: copy the active-branch chain up to `leafId`
    *  into a new .jsonl (same entry ids, parentSession lineage) — the same
    *  shape pi's own /fork produces, minus any LLM involvement. */
@@ -1026,6 +1040,7 @@ export function init(state) {
       }
       const runner = runnerFromReq(url);
       const ok = sendToRunner(runner, cmd);
+      if (ok) autoTitleFork(runner, cmd);
       json(res, ok ? 202 : 503, ok ? { queued: true, runner: runner.id } : { error: "pi process unavailable" });
       return;
     }
@@ -1534,6 +1549,7 @@ export function init(state) {
         // 4. attach a runner to the fork and hand it to the client
         const runner = openSessionRunner({ sessionPath: fork.path, dir: cp.dir });
         sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${hash}` });
+        runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
         console.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
         json(res, 200, { rolledBack: hash, safety, fork: { id: fork.id, path: fork.path }, runner: runnerInfo(runner) });
       } catch (e) {
