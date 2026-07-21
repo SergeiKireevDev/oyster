@@ -8,6 +8,26 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   refreshRoutines();
 }
 
+export function createHublotEventController({ isReplaying, toast, refreshHublots, scheduleRefresh, openUrl }) {
+  return (message) => {
+    if (isReplaying()) return false;
+    const tunnel = message.tunnel ?? {};
+    switch (message.type) {
+      case "tunnel_opened":
+        toast(`hublot up: ${tunnel.url} → :${tunnel.port}`, "info", { onClick: () => openUrl(tunnel.url) });
+        refreshHublots();
+        return true;
+      case "hublot_ready":
+        toast(`hublot ready: ${tunnel.url}`, "info", { onClick: () => openUrl(tunnel.url) });
+        refreshHublots(); scheduleRefresh(5000); scheduleRefresh(15000);
+        return true;
+      case "hublot_failed": toast(`hublot failed: ${message.error ?? "unknown error"}`, "error"); return true;
+      case "tunnel_closed": toast(`hublot closed: :${tunnel.port}`, "warning"); refreshHublots(); return true;
+      default: return false;
+    }
+  };
+}
+
 export function registerFileUploadInput(target, onChange) {
   target.addEventListener("change", onChange);
   return () => target.removeEventListener("change", onChange);

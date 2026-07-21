@@ -5,6 +5,13 @@ import { createComposerEventController } from "../public/src/lib/composerControl
 import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
+import { createHublotEventController } from "../public/src/runtime/eventControllers.js";
+
+test("hublot stream controller refreshes previews and schedules ready retries", () => {
+  const calls = []; const controller = createHublotEventController({ isReplaying: () => false, toast: (...args) => calls.push(["toast", ...args]), refreshHublots: () => calls.push("refresh"), scheduleRefresh: (ms) => calls.push(["schedule", ms]), openUrl: (url) => calls.push(["open", url]) });
+  assert.equal(controller({ type: "hublot_ready", tunnel: { url: "https://example.test" } }), true);
+  assert.deepEqual(calls.slice(1), ["refresh", ["schedule", 5000], ["schedule", 15000]]);
+});
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);

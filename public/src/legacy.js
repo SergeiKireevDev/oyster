@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
+import { createHublotEventController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createPiErrorController, createReplayEventGate, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
@@ -572,6 +572,13 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
   dispatch: handleEvent,
 });
 
+const hublotEvent = createHublotEventController({
+  isReplaying: () => replaying,
+  toast: addToast,
+  refreshHublots: () => loadHublots(),
+  scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
+  openUrl: (url) => window.open(url, "_blank"),
+});
 const piError = createPiErrorController({ isReplaying: () => replaying, toast: addToast });
 const runnerExit = createRunnerExitController({
   isReplaying: () => replaying,
@@ -705,37 +712,10 @@ function handleEvent(msg) {
       return;
 
     case "tunnel_opened":
-      if (!replaying) {
-        addToast(`hublot up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
-          onClick: () => window.open(msg.tunnel?.url, "_blank"),
-        });
-        loadHublots();
-      }
-      return;
-
     case "hublot_ready":
-      if (!replaying) {
-        addToast(`hublot ready: ${msg.tunnel?.url}`, "info", {
-          onClick: () => window.open(msg.tunnel?.url, "_blank"),
-        });
-        // rebuild previews now, then again shortly after: recreating the
-        // iframe is the only way to reload a possibly-captured error page,
-        // and the edge can lag a moment behind the ready signal
-        loadHublots();
-        delayedTasks.schedule(loadHublots, 5000);
-        delayedTasks.schedule(loadHublots, 15000);
-      }
-      return;
-
     case "hublot_failed":
-      if (!replaying) addToast(`hublot failed: ${msg.error ?? "unknown error"}`, "error");
-      return;
-
     case "tunnel_closed":
-      if (!replaying) {
-        addToast(`hublot closed: :${msg.tunnel?.port}`, "warning");
-        loadHublots();
-      }
+      hublotEvent(msg);
       return;
 
     case "routine_update": {
