@@ -42,6 +42,7 @@ import { promptCommand } from "./lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
+import { createHublotController } from "./lib/hublotController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -1945,26 +1946,15 @@ async function showHublots() {
   await refreshHublotManager({ loading: true });
 }
 
-async function createManagedHublot(descText) {
-  const desc = (descText ?? "").trim();
-  tunnelForm.desc = descText ?? "";
-  updateHublotManager({ desc: tunnelForm.desc });
-  if (!desc) { toast("describe what the hublot should expose", "warning"); return; }
-  updateHublotManager({ creating: true });
-  try {
-    // no port sent: the server allocates the next free one from 3000 up;
-    // a `brief` makes the server hand the setup to a background pi agent
-    const data = await createHublot(fetch, { label: desc || null, sessionId: state?.sessionId ?? null, brief: desc });
-    tunnelForm.desc = "";
-    updateHublotManager({ desc: "" });
-    closeModal();
-    toast(`hublot opening at ${data.tunnel.url} — background agent is setting it up…`);
-  } catch (e) {
-    toast(`hublot failed: ${e.message}`, "error");
-  } finally {
-    updateHublotManager({ creating: false });
-  }
-}
+const hublotController = createHublotController({
+  createHublot: (options) => createHublot(fetch, options),
+  getSessionId: () => state?.sessionId ?? null,
+  setDescription: (desc) => { tunnelForm.desc = desc; updateHublotManager({ desc }); },
+  setCreating: (creating) => updateHublotManager({ creating }),
+  close: closeModal,
+  toast,
+});
+const createManagedHublot = hublotController.create;
 
 async function toggleManagedHublotScope() {
   await refreshHublotScope({
