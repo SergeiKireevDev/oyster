@@ -286,7 +286,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 3. Add session ownership and deletion orchestration
 
-- [ ] Add `app_sessions`, ownership foreign keys, and durable operation journaling.
+- [x] Add `app_sessions`, ownership foreign keys, and durable operation journaling.
 - [ ] Upsert an app-session owner whenever a session-owned resource is created.
 - [ ] Implement the staged session deletion workflow described above.
 - [ ] Reconcile incomplete deletion operations at startup.

@@ -23,6 +23,27 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX operations_status_kind_idx ON operations(status, kind);
     `,
   }),
+  Object.freeze({
+    version: 2,
+    name: "session_ownership",
+    sql: `
+      CREATE TABLE app_sessions (
+        id INTEGER PRIMARY KEY,
+        backend TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        storage_path TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (backend, session_id, storage_path)
+      );
+
+      CREATE UNIQUE INDEX app_sessions_identity_without_path_idx
+        ON app_sessions(backend, session_id) WHERE storage_path IS NULL;
+
+      ALTER TABLE operations ADD COLUMN owner_id INTEGER
+        REFERENCES app_sessions(id) ON DELETE SET NULL;
+      CREATE INDEX operations_owner_idx ON operations(owner_id);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

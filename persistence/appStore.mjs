@@ -32,8 +32,31 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `).run(key, value, updatedAt),
     }),
+    sessions: Object.freeze({
+      upsert: ({ backend, sessionId, storagePath = null, createdAt }) => {
+        database.prepare(`
+          INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?)
+          ON CONFLICT DO NOTHING
+        `).run(backend, sessionId, storagePath, createdAt);
+        return { ...database.prepare("SELECT id, backend, session_id, storage_path, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath) };
+      },
+      find: ({ backend, sessionId, storagePath = null }) => {
+        const row = database.prepare("SELECT id, backend, session_id, storage_path, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath);
+        return row ? { ...row } : null;
+      },
+      delete: (id) => database.prepare("DELETE FROM app_sessions WHERE id = ?").run(id).changes,
+    }),
     operations: Object.freeze({
-      listIncomplete: () => database.prepare("SELECT id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),
+      create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
+        INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, ownerId, kind, status, stage, payload, error, createdAt, updatedAt),
+      find: (id) => {
+        const row = database.prepare("SELECT id, owner_id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE id = ?").get(id);
+        return row ? { ...row } : null;
+      },
+      update: (id, { status, stage, error = null, updatedAt }) => database.prepare("UPDATE operations SET status = ?, stage = ?, error = ?, updated_at = ? WHERE id = ?").run(status, stage, error, updatedAt, id).changes,
+      listIncomplete: () => database.prepare("SELECT id, owner_id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),
       markRunningInterrupted: (updatedAt) => database.prepare("UPDATE operations SET status = 'interrupted', error = COALESCE(error, 'server restarted during operation'), updated_at = ? WHERE status = 'running'").run(updatedAt).changes,
     }),
   });

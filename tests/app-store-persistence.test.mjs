@@ -41,6 +41,27 @@ test("foundation constraints and explicit rollback preserve consistent rows", (t
   assert.equal(database.prepare("SELECT count(*) AS count FROM operations").get().count, 0);
 });
 
+test("session owners are unique and durable operations retain their journal after owner deletion", (t) => {
+  const { path, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+
+  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "created" });
+  const duplicate = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "later" });
+  assert.equal(duplicate.id, owner.id);
+  assert.equal(duplicate.created_at, "created");
+
+  store.transaction((repositories) => repositories.operations.create({
+    id: "delete-1", ownerId: owner.id, kind: "delete_session", status: "pending",
+    stage: "persisted", payload: '{"sessionId":"session-1"}', createdAt: "created",
+  }));
+  assert.equal(store.repositories.operations.find("delete-1").owner_id, owner.id);
+  assert.equal(store.repositories.sessions.delete(owner.id), 1);
+  assert.equal(store.repositories.operations.find("delete-1").owner_id, null);
+  assert.equal(store.repositories.operations.update("delete-1", { status: "completed", stage: "done", updatedAt: "finished" }), 1);
+  assert.equal(store.repositories.operations.find("delete-1").status, "completed");
+});
+
 test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
   const { path, databases, Database } = fixture(t);
   const store = openAppStore({ databasePath: path, Database });
@@ -55,7 +76,7 @@ test("startup hydration rebuilds settings and incomplete operation snapshots onl
   assert.deepEqual(store.hydrate(), {
     settings: [{ key: "workdir", value: '"/workspace"', updated_at: "2026-07-16T00:00:00.000Z" }],
     incompleteOperations: [{
-      id: "pending", kind: "delete_session", status: "running", stage: "agent_delete",
+      id: "pending", owner_id: null, kind: "delete_session", status: "running", stage: "agent_delete",
       payload: null, error: null, created_at: "2026-07-16T00:00:00.000Z", updated_at: "2026-07-16T00:00:01.000Z",
     }],
   });
@@ -71,7 +92,7 @@ test("startup reconciliation marks operations interrupted before hydration", (t)
   assert.equal(store.reconcileInterruptedOperations("restarted"), 1);
   assert.equal(store.reconcileInterruptedOperations("again"), 0);
   assert.deepEqual(store.hydrate().incompleteOperations, [{
-    id: "running", kind: "delete_session", status: "interrupted", stage: "agent_delete",
+    id: "running", owner_id: null, kind: "delete_session", status: "interrupted", stage: "agent_delete",
     payload: null, error: "server restarted during operation", created_at: "created", updated_at: "restarted",
   }]);
 });
@@ -85,9 +106,9 @@ test("closing and reopening the app store preserves data without rerunning migra
 
   const second = openAppStore({ databasePath: path, Database });
   t.after(() => second.close());
-  assert.deepEqual(second.migrationStatus, { currentVersion: 1, appliedVersions: [1] });
+  assert.deepEqual(second.migrationStatus, { currentVersion: 2, appliedVersions: [1, 2] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
-  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 1);
+  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 2);
 });
 
 test("WAL permits concurrent readers and committed cross-connection writes", (t) => {
