@@ -75,6 +75,15 @@ export async function annotateTranscriptEntries({ fetchEntries, elements, findEn
   return entries;
 }
 
+/** Resolve and cache a persisted entry ID for a rendered transcript element. */
+export async function resolveTranscriptEntryId({ element, fetchEntries, elements, findEntry }) {
+  if (element?.dataset?.entryId) return element.dataset.entryId;
+  const entry = findEntry(await fetchEntries(), element);
+  if (!entry?.id) return null;
+  element.dataset.entryId = entry.id;
+  return entry.id;
+}
+
 /** Scroll to and briefly highlight a transcript element. */
 export function flashTranscriptElement(element, { setTimeoutImpl = setTimeout } = {}) {
   element.scrollIntoView({ behavior: "smooth", block: "center" });

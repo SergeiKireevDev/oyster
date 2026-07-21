@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, filterReplayEvents, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -44,6 +44,12 @@ test("transcript flash scrolls and schedules highlight cleanup", () => {
   flashTranscriptElement(element, { setTimeoutImpl: (fn, delay) => timers.push([fn, delay]) });
   timers.forEach(([fn]) => fn());
   assert.deepEqual(calls.map(([name]) => name), ["scroll", "add", "add", "remove"]);
+});
+
+test("transcript entry ID resolver caches a matched entry", async () => {
+  const element = { dataset: {} };
+  assert.equal(await resolveTranscriptEntryId({ element, fetchEntries: async () => [{ id: "entry" }], elements: () => [element], findEntry: (entries) => entries[0] }), "entry");
+  assert.equal(element.dataset.entryId, "entry");
 });
 
 test("transcript annotation attaches persisted entry IDs", async () => {
