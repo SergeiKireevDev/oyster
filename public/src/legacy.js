@@ -1318,7 +1318,7 @@ function setupCommandPalette(el) {
         closeCmdPalette();
       }
     },
-    onBlur: () => setTimeout(() => {
+    onBlur: () => delayedTasks.schedule(() => {
       if (cmdState?.target === el) closeCmdPalette();
     }, 150),
   });
