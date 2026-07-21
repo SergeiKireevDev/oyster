@@ -436,6 +436,31 @@ function requireToken() {
   gate.classList.add("open");
   $("gateInput").focus();
 }
+
+// Only drop the stored token if the server itself rejects it via the query-param
+// path — a stripped header or transient proxy error must not log the user out.
+let verifyingToken = false;
+async function handleUnauthorized() {
+  if (verifyingToken) return;
+  verifyingToken = true;
+  try {
+    const res = await fetch(`/rpc?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "get_state" }),
+    });
+    if (res.status === 401) {
+      localStorage.removeItem("pi_ui_token");
+      requireToken();
+    } else {
+      toast("temporary auth hiccup — retry", "warning");
+    }
+  } catch {
+    toast("network error — retry", "warning");
+  } finally {
+    verifyingToken = false;
+  }
+}
 $("gateBtn").addEventListener("click", () => {
   const v = $("gateInput").value.trim();
   if (!v) return;
@@ -467,12 +492,14 @@ async function rpc(cmd, { wait = true } = {}) {
       }, 60000);
     });
   }
-  const res = await fetch("/rpc", {
+  // token goes in the query string + x-auth-token header: some tunnels/proxies
+  // strip or overwrite the Authorization header, which showed up as 401s
+  const res = await fetch(`/rpc?token=${encodeURIComponent(token)}`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    headers: { "content-type": "application/json", "x-auth-token": token },
     body: JSON.stringify(cmd),
   });
-  if (res.status === 401) { localStorage.removeItem("pi_ui_token"); requireToken(); throw new Error("unauthorized"); }
+  if (res.status === 401) { handleUnauthorized(); throw new Error("unauthorized"); }
   if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
   return wait ? waiter : null;
 }
@@ -971,7 +998,7 @@ menu.addEventListener("click", async (e) => {
       clearMessages();
       for (const m of messages) renderFullMessage(m);
     } else if (action === "restart") {
-      await fetch("/restart", { method: "POST", headers: { authorization: `Bearer ${token}` } });
+      await fetch(`/restart?token=${encodeURIComponent(token)}`, { method: "POST" });
       clearMessages();
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
