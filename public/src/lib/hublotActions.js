@@ -9,6 +9,16 @@ export function nextHublotScope(scopeAll) {
   return !scopeAll;
 }
 
+export async function refreshHublotScope({ scopeAll, setScope, updateTitle, refreshManager, refreshSidebar, refreshRoutines }) {
+  const nextScope = nextHublotScope(scopeAll);
+  setScope(nextScope);
+  updateTitle(nextScope);
+  await refreshManager();
+  refreshSidebar();
+  refreshRoutines();
+  return nextScope;
+}
+
 export async function createHublot(fetchImpl, { label, sessionId, brief }) {
   const res = await fetchImpl("/tunnels", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label, sessionId, brief }) });
   const data = await res.json().catch(() => ({}));

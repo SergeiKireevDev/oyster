@@ -30,7 +30,7 @@ import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
-import { createHublot, listHublots, nextHublotScope } from "./lib/hublotActions.js";
+import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
@@ -2275,11 +2275,14 @@ async function createManagedHublot(descText) {
 }
 
 async function toggleManagedHublotScope() {
-  tunnelScopeAll = nextHublotScope(tunnelScopeAll);
-  updateModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session" });
-  await refreshHublotManager({ loading: true });
-  loadHublots(); // keep the sidebar in the same scope
-  syncRoutinesStore(); // the routines section shares the scope toggle
+  await refreshHublotScope({
+    scopeAll: tunnelScopeAll,
+    setScope: (scope) => { tunnelScopeAll = scope; },
+    updateTitle: (scope) => updateModal({ title: scope ? "Hublots — all sessions" : "Hublots — this session" }),
+    refreshManager: () => refreshHublotManager({ loading: true }),
+    refreshSidebar: loadHublots,
+    refreshRoutines: syncRoutinesStore,
+  });
 }
 
 setHublotManagerHandlers({

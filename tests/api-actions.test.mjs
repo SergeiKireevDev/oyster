@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCheckpoint } from "../public/src/lib/checkpointActions.js";
 import { listRoutines, runRoutine } from "../public/src/lib/routineActions.js";
-import { createHublot, nextHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
+import { createHublot, refreshHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
 
 test("API actions normalize successful checkpoint and routine responses", async () => {
@@ -17,9 +17,11 @@ test("API actions normalize successful checkpoint and routine responses", async 
   assert.deepEqual(JSON.parse(calls[1][1].body), { name: "job", action: "start", sessionId: "session" });
 });
 
-test("hublot scope action toggles scope", () => {
-  assert.equal(nextHublotScope(false), true);
-  assert.equal(nextHublotScope(true), false);
+test("hublot scope action refreshes scoped stores", async () => {
+  const calls = [];
+  const next = await refreshHublotScope({ scopeAll: false, setScope: (v) => calls.push(["scope", v]), updateTitle: (v) => calls.push(["title", v]), refreshManager: async () => calls.push(["manager"]), refreshSidebar: () => calls.push(["sidebar"]), refreshRoutines: () => calls.push(["routines"]) });
+  assert.equal(next, true);
+  assert.deepEqual(calls, [["scope", true], ["title", true], ["manager"], ["sidebar"], ["routines"]]);
 });
 
 test("hublot create action preserves session payload", async () => {
