@@ -5,8 +5,6 @@ import { createCarouselController, createCarouselEventRegistration, createCarous
 import { createCarouselEventDependencies } from "../../runtime/carouselEventDependencies.js";
 import { createLayoutFeature } from "../layout/createLayoutFeature.js";
 import { createSettingsFeature } from "./createSettingsFeature.js";
-import { configureHeaderActions } from "./headerActions.js";
-import { configureSettingsActions } from "./settingsActions.js";
 import {
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
@@ -29,7 +27,6 @@ export function createSettingsLayoutRuntime(deps) {
   });
 
   const settingsChanged = () => deps.reloadTranscript().catch(() => {});
-  const detachSettingsActions = configureSettingsActions({ changed: settingsChanged });
 
   const handleExtensionUI = createExtensionUiController({
     respond: (id, payload) => deps.rpc({ type: "extension_ui_response", id, ...payload }, { wait: false }).catch(() => {}),
@@ -96,7 +93,6 @@ export function createSettingsLayoutRuntime(deps) {
     toggleHublots: header.toggleHublots,
     toggleTree: header.toggleTree,
   };
-  const detachHeaderActions = configureHeaderActions((action, sourceEvent) => headerActions[action]?.(sourceEvent));
   const detachUiActions = [
     deps.uiActions.register(HEADER_CHOOSE_MODEL_ACTION, headerActions.chooseModel),
     deps.uiActions.register(HEADER_CYCLE_THINKING_ACTION, headerActions.cycleThinking),
@@ -140,8 +136,6 @@ export function createSettingsLayoutRuntime(deps) {
       if (tornDown) return;
       tornDown = true;
       eventAdapter.detach();
-      detachHeaderActions();
-      detachSettingsActions();
       detachUiActions.splice(0).reverse().forEach((detach) => detach());
       settings.teardown?.();
       carousel.teardown?.();

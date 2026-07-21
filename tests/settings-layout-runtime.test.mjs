@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createSettingsLayoutRuntime } from "../public/src/features/settings/createSettingsLayoutRuntime.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 import {
@@ -59,6 +60,23 @@ test("settings/layout runtime registers header and settings-change actions until
 
   runtime.teardown();
   assert.equal(registered.size, 0);
+});
+
+test("header and settings components route operations through scoped actions", () => {
+  const header = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
+  const settings = readFileSync(new URL("../public/src/components/SettingsModal.svelte", import.meta.url), "utf8");
+  for (const name of [
+    "HEADER_CHOOSE_MODEL_ACTION",
+    "HEADER_CYCLE_THINKING_ACTION",
+    "HEADER_OPEN_CONFIG_ACTION",
+    "HEADER_TOGGLE_HUBLOTS_ACTION",
+    "HEADER_TOGGLE_TREE_ACTION",
+  ]) {
+    assert.match(header, new RegExp(`uiActions\\.invoke\\(${name}`));
+  }
+  assert.match(settings, /uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
+  assert.doesNotMatch(header, /features\/settings\/headerActions\.js/);
+  assert.doesNotMatch(settings, /features\/settings\/settingsActions\.js/);
 });
 
 test("settings/layout remount attaches listeners once and detaches completely", () => {

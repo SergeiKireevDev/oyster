@@ -1,6 +1,10 @@
 <script>
-  import { settingsChanged } from "../features/settings/settingsActions.js";
   import { closeModalState } from "../stores/modal.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { SETTINGS_CHANGED_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const settingsChanged = () => uiActions.invoke(SETTINGS_CHANGED_ACTION);
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
   ];

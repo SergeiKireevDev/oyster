@@ -106,7 +106,7 @@ module-global feature callback state.
   component. Add focused transform tests.
 - [x] Add scoped names for header and settings-change actions, and register
   them from the settings/layout runtime with teardown-safe unregister functions.
-- [ ] Change `Header.svelte` and `SettingsModal.svelte` to invoke scoped
+- [x] Change `Header.svelte` and `SettingsModal.svelte` to invoke scoped
   actions, then delete `features/settings/headerActions.js`,
   `features/settings/settingsActions.js`, and their configuration calls.
 - [ ] Move SettingsModal's `localStorage` read/write behind an injected settings
