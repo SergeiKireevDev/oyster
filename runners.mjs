@@ -60,6 +60,31 @@ export function createRunnerManager(state, {
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // stable id -> runner
+  const persistedRunners = runnerRepository?.list() ?? [];
+  for (const persisted of persistedRunners) {
+    if (state.runners.has(persisted.id)) continue;
+    const reference = persisted.session_backend
+      ? sessionReferences.validate({
+        backend: persisted.session_backend,
+        id: persisted.session_id,
+        storagePath: persisted.session_storage_path,
+      })
+      : null;
+    state.runners.set(persisted.id, {
+      id: persisted.id,
+      dir: persisted.dir,
+      sessionRef: reference,
+      sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
+      sessionId: reference?.id ?? null,
+      sessionName: persisted.session_name,
+      busy: false,
+      proc: null,
+      startCount: persisted.start_count,
+      lastSpawnAt: 0,
+    });
+  }
+  const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1);
+  if (persistedDefault) state.defaultRunnerId = persistedDefault.id;
   for (const runner of state.runners.values()) {
     if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
       runner.sessionRef = sessionReferences.validate({
@@ -457,8 +482,8 @@ export function createRunnerManager(state, {
   state.runnerReaperTimer = setInterval(reaperTick, ORAPHA_REAP_INTERVAL_MS);
   state.runnerReaperTimer.unref?.();
 
-  // legacy entry points used by server.mjs
-  function startPi() { defaultRunner(); }
+  // Startup only restores descriptors. The first SSE/RPC selection starts a process.
+  function startPi() {}
   function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
 
   return {

@@ -87,6 +87,59 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(store.repositories.runners.find(runner.id), null, "session ownership cascades runner descriptors");
 });
 
+test("startup restores runner descriptors and replay without spawning until selection demands it", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-restore-"));
+  const databasePath = join(root, "app.sqlite");
+  let store = openAppStore({ databasePath });
+  const sqlitePath = join(root, "agent.sqlite");
+  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "restored-session", storagePath: sqlitePath, createdAt: "owner" });
+  const runnerId = "r-restored000";
+  store.repositories.runners.create({
+    id: runnerId, ownerId: owner.id, dir: "/persisted/workspace",
+    sessionBackend: "sqlite", sessionId: "restored-session", sessionStoragePath: sqlitePath,
+    sessionName: "Persisted name", isDefault: true, desiredState: "running", lastStatus: "running",
+    startCount: 4, createdAt: "created", lastStartedAt: "previous-start",
+  });
+  store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event", payload: '{"type":"persisted"}', createdAt: "event" });
+  store.close();
+  store = openAppStore({ databasePath });
+  const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });
+  let spawnCount = 0;
+  const state = {
+    appStore: store,
+    config: { PI_BIN: "/pi", PI_EXTRA_ARGS: [], PERSISTENT_STORE: "sqlite", SQLITE_PATH: sqlitePath },
+    currentDir: "/other",
+    sseClients: new Set(),
+    sessionReferences,
+    serverEvent() {},
+  };
+  state.piProcesses = createPiProcessLauncher({ config: state.config, spawnImpl() { spawnCount++; return fakeProcess(); } });
+  const manager = createRunnerManager(state, { appStore: store, now: () => "now" });
+  t.after(() => {
+    clearInterval(state.runnerWatchdogTimer);
+    clearInterval(state.runnerReaperTimer);
+    manager.stopPi();
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const restored = state.runners.get(runnerId);
+  assert.equal(restored.dir, "/persisted/workspace");
+  assert.equal(restored.sessionId, "restored-session");
+  assert.equal(restored.sessionName, "Persisted name");
+  assert.equal(restored.startCount, 4);
+  assert.equal(restored.proc, null);
+  assert.equal(state.defaultRunnerId, runnerId);
+  assert.deepEqual(manager.replayRunnerEvents(restored), ['{"type":"persisted"}']);
+  manager.startPi();
+  assert.equal(spawnCount, 0, "server startup must not eagerly spawn restored runners");
+  assert.equal(manager.runnerFromReq(new URL(`http://localhost/?runner=${runnerId}`)), restored);
+  assert.equal(spawnCount, 0, "descriptor lookup alone remains lazy");
+  manager.sendToRunner(restored, { type: "get_state" });
+  assert.equal(spawnCount, 1, "the selected runner starts on first command demand");
+  assert.equal(restored.startCount, 5);
+});
+
 test("runner replay events persist exact payloads and enforce their configured cap", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-events-"));
   const databasePath = join(root, "app.sqlite");
