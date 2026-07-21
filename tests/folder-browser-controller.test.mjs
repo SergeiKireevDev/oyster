@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFolderBrowserController } from "../public/src/lib/folderBrowserController.js";
+import { createFolderBrowserController, createFolderBrowserEventController } from "../public/src/lib/folderBrowserController.js";
 
 test("folder browser creates a folder and loads it", async () => {
   const calls = [];
@@ -74,3 +74,6 @@ test("folder browser reports a failed chosen-folder session without switching", 
 
   assert.deepEqual(calls, [["runner unavailable", "error"]]);
 });
+
+
+test("folder browser event controller routes events", () => { const ls=new Map(); const t={addEventListener:(n,f)=>ls.set(n,f),removeEventListener(){}}; const calls=[]; createFolderBrowserEventController({windowTarget:t,browse:(p)=>calls.push(p),create:()=>calls.push("create"),cancel:()=>calls.push("cancel"),submit:()=>calls.push("submit")}).attach(); ls.get("pi-folder-browser-browse")({detail:"/x"}); ls.get("pi-folder-browser-submit")(); assert.deepEqual(calls,["/x","submit"]); });

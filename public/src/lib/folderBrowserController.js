@@ -1,3 +1,10 @@
+export function createFolderBrowserEventController({ windowTarget, browse, create, cancel, submit }) {
+  const listeners = [["pi-folder-browser-browse", (event) => browse(event.detail)], ["pi-folder-browser-create", create], ["pi-folder-browser-cancel", cancel], ["pi-folder-browser-submit", submit]];
+  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
+  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
+  return { attach, detach };
+}
+
 export function createFolderBrowserController({ browse, mkdir, update, updateTitle, getShowHidden, setPath, openSessionRunner, setWorkdir, switchToRunner, toast }) {
   async function load(path) {
     update({ loading: true });

@@ -84,17 +84,6 @@ export function registerFileExplorerEvents(target, { browse, edit, save, upload,
   return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
 }
 
-export function registerFolderBrowserEvents(target, { browse, create, cancel, submit }) {
-  const listeners = [
-    ["pi-folder-browser-browse", (event) => browse(event.detail)],
-    ["pi-folder-browser-create", () => create()],
-    ["pi-folder-browser-cancel", () => cancel()],
-    ["pi-folder-browser-submit", () => submit()],
-  ];
-  for (const [name, listener] of listeners) target.addEventListener(name, listener);
-  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
-}
-
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);

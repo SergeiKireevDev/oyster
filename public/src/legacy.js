@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFileUploadInput, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -48,7 +48,7 @@ import { createCheckpointTreeController, createCheckpointTreeEventController } f
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController, createHublotSidebarController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
-import { createFolderBrowserController } from "./lib/folderBrowserController.js";
+import { createFolderBrowserController, createFolderBrowserEventController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
 import { createFilePickerController, createFilePickerEventController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
@@ -1490,12 +1490,12 @@ const createFolderBrowser = () => {
   return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
-registerFolderBrowserEvents(window, {
+createFolderBrowserEventController({ windowTarget: window,
   browse: loadFolderBrowser,
   create: createFolderBrowser,
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
   submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
-});
+}).attach();
 
 // ------------------------------------------------------------ tunnels
 
