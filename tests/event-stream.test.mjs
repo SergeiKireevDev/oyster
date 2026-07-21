@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createReplayEventGate, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createReplayEventGate, createRunnerExitController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,11 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("runner exit controller ignores replayed exits", () => {
+  const calls = []; const exit = createRunnerExitController({ isReplaying: () => true, toast: (...args) => calls.push(args), setBusy: (value) => calls.push(value) });
+  assert.equal(exit(), false); assert.deepEqual(calls, []);
 });
 
 test("event lifecycle logging classification excludes noisy updates", () => {

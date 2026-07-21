@@ -14,6 +14,16 @@ export function stateRefreshRequired(command) {
   return STATE_REFRESHING_COMMANDS.has(command);
 }
 
+/** Handle live runner exit without surfacing replayed historical exits. */
+export function createRunnerExitController({ isReplaying, toast, setBusy }) {
+  return () => {
+    if (isReplaying()) return false;
+    toast("pi process exited — it will restart on next message", "warning");
+    setBusy(false);
+    return true;
+  };
+}
+
 export function createReplayEventGate({ isReplaying, isGateRequired, isReplayDone, buffer, gatedTypes, log = () => {} }) {
   return (message) => {
     if (!isReplaying() || !isGateRequired() || !gatedTypes.has(message.type)) return false;

@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -572,6 +572,12 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
   dispatch: handleEvent,
 });
 
+const runnerExit = createRunnerExitController({
+  isReplaying: () => replaying,
+  toast: addToast,
+  setBusy,
+});
+
 const replayEventGate = createReplayEventGate({
   isReplaying: () => replaying,
   isGateRequired: () => transcriptGateRequired,
@@ -656,10 +662,7 @@ function handleEvent(msg) {
       return;
 
     case "pi_exit":
-      // replayed copies describe past restarts, not the current process
-      if (replaying) return;
-      addToast("pi process exited — it will restart on next message", "warning");
-      setBusy(false);
+      runnerExit();
       return;
 
     case "pi_started":
