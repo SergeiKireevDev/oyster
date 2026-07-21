@@ -1,9 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  groupRunnersByCwd,
   groupSessionFamilies,
   partitionSessionFamilies,
 } from "../public/src/features/sessions/sessionPickerViewModel.js";
+
+test("session sidebar groups runners by cwd in input order", () => {
+  const runners = [
+    { id: "a", dir: "/work/one" },
+    { id: "b", dir: "/work/two" },
+    { id: "c", dir: "/work/one" },
+  ];
+  assert.deepEqual(groupRunnersByCwd(runners), [
+    { cwd: "/work/one", runners: [runners[0], runners[2]] },
+    { cwd: "/work/two", runners: [runners[1]] },
+  ]);
+});
 
 const sessions = [
   { path: "/root.jsonl", name: "root" },

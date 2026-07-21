@@ -160,6 +160,11 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await swipe(page, "right");
     }
     await expect(page.locator("#sessions")).toBeVisible();
+    const cwdGroup = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: "workspace" }) });
+    await expect(cwdGroup.locator(".session-sidebar-count")).toHaveText("2");
+    await cwdGroup.locator("summary").click();
+    await expect(cwdGroup.locator(".session-sidebar-row").first()).toBeHidden();
+    await cwdGroup.locator("summary").click();
     const first = page.locator("#sessions .session-sidebar-row", { hasText: A });
     await expect(first).toBeVisible({ timeout: 15000 });
     await page.locator("#sessions .session-sidebar-search").fill(A);
@@ -168,6 +173,16 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await expect(result.locator(".session-sidebar-snippet").first()).toContainText(A);
     await result.click();
     await expect(page.locator("#messages")).toContainText(A, { timeout: 15000 });
+
+    if (mobile) await swipe(page, "right");
+    await page.locator("#sessions .session-sidebar-search").fill("");
+    const stoppedEntry = page.locator("#sessions .session-sidebar-entry", { hasText: B });
+    await stoppedEntry.locator(".session-sidebar-action.stop").click();
+    await expect(page.locator(".toast", { hasText: "process stopped" })).toBeVisible({ timeout: 10000 });
+    await expect(stoppedEntry.locator(".session-sidebar-action.delete")).toBeVisible({ timeout: 10000 });
+    page.once("dialog", (dialog) => dialog.accept());
+    await stoppedEntry.locator(".session-sidebar-action.delete").click();
+    await expect(stoppedEntry).toHaveCount(0, { timeout: 10000 });
   });
 
   test("start sessions and stop a session's background process", async ({ page }) => {

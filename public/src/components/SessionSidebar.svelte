@@ -4,11 +4,14 @@
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { runnerSessionIdentity, sameSession } from "../lib/sessionIdentity.js";
+  import { groupRunnersByCwd } from "../features/sessions/sessionPickerViewModel.js";
   import {
+    SESSION_PICKER_DELETE_ACTION,
     SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
     SESSION_PICKER_SEARCH_ACTION,
     SESSION_PICKER_SET_SCOPE_ACTION,
     SESSION_PICKER_SHOW_ACTION,
+    SESSION_PICKER_STOP_ACTION,
     SESSION_SIDEBAR_REFRESH_ACTION,
     SESSION_SWITCH_RUNNER_ACTION,
   } from "../runtime/uiActionNames.js";
@@ -18,6 +21,8 @@
   const showAllSessions = () => uiActions.invoke(SESSION_PICKER_SHOW_ACTION);
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
   const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
+  const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
+  const deleteSession = (runner) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, savedSession(runner) ?? runner);
 
   let searchTimer = null;
   function updateQuery(value) {
@@ -35,14 +40,15 @@
   onDestroy(() => clearTimeout(searchTimer));
 
   $: searching = $sessionPicker.query.trim().length >= 2;
-  $: activeRunners = $appSession.runners.filter((runner) => runner.alive && runner.sessionId);
+  $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
+  $: runnerGroups = groupRunnersByCwd(sidebarRunners);
   let runnerSignature = "";
   $: {
-    const nextSignature = activeRunners.map((runner) => [
+    const nextSignature = sidebarRunners.map((runner) => [
       runner.id,
       runner.sessionKey ?? runner.sessionId,
       runner.sessionName ?? "",
-      runner.busy ? "busy" : "idle",
+      runner.alive ? (runner.busy ? "busy" : "idle") : "stopped",
     ].join(":")).join("|");
     if (nextSignature && nextSignature !== runnerSignature) {
       runnerSignature = nextSignature;
@@ -63,9 +69,8 @@
     return runner.sessionName || session?.name || session?.preview || `Session ${String(runner.sessionId).slice(0, 8)}`;
   }
 
-  function folder(runner) {
-    const value = runner.dir || "";
-    return value.split(/[\\/]/).filter(Boolean).pop() || value;
+  function cwdLabel(cwd) {
+    return cwd.split(/[\\/]/).filter(Boolean).pop() || cwd;
   }
 </script>
 
@@ -105,22 +110,37 @@
           {/each}
         </button>
       {/each}
-    {:else if activeRunners.length}
-      {#each activeRunners as runner (runner.id)}
-        <button
-          type="button"
-          class:current={runner.id === $appSession.currentRunner}
-          class:busy={runner.busy}
-          class="session-sidebar-row"
-          title={`${label(runner)}${runner.dir ? `\n${runner.dir}` : ""}`}
-          onclick={() => switchRunner(runner.id)}
-        >
-          <span class="s-dot" class:on={!runner.busy} class:busy={runner.busy}></span>
-          <span class="session-sidebar-copy">
-            <span class="session-sidebar-name">{label(runner)}</span>
-            {#if runner.dir}<span class="session-sidebar-folder">{folder(runner)}</span>{/if}
-          </span>
-        </button>
+    {:else if sidebarRunners.length}
+      {#each runnerGroups as group (group.cwd)}
+        <details class="session-sidebar-cwd" open>
+          <summary title={group.cwd}>
+            <span>{cwdLabel(group.cwd)}</span>
+            <span class="session-sidebar-count">{group.runners.length}</span>
+          </summary>
+          <div class="session-sidebar-cwd-list">
+            {#each group.runners as runner (runner.id)}
+              <div class="session-sidebar-entry" class:current={runner.id === $appSession.currentRunner}>
+                <button
+                  type="button"
+                  class:busy={runner.busy}
+                  class="session-sidebar-row"
+                  title={`${label(runner)}${runner.dir ? `\n${runner.dir}` : ""}`}
+                  onclick={() => switchRunner(runner.id)}
+                >
+                  <span class="s-dot" class:on={runner.alive && !runner.busy} class:busy={runner.alive && runner.busy}></span>
+                  <span class="session-sidebar-copy">
+                    <span class="session-sidebar-name">{label(runner)}</span>
+                  </span>
+                </button>
+                {#if runner.alive}
+                  <button type="button" class="session-sidebar-action stop" title="Stop this session's process" onclick={() => stopSession(runner)}>■</button>
+                {:else if runner.id !== $appSession.currentRunner}
+                  <button type="button" class="session-sidebar-action delete" title="Delete session" onclick={() => deleteSession(runner)}>✕</button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </details>
       {/each}
     {:else}
       <div class="r-empty">(no active sessions)</div>

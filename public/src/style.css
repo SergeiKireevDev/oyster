@@ -131,7 +131,44 @@
     outline: none;
   }
   .session-sidebar-search:focus { border-color: var(--accent); }
-  .session-sidebar-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+  .session-sidebar-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  .session-sidebar-cwd { min-width: 0; }
+  .session-sidebar-cwd > summary {
+    display: flex; align-items: center; gap: 6px;
+    min-width: 0;
+    padding: 5px 4px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+  }
+  .session-sidebar-cwd > summary::-webkit-details-marker { display: none; }
+  .session-sidebar-cwd > summary::before { content: "▸"; flex-shrink: 0; transition: transform .15s; }
+  .session-sidebar-cwd[open] > summary::before { transform: rotate(90deg); }
+  .session-sidebar-cwd > summary > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-count { margin-left: auto; color: var(--muted); font-weight: 400; }
+  .session-sidebar-cwd-list { display: flex; flex-direction: column; gap: 4px; }
+  .session-sidebar-entry {
+    display: flex; align-items: center; gap: 2px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+  }
+  .session-sidebar-entry:hover { background: var(--panel-2); border-color: var(--border); }
+  .session-sidebar-entry.current { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .session-sidebar-action {
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+  }
+  .session-sidebar-action.stop:hover, .session-sidebar-action.delete:hover { color: var(--red); background: rgba(247,118,142,.1); }
   .session-sidebar-status { padding: 4px 2px; color: var(--muted); font-size: 11px; }
   .session-sidebar-hit {
     display: flex; flex-direction: column; gap: 3px;
@@ -158,9 +195,9 @@
   .session-sidebar-snippet mark { background: rgba(224,175,104,.3); color: var(--text); border-radius: 2px; }
   .session-sidebar-row {
     display: flex; align-items: center; gap: 8px;
-    width: 100%; min-width: 0;
+    flex: 1; min-width: 0;
     padding: 7px 8px;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 8px;
     background: transparent;
     color: var(--text);
@@ -168,8 +205,7 @@
     text-align: left;
     cursor: pointer;
   }
-  .session-sidebar-row:hover { background: var(--panel-2); border-color: var(--border); }
-  .session-sidebar-row.current { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .session-sidebar-row:hover { background: transparent; }
   .session-sidebar-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
   .session-sidebar-name, .session-sidebar-folder { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-name { font-size: 13px; font-weight: 600; }

@@ -1,5 +1,16 @@
 import { parentSessionIdentity, sessionIdentity } from "../../lib/sessionIdentity.js";
 
+/** Groups active runners by working directory while preserving runner order. */
+export function groupRunnersByCwd(runners) {
+  const groups = new Map();
+  for (const runner of runners) {
+    const cwd = runner.dir || "(unknown working directory)";
+    if (!groups.has(cwd)) groups.set(cwd, { cwd, runners: [] });
+    groups.get(cwd).runners.push(runner);
+  }
+  return [...groups.values()];
+}
+
 /** Groups a flat session list into root sessions and their forks without mutating input. */
 export function groupSessionFamilies(sessions) {
   const byIdentity = new Map(sessions.map((session) => [sessionIdentity(session), session]));

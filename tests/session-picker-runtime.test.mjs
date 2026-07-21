@@ -120,5 +120,9 @@ test("session sidebar routes switching and the full picker through scoped action
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_REFRESH_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_SEARCH_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_PICKER_STOP_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_PICKER_DELETE_ACTION/);
   assert.match(source, /session-sidebar-snippet/);
+  assert.match(source, /<details class="session-sidebar-cwd" open>/);
+  assert.match(source, /groupRunnersByCwd\(sidebarRunners\)/);
 });
