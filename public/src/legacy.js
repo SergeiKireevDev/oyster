@@ -1736,7 +1736,7 @@ function setupCommandPalette(el) {
   }, 150));
 }
 
-setCommandPaletteHandlers({ setActive: setActiveCmd, runIndex: runCmdIndex });
+setCommandPaletteHandlers({ runIndex: runCmdIndex });
 
 setupCommandPalette(input);
 

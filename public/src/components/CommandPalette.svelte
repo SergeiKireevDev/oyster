@@ -1,10 +1,10 @@
 <script>
-  import { runCommandPaletteIndex, setCommandPaletteActive } from "../lib/legacyBridge.js";
-  import { commandPalette } from "../stores/commandPalette.js";
+  import { runCommandPaletteIndex } from "../lib/legacyBridge.js";
+  import { commandPalette, setCommandPaletteState } from "../stores/commandPalette.js";
 
   function choose(event, index) {
     event.preventDefault();
-    setCommandPaletteActive(index);
+    setCommandPaletteState({ items: $commandPalette.items.map((item, i) => ({ ...item, active: i === index })) });
     runCommandPaletteIndex(index);
   }
 </script>

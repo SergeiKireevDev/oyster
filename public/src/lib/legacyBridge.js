@@ -198,10 +198,6 @@ export function setCommandPaletteHandlers(handlers) {
   commandPaletteHandlers = handlers ?? {};
 }
 
-export function setCommandPaletteActive(index) {
-  return commandPaletteHandlers.setActive?.(index);
-}
-
 export function runCommandPaletteIndex(index) {
   return commandPaletteHandlers.runIndex?.(index);
 }
