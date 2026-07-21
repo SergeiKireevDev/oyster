@@ -26,6 +26,7 @@ export function createTranscriptAssembly(deps) {
   const localEchoes = [];
   let afterTranscript = null;
   let synchronization = null;
+  let permalinkOperations = null;
 
   const transcriptActions = createTranscriptActions({
     callbacks: {
@@ -190,9 +191,8 @@ export function createTranscriptAssembly(deps) {
     return synchronization;
   }
 
-  return {
+  const operations = {
     domAdapter: transcriptScroll,
-    configureSynchronization,
     addUserMessage,
     assistantAlreadyRendered(message) {
       const text = transcriptActions.assistantPlainText(message);
@@ -213,11 +213,27 @@ export function createTranscriptAssembly(deps) {
     },
     scrollToBottom: (force) => transcriptScroll.scrollToBottom(force),
     setAfterTranscript: (callback) => { afterTranscript = callback; },
+    reloadTranscript: (...args) => synchronization.reloadTranscript(...args),
+    syncTranscriptSoon: (...args) => synchronization.syncTranscriptSoon(...args),
+    agentStart: (...args) => synchronization.agentStart(...args),
+    agentCompletion: (...args) => synchronization.agentCompletion(...args),
+    schedulePostSendFileTranscriptSync: (...args) => synchronization.schedulePostSendFileTranscriptSync(...args),
+    composerReadyForSend: (...args) => deps.composerReadyForSend(...args),
+    annotateTranscriptEntries: (...args) => permalinkOperations.annotateTranscriptEntries(...args),
+    copyPermalink: (...args) => permalinkOperations.copyPermalink(...args),
+    focusEntryById: (...args) => permalinkOperations.focusEntryById(...args),
+  };
+
+  return {
+    configureSynchronization,
+    operations,
+    setPermalinkOperations: (next) => { permalinkOperations = next; },
     teardown() {
       renderer.cancel();
       localEchoes.length = 0;
       afterTranscript = null;
       synchronization = null;
+      permalinkOperations = null;
       toolCards.clear();
       assistantStream.clear();
       renderer = null;

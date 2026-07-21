@@ -166,14 +166,16 @@ const transcriptAssembly = createTranscriptAssembly({
     setCheckpointRestores([]);
   },
   resetTranscriptItems,
+  composerReadyForSend: () => platformEvents.isComposerReady(connected, transcriptGateRequired),
 });
-const transcriptScroll = transcriptAssembly.domAdapter;
-const addUserMessage = transcriptAssembly.addUserMessage;
-const assistantAlreadyRendered = transcriptAssembly.assistantAlreadyRendered;
-const clearMessages = transcriptAssembly.clearMessages;
-const handleTranscriptStreamEvent = transcriptAssembly.handleStreamEvent;
-const renderFullMessage = transcriptAssembly.renderFullMessage;
-const renderTranscript = transcriptAssembly.renderTranscript;
+const transcriptOperations = transcriptAssembly.operations;
+const transcriptScroll = transcriptOperations.domAdapter;
+const addUserMessage = transcriptOperations.addUserMessage;
+const assistantAlreadyRendered = transcriptOperations.assistantAlreadyRendered;
+const clearMessages = transcriptOperations.clearMessages;
+const handleTranscriptStreamEvent = transcriptOperations.handleStreamEvent;
+const renderFullMessage = transcriptOperations.renderFullMessage;
+const renderTranscript = transcriptOperations.renderTranscript;
 
 // ------------------------------------------------------------ checkpoints
 //
@@ -350,7 +352,7 @@ function setTranscriptGateRequired(value) {
 }
 function setReplaying(value, phase = null) { platformEvents.setReplaying(value, phase); }
 function handleEvent(msg) { return platformEvents.dispatch(msg); }
-const composerReadyForSend = () => platformEvents.isComposerReady(connected, transcriptGateRequired);
+const composerReadyForSend = transcriptOperations.composerReadyForSend;
 platformEvents = createPlatformEventDispatch({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
@@ -380,7 +382,7 @@ platformEvents = createPlatformEventDispatch({
 });
 const flushReplayBufferedEvents = platformEvents.flushBufferedEvents;
 
-const transcriptSynchronization = transcriptAssembly.configureSynchronization({
+transcriptAssembly.configureSynchronization({
   rpc,
   applyState,
   fetchImpl: fetch,
@@ -404,13 +406,11 @@ const transcriptSynchronization = transcriptAssembly.configureSynchronization({
   getSessionFile: () => state?.sessionFile,
   logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
-const {
-  reloadTranscript,
-  syncTranscriptSoon,
-  agentStart,
-  agentCompletion,
-  schedulePostSendFileTranscriptSync,
-} = transcriptSynchronization;
+const reloadTranscript = transcriptOperations.reloadTranscript;
+const syncTranscriptSoon = transcriptOperations.syncTranscriptSoon;
+const agentStart = transcriptOperations.agentStart;
+const agentCompletion = transcriptOperations.agentCompletion;
+const schedulePostSendFileTranscriptSync = transcriptOperations.schedulePostSendFileTranscriptSync;
 
 const refreshStateNow = createSessionStateRefresher({
   rpc: async (request) => {
@@ -502,7 +502,7 @@ async function send() {
   input.style.height = "auto";
   setBusy(sessionUi.busy); // hide the Steer button again
   addUserMessage({ role: "user", content: text });
-  transcriptAssembly.addLocalEcho(text);
+  transcriptOperations.addLocalEcho(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
     // Cloudflare/EventSource can occasionally stall live SSE delivery. Poll the
@@ -510,7 +510,7 @@ async function send() {
     // fast first response appears without a manual refresh.
     schedulePostSendFileTranscriptSync(text);
   } catch (e) {
-    transcriptAssembly.removeLocalEcho(text);
+    transcriptOperations.removeLocalEcho(text);
     addToast(`send failed: ${e.message}`, "error");
   }
 }
@@ -849,11 +849,11 @@ const detachFolderBrowserActions = configureFolderBrowserActions({
 /** Send a message to the agent as if typed in the composer. */
 async function sendAgentMessage(text) {
   addUserMessage({ role: "user", content: text });
-  transcriptAssembly.addLocalEcho(text);
+  transcriptOperations.addLocalEcho(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
   } catch (e) {
-    transcriptAssembly.removeLocalEcho(text);
+    transcriptOperations.removeLocalEcho(text);
     addToast(`send failed: ${e.message}`, "error");
   }
 }
@@ -1075,7 +1075,7 @@ const sessionPickerRuntime = createSessionPickerRuntime({
   setWorkdir,
   reloadTranscript,
   focusSearchHit,
-  setAfterTranscript: transcriptAssembly.setAfterTranscript,
+  setAfterTranscript: transcriptOperations.setAfterTranscript,
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
 });
 const showSessionPicker = sessionPickerRuntime.show;
@@ -1113,8 +1113,12 @@ const transcriptRuntime = createTranscriptRuntime({
   copy: copyTextToClipboard,
   prompt: extensionUiAdapters.input,
 });
+transcriptAssembly.setPermalinkOperations(transcriptRuntime);
 const transcriptFeature = transcriptRuntime.feature;
-const { annotateTranscriptEntries, copyPermalink, focusEntryById, focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
+const annotateTranscriptEntries = transcriptOperations.annotateTranscriptEntries;
+const copyPermalink = transcriptOperations.copyPermalink;
+const focusEntryById = transcriptOperations.focusEntryById;
+const { focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
 
 /** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
 function chatEls() {
@@ -1199,7 +1203,7 @@ const boot = createSessionBootController(createSessionBootDependencies({
     return data.session;
   },
   openInitialSession: (options) => getSessionRuntime().openInitialSession(options),
-  setAfterTranscript: transcriptAssembly.setAfterTranscript,
+  setAfterTranscript: transcriptOperations.setAfterTranscript,
   focusEntry: focusEntryById,
   connect,
   log: lifecycleLog,

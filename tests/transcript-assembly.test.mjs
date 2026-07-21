@@ -37,16 +37,17 @@ function createDependencies() {
 test("transcript assembly owns DOM, stream, action, tool-card, and renderer construction", () => {
   const assembly = createTranscriptAssembly(createDependencies());
 
-  assert.equal(typeof assembly.domAdapter.nearBottom, "function");
-  assert.equal(typeof assembly.addUserMessage, "function");
-  assert.equal(typeof assembly.handleStreamEvent, "function");
-  assert.equal(typeof assembly.renderFullMessage, "function");
-  assert.equal(typeof assembly.renderTranscript, "function");
-  assert.equal(typeof assembly.clearMessages, "function");
+  const operations = assembly.operations;
+  assert.equal(typeof operations.domAdapter.nearBottom, "function");
+  assert.equal(typeof operations.addUserMessage, "function");
+  assert.equal(typeof operations.handleStreamEvent, "function");
+  assert.equal(typeof operations.renderFullMessage, "function");
+  assert.equal(typeof operations.renderTranscript, "function");
+  assert.equal(typeof operations.clearMessages, "function");
   assert.equal(typeof assembly.teardown, "function");
 
-  assembly.addLocalEcho("hello");
-  assembly.removeLocalEcho("hello");
+  operations.addLocalEcho("hello");
+  operations.removeLocalEcho("hello");
   assembly.teardown();
 });
 
@@ -81,5 +82,13 @@ test("transcript assembly owns reload and synchronization controller constructio
   assert.equal(typeof synchronization.agentCompletion, "function");
   assert.equal(typeof synchronization.schedulePostSendFileTranscriptSync, "function");
   assert.equal(assembly.configureSynchronization({}), synchronization);
+  assert.equal(typeof assembly.operations.reloadTranscript, "function");
+  assert.equal(typeof assembly.operations.composerReadyForSend, "function");
+  assembly.setPermalinkOperations({
+    annotateTranscriptEntries() {},
+    copyPermalink() {},
+    focusEntryById() {},
+  });
+  assert.equal(typeof assembly.operations.copyPermalink, "function");
   assembly.teardown();
 });

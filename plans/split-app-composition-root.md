@@ -30,7 +30,7 @@ coupling cannot grow unnoticed.
 
 - [x] Create `features/transcript/createTranscriptAssembly.js` and move transcript DOM adapter, action, tool-card, assistant-stream, and renderer construction into it.
 - [x] Move canonical reload, replay reconciliation, transcript sync, post-agent sync, and post-send sync construction into the transcript assembly.
-- [ ] Expose only narrow transcript operations required elsewhere, including reload, render, clear, stream dispatch, composer readiness, permalink actions, and teardown.
+- [x] Expose only narrow transcript operations required elsewhere, including reload, render, clear, stream dispatch, composer readiness, permalink actions, and teardown.
 - [ ] Add fresh mount → teardown → mount tests covering renderer, stream, sync timer, and DOM-adapter ownership.
 
 **Acceptance:** the composition root does not construct transcript controllers,
