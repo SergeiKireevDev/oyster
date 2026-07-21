@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, copyFile, writeFile, rename, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, rename, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -154,6 +154,48 @@ test("an open SSE response survives an application reload and receives the state
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2 });
   assert.deepEqual(await eventPromise, { type: "code_reloaded", reloadCount: 2, _server: true });
+});
+
+test("editing a route factory reloads its response without disconnecting SSE", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-ui-route-reload-"));
+  const port = await availablePort();
+  await mkdir(join(root, "http", "routes"), { recursive: true });
+  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await writeFile(join(root, "http", "routes", "value.mjs"), 'export const value = "before";\n');
+  await writeFile(join(root, "app.mjs"), `
+import { statSync } from "node:fs";
+export async function init(state) {
+  const path = new URL("./http/routes/value.mjs", import.meta.url);
+  const route = await import(\`\${path}?v=\${statSync(path).mtimeMs}\`);
+  return {
+    async handleRequest(req, res) {
+      if (req.url === "/events") {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        state.sseClients.add(res);
+        req.on("close", () => state.sseClients.delete(res));
+        res.write(": connected\\n\\n");
+        return;
+      }
+      res.end(JSON.stringify({ value: route.value }));
+    },
+    startPi() {}, stopPi() {}, stopTunnels() {}, stopRoutines() {},
+  };
+}`);
+  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const abort = new AbortController();
+  t.after(async () => { abort.abort(); if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); } await rm(root, { recursive: true, force: true }); });
+  await waitForOutput(child, "listening on");
+  const events = await fetch(`http://127.0.0.1:${port}/events`, { signal: abort.signal });
+  const reader = events.body.getReader(); await reader.read();
+  const eventPromise = nextServerEvent(reader);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const replacement = join(root, "http", "routes", "replacement.mjs");
+  await writeFile(replacement, 'export const value = "after";\n');
+  await rename(replacement, join(root, "http", "routes", "value.mjs"));
+  await waitForOutput(child, "hot-reloaded app.mjs after http/routes/value.mjs");
+  const response = await fetch(`http://127.0.0.1:${port}/`);
+  assert.deepEqual(await response.json(), { value: "after" });
+  assert.equal((await eventPromise).type, "code_reloaded");
 });
 
 test("an invalid application replacement keeps the active handler and emits a failure event", async (t) => {

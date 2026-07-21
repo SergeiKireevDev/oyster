@@ -13,7 +13,8 @@ test("app cache-busts every extracted route-factory import", () => {
     assert.ok(source.includes(`"${name}"`), `missing dynamic route factory ${name}`);
     assert.equal(source.includes(`from "./http/routes/${name}.mjs"`), false);
   }
-  assert.match(source, /import\(bust\(`http\/routes\/\$\{name\}\.mjs`\)\)/);
+  assert.match(source, /\.map\(\(name\) => `http\/routes\/\$\{name\}\.mjs`\)/);
+  assert.match(source, /\.map\(\(name\) => import\(bust\(name\)\)\)/);
 });
 
 test("mtime query observes a changed route module across application-style reloads", async (t) => {

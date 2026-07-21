@@ -46,7 +46,7 @@ function response() {
 }
 
 test("composed dispatch keeps open routes public and authenticated routes protected", async () => {
-  const application = init(stableState());
+  const application = await init(stableState());
 
   const health = response();
   await application.handleRequest(request("/health"), health);

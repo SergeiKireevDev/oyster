@@ -162,7 +162,7 @@ or session-fork semantics.
 - [x] Change `server.mjs` watching to reload when `app.mjs`, `http/`, or an
   extracted route-factory dependency changes. Watch directories so atomic-save
   rename behavior remains safe; debounce one reload per change burst.
-- [ ] Add a route-factory reload integration test that changes a temporary
+- [x] Add a route-factory reload integration test that changes a temporary
   route module, confirms the new response is served, and confirms an existing
   SSE client remains connected.
 - [ ] Document that cache-busted hot reload is a development/runtime recovery

@@ -100,7 +100,7 @@ let app = null;
 async function loadApp() {
   const url = `${pathToFileURL(APP_PATH)}?v=${statSync(APP_PATH).mtimeMs}`;
   const mod = await import(url);
-  const next = mod.init(state); // { handleRequest }
+  const next = await mod.init(state); // { handleRequest }
   app = next;
   state.reloadCount++;
   console.log(`[pi-ui] app.mjs loaded (reload #${state.reloadCount})`);
