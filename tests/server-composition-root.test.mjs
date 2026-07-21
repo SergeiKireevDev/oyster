@@ -22,8 +22,10 @@ test("stable core owns one app-store service across application reloads", () => 
   assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.PI_UI_DB_PATH \}\);/);
   assert.match(stableSource, /const state = \{[\s\S]*?appStore,/);
   assert.match(stableSource, /state\.appStore\.close\(\);/);
-  assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("const appHydration = appStore.hydrate()"));
+  assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("appStore.reconcileInterruptedOperations()"));
+  assert.ok(stableSource.indexOf("appStore.reconcileInterruptedOperations()") < stableSource.indexOf("const appHydration = appStore.hydrate()"));
   assert.ok(stableSource.indexOf("const appHydration = appStore.hydrate()") < stableSource.indexOf("await loadApp();"));
+  assert.ok(stableSource.indexOf("await loadApp();") < stableSource.indexOf("server.listen("));
   assert.match(stableSource, /appSettings: new Map\(appHydration\.settings/);
   assert.match(stableSource, /incompleteOperations: new Map\(appHydration\.incompleteOperations/);
   assert.doesNotMatch(source, /openAppStore|node:sqlite/);

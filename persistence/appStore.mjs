@@ -30,6 +30,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     }),
     operations: Object.freeze({
       listIncomplete: () => database.prepare("SELECT id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),
+      markRunningInterrupted: (updatedAt) => database.prepare("UPDATE operations SET status = 'interrupted', error = COALESCE(error, 'server restarted during operation'), updated_at = ? WHERE status = 'running'").run(updatedAt).changes,
     }),
   });
   let closed = false;
@@ -55,6 +56,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     }
   }
 
+  function reconcileInterruptedOperations(now = new Date().toISOString()) {
+    return transaction(() => repositories.operations.markRunningInterrupted(now));
+  }
+
   function hydrate() {
     if (closed) throw new Error("application database is closed");
     return Object.freeze({
@@ -68,6 +73,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     repositories,
     migrationStatus,
     transaction,
+    reconcileInterruptedOperations,
     hydrate,
     get closed() { return closed; },
     close() {

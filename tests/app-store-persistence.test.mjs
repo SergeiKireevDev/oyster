@@ -61,6 +61,21 @@ test("startup hydration rebuilds settings and incomplete operation snapshots onl
   });
 });
 
+test("startup reconciliation marks operations interrupted before hydration", (t) => {
+  const { path, databases, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+  databases[0].prepare("INSERT INTO operations(id, kind, status, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run("running", "delete_session", "running", "agent_delete", "created", "started");
+
+  assert.equal(store.reconcileInterruptedOperations("restarted"), 1);
+  assert.equal(store.reconcileInterruptedOperations("again"), 0);
+  assert.deepEqual(store.hydrate().incompleteOperations, [{
+    id: "running", kind: "delete_session", status: "interrupted", stage: "agent_delete",
+    payload: null, error: "server restarted during operation", created_at: "created", updated_at: "restarted",
+  }]);
+});
+
 test("closing and reopening the app store preserves data without rerunning migrations", (t) => {
   const { path, databases, Database } = fixture(t);
   const first = openAppStore({ databasePath: path, Database });

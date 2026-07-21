@@ -147,6 +147,7 @@ if (process.argv.includes("--check-config")) {
 // Open exactly once in the stable core. Hot-reloaded app modules receive this
 // same service through state rather than creating their own connections.
 const appStore = openAppStore({ databasePath: config.PI_UI_DB_PATH });
+const recoveredOperationCount = appStore.reconcileInterruptedOperations();
 const appHydration = appStore.hydrate();
 
 const state = {
@@ -155,6 +156,7 @@ const state = {
   /** Rebuildable caches hydrated without starting any OS process. */
   appSettings: new Map(appHydration.settings.map((entry) => [entry.key, entry])),
   incompleteOperations: new Map(appHydration.incompleteOperations.map((entry) => [entry.id, entry])),
+  recoveredOperationCount,
   /** cwd for the pi process (changed via POST /workdir) */
   currentDir: config.PI_DIR,
   /** @type {Map<string, object>} live tunnels (id -> entry with proc handle) */
