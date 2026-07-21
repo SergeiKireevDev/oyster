@@ -175,7 +175,7 @@ Remaining work, broken into atomic commits:
    teardown functions using the existing lifecycle/attachment/cleanup modules.
    Export a `{ start, teardown }` runtime; no lifecycle dependency factory may
    remain in `legacy.js`.
-6. [ ] **Switch the application entry point.** Change `appRuntime.js` to construct
+6. [x] **Switch the application entry point.** Change `appRuntime.js` to construct
    the new factory directly and delete `legacyRuntimeAdapter.js`,
    `legacyRuntimeDependencies.js`, `legacyRuntimeEventAdapters.js`, and
    `legacyRuntimeCleanup.js` only after their behavior is in a non-legacy

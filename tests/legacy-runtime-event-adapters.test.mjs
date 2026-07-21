@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLegacyRuntimeEventAdapters } from "../public/src/runtime/legacyRuntimeEventAdapters.js";
+import { createRuntimeEventAdapters } from "../public/src/runtime/runtimeEventAdapters.js";
 
 test("runtime event adapters attach once and then apply the carousel", () => {
   const calls = [];
-  const runtime = createLegacyRuntimeEventAdapters({
+  const runtime = createRuntimeEventAdapters({
     attachers: [{ attach: () => calls.push("first") }, { attach: () => calls.push("second") }],
     applyCarousel: () => calls.push("carousel"),
   });

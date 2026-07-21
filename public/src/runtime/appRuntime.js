@@ -1,8 +1,17 @@
-import { loadLegacyRuntimeLifecycle } from "./legacyRuntimeAdapter.js";
+import { createAppRuntime } from "./createAppRuntime.js";
 
-/** Temporary composition root while feature dependencies leave legacy.js. */
+let runtime;
+
+/** Starts the explicit application composition root without a legacy adapter. */
 export async function startAppRuntime() {
-  const runtime = await loadLegacyRuntimeLifecycle();
+  if (!runtime) {
+    const { createAppRuntimeDependencies } = await import("./appRuntimeImplementation.js");
+    runtime = createAppRuntime({
+      browser: { window, document, location, history, find: (id) => document.getElementById(id) },
+      stores: {},
+      createRuntime: () => createAppRuntimeDependencies(),
+    });
+  }
   runtime.start();
   return runtime.teardown;
 }

@@ -1,5 +1,5 @@
 /** Register the remaining feature event adapters once and expose explicit teardown. */
-export function createLegacyRuntimeEventAdapters({ attachers, applyCarousel }) {
+export function createRuntimeEventAdapters({ attachers, applyCarousel }) {
   let attached = false;
 
   return {
