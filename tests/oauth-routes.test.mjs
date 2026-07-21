@@ -81,6 +81,51 @@ test("OAuth start validates provider capability and explicit replacement", async
   assert.equal(accepted.body.flow.flowId, FLOW_ID);
 });
 
+test("OAuth routes map failures to stable safe statuses without echoing inputs", async () => {
+  const cases = [
+    ["invalid_provider", 400],
+    ["oauth_invalid_response", 400],
+    ["oauth_provider_not_found", 404],
+    ["oauth_flow_not_found", 404],
+    ["credential_not_found", 404],
+    ["credential_busy", 409],
+    ["credential_replace_required", 409],
+    ["credential_type_conflict", 409],
+    ["oauth_flow_limit", 409],
+    ["oauth_response_stale", 409],
+    ["oauth_flow_inactive", 409],
+    ["credential_service_unavailable", 503],
+    ["secret-code-canary", 503],
+  ];
+  for (const [code, expected] of cases) {
+    const routes = createOAuthRoutes(dependencies({
+      flowService: {
+        start() { throw Object.assign(new Error("provider-error-canary"), { code }); },
+        getStatus() {}, respond() {}, cancel() {},
+      },
+    }));
+    const res = response();
+    await routes["POST /oauth/start"]({ body: { provider: "mock", replace: false, secret: "body-canary" } }, res);
+    assert.equal(res.status, expected, code);
+    assert.doesNotMatch(JSON.stringify(res.body), /provider-error|body-canary|secret-code/);
+    if (code === "secret-code-canary") assert.equal(res.body.code, "credential_service_unavailable");
+  }
+
+  const malformedRoutes = createOAuthRoutes(dependencies());
+  const malformed = response();
+  await malformedRoutes["POST /oauth/respond"]({ raw: '{"value":"malformed-canary"' }, malformed);
+  assert.equal(malformed.status, 400);
+  assert.doesNotMatch(JSON.stringify(malformed.body), /malformed-canary/);
+
+  const restartFailure = createOAuthRoutes(dependencies({
+    restartActiveRunners: async () => { throw new Error("restart-canary"); },
+  }));
+  const res = response();
+  await restartFailure["DELETE /oauth"]({ body: { provider: "mock", restart: true } }, res);
+  assert.equal(res.status, 503);
+  assert.doesNotMatch(JSON.stringify(res.body), /restart-canary/);
+});
+
 test("OAuth polling, response, cancellation, and logout keep flow data in JSON bodies", async () => {
   const calls = [];
   const routes = createOAuthRoutes(dependencies({

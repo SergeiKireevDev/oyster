@@ -150,7 +150,7 @@ DELETE /oauth          { "provider": "...", "restart": true }
   Keep flow IDs and callback values out of paths and query strings. Start must
   require `replace: true` when a stored API key or OAuth credential would be
   replaced; logout must require explicit restart confirmation.
-- [ ] Return stable safe errors: `400` malformed input, `404` unknown/expired
+- [x] Return stable safe errors: `400` malformed input, `404` unknown/expired
   flow or provider, `409` credential conflict/busy provider/stale response,
   `413` oversized body, and `503` unavailable configured SDK or post-mutation
   restart failure. Never echo request bodies, callback values, redirect URLs,

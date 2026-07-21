@@ -43,15 +43,29 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
   }
 
   function operationError(res, error) {
-    const status = error?.code === "oauth_provider_not_found" || error?.code === "oauth_flow_not_found"
-      ? 404
-      : error?.code === "credential_busy" || error?.code === "credential_replace_required"
-        || error?.code === "oauth_flow_limit" || error?.code === "oauth_response_stale"
-        ? 409
-        : error?.code === "invalid_provider" || error?.code === "oauth_invalid_response"
-          ? 400
-          : 503;
-    json(res, status, { error: status === 503 ? "OAuth service unavailable" : "OAuth request could not be completed", code: error?.code ?? "credential_service_unavailable" });
+    const statuses = {
+      invalid_provider: 400,
+      oauth_invalid_response: 400,
+      oauth_provider_not_found: 404,
+      oauth_flow_not_found: 404,
+      credential_not_found: 404,
+      credential_busy: 409,
+      credential_replace_required: 409,
+      credential_type_conflict: 409,
+      oauth_flow_limit: 409,
+      oauth_response_stale: 409,
+      oauth_flow_inactive: 409,
+      credential_service_unavailable: 503,
+    };
+    const code = Object.hasOwn(statuses, error?.code) ? error.code : "credential_service_unavailable";
+    const status = statuses[code];
+    const message = {
+      400: "invalid OAuth request",
+      404: "OAuth flow or provider not found",
+      409: "OAuth request conflicts with current credential state",
+      503: "OAuth service unavailable",
+    }[status];
+    json(res, status, { error: message, code });
   }
 
   return {
