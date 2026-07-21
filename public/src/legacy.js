@@ -1826,12 +1826,3 @@ export function createLegacyRuntimeLifecycleDependencies() {
   });
 }
 
-/** Start legacy-owned transport and session boot only after Svelte has mounted. */
-export function startLegacyRuntime() {
-  return runtimeStarter();
-}
-
-/** Release runtime-owned long-lived transport resources on app unmount. */
-export function teardownLegacyRuntime() {
-  return runtimeTeardown();
-}
