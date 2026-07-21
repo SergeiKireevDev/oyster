@@ -1,6 +1,12 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
+import { configureFilePickerActions } from "../files/filePickerActions.js";
+import { configureFolderBrowserActions } from "../files/folderBrowserActions.js";
+import { configureFileExplorerActions } from "../files/fileExplorerActions.js";
+import { configureFilesActions } from "../files/filesActions.js";
+import { configureHublotActions } from "../hublots/hublotActions.js";
+import { configureRoutineActions } from "../routines/routineActions.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
 export function createResourceAssembly(deps) {
@@ -33,14 +39,27 @@ export function createResourceAssembly(deps) {
     updateRoutine: (...args) => active(routines.sidebar.update, ...args),
     getRoutineItems: () => !tornDown ? routines.sidebar.items : [],
   });
+  const actionDetachers = [];
   return {
     files,
     hublots,
     routines,
     operations,
+    configureActions(actions) {
+      if (actionDetachers.length) return;
+      actionDetachers.push(
+        configureFilePickerActions(actions.filePicker),
+        configureFolderBrowserActions(actions.folderBrowser),
+        configureFileExplorerActions(actions.fileExplorer),
+        configureFilesActions(actions.files),
+        configureHublotActions(actions.hublots),
+        configureRoutineActions(actions.routine),
+      );
+    },
     teardown() {
       if (tornDown) return;
       tornDown = true;
+      actionDetachers.splice(0).reverse().forEach((detach) => detach());
       files.teardown?.();
       routines.teardown();
       hublots.teardown();

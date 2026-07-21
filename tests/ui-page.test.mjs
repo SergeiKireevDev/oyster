@@ -59,7 +59,7 @@ test("application runtime controller injections use the Svelte toast store actio
 
 test("composer prompts delegate busy steering behavior to prompt actions", () => {
   assert.match(runtimeImplementation, /import \{ createComposerAssembly \} from "\.\.\/features\/composer\/createComposerAssembly\.js";/);
-  assert.match(runtimeImplementation, /const promptRpcCommand = composerOperations\.promptRpcCommand;/);
+  assert.doesNotMatch(runtimeImplementation, /promptRpcCommand/);
   assert.match(composerAssembly, /promptCommand\(text, deps\.getBusy\(\)\)/);
   assert.match(composerAssembly, /await deps\.rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });

@@ -1,6 +1,7 @@
 import { createHublotFeature } from "./createHublotFeature.js";
 import { createHublotManagerController } from "../../lib/hublotManagerController.js";
 import { refreshHublotScope } from "../../lib/hublotActions.js";
+import { createHublotController } from "../../lib/hublotController.js";
 
 export function createHublotRuntime(deps) {
   let scopeAll = false;
@@ -9,7 +10,7 @@ export function createHublotRuntime(deps) {
   let controller;
   const refresh = (options) => controller.refresh(options);
   const manager = createHublotManagerController({ resetCarousel: deps.resetCarousel, openModal: deps.openModal, refresh, getScopeAll: () => scopeAll });
-  controller = createHublotFeature({ createController: deps.createController, dependencies: {
+  controller = createHublotFeature({ createController: deps.createController ?? createHublotController, dependencies: {
     ...deps, getSessionId: deps.getSessionId, setDescription: (desc) => { form.desc = desc; deps.setDescription(desc); },
     listSidebarHublots: () => deps.listSidebarHublots(visible), isVisible: visible,
     getScopeAll: () => scopeAll, getDescription: () => form.desc,

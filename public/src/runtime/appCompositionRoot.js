@@ -15,7 +15,6 @@ import { createTranscriptAssembly } from "../features/transcript/createTranscrip
 import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
-import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "../stores/checkpointModelPicker.js";
@@ -39,22 +38,12 @@ import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createHublot, hublotVisible, listHublots } from "../lib/hublotActions.js";
-import { createHublotController } from "../lib/hublotController.js";
-import { configureHublotActions } from "../features/hublots/hublotActions.js";
-import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
-import { configureFilesActions } from "../features/files/filesActions.js";
-import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
-import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
-import { configureRoutineActions } from "../features/routines/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
-import { configureSettingsActions } from "../features/settings/settingsActions.js";
-import { configureHeaderActions } from "../features/settings/headerActions.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
 import { copyTextToClipboard } from "../lib/clipboardController.js";
-import { createExtensionUiController } from "../lib/extensionUiController.js";
 import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
 /*
@@ -75,16 +64,18 @@ export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history } = browser;
   void stores;
 
-let platformEvents;
 const lifecycleLog = createLifecycleLogger({
-  snapshot: () => ({
-    runner: getCurrentRunner(),
-    sessionId: getSessionState()?.sessionId ?? null,
-    replaying: platformEvents?.snapshot().replaying ?? true,
-    transcriptGateRequired,
-    replayDoneSeen: platformEvents?.snapshot().replayDoneSeen ?? false,
-    connected,
-  }),
+  snapshot: () => {
+    const events = platformAssembly.snapshotEvents();
+    return {
+      runner: getCurrentRunner(),
+      sessionId: getSessionState()?.sessionId ?? null,
+      replaying: events?.replaying ?? true,
+      transcriptGateRequired: platformAssembly.state.isTranscriptGateRequired(),
+      replayDoneSeen: events?.replayDoneSeen ?? false,
+      connected: platformAssembly.state.isConnected(),
+    };
+  },
 });
 
 // ------------------------------------------------------------ token
@@ -109,7 +100,7 @@ const platformAssembly = createPlatformAssembly({
   },
 });
 const delayedTasks = createLifecycleDelayedTasks();
-const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = platformAssembly.transport;
+const { token, requireToken, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = platformAssembly.transport;
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
@@ -150,10 +141,9 @@ const transcriptAssembly = createTranscriptAssembly({
     setCheckpointRestores([]);
   },
   resetTranscriptItems,
-  composerReadyForSend: () => platformEvents.isComposerReady(connected, transcriptGateRequired),
+  composerReadyForSend: () => platformAssembly.events.isComposerReady(platformAssembly.state.isConnected(), platformAssembly.state.isTranscriptGateRequired()),
 });
 const transcriptOperations = transcriptAssembly.operations;
-const addUserMessage = transcriptOperations.addUserMessage;
 const assistantAlreadyRendered = transcriptOperations.assistantAlreadyRendered;
 const clearMessages = transcriptOperations.clearMessages;
 const renderFullMessage = transcriptOperations.renderFullMessage;
@@ -211,7 +201,7 @@ const sessionAssembly = createSessionAssembly({
   updateHeaderState,
   stateApplier: {
     applySessionState,
-    getEmptySessionRunners: () => emptySessionRunners,
+    getEmptySessionRunners: () => sessionOperations.getEmptyRunners(),
     getRoutines: () => resourceOperations.getRoutineItems(),
     routineVisible,
     getTunnelScopeAll: () => resourceAssembly.hublots.getScopeAll(),
@@ -238,7 +228,7 @@ const sessionAssembly = createSessionAssembly({
     getCurrentRunner: () => getCurrentRunner(),
     getRunners: () => getRunners(),
     preview: null,
-    markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
+    markEmpty: (runnerId) => sessionOperations.markEmptyRunner(runnerId),
     log: lifecycleLog,
   },
   featureDependencies: ({ sessionOpenController, previewController }) => ({
@@ -275,9 +265,8 @@ const updateUsage = sessionOperations.updateUsage;
 
 // ------------------------------------------------------------ event stream
 
-let connected = false;
 const managedConnection = platformAssembly.configureConnection({
-  setConnected: (value) => { connected = value; updateAppSession({ connected }); },
+  setConnected: (value) => updateAppSession({ connected: platformAssembly.state.setConnected(value) }),
   setStatus: (stateInfo) => updateHeaderState({ stateInfo }),
   getToken: () => token,
   requireToken,
@@ -285,7 +274,7 @@ const managedConnection = platformAssembly.configureConnection({
   setReplaying: (...args) => platformAssembly.setReplaying(...args),
   setReplayDoneSeen: (value) => platformEvents.markReplayDone(value),
   setReplayBuffer: (value) => platformEvents.setReplayBuffer(value),
-  getSkipTranscriptGate: () => getCurrentRunner() && emptySessionRunners.has(getCurrentRunner()),
+  getSkipTranscriptGate: () => getCurrentRunner() && sessionOperations.isEmptyRunner(getCurrentRunner()),
   getRunner: () => getCurrentRunner(),
   log: lifecycleLog,
   onOpen: async ({ replay, skipTranscriptGate, started }) => {
@@ -301,17 +290,14 @@ const managedConnection = platformAssembly.configureConnection({
 const { coordinator: connectionCoordinator, watchdog: teardownReconnectWatchdog } = managedConnection;
 const connect = connectionCoordinator.connect;
 
-let transcriptGateRequired = true;
 const isDuplicateSseEvent = createLoggedSseDeduper({ log: lifecycleLog });
-const emptySessionRunners = new Set();
-updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired });
+updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired: platformAssembly.state.isTranscriptGateRequired() });
 function setTranscriptGateRequired(value) {
-  transcriptGateRequired = !!value;
-  updateAppSession({ transcriptGateRequired });
+  updateAppSession({ transcriptGateRequired: platformAssembly.state.setTranscriptGateRequired(value) });
 }
 const setReplaying = platformAssembly.setReplaying;
 const composerReadyForSend = transcriptOperations.composerReadyForSend;
-platformEvents = platformAssembly.configureEvents({
+const platformEvents = platformAssembly.configureEvents({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
   toast: addToast,
@@ -339,7 +325,7 @@ platformEvents = platformAssembly.configureEvents({
       assistantAlreadyRendered,
       reloadTranscript: () => reloadTranscript(),
       setBusy,
-      isGateRequired: () => transcriptGateRequired,
+      isGateRequired: platformAssembly.state.isTranscriptGateRequired,
       agentStart: () => agentStart(),
       agentCompletion: () => agentCompletion(),
       transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
@@ -423,7 +409,6 @@ const closeModal = dialogAdapters.modal.close;
 const updateModal = dialogAdapters.modal.update;
 const showSettingsModal = dialogAdapters.modal.showSettings;
 
-const promptRpcCommand = composerOperations.promptRpcCommand;
 const setupCommandPalette = composerOperations.setupCommandPalette;
 const detachComposerActions = () => composerAssembly.teardown();
 
@@ -433,7 +418,7 @@ const detachComposerActions = () => composerAssembly.teardown();
  *  inserting the path into the composer. */
 const resourceAssembly = createResourceAssembly({
   files: {
-  pickerState: () => ({ curDir: "", showHidden: true, onPick: insertIntoComposer, onCancel: null, returnToHublot: false }),
+  pickerState: () => ({ curDir: "", showHidden: true, onPick: composerOperations.insertText, onCancel: null, returnToHublot: false }),
   folderState: () => ({ browsePath: "", showHidden: true, done: null }),
   explorerState: () => ({ curPath: "", showHidden: true, editPath: "", editContent: "" }),
   picker: ({ state }) => ({
@@ -488,7 +473,6 @@ const resourceAssembly = createResourceAssembly({
     getSessionId: () => getSessionState()?.sessionId ?? null,
     resetCarousel: () => layoutOperations.reset(),
     openModal,
-    createController: createHublotController,
     createHublot: (options) => createHublot(fetch, options),
     setDescription: (desc) => updateHublotManager({ desc }),
     setCreating: (creating) => updateHublotManager({ creating }),
@@ -534,28 +518,14 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
   return filePickerController.show({ path: getWorkdir(), onPick, onCancel, returnToHublot });
 }
 
-const detachFilePickerActions = configureFilePickerActions({
+const filePickerActions = {
   browse: loadFilePicker,
   pick: (path) => filePickerController.complete({ ...filePickerState, path }),
   useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
-});
+};
 
-/** Insert text at the cursor position in the composer, padded with spaces. */
-function insertIntoComposer(text) {
-  const inp = $("input");
-  const start = inp.selectionStart ?? inp.value.length;
-  const end = inp.selectionEnd ?? start;
-  const before = inp.value.slice(0, start);
-  const after = inp.value.slice(end);
-  const pad = before && !/\s$/.test(before) ? " " : "";
-  const padAfter = after && !/^\s/.test(after) ? " " : "";
-  inp.value = before + pad + text + padAfter + after;
-  const pos = (before + pad + text).length;
-  inp.setSelectionRange(pos, pos);
-  inp.dispatchEvent(new Event("input")); // resize textarea
-  inp.focus();
-}
+const insertIntoComposer = composerOperations.insertText;
 
 // ------------------------------------------------------------ folder browser
 
@@ -592,26 +562,14 @@ const createFolderBrowser = () => {
   return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
-const detachFolderBrowserActions = configureFolderBrowserActions({
+const folderBrowserActions = {
   browse: loadFolderBrowser,
   create: createFolderBrowser,
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
   submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
-});
+};
 
 // ------------------------------------------------------------ tunnels
-
-/** Send a message to the agent as if typed in the composer. */
-async function sendAgentMessage(text) {
-  addUserMessage({ role: "user", content: text });
-  transcriptOperations.addLocalEcho(text);
-  try {
-    await rpc(promptRpcCommand(text), { wait: false });
-  } catch (e) {
-    transcriptOperations.removeLocalEcho(text);
-    addToast(`send failed: ${e.message}`, "error");
-  }
-}
 
 // ------------------------------------------------------------ file explorer
 // Built-in "hublot": same modal style as the attach-file picker, but with
@@ -630,14 +588,14 @@ const saveExplorerFile = () => fileExplorerController.saveEditor(
   get(fileExplorer).editContent,
 );
 
-const detachFileExplorerActions = configureFileExplorerActions({
+const fileExplorerActions = {
   browse: loadFileExplorer,
   edit: editExplorerFile,
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
   back: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
-});
+};
 
 
 const hublotRuntime = resourceAssembly.hublots;
@@ -650,18 +608,18 @@ const tunnelVisible = hublotRuntime.isVisible;
 
 // ------------------------------------------------------------ hublot sidebar
 
-const detachHublotActions = configureHublotActions({
+const hublotActions = {
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
   create: createManagedHublot,
   toggleScope: toggleManagedHublotScope,
   openCommandPalette: setupCommandPalette,
-});
+};
 
 const loadHublots = resourceOperations.loadHublots;
 
-const detachFilesActions = configureFilesActions({
+const filesActions = {
   openExplorer: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
-});
+};
 
 // ------------------------------------------------------------ routines sidebar
 //
@@ -681,7 +639,14 @@ const routineSidebarController = routineRuntime.sidebar;
 const routineController = routineRuntime.controller;
 const syncRoutinesStore = resourceOperations.syncRoutines;
 function loadRoutines() { if (token) return resourceOperations.loadRoutines(); }
-const detachRoutineActions = configureRoutineActions(routineController.run);
+resourceAssembly.configureActions({
+  filePicker: filePickerActions,
+  folderBrowser: folderBrowserActions,
+  fileExplorer: fileExplorerActions,
+  files: filesActions,
+  hublots: hublotActions,
+  routine: routineController.run,
+});
 
 // ------------------------------------------------------------ session picker
 
@@ -903,13 +868,7 @@ const detachRuntimeEventAdapters = () => {
   settingsLayoutRuntime.teardown();
   detachComposerActions();
   detachCheckpointTreeActions();
-  detachFilePickerActions();
-  detachFolderBrowserActions();
-  detachFileExplorerActions();
-  detachHublotActions();
-  detachRoutineActions();
   detachSessionPickerActions();
-  detachFilesActions();
   transcriptAssembly.teardown();
   resourceAssembly.teardown();
   dialogAdapters.teardown();

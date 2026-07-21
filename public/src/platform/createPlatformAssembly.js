@@ -10,6 +10,7 @@ export function createPlatformAssembly(deps) {
   let connection;
   let attachments;
   let tornDown = false;
+  const state = { connected: false, transcriptGateRequired: true };
   return {
     transport,
     configureEvents(config) {
@@ -36,6 +37,12 @@ export function createPlatformAssembly(deps) {
     dispatchEvent: (...args) => events?.dispatch(...args),
     setReplaying: (...args) => events?.setReplaying(...args),
     snapshotEvents: () => events?.snapshot(),
+    state: Object.freeze({
+      isConnected: () => state.connected,
+      setConnected: (value) => { state.connected = Boolean(value); return state.connected; },
+      isTranscriptGateRequired: () => state.transcriptGateRequired,
+      setTranscriptGateRequired: (value) => { state.transcriptGateRequired = Boolean(value); return state.transcriptGateRequired; },
+    }),
     teardown() {
       if (tornDown) return;
       tornDown = true;

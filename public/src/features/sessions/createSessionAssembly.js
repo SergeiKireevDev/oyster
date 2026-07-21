@@ -44,6 +44,7 @@ export function createSessionAssembly(deps) {
   let pickerRuntime = null;
   let bootController = null;
   let runnersUpdateHandler = null;
+  const emptyRunners = new Set();
 
   const operations = {
     boot: (...args) => bootController(...args),
@@ -66,6 +67,9 @@ export function createSessionAssembly(deps) {
     updateUsage: (message) => sessionUi.updateUsage(message),
     setRunnersUpdateHandler: (handler) => { runnersUpdateHandler = handler; },
     notifyRunnersChanged: (next) => runnersUpdateHandler?.(next),
+    getEmptyRunners: () => emptyRunners,
+    markEmptyRunner: (id) => emptyRunners.add(id),
+    isEmptyRunner: (id) => emptyRunners.has(id),
   };
 
   return {

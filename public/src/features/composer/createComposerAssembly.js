@@ -32,6 +32,20 @@ export function createComposerAssembly(deps) {
     history.reset();
   }
 
+  function insertText(text) {
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    const before = input.value.slice(0, start);
+    const after = input.value.slice(end);
+    const pad = before && !/\s$/.test(before) ? " " : "";
+    const padAfter = after && !/^\s/.test(after) ? " " : "";
+    input.value = before + pad + text + padAfter + after;
+    const position = (before + pad + text).length;
+    input.setSelectionRange(position, position);
+    input.dispatchEvent(new Event("input"));
+    input.focus();
+  }
+
   const promptRpcCommand = (text) => promptCommand(text, deps.getBusy());
 
   async function send() {
@@ -207,6 +221,7 @@ export function createComposerAssembly(deps) {
       send,
       abort,
       setText,
+      insertText,
       rememberPrompt: (text) => history.remember(text),
       clearHistory: () => history.clear(),
       resetHistory: () => history.reset(),
