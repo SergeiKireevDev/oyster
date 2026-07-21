@@ -1,12 +1,14 @@
 "use strict";
 
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHeaderHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { updateHeaderState } from "./stores/header.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
+import { openConfirmPrompt, openTextPrompt } from "./stores/dialogs.js";
 import { closeModalState, openModal, updateModal } from "./stores/modal.js";
+import { openOptionPicker } from "./stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "./stores/routines.js";
 import { addToast } from "./stores/toasts.js";
 
@@ -3004,18 +3006,14 @@ async function cycleThinking() {
   } catch (e) { toast(e.message, "error"); }
 }
 
-$("modelChip").addEventListener("click", chooseModel);
-$("thinkChip").addEventListener("click", cycleThinking);
-
-// mobile: one combined chip — a tiny two-option picker
-$("cfgChip").addEventListener("click", async () => {
+async function openConfigPicker() {
   const which = await pickOption("Settings", [
     `Model: ${state?.model?.id ?? "?"} — change…`,
     `Thinking: ${state?.thinkingLevel ?? "?"} — cycle`,
   ]);
   if (which === 0) await chooseModel();
   else if (which === 1) await cycleThinking();
-});
+}
 
 // ------------------------------------------------------------ session search
 
@@ -3323,119 +3321,21 @@ async function showSettingsModal() {
 }
 
 function pickOption(title, options, { searchable = false } = {}) {
-  return new Promise((resolve) => {
-    updateModal({ title });
-    const body = $("mBody");
-    body.innerHTML = "";
-    const buttons = [];
-    const done = (v) => { document.removeEventListener("keydown", onKey); closeModal(); resolve(v); };
-
-    // ---- keyboard navigation: arrows move a highlight, Enter picks it ----
-    let active = -1; // index into buttons, -1 = none
-    const visible = () => buttons.filter((b) => b.style.display !== "none");
-    const setActive = (b) => {
-      active = buttons.indexOf(b);
-      buttons.forEach((x) => x.classList.toggle("active", x === b));
-      b?.scrollIntoView({ block: "nearest" });
-    };
-    const move = (dir) => {
-      const vis = visible();
-      if (!vis.length) return;
-      const cur = vis.indexOf(buttons[active]);
-      const next = cur < 0 ? (dir > 0 ? 0 : vis.length - 1) : (cur + dir + vis.length) % vis.length;
-      setActive(vis[next]);
-    };
-    const onKey = (e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
-      else if (e.key === "Enter") {
-        e.preventDefault();
-        const target = active >= 0 && buttons[active].style.display !== "none"
-          ? buttons[active]
-          : (searchable ? visible()[0] : null); // filtering: Enter picks the first match
-        if (target) target.click();
-      } else if (e.key === "Escape") { e.preventDefault(); done(null); }
-    };
-    document.addEventListener("keydown", onKey);
-
-    let search = null;
-    if (searchable) {
-      search = document.createElement("input");
-      search.type = "text";
-      search.placeholder = "Filter…";
-      body.appendChild(search);
-      search.addEventListener("input", () => {
-        const q = search.value.trim().toLowerCase();
-        for (const b of buttons)
-          b.style.display = b.textContent.toLowerCase().includes(q) ? "" : "none";
-        // drop the highlight if filtering hid it
-        if (active >= 0 && buttons[active].style.display === "none") setActive(null);
-      });
-    }
-    options.forEach((opt, idx) => {
-      const b = document.createElement("button");
-      b.className = "m-option";
-      b.textContent = opt;
-      b.addEventListener("click", () => done(idx));
-      b.addEventListener("mousemove", () => { if (active !== idx) setActive(b); });
-      body.appendChild(b);
-      buttons.push(b);
-    });
-    const actions = $("mActions");
-    const cancel = document.createElement("span");
-    cancel.className = "chip";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => done(null));
-    actions.appendChild(cancel);
-    openModal({ title });
-    search?.focus();
-  });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  return openOptionPicker(title, options, { searchable });
 }
 
 function promptText(title, placeholder, prefill) {
-  return new Promise((resolve) => {
-    updateModal({ title });
-    const body = $("mBody");
-    body.innerHTML = "";
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.placeholder = placeholder || "";
-    inp.value = prefill || "";
-    body.appendChild(inp);
-    const actions = $("mActions");
-    const cancel = document.createElement("span");
-    cancel.className = "chip";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => { closeModal(); resolve(null); });
-    const ok = document.createElement("button");
-    ok.className = "btn";
-    ok.textContent = "OK";
-    ok.style.padding = "6px 16px";
-    ok.addEventListener("click", () => { const v = inp.value; closeModal(); resolve(v); });
-    actions.append(cancel, ok);
-    openModal({ title });
-    inp.focus();
-    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
-  });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  return openTextPrompt(title, placeholder, prefill);
 }
 
 function confirmDialog(title, message) {
-  return new Promise((resolve) => {
-    updateModal({ title });
-    $("mBody").textContent = message;
-    const actions = $("mActions");
-    const no = document.createElement("span");
-    no.className = "chip";
-    no.textContent = "No";
-    no.addEventListener("click", () => { closeModal(); resolve(false); });
-    const yes = document.createElement("button");
-    yes.className = "btn";
-    yes.textContent = "Yes";
-    yes.style.padding = "6px 16px";
-    yes.addEventListener("click", () => { closeModal(); resolve(true); });
-    actions.append(no, yes);
-    openModal({ title });
-  });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  return openConfirmPrompt(title, message);
 }
 
 // ------------------------------------------------------------ extension UI bridge
@@ -3642,8 +3542,7 @@ function attachSwipeListeners() {
 }
 
 // ---- unify the header chip taps with the carousel ----
-$("hublotChip").addEventListener("click", (e) => {
-  e.stopPropagation();
+function toggleHublotsFromHeader() {
   const hublots = $("hublots");
   if (window.matchMedia("(min-width: 761px)").matches) {
     // desktop: default toggle behaviour
@@ -3656,11 +3555,9 @@ $("hublotChip").addEventListener("click", (e) => {
   carousel = opening ? 1 : 0;
   localStorage.setItem("pi_carousel", String(carousel));
   applyCarousel();
-});
+}
 
-const _origTreeChipClick = $("treeChip").onclick;
-$("treeChip").addEventListener("click", (e) => {
-  e.stopPropagation();
+function toggleTreeFromHeader() {
   const treebar = $("treebar");
   if (window.matchMedia("(min-width: 761px)").matches) {
     treebar.classList.toggle("open");
@@ -3671,6 +3568,14 @@ $("treeChip").addEventListener("click", (e) => {
   carousel = opening ? 2 : 0;
   localStorage.setItem("pi_carousel", String(carousel));
   applyCarousel();
+}
+
+setHeaderHandlers({
+  chooseModel,
+  cycleThinking,
+  openConfig: openConfigPicker,
+  toggleHublots: toggleHublotsFromHeader,
+  toggleTree: toggleTreeFromHeader,
 });
 
 // apply initial page on load + whenever the page becomes mobile/desktop

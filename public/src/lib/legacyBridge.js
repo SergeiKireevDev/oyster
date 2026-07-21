@@ -5,6 +5,7 @@ let routineHandlers = {};
 let commandPaletteHandlers = {};
 let checkpointTreeHandlers = {};
 let settingsHandlers = {};
+let headerHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -84,4 +85,30 @@ export function setSettingsHandlers(handlers) {
 
 export function reloadAfterSettingsChange() {
   return settingsHandlers.reload?.();
+}
+
+export function setHeaderHandlers(handlers) {
+  headerHandlers = handlers ?? {};
+}
+
+export function chooseHeaderModel() {
+  return headerHandlers.chooseModel?.();
+}
+
+export function cycleHeaderThinking() {
+  return headerHandlers.cycleThinking?.();
+}
+
+export function openHeaderConfig() {
+  return headerHandlers.openConfig?.();
+}
+
+export function toggleHeaderHublots(event) {
+  event?.stopPropagation?.();
+  return headerHandlers.toggleHublots?.();
+}
+
+export function toggleHeaderTree(event) {
+  event?.stopPropagation?.();
+  return headerHandlers.toggleTree?.();
 }
