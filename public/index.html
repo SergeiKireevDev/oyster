@@ -2092,6 +2092,8 @@ function connect() {
       // existing DOM would duplicate messages.
       await reloadTranscript();
     } catch (e) {
+      // a failed reload must not wedge the stream in replay mode forever
+      replaying = false;
       if (String(e.message).includes("unauthorized")) return;
       toast(`init failed: ${e.message}`, "error");
     }
@@ -2115,7 +2117,13 @@ function connect() {
   };
 }
 
-let replaying = true; // true while the SSE replay buffer is being re-delivered
+// True from (re)connect until the canonical transcript's tail is rendered.
+// This covers BOTH the SSE replay buffer and the live events of a busy
+// runner: rendering either before reloadTranscript() has rebuilt the
+// transcript would paint duplicates onto the preview and fight its scroll
+// position. reloadTranscript() lifts the gate the moment the tail is in the
+// DOM (live events append below it just fine while history backfills above).
+let replaying = true;
 
 function handleEvent(msg) {
   // While the SSE replay buffer is being re-delivered, drop transcript-
@@ -2131,7 +2139,8 @@ function handleEvent(msg) {
       return;
 
     case "replay_done":
-      replaying = false;
+      // NOTE: `replaying` stays true here — only the canonical transcript
+      // render (reloadTranscript) opens the live-event gate
       if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
       if (msg.runners) runnersNow = msg.runners;
       if (msg.workdir) setWorkdir(msg.workdir);
@@ -2346,7 +2355,11 @@ async function reloadTranscript() {
   ]);
   applyState(s);
   lastPreview = null; // canonical content from pi supersedes the file preview
-  const complete = await renderTranscript(messages);
+  const rendered = renderTranscript(messages); // tail is in the DOM after this call
+  // the transcript now shows the right last messages: let live events through
+  // (they append below the tail; backfill continues above the viewport)
+  replaying = false;
+  const complete = await rendered;
   // markers and the permalink-focus callback need the FULL transcript in the
   // DOM (their targets may live in a backfilled chunk); skip both if this
   // render was superseded by a newer one meanwhile
