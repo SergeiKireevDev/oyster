@@ -66,12 +66,17 @@ function bashToolName(tools) {
 }
 
 /** The bash command that serves the button page on `port`. */
-function serveButtonCommand(port) {
-  // Heredoc keeps the tiny node server out of nested quoting; setsid+nohup
-  // detach it so it survives the bash tool call finishing. node:22 base image
-  // has node but not python, so we serve with node.
+function serveButtonCommand(port, startupPath) {
+  // Honor the production setup-agent contract: create one idempotent startup
+  // artifact at the allocated path and invoke that artifact (never start the
+  // service directly from the agent tool call).
   return [
+    `mkdir -p "$(dirname '${startupPath}')"`,
+    `cat > '${startupPath}' <<'STARTUP'`,
+    `#!/bin/sh`,
+    `# pi-lot-ui: idempotent`,
     `port=${port}`,
+    `curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null && exit 0`,
     `cat > /tmp/hublot-$port.js <<'JS'`,
     `const http = require('http');`,
     `const html = '<!doctype html><html><head><title>e2e button</title></head>' +`,
@@ -81,7 +86,10 @@ function serveButtonCommand(port) {
     `JS`,
     `PORT=$port setsid nohup node /tmp/hublot-$port.js > /tmp/hublot-$port.log 2>&1 &`,
     `sleep 1`,
-    `curl -s -o /dev/null "http://127.0.0.1:$port/" && echo "serving on $port"`,
+    `curl -fsS -o /dev/null "http://127.0.0.1:$port/"`,
+    `STARTUP`,
+    `chmod 700 '${startupPath}'`,
+    `'${startupPath}' && echo "serving on $port"`,
   ].join("\n");
 }
 
@@ -95,10 +103,11 @@ function decide(messages, tools) {
   const portMatch = userText.match(/(?:local port|localhost:)\s*(\d+)/i);
   const wantsServe = /(serve|reachable|hublot|available on local port|forwards? to|keep running)/i.test(userText);
   if (portMatch && wantsServe && !hasToolResult) {
+    const startupPath = userText.match(/at exactly\s+(\S+)/i)?.[1]?.replace(/[.,;:]$/, "");
     return {
       kind: "tool",
       name: bashToolName(tools),
-      arguments: { command: serveButtonCommand(portMatch[1]) },
+      arguments: { command: serveButtonCommand(portMatch[1], startupPath ?? `/tmp/hublot-${portMatch[1]}-start.sh`) },
     };
   }
   if (hasToolResult) {

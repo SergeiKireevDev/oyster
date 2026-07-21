@@ -23,8 +23,8 @@
  */
 
 import { spawn, execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
@@ -300,16 +300,54 @@ export function closeAllTunnels(state) {
 
 // ---------------------------------------------------------------- hublot agents
 
+const START_SCRIPT_MAX_BYTES = 256 * 1024;
+
+export function hublotAgentPrompt(hublot, brief) {
+  return `Prepare the following service on local port ${hublot.port}:\n${brief}\n\n` +
+    `Create an idempotent executable startup script at exactly ${hublot.serviceStartScriptPath}. ` +
+    `It must start with a shebang and the line "# pi-lot-ui: idempotent", safely do nothing ` +
+    `when the service is already healthy, and recreate the service after a restart. ` +
+    `Invoke that exact script to start the service; do not start the service by any other command. ` +
+    `Do not open a public tunnel. Whatever serves it must keep running after you exit. ` +
+    `Verify it responds on port ${hublot.port} before finishing.`;
+}
+
+/** Validate the setup-agent artifact and atomically persist its recovery source. */
+export function validateAndStoreHublotStartupScript(state, hublot) {
+  const row = hublotRepository(state).find(hublot.id);
+  const path = hublot.serviceStartScriptPath;
+  if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
+  if (!path || path !== row.service_start_script_path) throw new Error("setup agent did not use the allocated startup-script path");
+  let descriptor = null;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const metadata = fstatSync(descriptor);
+    if (!metadata.isFile()) throw new Error("startup script is not a regular file");
+    if (!(metadata.mode & 0o111)) throw new Error("startup script is not executable");
+    if (metadata.size < 1 || metadata.size > START_SCRIPT_MAX_BYTES) throw new Error(`startup script must be 1-${START_SCRIPT_MAX_BYTES} bytes`);
+    const content = readFileSync(descriptor, "utf8");
+    if (!content.startsWith("#!")) throw new Error("startup script must start with a shebang");
+    if (!/^# pi-lot-ui: idempotent$/m.test(content)) throw new Error("startup script must declare the idempotent hublot protocol");
+    if (content.includes("\0")) throw new Error("startup script must be text");
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    hublotRepository(state).update(row.id, {
+      service_start_script: content,
+      service_start_script_sha256: sha256,
+    });
+    return Object.freeze({ path, content, sha256 });
+  } catch (error) {
+    throw new Error(`invalid hublot startup script at ${path}: ${error.message}`, { cause: error });
+  } finally {
+    if (descriptor !== null) closeSync(descriptor);
+  }
+}
+
 /** Spawn a one-shot background pi agent (`pi -p`) and resolve only after
  *  its local service answers. The caller opens and publishes the tunnel
  *  afterwards, so users never see a hublot that still returns 502. */
 export function spawnHublotAgent(state, hublot, brief) {
   return new Promise((resolvePromise, reject) => {
-    const prompt =
-      `Prepare the following service on local port ${hublot.port}:\n${brief}\n\n` +
-      `Do not open a public tunnel. Whatever serves it must keep running after you exit: ` +
-      `start it detached in the background (e.g. nohup … & disown) and verify it responds ` +
-      `on port ${hublot.port} before finishing.`;
+    const prompt = hublotAgentPrompt(hublot, brief);
     console.log(`[pi-ui] preparing local service for hublot :${hublot.port}`);
     // --no-session: these one-shot setup runs must not leave session files
     // behind (they would clutter the sessions list)
@@ -339,6 +377,10 @@ export function spawnHublotAgent(state, hublot, brief) {
 
     const finish = (error = null) => {
       if (done) return;
+      if (!error) {
+        try { validateAndStoreHublotStartupScript(state, hublot); }
+        catch (validationError) { error = validationError.message; }
+      }
       done = true;
       clearInterval(poll);
       if (error) {
