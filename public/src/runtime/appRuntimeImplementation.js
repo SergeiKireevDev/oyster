@@ -20,12 +20,12 @@ import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
-import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
+import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
 import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
-import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./sessionRuntime.js";
+import { applySessionState, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./carouselController.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
@@ -80,8 +80,6 @@ import { createSettingsLayoutRuntime } from "../features/settings/createSettings
 import { createSettingsController } from "../lib/settingsController.js";
 import { configureSettingsActions } from "../features/settings/settingsActions.js";
 import { configureHeaderActions } from "../features/settings/headerActions.js";
-import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../lib/sessionPickerController.js";
-import { createSessionPickerSearchController } from "../lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
 import { copyTextToClipboard } from "../lib/clipboardController.js";
@@ -1343,15 +1341,10 @@ const detachRoutineActions = configureRoutineActions(routineController.run);
 
 // ------------------------------------------------------------ session picker
 
-let sessionPickerResolve = null;
-let sessionPickerSessions = [];
-
-const sessionPickerSnapshot = () => storeSnapshot(sessionPicker);
-
-const sessionPickerSearchController = createSessionPickerSearchController({
-  getSnapshot: sessionPickerSnapshot,
-  update: updateSessionPicker,
-  groupResults: groupSessionSearchResults,
+const sessionPickerRuntime = createSessionPickerRuntime({
+  storeSnapshot,
+  sessionPickerStore: sessionPicker,
+  updateSessionPicker,
   async fetchSearch({ q, scope, path, includeTools }) {
     const params = new URLSearchParams({ token, q, scope });
     if (path) params.set("path", path);
@@ -1359,10 +1352,6 @@ const sessionPickerSearchController = createSessionPickerSearchController({
     const res = await fetch(`/search?${params}`);
     return { ok: res.ok, status: res.status, data: await res.json() };
   },
-});
-const runSessionPickerSearch = sessionPickerSearchController.search;
-
-const sessionPickerFolderController = createSessionPickerFolderController({
   async fetchSessions(folder) {
     const dir = folder ?? sessionUi.workdir;
     const query = dir ? `${folder ? "path" : "dir"}=${encodeURIComponent(dir)}` : "";
@@ -1371,136 +1360,62 @@ const sessionPickerFolderController = createSessionPickerFolderController({
     if (!response.ok) throw new Error(data.error || `failed to list sessions (${response.status})`);
     return data.sessions ?? [];
   },
-  getSnapshot: sessionPickerSnapshot,
-  update: updateSessionPicker,
   getRunners: () => runnersNow,
-  setSessions: (sessions) => { sessionPickerSessions = sessions; },
   toast: addToast,
-});
-const loadSessionPickerFolder = sessionPickerFolderController.loadFolder;
-
-const sessionPickerController = createSessionPickerController({
   stopRunner: (id) => getSessionRuntime().stopSession(id),
-  getRunners: () => runnersNow,
-  markStopped: markRunnerStopped,
-  setRunners: (runners = runnersNow) => updateSessionPicker({ runners }),
-  toast: addToast,
-});
-
-const sessionPickerDeleteController = createSessionPickerDeleteController({
   async removeSession(path) {
     const response = await fetch(`/session?path=${encodeURIComponent(path)}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `delete failed (${response.status})`);
     return data;
   },
-  getSessions: () => sessionPickerSessions,
-  setSessions: (sessions) => { sessionPickerSessions = sessions; updateSessionPicker({ sessions }); },
-  toast: addToast,
   refreshHublots: loadHublots,
   refreshRoutines: loadRoutines,
   confirm,
-});
-
-const sessionPickerActions = {
-  setScope: sessionPickerSearchController.setScope,
-  setFolder: sessionPickerSearchController.setFolder,
-  setExcludeTools: sessionPickerSearchController.setExcludeTools,
-  runSearch: runSessionPickerSearch,
-  chooseSession: (sessionPath) => {
-    closeModal();
-    sessionPickerResolve?.(sessionPickerController.chooseSession(sessionPath, sessionPickerSessions));
-  },
-  stopSession: sessionPickerController.stopSession,
-  deleteSession: sessionPickerDeleteController.deleteSession,
-  openSearchHit: (sessionPath, hit) => {
-    sessionPickerResolve?.(null);
-    getSessionRuntime().openSessionAtSearchHit(sessionPath, hit);
-  },
-  loadFolder: loadSessionPickerFolder,
-};
-const cancelSessionPicker = () => { closeModal(); sessionPickerResolve?.(null); };
-const detachSessionPickerActions = configureSessionPickerActions((type, ...args) => type === "cancel" ? cancelSessionPicker() : sessionPickerActions[type]?.(...args));
-
-async function showSessionPicker() {
-  // list the sessions of the CURRENT session's directory, not the server's
-  // last-set global workdir
-  const dirQ = sessionUi.workdir ? `?dir=${encodeURIComponent(sessionUi.workdir)}` : "";
-  const res = await fetch(`/sessions${dirQ}`);
-  if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return; }
-  const { sessions } = await res.json();
-  if (!sessions.length) { addToast("no saved sessions"); return; }
-  sessionPickerSessions = sessions;
-  const currentSessionFile = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
-  const currentId = sessions.find((session) => session.path === currentSessionFile)?.id ?? state?.sessionId;
-
-  // folders for the search scope selector and the "other folders" section
-  let folders = [], currentFolder = null;
-  try {
-    const r = await fetch(`/session-folders${dirQ}`);
-    const d = await r.json();
-    if (r.ok) { folders = d.folders; currentFolder = d.current; }
-  } catch {}
-  onRunnersUpdate = (runners) => updateSessionPicker({ runners });
-
-  const chosen = await new Promise((resolve) => {
-    sessionPickerResolve = resolve;
-    updateSessionPicker({
-      sessions,
-      folders,
-      currentFolder,
-      currentId,
-      currentWorkdir: sessionUi.workdir,
-      runners: runnersNow,
-      query: "",
-      scope: "all",
-      folderPath: currentFolder ?? folders[0]?.dir ?? "",
-      excludeTools: true,
-      searchStatus: "",
-      searchResults: [],
-      searchFilesSearched: 0,
-      searchTruncated: false,
-      searching: false,
-      otherFolderSessions: {},
-      loadingFolders: {},
-    });
-    openModal({ title: "Sessions", content: "sessionPicker" });
-  });
-
-  onRunnersUpdate = null;
-  sessionPickerResolve = null;
-  const fullChoice = chosen ? (sessionPickerSessions.find((session) => session.path === chosen.path || session.id === chosen.id) ?? chosen) : null;
-  if (!fullChoice) return;
-  try {
-    // attaches to the session's live runner if it has one (its work is
-    // untouched), else spawns a fresh pi on that session in the background;
-    // sessions from other folders spawn in their own recorded cwd
-    const runner = await getSessionRuntime().openAndSwitchSession({
-      sessionPath: fullChoice.path,
-      dir: fullChoice.cwd || sessionUi.workdir,
-    });
-    addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
-  } catch (e) {
-    addToast(`switch failed: ${e.message}`, "error");
-  }
-}
-
-
-// ------------------------------------------------------------ session search
-
-/** Switch to the hit's session (if needed) and scroll to / flash the message. */
-const searchHitSessionController = createSearchHitSessionController({
   close: closeModal,
+  openSessionAtSearchHit: (sessionPath, hit) => getSessionRuntime().openSessionAtSearchHit(sessionPath, hit),
+  async loadInitialPickerData() {
+    const dirQ = sessionUi.workdir ? `?dir=${encodeURIComponent(sessionUi.workdir)}` : "";
+    const res = await fetch(`/sessions${dirQ}`);
+    if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], folders: [], currentFolder: null }; }
+    const { sessions } = await res.json();
+    let folders = [], currentFolder = null;
+    try {
+      const r = await fetch(`/session-folders${dirQ}`);
+      const d = await r.json();
+      if (r.ok) { folders = d.folders; currentFolder = d.current; }
+    } catch {}
+    return { sessions, folders, currentFolder };
+  },
+  getCurrentSessionId: (sessions) => {
+    const currentSessionFile = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+    return sessions.find((session) => session.path === currentSessionFile)?.id ?? state?.sessionId;
+  },
+  setRunnersUpdateHandler: (handler) => { onRunnersUpdate = handler; },
+  getWorkdir: () => sessionUi.workdir,
+  open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
+  async openChosenSession(fullChoice) {
+    try {
+      await getSessionRuntime().openAndSwitchSession({ sessionPath: fullChoice.path, dir: fullChoice.cwd || sessionUi.workdir });
+      addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
+    } catch (e) {
+      addToast(`switch failed: ${e.message}`, "error");
+    }
+  },
   getSessionId: () => state?.sessionId,
-  open: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || sessionUi.workdir }),
+  openSearchSession: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || sessionUi.workdir }),
   getCurrentRunner: () => currentRunner,
   setWorkdir,
-  reload: reloadTranscript,
-  focus: focusSearchHit,
+  reloadTranscript,
+  focusSearchHit,
   setAfterTranscript: (callback) => { afterTranscript = callback; },
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
-  toast: addToast,
 });
+const showSessionPicker = sessionPickerRuntime.show;
+const searchHitSessionController = sessionPickerRuntime.searchHit;
+const detachSessionPickerActions = sessionPickerRuntime.detachActions;
+
+// ------------------------------------------------------------ session search
 async function focusSearchHit(hit) {
   if (hit.entryId) {
     await focusEntryById(hit.entryId);
