@@ -1836,8 +1836,6 @@ const handleExtensionUI = createExtensionUiController({
 // Mobile-only: horizontal swipes move through three views — chat, hublots,
 // checkpoints — like snapping pages. A two-finger swipe switches between
 // active sessions. A three-dot indicator at the bottom shows position.
-function switchToAdjacentRunner(direction) { return adjacentRunnerController(direction); }
-//
 // Pages: 0 = chat (no sidebar); 1 = hublots drawer; 2 = checkpoints drawer.
 // Right swipe advances, left swipe goes back.
 
@@ -1853,7 +1851,7 @@ const carouselController = createCarouselController({
 const swipeController = createCarouselSwipeController({
   isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
   step: (direction) => carouselController.step(direction),
-  switchRunner: switchToAdjacentRunner,
+  switchRunner: (direction) => adjacentRunnerController(direction),
 });
 
 // Find sessions the user would consider "active": alive, has a real
