@@ -56,6 +56,7 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
 | `--pi` | `PI_BIN` | `pi` | pi executable path |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
+| – | `PI_UI_DB_PATH` | `~/.pi/agent/pi-lot-ui.sqlite` | separate SQLite database for pi-lot-ui-owned application data |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |
 
 ### Running as a service

@@ -104,6 +104,7 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 | `--pi` | `PI_BIN` | local checkout `dist/cli.js` | pi executable; bare names are resolved through `PATH` |
 | – | `PERSISTENT_STORE` | `sqlite` | session backend: `sqlite` or `jsonl` |
 | – | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi agent directory; SQLite database is `<dir>/sessions.sqlite` |
+| – | `PI_UI_DB_PATH` | `~/.pi/agent/pi-lot-ui.sqlite` | separate SQLite database for pi-lot-ui-owned application data |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc`; `--session-dir <dir>` relocates `sessions.sqlite` |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary used to open tunnels (must support `tunnel --url http://127.0.0.1:<port>`) |
 

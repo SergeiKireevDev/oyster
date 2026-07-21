@@ -265,7 +265,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 1. Add the app database foundation
 
-- [ ] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-ui.sqlite`.
+- [x] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-ui.sqlite`.
 - [ ] Create one stable-core-owned database service and expose repositories through `state.appStore`; define deterministic startup, hot-reload reuse, graceful close, and test teardown behavior.
 - [ ] Enable WAL, foreign keys, a busy timeout, and `synchronous=NORMAL`.
 - [ ] Add numbered, transactional, idempotent schema migrations.

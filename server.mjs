@@ -109,6 +109,7 @@ const config = {
   PI_EXTRA_ARGS: piExtraArgs,
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
+  PI_UI_DB_PATH: resolve(process.env.PI_UI_DB_PATH ?? join(homedir(), ".pi", "agent", "pi-lot-ui.sqlite")),
   SQLITE_PATH: persistentStore === "sqlite"
     ? join(resolve(sessionDirIndex >= 0 && piExtraArgs[sessionDirIndex + 1] ? piExtraArgs[sessionDirIndex + 1] : agentDir), "sessions.sqlite")
     : null,
@@ -126,6 +127,7 @@ if (process.argv.includes("--check-config")) {
     piBin: config.PI_BIN,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
+    appDbPath: config.PI_UI_DB_PATH,
     node: process.versions.node,
   }));
   process.exit(0);
