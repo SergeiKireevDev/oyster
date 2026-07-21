@@ -2,6 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRpcClient } from "../public/src/runtime/rpcClient.js";
 
+test("rpc client rejects and clears pending commands when its request fails", async () => {
+  const originalFetch = globalThis.fetch;
+  const cleared = [];
+  globalThis.fetch = async () => ({ ok: false, status: 500 });
+  try {
+    const client = createRpcClient({
+      getRunner: () => "runner", getToken: () => "token", onUnauthorized: () => {}, onPendingResume: () => {},
+      setTimeoutImpl: () => "timer", clearTimeoutImpl: (timer) => cleared.push(timer),
+    });
+    await assert.rejects(client.rpc({ type: "get_state" }), /rpc failed: 500/);
+    assert.deepEqual(cleared, ["timer"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("rpc client disposal rejects pending commands and clears their timers", async () => {
   const originalFetch = globalThis.fetch;
   const timers = [];

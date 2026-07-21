@@ -12,14 +12,23 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer });
     }) : null;
-    const res = await fetch(`/rpc?runner=${encodeURIComponent(getRunner() ?? "")}`, {
-      method: "POST", headers: { "content-type": "application/json", "x-auth-token": getToken() }, body: JSON.stringify(cmd),
-    });
-    if (res.status === 401) { onUnauthorized(); throw new Error("unauthorized"); }
-    if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
-    const ack = await res.json().catch(() => null);
-    if (ack?.pendingResume && cmd.type === "prompt") onPendingResume();
-    return waiter;
+    try {
+      const res = await fetch(`/rpc?runner=${encodeURIComponent(getRunner() ?? "")}`, {
+        method: "POST", headers: { "content-type": "application/json", "x-auth-token": getToken() }, body: JSON.stringify(cmd),
+      });
+      if (res.status === 401) { onUnauthorized(); throw new Error("unauthorized"); }
+      if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
+      const ack = await res.json().catch(() => null);
+      if (ack?.pendingResume && cmd.type === "prompt") onPendingResume();
+      return waiter;
+    } catch (error) {
+      const pendingWaiter = pending.get(id);
+      if (!pendingWaiter) throw error;
+      pending.delete(id);
+      clearTimeoutImpl(pendingWaiter.timer);
+      pendingWaiter.reject(error);
+      return waiter;
+    }
   }
 
   function handleResponse(msg) {
