@@ -1644,10 +1644,11 @@ managedHublotEventController.attach();
 
 // ------------------------------------------------------------ hublot sidebar
 
-createHublotSidebarEventController({
+const hublotSidebarEventController = createHublotSidebarEventController({
   windowTarget: window,
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
-}).attach();
+});
+hublotSidebarEventController.attach();
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
 // tap outside the drawer closes it (mobile only — on desktop they're
@@ -2171,5 +2172,6 @@ export function teardownLegacyRuntime() {
   folderBrowserEventController.detach();
   fileExplorerEventController.detach();
   managedHublotEventController.detach();
+  hublotSidebarEventController.detach();
   connectionState.lost();
 }
