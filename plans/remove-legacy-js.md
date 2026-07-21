@@ -165,7 +165,7 @@ Remaining work, broken into atomic commits:
    `legacy.js` into the factory. Preserve the existing injected callbacks,
    replay gate, `_sseId` dedupe, durable transcript reload, and scroll
    adapters. Test the factory with fake browser adapters.
-4. [ ] **Move feature-controller construction.** Move construction and dependency
+4. [x] **Move feature-controller construction.** Move construction and dependency
    wiring for checkpoint, composer/command, file/folder, hublot, routine,
    session-picker, settings, extension-UI, and carousel controllers into the
    factory. Keep each controller's event adapter as an explicit factory output

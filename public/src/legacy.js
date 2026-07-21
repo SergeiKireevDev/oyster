@@ -49,9 +49,8 @@ import { renderMarkdown } from "./lib/markdownRenderer.js";
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
-import { createCheckpointController } from "./lib/checkpointController.js";
-import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
+import { openCheckpointModelPicker as openModelPicker } from "./lib/checkpointActions.js";
+import { createCheckpointFeatureRuntime } from "./runtime/checkpointFeatureRuntime.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
@@ -59,7 +58,6 @@ import { createPostSendTranscriptSyncController } from "./lib/postSendTranscript
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createComposerHistoryController } from "./lib/composerHistoryController.js";
 import { createComposerEventController } from "./lib/composerController.js";
-import { createCheckpointTreeController, createCheckpointTreeEventController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
@@ -254,61 +252,21 @@ function pickCheckpointModel(options = {}) {
   });
 }
 
-const checkpointMarkerController = createCheckpointMarkerController({
-  tick,
-  chatElements: chatEls,
-  setTarget: setCheckpointTarget,
-  setRestores: setCheckpointRestores,
+const checkpointFeature = createCheckpointFeatureRuntime({
   fetchImpl: fetch,
-  getSessionId: () => state?.sessionId,
-  fetchSessionEntries,
+  windowTarget: window,
+  marker: { tick, chatElements: chatEls, setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => state?.sessionId, fetchSessionEntries },
+  tree: { fetchImpl: fetch, getState: () => state, getRunners: () => runnersNow, getCurrentRunner: () => currentRunner, getWorkdir: () => sessionUi.workdir, setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
+  controller: { pickModel: pickCheckpointModel, getRunner: () => currentRunner, getSessionId: () => state?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
 });
+const { marker: checkpointMarkerController, tree: checkpointTreeController, controller: checkpointController } = checkpointFeature;
 const placeCheckpointBtn = () => checkpointMarkerController.place();
 const refreshCheckpointMarkers = () => checkpointMarkerController.refresh();
-
-
-// ------------------------------------------------------------ checkpoint / fork tree sidebar
-//
-// The ⎇ chip toggles a right sidebar showing the current session's whole
-// family: its root ancestor, every fork (nested under the checkpoint it was
-// created from), and each session's checkpoints. Sessions switch on tap;
-// checkpoints roll back on tap.
-
-const checkpointTreeController = createCheckpointTreeController({
-  fetchImpl: fetch,
-  getState: () => state,
-  getRunners: () => runnersNow,
-  getCurrentRunner: () => currentRunner,
-  getWorkdir: () => sessionUi.workdir,
-  setTreeState: setCheckpointTreeState,
-  isOpen: () => $("treebar").classList.contains("open"),
-  openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
-  toast: addToast,
-});
 const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
 const loadCheckpointTree = () => checkpointTreeController.load();
-const checkpointController = createCheckpointController({
-  pickModel: pickCheckpointModel,
-  createCheckpoint: (runner, model) => createCheckpoint(fetch, runner, model),
-  rollbackCheckpoint: (options) => rollbackCheckpoint(fetch, options),
-  resultMessage: checkpointResultMessage,
-  getRunner: () => currentRunner,
-  getSessionId: () => state?.sessionId,
-  setBusy: setCheckpointBusy,
-  setRestoreBusy: setCheckpointRestoreBusy,
-  refreshMarkers: refreshCheckpointMarkers,
-  refreshTree: refreshTreeIfOpen,
-  switchRunner: (id) => getSessionRuntime().switchRunner(id),
-  toast: addToast,
-});
 function handleCheckpointClick(event) { return checkpointController.freeze(event); }
 function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
-
-const checkpointTreeEventController = createCheckpointTreeEventController({
-  windowTarget: window,
-  openSession: checkpointTreeController.openTreeSession,
-  rollback: rollbackToCheckpoint,
-});
+const checkpointTreeEventController = checkpointFeature.createEventAdapter();
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;
