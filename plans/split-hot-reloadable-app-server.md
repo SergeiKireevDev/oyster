@@ -51,7 +51,7 @@ before route code moves.
 - [x] Add `http/createRouteTable.mjs`, which merges named route maps and throws
   on duplicate method/path keys. Add unit tests for merge order, duplicate
   rejection, and handler lookup.
-- [ ] Add `http/createRequestContext.mjs` containing only reusable HTTP helpers
+- [x] Add `http/createRequestContext.mjs` containing only reusable HTTP helpers
   currently in `app.mjs`: JSON/text responses, JSON body parsing, MIME lookup,
   auth/token comparison, rate-limit checks, and safe path resolution. Preserve
   current status codes and add focused contract tests for each helper.
