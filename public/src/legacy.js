@@ -1540,10 +1540,6 @@ const sessionPickerSearchController = createSessionPickerSearchController({
 });
 const runSessionPickerSearch = sessionPickerSearchController.search;
 
-function updateSessionPickerRunners(runners = runnersNow) {
-  updateSessionPicker({ runners });
-}
-
 const sessionPickerFolderController = createSessionPickerFolderController({
   async fetchSessions(folder) {
     const dir = folder ?? sessionUi.workdir;
@@ -1565,7 +1561,7 @@ const sessionPickerController = createSessionPickerController({
   stopRunner: (id) => getSessionRuntime().stopSession(id),
   getRunners: () => runnersNow,
   markStopped: markRunnerStopped,
-  setRunners: updateSessionPickerRunners,
+  setRunners: (runners = runnersNow) => updateSessionPicker({ runners }),
   toast: addToast,
 });
 
