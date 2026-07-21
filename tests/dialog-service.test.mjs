@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
   createDialogService,
   emptyConfirmPrompt,
@@ -44,8 +44,36 @@ test("dialog adapters use the scoped service without module-level controller bri
   const adapters = readFileSync(new URL("../public/src/platform/createDialogAdapters.js", import.meta.url), "utf8");
   assert.match(adapters, /deps\.dialogService\.(?:openText|openEditor|openConfirm|openOption)/);
   assert.doesNotMatch(adapters, /\bconfigure[A-Z]\w*Controller/);
-  assert.equal(existsSync(new URL("../public/src/stores/dialogs.js", import.meta.url)), false);
-  assert.equal(existsSync(new URL("../public/src/stores/optionPicker.js", import.meta.url)), false);
+});
+
+test("dialog service is the only dialog and option-picker state path", () => {
+  const sourceRoot = new URL("../public/src/", import.meta.url);
+  const sourceFiles = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
+      if (entry.isDirectory()) visit(url);
+      else if (/\.(?:js|svelte)$/.test(entry.name)) sourceFiles.push(url);
+    }
+  };
+  visit(sourceRoot);
+
+  assert.equal(existsSync(new URL("stores/dialogs.js", sourceRoot)), false);
+  assert.equal(existsSync(new URL("stores/optionPicker.js", sourceRoot)), false);
+
+  const legacyReferences = [];
+  const stateOwners = [];
+  for (const file of sourceFiles) {
+    const source = readFileSync(file, "utf8");
+    const relativePath = decodeURIComponent(file.pathname.slice(sourceRoot.pathname.length));
+    if (/stores\/(?:dialogs|optionPicker)\.js/.test(source)) legacyReferences.push(relativePath);
+    if (/createStore\([\s\S]*\b(?:textPrompt|editorPrompt|confirmPrompt|optionPicker)\b/.test(source)) {
+      stateOwners.push(relativePath);
+    }
+  }
+
+  assert.deepEqual(legacyReferences, []);
+  assert.deepEqual(stateOwners, ["runtime/dialogService.js"]);
 });
 
 test("dialog service instances own independent prompt presentation state", () => {

@@ -30,7 +30,7 @@ cd tests/e2e && npm test
 
 ## 1. Remove Obsolete Dialog Compatibility State
 
-- [ ] Delete unused `public/src/stores/dialogs.js` and
+- [x] Delete unused `public/src/stores/dialogs.js` and
   `public/src/stores/optionPicker.js`, then add a no-reference test proving
   `dialogService` is the only dialog/option-picker state path.
 
