@@ -1,5 +1,5 @@
 <script>
-  const openFileExplorer = () => window.dispatchEvent(new Event("pi-open-file-explorer"));
+  import { openFilesExplorer as openFileExplorer } from "../features/files/filesActions.js";
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
   import { addToast } from "../stores/toasts.js";

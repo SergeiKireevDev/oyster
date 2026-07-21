@@ -2,6 +2,7 @@
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { addToast } from "../stores/toasts.js";
+  import { openFilesExplorer as openManagedFileExplorer } from "../features/files/filesActions.js";
 
   async function closeManagedHublot(id) {
     try {
@@ -12,7 +13,6 @@
     }
   }
 
-  const openManagedFileExplorer = () => window.dispatchEvent(new Event("pi-open-file-explorer"));
   const createManagedHublot = (desc) => window.dispatchEvent(new CustomEvent("pi-managed-hublot-create", { detail: desc }));
 
   function commandPalette(node) {

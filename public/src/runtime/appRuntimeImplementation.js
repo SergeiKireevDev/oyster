@@ -64,7 +64,8 @@ import { createHublotController, createHublotSidebarEventController, createManag
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { createFolderBrowserController } from "../lib/folderBrowserController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
-import { createFileExplorerController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
+import { createFileExplorerController } from "../lib/fileExplorerController.js";
+import { configureFilesActions } from "../features/files/filesActions.js";
 import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
 import { createFilePickerController } from "../lib/filePickerController.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
@@ -1318,9 +1319,8 @@ const mobileDrawerDismissController = createMobileDrawerDismissController({
 
 const loadHublots = hublotController.refreshSidebar;
 
-const openFileExplorerEventController = createOpenFileExplorerEventController({
-  windowTarget: window,
-  open: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
+const detachFilesActions = configureFilesActions({
+  openExplorer: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
 });
 
 // ------------------------------------------------------------ routines sidebar
@@ -1733,7 +1733,7 @@ const detachRuntimeEventAdapters = () => {
   hublotSidebarEventController.detach();
   routineEventController.detach();
   sessionPickerEventController.detach();
-  openFileExplorerEventController.detach();
+  detachFilesActions();
   commandPaletteInputController?.detach();
 };
 const runtimeTeardown = createRuntimeCleanup({
@@ -1758,7 +1758,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
     managedHublotEventController,
-    hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
+    hublotSidebarEventController, mobileDrawerDismissController,
     routineEventController, sessionPickerEventController, settingsChangeController,
     headerEventController, carouselEventRegistration,
   ],
