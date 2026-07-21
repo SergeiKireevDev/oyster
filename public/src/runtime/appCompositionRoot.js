@@ -8,16 +8,12 @@ import { processEventMessage, runCanonicalReload } from "./eventStream.js";
 import { createPlatformAssembly } from "../platform/createPlatformAssembly.js";
 import { installDebugHooks } from "./debugHooks.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
-import { createRuntimeCleanup } from "./runtimeCleanup.js";
-import { createRuntimeStarter } from "./startController.js";
-import { createRuntimeStarterDependencies } from "./runtimeStarterDependencies.js";
-import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependencies } from "./runtimeDependencies.js";
+import { createLifecycleAssembly, createLifecycleDelayedTasks } from "./createLifecycleAssembly.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
-import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
@@ -112,7 +108,7 @@ const platformAssembly = createPlatformAssembly({
     toast: addToast,
   },
 });
-const delayedTasks = platformAssembly.delayedTasks;
+const delayedTasks = createLifecycleDelayedTasks();
 const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = platformAssembly.transport;
 // AuthGate.svelte owns the token-entry form behavior.
 
@@ -911,23 +907,6 @@ const detachRuntimeEventAdapters = () => {
   resourceAssembly.teardown();
   dialogAdapters.teardown();
 };
-const runtimeTeardown = createRuntimeCleanup({
-  closeEventStream: () => connectionCoordinator.disconnect(),
-  clearEventSource: () => {},
-  disposeRpc: disposeRpcClient,
-  stopWatchdog: teardownReconnectWatchdog,
-  detachEventAdapters: detachRuntimeEventAdapters,
-  detachAttachments: () => runtimeAttachments.detach(),
-  cancelDelayedTasks: () => delayedTasks.cancelAll(),
-  loseConnection: () => managedConnection.state.lost(),
-});
-
-const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
-  hasToken: () => Boolean(token),
-  requireToken,
-  boot,
-}));
-
 const featureAssembly = createFeatureAssembly({
   platform: connectionCoordinator,
   sessions: sessionAssembly,
@@ -935,22 +914,23 @@ const featureAssembly = createFeatureAssembly({
   features: {},
 });
 
-const runtimeEventAdapters = createRuntimeEventAdapters({
-  attachers: [
-    commandPaletteRunController,
-    commandPaletteKeyboardController, menuEventController,
-    settingsLayoutEvents,
-  ],
-  applyCarousel: () => layoutOperations.apply(),
+void featureAssembly;
+return createLifecycleAssembly({
+  attachments: runtimeAttachments,
+  eventAttachers: [commandPaletteRunController, commandPaletteKeyboardController, menuEventController, settingsLayoutEvents],
+  applyLayout: () => layoutOperations.apply(),
+  start: { hasToken: () => Boolean(token), requireToken, boot },
+  cancelDelayedTasks: () => delayedTasks.cancelAll(),
+  cleanup: {
+    closeEventStream: () => connectionCoordinator.disconnect(),
+    clearEventSource: () => {},
+    disposeRpc: disposeRpcClient,
+    stopWatchdog: teardownReconnectWatchdog,
+    detachEventAdapters: detachRuntimeEventAdapters,
+    detachAttachments: () => runtimeAttachments.detach(),
+    loseConnection: () => managedConnection.state.lost(),
+  },
 });
-
-  return assembleRuntimeLifecycleDependencies({
-    attachAuthenticatedFetch: runtimeAttachments.attachAuthenticatedFetch,
-    attachEventAdapters: runtimeEventAdapters.attach,
-    attachDebugHooks: runtimeAttachments.attachDebugHooks,
-    start: runtimeStarter,
-    teardown: runtimeTeardown,
-  });
 }
 
 

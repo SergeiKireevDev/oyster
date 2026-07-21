@@ -99,7 +99,7 @@ feature-local browser listeners.
 ## [ ] 9. Extract Platform and Lifecycle Assembly
 
 - [x] Create `platform/createPlatformAssembly.js` to compose authenticated fetch, RPC transport, event dispatch, connection coordination, watchdog, and debug hooks.
-- [ ] Create `runtime/createLifecycleAssembly.js` to own boot ordering, attachment ordering, delayed tasks, teardown ordering, and restart behavior.
+- [x] Create `runtime/createLifecycleAssembly.js` to own boot ordering, attachment ordering, delayed tasks, teardown ordering, and restart behavior.
 - [ ] Remove stale root compatibility callbacks and inject narrow feature event maps into the platform assembly.
 - [ ] Add connect → disconnect → connect and start → teardown → start tests covering RPC, EventSource, watchdog, delayed tasks, and debug hooks.
 
