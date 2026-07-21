@@ -777,6 +777,8 @@ function applyState(s) {
   state = s;
   updateAppSession({ state: s, ...(sessionChanged ? { titleOverride: null } : {}) });
   if (sessionChanged) {
+    if ((s?.messageCount ?? 0) > 0 || s?.sessionFile) emptySessionRunners.delete(currentRunner);
+    setTranscriptGateRequired(!emptySessionRunners.has(currentRunner) && (s?.messageCount ?? 0) > 0);
     routines.set(routinesNow.filter(routineVisible));
     routineScopeAll.set(tunnelScopeAll);
     routineCurrentSessionId.set(s?.sessionId ?? null);
@@ -876,6 +878,7 @@ async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
+  if (!sessionPath && data.runner?.id) emptySessionRunners.add(data.runner.id);
   return data.runner;
 }
 
@@ -925,6 +928,8 @@ function connect() {
   if (!token) { requireToken(); return; }
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
+  const skipTranscriptGate = currentRunner && emptySessionRunners.has(currentRunner);
+  setTranscriptGateRequired(!skipTranscriptGate);
   setReplaying(true, "replay");
   replayDoneSeen = false;
   replayBufferedEvents = [];
@@ -933,6 +938,7 @@ function connect() {
     connected = true;
     updateAppSession({ connected });
     updateHeaderState({ stateInfo: "connected" });
+    if (replaying) setReplaying(true, "canonical");
     try {
       // Always rebuild from the canonical transcript: the SSE replay buffer
       // re-delivers recent events on reconnect, so rendering them onto the
@@ -973,7 +979,16 @@ function connect() {
 let replaying = true;
 let replayDoneSeen = false;
 let replayBufferedEvents = [];
-updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay" });
+let transcriptGateRequired = true;
+const emptySessionRunners = new Set();
+updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired });
+function setTranscriptGateRequired(value) {
+  transcriptGateRequired = !!value;
+  updateAppSession({ transcriptGateRequired });
+}
+function composerReadyForSend() {
+  return connected && (!replaying || !transcriptGateRequired);
+}
 function setReplaying(value, phase = null) {
   replaying = !!value;
   updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
@@ -1414,7 +1429,7 @@ function promptRpcCommand(text) {
 
 async function send() {
   const text = input.value.trim();
-  if (!text || replaying || !connected) return;
+  if (!text || !composerReadyForSend()) return;
   // guard against typos like "/goal": an unknown slash command is not
   // expanded by pi — it goes to the model as plain text, which can kick off
   // a long unwanted agent run

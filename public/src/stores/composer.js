@@ -7,7 +7,9 @@ export const composerUi = derived([appSession, composerText], ([$appSession, $co
   const busy = !!$appSession.busy;
   const connected = !!$appSession.connected;
   const replaying = !!$appSession.replayingTranscript;
-  const ready = connected && !replaying;
+  const gateRequired = $appSession.transcriptGateRequired !== false;
+  const gated = replaying && gateRequired;
+  const ready = connected && !gated;
   const hasText = !!String($composerText ?? "").trim();
   return {
     ready,
@@ -15,11 +17,11 @@ export const composerUi = derived([appSession, composerText], ([$appSession, $co
     sendDisabled: !ready,
     placeholder: !connected
       ? "connecting…"
-      : replaying && $appSession.transcriptLoadPhase === "replay"
+      : gated && $appSession.transcriptLoadPhase === "replay"
         ? "replaying transcript…"
-        : replaying && $appSession.transcriptLoadPhase === "canonical"
+        : gated && $appSession.transcriptLoadPhase === "canonical"
           ? "loading canonical transcript…"
-          : replaying
+          : gated
             ? "loading transcript…"
             : "message (type : for commands)",
     sendText: busy ? "Steer" : "Send",

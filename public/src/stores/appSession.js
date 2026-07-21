@@ -9,6 +9,7 @@ export const appSession = writable({
   connected: false,
   replayingTranscript: false,
   transcriptLoadPhase: null,
+  transcriptGateRequired: true,
   titleOverride: null,
 });
 

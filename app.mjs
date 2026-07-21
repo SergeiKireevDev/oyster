@@ -388,6 +388,17 @@ export function init(state) {
       });
       res.write(`: connected\n\n`);
       res.runnerId = runner.id; // this client sees only this runner's stream
+      // Register the client BEFORE replaying buffered events. Browser
+      // EventSource may fire `open` as soon as headers/first bytes arrive, and
+      // the UI immediately sends get_state/get_messages RPCs. If this response
+      // is still replaying and not yet in state.sseClients, those RPC responses
+      // can be broadcast to nobody and the client times out waiting for them.
+      state.sseClients.add(res);
+      let ping = null;
+      req.on("close", () => {
+        if (ping) clearInterval(ping);
+        state.sseClients.delete(res);
+      });
       // replay this runner's buffered events so the client can reconstruct
       // in-flight state
       if (url.searchParams.get("replay") !== "0") {
@@ -398,19 +409,14 @@ export function init(state) {
         runner: runner.id, piRunning: !!runner.proc, workdir: runner.dir,
         runners: listRunnerInfo(),
       })}\n\n`);
-      state.sseClients.add(res);
       // data pings (not SSE comments) so the client can detect a dead
       // connection: comments never reach onmessage, real events do. They
       // carry the runner list so a client that missed a pi_exit/pi_started
       // (buffer overflow, reconnect gap) still converges on real liveness.
-      const ping = setInterval(
+      ping = setInterval(
         () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true, runners: listRunnerInfo() })}\n\n`),
         25000
       );
-      req.on("close", () => {
-        clearInterval(ping);
-        state.sseClients.delete(res);
-      });
     },
 
     "POST /rpc": async (req, res, url) => {
