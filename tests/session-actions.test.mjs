@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchSessionPreview, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
+import { fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -23,6 +23,17 @@ test("session actions fetch durable transcript previews", async () => {
   assert.deepEqual(await fetchSessionPreview(fetchImpl, "/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), [{ role: "user", content: "saved" }]);
   assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl");
   assert.equal(await fetchSessionPreview(async () => ({ ok: false }), "/other.jsonl"), null);
+});
+
+test("session actions open a runner with normalized server errors", async () => {
+  const calls = [];
+  const runner = await openSession(async (url, options) => {
+    calls.push([url, options]);
+    return { ok: true, json: async () => ({ runner: { id: "r2" } }) };
+  }, { sessionPath: "/a.jsonl", dir: "/work" });
+  assert.deepEqual(runner, { id: "r2" });
+  assert.deepEqual(JSON.parse(calls[0][1].body), { sessionPath: "/a.jsonl", dir: "/work" });
+  await assert.rejects(() => openSession(async () => ({ ok: false, status: 409, json: async () => ({ error: "busy" }) })), /busy/);
 });
 
 test("session actions skip transcript replay for empty runners", () => {

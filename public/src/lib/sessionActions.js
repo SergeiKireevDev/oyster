@@ -24,6 +24,18 @@ export async function fetchSessionPreview(fetchImpl, sessionPath) {
   return data.messages ?? [];
 }
 
+/** Open or resume a runner, normalizing the server's response and errors. */
+export async function openSession(fetchImpl, { sessionPath = null, dir = null } = {}) {
+  const res = await fetchImpl("/open-session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionPath, dir }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
+  return data.runner;
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }

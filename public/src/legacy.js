@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, fetchSessionPreview, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
+import { applySessionState, fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -785,16 +785,10 @@ async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
     lastPreview = { sessionPath, messages: null };
     fetchPreview(sessionPath);
   }
-  const res = await fetch(`/open-session`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sessionPath, dir }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
-  if (!sessionPath && data.runner?.id) emptySessionRunners.add(data.runner.id);
-  lifecycleLog("openSessionRunner:done", { runner: data.runner?.id, sessionPath: data.runner?.sessionFile, sessionId: data.runner?.sessionId, ms: Math.round(performance.now() - started) });
-  return data.runner;
+  const runner = await openSession(fetch, { sessionPath, dir });
+  if (!sessionPath && runner?.id) emptySessionRunners.add(runner.id);
+  lifecycleLog("openSessionRunner:done", { runner: runner?.id, sessionPath: runner?.sessionFile, sessionId: runner?.sessionId, ms: Math.round(performance.now() - started) });
+  return runner;
 }
 
 /** hook: session picker (when open) re-renders its indicators */
