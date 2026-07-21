@@ -44,7 +44,8 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
     logger: { error() {} },
   });
   const created = response(); await routes["POST /checkpoint"]({ body: { label: "save", model: "model/id" } }, created, new URL("http://localhost/checkpoint"));
-  assert.equal(created.status, 200); assert.equal(created.body.recorded, true); assert.equal(created.body.anchorId, "entry-1");
+  assert.equal(created.status, 200);
+  assert.deepEqual(created.body, { hash: "abc123", committed: true, recorded: true, anchorId: "entry-1" });
   assert.deepEqual(calls[0], [{ bin: "pi" }, "/work", "save", "model/id"]);
   assert.deepEqual(owners, [runner.sessionRef]);
   const missing = response(); routes["GET /checkpoints"]({}, missing, new URL("http://localhost/checkpoints")); assert.equal(missing.status, 400);
@@ -77,6 +78,45 @@ test("SQLite rollback capability rejection occurs before git or safety-checkpoin
   await routes["POST /rollback"]({ body: { sessionId: "sqlite", hash: "abc" } }, result);
   assert.equal(result.status, 409);
   assert.deepEqual(calls, []);
+});
+
+test("rollback preserves the existing fork-before-reset failure behavior and payload", async () => {
+  const sessionRef = { backend: "sqlite", id: "sqlite", storagePath: "/agent/sessions.sqlite" };
+  const forkRef = { backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" };
+  const events = [], sideEffects = [];
+  const routes = createCheckpointRoutes({
+    state: {
+      sessionCatalog: {
+        backend: "sqlite", findById: () => ({ id: "sqlite" }),
+        entries: () => ({ entries: [{ id: "e1" }] }),
+      },
+      sessionOperations: {
+        capabilities: { exactFork: { sqlite: true } },
+        async forkSession() { sideEffects.push("fork"); return { id: "fork", sessionRef: forkRef }; },
+      },
+    },
+    config: { PI_BIN: "pi" },
+    requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
+    checkpointRepository: {
+      ...repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", leafId: "e1", sessionRef }] }),
+      replaceForSession() { sideEffects.push("inherit"); },
+    },
+    checkpointRollbackJournal: rollbackJournal(events),
+    git: async (_dir, args) => args[0] === "status"
+      ? { code: 0, stdout: "", stderr: "" }
+      : { code: 1, stdout: "", stderr: "cannot reset" },
+    checkpointWorkdir: async () => ({ status: 200, body: {} }),
+    openSessionRunner() { sideEffects.push("runner"); },
+    sendToRunner() {}, srvId: () => "srv", runnerInfo() {},
+    logger: { error() {}, log() {} },
+  });
+
+  const result = response();
+  await routes["POST /rollback"]({ body: { sessionId: "sqlite", hash: "abc" } }, result);
+  assert.equal(result.status, 500);
+  assert.deepEqual(result.body, { error: "git reset failed: cannot reset" });
+  assert.deepEqual(sideEffects, ["fork"]);
+  assert.deepEqual(events.map(([stage]) => stage), ["persisted", "safety_checkpointed", "session_forked", "failed"]);
 });
 
 test("SQLite rollback forks the exact entry before resetting and opens the fork by reference", async () => {
