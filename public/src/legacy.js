@@ -37,6 +37,7 @@ import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSes
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
+import { createCommandGuard } from "./lib/commandActions.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -618,7 +619,7 @@ function switchToRunner(id) {
       carouselController.reset();
     },
     renderPreview: renderPreviewNow,
-    resetCommands: () => { knownCommands = null; },
+    resetCommands: () => commandGuard?.reset(),
     connect,
   } });
 }
@@ -1244,18 +1245,7 @@ function composerKeydown(e) {
 
 // pi's slash commands (extensions, prompt templates, skills), cached until
 // the pi process or folder changes
-let knownCommands = null;
-async function getKnownCommands() {
-  if (knownCommands) return knownCommands;
-  try {
-    const { commands } = await rpc({ type: "get_commands" });
-    knownCommands = new Set(commands.map((c) => c.name));
-  } catch {
-    knownCommands = null; // retry next time
-    return new Set();
-  }
-  return knownCommands;
-}
+let commandGuard = createCommandGuard({ rpc, confirm: confirmDialog });
 
 function promptRpcCommand(text) {
   return { type: "prompt", message: text, ...(busy ? { streamingBehavior: "steer" } : {}) };
@@ -1267,19 +1257,7 @@ async function send() {
   // guard against typos like "/goal": an unknown slash command is not
   // expanded by pi — it goes to the model as plain text, which can kick off
   // a long unwanted agent run
-  if (text.startsWith("/")) {
-    const name = text.slice(1).split(/\s+/)[0];
-    if (name) {
-      const cmds = await getKnownCommands();
-      if (!cmds.has(name)) {
-        const proceed = await confirmDialog(
-          "Unknown command",
-          `"/${name}" is not a pi command. Send it to the model as plain text?`
-        );
-        if (!proceed) return; // text stays in the composer
-      }
-    }
-  }
+  if (!await commandGuard.confirmKnownCommand(text)) return; // text stays in the composer
   input.value = "";
   setComposerTextValue("");
   input.style.height = "auto";
