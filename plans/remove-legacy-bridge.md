@@ -55,8 +55,8 @@ creation into store-backed action modules.
   independently action-owned.
 - Preserve extension file/folder-picker response contracts exactly.
 
-**Acceptance:** remove `setFileExplorerHandlers`, `setFilePickerHandlers`, and
-`setFolderBrowserHandlers` plus all exports using those registries.
+✅ Removed File Explorer, File Picker, and Folder Browser handler registries;
+components now use stores, focused actions, or narrow direct events.
 
 ## 3. Remove Hublot and Routine Bridges
 
@@ -98,8 +98,8 @@ Inject session lifecycle callbacks from the session action boundary for runner
 switches, previews, and transcript reload. Preserve deliberate
 `connect({ replay: false })` switching behavior.
 
-**Acceptance:** remove `setSessionPickerHandlers` and all session-picker bridge
-exports; session/model/transcript e2e tests remain green.
+✅ Removed `setSessionPickerHandlers` and all session-picker bridge exports;
+components emit direct actions to the session lifecycle dispatcher.
 
 ## 5. Remove Checkpoint Tree Bridge
 
@@ -137,19 +137,17 @@ settings action module with an injected transport/session-refresh callback.
 component emits a direct settings-change event that legacy transport handling
 uses to reconcile the transcript.
 
-## 8. Delete the Bridge
+## 8. Delete the Bridge ✅
 
 After every registry has zero consumers:
 
-1. Run `rg "legacyBridge" public/src tests`.
-2. Remove `public/src/lib/legacyBridge.js`.
-3. Remove its import and all registration calls from `legacy.js`.
-4. Add/update tests guarding direct action behavior.
-5. Run the full validation suite.
+✅ `rg "legacyBridge" public/src tests` has no imports or consumers.
+✅ Removed `public/src/lib/legacyBridge.js` and its legacy registrations.
+✅ Full validation passes for every verified extraction.
 
-## Completion Criteria
+## Completion Criteria ✅
 
-- No `legacyBridge.js` imports or handler registrations remain.
+- ✅ No `legacyBridge.js` imports or handler registrations remain.
 - Svelte components use stores and focused action modules directly.
 - `legacy.js` contains transport/session bootstrap and unavoidable global DOM
   timing only.
