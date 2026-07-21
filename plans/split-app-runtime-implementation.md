@@ -336,7 +336,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
     `appRuntimeImplementation.js` into `platform/` and delete the root block.
   - [x] Extract transcript controller assembly from the root into
     `features/transcript/` and delete the corresponding root construction.
-  - [ ] Extract session controller assembly from the root into
+  - [x] Extract session controller assembly from the root into
     `features/sessions/` and delete the corresponding root construction.
   - [ ] Move remaining feature-controller construction blocks from the root
     into their feature factory modules, then remove the root imports.

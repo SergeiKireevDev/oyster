@@ -3,6 +3,7 @@ export function createLazySessionFeature({ createRuntime, getDependencies }) {
   let feature;
   return {
     get: () => feature ??= createSessionFeature({ createRuntime, dependencies: getDependencies() }),
+    isStarted: () => Boolean(feature),
     teardown: () => { feature?.teardown(); feature = undefined; },
   };
 }
