@@ -1,21 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createCheckpointFeature } from "../public/src/features/checkpoints/checkpointFeature.js";
-import { configureCheckpointTreeActions, openCheckpointTreeSession, rollbackCheckpointTree } from "../public/src/features/checkpoints/checkpointTreeActions.js";
 
 test("checkpoint feature exposes construction without a global event adapter", () => {
   assert.equal(typeof createCheckpointFeature, "function");
 });
 
-test("checkpoint tree actions use the configured feature API", () => {
-  const calls = [];
-  const detach = configureCheckpointTreeActions({
-    openSession: (node) => calls.push(["open", node]),
-    rollback: (checkpoint, target) => calls.push(["rollback", checkpoint, target]),
-  });
-  openCheckpointTreeSession("node");
-  rollbackCheckpointTree("checkpoint", "target");
-  detach();
-  openCheckpointTreeSession("ignored");
-  assert.deepEqual(calls, [["open", "node"], ["rollback", "checkpoint", "target"]]);
+test("checkpoint tree node routes open-session and rollback through scoped actions", () => {
+  const source = readFileSync(new URL("../public/src/components/CheckpointTreeNode.svelte", import.meta.url), "utf8");
+  assert.match(source, /getUiActionRegistry\(\)/);
+  assert.match(source, /uiActions\.invoke\(CHECKPOINT_TREE_OPEN_ACTION, node\)/);
+  assert.match(source, /uiActions\.invoke\(CHECKPOINT_TREE_ROLLBACK_ACTION, checkpoint, target\)/);
+  assert.doesNotMatch(source, /features\/checkpoints\/checkpointTreeActions\.js/);
 });

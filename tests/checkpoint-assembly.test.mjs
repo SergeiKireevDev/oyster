@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createCheckpointAssembly } from "../public/src/features/checkpoints/createCheckpointAssembly.js";
-import { openCheckpointTreeSession } from "../public/src/features/checkpoints/checkpointTreeActions.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "../public/src/runtime/uiActionNames.js";
 
@@ -37,18 +36,20 @@ test("checkpoint assembly owns model marker tree freeze rollback and action cons
 
 test("checkpoint assembly remounts marker tree and action registration ownership", async () => {
   const firstSwitches = [];
-  const first = createCheckpointAssembly(dependencies(firstSwitches));
+  const firstUiActions = createUiActionRegistry();
+  const first = createCheckpointAssembly(dependencies(firstSwitches, firstUiActions));
   const firstOperations = first.operations;
-  await openCheckpointTreeSession({ id: "other-1", path: "/one.jsonl", cwd: "/tmp" });
+  await firstUiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, { id: "other-1", path: "/one.jsonl", cwd: "/tmp" });
   assert.equal(firstSwitches.length, 1);
   first.teardown();
-  await openCheckpointTreeSession({ id: "ignored", path: "/ignored.jsonl" });
+  assert.equal(firstUiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, { id: "ignored", path: "/ignored.jsonl" }), undefined);
   assert.equal(firstSwitches.length, 1);
 
   const secondSwitches = [];
-  const second = createCheckpointAssembly(dependencies(secondSwitches));
+  const secondUiActions = createUiActionRegistry();
+  const second = createCheckpointAssembly(dependencies(secondSwitches, secondUiActions));
   assert.notEqual(second.operations, firstOperations);
-  await openCheckpointTreeSession({ id: "other-2", path: "/two.jsonl", cwd: "/tmp" });
+  await secondUiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, { id: "other-2", path: "/two.jsonl", cwd: "/tmp" });
   assert.equal(secondSwitches.length, 1);
   second.teardown();
 });

@@ -1,7 +1,10 @@
 <script>
-  import { openCheckpointTreeSession, rollbackCheckpointTree } from "../features/checkpoints/checkpointTreeActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "../runtime/uiActionNames.js";
 
-  const rollbackCheckpoint = rollbackCheckpointTree;
+  const uiActions = getUiActionRegistry();
+  const openCheckpointTreeSession = (node) => uiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, node);
+  const rollbackCheckpoint = (checkpoint, target) => uiActions.invoke(CHECKPOINT_TREE_ROLLBACK_ACTION, checkpoint, target);
 
   export let node;
   export let currentSessionId = null;

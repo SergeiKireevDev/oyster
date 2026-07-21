@@ -85,7 +85,7 @@ workflow and import no mutable `*Actions.js` bridge.
   input, Enter, send, and abort routing after remount.
 - [x] Register checkpoint-tree open and rollback operations from
   `createCheckpointAssembly()` with teardown-safe unregister functions.
-- [ ] Change `CheckpointTreeNode.svelte` to invoke scoped checkpoint actions,
+- [x] Change `CheckpointTreeNode.svelte` to invoke scoped checkpoint actions,
   then delete `features/checkpoints/checkpointTreeActions.js` and its
   configuration call. Test open-session and rollback routing.
 
