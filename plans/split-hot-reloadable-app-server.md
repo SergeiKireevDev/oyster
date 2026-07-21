@@ -71,7 +71,7 @@ collisions fail during construction, before a handler swap.
 - [x] Move UI document serving (`/` and `/s/<sessionId>[/m/<entryId>]`) and
   public asset serving into `http/routes/staticRoutes.mjs`. Preserve traversal
   rejection, Vite output behavior, cache headers, and MIME types with tests.
-- [ ] Remove the extracted open/static route code from `app.mjs`; compose both
+- [x] Remove the extracted open/static route code from `app.mjs`; compose both
   factories through the route table and run no-reference checks for their old
   helpers.
 
