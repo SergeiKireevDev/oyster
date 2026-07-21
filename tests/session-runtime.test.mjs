@@ -1,6 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionRuntime } from "../public/src/runtime/sessionRuntime.js";
+import { createSessionRunnerState, createSessionRuntime } from "../public/src/runtime/sessionRuntime.js";
+
+test("session runner state persists selection and publishes runner lists", () => {
+  const persisted = new Map([["pi_runner", "saved"]]);
+  const updates = [];
+  const state = createSessionRunnerState({
+    storage: { getItem: (key) => persisted.get(key) ?? null, setItem: (key, value) => persisted.set(key, value), removeItem: (key) => persisted.delete(key) },
+    updateAppSession: (update) => updates.push(update),
+  });
+  assert.equal(state.currentRunner, "saved");
+  state.setRunner("next");
+  state.setRunners([{ id: "next" }]);
+  state.setRunner(null);
+  assert.equal(persisted.has("pi_runner"), false);
+  assert.deepEqual(updates, [{ currentRunner: "next" }, { runners: [{ id: "next" }] }, { currentRunner: null }]);
+});
 
 test("session runtime delegates deliberate switches with the current runner and adapters", () => {
   const calls = [];
