@@ -1142,6 +1142,11 @@
   .api-key-provider span { max-width: 100%; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; }
   .api-key-source, .api-key-readonly { padding: 2px 6px; border-radius: 999px; background: var(--code-bg); color: var(--muted); font-size: 10px; white-space: nowrap; }
   .api-key-readonly { color: var(--accent); }
+  .api-key-form { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1.3fr) auto; align-items: end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .api-key-form label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+  .api-key-form select, .api-key-form input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
+  .api-key-form input:focus, .api-key-form select:focus { border-color: var(--accent-dim); outline: none; }
+  @media (max-width: 600px) { .api-key-form { grid-template-columns: 1fr; } }
   #modal .m-option.session-row { display: flex; align-items: center; }
   #modal .s-session-main {
     flex: 1; min-width: 0; padding: 0; border: 0;

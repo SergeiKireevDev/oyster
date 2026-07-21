@@ -121,7 +121,7 @@ inactive, and serialized responses/errors contain no submitted or stored key.
   each provider and safe source state (`stored API key`, `stored OAuth`,
   `environment`, `models.json`, or `not configured`) without displaying any
   credential-derived text. Keep OAuth rows read-only in this first version.
-- [ ] Provide an in-modal add/replace form with an unprefilled password input,
+- [x] Provide an in-modal add/replace form with an unprefilled password input,
   `autocomplete="off"`, disabled spelling/autocorrection, provider selection
   sourced from the server, and explicit **Save and restart pi** wording. Clear
   the input immediately on success, failure, cancellation, modal close, and

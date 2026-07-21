@@ -1,4 +1,4 @@
-import { API_KEYS_OPEN_ACTION } from "../../runtime/uiActionNames.js";
+import { API_KEYS_OPEN_ACTION, API_KEYS_SAVE_ACTION } from "../../runtime/uiActionNames.js";
 import { createApiKeysController } from "./createApiKeysController.js";
 
 /** Owns the mount-scoped API-key workflow independently of settings. */
@@ -22,12 +22,14 @@ export function createCredentialsAssembly({
     return controller.load();
   };
   const detachOpenAction = uiActions.register(API_KEYS_OPEN_ACTION, open);
+  const detachSaveAction = uiActions.register(API_KEYS_SAVE_ACTION, controller.save);
 
   return Object.freeze({
     operations: Object.freeze({ open, load: controller.load, save: controller.save, remove: controller.remove }),
     teardown() {
       if (tornDown) return;
       tornDown = true;
+      detachSaveAction();
       detachOpenAction();
       controller.teardown();
     },

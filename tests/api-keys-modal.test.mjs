@@ -15,6 +15,21 @@ test("API Keys modal is owned by the overlay and covers safe provider states", (
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only/);
 });
 
+test("API Keys modal form keeps submitted keys local and clears them on every exit", () => {
+  assert.match(modal, /type="password"/);
+  assert.match(modal, /autocomplete="off"/);
+  assert.match(modal, /autocapitalize="none"/);
+  assert.match(modal, /autocorrect="off"/);
+  assert.match(modal, /spellcheck="false"/);
+  assert.match(modal, /Save and restart pi/);
+  assert.match(modal, /Replace and restart pi/);
+  assert.match(modal, /uiActions\.invoke\(API_KEYS_SAVE_ACTION, \{ provider: selectedProvider, key \}\)/);
+  assert.match(modal, /finally \{[\s\S]*?clearKey\(\)/);
+  assert.match(modal, /function close\(\) \{[\s\S]*?clearKey\(\)/);
+  assert.match(modal, /onDestroy\(clearKey\)/);
+  assert.doesNotMatch(modal, /bind:value=\{key/);
+});
+
 test("API Keys modal renders loading empty error and restart feedback without credential fields", () => {
   assert.match(modal, /Loading provider credentials/);
   assert.match(modal, /No providers are available/);
