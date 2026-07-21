@@ -44,6 +44,11 @@ export async function stopSessionRunner(fetchImpl, id) {
   return data;
 }
 
+/** Return runner metadata after a process has been stopped. */
+export function markRunnerStopped(runners, id) {
+  return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }
