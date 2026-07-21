@@ -6,6 +6,7 @@ import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.j
 
 const appSource = readFileSync(new URL("../public/src/App.svelte", import.meta.url), "utf8");
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
+const commandPaletteSource = readFileSync(new URL("../public/src/components/CommandPalette.svelte", import.meta.url), "utf8");
 
 test("App provides its UI action registry and passes it to the runtime", () => {
   assert.match(appSource, /provideUiActionRegistry\(createUiActionRegistry\(\)\)/);
@@ -21,6 +22,12 @@ test("Menu routes every action through the scoped registry", () => {
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
     ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"],
   );
+});
+
+test("CommandPalette routes mouse selection through the scoped registry", () => {
+  assert.match(commandPaletteSource, /onmousedown=\{\(event\) => choose\(event, i\)\}/);
+  assert.match(commandPaletteSource, /uiActions\.invoke\(COMMAND_PALETTE_RUN_ACTION, index\)/);
+  assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|pi-command-palette-run/);
 });
 
 test("application mount teardown remount passes a fresh UI action registry", async () => {

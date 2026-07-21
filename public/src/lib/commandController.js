@@ -23,19 +23,6 @@ export function moveCommandPaletteActive(active, count, direction) {
   return (active + direction + count) % count;
 }
 
-/** Own the palette's capture-phase keyboard lifecycle outside component markup. */
-export function createCommandPaletteRunController({ windowTarget, run }) {
-  const onRun = (event) => run(event.detail);
-  function attach() {
-    windowTarget.addEventListener("pi-command-palette-run", onRun);
-    return detach;
-  }
-  function detach() {
-    windowTarget.removeEventListener("pi-command-palette-run", onRun);
-  }
-  return { attach, detach };
-}
-
 /** Own command-trigger input and delayed blur dismissal for one composer input. */
 export function createCommandPaletteInputController({ target, onInput, onBlur }) {
   function attach() {

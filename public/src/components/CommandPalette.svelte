@@ -1,10 +1,18 @@
 <script>
   import { commandPalette, setCommandPaletteState } from "../stores/commandPalette.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { COMMAND_PALETTE_RUN_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+
+  function setActive(index) {
+    setCommandPaletteState({ items: $commandPalette.items.map((item, i) => ({ ...item, active: i === index })) });
+  }
 
   function choose(event, index) {
     event.preventDefault();
-    setCommandPaletteState({ items: $commandPalette.items.map((item, i) => ({ ...item, active: i === index })) });
-    window.dispatchEvent(new CustomEvent("pi-command-palette-run", { detail: index }));
+    setActive(index);
+    uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, index);
   }
 </script>
 
@@ -28,7 +36,7 @@
         tabindex="-1"
         aria-selected={cmd.active}
         onmousedown={(event) => choose(event, i)}
-        onmousemove={() => setCommandPaletteActive(i)}
+        onmousemove={() => setActive(i)}
       >
         <span class="cmd-ico">{cmd.icon}</span>
         <div class="cmd-body">

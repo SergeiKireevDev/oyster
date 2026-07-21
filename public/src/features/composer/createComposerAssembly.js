@@ -1,5 +1,5 @@
 import { createCommandGuard, commandTrigger, filterCommands } from "../../lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "../../lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
@@ -154,7 +154,6 @@ export function createComposerAssembly(deps) {
       inputController.attach();
       return inputController;
     }
-    const runController = createCommandPaletteRunController({ windowTarget: commandDeps.windowTarget, run: runIndex });
     const detachPaletteRunAction = commandDeps.uiActions?.register(COMMAND_PALETTE_RUN_ACTION, runIndex) ?? (() => {});
     const keyboardController = createCommandPaletteKeyboardController({
       documentTarget: commandDeps.documentTarget,
@@ -192,12 +191,11 @@ export function createComposerAssembly(deps) {
     const detachMenuAction = commandDeps.uiActions?.register(MENU_ACTION, runMenuAction) ?? (() => {});
     setup(input);
     commandRuntime = {
-      guard, setup, runController, keyboardController, runMenuAction,
+      guard, setup, keyboardController, runMenuAction,
       isOpen: () => palette.classList.contains("open"),
       teardown() {
         inputController?.detach();
         keyboardController.detach();
-        runController.detach();
         detachPaletteRunAction();
         detachMenuAction();
         close();

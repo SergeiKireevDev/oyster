@@ -84,7 +84,6 @@ test("composer assembly owns command guard palette menu and listener constructio
   });
   assert.equal(typeof commands.guard.confirmKnownCommand, "function");
   assert.equal(typeof commands.setup, "function");
-  assert.equal(typeof commands.runController.attach, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
   assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), false);
   for (const action of ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"]) {
@@ -126,7 +125,6 @@ test("composer assembly remounts actions and command listeners without stale own
 
   const first = createHarness();
   const firstCommands = first.assembly.configureCommands(commandDependencies());
-  firstCommands.runController.attach();
   firstCommands.keyboardController.attach();
   await runComposerAction("send");
   assert.ok(first.calls.some((call) => call[0] === "user"));
@@ -137,7 +135,6 @@ test("composer assembly remounts actions and command listeners without stale own
 
   const second = createHarness();
   const secondCommands = second.assembly.configureCommands(commandDependencies());
-  secondCommands.runController.attach();
   secondCommands.keyboardController.attach();
   await runComposerAction("abort");
   assert.ok(second.calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));

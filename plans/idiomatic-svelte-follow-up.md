@@ -44,7 +44,7 @@ cd tests/e2e && npm test
   runtime's UI action registry under one named action. Do not change
   `CommandPalette.svelte` in this step; test registry invocation reaches the
   existing implementation.
-- [ ] Change `CommandPalette.svelte` to invoke the scoped action registry for
+- [x] Change `CommandPalette.svelte` to invoke the scoped action registry for
   mouse selection. Delete the `pi-command-palette-run` `window` event dispatch
   and its event-listener adapter; test mouse and keyboard selection routing.
 - [ ] Run `rg "pi-menu-action|pi-command-palette-run|window\.dispatchEvent" public/src`
