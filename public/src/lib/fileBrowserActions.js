@@ -12,3 +12,10 @@ export async function readFile(fetchImpl, path) {
   if (!res.ok) throw new Error(data.error || "cannot open file");
   return data;
 }
+
+export async function saveFile(fetchImpl, { path, content }) {
+  const res = await fetchImpl("/file-save", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, content }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `save failed (${res.status})`);
+  return data;
+}

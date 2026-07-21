@@ -32,7 +32,7 @@ import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { listHublots } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
-import { browseFiles, readFile } from "./lib/fileBrowserActions.js";
+import { browseFiles, readFile, saveFile } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2185,13 +2185,7 @@ async function saveExplorerFile() {
   const path = fileExplorerState.editPath;
   updateFileExplorer({ saving: true });
   try {
-    const r = await fetch(`/file-save`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path, content: fileExplorerState.editContent }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || `save failed (${r.status})`);
+    const d = await saveFile(fetch, { path, content: fileExplorerState.editContent });
     toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
   } catch (e) {
     toast(e.message, "error");
