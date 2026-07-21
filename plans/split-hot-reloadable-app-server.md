@@ -39,7 +39,7 @@ cd tests/e2e && npm test
 - [x] Extend that fixture test with an intentionally invalid replacement module
   and verify the previous successful handler still serves requests and the
   reload-failure event is emitted.
-- [ ] Extend the fixture test with an open SSE response, reload the request
+- [x] Extend the fixture test with an open SSE response, reload the request
   handler, and verify the response remains writable and receives a subsequent
   state-owned broadcast.
 
