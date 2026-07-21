@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openEventStream, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createReplayEventGate, openEventStream, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,16 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("replay event gate buffers only events that arrive after replay completion", () => {
+  let replayDone = false; const buffered = [];
+  const gate = createReplayEventGate({ isReplaying: () => true, isGateRequired: () => true, isReplayDone: () => replayDone, buffer: (message) => buffered.push(message), gatedTypes: new Set(["message_update"]) });
+  assert.equal(gate({ type: "message_update" }), true);
+  replayDone = true;
+  assert.equal(gate({ type: "message_update" }), true);
+  assert.deepEqual(buffered, [{ type: "message_update" }]);
+  assert.equal(gate({ type: "response" }), false);
 });
 
 test("event stream opens an encoded runner/replay URL", () => {

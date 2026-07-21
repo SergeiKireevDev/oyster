@@ -1,4 +1,14 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+/** Decide whether a replay-gated transcript event should be buffered or dispatched. */
+export function createReplayEventGate({ isReplaying, isGateRequired, isReplayDone, buffer, gatedTypes, log = () => {} }) {
+  return (message) => {
+    if (!isReplaying() || !isGateRequired() || !gatedTypes.has(message.type)) return false;
+    log("sse:gated", { type: message.type, role: message.message?.role, replayDoneSeen: isReplayDone() });
+    if (isReplayDone()) buffer(message);
+    return true;
+  };
+}
+
 export function processEventMessage(raw, { dedupe, dispatch, onError, onReceived }) {
   let message;
   try { message = JSON.parse(raw); } catch { return; }

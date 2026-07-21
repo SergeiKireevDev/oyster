@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -572,6 +572,15 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
   dispatch: handleEvent,
 });
 
+const replayEventGate = createReplayEventGate({
+  isReplaying: () => replaying,
+  isGateRequired: () => transcriptGateRequired,
+  isReplayDone: () => replayDoneSeen,
+  buffer: (message) => replayBufferedEvents.push(message),
+  gatedTypes: REPLAY_GATED_EVENT_TYPES,
+  log: lifecycleLog,
+});
+
 function handleEvent(msg) {
   if (["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"].includes(msg.type)) {
     lifecycleLog("sse:event", { type: msg.type, command: msg.command, sseId: msg._sseId, role: msg.message?.role, runner: msg.runner });
@@ -584,11 +593,7 @@ function handleEvent(msg) {
   // buffer those and flush them after the canonical tail is on screen. Without
   // this, a response that finishes during reconnect can be dropped until the
   // user refreshes the page.
-  if (replaying && transcriptGateRequired && REPLAY_GATED_EVENT_TYPES.has(msg.type)) {
-    lifecycleLog("sse:gated", { type: msg.type, role: msg.message?.role, replayDoneSeen, buffered: replayBufferedEvents.length });
-    if (replayDoneSeen) replayBufferedEvents.push(msg);
-    return;
-  }
+  if (replayEventGate(msg)) return;
   switch (msg.type) {
     case "ping":
       // Pings carry authoritative runner liveness, handled by the runtime
