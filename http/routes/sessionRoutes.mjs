@@ -9,6 +9,7 @@ export function createSessionRoutes({
   runners,
   resources,
   sessionOperations = null,
+  deleteOwnedSession = null,
   resolvePath = resolve,
   unlinkFile = unlinkSync,
   logger = console,
@@ -119,23 +120,44 @@ export function createSessionRoutes({
       const matchingRunners = [...state.runners.values()].filter((runner) => runner.sessionRef
         ? state.sessionReferences.equals(runner.sessionRef, reference)
         : reference.backend === "jsonl" && runner.sessionFile === reference.storagePath);
-      for (const runner of matchingRunners) stopRunner(runner);
+      const workflow = deleteOwnedSession ?? (async (steps) => {
+        const stoppedRunners = await steps.stopRunners();
+        const agentResult = await steps.deleteAgentSession();
+        await steps.removeRuntime(stoppedRunners);
+        await steps.broadcast();
+        const closedHublots = await steps.closeHublots();
+        const stoppedRoutines = await steps.stopRoutines();
+        return { agentResult, closedHublots, stoppedRoutines };
+      });
       try {
-        const result = await operations.deleteSession(reference);
-        for (const runner of matchingRunners) {
-          state.runners.delete(runner.id);
-          if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
-        }
-        runnersChanged();
-        const closedHublots = [];
-        for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
-          if (tunnel.sessionId !== reference.id) continue;
-          closeTunnel(state, tunnel.id);
-          closedHublots.push(tunnel.port);
-          logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
-        }
-        const releasedRoutines = releaseSessionRoutines(state, reference.id);
-        json(res, 200, { deleted: result.deleted, closedHublots, releasedRoutines });
+        const outcome = await workflow({
+          reference,
+          stopRunners: () => { for (const runner of matchingRunners) stopRunner(runner); return matchingRunners; },
+          closeHublots: () => {
+            const closed = [];
+            for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
+              if (tunnel.sessionId !== reference.id) continue;
+              closeTunnel(state, tunnel.id);
+              closed.push(tunnel.port);
+              logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
+            }
+            return closed;
+          },
+          stopRoutines: () => releaseSessionRoutines(state, reference.id),
+          deleteAgentSession: () => operations.deleteSession(reference),
+          removeRuntime: (stoppedRunners) => {
+            for (const runner of stoppedRunners) {
+              state.runners.delete(runner.id);
+              if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
+            }
+          },
+          broadcast: () => runnersChanged(),
+        });
+        json(res, 200, {
+          deleted: outcome.agentResult.deleted,
+          closedHublots: outcome.closedHublots,
+          releasedRoutines: outcome.stoppedRoutines,
+        });
       } catch (error) {
         const status = error.code === "capability_unavailable" ? 409 : 500;
         json(res, status, { error: `failed to delete session: ${error.message}` });

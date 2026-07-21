@@ -44,6 +44,15 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX operations_owner_idx ON operations(owner_id);
     `,
   }),
+  Object.freeze({
+    version: 3,
+    name: "session_deletion_state",
+    sql: `
+      ALTER TABLE app_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'deleting'));
+      CREATE INDEX app_sessions_status_idx ON app_sessions(status);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

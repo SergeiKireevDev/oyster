@@ -50,6 +50,7 @@ test("session owners are unique and durable operations retain their journal afte
   const duplicate = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "later" });
   assert.equal(duplicate.id, owner.id);
   assert.equal(duplicate.created_at, "created");
+  assert.equal(duplicate.status, "active");
 
   store.transaction((repositories) => repositories.operations.create({
     id: "delete-1", ownerId: owner.id, kind: "delete_session", status: "pending",
@@ -106,9 +107,9 @@ test("closing and reopening the app store preserves data without rerunning migra
 
   const second = openAppStore({ databasePath: path, Database });
   t.after(() => second.close());
-  assert.deepEqual(second.migrationStatus, { currentVersion: 2, appliedVersions: [1, 2] });
+  assert.deepEqual(second.migrationStatus, { currentVersion: 3, appliedVersions: [1, 2, 3] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
-  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 2);
+  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 3);
 });
 
 test("WAL permits concurrent readers and committed cross-connection writes", (t) => {

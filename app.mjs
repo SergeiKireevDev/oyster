@@ -10,22 +10,19 @@ const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
   const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
-  
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
     await import(bust("routines.mjs"));
-  
   const {
     SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
     sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
-  
   const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
-  
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
-  const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
+  const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
+  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -76,6 +73,7 @@ export async function init(state) {
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
+  const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
@@ -146,6 +144,7 @@ export async function init(state) {
     runners: { stopRunner, runnersChanged },
     resources: { closeTunnel, releaseSessionRoutines },
     sessionOperations: state.sessionOperations,
+    deleteOwnedSession,
   });
 
   const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes });

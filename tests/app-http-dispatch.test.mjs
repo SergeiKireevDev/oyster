@@ -21,8 +21,8 @@ function stableState() {
     sseClients: new Set(),
     reloadCount: 1,
     appStore: {
-      path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 2, appliedVersions: [1, 2] },
-      repositories: { sessions: { upsert: (owner) => owner } },
+      path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 3, appliedVersions: [1, 2, 3] },
+      repositories: { sessions: { upsert: (owner) => owner }, operations: {} },
     },
     broadcast() {},
     serverEvent() {},
