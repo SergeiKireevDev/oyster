@@ -1,4 +1,4 @@
-export function createRpcClient({ getRunner, getToken, onUnauthorized, onPendingResume, timeoutMs = 60000 }) {
+export function createRpcClient({ getRunner, getToken, onUnauthorized, onPendingResume, timeoutMs = 60000, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   const clientId = Math.random().toString(36).slice(2, 8);
   let sequence = 0;
   const pending = new Map();
@@ -7,10 +7,10 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
     const id = `${clientId}-${++sequence}`;
     const cmd = { id, ...command };
     const waiter = wait ? new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      setTimeout(() => {
+      const timer = setTimeoutImpl(() => {
         if (pending.has(id)) { pending.delete(id); reject(new Error(`timeout waiting for ${cmd.type}`)); }
       }, timeoutMs);
+      pending.set(id, { resolve, reject, timer });
     }) : null;
     const res = await fetch(`/rpc?runner=${encodeURIComponent(getRunner() ?? "")}`, {
       method: "POST", headers: { "content-type": "application/json", "x-auth-token": getToken() }, body: JSON.stringify(cmd),
@@ -26,7 +26,17 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
     const waiter = pending.get(msg.id);
     if (!waiter) return;
     pending.delete(msg.id);
+    clearTimeoutImpl(waiter.timer);
     if (msg.success) waiter.resolve(msg.data); else waiter.reject(new Error(msg.error || "command failed"));
   }
-  return { rpc, handleResponse };
+
+  function dispose(reason = "rpc client stopped") {
+    for (const waiter of pending.values()) {
+      clearTimeoutImpl(waiter.timer);
+      waiter.reject(new Error(reason));
+    }
+    pending.clear();
+  }
+
+  return { rpc, handleResponse, dispose };
 }

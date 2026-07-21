@@ -142,7 +142,7 @@ const rpcClient = createRpcClient({
   onUnauthorized: handleUnauthorized,
   onPendingResume: () => addToast("session is still resuming — message queued", "warning"),
 });
-const { rpc, handleResponse } = rpcClient;
+const { rpc, handleResponse, dispose: disposeRpcClient } = rpcClient;
 
 // ------------------------------------------------------------ markdown (small, escape-first)
 
@@ -2169,6 +2169,7 @@ export function startLegacyRuntime() {
 export function teardownLegacyRuntime() {
   eventStream.close();
   es = null;
+  disposeRpcClient();
   teardownReconnectWatchdog();
   carouselEventRegistration.detach();
   mobileDrawerDismissController.detach();
