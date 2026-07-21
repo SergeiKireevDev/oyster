@@ -1,17 +1,17 @@
-export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast }) {
+export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, isVisible, updateManager, getScopeAll, getDescription }) {
   async function create(description) {
     const text = (description ?? "").trim();
     setDescription(description ?? "");
     if (!text) { toast("describe what the hublot should expose", "warning"); return; }
     setCreating(true);
-    try {
-      const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text });
-      setDescription("");
-      close();
-      toast(`hublot opening at ${data.tunnel.url} — background agent is setting it up…`);
-    } catch (error) {
-      toast(`hublot failed: ${error.message}`, "error");
-    } finally { setCreating(false); }
+    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`hublot opening at ${data.tunnel.url} — background agent is setting it up…`); }
+    catch (error) { toast(`hublot failed: ${error.message}`, "error"); } finally { setCreating(false); }
   }
-  return { create };
+  async function refresh({ loading = false } = {}) {
+    const common = { scopeAll: getScopeAll(), currentSessionId: getSessionId(), desc: getDescription() };
+    updateManager({ loading, ...common });
+    try { const tunnels = await listHublots(); updateManager({ loading: false, tunnels: tunnels.filter(isVisible), total: tunnels.length, ...common }); }
+    catch (error) { updateManager({ loading: false, tunnels: [], total: 0 }); toast(`failed to list hublots: ${error.message}`, "error"); }
+  }
+  return { create, refresh };
 }

@@ -1917,30 +1917,7 @@ function tunnelVisible(tunnel) {
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
 const tunnelForm = { desc: "" };
 
-async function refreshHublotManager({ loading = false } = {}) {
-  updateHublotManager({
-    loading,
-    scopeAll: tunnelScopeAll,
-    currentSessionId: state?.sessionId ?? null,
-    desc: tunnelForm.desc,
-  });
-  try {
-    const res = await fetch(`/tunnels`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
-    updateHublotManager({
-      loading: false,
-      tunnels: (data.tunnels ?? []).filter(tunnelVisible),
-      total: data.tunnels?.length ?? 0,
-      scopeAll: tunnelScopeAll,
-      currentSessionId: state?.sessionId ?? null,
-      desc: tunnelForm.desc,
-    });
-  } catch (e) {
-    updateHublotManager({ loading: false, tunnels: [], total: 0 });
-    toast(`failed to list hublots: ${e.message}`, "error");
-  }
-}
+async function refreshHublotManager(options) { return hublotController.refresh(options); }
 
 async function showHublots() {
   // close the slide-over sidebars so they don't sit on top of the modal
@@ -1957,6 +1934,11 @@ const hublotController = createHublotController({
   setCreating: (creating) => updateHublotManager({ creating }),
   close: closeModal,
   toast,
+  listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
+  isVisible: tunnelVisible,
+  updateManager: updateHublotManager,
+  getScopeAll: () => tunnelScopeAll,
+  getDescription: () => tunnelForm.desc,
 });
 const createManagedHublot = hublotController.create;
 
