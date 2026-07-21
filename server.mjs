@@ -114,21 +114,32 @@ function watchApp() {
   // Watch DIRECTORIES, not files: editors and tools often save via
   // write-to-temp + rename, which replaces the inode and permanently
   // detaches a file-based fs.watch. Directory watchers survive renames.
-  watch(__dirname, (_event, filename) => {
-    if (filename !== "app.mjs") return;
-    // debounce: editors fire multiple change events per save
+  const scheduleReload = (changed) => {
     clearTimeout(reloadTimer);
     reloadTimer = setTimeout(async () => {
       try {
         await loadApp();
-        console.log(`[pi-ui] hot-reloaded app.mjs (clients stay connected: ${state.sseClients.size})`);
+        console.log(`[pi-ui] hot-reloaded app.mjs after ${changed} (clients stay connected: ${state.sseClients.size})`);
       } catch (e) {
         // keep serving with the previous version on syntax/runtime errors
         console.error(`[pi-ui] reload FAILED, keeping old code: ${e.message}`);
         state.serverEvent({ type: "code_reload_failed", error: e.message });
       }
     }, 150);
+  };
+
+  watch(__dirname, (_event, filename) => {
+    if (filename === "app.mjs") scheduleReload("app.mjs");
   });
+
+  const httpDir = join(__dirname, "http");
+  const routeDir = join(httpDir, "routes");
+  for (const directory of [httpDir, routeDir]) {
+    if (!existsSync(directory)) continue;
+    watch(directory, (_event, filename) => {
+      if (filename?.endsWith(".mjs")) scheduleReload(`http/${directory === routeDir ? "routes/" : ""}${filename}`);
+    });
+  }
 
   // notify browsers when the Vite UI changes so they can refresh themselves
   const publicDir = join(__dirname, "public");
@@ -174,7 +185,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
-  console.log(`[pi-ui] hot reload: watching app.mjs and public/index.html + public/src`);
+  console.log(`[pi-ui] hot reload: watching app.mjs, http/, public/index.html + public/src`);
   app.startPi();
 });
 

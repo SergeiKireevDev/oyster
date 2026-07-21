@@ -159,7 +159,7 @@ or session-fork semantics.
   using the existing mtime strategy. Add a test proving a changed route factory
   is observed after an application reload rather than served from Node's ESM
   cache.
-- [ ] Change `server.mjs` watching to reload when `app.mjs`, `http/`, or an
+- [x] Change `server.mjs` watching to reload when `app.mjs`, `http/`, or an
   extracted route-factory dependency changes. Watch directories so atomic-save
   rename behavior remains safe; debounce one reload per change burst.
 - [ ] Add a route-factory reload integration test that changes a temporary
