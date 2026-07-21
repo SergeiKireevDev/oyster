@@ -9,6 +9,18 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerComposerEvents(target, { inputChanged, keydown, send, abort }) {
+  const onComposer = (event) => {
+    const { action, sourceEvent } = event.detail ?? {};
+    if (action === "inputChanged") inputChanged();
+    else if (action === "keydown") keydown(sourceEvent);
+    else if (action === "send") send();
+    else if (action === "abort") abort();
+  };
+  target.addEventListener("pi:composer", onComposer);
+  return () => target.removeEventListener("pi:composer", onComposer);
+}
+
 export function registerCommandPaletteKeyboard(target, { isOpen, move, run, close }) {
   const onKeydown = (event) => {
     if (!isOpen()) return;

@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("composer event adapter routes each composer action", () => {
+  let listener;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  const calls = [];
+  registerComposerEvents(target, { inputChanged: () => calls.push("input"), keydown: (event) => calls.push(["keydown", event]), send: () => calls.push("send"), abort: () => calls.push("abort") });
+  listener({ detail: { action: "inputChanged" } });
+  listener({ detail: { action: "keydown", sourceEvent: "event" } });
+  listener({ detail: { action: "send" } }); listener({ detail: { action: "abort" } });
+  assert.deepEqual(calls, ["input", ["keydown", "event"], "send", "abort"]);
+});
 
 test("command palette keyboard adapter handles palette keys only while open", () => {
   let listener;
