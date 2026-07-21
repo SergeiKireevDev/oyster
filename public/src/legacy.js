@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -629,8 +629,7 @@ function handleEvent(msg) {
     case "response":
       handleResponse(msg);
       // state changes often follow commands; refresh cheaply
-      if (["set_model", "set_thinking_level", "cycle_thinking_level", "new_session",
-           "switch_session", "compact", "set_session_name"].includes(msg.command)) {
+      if (stateRefreshRequired(msg.command)) {
         refreshState();
       }
       return;

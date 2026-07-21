@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createReplayEventGate, openEventStream, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createReplayEventGate, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,11 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("state refresh command classification excludes ordinary responses", () => {
+  assert.equal(stateRefreshRequired("set_model"), true);
+  assert.equal(stateRefreshRequired("get_messages"), false);
 });
 
 test("replay event gate buffers only events that arrive after replay completion", () => {

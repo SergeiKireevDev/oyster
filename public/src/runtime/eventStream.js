@@ -1,5 +1,12 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
 /** Decide whether a replay-gated transcript event should be buffered or dispatched. */
+const STATE_REFRESHING_COMMANDS = new Set(["set_model", "set_thinking_level", "cycle_thinking_level", "new_session", "switch_session", "compact", "set_session_name"]);
+
+/** Whether an RPC response requires a cheap authoritative state refresh. */
+export function stateRefreshRequired(command) {
+  return STATE_REFRESHING_COMMANDS.has(command);
+}
+
 export function createReplayEventGate({ isReplaying, isGateRequired, isReplayDone, buffer, gatedTypes, log = () => {} }) {
   return (message) => {
     if (!isReplaying() || !isGateRequired() || !gatedTypes.has(message.type)) return false;
