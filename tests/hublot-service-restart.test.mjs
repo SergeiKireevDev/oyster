@@ -163,7 +163,7 @@ test("failed port verification records failure and never reopens a tunnel", asyn
 
 test("missing self-served services without startup scripts become actionable interruptions", async (t) => {
   const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4236 });
+  const hublot = reserveHublot(state, { port: 4236, serviceKind: "self_served" });
   recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale-self.test" });
   persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: process.pid });
   let restartAttempts = 0;

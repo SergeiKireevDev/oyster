@@ -6,7 +6,7 @@
  * tunnel to a local port, managed by the pi-remote-ui server (server.mjs).
  * Opening one through this tool:
  *   - lets the server allocate the next free port (3000+)
- *   - optionally has a background pi agent bring up the local service first
+ *   - has a background pi agent bring up the local service first
  *   - opens cloudflared only after that service answers, then binds the
  *     interface to the CURRENT session so it appears ready in the UI, and
  *     is torn down (service + agent + tunnel) when closed or when the
@@ -60,31 +60,25 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "Manage hublots — public web interfaces (cloudflared tunnels to local ports) for this " +
       "session. When the user asks to 'create/open a hublot', use this tool. " +
       "Actions: 'open' creates a hublot — the server allocates a free local port and returns " +
-      "the public URL; by default a background agent is spawned to serve `description` on that " +
-      "port, or pass self_serve=true to get a bare port that YOU must serve. 'close' tears one " +
+      "the public URL; a background agent is spawned to serve `description` on that " +
+      "port before the tunnel opens. 'close' tears one " +
       "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
       "session's hublots. Opened hublots appear automatically in the pi-remote-ui.",
     promptSnippet: "Open/close/list hublots (public web interfaces / tunnels) for this session",
     promptGuidelines: [
-      "A 'hublot' is a public web interface. Use hublot with action=open and self_serve=true " +
-        "when you are about to start a server yourself and want it publicly reachable; serve " +
-        "the returned port, detached, afterwards.",
+      "A 'hublot' is a public web interface. Use hublot with action=open and a clear " +
+        "description of what should be served; the background agent will create and persist " +
+        "an idempotent startup script before the tunnel opens.",
       "Use hublot with action=close (id or port) instead of killing cloudflared processes manually.",
+      "Do not start or serve the hublot port yourself; hublots are always agent-managed.",
     ],
     parameters: Type.Object({
       action: StringEnum(["open", "close", "list"] as const),
       description: Type.Optional(
         Type.String({
           description:
-            "For 'open': what the hublot should expose (becomes the label and, unless " +
-            "self_serve, the brief given to the background agent that sets it up)",
-        }),
-      ),
-      self_serve: Type.Optional(
-        Type.Boolean({
-          description:
-            "For 'open': if true, no background agent is spawned — the caller must make the " +
-            "returned local port serve the content (default false)",
+            "For 'open': what the hublot should expose (becomes the label and the " +
+            "brief given to the background agent that sets it up)",
         }),
       ),
       session_id: Type.Optional(
@@ -103,20 +97,16 @@ export default function hublotExtension(pi: ExtensionAPI) {
 
       if (params.action === "open") {
         if (!params.description) throw new Error("'open' requires a description");
-        onUpdate?.({ content: [{ type: "text", text: params.self_serve ? "Opening tunnel…" : "Preparing local service…" }] });
+        onUpdate?.({ content: [{ type: "text", text: "Preparing local service…" }] });
         const data = await api("POST", "/tunnels", {
           label: params.description.slice(0, 200),
-          brief: params.self_serve ? null : params.description,
+          brief: params.description,
           sessionId: params.session_id ?? sessionId,
         });
         const t = data.tunnel;
-        const text = params.self_serve
-          ? `Hublot open: ${t.url} → http://localhost:${t.port}\n` +
-            `No background agent was spawned: YOU must now make local port ${t.port} serve the ` +
-            `content, with whatever serves it kept running detached (e.g. nohup … & disown).`
-          : `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
-            `The background agent brought the local service up before the tunnel was opened. ` +
-            `Do not serve the port yourself.`;
+        const text = `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
+          `The background agent brought the local service up before the tunnel was opened. ` +
+          `Do not serve the port yourself.`;
         return { content: [{ type: "text", text }], details: t };
       }
 

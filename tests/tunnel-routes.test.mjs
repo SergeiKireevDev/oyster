@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createTunnelRoutes } from "../http/routes/tunnelRoutes.mjs";
 
 const response = () => ({});
+
 test("tunnel routes prepare the local service before opening and publishing its tunnel", async () => {
   const events = [], agents = [], closed = [], owners = [], order = [];
   const state = { tunnels: new Map(), serverEvent: (event) => events.push(event) };
@@ -31,4 +32,26 @@ test("tunnel routes prepare the local service before opening and publishing its 
   assert.deepEqual(owners, ["s1", "s2"]);
   const removed = response(); routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
+});
+
+test("tunnel routes reject opens without an agent brief", async () => {
+  let reserved = false;
+  const routes = createTunnelRoutes({
+    state: {}, config: { TUNNEL_BIN: "cloudflared" },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      readJsonBody: async (req) => req.body,
+    },
+    listTunnels: () => [],
+    reserveHublot: () => { reserved = true; },
+    rebindHublot: () => null,
+    openTunnel: async () => null,
+    closeTunnel: () => null,
+    spawnHublotAgent: async () => null,
+  });
+  const res = response();
+  await routes["POST /tunnels"]({ body: { port: 4000, label: "bare" } }, res);
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /agent-managed hublots require a non-empty brief/);
+  assert.equal(reserved, false);
 });

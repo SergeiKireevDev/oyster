@@ -35,7 +35,7 @@ function fixture(t) {
 test("graceful hublot shutdown awaits bounded escalation and retains desired-open recovery state", async (t) => {
   const { store, state, child } = fixture(t);
   const managed = reserveHublot(state, { port: 4240, brief: "managed preview" });
-  const selfServed = reserveHublot(state, { port: 4241 });
+  const selfServed = reserveHublot(state, { port: 4241, serviceKind: "self_served" });
   recordHublotTransition(state, managed.id, "open", { publicUrl: "https://managed.trycloudflare.com" });
   recordHublotTransition(state, selfServed.id, "open", { publicUrl: "https://self.trycloudflare.com" });
 

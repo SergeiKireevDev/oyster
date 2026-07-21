@@ -10,6 +10,10 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       if (body === undefined) return;
       const requestedPort = body?.port;
       const brief = body?.brief ? String(body.brief) : null;
+      if (!brief) {
+        json(res, 400, { error: "agent-managed hublots require a non-empty brief" });
+        return;
+      }
       let prepared = null;
       let reserved = null;
       try {
@@ -30,10 +34,10 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
           ...options, id: reserved.id, port: reserved.port,
           serviceStartScriptPath: reserved.service_start_script_path,
         };
-        if (brief) prepared = await spawnHublotAgent(state, reservedOptions, brief);
+        prepared = await spawnHublotAgent(state, reservedOptions, brief);
         const tunnel = await openTunnel(state, reservedOptions);
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
-        json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });
+        json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: true });
       } catch (e) {
         if (reserved && state.appStore?.repositories?.hublots?.find(reserved.id)?.status === "opening") {
           recordHublotTransition(state, reserved.id, "failed", { publicUrl: null, lastError: e.message });

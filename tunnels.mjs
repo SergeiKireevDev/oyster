@@ -228,7 +228,7 @@ export async function allocateHublot(state, options = {}, {
 /** Allocate durable identity and recovery configuration before any process starts. */
 export function reserveHublot(state, {
   port, label = null, sessionId = null, ownerId = null, brief = null,
-  serviceKind = brief ? "agent_managed" : "self_served",
+  serviceKind = "agent_managed",
 } = {}) {
   port = Number(port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);

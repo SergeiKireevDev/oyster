@@ -35,6 +35,7 @@ test("supervisor reconciles every desired-open hublot against persisted identiti
   const stale = reserveHublot(state, { port: 4201 });
   recordHublotTransition(state, stale.id, "open", { publicUrl: "https://stale.test" });
   processRow(store, stale.id, "stale-tunnel", "tunnel");
+  processRow(store, stale.id, "healthy-stale-service", "service");
 
   const closed = reserveHublot(state, { port: 4202 });
   recordHublotTransition(state, closed.id, "closed", { desiredState: "closed", closedAt: "closed" });

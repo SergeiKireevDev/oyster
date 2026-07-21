@@ -39,11 +39,11 @@ test("agent-managed hublots reserve durable identity and startup path before run
   assert.deepEqual(store.repositories.hublots.listLifecycleEvents(reserved.id).map((event) => event.status), ["opening"]);
 });
 
-test("self-served hublots are also persisted before tunneling without an app startup path", (t) => {
-  const { store, state } = fixture(t);
-  const reserved = reserveHublot(state, { port: 8081, label: "existing service" });
-  assert.equal(reserved.service_kind, "self_served");
-  assert.equal(reserved.service_start_script_path, null);
+test("hublot reservations default to agent-managed startup scripts", (t) => {
+  const { root, store, state } = fixture(t);
+  const reserved = reserveHublot(state, { port: 8081, label: "managed service" });
+  assert.equal(reserved.service_kind, "agent_managed");
+  assert.equal(reserved.service_start_script_path, join(root, "agent", "hublots", reserved.id, "start.sh"));
   assert.equal(store.repositories.hublots.find(reserved.id).status, "opening");
   assert.throws(() => reserveHublot(state, { port: 8081 }), /already tunneled/);
 });
