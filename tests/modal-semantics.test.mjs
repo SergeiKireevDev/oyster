@@ -28,3 +28,29 @@ test("prompt picker checkpoint and hublot modal controls use native buttons", ()
   assert.match(hublot, /<button class="chip" onclick=\{closeModalState\}>Close<\/button>/);
   assert.match(hublot, /<button\s+class="x"\s+title="close this hublot"/);
 });
+
+test("file folder session and overlay controls use native semantics", () => {
+  const components = [
+    "FileExplorerModal.svelte",
+    "FilePickerModal.svelte",
+    "FolderBrowserModal.svelte",
+    "SessionPickerModal.svelte",
+    "Overlays.svelte",
+  ];
+  for (const name of components) {
+    assert.doesNotMatch(read(name), /<span\b[^>]*role="button"/, `${name} must not emulate buttons with spans`);
+  }
+
+  const explorer = read("FileExplorerModal.svelte");
+  for (const action of ["saveFileExplorer", "uploadFileExplorer", "backFileExplorer", "backFileExplorerToHublots", "closeModalState"]) {
+    assert.match(explorer, new RegExp(`<button[^>]*onclick=\\{${action}\\}`));
+  }
+  assert.match(read("FilePickerModal.svelte"), /<button class="chip" title="Insert the current folder path" onclick=\{useFilePickerFolder\}>/);
+  assert.match(read("FolderBrowserModal.svelte"), /<button class="chip" onclick=\{cancelFolderBrowser\}>Cancel<\/button>/);
+
+  const sessions = read("SessionPickerModal.svelte");
+  assert.match(sessions, /<button class="s-session-main" onclick=\{\(\) => choosePickedSession\(session\.path\)\}>/);
+  assert.match(sessions, /<button class="s-del s-stop"[^>]*title="Stop this session's process \(keeps the session\)"/);
+  assert.match(sessions, /<button class="s-del" title="Delete session"/);
+  assert.match(sessions, /<button class="chip" onclick=\{cancelSessionPicker\}>Cancel<\/button>/);
+});

@@ -46,8 +46,8 @@
 {/if}
 
 <div class="m-actions" id="mActions">
-  <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
-  <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ showHidden: !$folderBrowser.showHidden }); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-  <span class="chip" role="button" tabindex="0" onclick={cancelFolderBrowser} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFolderBrowser(); }}>Cancel</span>
+  <button class="chip" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })}>New folder</button>
+  <button class="chip toggle-hidden" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
+  <button class="chip" onclick={cancelFolderBrowser}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
 </div>

@@ -60,7 +60,7 @@
         title={`download ${file.name}`}
         style="text-decoration:none"
       >⬇</a>
-      <span class="chip" role="button" tabindex="0" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") editExploredFile(fullPath); }}>✎</span>
+      <button class="chip" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
     </div>
   {/each}
   {#if !visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden).length && !files.length}
@@ -70,13 +70,13 @@
 
 <div class="m-actions" id="mActions">
   {#if $fileExplorer.mode === "edit"}
-    <span class="chip" role="button" tabindex="0" onclick={saveFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveFileExplorer(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
+    <button class="chip" onclick={saveFileExplorer}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
     <a class="chip" href={downloadFileUrl($fileExplorer.token, $fileExplorer.editPath)} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
-    <span class="chip" role="button" tabindex="0" onclick={backFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorer(); }}>← Back</span>
+    <button class="chip" onclick={backFileExplorer}>← Back</button>
   {:else}
-    <span class="chip" role="button" tabindex="0" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") uploadFileExplorer(); }}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</span>
-    <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFileExplorer({ showHidden: !$fileExplorer.showHidden }); }}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-    <span class="chip" role="button" tabindex="0" onclick={backFileExplorerToHublots} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorerToHublots(); }}>← Hublots</span>
+    <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</button>
+    <button class="chip toggle-hidden" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
+    <button class="chip" onclick={backFileExplorerToHublots}>← Hublots</button>
   {/if}
-  <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
+  <button class="chip" onclick={closeModalState}>Close</button>
 </div>

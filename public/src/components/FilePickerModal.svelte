@@ -32,7 +32,7 @@
 {/if}
 
 <div class="m-actions" id="mActions">
-  <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={useFilePickerFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") useFilePickerFolder(); }}>📁 Use this folder</span>
-  <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-  <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
+  <button class="chip" title="Insert the current folder path" onclick={useFilePickerFolder}>📁 Use this folder</button>
+  <button class="chip toggle-hidden" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
+  <button class="chip" onclick={cancelFilePicker}>Cancel</button>
 </div>

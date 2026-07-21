@@ -114,7 +114,7 @@ application; no global dialog store contains runtime callbacks.
   checkpoint, and hublot modal components with styled native `button` elements.
   Preserve labels, titles, disabled behavior, and keyboard behavior in a markup
   regression test.
-- [ ] Replace clickable `span[role="button"]` controls in file, folder,
+- [x] Replace clickable `span[role="button"]` controls in file, folder,
   session, and overlay-shell components with styled native `button` elements.
   Extend the markup regression test to cover every modal/overlay component.
 - [ ] Add a browser-action adapter with an `openExternal(url)` operation and

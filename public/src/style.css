@@ -761,6 +761,11 @@
     cursor: default;
   }
   #modal .m-option.current .s-name { color: var(--accent); }
+  #modal .m-option.session-row { display: flex; align-items: center; }
+  #modal .s-session-main {
+    flex: 1; min-width: 0; padding: 0; border: 0;
+    background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
   #modal .m-option .s-title {
     display: flex; gap: 8px; align-items: baseline;
     white-space: nowrap; overflow: hidden;
@@ -796,6 +801,8 @@
   @keyframes dotblink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   #modal .m-option .s-del {
     flex-shrink: 0;
+    border: 0;
+    background: transparent;
     margin-left: 6px;
     padding: 0 6px;
     border-radius: 6px;

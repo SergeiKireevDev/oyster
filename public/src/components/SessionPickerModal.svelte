@@ -93,13 +93,6 @@
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
   }
-  function keyActivate(event, fn) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      event.stopPropagation();
-      fn();
-    }
-  }
   function queryInput(value) {
     updateSessionPicker({
       query: value,
@@ -209,20 +202,22 @@
   {@const current = session.id === $sessionPicker.currentId}
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
-  <button class={`m-option${current ? " current" : ""}`} onclick={() => choosePickedSession(session.path)}>
-    <div class="s-title">
-      <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
-      <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
-      <span class="s-date">{fmtSessionDate(session.modifiedAt)} · {session.messageCount} msgs</span>
-      <span class="s-del s-stop" role="button" tabindex="0" style:display={alive ? "" : "none"} title="Stop this session's process (keeps the session)" onclick={(event) => { event.stopPropagation(); stopPickedSession(session); }} onkeydown={(event) => keyActivate(event, () => stopPickedSession(session))}>■</span>
-      {#if !current}
-        <span class="s-del" role="button" tabindex="0" title="Delete session" onclick={(event) => { event.stopPropagation(); deletePickedSession(session); }} onkeydown={(event) => keyActivate(event, () => deletePickedSession(session))}>✕</span>
+  <div class={`m-option session-row${current ? " current" : ""}`}>
+    <button class="s-session-main" onclick={() => choosePickedSession(session.path)}>
+      <div class="s-title">
+        <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
+        <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
+        <span class="s-date">{fmtSessionDate(session.modifiedAt)} · {session.messageCount} msgs</span>
+      </div>
+      {#if session.name && session.preview}
+        <div class="s-preview">{session.preview}</div>
       {/if}
-    </div>
-    {#if session.name && session.preview}
-      <div class="s-preview">{session.preview}</div>
+    </button>
+    <button class="s-del s-stop" style:display={alive ? "" : "none"} title="Stop this session's process (keeps the session)" onclick={() => stopPickedSession(session)}>■</button>
+    {#if !current}
+      <button class="s-del" title="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
     {/if}
-  </button>
+  </div>
 {/snippet}
 
 {#snippet SessionRows({ sessions })}
@@ -248,5 +243,5 @@
 {/snippet}
 
 <div class="m-actions" id="mActions">
-  <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => keyActivate(event, cancelSessionPicker)}>Cancel</span>
+  <button class="chip" onclick={cancelSessionPicker}>Cancel</button>
 </div>
