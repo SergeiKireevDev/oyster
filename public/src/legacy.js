@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -1075,14 +1075,10 @@ const transcriptSyncScheduler = createTranscriptSyncScheduler({
     if (!String(error.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, error);
   },
 });
-let postAgentTranscriptSyncTimer = null;
+const postAgentTranscriptSyncController = createDebouncedTranscriptSyncController({ schedule: transcriptSyncScheduler.schedule });
 let postSendFileSyncTimer = null;
 const syncTranscriptSoon = transcriptSyncScheduler.schedule;
-
-function schedulePostAgentTranscriptSync() {
-  clearTimeout(postAgentTranscriptSyncTimer);
-  postAgentTranscriptSyncTimer = syncTranscriptSoon("post-agent", 250);
-}
+const schedulePostAgentTranscriptSync = () => postAgentTranscriptSyncController.schedule();
 
 function schedulePostSendFileTranscriptSync(expectedUserText) {
   clearTimeout(postSendFileSyncTimer);

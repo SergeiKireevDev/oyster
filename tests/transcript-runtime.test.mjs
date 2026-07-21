@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssistantStream, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+
+test("debounced transcript sync controller replaces its pending timer", () => {
+  const cleared = []; const scheduled = [];
+  const controller = createDebouncedTranscriptSyncController({ schedule: (...args) => { scheduled.push(args); return scheduled.length; }, clearTimeoutImpl: (timer) => cleared.push(timer) });
+  controller.schedule(); controller.schedule("again", 50);
+  assert.deepEqual(cleared, [1]);
+  assert.deepEqual(scheduled, [["post-agent", 250], ["again", 50]]);
+});
 
 test("transcript sync scheduler retries during replay before reloading", async () => {
   const timers = []; let replaying = true; let reloads = 0;

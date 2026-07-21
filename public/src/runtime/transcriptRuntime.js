@@ -43,6 +43,18 @@ export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, 
   return { schedule };
 }
 
+/** Coalesce post-agent durable transcript refreshes into one pending sync. */
+export function createDebouncedTranscriptSyncController({ schedule, clearTimeoutImpl = clearTimeout }) {
+  let timer = null;
+  return {
+    schedule(label = "post-agent", delay = 250) {
+      if (timer) clearTimeoutImpl(timer);
+      timer = schedule(label, delay);
+      return timer;
+    },
+  };
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);
