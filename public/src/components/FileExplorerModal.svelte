@@ -4,8 +4,8 @@
     browseExploredFolder,
     editExploredFile,
     saveExploredFile,
-    setExploredFileContent,
   } from "../lib/legacyBridge.js";
+  import { updateFileExplorer } from "../stores/fileExplorer.js";
   import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
@@ -21,7 +21,7 @@
     value={$fileExplorer.editContent}
     spellcheck="false"
     style="width:100%;height:50vh;resize:vertical;font:12.5px/1.5 ui-monospace,monospace;white-space:pre;tab-size:4;box-sizing:border-box;margin-top:6px;"
-    oninput={(event) => setExploredFileContent(event.currentTarget.value)}
+    oninput={(event) => updateFileExplorer({ editContent: event.currentTarget.value })}
     onkeydown={(event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "s") {
         event.preventDefault();

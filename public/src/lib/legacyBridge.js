@@ -98,10 +98,6 @@ export function editExploredFile(path) {
   return fileExplorerHandlers.editFile?.(path);
 }
 
-export function setExploredFileContent(content) {
-  return fileExplorerHandlers.setEditContent?.(content);
-}
-
 export function saveExploredFile() {
   return fileExplorerHandlers.saveFile?.();
 }

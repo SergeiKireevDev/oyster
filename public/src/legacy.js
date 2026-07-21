@@ -1,7 +1,7 @@
 "use strict";
 
 import { tick } from "svelte";
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -10,7 +10,7 @@ import { setCheckpointBusy, setCheckpointTarget } from "./stores/checkpointMarke
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "./stores/checkpointRestores.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
-import { updateFileExplorer } from "./stores/fileExplorer.js";
+import { fileExplorer, updateFileExplorer } from "./stores/fileExplorer.js";
 import { updateFilePicker } from "./stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "./stores/folderBrowser.js";
 import { setComposerTextValue } from "./stores/composer.js";
@@ -2181,7 +2181,7 @@ async function saveExplorerFile() {
   const path = fileExplorerState.editPath;
   updateFileExplorer({ saving: true });
   try {
-    const d = await saveFile(fetch, { path, content: fileExplorerState.editContent });
+    const d = await saveFile(fetch, { path, content: get(fileExplorer).editContent });
     toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
   } catch (e) {
     toast(e.message, "error");
@@ -2193,10 +2193,6 @@ async function saveExplorerFile() {
 setFileExplorerHandlers({
   browse: loadFileExplorer,
   editFile: editExplorerFile,
-  setEditContent: (editContent) => {
-    fileExplorerState.editContent = editContent;
-    updateFileExplorer({ editContent });
-  },
   saveFile: saveExplorerFile,
   uploadFiles: uploadExplorerFiles,
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
