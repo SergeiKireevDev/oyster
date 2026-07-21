@@ -11,6 +11,12 @@ export function initializeAuth() {
   return token;
 }
 
+/** Open and focus the authentication gate after an explicit unauthorized response. */
+export function showAuthGate({ gate, input }) {
+  gate.classList.add("open");
+  input.focus();
+}
+
 export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }) {
   let lastProbeAt = 0;
   return async () => {

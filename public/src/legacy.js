@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
+import { createAuthProbe, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
@@ -107,10 +107,7 @@ const $ = (id) => document.getElementById(id);
 const gate = $("gate");
 
 
-function requireToken() {
-  gate.classList.add("open");
-  $("gateInput").focus();
-}
+const requireToken = () => showAuthGate({ gate, input: $("gateInput") });
 
 // SSE failures: distinguish "server unreachable" from "token rejected".
 // Only the server itself saying the token is invalid clears it.
