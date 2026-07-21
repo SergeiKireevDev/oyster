@@ -59,7 +59,7 @@ event, and remounting cannot invoke a disposed runtime.
 - [x] Add `createDialogService()` that owns text, editor, confirm, and
   option-picker presentation state, but does not yet replace existing dialog
   exports. Test independent service instances have independent state.
-- [ ] Add a dialog-service Svelte context provider in `App.svelte`, and pass
+- [x] Add a dialog-service Svelte context provider in `App.svelte`, and pass
   the same service to `startAppRuntime()`. Test mount → teardown → mount creates
   fresh services.
 - [ ] Move text-prompt open, cancel, and submit promise handling from

@@ -8,19 +8,23 @@
   import { startAppRuntime } from "./runtime/appRuntime.js";
   import { createUiActionRegistry } from "./runtime/uiActionRegistry.js";
   import { provideUiActionRegistry } from "./runtime/uiActionContext.js";
+  import { createDialogService } from "./runtime/dialogService.js";
+  import { provideDialogService } from "./runtime/dialogServiceContext.js";
 
   const uiActions = provideUiActionRegistry(createUiActionRegistry());
+  const dialogs = provideDialogService(createDialogService());
 
   onMount(() => {
     let teardown;
     let disposed = false;
-    startAppRuntime({ uiActions }).then((dispose) => {
+    startAppRuntime({ uiActions, dialogs }).then((dispose) => {
       if (disposed) dispose();
       else teardown = dispose;
     });
     return () => {
       disposed = true;
       teardown?.();
+      dialogs.teardown();
       uiActions.teardown();
     };
   });

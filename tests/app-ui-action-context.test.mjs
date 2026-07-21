@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createAppRuntimeStarter } from "../public/src/runtime/appRuntime.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
+import { createDialogService } from "../public/src/runtime/dialogService.js";
 
 const appSource = readFileSync(new URL("../public/src/App.svelte", import.meta.url), "utf8");
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
@@ -10,7 +11,7 @@ const commandPaletteSource = readFileSync(new URL("../public/src/components/Comm
 
 test("App provides its UI action registry and passes it to the runtime", () => {
   assert.match(appSource, /provideUiActionRegistry\(createUiActionRegistry\(\)\)/);
-  assert.match(appSource, /startAppRuntime\(\{ uiActions \}\)/);
+  assert.match(appSource, /startAppRuntime\(\{ uiActions, dialogs \}\)/);
   assert.match(appSource, /uiActions\.teardown\(\)/);
 });
 
@@ -30,7 +31,12 @@ test("CommandPalette routes mouse selection through the scoped registry", () => 
   assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|pi-command-palette-run/);
 });
 
-test("application mount teardown remount passes a fresh UI action registry", async () => {
+test("App provides one dialog service to components and the runtime", () => {
+  assert.match(appSource, /provideDialogService\(createDialogService\(\)\)/);
+  assert.match(appSource, /dialogs\.teardown\(\)/);
+});
+
+test("application mount teardown remount passes fresh scoped UI services", async () => {
   const received = [];
   const start = createAppRuntimeStarter({
     browser: {},
@@ -38,7 +44,7 @@ test("application mount teardown remount passes a fresh UI action registry", asy
     async loadDependencies() {
       return {
         createApplicationRuntimeDependencies(_browser, services) {
-          received.push(services.uiActions);
+          received.push({ uiActions: services.uiActions, dialogs: services.dialogs });
           return {
             attachAuthenticatedFetch() {}, attachEventAdapters() {}, attachDebugHooks() {}, start() {}, teardown() {},
           };
@@ -48,20 +54,29 @@ test("application mount teardown remount passes a fresh UI action registry", asy
   });
 
   const firstRegistry = createUiActionRegistry();
+  const firstDialogs = createDialogService();
   firstRegistry.register("mounted", () => "first");
-  const unmountFirst = await start({ uiActions: firstRegistry });
+  firstDialogs.setTextPrompt({ title: "First", placeholder: "", value: "" });
+  const unmountFirst = await start({ uiActions: firstRegistry, dialogs: firstDialogs });
   unmountFirst();
+  firstDialogs.teardown();
   firstRegistry.teardown();
 
   const secondRegistry = createUiActionRegistry();
+  const secondDialogs = createDialogService();
   secondRegistry.register("mounted", () => "second");
-  const unmountSecond = await start({ uiActions: secondRegistry });
+  const unmountSecond = await start({ uiActions: secondRegistry, dialogs: secondDialogs });
 
-  assert.deepEqual(received, [firstRegistry, secondRegistry]);
+  assert.deepEqual(received, [
+    { uiActions: firstRegistry, dialogs: firstDialogs },
+    { uiActions: secondRegistry, dialogs: secondDialogs },
+  ]);
   assert.notEqual(firstRegistry, secondRegistry);
+  assert.notEqual(firstDialogs, secondDialogs);
   assert.equal(firstRegistry.invoke("mounted"), undefined);
   assert.equal(secondRegistry.invoke("mounted"), "second");
 
   unmountSecond();
+  secondDialogs.teardown();
   secondRegistry.teardown();
 });
