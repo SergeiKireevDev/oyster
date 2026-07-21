@@ -1681,8 +1681,10 @@ async function showSessionPicker() {
     // attaches to the session's live runner if it has one (its work is
     // untouched), else spawns a fresh pi on that session in the background;
     // sessions from other folders spawn in their own recorded cwd
-    const runner = await openSessionRunner({ sessionPath: fullChoice.path, dir: fullChoice.cwd || sessionUi.workdir });
-    switchToRunner(runner.id);
+    const runner = await getSessionRuntime().openAndSwitchSession({
+      sessionPath: fullChoice.path,
+      dir: fullChoice.cwd || sessionUi.workdir,
+    });
     addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
   } catch (e) {
     addToast(`switch failed: ${e.message}`, "error");

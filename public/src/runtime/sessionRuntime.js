@@ -26,26 +26,31 @@ export function createSessionRuntime({
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
   connect,
 }) {
+  const switchRunner = (id) => switchSessionRunner({
+    id,
+    currentRunner: getCurrentRunner(),
+    hooks: {
+      log,
+      resetPreview,
+      refreshState,
+      setRunner,
+      clearTranscript,
+      resetSessionUi,
+      renderPreview,
+      resetCommands,
+      connect,
+    },
+  });
+
   return {
     openSession(options) { return openSession(options); },
+    async openAndSwitchSession(options) {
+      const runner = await openSession(options);
+      if (runner?.id) switchRunner(runner.id);
+      return runner;
+    },
     openSessionAtSearchHit(...args) { return openSearchHit(...args); },
     refreshState() { return refreshState(); },
-    switchRunner(id) {
-      return switchSessionRunner({
-        id,
-        currentRunner: getCurrentRunner(),
-        hooks: {
-          log,
-          resetPreview,
-          refreshState,
-          setRunner,
-          clearTranscript,
-          resetSessionUi,
-          renderPreview,
-          resetCommands,
-          connect,
-        },
-      });
-    },
+    switchRunner,
   };
 }
