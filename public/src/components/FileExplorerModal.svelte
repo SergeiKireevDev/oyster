@@ -5,18 +5,25 @@
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
-    backFileExplorer,
-    backFileExplorerToHublots,
-    browseFileExplorer,
-    editFileExplorer,
-    saveFileExplorer,
-    uploadFileExplorer,
-  } from "../features/files/fileExplorerActions.js";
+    FILE_EXPLORER_BACK_ACTION,
+    FILE_EXPLORER_BROWSE_ACTION,
+    FILE_EXPLORER_EDIT_ACTION,
+    FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
+    FILE_EXPLORER_SAVE_ACTION,
+    FILE_EXPLORER_UPLOAD_ACTION,
+  } from "../runtime/uiActionNames.js";
 
   const browserActions = getBrowserActions();
-  const editExploredFile = editFileExplorer;
+  const uiActions = getUiActionRegistry();
+  const browseFileExplorer = (path) => uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, path);
+  const editExploredFile = (path) => uiActions.invoke(FILE_EXPLORER_EDIT_ACTION, path);
+  const saveFileExplorer = () => uiActions.invoke(FILE_EXPLORER_SAVE_ACTION);
   const saveExploredFile = saveFileExplorer;
+  const uploadFileExplorer = () => uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
+  const backFileExplorer = () => uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
+  const backFileExplorerToHublots = () => uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
 
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
   $: editedFileDownload = browserActions.fileDownload($fileExplorer.token, $fileExplorer.editPath);

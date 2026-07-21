@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureFileExplorerActions } from "../files/fileExplorerActions.js";
 import { configureFilesActions } from "../files/filesActions.js";
 import { configureHublotActions } from "../hublots/hublotActions.js";
 import { configureRoutineActions } from "../routines/routineActions.js";
@@ -14,6 +13,12 @@ import {
   FOLDER_BROWSER_CANCEL_ACTION,
   FOLDER_BROWSER_CREATE_ACTION,
   FOLDER_BROWSER_SUBMIT_ACTION,
+  FILE_EXPLORER_BACK_ACTION,
+  FILE_EXPLORER_BROWSE_ACTION,
+  FILE_EXPLORER_EDIT_ACTION,
+  FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
+  FILE_EXPLORER_SAVE_ACTION,
+  FILE_EXPLORER_UPLOAD_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
@@ -64,7 +69,12 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(FOLDER_BROWSER_CREATE_ACTION, actions.folderBrowser.create),
         deps.uiActions.register(FOLDER_BROWSER_SUBMIT_ACTION, actions.folderBrowser.submit),
         deps.uiActions.register(FOLDER_BROWSER_CANCEL_ACTION, actions.folderBrowser.cancel),
-        configureFileExplorerActions(actions.fileExplorer),
+        deps.uiActions.register(FILE_EXPLORER_BROWSE_ACTION, actions.fileExplorer.browse),
+        deps.uiActions.register(FILE_EXPLORER_EDIT_ACTION, actions.fileExplorer.edit),
+        deps.uiActions.register(FILE_EXPLORER_SAVE_ACTION, actions.fileExplorer.save),
+        deps.uiActions.register(FILE_EXPLORER_UPLOAD_ACTION, actions.fileExplorer.upload),
+        deps.uiActions.register(FILE_EXPLORER_BACK_ACTION, actions.fileExplorer.back),
+        deps.uiActions.register(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION, actions.fileExplorer.backToHublots),
         configureFilesActions(actions.files),
         configureHublotActions(actions.hublots),
         configureRoutineActions(actions.routine),

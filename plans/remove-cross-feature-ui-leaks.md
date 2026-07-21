@@ -51,7 +51,7 @@ cd tests/e2e && npm test
   change `FolderBrowserModal.svelte` to invoke them. Delete
   `features/files/folderBrowserActions.js` and its configuration call; test
   browse, create, submit, and cancel routing.
-- [ ] Register file-explorer handlers through `createResourceAssembly()` and
+- [x] Register file-explorer handlers through `createResourceAssembly()` and
   change `FileExplorerModal.svelte` to invoke them. Delete
   `features/files/fileExplorerActions.js` and its configuration call; test
   browse, edit, save, upload, back, and return-to-hublot routing.

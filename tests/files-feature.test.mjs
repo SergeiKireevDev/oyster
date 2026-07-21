@@ -2,19 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createFilesFeature } from "../public/src/features/files/createFilesFeature.js";
-import { configureFileExplorerActions, saveFileExplorer } from "../public/src/features/files/fileExplorerActions.js";
 
 test("files feature requires injected controller dependencies", () => {
   assert.throws(() => createFilesFeature({}), TypeError);
-});
-
-test("remaining file action adapter routes configured actions and clears on teardown", () => {
-  const calls = [];
-  const detachExplorer = configureFileExplorerActions({ save: () => calls.push("save") });
-  saveFileExplorer();
-  detachExplorer();
-  saveFileExplorer();
-  assert.deepEqual(calls, ["save"]);
 });
 
 test("file picker component routes browse, choose, use-folder, and cancel through scoped actions", () => {
@@ -35,4 +25,16 @@ test("folder browser component routes browse, create, submit, and cancel through
   assert.match(source, /uiActions\.invoke\(FOLDER_BROWSER_SUBMIT_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(FOLDER_BROWSER_CANCEL_ACTION\)/);
   assert.doesNotMatch(source, /features\/files\/folderBrowserActions\.js/);
+});
+
+test("file explorer component routes browse, edit, save, upload, back, and return through scoped actions", () => {
+  const source = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
+  assert.match(source, /getUiActionRegistry\(\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_BROWSE_ACTION, path\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_EDIT_ACTION, path\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_SAVE_ACTION\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_UPLOAD_ACTION\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_BACK_ACTION\)/);
+  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION\)/);
+  assert.doesNotMatch(source, /features\/files\/fileExplorerActions\.js/);
 });

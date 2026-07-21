@@ -11,6 +11,12 @@ import {
   FOLDER_BROWSER_CANCEL_ACTION,
   FOLDER_BROWSER_CREATE_ACTION,
   FOLDER_BROWSER_SUBMIT_ACTION,
+  FILE_EXPLORER_BACK_ACTION,
+  FILE_EXPLORER_BROWSE_ACTION,
+  FILE_EXPLORER_EDIT_ACTION,
+  FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
+  FILE_EXPLORER_SAVE_ACTION,
+  FILE_EXPLORER_UPLOAD_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 test("resource assembly composes files hublots and routines with one teardown boundary", () => {
@@ -67,7 +73,7 @@ test("resource assemblies remount without retaining controllers or cross-refresh
   second.teardown();
 });
 
-test("resource assembly registers file-picker and folder-browser handlers until teardown", () => {
+test("resource assembly registers file-picker, folder-browser, and file-explorer handlers until teardown", () => {
   const calls = [];
   const uiActions = createUiActionRegistry();
   const assembly = createResourceAssembly({
@@ -92,7 +98,14 @@ test("resource assembly registers file-picker and folder-browser handlers until 
       submit: () => calls.push(["folder-submit"]),
       cancel: () => calls.push(["folder-cancel"]),
     },
-    fileExplorer: {},
+    fileExplorer: {
+      browse: (path) => calls.push(["explorer-browse", path]),
+      edit: (path) => calls.push(["explorer-edit", path]),
+      save: () => calls.push(["explorer-save"]),
+      upload: () => calls.push(["explorer-upload"]),
+      back: () => calls.push(["explorer-back"]),
+      backToHublots: () => calls.push(["explorer-return"]),
+    },
     files: {},
     hublots: {},
     routine() {},
@@ -106,6 +119,12 @@ test("resource assembly registers file-picker and folder-browser handlers until 
   uiActions.invoke(FOLDER_BROWSER_CREATE_ACTION);
   uiActions.invoke(FOLDER_BROWSER_SUBMIT_ACTION);
   uiActions.invoke(FOLDER_BROWSER_CANCEL_ACTION);
+  uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, "/files");
+  uiActions.invoke(FILE_EXPLORER_EDIT_ACTION, "/files/readme.md");
+  uiActions.invoke(FILE_EXPLORER_SAVE_ACTION);
+  uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
+  uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
+  uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
@@ -115,10 +134,17 @@ test("resource assembly registers file-picker and folder-browser handlers until 
     ["folder-create"],
     ["folder-submit"],
     ["folder-cancel"],
+    ["explorer-browse", "/files"],
+    ["explorer-edit", "/files/readme.md"],
+    ["explorer-save"],
+    ["explorer-upload"],
+    ["explorer-back"],
+    ["explorer-return"],
   ]);
 
   assembly.teardown();
   assert.equal(uiActions.invoke(FILE_PICKER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, "/stale"), undefined);
-  assert.equal(calls.length, 8);
+  assert.equal(uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, "/stale"), undefined);
+  assert.equal(calls.length, 14);
 });
