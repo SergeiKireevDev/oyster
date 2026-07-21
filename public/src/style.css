@@ -941,7 +941,8 @@
     cursor: pointer;
   }
   #modal .m-option:hover { border-color: var(--accent); }
-  #modal .m-option.active { border-color: var(--accent); background: var(--user-bubble); }
+  #modal .m-option.active,
+  #modal .m-option.keyboard-active { border-color: var(--accent); background: var(--user-bubble); }
   #modal .m-option.current {
     border-color: var(--accent);
     background: var(--user-bubble);

@@ -403,7 +403,23 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await page.keyboard.press("Enter");
     await expect(palette).not.toHaveClass(/open/);
     await expect(page.locator("#overlay")).toHaveClass(/open/);
-    await expect(page.locator("#modal", { hasText: "match-01.txt" })).toBeVisible();
+    const modal = page.locator("#modal", { hasText: "match-01.txt" });
+    await expect(modal).toBeVisible();
+
+    // Desktop-style modal controls navigate choices, select with Enter, and
+    // cancel with Escape without requiring a mouse.
+    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowDown");
+    await expect(modal.locator(".m-option.keyboard-active")).toContainText("match-01.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+    await expect(page.locator("#input")).toHaveValue(`/workspace/${large}/match-01.txt`);
+
+    await page.fill("#input", `./${large}/match-`);
+    await expect(palette.locator(".cmd-row", { hasText: "Open file explorer" })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#overlay")).toHaveClass(/open/);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#overlay")).not.toHaveClass(/open/);
   });
 
   test("switching sessions restores each session's model", async ({ page }) => {

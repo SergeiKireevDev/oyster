@@ -14,11 +14,77 @@
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
   import { modalState } from "../stores/modal.js";
+
+  const optionSelector = "button.m-option:not(:disabled), .session-row > button.s-session-main:not(:disabled), label.m-option";
+  let keyboardOption = null;
+  let modalElement;
+
+  $: if ($modalState.open && modalElement) {
+    queueMicrotask(() => {
+      if ($modalState.open && !modalElement.contains(modalElement.ownerDocument.activeElement)) modalElement.focus();
+    });
+  }
+
+  function optionsIn(overlay) {
+    return [...overlay.querySelectorAll(optionSelector)].filter((option) => option.getClientRects().length > 0);
+  }
+
+  function activateOption(option) {
+    keyboardOption?.closest(".m-option")?.classList.remove("keyboard-active");
+    keyboardOption = option;
+    keyboardOption?.closest(".m-option")?.classList.add("keyboard-active");
+    keyboardOption?.scrollIntoView({ block: "nearest" });
+  }
+
+  function cancelModal(overlay) {
+    const explicit = overlay.querySelector("[data-modal-cancel]");
+    if (explicit) { explicit.click(); return; }
+    const fallback = [...overlay.querySelectorAll("button")].find((button) => /^(cancel|close|done|no)$/i.test(button.textContent.trim()));
+    fallback?.click();
+  }
+
+  function modalKeydown(event) {
+    if (!$modalState.open || $modalState.content === "optionPicker") return;
+    const overlay = event.currentTarget;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelModal(overlay);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
+    if (event.target.matches?.("textarea, select, [contenteditable=true]") || (event.key === "Enter" && event.target.matches?.("input, button"))) return;
+    const options = optionsIn(overlay);
+    if (!options.length) {
+      const primary = event.key === "Enter" ? overlay.querySelector(".m-actions button.btn:not(:disabled)") : null;
+      if (!primary) return;
+      event.preventDefault();
+      event.stopPropagation();
+      primary.click();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      const selected = options.includes(keyboardOption) ? keyboardOption : event.target.closest?.(optionSelector) ?? options[0];
+      selected?.click();
+      return;
+    }
+    const current = options.indexOf(keyboardOption);
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const next = current < 0 ? (direction > 0 ? 0 : options.length - 1) : (current + direction + options.length) % options.length;
+    activateOption(options[next]);
+  }
+
+  function modalMousemove(event) {
+    const option = event.target.closest?.(optionSelector);
+    if (option && event.currentTarget.contains(option)) activateOption(option);
+  }
 </script>
 
 <CarouselIndicator />
 
-<div id="overlay" class:open={$modalState.open}><div id="modal" class:wide={$modalState.wide}>
+<div id="overlay" class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
   <div class="m-title" id="mTitle">{$modalState.title}</div>
 
   {#if $modalState.content === null}

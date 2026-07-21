@@ -25,6 +25,6 @@
 />
 
 <div class="m-actions" id="mActions">
-  <button class="chip" onclick={dialogs.cancelText}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={dialogs.cancelText}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitText}>OK</button>
 </div>

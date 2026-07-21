@@ -230,5 +230,5 @@
 {/snippet}
 
 <div class="m-actions" id="mActions">
-  <button class="chip" onclick={cancelSessionPicker}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={cancelSessionPicker}>Cancel</button>
 </div>

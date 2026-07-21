@@ -32,6 +32,6 @@
   {/if}
 </div>
 <div class="m-actions">
-  <button class="chip" onclick={cancelCheckpointModelPicker}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={cancelCheckpointModelPicker}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
 </div>

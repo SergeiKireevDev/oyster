@@ -88,5 +88,5 @@
     <button class="chip toggle-hidden" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
     <button class="chip" onclick={backFileExplorerToHublots}>← Hublots</button>
   {/if}
-  <button class="chip" onclick={closeModalState}>Close</button>
+  <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>

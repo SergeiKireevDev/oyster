@@ -61,5 +61,5 @@
 {/each}
 
 <div class="m-actions" id="mActions">
-  <button class="chip" onclick={dialogs.cancelOption}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={dialogs.cancelOption}>Cancel</button>
 </div>
