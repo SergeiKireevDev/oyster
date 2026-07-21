@@ -167,6 +167,29 @@ export function createSessionOpenController({ open, getCurrentRunner, getRunners
 }
 
 /** Switch to a search hit's session before focusing its transcript entry. */
+export function adjacentActiveRunner(runners, currentRunner, workdir, direction) {
+  const candidates = runners.filter((runner) => runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir);
+  if (candidates.length <= 1) return { candidates, target: null };
+  const index = candidates.findIndex((runner) => runner.id === currentRunner);
+  const base = index === -1 ? 0 : index;
+  return { candidates, target: candidates[(base + direction + candidates.length) % candidates.length] };
+}
+
+/** Select an adjacent active runner, reporting empty and singleton workdirs. */
+export function createAdjacentRunnerController({ getRunners, getCurrentRunner, getWorkdir, switchRunner, toast }) {
+  return (direction) => {
+    const currentRunner = getCurrentRunner();
+    const { candidates, target } = adjacentActiveRunner(getRunners(), currentRunner, getWorkdir(), direction);
+    if (candidates.length <= 1) {
+      toast(candidates.length === 0 ? "no other active session" : "only one active session");
+      return false;
+    }
+    if (!target || target.id === currentRunner) return false;
+    switchRunner(target.id);
+    return true;
+  };
+}
+
 export function createSearchHitSessionController({ close, getSessionId, open, getCurrentRunner, setWorkdir, reload, focus, setAfterTranscript, switchRunner, toast }) {
   return async (sessionPath, hit) => {
     close();

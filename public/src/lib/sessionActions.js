@@ -1,6 +1,6 @@
-import { applySessionState, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
 
-export { applySessionState, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -90,31 +90,6 @@ export function formatSessionDate(iso, now = new Date()) {
   return sameDay
     ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-}
-
-export function adjacentActiveRunner(runners, currentRunner, workdir, direction) {
-  const candidates = runners.filter((runner) =>
-    runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir
-  );
-  if (candidates.length <= 1) return { candidates, target: null };
-  const index = candidates.findIndex((runner) => runner.id === currentRunner);
-  const base = index === -1 ? 0 : index;
-  return { candidates, target: candidates[(base + direction + candidates.length) % candidates.length] };
-}
-
-/** Select an adjacent active runner, reporting empty and singleton workdirs. */
-export function createAdjacentRunnerController({ getRunners, getCurrentRunner, getWorkdir, switchRunner, toast }) {
-  return (direction) => {
-    const currentRunner = getCurrentRunner();
-    const { candidates, target } = adjacentActiveRunner(getRunners(), currentRunner, getWorkdir(), direction);
-    if (candidates.length <= 1) {
-      toast(candidates.length === 0 ? "no other active session" : "only one active session");
-      return false;
-    }
-    if (!target || target.id === currentRunner) return false;
-    switchRunner(target.id);
-    return true;
-  };
 }
 
 export function usageInfo(usage) {
