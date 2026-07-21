@@ -30,6 +30,7 @@ const DEFAULT_PLAN = "plans/migration-svelte.md";
 const VALIDATION_TIMEOUT = 30 * 60 * 1000;
 const OUTPUT_LIMIT = 8_000;
 const PLAN_CONTEXT_LIMIT = 12_000;
+const QUICK_AGENT_RESPONSE_MS = 2 * 60 * 1000;
 
 function blankState(): GoalState {
   return {
@@ -76,6 +77,10 @@ function findNextUncheckedStep(plan: string) {
   return "";
 }
 
+function simpleContinuationPrompt(goal: GoalState) {
+  return `Goal loop remains active. Proceed with the current step${goal.currentStep ? `: ${goal.currentStep}` : ""}. If requirements are ambiguous, make the smallest reasonable assumption, implement exactly one step, then call goal_loop verify.`;
+}
+
 function continuationPrompt(ctx: ExtensionContext, goal: GoalState) {
   let plan = "";
   let suggested = "";
@@ -107,6 +112,7 @@ ${clipText(plan, PLAN_CONTEXT_LIMIT)}
 export default function goalLoop(pi: ExtensionAPI) {
   let state = blankState();
   let continuationQueued = false;
+  let lastContinuationAt = 0;
 
   function persist() {
     pi.appendEntry("goal-loop-state", state);
@@ -326,10 +332,13 @@ Implement exactly one plan step at a time. You MUST call goal_loop verify after 
     if (!state.active || continuationQueued) return;
     continuationQueued = true;
     try {
+      const now = Date.now();
+      const quickFollowup = lastContinuationAt > 0 && now - lastContinuationAt < QUICK_AGENT_RESPONSE_MS;
       await pi.sendUserMessage(
-        continuationPrompt(ctx, state),
+        quickFollowup ? simpleContinuationPrompt(state) : continuationPrompt(ctx, state),
         { deliverAs: "followUp" },
       );
+      lastContinuationAt = now;
     } finally {
       continuationQueued = false;
     }

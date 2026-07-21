@@ -50,6 +50,13 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
+export function createRunnersUpdateController({ setRunners, onRunnersChanged, refreshTree }) {
+  return (message) => {
+    const runners = message.runners ?? [];
+    setRunners(runners); onRunnersChanged(runners); refreshTree();
+  };
+}
+
 export function handleRunnerPing(message, { currentRunners, setRunners, onRunnersChanged, refreshTree }) {
   if (!message.runners || JSON.stringify(message.runners) === JSON.stringify(currentRunners())) return false;
   setRunners(message.runners);
