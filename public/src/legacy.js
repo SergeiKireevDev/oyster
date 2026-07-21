@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, formatSessionDate, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -2084,14 +2084,7 @@ function sessionPickerSnapshot() {
   return snapshot;
 }
 
-function groupSearchResults(results) {
-  const groups = new Map();
-  for (const hit of results) {
-    if (!groups.has(hit.sessionPath)) groups.set(hit.sessionPath, []);
-    groups.get(hit.sessionPath).push(hit);
-  }
-  return [...groups.entries()].map(([sessionPath, hits]) => ({ sessionPath, hits, first: hits[0] }));
-}
+const groupSearchResults = groupSessionSearchResults;
 
 async function runSessionPickerSearch() {
   const snap = sessionPickerSnapshot();

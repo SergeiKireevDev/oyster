@@ -59,6 +59,15 @@ export function markRunnerStopped(runners, id) {
 }
 
 /** Select the next live, session-backed runner in the current workdir. */
+export function groupSessionSearchResults(results) {
+  const groups = new Map();
+  for (const hit of results) {
+    if (!groups.has(hit.sessionPath)) groups.set(hit.sessionPath, []);
+    groups.get(hit.sessionPath).push(hit);
+  }
+  return [...groups.entries()].map(([sessionPath, hits]) => ({ sessionPath, hits, first: hits[0] }));
+}
+
 export function formatSessionDate(iso, now = new Date()) {
   if (!iso) return "";
   const date = new Date(iso);

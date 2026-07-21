@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createStateRefresher, formatSessionDate, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+
+test("session actions group search hits by session", () => {
+  const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
+  assert.deepEqual(grouped.map((group) => [group.sessionPath, group.hits.length, group.first.id]), [["a", 2, 1], ["b", 1, 3]]);
+});
 
 test("session actions format session dates", () => {
   const now = new Date("2025-01-02T12:00:00Z");
