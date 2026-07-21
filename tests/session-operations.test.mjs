@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createSessionOperations } from "../server/session-operations.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 import { createSqliteSessionCatalog } from "../server/sessions/sqliteCatalog.mjs";
 
-const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 const SKIP_SQLITE_CONTRACT = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
 const SQLITE_REPOSITORY_MODULE = SKIP_SQLITE_CONTRACT
   ? null

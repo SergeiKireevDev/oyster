@@ -8,7 +8,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".svelte"]);
-const SKIP_DIRS = new Set([".git", "dist", "node_modules", "plans", "audit", "tests"]);
+const SKIP_DIRS = new Set([".git", "dist", "node_modules", "pi", "plans", "audit", "tests"]);
 
 function sourceFiles(dir = ROOT) {
   const files = [];

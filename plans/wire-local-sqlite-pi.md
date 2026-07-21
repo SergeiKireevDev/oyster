@@ -2,8 +2,8 @@
 
 ## Goal
 
-Run oyster against the SQLite-enabled coding-agent checkout at
-`/home/ubuntu/pi-coding-agent`, select `PERSISTENT_STORE=sqlite` explicitly,
+Run oyster against the SQLite-enabled coding-agent submodule at
+`pi/`, select `PERSISTENT_STORE=sqlite` explicitly,
 and make saved-session behavior honest and usable when sessions are identified
 by a database plus session ID rather than by one `.jsonl` file per session.
 
@@ -13,9 +13,9 @@ data from the other backend.
 
 ## Guardrails
 
-- Treat `/home/ubuntu/pi-coding-agent` as a separate repository. Do not edit or
-  commit it from this goal loop. Consume a built CLI artifact from it and fail
-  clearly when that artifact is absent or stale.
+- Treat `pi/` as a separate submodule repository. Do not edit it from this goal
+  loop. Consume a built CLI artifact from it and fail clearly when that artifact
+  is absent or stale.
 - Require Node.js 22.19 or newer for SQLite mode because the local agent uses
   `node:sqlite`. Do not add an npm SQLite driver.
 - Resolve the store once in the stable server configuration and pass the same
@@ -49,7 +49,7 @@ pass.
 - [x] Add configuration tests and documentation for `PI_BIN`,
   `PERSISTENT_STORE=jsonl|sqlite`, and the SQLite database location. Default the
   development wiring to
-  `/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js` plus
+  `pi/packages/coding-agent/dist/cli.js` plus
   `sqlite`, while retaining explicit overrides and a documented JSONL rollback
   command. Validate the executable, Node version, and store value at startup
   with actionable errors.
@@ -175,13 +175,13 @@ SQLite-capable pi rather than accidentally falling back to version `0.80.3`.
 ```sh
 npm run build
 npm test
-docker build -f Dockerfile.local-pi --build-context pi-source=/home/ubuntu/pi-coding-agent -t oyster:sqlite .
+docker build -f Dockerfile.local-pi --build-context pi-source=./pi -t oyster:sqlite .
 cd tests/e2e && npm test
 ```
 
 ## Completion Criteria
 
-- oyster launches the built CLI from `/home/ubuntu/pi-coding-agent` and
+- oyster launches the built CLI from the `pi/` submodule and
   reports `sqlite` as the selected backend.
 - New conversations persist to `sessions.sqlite` and survive runner, server,
   and container replacement without creating session JSONL files.

@@ -31,7 +31,7 @@ test("both runtime images include lsof for restart-safe hublot PID discovery", (
 
 test("local-source build documentation pins context, revision, and version", () => {
   assert.match(containerDocs, /docker build -f Dockerfile\.local-pi/);
-  assert.match(containerDocs, /--build-context pi-source=\/path\/to\/pi-coding-agent/);
+  assert.match(containerDocs, /--build-context pi-source=\.\/pi/);
   assert.match(containerDocs, /--build-arg PI_LOCAL_REV=/);
-  assert.match(containerDocs, /--build-arg PI_LOCAL_VERSION=0\.80\.6/);
+  assert.match(containerDocs, /--build-arg PI_LOCAL_VERSION=0\.80\.7/);
 });

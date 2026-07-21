@@ -27,18 +27,22 @@ from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
 
 ## Installation
 
-This is a zero-dependency Node.js project — there is no install script, no build step, and no `npm install`.
+Oyster and its bundled pi submodule use separate lockfiles. Install and build both explicitly; do not run an unscoped workspace install across them.
 
 ### Prerequisites
 
 - **Node.js ≥ 22.19** — check with `node --version`. This is required universally because the stable server uses the built-in `node:sqlite` application store, even when pi sessions use JSONL.
-- **`pi` binary** — the [`pi` coding agent](https://github.com/badlogic/pi-mono) must be installed and on `PATH`. Install via npm: `npm install -g @earendil-works/pi-coding-agent` (or whatever package provides `pi`), then verify with `which pi`.
+- **`pi` source submodule** — initialize `pi/` and build its coding-agent CLI. `PI_BIN` can still select another compatible executable.
 - **`cloudflared`** (optional) — only needed for the tunnels feature. Install from [pkg.cloudflare.com](https://pkg.cloudflare.com) if you plan to use tunnel functionality.
 
 ### Quick start
 
 ```bash
-git clone <repo-url> oyster && cd oyster
+git clone --recurse-submodules <repo-url> oyster && cd oyster
+npm ci
+npm ci --prefix pi --ignore-scripts
+npm run build:pi
+npm run build
 node server/server.mjs
 ```
 
@@ -54,7 +58,7 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 | `--host` | `HOST` | `0.0.0.0` | bind address |
 | `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
-| `--pi` | `PI_BIN` | `pi` | pi executable path |
+| `--pi` | `PI_BIN` | `pi/packages/coding-agent/dist/cli.js` | pi executable path |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
 | – | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | separate SQLite database for oyster-owned application data |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |

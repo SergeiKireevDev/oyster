@@ -1,0 +1,4 @@
+[submodule "pi"]
+	path = pi
+	url = https://github.com/SergeiKireevDev/pi.git
+	branch = main

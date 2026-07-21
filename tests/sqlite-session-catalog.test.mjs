@@ -7,10 +7,11 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import { runSessionCatalogContract } from "./helpers/session-catalog-contract.mjs";
 import { createSqliteSessionCatalog } from "../server/sessions/sqliteCatalog.mjs";
 
-const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 const SKIP_LOCAL = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
 const roots = [];
 after(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));

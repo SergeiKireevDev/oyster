@@ -1,8 +1,8 @@
 # SQLite image built from an explicit local pi source context.
 #
 # docker build -f Dockerfile.local-pi \
-#   --build-context pi-source=/home/ubuntu/pi-coding-agent \
-#   --build-arg PI_LOCAL_REV="$(git -C /home/ubuntu/pi-coding-agent rev-parse HEAD)" \
+#   --build-context pi-source=./pi \
+#   --build-arg PI_LOCAL_REV="$(git -C pi rev-parse HEAD)" \
 #   -t oyster:sqlite .
 #
 # `pi-source` is required; there is no silent registry fallback in this file.
@@ -15,9 +15,11 @@ WORKDIR /src
 COPY --from=pi-source /package.json /package-lock.json /.npmrc /tsconfig.json /tsconfig.base.json /biome.json ./
 COPY --from=pi-source /scripts ./scripts
 COPY --from=pi-source /packages ./packages
+# Compile against the generated catalogs pinned in the source revision. The
+# package-level ai build regenerates them from live APIs and is not reproducible.
 RUN npm ci --ignore-scripts \
-    && npm run build --workspace packages/tui \
-    && npm run build --workspace packages/ai \
+    && npx --no-install tsgo -p packages/tui/tsconfig.build.json \
+    && npx --no-install tsgo -p packages/ai/tsconfig.build.json \
     && npm run build --workspace packages/agent \
     && npm run build --workspace packages/coding-agent \
     && mkdir -p /tarballs /opt/pi \
@@ -31,7 +33,7 @@ RUN npm ci --ignore-scripts \
 
 FROM node:22-slim
 ARG PI_LOCAL_REV=working-tree
-ARG PI_LOCAL_VERSION=0.80.6
+ARG PI_LOCAL_VERSION=0.80.7
 LABEL org.opencontainers.image.pi-source="local-build-context" \
       org.opencontainers.image.pi-revision="${PI_LOCAL_REV}" \
       org.opencontainers.image.pi-version="${PI_LOCAL_VERSION}"

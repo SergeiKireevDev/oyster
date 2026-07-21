@@ -52,7 +52,7 @@ function defaultTunnelBin() {
   return existsSync(local) ? local : "cloudflared";
 }
 
-const DEFAULT_LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const DEFAULT_LOCAL_PI = join(PROJECT_ROOT, "pi", "packages", "coding-agent", "dist", "cli.js");
 const MIN_NODE_VERSION = [22, 19, 0];
 
 function resolveExecutable(value) {
@@ -97,13 +97,13 @@ function validateConfig(config) {
   try {
     accessSync(config.PI_BIN, constants.X_OK);
   } catch {
-    throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Build /home/ubuntu/pi-coding-agent or set PI_BIN/--pi explicitly.`);
+    throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Initialize and build the pi submodule or set PI_BIN/--pi explicitly.`);
   }
   if (config.PI_BIN === DEFAULT_LOCAL_PI) {
     const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
     if (!existsSync(sourceRoot)) throw new Error(`local pi source is missing: ${sourceRoot}`);
     if (newestMtime(sourceRoot) > statSync(config.PI_BIN).mtimeMs) {
-      throw new Error(`local pi build is stale: ${config.PI_BIN}. Run npm run build in /home/ubuntu/pi-coding-agent.`);
+      throw new Error(`local pi build is stale: ${config.PI_BIN}. Run npm run build:pi.`);
     }
   }
 }

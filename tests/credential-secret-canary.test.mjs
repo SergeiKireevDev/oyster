@@ -4,12 +4,13 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import { createPiCredentialService } from "../server/pi-credential-service.mjs";
 import { createRestartActiveRunners } from "../server/runner-restart-service.mjs";
 import { createCredentialRoutes } from "../server/http/routes/credentialRoutes.mjs";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
-const LOCAL_PI = process.env.PI_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 
 function filesBelow(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {

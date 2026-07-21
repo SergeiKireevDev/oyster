@@ -4,9 +4,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SERVER = new URL("../server/server.mjs", import.meta.url);
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 
 function checkConfig({ args = [], env = {} } = {}) {
   const home = mkdtempSync(join(tmpdir(), "pi-ui-config-"));

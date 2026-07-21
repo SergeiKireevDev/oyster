@@ -16,12 +16,15 @@ For a substantial behavioral change, open an issue first so scope and design can
 Oyster requires Node.js 22.19 or newer.
 
 ```bash
+git submodule update --init --recursive
 npm ci
+npm ci --prefix pi --ignore-scripts
+npm run build:pi
 npm test
 npm run build
 ```
 
-The full test suite includes a contract against a compatible local pi SQLite build. If that build is not available, run the portable suite with:
+The full test suite uses the bundled pi submodule for its SQLite contract. If that build is not available, run the portable suite with:
 
 ```bash
 PI_SQLITE_CONTRACT_TEST=skip npm test

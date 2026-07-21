@@ -8,6 +8,7 @@
     "start": "node server/server.mjs",
     "dev": "vite --config vite.config.js",
     "build": "vite build --config vite.config.js",
+    "build:pi": "cd pi && npx --no-install tsgo -p packages/tui/tsconfig.build.json && npx --no-install tsgo -p packages/ai/tsconfig.build.json && npm run build --workspace packages/agent && npm run build --workspace packages/coding-agent",
     "docs:build": "node scripts/build-docs.mjs",
     "preview": "vite preview --config vite.config.js",
     "migrate-app-data": "node scripts/migrate-app-data.mjs",

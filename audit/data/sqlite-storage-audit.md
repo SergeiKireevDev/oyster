@@ -73,7 +73,7 @@ SQLITE_PATH                                   <agent-dir>/sessions.sqlite
 `--session-dir <dir>` relocates the SQLite database to `<dir>/sessions.sqlite`. SQLite mode requires Node.js 22.19 or newer and defaults to the explicitly built local coding-agent CLI at:
 
 ```text
-/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js
+pi/packages/coding-agent/dist/cli.js
 ```
 
 Every pi subprocess receives the same `PERSISTENT_STORE` through `pi-processes.mjs`. One-shot checkpoint-summary and hublot agents receive `--no-session`, so they should not create session rows.
@@ -86,8 +86,8 @@ The server itself treats the configured catalog as the only visible session stor
 
 The schema and write implementation live in the local pi checkout, principally:
 
-- `/home/ubuntu/pi-coding-agent/packages/agent/src/harness/session/sqlite/`
-- `/home/ubuntu/pi-coding-agent/packages/coding-agent/src/core/sqlite-session-repository.ts`
+- `pi/packages/agent/src/harness/session/sqlite/`
+- `pi/packages/coding-agent/src/core/sqlite-session-repository.ts`
 
 pi runner processes create and append sessions. `tree-pi-bak-sql/sessions/sqliteCatalog.mjs` opens request-scoped **read-only** `node:sqlite` handles for lists, transcript hydration, trees, and searches.
 

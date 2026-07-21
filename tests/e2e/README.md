@@ -20,7 +20,7 @@ no network model calls, fully deterministic**.
 - Docker. The suite uses `oyster:published` for the existing JSONL scenarios
   and `oyster:sqlite` for the container-replacement contract. It builds
   missing images automatically; the SQLite build uses `Dockerfile.local-pi`
-  with `/home/ubuntu/pi-coding-agent` (override with `PI_SOURCE_CONTEXT`).
+  with the repository's `pi` submodule (override with `PI_SOURCE_CONTEXT`).
 - Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
 
 Both images bundle a mock LLM, so no host credentials or external model access
@@ -63,7 +63,7 @@ port. Both are removed on teardown.
 | `PI_UI_TOKEN` | `e2e-test-token` | auth token |
 | `PI_UI_IMAGE` | `oyster:published` | published-package JSONL image for the existing scenarios |
 | `PI_UI_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
-| `PI_SOURCE_CONTEXT` | `/home/ubuntu/pi-coding-agent` | named BuildKit source used when the SQLite image must be built |
+| `PI_SOURCE_CONTEXT` | `<repository>/pi` | named BuildKit source used when the SQLite image must be built |
 | `PI_UI_CONTAINER` | allocated per test | name for a container the suite starts |
 
 ## Notes

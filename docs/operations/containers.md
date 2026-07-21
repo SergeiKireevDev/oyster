@@ -34,9 +34,9 @@ Mount pi's credential files or provide supported provider environment variables 
 
 ```bash
 docker build -f Dockerfile.local-pi \
-  --build-context pi-source=/path/to/pi-coding-agent \
-  --build-arg PI_LOCAL_REV="$(git -C /path/to/pi-coding-agent rev-parse HEAD)" \
-  --build-arg PI_LOCAL_VERSION=0.80.6 \
+  --build-context pi-source=./pi \
+  --build-arg PI_LOCAL_REV="$(git -C pi rev-parse HEAD)" \
+  --build-arg PI_LOCAL_VERSION=0.80.7 \
   -t oyster:sqlite .
 ```
 

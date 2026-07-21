@@ -30,7 +30,10 @@ Check the health response after every pi rebuild or deployment. It should identi
 
 ```bash
 git pull --ff-only
+git submodule update --init --recursive
 npm ci
+npm ci --prefix pi --ignore-scripts
+npm run build:pi
 npm run build
 npm test
 systemctl --user restart pi-ui.service

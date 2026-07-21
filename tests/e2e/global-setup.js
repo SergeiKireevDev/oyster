@@ -15,7 +15,7 @@ const LOCK_DIR = join(HERE, ".port-locks");
 const IMAGE = process.env.PI_UI_IMAGE ?? "oyster:published";
 const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "oyster:sqlite";
 const VERIFIED_IMAGE = "oyster:latest";
-const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? "/home/ubuntu/pi-coding-agent";
+const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? join(REPO_ROOT, "pi");
 
 const sh = (args, opts = {}) =>
   execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
