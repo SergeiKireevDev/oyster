@@ -7,8 +7,8 @@ import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./transcriptRuntime.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./eventControllers.js";
-import { createConnectionStateTransitions, createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./eventStream.js";
-import { createEventSourceTransport } from "../platform/createEventSourceTransport.js";
+import { createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, runCanonicalReload } from "./eventStream.js";
+import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
 import { installDebugHooks } from "./debugHooks.js";
 import { createDelayedTaskRegistry } from "./delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
@@ -18,8 +18,6 @@ import { createRuntimeStarterDependencies } from "./runtimeStarterDependencies.j
 import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependencies } from "./runtimeDependencies.js";
 import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
-import { createEventConnectionController } from "./eventConnectionController.js";
-import { createPlatformConnection } from "../platform/createPlatformConnection.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
@@ -462,49 +460,30 @@ const updateUsage = (message) => sessionUi.updateUsage(message);
 // ------------------------------------------------------------ event stream
 
 let connected = false;
-let es = null;
-const eventStream = createEventSourceTransport();
-const connectionState = createConnectionStateTransitions({
+const managedConnection = createManagedEventConnection({
   setConnected: (value) => { connected = value; updateAppSession({ connected }); },
   setStatus: (stateInfo) => updateHeaderState({ stateInfo }),
-});
-
-// Watchdog: the server sends a ping event every 25s. Through a tunnel, a
-// connection can die without the browser noticing (EventSource stays OPEN
-// forever on a half-dead socket) — if nothing arrives for 70s, force a
-// reconnect.
-let lastEventAt = Date.now();
-const teardownReconnectWatchdog = registerReconnectWatchdog({
-  getSource: () => es,
-  getLastEventAt: () => lastEventAt,
-  onExpired: () => {
-    eventStream.close();
-    connectionState.lost();
-    connectionCoordinator.connect();
-  },
-});
-
-const connect = createEventConnectionController({
-  getToken: () => token, requireToken, close: () => eventStream.close(),
-  setLastEventAt: (value) => { lastEventAt = value; }, setGate: setTranscriptGateRequired, setReplaying,
-  setReplayDoneSeen: (value) => { replayDoneSeen = value; }, setReplayBuffer: (value) => { replayBufferedEvents = value; },
-  getSkipTranscriptGate: () => currentRunner && emptySessionRunners.has(currentRunner), log: lifecycleLog,
-  connect: ({ token, replay }, handlers) => eventStream.connect({ token, runner: currentRunner, replay }, handlers), setSource: (source) => { es = source; },
+  getToken: () => token,
+  requireToken,
+  setGate: setTranscriptGateRequired,
+  setReplaying,
+  setReplayDoneSeen: (value) => { replayDoneSeen = value; },
+  setReplayBuffer: (value) => { replayBufferedEvents = value; },
+  getSkipTranscriptGate: () => currentRunner && emptySessionRunners.has(currentRunner),
+  getRunner: () => currentRunner,
+  log: lifecycleLog,
   onOpen: async ({ replay, skipTranscriptGate, started }) => {
-    lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); connectionState.opened();
+    lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); managedConnection.state.opened();
     await runCanonicalReload({ skipTranscriptGate, isReplaying: () => replaying, setReplaying, refreshState, reloadTranscript,
       onError: (error) => { if (!String(error.message).includes("unauthorized")) addToast(`init failed: ${error.message}`, "error"); }, });
   },
-  onError: () => { connectionState.reconnecting(); probeTokenValidity(); },
-  onMessage: (event) => processEventMessage(event.data, { onReceived: () => { lastEventAt = Date.now(); }, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
-});
-
-const connectionCoordinator = createPlatformConnection({
-  connect,
-  disconnect: () => eventStream.close(),
+  onError: () => { managedConnection.state.reconnecting(); probeTokenValidity(); },
+  onMessage: (event) => processEventMessage(event.data, { onReceived: () => {}, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
   refreshState: (...args) => refreshState(...args),
   dispatch: (...args) => handleEvent(...args),
 });
+const { coordinator: connectionCoordinator, watchdog: teardownReconnectWatchdog } = managedConnection;
+const connect = connectionCoordinator.connect;
 
 // True from (re)connect until the canonical transcript's tail is rendered.
 // This covers BOTH the SSE replay buffer and the live events of a busy
