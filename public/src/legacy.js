@@ -3,6 +3,7 @@
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
+import { createRpcClient } from "./runtime/rpcClient.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -146,49 +147,13 @@ async function handleUnauthorized() {
 
 // ------------------------------------------------------------ rpc plumbing
 
-const clientId = Math.random().toString(36).slice(2, 8);
-let cmdSeq = 0;
-const pending = new Map(); // id -> {resolve, reject}
-
-async function rpc(cmd, { wait = true } = {}) {
-  const id = `${clientId}-${++cmdSeq}`;
-  cmd = { id, ...cmd };
-  let waiter = null;
-  if (wait) {
-    waiter = new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      setTimeout(() => {
-        if (pending.has(id)) {
-          pending.delete(id);
-          reject(new Error(`timeout waiting for ${cmd.type}`));
-        }
-      }, 60000);
-    });
-  }
-  // token goes in the query string + x-auth-token header: some tunnels/proxies
-  // strip or overwrite the Authorization header, which showed up as 401s
-  const res = await fetch(`/rpc?runner=${encodeURIComponent(currentRunner ?? "")}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-auth-token": token },
-    body: JSON.stringify(cmd),
-  });
-  if (res.status === 401) { handleUnauthorized(); throw new Error("unauthorized"); }
-  if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
-  // accepted but held behind an in-flight session resume: surface it so a
-  // few seconds of silence doesn't read as an unresponsive session (only
-  // for prompts — background state fetches queue there routinely)
-  const ack = await res.json().catch(() => null);
-  if (ack?.pendingResume && cmd.type === "prompt") toast("session is still resuming — message queued", "warning");
-  return wait ? waiter : null;
-}
-
-function handleResponse(msg) {
-  const p = pending.get(msg.id);
-  if (!p) return;
-  pending.delete(msg.id);
-  if (msg.success) p.resolve(msg.data);
-  else p.reject(new Error(msg.error || "command failed"));
-}
+const rpcClient = createRpcClient({
+  getRunner: () => currentRunner,
+  getToken: () => token,
+  onUnauthorized: handleUnauthorized,
+  onPendingResume: () => toast("session is still resuming — message queued", "warning"),
+});
+const { rpc, handleResponse } = rpcClient;
 
 // ------------------------------------------------------------ markdown (small, escape-first)
 
