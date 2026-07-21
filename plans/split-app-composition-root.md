@@ -96,7 +96,7 @@ controller construction or shared resource state.
 **Acceptance:** the root does not inspect feature layout elements or register
 feature-local browser listeners.
 
-## [ ] 9. Extract Platform and Lifecycle Assembly
+## [x] 9. Extract Platform and Lifecycle Assembly
 
 - [x] Create `platform/createPlatformAssembly.js` to compose authenticated fetch, RPC transport, event dispatch, connection coordination, watchdog, and debug hooks.
 - [x] Create `runtime/createLifecycleAssembly.js` to own boot ordering, attachment ordering, delayed tasks, teardown ordering, and restart behavior.
