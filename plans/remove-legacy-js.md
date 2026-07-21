@@ -170,7 +170,7 @@ Remaining work, broken into atomic commits:
    session-picker, settings, extension-UI, and carousel controllers into the
    factory. Keep each controller's event adapter as an explicit factory output
    rather than registering it while constructing the controller.
-5. [ ] **Move lifecycle composition.** In the factory, compose the explicit
+5. [x] **Move lifecycle composition.** In the factory, compose the explicit
    `start`, `attachEventAdapters`, `attachAuthenticatedFetch`, debug-hook, and
    teardown functions using the existing lifecycle/attachment/cleanup modules.
    Export a `{ start, teardown }` runtime; no lifecycle dependency factory may

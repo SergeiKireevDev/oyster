@@ -12,11 +12,17 @@ test("application composition factory injects browser adapters and stores", () =
     createRuntime(dependencies) {
       assert.equal(dependencies.browser, browser);
       assert.equal(dependencies.stores, stores);
-      return { start: () => calls.push("start"), teardown: () => calls.push("teardown") };
+      return {
+        attachAuthenticatedFetch: () => calls.push("auth"),
+        attachEventAdapters: () => calls.push("adapters"),
+        attachDebugHooks: () => calls.push("debug"),
+        start: () => calls.push("start"),
+        teardown: () => calls.push("teardown"),
+      };
     },
   });
 
   runtime.start();
   runtime.teardown();
-  assert.deepEqual(calls, ["start", "teardown"]);
+  assert.deepEqual(calls, ["auth", "adapters", "debug", "start", "teardown"]);
 });
