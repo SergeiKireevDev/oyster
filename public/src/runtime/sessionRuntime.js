@@ -3,6 +3,24 @@
  * or transport implementations. The supplied connect adapter preserves the
  * canonical, no-replay session-switch contract.
  */
+/** Own current-runner persistence and runner-list publication for session composition. */
+export function createSessionRunnerState({ storage, updateAppSession, key = "pi_runner" }) {
+  let currentRunner = storage.getItem(key) || null;
+  let runners = [];
+  const setRunner = (id) => {
+    currentRunner = id || null;
+    if (currentRunner) storage.setItem(key, currentRunner); else storage.removeItem(key);
+    updateAppSession({ currentRunner });
+    return currentRunner;
+  };
+  const setRunners = (next) => {
+    runners = next ?? [];
+    updateAppSession({ runners });
+    return runners;
+  };
+  return { get currentRunner() { return currentRunner; }, get runners() { return runners; }, setRunner, setRunners };
+}
+
 /** Apply authoritative get_state responses through injectable session/store adapters. */
 export function createSessionStateApplier({ applySessionState, getState, setState, getCurrentRunner, getEmptySessionRunners, getRoutines, routineVisible, getTunnelScopeAll, hooks }) {
   return (incoming) => {
