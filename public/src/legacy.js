@@ -5,6 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
+import { handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -982,13 +983,14 @@ function handleEvent(msg) {
   }
   switch (msg.type) {
     case "ping":
-      // pings carry the authoritative runner list: reconcile liveness the
-      // client may have missed (pi_exit scrolled out of the replay buffer)
-      if (msg.runners && JSON.stringify(msg.runners) !== JSON.stringify(runnersNow)) {
-        setRunnersNow(msg.runners);
-        onRunnersUpdate?.(runnersNow);
-        refreshTreeIfOpen();
-      }
+      // Pings carry authoritative runner liveness, handled by the runtime
+      // controller while legacy supplies store/tree adapters.
+      handleRunnerPing(msg, {
+        currentRunners: () => runnersNow,
+        setRunners: setRunnersNow,
+        onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
+        refreshTree: refreshTreeIfOpen,
+      });
       return;
 
     case "replay_done":
