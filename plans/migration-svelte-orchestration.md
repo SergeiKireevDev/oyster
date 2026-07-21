@@ -74,13 +74,16 @@ explicit result/error values.
 
 Suggested order:
 
-4.1. `checkpointActions.js`: checkpoint creation, rollback, model selection
-request handling, and marker refresh inputs. Keep component busy/frozen display
-in existing stores.
+4.1. ✅ `checkpointActions.js`: extracted checkpoint creation and rollback
+requests. Model selection and marker refresh remain legacy UI orchestration;
+component busy/frozen display remains in existing stores.
 
-4.2. `hublotActions.js`: list/open/close operations and refresh/error handling.
+4.2. ✅ `hublotActions.js`: extracted list/close request handling. Opening and
+manager UI orchestration remain legacy-owned pending a concrete bridge reduction.
 
-4.3. `routineActions.js`: create/start/stop/teardown/status refresh handling.
+4.3. ✅ `routineActions.js`: extracted list and lifecycle request handling
+(create/start/stop/teardown/status). Store refresh/error presentation remains
+legacy-owned.
 
 4.4. `fileBrowserActions.js`: browse/read/download/save RPC operations shared by
 file explorer and picker flows.
