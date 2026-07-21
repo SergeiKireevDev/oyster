@@ -23,3 +23,36 @@ test("platform assembly composes transport events connection timers and debug at
   assembly.teardown();
   assert.deepEqual(calls, ["replay:true", "debug", "connection", "watchdog", "transport"]);
 });
+
+test("platform assemblies connect disconnect and reconnect without retaining RPC EventSource or watchdog state", () => {
+  const calls = [];
+  const mount = (name) => {
+    const assembly = createPlatformAssembly({
+      transport: {},
+      createTransport: () => ({ rpc: () => calls.push(`${name}:rpc`), dispose: () => calls.push(`${name}:disposeRpc`) }),
+      createEventDispatch: () => ({ dispatch() {} }),
+      createConnection: () => ({
+        coordinator: { connect: () => calls.push(`${name}:eventSource`), disconnect: () => calls.push(`${name}:disconnect`) },
+        watchdog: () => calls.push(`${name}:watchdog`),
+      }),
+      createAttachments: () => ({ detach: () => calls.push(`${name}:debug`) }),
+    });
+    assembly.configureEvents({});
+    assembly.configureConnection({});
+    assembly.configureAttachments({});
+    return assembly;
+  };
+  const first = mount("first");
+  first.transport.rpc();
+  first.connection.coordinator.connect();
+  first.teardown();
+  first.teardown();
+  const second = mount("second");
+  second.transport.rpc();
+  second.connection.coordinator.connect();
+  second.teardown();
+  assert.deepEqual(calls, [
+    "first:rpc", "first:eventSource", "first:debug", "first:disconnect", "first:watchdog", "first:disposeRpc",
+    "second:rpc", "second:eventSource", "second:debug", "second:disconnect", "second:watchdog", "second:disposeRpc",
+  ]);
+});

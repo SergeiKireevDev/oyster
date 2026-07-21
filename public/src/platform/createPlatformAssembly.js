@@ -9,6 +9,7 @@ export function createPlatformAssembly(deps) {
   let events;
   let connection;
   let attachments;
+  let tornDown = false;
   return {
     transport,
     configureEvents(config) {
@@ -36,6 +37,8 @@ export function createPlatformAssembly(deps) {
     setReplaying: (...args) => events?.setReplaying(...args),
     snapshotEvents: () => events?.snapshot(),
     teardown() {
+      if (tornDown) return;
+      tornDown = true;
       attachments?.detach?.();
       connection?.coordinator?.disconnect?.();
       connection?.watchdog?.();
