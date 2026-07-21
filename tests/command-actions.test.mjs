@@ -7,13 +7,11 @@ test("command helpers identify colon triggers and filter command names", () => {
   assert.deepEqual(filterCommands([{ name: "file" }, { name: "folder" }], "fi"), [{ name: "file" }]);
 });
 
-test("command guard allows slash commands through to pi", async () => {
+test("command guard confirms unknown slash commands and caches commands", async () => {
   let calls = 0; const prompts = [];
   const guard = createCommandGuard({ rpc: async () => { calls++; return { commands: [{ name: "known" }] }; }, confirm: async (...args) => { prompts.push(args); return false; } });
   assert.equal(await guard.confirmKnownCommand("/known hi"), true);
-  assert.equal(await guard.confirmKnownCommand("/typo"), true);
-  assert.equal(calls, 0);
-  assert.equal(prompts.length, 0);
-  guard.reset();
-  assert.equal(await guard.confirmKnownCommand("/known"), true);
+  assert.equal(await guard.confirmKnownCommand("/typo"), false);
+  assert.equal(calls, 1); assert.equal(prompts.length, 1);
+  guard.reset(); await guard.confirmKnownCommand("/known"); assert.equal(calls, 2);
 });
