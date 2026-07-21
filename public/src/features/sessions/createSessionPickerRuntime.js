@@ -19,6 +19,11 @@ import {
 
 const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
 
+export function sidebarSessionForRunner(runnerId, runners, sessions) {
+  const identity = runnerSessionIdentity(runners.find((runner) => runner.id === runnerId));
+  return identity ? sessions.find((session) => sameSession(session, identity)) ?? null : null;
+}
+
 export function activeSessionFolders(runners, currentFolder) {
   return [...new Set(runners
     .filter((runner) => runner.alive)
@@ -157,7 +162,9 @@ export function createSessionPickerRuntime(deps) {
     deps.uiActions.register(SESSION_SWITCH_RUNNER_ACTION, async (runnerId) => {
       if (!runnerId || runnerId === deps.getCurrentRunner()) return;
       try {
-        await deps.switchRunner(runnerId);
+        const session = sidebarSessionForRunner(runnerId, deps.getRunners(), sessions);
+        if (session) await deps.openChosenSession(session);
+        else await deps.switchRunner(runnerId);
       } catch (error) {
         deps.toast(`switch failed: ${error.message}`, "error");
       }

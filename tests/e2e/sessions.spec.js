@@ -32,11 +32,18 @@ async function newSession(page) {
   await expect(page.locator(".toast", { hasText: "new session" })).toBeVisible({ timeout: 10000 });
 }
 
-async function openSessions(page) {
-  await page.locator("#input").fill(":sessions");
-  await expect(page.locator("#cmdPalette")).toHaveClass(/open/);
-  await page.locator("#input").press("Enter");
-  await expect(page.locator("#mTitle")).toHaveText("Sessions");
+async function openSessionSidebar(page, mobile = false) {
+  if (mobile) {
+    for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) {
+      await swipe(page, "right");
+    }
+  }
+  await expect(page.locator("#sessions")).toBeVisible();
+  await page.locator("#sessions .session-sidebar-search").fill("");
+}
+
+function sidebarEntry(page, token) {
+  return page.locator("#sessions .session-sidebar-entry", { hasText: token });
 }
 
 async function newSessionInFolder(page, folderName) {
@@ -49,22 +56,12 @@ async function newSessionInFolder(page, folderName) {
   await expect(page.locator(".toast", { hasText: `folder: /workspace/${folderName}` })).toBeVisible({ timeout: 10000 });
 }
 
-async function loadOtherFolderAndSwitch(page, folderLabel, token) {
-  await openSessions(page);
-  await page.locator(".s-folders > summary").click();
-  const folder = page.locator(".s-folder").filter({
-    has: page.locator(":scope > summary", { hasText: folderLabel }),
-  });
-  await folder.locator(":scope > summary").click();
-  const row = rowFor(page, token);
+async function loadOtherFolderAndSwitch(page, token, { mobile = false } = {}) {
+  await openSessionSidebar(page, mobile);
+  const row = sidebarEntry(page, token);
   await expect(row).toBeVisible({ timeout: 10000 });
-  await row.click();
-  await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
-}
-
-// A session row in the picker that is titled/named after `token`.
-function rowFor(page, token) {
-  return page.locator(".m-option", { hasText: token });
+  await row.locator(".session-sidebar-row").click();
+  await expect(row).toHaveClass(/current/, { timeout: 10000 });
 }
 
 async function installFakeCloudflared() {
@@ -142,9 +139,10 @@ async function expectSidebarResources(page, { hublots, routines, mobile = false 
 
 async function switchToSessionByToken(page, token, { mobile = false } = {}) {
   await closeResourceSidebarIfMobile(page, mobile);
-  await openSessions(page);
-  await rowFor(page, token).click();
-  await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
+  await openSessionSidebar(page, mobile);
+  const row = sidebarEntry(page, token);
+  await row.locator(".session-sidebar-row").click();
+  await expect(row).toHaveClass(/current/, { timeout: 10000 });
 }
 
 function defineSessionManagementTests({ includeResourceSwitch = false, includeCrossDirectorySwitch = false, includeModalLifecycle = false, mobile = false } = {}) {
@@ -200,23 +198,28 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     // S2 (B) is now current
     await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible();
 
-    await openSessions(page);
+    await openSessionSidebar(page, mobile);
     // both rows are present and active (each gets a ■ stop control)
-    const alpha = rowFor(page, A);
-    const beta = rowFor(page, B);
+    const alpha = sidebarEntry(page, A);
+    const beta = sidebarEntry(page, B);
     await expect(alpha).toBeVisible();
     await expect(beta).toBeVisible();
-    await expect(alpha.locator(".s-stop")).toBeVisible();
-    await expect(beta.locator(".s-stop")).toBeVisible();
+    await expect(alpha.locator(".session-sidebar-action.stop")).toBeVisible();
+    await expect(beta.locator(".session-sidebar-action.stop")).toBeVisible();
 
     // stop ALPHA's background process
-    await alpha.locator(".s-stop").click();
+    await alpha.locator(".session-sidebar-action.stop").click();
     await expect(page.locator(".toast", { hasText: /process stopped/ })).toBeVisible({ timeout: 10000 });
 
-    // the stop control for ALPHA is now hidden (session went inactive); BETA's
-    // remains visible — proving the kill was scoped to that one runner
-    await expect(alpha.locator(".s-stop")).toBeHidden();
-    await expect(beta.locator(".s-stop")).toBeVisible();
+    // ALPHA becomes deletable and moves below active BETA in real time, proving
+    // the stop was scoped to one runner and active processes stay first.
+    await expect(alpha.locator(".session-sidebar-action.delete")).toBeVisible();
+    await expect(beta.locator(".session-sidebar-action.stop")).toBeVisible();
+    const rows = page.locator("#sessions .session-sidebar-entry");
+    await expect.poll(async () => {
+      const labels = await rows.allTextContents();
+      return labels.findIndex((text) => text.includes(B)) < labels.findIndex((text) => text.includes(A));
+    }).toBe(true);
 
     // confirm via the server that ALPHA's runner process is gone while BETA
     // lives. The mock doesn't persist the auto-title as a session name, so key
@@ -255,23 +258,20 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     // currently in DELTA
     await expect(page.locator(".msg.assistant", { hasText: D }).last()).toBeVisible();
 
-    // switch back to GAMMA via the picker
-    await openSessions(page);
-    await rowFor(page, G).click();
-    await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
+    // switch back to GAMMA via the sidebar
+    await switchToSessionByToken(page, G, { mobile });
 
     // the transcript reloads to GAMMA's content (and DELTA's is gone)
     await expect(page.locator(".msg.assistant", { hasText: G }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: D })).toHaveCount(0);
 
     // and the reverse works too
-    await openSessions(page);
-    await rowFor(page, D).click();
+    await switchToSessionByToken(page, D, { mobile });
     await expect(page.locator(".msg.assistant", { hasText: D }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: G })).toHaveCount(0);
   });
 
-  if (includeModalLifecycle) test("sessions modal stays current while adding, stopping, and deleting sessions across directories", async ({ page }) => {
+  if (includeModalLifecycle) test("sessions sidebar stays current while adding, stopping, and deleting sessions across directories", async ({ page }) => {
     await login(page);
 
     const A = tag("MODAL-A");
@@ -285,13 +285,13 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${A}.`);
     await newSessionInFolder(page, folderB);
     await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${B}.`);
-    await loadOtherFolderAndSwitch(page, "/workspace", A);
+    await loadOtherFolderAndSwitch(page, A);
 
-    await openSessions(page);
-    await expect(rowFor(page, A)).toBeVisible();
-    await expect(rowFor(page, B)).toBeVisible();
+    await openSessionSidebar(page);
+    await expect(sidebarEntry(page, A)).toBeVisible();
+    await expect(sidebarEntry(page, B)).toBeVisible();
 
-    // Add a third session out-of-band while the modal remains open. The live
+    // Add a third session out-of-band while the sidebar remains open. The live
     // runner update must make it appear without closing or refreshing.
     const opened = await api("POST", "/open-session", { dir: `/workspace/${folderC}` });
     expect(opened.status, opened.json.error).toBe(200);
@@ -300,38 +300,35 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       message: `Do not use any tools. Reply with exactly the word ${C}.`,
     });
     expect(prompted.status, prompted.json.error).toBe(202);
-    await expect(rowFor(page, C)).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".s-session-main:visible")).toHaveCount(3);
+    const cGroup = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: folderC }) });
+    const cEntry = cGroup.locator(".session-sidebar-entry");
+    await expect(cEntry).toBeVisible({ timeout: 15000 });
 
-    // Stopping B immediately moves it out of the active section, while A and C
-    // remain visible and active.
-    await rowFor(page, B).locator(".s-stop").click();
+    // Stopping B immediately changes its action to delete while A and C remain
+    // active and visible in their working-directory groups.
+    await sidebarEntry(page, B).locator(".session-sidebar-action.stop").click();
     await expect(page.locator(".toast", { hasText: /process stopped/ })).toBeVisible();
-    await expect(rowFor(page, B)).toBeHidden();
-    await expect(rowFor(page, A)).toBeVisible();
-    await expect(rowFor(page, C)).toBeVisible();
-    await expect(page.locator(".s-session-main:visible")).toHaveCount(2);
+    await expect(sidebarEntry(page, B).locator(".session-sidebar-action.delete")).toBeVisible();
+    await expect(sidebarEntry(page, A).locator(".session-sidebar-action.stop")).toBeVisible();
+    await expect(cEntry.locator(".session-sidebar-action.stop")).toBeVisible();
 
-    // The stopped session remains available under its folder and can be
-    // deleted. Its now-empty folder must disappear immediately.
-    await page.locator(".s-folders > summary").click();
-    const bFolder = page.locator(".s-folder").filter({ has: page.locator(":scope > summary", { hasText: `/workspace/modal/b/${RUN}` }) });
-    await bFolder.locator(":scope > summary").click();
-    await expect(rowFor(page, B)).toBeVisible();
+    // The stopped session can be deleted directly. Its now-empty cwd group
+    // disappears immediately.
     page.once("dialog", (dialog) => dialog.accept());
-    await rowFor(page, B).locator(".s-del:not(.s-stop)").click();
+    await sidebarEntry(page, B).locator(".session-sidebar-action.delete").click();
     await expect(page.locator(".toast", { hasText: /session deleted/ })).toBeVisible();
-    await expect(rowFor(page, B)).toHaveCount(0);
-    await expect(page.locator(".s-folder > summary", { hasText: `/workspace/modal/b/${RUN}` })).toHaveCount(0);
+    await expect(sidebarEntry(page, B)).toHaveCount(0);
+    await expect(page.locator("#sessions .session-sidebar-cwd > summary", { hasText: folderB })).toHaveCount(0);
 
-    // Deleting the newly-added active session also updates the open modal and
-    // leaves the unrelated active session untouched.
+    // Stop and delete the newly-added session; the unrelated active session is
+    // left untouched and its sidebar row remains usable.
+    await cEntry.locator(".session-sidebar-action.stop").click();
+    await expect(cEntry.locator(".session-sidebar-action.delete")).toBeVisible();
     page.once("dialog", (dialog) => dialog.accept());
-    await rowFor(page, C).locator(".s-del:not(.s-stop)").click();
-    await expect(rowFor(page, C)).toHaveCount(0);
-    await expect(page.locator(".s-folder > summary", { hasText: `/workspace/${folderC}` })).toHaveCount(0);
-    await expect(rowFor(page, A)).toBeVisible();
-    await expect(page.locator(".s-session-main:visible")).toHaveCount(1);
+    await cEntry.locator(".session-sidebar-action.delete").click();
+    await expect(cEntry).toHaveCount(0);
+    await expect(page.locator("#sessions .session-sidebar-cwd > summary", { hasText: folderC })).toHaveCount(0);
+    await expect(sidebarEntry(page, A).locator(".session-sidebar-action.stop")).toBeVisible();
   });
 
   if (includeCrossDirectorySwitch) test("switch sessions across working directories in both directions", async ({ page }) => {
@@ -350,13 +347,12 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await expect(page.locator("#workdirInfo")).toContainText(`/workspace/${otherFolder}`);
     await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible();
 
-    await loadOtherFolderAndSwitch(page, "/workspace", A);
+    await loadOtherFolderAndSwitch(page, A);
     await expect(page.locator("#workdirInfo")).toContainText("/workspace");
     await expect(page.locator(".msg.assistant", { hasText: A }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: B })).toHaveCount(0);
 
-    // Session-folder labels decode hyphens as separators.
-    await loadOtherFolderAndSwitch(page, `/workspace/other/${RUN}`, B);
+    await loadOtherFolderAndSwitch(page, B);
     await expect(page.locator("#workdirInfo")).toContainText(`/workspace/${otherFolder}`);
     await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: A })).toHaveCount(0);
@@ -370,19 +366,14 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await newSession(page);
     await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${NEEDLE}.`);
 
-    await openSessions(page);
-    const searchBox = page.locator("#mBody .search-row input[type=text]");
-    await expect(searchBox).toBeVisible();
+    await openSessionSidebar(page, mobile);
+    const searchBox = page.locator("#sessions .session-sidebar-search");
     await searchBox.fill(NEEDLE);
-    await searchBox.press("Enter");
 
-    // our needle surfaces as a highlighted hit (it matches the user message
-    // and the assistant's echoed reply, hence 2 hits) in exactly one session card
-    await expect(page.locator(".m-path", { hasText: /hits in/i })).toBeVisible({ timeout: 15000 });
-    const hit = page.locator(".search-hit").filter({ hasText: NEEDLE }).first();
-    await expect(hit).toBeVisible();
-    // the matched token is highlighted (one <mark> per shown snippet — assert the
-    // first one carries the needle)
+    // our needle surfaces as a highlighted sidebar hit (it matches the user
+    // message and the assistant's echoed reply).
+    const hit = page.locator("#sessions .session-sidebar-hit").filter({ hasText: NEEDLE }).first();
+    await expect(hit).toBeVisible({ timeout: 15000 });
     await expect(hit.locator("mark").first()).toHaveText(NEEDLE);
 
     // clicking the hit switches to that session and flashes the matching message
