@@ -149,16 +149,44 @@ function sendToPi(obj) {
 
 const tokenBuf = Buffer.from(TOKEN);
 
-function checkAuth(req, url) {
-  let provided = url.searchParams.get("token");
-  if (!provided) {
-    const header = req.headers["authorization"];
-    if (header?.startsWith("Bearer ")) provided = header.slice(7);
-  }
-  if (!provided) provided = req.headers["x-auth-token"];
+function tokenMatches(provided) {
   if (!provided) return false;
-  const buf = Buffer.from(String(provided));
+  const buf = Buffer.from(String(provided).trim());
   return buf.length === tokenBuf.length && timingSafeEqual(buf, tokenBuf);
+}
+
+function parseCookies(req) {
+  const out = {};
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return out;
+}
+
+/** Collect every place a token might arrive. Proxies and tunnels differ in
+ *  what they strip (Authorization is the usual casualty), so accept the token
+ *  from the query string, several headers, or a cookie. */
+function authCandidates(req, url) {
+  const bearer = req.headers["authorization"];
+  return {
+    query: url.searchParams.get("token"),
+    bearer: bearer?.startsWith("Bearer ") ? bearer.slice(7) : bearer,
+    xAuthToken: req.headers["x-auth-token"],
+    xApiKey: req.headers["x-api-key"],
+    cookie: parseCookies(req).pi_ui_token,
+  };
+}
+
+function checkAuth(req, url) {
+  const candidates = authCandidates(req, url);
+  if (Object.values(candidates).some(tokenMatches)) return true;
+  // diagnostic: show which credentials arrived (masked) so stripped headers are visible
+  const seen = Object.entries(candidates)
+    .map(([k, v]) => `${k}=${v ? `${String(v).slice(0, 4)}…(${String(v).length})` : "-"}`)
+    .join(" ");
+  console.log(`[auth-fail] ${req.method} ${url.pathname} from ${req.socket.remoteAddress} | ${seen} | ua=${req.headers["user-agent"] ?? "-"}`);
+  return false;
 }
 
 // ---------------------------------------------------------------- http
@@ -212,6 +240,18 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     json(res, 200, { ok: true, piRunning: !!pi, clients: sseClients.size });
+    return;
+  }
+
+  // debug: shows which auth credentials reached the server (and whether each
+  // validates) without requiring auth — helps diagnose header-stripping proxies
+  if (req.method === "GET" && url.pathname === "/authcheck") {
+    const candidates = authCandidates(req, url);
+    const report = {};
+    for (const [k, v] of Object.entries(candidates)) {
+      report[k] = v ? (tokenMatches(v) ? "valid" : `present-invalid(len=${String(v).length})`) : "absent";
+    }
+    json(res, 200, { authorized: Object.values(candidates).some(tokenMatches), credentials: report });
     return;
   }
 

@@ -427,6 +427,11 @@ let token = null;
     history.replaceState(null, "", location.pathname);
   }
   token = localStorage.getItem("pi_ui_token");
+  // also carry the token as a cookie: cookies survive proxies that strip
+  // Authorization/custom headers, and EventSource can't send headers at all
+  if (token) {
+    document.cookie = `pi_ui_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
+  }
 }
 
 const $ = (id) => document.getElementById(id);
@@ -451,6 +456,7 @@ async function handleUnauthorized() {
     });
     if (res.status === 401) {
       localStorage.removeItem("pi_ui_token");
+      document.cookie = "pi_ui_token=; path=/; max-age=0";
       requireToken();
     } else {
       toast("temporary auth hiccup — retry", "warning");
@@ -1002,6 +1008,7 @@ menu.addEventListener("click", async (e) => {
       clearMessages();
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
+      document.cookie = "pi_ui_token=; path=/; max-age=0";
       location.reload();
     }
   } catch (err) {
