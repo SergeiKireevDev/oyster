@@ -716,9 +716,7 @@ function switchToRunner(id) {
     clearTranscript: clearMessages,
     resetSessionUi: () => {
       // The new session has its own tree; do not leave stale sidebars visible.
-      carouselController.set(0, { apply: false });
-      $("hublots").classList.remove("open");
-      $("treebar").classList.remove("open");
+      carouselController.reset();
     },
     renderPreview: renderPreviewNow,
     resetCommands: () => { knownCommands = null; },
@@ -2087,9 +2085,7 @@ async function refreshHublotManager({ loading = false } = {}) {
 
 async function showHublots() {
   // close the slide-over sidebars so they don't sit on top of the modal
-  $("hublots").classList.remove("open");
-  $("treebar").classList.remove("open");
-  carouselController.set(0, { apply: false });
+  carouselController.reset();
 
   openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true, content: "hublotManager" });
   await refreshHublotManager({ loading: true });
@@ -2149,9 +2145,7 @@ registerMobileDrawerDismiss(document, {
   treebar: $("treebar"),
   isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
   close: () => {
-    $("hublots").classList.remove("open");
-    $("treebar").classList.remove("open");
-    carouselController.set(0, { apply: false });
+    carouselController.reset();
   },
 });
 

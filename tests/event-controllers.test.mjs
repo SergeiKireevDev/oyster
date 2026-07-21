@@ -90,6 +90,10 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.deepEqual([...treebar.classList.values], ["open"]);
   assert.deepEqual(writes, [["pi_carousel", "2"]]);
   assert.deepEqual(pages, ["tree", 2]);
+  controller.reset();
+  assert.equal(controller.get(), 0);
+  assert.deepEqual([...hublots.classList.values], []);
+  assert.deepEqual([...treebar.classList.values], []);
 });
 
 test("file upload input adapter registers and tears down its change listener", () => {

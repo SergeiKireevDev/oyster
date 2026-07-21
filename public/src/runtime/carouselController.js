@@ -54,7 +54,13 @@ export function createCarouselController({
     if (next !== current) set(next);
   }
 
-  return { apply, get: () => current, set, step };
+  function reset() {
+    documentTarget.getElementById("hublots").classList.remove("open");
+    documentTarget.getElementById("treebar").classList.remove("open");
+    set(0, { apply: false });
+  }
+
+  return { apply, get: () => current, reset, set, step };
 }
 
 /** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
