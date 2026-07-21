@@ -48,7 +48,7 @@ before route code moves.
 
 ## 2. Establish Route-Factory Infrastructure
 
-- [ ] Add `http/createRouteTable.mjs`, which merges named route maps and throws
+- [x] Add `http/createRouteTable.mjs`, which merges named route maps and throws
   on duplicate method/path keys. Add unit tests for merge order, duplicate
   rejection, and handler lookup.
 - [ ] Add `http/createRequestContext.mjs` containing only reusable HTTP helpers

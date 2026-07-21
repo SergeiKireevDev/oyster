@@ -38,6 +38,7 @@ RUN npm ci
 COPY server.mjs app.mjs sessions.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
 COPY public ./public
+COPY http ./http
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build
