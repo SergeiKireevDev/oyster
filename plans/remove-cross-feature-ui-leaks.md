@@ -38,7 +38,7 @@ cd tests/e2e && npm test
 
 ## 2. Convert Resource UI Actions to Scoped Registry Actions
 
-- [ ] Add names for file-picker, folder-browser, file-explorer, hublot, and
+- [x] Add names for file-picker, folder-browser, file-explorer, hublot, and
   routine UI actions to `runtime/uiActionNames.js`. Add registry tests covering
   namespaced registration, replacement, and unregistration.
 - [ ] Make `createResourceAssembly()` accept the scoped UI action registry and

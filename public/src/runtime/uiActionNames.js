@@ -1,2 +1,28 @@
 export const MENU_ACTION = "menu.run";
 export const COMMAND_PALETTE_RUN_ACTION = "commandPalette.run";
+
+export const FILE_PICKER_BROWSE_ACTION = "filePicker.browse";
+export const FILE_PICKER_CHOOSE_ACTION = "filePicker.choose";
+export const FILE_PICKER_USE_FOLDER_ACTION = "filePicker.useFolder";
+export const FILE_PICKER_CANCEL_ACTION = "filePicker.cancel";
+
+export const FOLDER_BROWSER_BROWSE_ACTION = "folderBrowser.browse";
+export const FOLDER_BROWSER_CREATE_ACTION = "folderBrowser.create";
+export const FOLDER_BROWSER_SUBMIT_ACTION = "folderBrowser.submit";
+export const FOLDER_BROWSER_CANCEL_ACTION = "folderBrowser.cancel";
+
+export const FILE_EXPLORER_BROWSE_ACTION = "fileExplorer.browse";
+export const FILE_EXPLORER_EDIT_ACTION = "fileExplorer.edit";
+export const FILE_EXPLORER_SAVE_ACTION = "fileExplorer.save";
+export const FILE_EXPLORER_UPLOAD_ACTION = "fileExplorer.upload";
+export const FILE_EXPLORER_BACK_ACTION = "fileExplorer.back";
+export const FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION = "fileExplorer.returnToHublots";
+export const FILE_EXPLORER_OPEN_ACTION = "fileExplorer.open";
+
+export const HUBLOT_SHOW_ACTION = "hublot.show";
+export const HUBLOT_CREATE_ACTION = "hublot.create";
+export const HUBLOT_TOGGLE_SCOPE_ACTION = "hublot.toggleScope";
+export const HUBLOT_REMOVE_ACTION = "hublot.remove";
+export const HUBLOT_OPEN_COMMAND_PALETTE_ACTION = "hublot.openCommandPalette";
+
+export const ROUTINE_RUN_ACTION = "routine.run";
