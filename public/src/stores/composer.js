@@ -3,23 +3,26 @@ import { appSession } from "./appSession.js";
 
 export const composerText = writable("");
 
-export const composerUi = derived([appSession, composerText], ([$appSession, $composerText]) => {
-  const busy = !!$appSession.busy;
-  const connected = !!$appSession.connected;
-  const replaying = !!$appSession.replayingTranscript;
-  const gateRequired = $appSession.transcriptGateRequired !== false;
+export function composerUiState(session, text) {
+  const busy = !!session.busy;
+  const connected = !!session.connected;
+  const replaying = !!session.replayingTranscript;
+  const gateRequired = session.transcriptGateRequired !== false;
   const gated = replaying && gateRequired;
   const ready = connected && !gated;
-  const hasText = !!String($composerText ?? "").trim();
+  const hasText = !!String(text ?? "").trim();
   return {
     ready,
-    inputDisabled: !ready,
+    // Disabling a focused textarea makes the browser blur it. Background
+    // reconnects and canonical syncs are transient, so keep drafting enabled
+    // while independently preventing sends until the transport is ready.
+    inputDisabled: false,
     sendDisabled: !ready,
     placeholder: !connected
       ? "connecting…"
-      : gated && $appSession.transcriptLoadPhase === "replay"
+      : gated && session.transcriptLoadPhase === "replay"
         ? "replaying transcript…"
-        : gated && $appSession.transcriptLoadPhase === "canonical"
+        : gated && session.transcriptLoadPhase === "canonical"
           ? "loading canonical transcript…"
           : gated
             ? "loading transcript…"
@@ -28,7 +31,9 @@ export const composerUi = derived([appSession, composerText], ([$appSession, $co
     sendHidden: busy && !hasText,
     stopHidden: !busy,
   };
-});
+}
+
+export const composerUi = derived([appSession, composerText], ([$appSession, $composerText]) => composerUiState($appSession, $composerText));
 
 export function setComposerTextValue(text) {
   composerText.set(text ?? "");

@@ -120,10 +120,16 @@ function renderMarkdown(src) {
         const m = lines[i].match(re);
         if (m) { items.push(m[3]); i++; }
         else if (/^\s{2,}\S/.test(lines[i]) && items.length) { items[items.length - 1] += "\n" + lines[i].trim(); i++; }
-        else break;
+        else if (/^\s*$/.test(lines[i])) {
+          let next = i + 1;
+          while (next < lines.length && /^\s*$/.test(lines[next])) next++;
+          if (next < lines.length && re.test(lines[next])) i = next;
+          else break;
+        } else break;
       }
       const tag = ordered ? "ol" : "ul";
-      out.push(`<${tag}>${items.map((it) => `<li>${inlineMd(escapeHtml(it)).replace(/\n/g, "<br>")}</li>`).join("")}</${tag}>`);
+      const start = ordered && ol[2] !== "1" ? ` start="${ol[2]}"` : "";
+      out.push(`<${tag}${start}>${items.map((it) => `<li>${inlineMd(escapeHtml(it)).replace(/\n/g, "<br>")}</li>`).join("")}</${tag}>`);
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {

@@ -9,3 +9,9 @@ test("markdown renderer escapes content while preserving supported markup", () =
   assert.match(html, /<div class="code-lang">js<\/div>/);
   assert.match(html, /tok-kw/);
 });
+
+test("markdown renderer keeps loose ordered lists in one numbering sequence", () => {
+  const html = renderMarkdown("1. first\n\n2. second\n\n3. third");
+  assert.equal(html, "<ol><li>first</li><li>second</li><li>third</li></ol>");
+  assert.equal(renderMarkdown("4. fourth\n5. fifth"), '<ol start="4"><li>fourth</li><li>fifth</li></ol>');
+});
