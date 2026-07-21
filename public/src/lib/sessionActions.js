@@ -1,6 +1,6 @@
-import { applySessionState, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
+import { applySessionState, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
 
-export { applySessionState, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
+export { applySessionState, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -58,27 +58,6 @@ export async function openSession(fetchImpl, { sessionPath = null, dir = null } 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
   return data.runner;
-}
-
-/** Switch to a search hit's session before focusing its transcript entry. */
-export function createSearchHitSessionController({ close, getSessionId, open, getCurrentRunner, setWorkdir, reload, focus, setAfterTranscript, switchRunner, toast }) {
-  return async (sessionPath, hit) => {
-    close();
-    if (hit.sessionId === getSessionId()) return focus(hit);
-    try {
-      const runner = await open({ sessionPath, dir: hit.sessionCwd || null });
-      if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
-      toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
-      if (runner.id === getCurrentRunner()) {
-        await reload();
-        return focus(hit);
-      }
-      setAfterTranscript(() => focus(hit));
-      switchRunner(runner.id);
-    } catch (error) {
-      toast(`switch failed: ${error.message}`, "error");
-    }
-  };
 }
 
 /** Stop a runner and normalize the endpoint's error payload. */
