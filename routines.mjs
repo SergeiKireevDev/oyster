@@ -54,6 +54,17 @@ const BINDINGS_PATH = join(ROUTINES_DIR, "bindings.json");
 const LOG_MAX = 80;
 const PROGRESS_RE = /^::progress\s+(?:(\d{1,3})%?(?:\s+|$))?(.*)$/;
 
+// Scan result cache — listRoutines does synchronous stat/readdir/readFileSync
+// on every call; cache it briefly so rapid-fire fetches (SSE replay_done,
+// mobile sidebar open) don't each pay the full disk cost. Invalidated on
+// any mutation (create / delete / binding change).
+let routinesCache = null; // { at, value }
+const ROUTINES_CACHE_TTL_MS = 500;
+
+function invalidateRoutinesCache() {
+  routinesCache = null;
+};
+
 export function routinesDir() {
   return ROUTINES_DIR;
 }
@@ -104,11 +115,12 @@ function saveBinding(r) {
 }
 
 /** Scan ~/.pi/routines/ and merge with live state + persisted bindings. */
-export function listRoutines(state) {
-  const map = routinesMap(state);
+function scanRoutinesDisk() {
+  // the expensive part: synchronous disk I/O (readdir + stat every file + read bindings)
   try { mkdirSync(ROUTINES_DIR, { recursive: true }); } catch {}
   const bindings = loadBindings();
   const found = new Set();
+  const fresh = new Map(); // name -> new idle entry
   for (const e of readdirSync(ROUTINES_DIR, { withFileTypes: true })) {
     if (!e.isFile() && !e.isSymbolicLink()) continue;
     const path = join(ROUTINES_DIR, e.name);
@@ -116,21 +128,33 @@ export function listRoutines(state) {
     try { st = statSync(path); } catch { continue; }
     if (!st.isFile() || !(st.mode & 0o111)) continue; // executables only
     found.add(e.name);
-    if (!map.has(e.name)) {
-      map.set(e.name, {
-        name: e.name, path,
-        sessionId: bindings[e.name]?.sessionId ?? null,
-        cwd: bindings[e.name]?.cwd ?? null,
-        status: "idle", progress: null, message: null,
-        startedAt: null, finishedAt: null, exitCode: null,
-        log: [], proc: null,
-      });
-    }
+    fresh.set(e.name, {
+      name: e.name, path,
+      sessionId: bindings[e.name]?.sessionId ?? null,
+      cwd: bindings[e.name]?.cwd ?? null,
+      status: "idle", progress: null, message: null,
+      startedAt: null, finishedAt: null, exitCode: null,
+      log: [], proc: null,
+    });
   }
-  // forget entries whose script vanished (or that pre-date the global store)
-  // — unless they are still running (keep those visible so they can be stopped)
-  for (const [key, r] of map) {
-    if (!found.has(key) && !r.proc) map.delete(key);
+  return { found, fresh };
+}
+
+export function listRoutines(state) {
+  const map = routinesMap(state);
+  const now = Date.now();
+  if (!routinesCache || now - routinesCache.at > ROUTINES_CACHE_TTL_MS) {
+    const { found, fresh } = scanRoutinesDisk();
+    // merge disk findings into live state
+    for (const [name, entry] of fresh) {
+      if (!map.has(name)) map.set(name, entry);
+    }
+    // forget entries whose script vanished (or that pre-date the global store)
+    // — unless they are still running (keep those visible so they can be stopped)
+    for (const [key, r] of [...map.entries()]) {
+      if (!found.has(key) && !r.proc) map.delete(key);
+    }
+    routinesCache = { at: now, found: [...found], snapshot: new Map(map) };
   }
   return [...map.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -138,8 +162,13 @@ export function listRoutines(state) {
 }
 
 function findRoutine(state, name) {
-  listRoutines(state); // refresh entries from disk
-  return routinesMap(state).get(name) ?? null;
+  const map = routinesMap(state);
+  // if it's already in live state (the common case — the routine was listed
+  // before any action), we don't need the disk scan
+  if (map.has(name)) return map.get(name);
+  // not in the map yet (e.g. routine added to disk by hand): scan to pick it up
+  listRoutines(state);
+  return map.get(name) ?? null;
 }
 
 function runScript(state, r, mode) {
@@ -215,6 +244,7 @@ export function createRoutine(state, { name, script, sessionId = null, cwd = nul
   if (!/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
   listRoutines(state);
   const map = routinesMap(state);
+  invalidateRoutinesCache();
   const existing = map.get(name);
   if (existing?.proc) throw new Error(`routine "${name}" is currently ${existing.status} — stop it before overwriting`);
   if (existing?.sessionId && sessionId && existing.sessionId !== sessionId) {
@@ -234,6 +264,7 @@ export function createRoutine(state, { name, script, sessionId = null, cwd = nul
   if (cwd) r.cwd = cwd;
   map.set(name, r);
   saveBinding(r);
+  invalidateRoutinesCache();
   console.log(`[pi-ui] routine ${existing ? "updated" : "created"}: ${path} (session ${r.sessionId ?? "-"})`);
   emit(state, r, existing ? "updated" : "created");
   return routineInfo(r);
@@ -250,6 +281,7 @@ export function deleteRoutine(state, name) {
   r.cwd = null;
   saveBinding(r); // removes the bindings.json entry
   routinesMap(state).delete(name);
+  invalidateRoutinesCache();
   emit(state, r, "deleted");
   return routineInfo(r);
 }
@@ -266,6 +298,7 @@ export function startRoutine(state, name, { sessionId = null, cwd = null } = {})
   if (sessionId) r.sessionId = sessionId;
   if (cwd) r.cwd = cwd;
   saveBinding(r);
+  invalidateRoutinesCache();
   runScript(state, r, "run");
   return routineInfo(r);
 }
@@ -275,6 +308,7 @@ export function stopRoutine(state, name) {
   if (!r) throw new Error(`no such routine: ${name}`);
   if (!r.proc) throw new Error(`routine "${name}" is not running`);
   r.status = "stopping";
+  invalidateRoutinesCache();
   emit(state, r, "stopping");
   const pid = r.proc.pid;
   try { process.kill(-pid, "SIGTERM"); } catch { try { r.proc.kill("SIGTERM"); } catch {} }
@@ -287,6 +321,7 @@ export function teardownRoutine(state, name) {
   const r = findRoutine(state, name);
   if (!r) throw new Error(`no such routine: ${name}`);
   if (r.proc) throw new Error(`routine "${name}" is ${r.status} — stop it first`);
+  invalidateRoutinesCache();
   runScript(state, r, "teardown");
   return routineInfo(r);
 }
@@ -299,6 +334,7 @@ export function releaseRoutine(state, name) {
   r.sessionId = null;
   r.cwd = null;
   saveBinding(r);
+  invalidateRoutinesCache();
   emit(state, r, "released");
   return routineInfo(r);
 }
@@ -318,6 +354,7 @@ export function releaseSessionRoutines(state, sessionId) {
     released.push(r.name);
     emit(state, r, "released");
   }
+  invalidateRoutinesCache();
   return released;
 }
 

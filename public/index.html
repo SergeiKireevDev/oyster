@@ -269,6 +269,22 @@
   }
   .side-head + .side-head, #routineList + .side-head { margin-top: 4px; }
   .side-head.routines { border-top: 1px solid var(--border); padding-top: 10px; }
+  .sidebar-loading {
+    display: flex; align-items: center; gap: 7px;
+    padding: 8px 2px;
+    color: var(--muted);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .sidebar-loading .spin {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .routine-block {
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -1442,7 +1458,7 @@ let liveAssistant = null; // { root, msg }
 function renderBlockEl(block) {
   if (block.type === "thinking") {
     const showThinking = localStorage.getItem("pi_show_thinking") !== "0";
-    if (!showThinking || !block.thinking) return null;   // hidden preference, or empty
+    if (!showThinking || !block.thinking?.trim()) return null;   // hidden, or empty/whitespace
     const d = document.createElement("details");
     d.className = "block thinking";
     d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
@@ -3465,12 +3481,15 @@ document.addEventListener("click", (e) => {
 
 async function loadHublots() {
   if (!token) return;
+  // show a lightweight loading hint so the wait doesn't read as a blank/stuck sidebar
+  const list = $("hublotList");
+  list.innerHTML = '<div class="sidebar-loading"><span class="spin"></span> loading hublots…</div>';
   let tunnels = [];
   try {
     const res = await fetch(`/tunnels`);
     const data = await res.json();
     if (res.ok) tunnels = data.tunnels.filter(tunnelVisible);
-  } catch { /* sidebar is best-effort */ }
+  } catch { list.innerHTML = ""; /* sidebar is best-effort */ }
   renderHublots(tunnels);
 }
 
@@ -3553,6 +3572,8 @@ function routineVisible(r) {
 
 async function loadRoutines() {
   if (!token) return;
+  // show a lightweight loading hint so the wait doesn't read as a blank/stuck sidebar
+  $("routineList").innerHTML = '<div class="sidebar-loading"><span class="spin"></span> loading routines…</div>';
   try {
     const res = await fetch(`/routines`);
     const data = await res.json();
