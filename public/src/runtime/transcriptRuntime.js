@@ -334,23 +334,26 @@ export function createAssistantStream({ mount, update, finish }) {
 export function createTranscriptStreamEventHandler({
   assistantStream, userMessageText, consumeLocalEcho, addUserMessage, updateUsage,
   finishToolCard, startToolCard, updateToolCard, toolResultText, notifyNewContent,
+  nearBottom = () => false,
 }) {
   return (message) => {
     const transcript = message.message;
+    const wasNearBottom = nearBottom();
+    const notify = () => notifyNewContent(wasNearBottom);
     switch (message.type) {
       case "message_start":
         if (transcript.role === "assistant") {
           assistantStream.start(transcript);
-          notifyNewContent();
+          notify();
         } else if (transcript.role === "user" && !consumeLocalEcho(userMessageText(transcript))) {
           addUserMessage(transcript, { preserveScroll: true });
-          notifyNewContent();
+          notify();
         }
         return true;
       case "message_update":
         if (transcript.role === "assistant") {
           assistantStream.update(transcript);
-          notifyNewContent();
+          notify();
         }
         return true;
       case "message_end":
@@ -358,19 +361,19 @@ export function createTranscriptStreamEventHandler({
           assistantStream.end(transcript);
           updateUsage(transcript);
         } else if (transcript.role === "toolResult") finishToolCard(transcript.toolCallId, transcript, transcript.isError);
-        notifyNewContent();
+        notify();
         return true;
       case "tool_execution_start":
         startToolCard(message.toolCallId);
-        notifyNewContent();
+        notify();
         return true;
       case "tool_execution_update":
         updateToolCard(message.toolCallId, message.partialResult);
-        notifyNewContent();
+        notify();
         return true;
       case "tool_execution_end":
         finishToolCard(message.toolCallId, typeof message.result === "string" ? message.result : toolResultText(message.result) || JSON.stringify(message.result, null, 2), message.isError);
-        notifyNewContent();
+        notify();
         return true;
       default:
         return false;

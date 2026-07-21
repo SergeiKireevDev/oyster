@@ -217,6 +217,20 @@ test("transcript stream handler assembles assistants, tools, and local user echo
   assert.equal(calls[7][2], "result");
 });
 
+test("transcript stream captures bottom proximity before content changes", () => {
+  let near = true;
+  const notices = [];
+  const handler = createTranscriptStreamEventHandler({
+    assistantStream: { start() { near = false; }, update() {}, end() {} },
+    userMessageText: () => "", consumeLocalEcho: () => false, addUserMessage() {}, updateUsage() {},
+    finishToolCard() {}, startToolCard() {}, updateToolCard() {}, toolResultText: () => "",
+    nearBottom: () => near,
+    notifyNewContent: (wasNearBottom) => notices.push(wasNearBottom),
+  });
+  handler({ type: "message_start", message: { role: "assistant" } });
+  assert.deepEqual(notices, [true]);
+});
+
 test("scroll adapter preserves reading position unless pinned or forced", () => {
   const scroller = { scrollHeight: 1000, scrollTop: 500, clientHeight: 400 };
   const scroll = createTranscriptScrollAdapter({ scroller });

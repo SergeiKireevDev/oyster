@@ -13,7 +13,7 @@
   }
 
   function trackScroll() {
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 24) clearTranscriptNotice();
+    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120) clearTranscriptNotice();
   }
 </script>
 

@@ -54,6 +54,30 @@ test("transcript assembly owns DOM, stream, action, tool-card, and renderer cons
   assembly.teardown();
 });
 
+test("new transcript content stays pinned near the bottom and only shows a notice when reading above", async () => {
+  const deps = createDependencies();
+  let notices = 0;
+  let clears = 0;
+  deps.showTranscriptNotice = () => notices++;
+  deps.clearTranscriptNotice = () => clears++;
+  const scroller = deps.findElement("scroller");
+  scroller.scrollHeight = 1000;
+  scroller.clientHeight = 600;
+  scroller.scrollTop = 350;
+  const assembly = createTranscriptAssembly(deps);
+
+  assembly.operations.handleStreamEvent({ type: "message_start", message: { role: "assistant", content: [] } });
+  await Promise.resolve();
+  assert.equal(scroller.scrollTop, 1000);
+  assert.equal(notices, 0);
+  assert.equal(clears, 1);
+
+  scroller.scrollTop = 100;
+  assembly.operations.handleStreamEvent({ type: "message_update", message: { role: "assistant", content: [] } });
+  assert.equal(notices, 1);
+  assembly.teardown();
+});
+
 test("transcript assembly owns reload and synchronization controller construction", () => {
   const assembly = createTranscriptAssembly(createDependencies());
   const synchronization = assembly.configureSynchronization({

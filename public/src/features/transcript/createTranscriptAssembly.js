@@ -83,7 +83,15 @@ export function createTranscriptAssembly(deps) {
     startToolCard: (id) => toolCards.start(id),
     updateToolCard: (id, result) => toolCards.updateResult(id, result),
     toolResultText,
-    notifyNewContent: deps.showTranscriptNotice,
+    nearBottom: () => transcriptScroll.nearBottom(),
+    notifyNewContent: (wasNearBottom) => {
+      if (!wasNearBottom) {
+        deps.showTranscriptNotice();
+        return;
+      }
+      deps.clearTranscriptNotice();
+      deps.tick().then(() => transcriptScroll.scrollToBottom(true));
+    },
   });
 
   function renderFullMessage(message, options = {}) {
