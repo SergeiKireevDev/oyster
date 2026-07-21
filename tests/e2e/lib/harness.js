@@ -96,10 +96,28 @@ export async function currentSessionId(page) {
   });
 }
 
+function assistantCount(page) {
+  return page.evaluate(() => document.querySelectorAll(".msg.assistant").length);
+}
+
 /** Type a prompt into the composer, send it, and wait for the agent turn to
- *  finish (busy dot clears and at least one assistant message is present). */
+ *  finish (busy dot clears and at least one assistant message is present).
+ *
+ *  Wait for the transcript to settle before counting: right after switching
+ *  sessions the DOM can still show the previous session's messages until the
+ *  SSE reconnect clears them, which would corrupt the "new messages" baseline. */
 export async function sendPrompt(page, text, { timeout = 120000 } = {}) {
-  const before = await page.locator(".msg.assistant").count();
+  if (process.env.E2E_TRACE) console.log("[sendPrompt] settle transcript");
+  // settle: the count must stay unchanged across a short window
+  let prev = await assistantCount(page);
+  for (let i = 0; i < 100; i++) {
+    await sleep(150);
+    const now = await assistantCount(page);
+    if (now === prev) break;
+    prev = now;
+  }
+  const before = await assistantCount(page);
+  if (process.env.E2E_TRACE) console.log("[sendPrompt] before=", before, "text=", text.slice(0, 40));
   await page.fill("#input", text);
   await page.click("#sendBtn");
   await waitForCount(page, ".msg.assistant", before + 1, timeout);
