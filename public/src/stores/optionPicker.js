@@ -1,40 +1,16 @@
-import { get, writable } from "svelte/store";
-import { closeModalState, openModal } from "./modal.js";
+import { writable } from "svelte/store";
 
-export const optionPicker = writable({
-  title: "",
-  options: [],
-  searchable: false,
-  query: "",
-  active: -1,
-  resolve: null,
-});
+export const emptyOptionPicker = Object.freeze({ title: "", options: [], searchable: false, query: "", active: -1 });
+export const optionPicker = writable(emptyOptionPicker);
 
-export function openOptionPicker(title, options, { searchable = false } = {}) {
-  return new Promise((resolve) => {
-    optionPicker.set({ title, options, searchable, query: "", active: -1, resolve });
-    openModal({ title, content: "optionPicker" });
-  });
+let controller = {};
+export function configureOptionPickerController(next) {
+  controller = next ?? {};
+  return () => { if (controller === next) controller = {}; };
 }
 
-export function cancelOptionPicker() {
-  const state = get(optionPicker);
-  state.resolve?.(null);
-  optionPicker.set({ title: "", options: [], searchable: false, query: "", active: -1, resolve: null });
-  closeModalState();
-}
-
-export function chooseOption(index) {
-  const state = get(optionPicker);
-  state.resolve?.(index);
-  optionPicker.set({ title: "", options: [], searchable: false, query: "", active: -1, resolve: null });
-  closeModalState();
-}
-
-export function setOptionQuery(query) {
-  optionPicker.update((state) => ({ ...state, query, active: -1 }));
-}
-
-export function setOptionActive(active) {
-  optionPicker.update((state) => ({ ...state, active }));
-}
+export const openOptionPicker = (...args) => controller.open?.(...args);
+export const cancelOptionPicker = () => controller.cancel?.();
+export const chooseOption = (index) => controller.choose?.(index);
+export function setOptionQuery(query) { optionPicker.update((state) => ({ ...state, query, active: -1 })); }
+export function setOptionActive(active) { optionPicker.update((state) => ({ ...state, active })); }

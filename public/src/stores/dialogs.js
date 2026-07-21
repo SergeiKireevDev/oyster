@@ -1,74 +1,29 @@
-import { get, writable } from "svelte/store";
-import { closeModalState, openModal } from "./modal.js";
+import { writable } from "svelte/store";
 
-const emptyPrompt = { title: "", placeholder: "", value: "", resolve: null };
-const emptyEditor = { title: "", placeholder: "", value: "", resolve: null };
-const emptyConfirm = { title: "", message: "", resolve: null };
+const emptyPrompt = { title: "", placeholder: "", value: "" };
+const emptyEditor = { title: "", placeholder: "", value: "" };
+const emptyConfirm = { title: "", message: "" };
 
 export const textPrompt = writable(emptyPrompt);
 export const editorPrompt = writable(emptyEditor);
 export const confirmPrompt = writable(emptyConfirm);
 
-export function openTextPrompt(title, placeholder = "", prefill = "") {
-  return new Promise((resolve) => {
-    textPrompt.set({ title, placeholder: placeholder || "", value: prefill || "", resolve });
-    openModal({ title, content: "textPrompt" });
-  });
+let controller = {};
+export function configureDialogController(next) {
+  controller = next ?? {};
+  return () => { if (controller === next) controller = {}; };
 }
 
-export function setTextPromptValue(value) {
-  textPrompt.update((state) => ({ ...state, value }));
-}
+export const openTextPrompt = (...args) => controller.openText?.(...args);
+export const openEditorPrompt = (...args) => controller.openEditor?.(...args);
+export const openConfirmPrompt = (...args) => controller.openConfirm?.(...args);
+export const cancelEditorPrompt = () => controller.cancelEditor?.();
+export const submitEditorPrompt = () => controller.submitEditor?.();
+export const cancelTextPrompt = () => controller.cancelText?.();
+export const submitTextPrompt = () => controller.submitText?.();
+export const answerConfirmPrompt = (answer) => controller.answerConfirm?.(answer);
 
-export function openEditorPrompt(title, placeholder = "", prefill = "") {
-  return new Promise((resolve) => {
-    editorPrompt.set({ title, placeholder: placeholder || "", value: prefill || "", resolve });
-    openModal({ title, content: "editorPrompt" });
-  });
-}
+export function setTextPromptValue(value) { textPrompt.update((state) => ({ ...state, value })); }
+export function setEditorPromptValue(value) { editorPrompt.update((state) => ({ ...state, value })); }
 
-export function setEditorPromptValue(value) {
-  editorPrompt.update((state) => ({ ...state, value }));
-}
-
-export function cancelEditorPrompt() {
-  const state = get(editorPrompt);
-  state.resolve?.(null);
-  editorPrompt.set(emptyEditor);
-  closeModalState();
-}
-
-export function submitEditorPrompt() {
-  const state = get(editorPrompt);
-  state.resolve?.(state.value);
-  editorPrompt.set(emptyEditor);
-  closeModalState();
-}
-
-export function cancelTextPrompt() {
-  const state = get(textPrompt);
-  state.resolve?.(null);
-  textPrompt.set(emptyPrompt);
-  closeModalState();
-}
-
-export function submitTextPrompt() {
-  const state = get(textPrompt);
-  state.resolve?.(state.value);
-  textPrompt.set(emptyPrompt);
-  closeModalState();
-}
-
-export function openConfirmPrompt(title, message) {
-  return new Promise((resolve) => {
-    confirmPrompt.set({ title, message, resolve });
-    openModal({ title, content: "confirmPrompt" });
-  });
-}
-
-export function answerConfirmPrompt(answer) {
-  const state = get(confirmPrompt);
-  state.resolve?.(answer);
-  confirmPrompt.set(emptyConfirm);
-  closeModalState();
-}
+export const emptyDialogStates = Object.freeze({ emptyPrompt, emptyEditor, emptyConfirm });
