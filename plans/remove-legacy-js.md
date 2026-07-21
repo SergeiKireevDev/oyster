@@ -137,17 +137,10 @@ no feature-specific listener is left in the app composition root.
 
 ## 7. Reduce the Composition Root and Delete `legacy.js` ⏳
 
-**Assessment (2026-07-13): in progress.** Steps 1–6 have left the feature
-controllers/runtimes importable and removed direct `document`/`window` listener
-registration from `legacy.js`. The recent lifecycle commits also extracted
-runtime attachments, adapter registration, and teardown composition.
-
-The deletion boundary has not yet been crossed: `appRuntime.js` still loads
-`legacyRuntimeAdapter.js`, which dynamically imports `../legacy.js` for
-`createLegacyRuntimeLifecycleDependencies()`. `legacy.js` is still 1,828 lines
-and remains the place where the remaining dependency graph and lifecycle
-objects are assembled. Its parse/DOM-ID guard still intentionally targets that
-file. Therefore this step must remain incomplete.
+**Assessment (2026-07-13): complete.** The application runtime now owns the
+composition boundary. `appRuntime.js` loads the replacement implementation
+only after Svelte mounts, preserving DOM initialization order; no production
+module imports the removed legacy module.
 
 Remaining work, broken into atomic commits:
 
@@ -184,7 +177,7 @@ Remaining work, broken into atomic commits:
    `public/src/legacy.js`; update `tests/ui-page.test.mjs` so syntax and DOM-ID
    checks cover the replacement composition/runtime modules. Remove or rename
    legacy-named tests and files that no longer describe a live boundary.
-8. [ ] **Prove completion.** Run the stale-reference check below (excluding only
+8. [x] **Prove completion.** Run the stale-reference check below (excluding only
    historical fixture names such as `*_legacy.jsonl`), then run the complete
    validation matrix from the guardrails.
 
@@ -201,10 +194,8 @@ rg "legacy\.js|legacy" public/src tests
   focused event adapters own registration and teardown.
 - [x] Lifecycle attachments, adapter registration, and teardown have narrow
   runtime modules with focused tests.
-- [ ] Final dependency assembly remains in `public/src/legacy.js` (1,828
-  lines), reached through `legacyRuntimeAdapter.js`.
-- [ ] Move that assembly to `appRuntime.js`, remove the adapter/import chain,
-  then delete `legacy.js` and retarget its guard tests.
+- [x] Final dependency assembly lives in the application runtime implementation.
+- [x] Removed the adapter/import chain, deleted `legacy.js`, and retargeted guard tests.
 
 ## Completion Criteria
 
