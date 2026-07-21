@@ -340,7 +340,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
     `features/sessions/` and delete the corresponding root construction.
   - [x] Move remaining feature-controller construction blocks from the root
     into their feature factory modules, then remove the root imports.
-  - [ ] Replace the implementation module with an `appComposition.js` wiring
+  - [x] Replace the implementation module with an `appComposition.js` wiring
     module under 400 lines, and add a line-count/import-boundary regression
     test that prevents regression.
 
