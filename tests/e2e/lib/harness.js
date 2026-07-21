@@ -1,6 +1,6 @@
-// Shared helpers for the pi-lot-ui Playwright e2e suite.
+// Shared helpers for the oyster Playwright e2e suite.
 //
-// The tests target a SELF-CONTAINED pi-lot-ui container on its own port whose
+// The tests target a SELF-CONTAINED oyster container on its own port whose
 // image bundles a deterministic mock LLM (activated via E2E_MOCK_LLM=1), so
 // there are NO credential mounts and no external model calls. They drive the
 // product two ways:
@@ -23,7 +23,7 @@ const STATE_FILE = join(HERE, "..", ".e2e-state.json");
 
 export const BASE = process.env.PI_UI_URL ?? "http://localhost:4000";
 export const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const DEFAULT_CONTAINER = process.env.PI_UI_CONTAINER ?? "pi-lot-e2e";
+const DEFAULT_CONTAINER = process.env.PI_UI_CONTAINER ?? "oyster-e2e";
 
 function baseUrl() {
   return process.env.PI_UI_URL ?? BASE;

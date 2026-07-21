@@ -71,10 +71,10 @@ function writeGallery(files) {
     return `<article class="card"><h2>${title}</h2><video controls preload="metadata" src="${file}"></video><p><a href="${file}" download>Download</a><span>${sizeText(st.size)}</span></p></article>`;
   }).join("\n");
   writeFileSync(join(OUT, "index.html"), `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>pi-lot e2e videos</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>oyster e2e videos</title>
 <style>
 :root{color-scheme:dark;--bg:#0f1115;--panel:#171a21;--border:#2a2f3a;--text:#e6e9ef;--muted:#8b93a3;--accent:#7aa2f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}header{position:sticky;top:0;z-index:2;background:rgba(15,17,21,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:18px 22px}h1{margin:0;font-size:22px}header p{margin:4px 0 0;color:var(--muted)}main{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;padding:18px}.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}h2{font-size:14px;margin:0 0 10px;color:var(--text);font-weight:650}video{width:100%;aspect-ratio:16/10;background:#000;border-radius:10px;border:1px solid #000}p{display:flex;justify-content:space-between;align-items:center;margin:8px 2px 0;color:var(--muted);font-size:12px}a{color:var(--accent);text-decoration:none}@media(max-width:520px){main{grid-template-columns:1fr;padding:10px}header{padding:14px}.card{padding:8px}}
-</style></head><body><header><h1>pi-lot e2e test videos</h1><p>${files.length} recordings generated ${generated}</p></header><main>${cards}</main></body></html>`);
+</style></head><body><header><h1>oyster e2e test videos</h1><p>${files.length} recordings generated ${generated}</p></header><main>${cards}</main></body></html>`);
 }
 
 function main() {
@@ -85,7 +85,7 @@ function main() {
   rmSync(RAW, { recursive: true, force: true });
   mkdirSync(RAW, { recursive: true });
   rmSync(join(HERE, ".port-locks"), { recursive: true, force: true });
-  safeRmDocker("^pi-lot-e2e-[0-9]+$");
+  safeRmDocker("^oyster-e2e-[0-9]+$");
 
   console.log(`Recording e2e videos with E2E_ACTION_DELAY_MS=${DELAY_MS}, E2E_WORKERS=${WORKERS}`);
   const result = spawnSync("npx", ["playwright", "test"], {
@@ -119,7 +119,7 @@ function main() {
   for (const name of names) console.log(`  ${name}`);
   console.log(`Gallery: ${join(OUT, "index.html")}`);
 
-  safeRmDocker("^pi-lot-e2e-[0-9]+$");
+  safeRmDocker("^oyster-e2e-[0-9]+$");
   rmSync(join(HERE, ".port-locks"), { recursive: true, force: true });
   process.exit(result.status ?? 1);
 }

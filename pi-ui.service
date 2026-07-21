@@ -1,5 +1,5 @@
 [Unit]
-Description=pi-lot-ui - web UI for the pi coding agent
+Description=oyster - web UI for the pi coding agent
 
 [Service]
 WorkingDirectory=__PI_UI_DIR__

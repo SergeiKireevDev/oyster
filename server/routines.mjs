@@ -1,5 +1,5 @@
 /**
- * pi-lot-ui — routine manager
+ * oyster — routine manager
  *
  * A routine definition and its optional session binding are authoritative in
  * the app SQLite store. Executable files under `~/.pi/routines/` are runtime
@@ -313,7 +313,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
   const runner = [...state.runners.values()].find((candidate) => candidate.sessionId === sessionId);
   const cwd = runner?.dir ?? state.currentDir;
   const prompt = [
-    "Create one durable pi-lot-ui routine for the user request below.",
+    "Create one durable oyster routine for the user request below.",
     "Use the routine tool with action=create and session_id exactly as supplied.",
     "Write the complete self-contained script yourself. It MUST handle both run and teardown,",
     "teardown MUST remove every byproduct made by run, it must not require interactive input,",

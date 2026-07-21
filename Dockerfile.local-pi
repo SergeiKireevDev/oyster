@@ -3,7 +3,7 @@
 # docker build -f Dockerfile.local-pi \
 #   --build-context pi-source=/home/ubuntu/pi-coding-agent \
 #   --build-arg PI_LOCAL_REV="$(git -C /home/ubuntu/pi-coding-agent rev-parse HEAD)" \
-#   -t pi-lot-ui:sqlite .
+#   -t oyster:sqlite .
 #
 # `pi-source` is required; there is no silent registry fallback in this file.
 # syntax=docker/dockerfile:1.7

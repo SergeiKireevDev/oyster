@@ -25,7 +25,7 @@ The following still live in files rather than SQLite:
 - Routine scripts: `~/.pi/routines/<executable>`
 - Routine bindings: `~/.pi/routines/bindings.json`
 - Workspace/project files and browser uploads
-- Optional UI token: `<pi-lot-ui>/.ui-token`
+- Optional UI token: `<oyster>/.ui-token`
 - Pi configuration, model, extension, and credential files under the agent/home directories
 - Existing JSONL sessions when JSONL mode has been used
 
@@ -45,20 +45,20 @@ SQLite and JSONL are independent stores. Switching `PERSISTENT_STORE` changes wh
 | Session name/stats/model state | `session_materialized` and `entry_materialized` JSON payloads | Derived by parsing entries | Catalog projection | pi |
 | Session discovery text | `sessions.first_message`, `all_messages_text` | Derived by scanning messages | Search result | pi/catalog |
 | Schema migrations | `migrations` | Session header `version` | None | agent-core / pi |
-| Checkpoint metadata | **Not in SQLite**: `checkpoints.json` | Same | Loaded on each operation | pi-lot-ui |
+| Checkpoint metadata | **Not in SQLite**: `checkpoints.json` | Same | Loaded on each operation | oyster |
 | Workspace checkpoint | **Not in SQLite**: Git | Same | Git command results | Git |
-| Routine definition | **Not in SQLite**: executable file | Same | `state.routines` | pi-lot-ui/user |
-| Routine binding | **Not in SQLite**: `bindings.json` | Same | Fields on live routine | pi-lot-ui |
-| Routine run/log/progress | Not persisted | Not persisted | `state.routines` | pi-lot-ui |
-| Tunnel/hublot | Not persisted | Not persisted | `state.tunnels` | pi-lot-ui |
-| Runner | Not persisted | Not persisted | `state.runners` | pi-lot-ui |
-| Runner replay | Not persisted | Not persisted | `Runner.buffer`, max 400 | pi-lot-ui |
-| SSE subscription | Not persisted | Not persisted | `state.sseClients` | pi-lot-ui |
-| Auth failures | Not persisted | Not persisted | `state.authFails` | pi-lot-ui |
-| Current workdir | Not persisted | Not persisted | `state.currentDir` | pi-lot-ui |
+| Routine definition | **Not in SQLite**: executable file | Same | `state.routines` | oyster/user |
+| Routine binding | **Not in SQLite**: `bindings.json` | Same | Fields on live routine | oyster |
+| Routine run/log/progress | Not persisted | Not persisted | `state.routines` | oyster |
+| Tunnel/hublot | Not persisted | Not persisted | `state.tunnels` | oyster |
+| Runner | Not persisted | Not persisted | `state.runners` | oyster |
+| Runner replay | Not persisted | Not persisted | `Runner.buffer`, max 400 | oyster |
+| SSE subscription | Not persisted | Not persisted | `state.sseClients` | oyster |
+| Auth failures | Not persisted | Not persisted | `state.authFails` | oyster |
+| Current workdir | Not persisted | Not persisted | `state.currentDir` | oyster |
 | Project/workspace content | Filesystem | Filesystem | Request buffers | User/tools |
-| Browser partial upload | `.<name>.upload` file | Same | Request body only | pi-lot-ui |
-| UI auth token | Optional `.ui-token` file | Same | `config.TOKEN` | pi-lot-ui |
+| Browser partial upload | `.<name>.upload` file | Same | Request body only | oyster |
+| UI auth token | Optional `.ui-token` file | Same | `config.TOKEN` | oyster |
 
 ## Configuration and source of truth
 
@@ -91,7 +91,7 @@ The schema and write implementation live in the local pi checkout, principally:
 
 pi runner processes create and append sessions. `tree-pi-bak-sql/sessions/sqliteCatalog.mjs` opens request-scoped **read-only** `node:sqlite` handles for lists, transcript hydration, trees, and searches.
 
-Delete and exact-entry fork are write operations, but pi-lot-ui does not issue ad hoc workflow SQL. `session-operations.mjs` imports `CodingAgentSqliteSessionRepository` from the configured pi build and delegates those mutations to its repository API.
+Delete and exact-entry fork are write operations, but oyster does not issue ad hoc workflow SQL. `session-operations.mjs` imports `CodingAgentSqliteSessionRepository` from the configured pi build and delegates those mutations to its repository API.
 
 ### `migrations`
 
@@ -327,7 +327,7 @@ Git, not SQLite, versions workspace content.
 
 The server still consumes filesystem/env configuration. Relevant files include:
 
-- Optional `<pi-lot-ui>/.ui-token`
+- Optional `<oyster>/.ui-token`
 - pi agent configuration/model/credential files under `~/.pi/agent` or `$HOME`
 - pi extensions under `~/.pi/agent/extensions/`
 - systemd configuration in `pi-ui.service`
@@ -423,7 +423,7 @@ checkpoint JSON + SQLite session entry ID + Git hash
 
 ## Recommended next steps
 
-1. Move checkpoint metadata and routine bindings into a separate **pi-lot-ui metadata SQLite database**, not into pi's session schema. Use foreign-key-like application checks against session references and version migrations.
+1. Move checkpoint metadata and routine bindings into a separate **oyster metadata SQLite database**, not into pi's session schema. Use foreign-key-like application checks against session references and version migrations.
 2. Make checkpoint saves throw on failure and only return `recorded: true` after confirmed persistence.
 3. Garbage-collect checkpoint records when sessions are deleted, with an audit command for existing orphans.
 4. Add a supported session-repository/catalog API from pi so the UI does not query private tables directly.
@@ -436,7 +436,7 @@ checkpoint JSON + SQLite session entry ID + Git hash
 
 ## Bottom line
 
-The migration correctly makes SQLite the canonical store for **conversation/session data**, including full transcript trees and derived session state. It does not make SQLite the canonical store for the entire pi-lot-ui system. The architecture remains intentionally hybrid:
+The migration correctly makes SQLite the canonical store for **conversation/session data**, including full transcript trees and derived session state. It does not make SQLite the canonical store for the entire oyster system. The architecture remains intentionally hybrid:
 
 ```text
 SQLite     -> pi sessions, entries, branches, lineage, transcript discovery and stats

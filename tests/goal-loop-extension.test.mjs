@@ -16,7 +16,7 @@ async function loadInferValidation() {
 }
 
 test("goal-loop contains no project-specific defaults", () => {
-  assert.doesNotMatch(source, /tree-pi|pi-lot-ui|migration-svelte/i);
+  assert.doesNotMatch(source, /tree-pi|oyster|migration-svelte/i);
   assert.doesNotMatch(source, /docker build|npm (?:run build|test)/i);
 });
 

@@ -49,7 +49,7 @@ test("OAuth tokens persist only in Pi auth while callback material remains trans
   writeFileSync(authPath, "{}", { mode: 0o600 });
   chmodSync(authPath, 0o600);
 
-  const databasePath = join(root, "pi-lot-ui.sqlite");
+  const databasePath = join(root, "oyster.sqlite");
   const appStore = openAppStore({ databasePath });
   appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
   appStore.close();

@@ -18,7 +18,7 @@ function fixture(t) {
 test("hublot runtime registry contains only ChildProcess handles keyed by persistent process id", (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4195, brief: "serve" });
-  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\nexit 0\n";
+  const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
   mkdirSync(dirname(hublot.service_start_script_path), { recursive: true });
   writeFileSync(hublot.service_start_script_path, script, { mode: 0o700 });
   chmodSync(hublot.service_start_script_path, 0o700);

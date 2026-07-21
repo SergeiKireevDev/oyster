@@ -5,7 +5,7 @@ import { applyMigrations } from "./migrations.mjs";
 import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appSettings.mjs";
 
 /**
- * Open the single pi-lot-ui application database owned by the stable server.
+ * Open the single oyster application database owned by the stable server.
  *
  * The stable core keeps this service on `state.appStore`, so hot-reloaded
  * application modules receive the same repository registry and connection.

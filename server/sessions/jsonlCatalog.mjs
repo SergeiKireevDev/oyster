@@ -1,5 +1,5 @@
 /**
- * pi-lot-ui — session file access
+ * oyster — session file access
  *
  * The single home for reading pi's session .jsonl files. Every consumer
  * (listing, search, tree views, permalink anchors, forking, checkpoints)

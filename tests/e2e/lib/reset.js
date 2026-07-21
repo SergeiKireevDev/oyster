@@ -15,8 +15,8 @@ const PORT_MIN = Number(process.env.E2E_PORT_MIN ?? 4000);
 const PORT_MAX = Number(process.env.E2E_PORT_MAX ?? 4018);
 
 const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const DEFAULT_IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui:published";
-const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "pi-lot-ui:sqlite";
+const DEFAULT_IMAGE = process.env.PI_UI_IMAGE ?? "oyster:published";
+const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "oyster:sqlite";
 
 let allocatedPort = null;
 let lockFile = null;
@@ -70,8 +70,8 @@ function allocatePort() {
       writeFileSync(file, `${process.pid}\n`);
       allocatedPort = port;
       lockFile = file;
-      container = `pi-lot-e2e-${port}`;
-      agentVolume = `pi-lot-e2e-agent-${port}`;
+      container = `oyster-e2e-${port}`;
+      agentVolume = `oyster-e2e-agent-${port}`;
       base = `http://localhost:${port}`;
       process.env.PI_UI_URL = base;
       process.env.PI_UI_CONTAINER = container;
@@ -80,7 +80,7 @@ function allocatePort() {
     } catch {
       // If a previous crashed run left a lock behind but no matching container
       // exists, reclaim it. Otherwise leave it for the active parallel test.
-      const staleContainer = `pi-lot-e2e-${port}`;
+      const staleContainer = `oyster-e2e-${port}`;
       if (!lockOwnerAlive(file) && !running(staleContainer)) {
         try { rmSync(file, { force: true }); } catch {}
         try {
@@ -90,7 +90,7 @@ function allocatePort() {
           allocatedPort = port;
           lockFile = file;
           container = staleContainer;
-          agentVolume = `pi-lot-e2e-agent-${port}`;
+          agentVolume = `oyster-e2e-agent-${port}`;
           base = `http://localhost:${port}`;
           process.env.PI_UI_URL = base;
           process.env.PI_UI_CONTAINER = container;

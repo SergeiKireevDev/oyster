@@ -37,7 +37,7 @@ Session mutations delegate to capabilities exposed by the configured pi CLI. The
 
 ## Application persistence
 
-`server/persistence/appStore.mjs` opens the separate `pi-lot-ui.sqlite` database and exposes repositories. Migrations, settings, routine and hublot state, and recovery journals live under `server/persistence/`.
+`server/persistence/appStore.mjs` opens the separate `oyster.sqlite` database and exposes repositories. Migrations, settings, routine and hublot state, and recovery journals live under `server/persistence/`.
 
 ## Frontend
 

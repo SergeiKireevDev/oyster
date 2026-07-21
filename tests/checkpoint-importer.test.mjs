@@ -10,7 +10,7 @@ import { createSessionReferenceCodec } from "../server/session-references.mjs";
 function setup(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-checkpoint-import-"));
   const agentDir = join(root, ".pi", "agent");
-  const store = openAppStore({ databasePath: join(agentDir, "pi-lot-ui.sqlite") });
+  const store = openAppStore({ databasePath: join(agentDir, "oyster.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   return {
     root,

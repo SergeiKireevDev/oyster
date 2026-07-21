@@ -22,7 +22,7 @@ Before starting another extraction, confirm the current tree is green:
 ```sh
 npm run build
 npm test
-docker build -t pi-lot-ui .
+docker build -t oyster .
 cd tests/e2e && npm test
 ```
 
@@ -206,7 +206,7 @@ After every migration extraction or behavior change, run the full validation sui
 ```sh
 npm run build
 npm test
-docker build -t pi-lot-ui .
+docker build -t oyster .
 cd tests/e2e && npm test
 ```
 

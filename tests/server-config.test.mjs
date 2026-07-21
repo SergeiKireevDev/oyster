@@ -33,7 +33,7 @@ test("development configuration selects the local SQLite pi build", { skip: !exi
   assert.equal(config.piBin, LOCAL_PI);
   assert.equal(config.persistentStore, "sqlite");
   assert.match(config.sqlitePath, /\.pi\/agent\/sessions\.sqlite$/);
-  assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "pi-lot-ui.sqlite"));
+  assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "oyster.sqlite"));
   assert.ok(Number(config.node.split(".")[0]) >= 22);
 });
 
@@ -44,7 +44,7 @@ test("configuration accepts an explicit executable and JSONL rollback", () => {
   assert.equal(config.piBin, process.execPath);
   assert.equal(config.persistentStore, "jsonl");
   assert.equal(config.sqlitePath, null);
-  assert.match(config.appDbPath, /\.pi\/agent\/pi-lot-ui\.sqlite$/);
+  assert.match(config.appDbPath, /\.pi\/agent\/oyster\.sqlite$/);
   assert.equal(config.node, process.versions.node);
 });
 
@@ -54,7 +54,7 @@ test("SQLite database follows the configured agent or session directory", () => 
   assert.equal(result.status, 0, result.stderr);
   let config = JSON.parse(result.stdout);
   assert.equal(config.sqlitePath, join(agentDir, "sessions.sqlite"));
-  assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "pi-lot-ui.sqlite"));
+  assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "oyster.sqlite"));
 
   const sessionDir = join(tmpdir(), "custom-pi-sessions");
   result = checkConfig({
@@ -65,7 +65,7 @@ test("SQLite database follows the configured agent or session directory", () => 
 });
 
 test("application database accepts an independent PI_UI_DB_PATH", () => {
-  const appDbPath = join(tmpdir(), "custom-pi-lot-ui", "app.sqlite");
+  const appDbPath = join(tmpdir(), "custom-oyster", "app.sqlite");
   const result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_DB_PATH: appDbPath } });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).appDbPath, appDbPath);

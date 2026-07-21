@@ -1,16 +1,16 @@
-# pi-lot-ui — end-to-end test image
+# oyster — end-to-end test image
 #
-# Build:  docker build -t pi-lot-ui .
+# Build:  docker build -t oyster .
 # Run:    docker run -d -p 4000:4000 \
 #           -e PI_UI_TOKEN=<token> \
 #           -v ~/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro \
 #           -v ~/.pi/agent/models.json:/root/.pi/agent/models.json:ro \
-#           --name pi-lot-ui pi-lot-ui
+#           --name oyster oyster
 #
 #         The auth.json/models.json mounts give the pi agent its LLM
 #         credentials — without them the chat gets no answers (model shows
 #         as "unknown"). Alternatively pass -e ANTHROPIC_API_KEY=sk-...
-# Token:  docker logs pi-lot-ui | grep "auth token"
+# Token:  docker logs oyster | grep "auth token"
 # Open:   http://localhost:4000/#token=<TOKEN>
 
 FROM node:22-slim

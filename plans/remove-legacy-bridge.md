@@ -16,7 +16,7 @@ document-level timing in `legacy.js` until they have safe independent owners.
 ```sh
 npm run build
 npm test
-docker build -t pi-lot-ui .
+docker build -t oyster .
 cd tests/e2e && npm test
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Deterministic mock LLM for the pi-lot-ui e2e suite.
+ * Deterministic mock LLM for the oyster e2e suite.
  *
  * Speaks the OpenAI Chat Completions API (`POST /v1/chat/completions`,
  * streaming SSE + `[DONE]`, plus `GET /v1/models`) well enough for pi's
@@ -74,7 +74,7 @@ function serveButtonCommand(port, startupPath) {
     `mkdir -p "$(dirname '${startupPath}')"`,
     `cat > '${startupPath}' <<'STARTUP'`,
     `#!/bin/sh`,
-    `# pi-lot-ui: idempotent`,
+    `# oyster: idempotent`,
     `port=${port}`,
     `curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null && exit 0`,
     `cat > /tmp/hublot-$port.js <<'JS'`,

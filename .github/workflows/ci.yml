@@ -58,7 +58,7 @@ jobs:
         with:
           context: .
           load: true
-          tags: pi-lot-ui:published
+          tags: oyster:published
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

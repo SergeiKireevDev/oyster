@@ -1,5 +1,5 @@
 /**
- * pi-lot-ui — checkpoints, rollback forks and git plumbing
+ * oyster — checkpoints, rollback forks and git plumbing
  *
  * A checkpoint = one commit of every pending workdir change, anchored to the
  * session message it was taken at. Records live in the injected SQLite

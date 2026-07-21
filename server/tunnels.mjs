@@ -1,5 +1,5 @@
 /**
- * pi-lot-ui — tunnel manager
+ * oyster — tunnel manager
  *
  * Spawns and tracks tunnel processes (cloudflared quick tunnels by default)
  * on behalf of the UI, so a session can deterministically expose a local
@@ -660,7 +660,7 @@ const START_SCRIPT_MAX_BYTES = 256 * 1024;
 export function hublotAgentPrompt(hublot, brief) {
   return `Prepare the following service on local port ${hublot.port}:\n${brief}\n\n` +
     `Create an idempotent executable startup script at exactly ${hublot.serviceStartScriptPath}. ` +
-    `It must start with a shebang and the line "# pi-lot-ui: idempotent", safely do nothing ` +
+    `It must start with a shebang and the line "# oyster: idempotent", safely do nothing ` +
     `when the service is already healthy, and recreate the service after a restart. ` +
     `Invoke that exact script to start the service; do not start the service by any other command. ` +
     `Do not open a public tunnel. Whatever serves it must keep running after you exit. ` +
@@ -682,7 +682,7 @@ export function validateAndStoreHublotStartupScript(state, hublot) {
     if (metadata.size < 1 || metadata.size > START_SCRIPT_MAX_BYTES) throw new Error(`startup script must be 1-${START_SCRIPT_MAX_BYTES} bytes`);
     const content = readFileSync(descriptor, "utf8");
     if (!content.startsWith("#!")) throw new Error("startup script must start with a shebang");
-    if (!/^# pi-lot-ui: idempotent$/m.test(content)) throw new Error("startup script must declare the idempotent hublot protocol");
+    if (!/^# oyster: idempotent$/m.test(content)) throw new Error("startup script must declare the idempotent hublot protocol");
     if (content.includes("\0")) throw new Error("startup script must be text");
     const sha256 = createHash("sha256").update(content).digest("hex");
     hublotRepository(state).update(row.id, {

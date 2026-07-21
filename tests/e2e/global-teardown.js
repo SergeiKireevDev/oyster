@@ -16,12 +16,12 @@ const sh = (args) => {
 };
 
 export default async function globalTeardown() {
-  const names = sh(["ps", "-a", "--filter", "name=^pi-lot-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
+  const names = sh(["ps", "-a", "--filter", "name=^oyster-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
   for (const name of names) {
     console.log(`[e2e] removing leftover container ${name}`);
     sh(["rm", "-f", name]);
   }
-  const volumes = sh(["volume", "ls", "--filter", "name=^pi-lot-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+  const volumes = sh(["volume", "ls", "--filter", "name=^oyster-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
   for (const volume of volumes) {
     console.log(`[e2e] removing leftover volume ${volume}`);
     sh(["volume", "rm", "-f", volume]);

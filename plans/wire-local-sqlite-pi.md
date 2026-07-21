@@ -1,8 +1,8 @@
-# Wire the Local SQLite-Enabled pi into pi-lot-ui
+# Wire the Local SQLite-Enabled pi into oyster
 
 ## Goal
 
-Run pi-lot-ui against the SQLite-enabled coding-agent checkout at
+Run oyster against the SQLite-enabled coding-agent checkout at
 `/home/ubuntu/pi-coding-agent`, select `PERSISTENT_STORE=sqlite` explicitly,
 and make saved-session behavior honest and usable when sessions are identified
 by a database plus session ID rather than by one `.jsonl` file per session.
@@ -175,13 +175,13 @@ SQLite-capable pi rather than accidentally falling back to version `0.80.3`.
 ```sh
 npm run build
 npm test
-docker build -f Dockerfile.local-pi --build-context pi-source=/home/ubuntu/pi-coding-agent -t pi-lot-ui:sqlite .
+docker build -f Dockerfile.local-pi --build-context pi-source=/home/ubuntu/pi-coding-agent -t oyster:sqlite .
 cd tests/e2e && npm test
 ```
 
 ## Completion Criteria
 
-- pi-lot-ui launches the built CLI from `/home/ubuntu/pi-coding-agent` and
+- oyster launches the built CLI from `/home/ubuntu/pi-coding-agent` and
   reports `sqlite` as the selected backend.
 - New conversations persist to `sessions.sqlite` and survive runner, server,
   and container replacement without creating session JSONL files.

@@ -9,7 +9,7 @@ import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 test("SQLite and JSONL session identities safely own resources in the separate app database", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-dual-backend-app-refs-"));
-  const appDatabasePath = join(root, "pi-lot-ui.sqlite");
+  const appDatabasePath = join(root, "oyster.sqlite");
   const codingDatabasePath = join(root, "coding-agent-sessions.sqlite");
   const jsonlRoot = join(root, "sessions");
   const jsonlPath = join(jsonlRoot, "project", "session.jsonl");

@@ -7,7 +7,7 @@ tags: backup, recovery, sqlite
 Oyster uses two separately owned data domains:
 
 1. pi's session store, such as `~/.pi/agent/sessions.sqlite`
-2. Oyster's application database, normally `~/.pi/agent/pi-lot-ui.sqlite`
+2. Oyster's application database, normally `~/.pi/agent/oyster.sqlite`
 
 Never replace one with the other.
 
@@ -37,7 +37,7 @@ done
 systemctl --user start pi-ui.service
 ```
 
-Apply the same closed-database rule to `pi-lot-ui.sqlite`.
+Apply the same closed-database rule to `oyster.sqlite`.
 
 ## Restore
 

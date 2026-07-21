@@ -51,7 +51,7 @@ test("credential canary remains only in pi auth.json and is absent after removal
     baseUrl: "http://127.0.0.1:9/v1", api: "openai-completions",
     models: [{ id: "canary-model", name: "Canary Model", reasoning: false, input: ["text"], contextWindow: 1000, maxTokens: 100, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
   } } }));
-  const appDatabase = join(root, "pi-lot-ui.sqlite");
+  const appDatabase = join(root, "oyster.sqlite");
   const appStore = openAppStore({ databasePath: appDatabase });
   appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
   appStore.close();

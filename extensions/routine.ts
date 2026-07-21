@@ -2,7 +2,7 @@
  * routine.ts — pi extension exposing the pi-remote-ui "routines" feature
  * as the "routine" tool the LLM can call directly from the harness.
  *
- * A routine is a durable runnable script definition managed by pi-lot-ui,
+ * A routine is a durable runnable script definition managed by oyster,
  * bound to the session using it and driven by the pi-remote-ui server
  * (`server/server.mjs`) through a tiny protocol:
  *
@@ -81,7 +81,7 @@ export default function routineExtension(pi: ExtensionAPI) {
     name: "routine",
     label: "Routine",
     description:
-      "Manage routines — durable runnable scripts managed by pi-lot-ui and bound to this session, " +
+      "Manage routines — durable runnable scripts managed by oyster and bound to this session, " +
       "with native progression reporting in the pi-remote-ui sidebar. When the user asks to " +
       "'create a routine' for some task, use action=create with a `script` implementing the " +
       "protocol: the script receives one argument, `run` (do the job) or `teardown` (remove " +

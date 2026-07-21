@@ -13,7 +13,7 @@ function stableState() {
       PI_DIR: projectRoot,
       DIRNAME: projectRoot,
       PI_BIN: "pi",
-      PI_AGENT_DIR: "/tmp/pi-lot-ui-dispatch-agent",
+      PI_AGENT_DIR: "/tmp/oyster-dispatch-agent",
       PI_EXTRA_ARGS: [],
       TUNNEL_BIN: "cloudflared",
     },
@@ -23,7 +23,7 @@ function stableState() {
     reloadCount: 1,
     hublotSupervisor: { async reconcile() { return { checked: 0 }; }, start() {}, stop() {} },
     appStore: {
-      path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
+      path: "/tmp/oyster.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
         sessions: { upsert: (owner) => owner }, operations: { listIncomplete: () => [] },
         checkpoints: { load: () => ({}), save() {} },

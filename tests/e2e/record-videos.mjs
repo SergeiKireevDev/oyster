@@ -14,7 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
 
 const TOKEN = "e2e-test-token";
-const CONTROLLER = "pi-lot-video";
+const CONTROLLER = "oyster-video";
 const PORT = 4030;
 const BASE = `http://localhost:${PORT}`;
 const OUT = join(ROOT, "preview-videos");
@@ -26,13 +26,13 @@ async function main() {
   mkdirSync(RAW, { recursive: true });
 
   // build image if needed
-  try { sh(`docker images -q pi-lot-ui`); } catch {
-    sh(`docker build -t pi-lot-ui ${JSON.stringify(ROOT)}`);
+  try { sh(`docker images -q oyster`); } catch {
+    sh(`docker build -t oyster ${JSON.stringify(ROOT)}`);
   }
 
   // start container
   sh(`docker rm -f ${CONTROLLER} 2>/dev/null || true`);
-  sh(`docker run -d --name ${CONTROLLER} -p ${PORT}:4000 -e PI_UI_TOKEN=${TOKEN} -e E2E_MOCK_LLM=1 pi-lot-ui`);
+  sh(`docker run -d --name ${CONTROLLER} -p ${PORT}:4000 -e PI_UI_TOKEN=${TOKEN} -e E2E_MOCK_LLM=1 oyster`);
 
   // wait for it to come up
   let up = false;

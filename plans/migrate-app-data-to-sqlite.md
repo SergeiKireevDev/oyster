@@ -1,16 +1,16 @@
-# Migrate pi-lot-ui Application Data to SQLite
+# Migrate oyster Application Data to SQLite
 
 ## Goal
 
-Make SQLite authoritative for all pi-lot-ui-owned durable data, including checkpoints, routines, hublots, runner descriptors, replay events, and server-level settings.
+Make SQLite authoritative for all oyster-owned durable data, including checkpoints, routines, hublots, runner descriptors, replay events, and server-level settings.
 
 Keep the app database separate from the coding agent's session database:
 
 ```text
-~/.pi/agent/pi-lot-ui.sqlite
+~/.pi/agent/oyster.sqlite
 ```
 
-The coding agent continues to own `sessions.sqlite` (or JSONL in compatibility mode). pi-lot-ui must not add tables to or directly mutate the agent's SQLite schema.
+The coding agent continues to own `sessions.sqlite` (or JSONL in compatibility mode). oyster must not add tables to or directly mutate the agent's SQLite schema.
 
 ## Coding-agent SQLite boundary
 
@@ -21,7 +21,7 @@ The pi agent SQLite model must remain unchanged throughout this migration.
 - Continue reading sessions through the backend-neutral catalog.
 - Continue creating forks and deleting sessions through the coding agent's supported repository operations.
 - Treat the agent's `sessions.parent_session_id`, entries, and active leaf as canonical session lineage.
-- Store only pi-lot-ui-owned resource ownership, checkpoint associations, and recovery metadata in `pi-lot-ui.sqlite`.
+- Store only oyster-owned resource ownership, checkpoint associations, and recovery metadata in `oyster.sqlite`.
 - Any app-side parent or fork-point fields must be optional denormalized metadata for app workflows, never a replacement for or mutation of the agent model.
 
 ## Runtime boundary
@@ -265,13 +265,13 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 1. Add the app database foundation
 
-- [x] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-ui.sqlite`.
+- [x] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`.
 - [x] Create one stable-core-owned database service and expose repositories through `state.appStore`; define deterministic startup, hot-reload reuse, graceful close, and test teardown behavior.
 - [x] Enable WAL, foreign keys, a busy timeout, and `synchronous=NORMAL`.
 - [x] Add numbered, transactional, idempotent schema migrations.
 - [x] Set and document the universal Node version required by `node:sqlite`.
 - [x] Add tests for migrations, constraints, transactions, restart behavior, and concurrent WAL access.
-- [x] Add a static/integration guard proving app migrations and writes target only `pi-lot-ui.sqlite` and leave the coding-agent schema unchanged.
+- [x] Add a static/integration guard proving app migrations and writes target only `oyster.sqlite` and leave the coding-agent schema unchanged.
 
 ### 2. Wire the app store into the stable server core
 
@@ -381,7 +381,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ## Completion criteria
 
-- SQLite is authoritative for every durable piece of pi-lot-ui application data.
+- SQLite is authoritative for every durable piece of oyster application data.
 - The coding agent remains the sole owner of its unchanged session schema and store.
 - Memory contains only live runtime handles, transient connections, timers, queues, and rebuildable caches.
 - Every session-owned checkpoint, routine, and hublot is cascade deleted when its session is deleted.

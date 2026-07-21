@@ -1,11 +1,11 @@
-# Manage pi OAuth from pi-lot-ui
+# Manage pi OAuth from oyster
 
 ## Goal
 
-Extend the existing pi credential workflow so an authenticated pi-lot-ui user can
+Extend the existing pi credential workflow so an authenticated oyster user can
 sign in to and sign out of OAuth-capable providers from the browser. Delegate
 provider discovery, authorization, token exchange, refresh semantics, and
-credential persistence to the SDK owned by the configured `PI_BIN`; pi-lot-ui
+credential persistence to the SDK owned by the configured `PI_BIN`; oyster
 must only adapt Pi's interactive OAuth callbacks to a transient web workflow.
 
 Rename the top-level **API Keys…** workflow to **Credentials…** so API keys and
@@ -24,7 +24,7 @@ provider implementation is unavailable remain visible and removable, but cannot
 start a new sign-in flow.
 
 Pi currently exposes browser authorization, device-code, prompt, selection,
-progress, manual-code, and cancellation callbacks. pi-lot-ui must support all of
+progress, manual-code, and cancellation callbacks. oyster must support all of
 those callback shapes. For callback-server providers used from another machine,
 the UI must support pasting the final redirect URL or authorization code instead
 of assuming the browser can reach a loopback listener on the server host.
@@ -33,19 +33,19 @@ of assuming the browser can reach a loopback listener on the server host.
 
 - Use the configured Pi SDK's `AuthStorage.login()`, `AuthStorage.logout()`, and
   `AuthStorage.getOAuthProviders()` APIs. Do not implement provider token
-  exchanges, refresh logic, PKCE, or direct `auth.json` editing in pi-lot-ui.
+  exchanges, refresh logic, PKCE, or direct `auth.json` editing in oyster.
 - Keep credentials in validated `PI_AGENT_DIR/auth.json`. OAuth access tokens,
   refresh tokens, authorization codes, redirect URLs containing codes, device
   codes, prompt responses, and provider callback state must never enter SQLite,
   browser storage, logs, SSE broadcasts, runner state, telemetry, or durable
-  pi-lot-ui events.
+  oyster events.
 - Authorization URLs, device verification URLs/codes, provider instructions,
   and prompts may be returned only to the authenticated browser participating
   in the transient flow. Retain them in memory only as long as needed.
 - Keep pending flow state on the host-owned application `state` object so an
   `app.mjs` hot reload does not orphan active provider promises. Bound the
   number of flows, prompt/input sizes, polling rate, and lifetime.
-- Every OAuth endpoint requires normal pi-lot-ui authentication. Keep flow IDs,
+- Every OAuth endpoint requires normal oyster authentication. Keep flow IDs,
   authorization codes, and prompt responses in bounded JSON bodies, never URL
   paths or query strings.
 - Generate cryptographically random, one-time flow IDs. Bind every response to a
@@ -67,7 +67,7 @@ of assuming the browser can reach a loopback listener on the server host.
   logout, using the existing all-active-runner restart service. Do not restart
   runners for failed or cancelled flows. Report durable-success/restart-failure
   states honestly without trying to roll credentials back.
-- Never automatically navigate the main pi-lot-ui window to a provider. The
+- Never automatically navigate the main oyster window to a provider. The
   empty-auth startup behavior may open the credentials modal and provider
   chooser, but upstream authorization still requires a clear user-initiated
   link/button that can open a new tab and remains usable when popup blocking is
@@ -268,9 +268,9 @@ npm test
   browser/manual callback, prompt, and selection interactions. On app startup,
   an empty Pi `auth.json` automatically opens the credentials setup workflow
   once without automatically navigating to an upstream provider.
-- Pi—not pi-lot-ui—owns provider OAuth logic, PKCE/state validation, token
+- Pi—not oyster—owns provider OAuth logic, PKCE/state validation, token
   exchange, refresh, and persistence in validated `PI_AGENT_DIR/auth.json`.
-- OAuth credentials and transient authorization material never enter pi-lot-ui
+- OAuth credentials and transient authorization material never enter oyster
   durable storage, logs, events, URLs, runner state, or browser storage.
 - Pending flows are bounded, authenticated, cancellable, expiring, replay-safe,
   hot-reload-safe, and cleaned up on shutdown.

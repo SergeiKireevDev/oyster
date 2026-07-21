@@ -1,5 +1,5 @@
 /**
- * pi-lot-ui — pi runner manager
+ * oyster — pi runner manager
  *
  * One pi process per open session ("runner"). Runners keep working in the
  * background when the browser looks at another session; each SSE client

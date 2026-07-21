@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run every e2e spec against a FRESH mock container: tear down and recreate
-# pi-lot-e2e before each spec so no sessions/state leak between specs.
+# oyster-e2e before each spec so no sessions/state leak between specs.
 #
 # Usage:  bash tests/e2e/run-isolated.sh
 set -euo pipefail
@@ -21,7 +21,7 @@ for spec in "${SPECS[@]}"; do
   echo "  $(basename "$spec")"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   # force a fresh container for this spec
-  docker rm -f pi-lot-e2e >/dev/null 2>&1 || true
+  docker rm -f oyster-e2e >/dev/null 2>&1 || true
   rm -f .e2e-state.json
   if npx playwright test "$spec"; then
     PASS+=("$spec")

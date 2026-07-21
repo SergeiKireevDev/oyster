@@ -13,7 +13,7 @@ test("all runtime contracts require Node 22.19 for the application SQLite store"
   assert.equal(packageJson.engines.node, ">=22.19.0");
   assert.equal(packageLock.packages[""].engines.node, ">=22.19.0");
   assert.match(server, /const MIN_NODE_VERSION = \[22, 19, 0\]/);
-  assert.match(server, /pi-lot-ui requires Node\.js >=/);
+  assert.match(server, /oyster requires Node\.js >=/);
   assert.doesNotMatch(server, /if \(config\.PERSISTENT_STORE === "sqlite"\)[\s\S]*?Node\.js/);
   for (const document of [readme, agents, e2eReadme]) assert.match(document, /Node(?:\.js)?\s*(?:≥|>=)\s*22\.19/);
 });

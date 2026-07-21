@@ -5,11 +5,11 @@ tags: migration, sqlite, recovery
 hidden: true
 ---
 
-This runbook applies only to Oyster's application database, `pi-lot-ui.sqlite`. The coding agent owns its session SQLite/JSONL stores separately; **never copy, replace, delete, or migrate those stores as part of this procedure**.
+This runbook applies only to Oyster's application database, `oyster.sqlite`. The coding agent owns its session SQLite/JSONL stores separately; **never copy, replace, delete, or migrate those stores as part of this procedure**.
 
 ## Paths and prerequisites
 
-The application database is `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-ui.sqlite`. Legacy inputs default to:
+The application database is `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`. Legacy inputs default to:
 
 - `~/.pi/agent/checkpoints.json`
 - `~/.pi/routines/` executable definitions and `bindings.json`
@@ -24,7 +24,7 @@ Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. 
 
    ```sh
    stamp=$(date -u +%Y%m%dT%H%M%SZ)
-   db=${PI_UI_DB_PATH:-$HOME/.pi/agent/pi-lot-ui.sqlite}
+   db=${PI_UI_DB_PATH:-$HOME/.pi/agent/oyster.sqlite}
    mkdir -m 700 "$HOME/pi-ui-backup-$stamp"
    cp -p "$db" "$HOME/pi-ui-backup-$stamp/"
    for sidecar in "$db-wal" "$db-shm"; do test ! -e "$sidecar" || cp -p "$sidecar" "$HOME/pi-ui-backup-$stamp/"; done
@@ -43,7 +43,7 @@ Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. 
    npm run migrate-app-data -- --apply --service-stopped
    ```
 
-A successful apply validates destination rows before renaming each imported source to `*.legacy-backup-<UTC timestamp>`. These files have mode `0444`, are never automatically deleted, and must be retained through at least the next pi-lot-ui release (branded Oyster). Keep the separate pre-cutover backup longer if local policy requires it.
+A successful apply validates destination rows before renaming each imported source to `*.legacy-backup-<UTC timestamp>`. These files have mode `0444`, are never automatically deleted, and must be retained through at least the next oyster release (branded Oyster). Keep the separate pre-cutover backup longer if local policy requires it.
 
 ## Restore the application database
 
@@ -59,13 +59,13 @@ Do not merge SQLite files with filesystem tools. A snapshot taken while the serv
 
 ## Downgrade
 
-Older releases may not understand a database migrated by a newer release. Do not start an older binary against a newer `pi-lot-ui.sqlite`.
+Older releases may not understand a database migrated by a newer release. Do not start an older binary against a newer `oyster.sqlite`.
 
 Preferred downgrade:
 
 1. Stop the service.
 2. Install the older application release.
-3. Restore the `pi-lot-ui.sqlite` snapshot made by that release, including its matching sidecars if present.
+3. Restore the `oyster.sqlite` snapshot made by that release, including its matching sidecars if present.
 4. Start and validate the older release.
 
 If no compatible application-database snapshot exists, keep the newer database aside and restore the dated legacy files to their original names for a legacy-capable release. Copy rather than move the read-only backups, set checkpoint JSON and `bindings.json` to owner read/write (`0600`), and set routine scripts to owner read/write/execute (`0700`). Never point an older release at the newer database, and never treat the coding-agent session store as an application-data backup.

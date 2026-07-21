@@ -7,7 +7,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 
 test("app store creates its database directory and closes idempotently", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-app-store-"));
-  const databasePath = join(root, "nested", "pi-lot-ui.sqlite");
+  const databasePath = join(root, "nested", "oyster.sqlite");
   const store = openAppStore({ databasePath });
   t.after(() => {
     store.close();

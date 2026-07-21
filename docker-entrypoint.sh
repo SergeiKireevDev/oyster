@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-lot-ui container entrypoint.
+# oyster container entrypoint.
 #
 # Normal (production) mode: just runs the UI server.
 #

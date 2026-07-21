@@ -18,7 +18,7 @@ function setup() {
       PI_BIN: "/configured/pi", PERSISTENT_STORE: "sqlite", SQLITE_PATH: "/agent/sessions.sqlite",
     },
     piProcesses: { bin: "/running/pi", persistentStore: "sqlite" },
-    appStore: { path: "/agent/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 1, appliedVersions: [1] } },
+    appStore: { path: "/agent/oyster.sqlite", migrationStatus: { currentVersion: 1, appliedVersions: [1] } },
     sseClients: new Set([{}]),
     reloadCount: 7,
   };
@@ -41,7 +41,7 @@ test("health route reports stable state including the reload count without auth"
     runners: [{ id: "runner-1" }],
     clients: 1,
     reloadCount: 7,
-    appDatabase: { path: "/agent/pi-lot-ui.sqlite", migrations: { currentVersion: 1, appliedVersions: [1] } },
+    appDatabase: { path: "/agent/oyster.sqlite", migrations: { currentVersion: 1, appliedVersions: [1] } },
     pi: { bin: "/running/pi", persistentStore: "sqlite", sqlitePath: "/agent/sessions.sqlite" },
   });
 });

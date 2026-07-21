@@ -19,7 +19,7 @@ export async function importLegacyAppData({
   now = () => new Date().toISOString(),
   backupFile = retainLegacyFileAsReadOnlyBackup,
 } = {}) {
-  if (serviceStopped !== true) throw new Error("legacy import requires the pi-lot-ui service to be stopped");
+  if (serviceStopped !== true) throw new Error("legacy import requires the oyster service to be stopped");
   if (!sessionReferences) throw new Error("session reference codec is required");
   if (typeof resolveOwner !== "function") throw new Error("routine owner resolver is required");
   const apply = mode === "apply";

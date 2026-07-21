@@ -57,7 +57,7 @@ test("dead desired-open service executes its persisted script, persists its new 
   const scriptPath = join(state.config.PI_AGENT_DIR, "hublots", id, "start.sh");
   const pidPath = join(state.config.PI_AGENT_DIR, "hublots", id, "service.pid");
   const port = 4238;
-  const script = `#!/bin/sh\n# pi-lot-ui: idempotent\n${JSON.stringify(process.execPath)} -e 'require("node:http").createServer((q,s)=>s.end("ok")).listen(${port},"127.0.0.1")' >/dev/null 2>&1 &\necho $! > ${JSON.stringify(pidPath)}\n`;
+  const script = `#!/bin/sh\n# oyster: idempotent\n${JSON.stringify(process.execPath)} -e 'require("node:http").createServer((q,s)=>s.end("ok")).listen(${port},"127.0.0.1")' >/dev/null 2>&1 &\necho $! > ${JSON.stringify(pidPath)}\n`;
   mkdirSync(join(state.config.PI_AGENT_DIR, "hublots", id), { recursive: true });
   writeFileSync(scriptPath, script, { mode: 0o700 });
   chmodSync(scriptPath, 0o700);

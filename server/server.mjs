@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * pi-lot-ui — stable core (hot-reload host)
+ * oyster — stable core (hot-reload host)
  *
  * This file owns everything that must SURVIVE a code reload:
  *   - the listening HTTP socket
@@ -83,7 +83,7 @@ function validateConfig(config) {
   const supportedNode = MIN_NODE_VERSION.every((part, index) =>
     currentNode[index] === part || currentNode[index] > part || currentNode.slice(0, index).some((value, prior) => value > MIN_NODE_VERSION[prior]));
   if (!supportedNode) {
-    throw new Error(`pi-lot-ui requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
+    throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
   if (!config.PI_UI_DB_PATH.endsWith(".sqlite")) {
     throw new Error(`PI_UI_DB_PATH must name a .sqlite file: ${config.PI_UI_DB_PATH}`);
@@ -120,7 +120,7 @@ const config = {
   PI_EXTRA_ARGS: piExtraArgs,
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
-  PI_UI_DB_PATH: resolve(process.env.PI_UI_DB_PATH ?? join(homedir(), ".pi", "agent", "pi-lot-ui.sqlite")),
+  PI_UI_DB_PATH: resolve(process.env.PI_UI_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
   SQLITE_PATH: persistentStore === "sqlite"
     ? join(resolve(sessionDirIndex >= 0 && piExtraArgs[sessionDirIndex + 1] ? piExtraArgs[sessionDirIndex + 1] : agentDir), "sessions.sqlite")
     : null,

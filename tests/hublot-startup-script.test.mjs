@@ -46,7 +46,7 @@ test("setup-agent contract names the allocated idempotent script and requires in
 test("validated startup source and SHA-256 become authoritative in SQLite", (t) => {
   const { store, state } = fixture(t);
   const hublot = reserve(state);
-  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\n# Return when healthy; otherwise start detached.\nexit 0\n";
+  const script = "#!/bin/sh\n# oyster: idempotent\n# Return when healthy; otherwise start detached.\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
 
   const validated = validateAndStoreHublotStartupScript(state, {
@@ -64,7 +64,7 @@ test("validated startup source and SHA-256 become authoritative in SQLite", (t) 
 test("missing and mismatched startup artifacts are atomically restored before invocation", (t) => {
   const { root, state } = fixture(t);
   const hublot = reserve(state);
-  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\nexit 0\n";
+  const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
   validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
 
@@ -97,7 +97,7 @@ test("a missing startup script is rematerialized from SQLite contents and hash a
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   let state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
   const hublot = reserve(state);
-  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\necho restored\n";
+  const script = "#!/bin/sh\n# oyster: idempotent\necho restored\n";
   const sha256 = createHash("sha256").update(script).digest("hex");
   writeScript(hublot.service_start_script_path, script);
   validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
@@ -127,7 +127,7 @@ test("a missing startup script is rematerialized from SQLite contents and hash a
 test("rematerialization replaces symlinks without changing their targets", (t) => {
   const { root, state } = fixture(t);
   const hublot = reserve(state);
-  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\nexit 0\n";
+  const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
   validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
   const victim = join(root, "victim.sh");
@@ -145,7 +145,7 @@ test("startup validation rejects unsafe or non-protocol artifacts without persis
   const { root, store, state } = fixture(t);
 
   const nonExecutable = reserve(state, 4174);
-  writeScript(nonExecutable.service_start_script_path, "#!/bin/sh\n# pi-lot-ui: idempotent\n", 0o600);
+  writeScript(nonExecutable.service_start_script_path, "#!/bin/sh\n# oyster: idempotent\n", 0o600);
   assert.throws(() => validateAndStoreHublotStartupScript(state, {
     id: nonExecutable.id, serviceStartScriptPath: nonExecutable.service_start_script_path,
   }), /not executable/);
@@ -158,7 +158,7 @@ test("startup validation rejects unsafe or non-protocol artifacts without persis
 
   const linked = reserve(state, 4176);
   const outside = join(root, "outside.sh");
-  writeScript(outside, "#!/bin/sh\n# pi-lot-ui: idempotent\n");
+  writeScript(outside, "#!/bin/sh\n# oyster: idempotent\n");
   mkdirSync(dirname(linked.service_start_script_path), { recursive: true });
   symlinkSync(outside, linked.service_start_script_path);
   assert.throws(() => validateAndStoreHublotStartupScript(state, {

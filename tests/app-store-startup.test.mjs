@@ -9,7 +9,7 @@ const SERVER = new URL("../server/server.mjs", import.meta.url);
 
 test("an application database migration failure exits before the HTTP server listens", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-invalid-app-store-"));
-  const databasePath = join(root, "pi-lot-ui.sqlite");
+  const databasePath = join(root, "oyster.sqlite");
   writeFileSync(databasePath, "not a sqlite database");
   const result = spawnSync(process.execPath, [
     SERVER.pathname,

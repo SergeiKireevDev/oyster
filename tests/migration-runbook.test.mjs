@@ -12,12 +12,12 @@ test("migration runbook covers backup, restore, downgrade, and failure recovery"
   assert.match(runbook, /--dry-run --service-stopped/);
   assert.match(runbook, /--apply --service-stopped/);
   assert.match(runbook, /legacy_migration_ledger/);
-  assert.match(runbook, /retain(?:ed)? through at least the next pi-lot-ui release/i);
+  assert.match(runbook, /retain(?:ed)? through at least the next oyster release/i);
 });
 
 test("runbook keeps application backups isolated from coding-agent stores", () => {
   assert.match(runbook, /never copy, replace, delete, or migrate those stores/i);
-  assert.match(runbook, /Do not start an older binary against a newer `pi-lot-ui\.sqlite`/);
+  assert.match(runbook, /Do not start an older binary against a newer `oyster\.sqlite`/);
   assert.match(runbook, /database and its sidecars/);
   assert.match(runbook, /legacy sources remain at their original paths/);
   assert.match(readme, /\[application-data migration runbook\]\(docs\/app-data-migration\.md\)/);

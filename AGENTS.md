@@ -1,4 +1,4 @@
-# Agent guidelines for pi-lot-ui
+# Agent guidelines for oyster
 
 ## Bundled pi extensions
 
@@ -38,7 +38,7 @@ This is a zero-dependency Node.js project — there is no install script, no bui
 ### Quick start
 
 ```bash
-git clone <repo-url> pi-lot-ui && cd pi-lot-ui
+git clone <repo-url> oyster && cd oyster
 node server/server.mjs
 ```
 
@@ -56,7 +56,7 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
 | `--pi` | `PI_BIN` | `pi` | pi executable path |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
-| – | `PI_UI_DB_PATH` | `~/.pi/agent/pi-lot-ui.sqlite` | separate SQLite database for pi-lot-ui-owned application data |
+| – | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | separate SQLite database for oyster-owned application data |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |
 
 ### Running as a service

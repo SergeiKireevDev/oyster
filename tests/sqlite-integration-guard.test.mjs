@@ -64,7 +64,7 @@ test("SQLite identity is never reduced to a bare database-path comparison", () =
   assert.deepEqual(offenders, [], `compare full session references through server/session-references.mjs: ${offenders.join(", ")}`);
 });
 
-test("SQLite mutations are isolated to the pi-lot-ui persistence boundary", () => {
+test("SQLite mutations are isolated to the oyster persistence boundary", () => {
   const mutation = /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/;
   const offenders = sources
     .filter(({ text }) => mutation.test(text))
@@ -97,11 +97,11 @@ test("only the app-store owner and read-only session catalog can construct SQLit
   assert.doesNotMatch(catalog, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/);
 });
 
-test("opening and migrating pi-lot-ui.sqlite leaves the coding-agent schema unchanged", (t) => {
+test("opening and migrating oyster.sqlite leaves the coding-agent schema unchanged", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-schema-boundary-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const agentPath = join(root, "sessions.sqlite");
-  const appPath = join(root, "pi-lot-ui.sqlite");
+  const appPath = join(root, "oyster.sqlite");
   const agent = new DatabaseSync(agentPath);
   agent.exec("CREATE TABLE sessions(id TEXT PRIMARY KEY, payload TEXT); INSERT INTO sessions VALUES ('agent-session', 'untouched');");
   const schemaBefore = agent.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all().map((row) => ({ ...row }));

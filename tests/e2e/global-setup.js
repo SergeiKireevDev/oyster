@@ -1,6 +1,6 @@
 // E2E global setup for the parallel suite.
 //
-// Individual tests start their own mock pi-lot-ui containers via lib/reset.js.
+// Individual tests start their own mock oyster containers via lib/reset.js.
 // This setup only prepares the image once and clears stale containers/port locks
 // from interrupted earlier runs. Live tests then allocate ports 4000..4018.
 
@@ -12,8 +12,9 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..");
 const LOCK_DIR = join(HERE, ".port-locks");
-const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui:published";
-const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "pi-lot-ui:sqlite";
+const IMAGE = process.env.PI_UI_IMAGE ?? "oyster:published";
+const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "oyster:sqlite";
+const VERIFIED_IMAGE = "oyster:latest";
 const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? "/home/ubuntu/pi-coding-agent";
 
 const sh = (args, opts = {}) =>
@@ -24,12 +25,12 @@ const imageExists = (image = IMAGE) => { try { return !!sh(["images", "-q", imag
 export default async function globalSetup() {
   // Clean stale parallel-test containers and lock files from previous aborted runs.
   try {
-    const names = sh(["ps", "-a", "--filter", "name=^pi-lot-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
+    const names = sh(["ps", "-a", "--filter", "name=^oyster-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
     for (const name of names) {
       console.log(`[e2e] removing stale container ${name}`);
       try { sh(["rm", "-f", name]); } catch {}
     }
-    const volumes = sh(["volume", "ls", "--filter", "name=^pi-lot-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+    const volumes = sh(["volume", "ls", "--filter", "name=^oyster-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
     for (const volume of volumes) {
       console.log(`[e2e] removing stale volume ${volume}`);
       try { sh(["volume", "rm", "-f", volume]); } catch {}
@@ -38,11 +39,11 @@ export default async function globalSetup() {
   try { rmSync(LOCK_DIR, { recursive: true, force: true }); } catch {}
   mkdirSync(LOCK_DIR, { recursive: true });
 
-  // The verified loop builds the current worktree as `pi-lot-ui` immediately
+  // The verified loop builds the current worktree as `oyster` immediately
   // before E2E. Point the default published-package test tag at that fresh
   // image so an older cached tag cannot run stale UI code.
-  if (!process.env.PI_UI_IMAGE && imageExists("pi-lot-ui")) {
-    sh(["tag", "pi-lot-ui", IMAGE]);
+  if (!process.env.PI_UI_IMAGE && imageExists(VERIFIED_IMAGE)) {
+    sh(["tag", VERIFIED_IMAGE, IMAGE]);
   }
 
   if (!imageExists()) {

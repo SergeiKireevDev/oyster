@@ -27,7 +27,7 @@ Completed so far:
 - ✅ 9.4 tool call/result cards via Svelte-backed stores.
 - ✅ 9.5 streaming assistant update path for text/thinking-only assistant messages.
 - ✅ Extracted and tested `splitTurns()` / `takeTailChunk()` in `public/src/lib/transcriptUtils.js`.
-- ✅ Full validation passed after the latest tranche: `npm run build`, `npm test`, `docker build -t pi-lot-ui .`, and full e2e.
+- ✅ Full validation passed after the latest tranche: `npm run build`, `npm test`, `docker build -t oyster .`, and full e2e.
 - ✅ 9.7 checkpoint iceberg now renders through `CheckpointButton.svelte`; legacy still owns checkpoint API orchestration and placement.
 - ✅ 9.8 permalink UI has a shared `PermalinkButton.svelte` for Svelte-rendered user/assistant messages.
 - ✅ 9.8 permalink entry alignment now annotates rendered transcript messages with `data-entry-id` after full transcript load and uses that before falling back to text matching.
@@ -276,7 +276,7 @@ npm test
 After any behavior-affecting transcript change:
 
 ```sh
-docker build -t pi-lot-ui .
+docker build -t oyster .
 cd tests/e2e && npm test
 ```
 
@@ -321,6 +321,6 @@ Step 9 is complete when:
 ```sh
 npm run build
 npm test
-docker build -t pi-lot-ui .
+docker build -t oyster .
 cd tests/e2e && npm test
 ```

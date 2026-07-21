@@ -17,7 +17,7 @@ Flags take precedence over their corresponding environment variables.
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | Tunnel executable |
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
 | — | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi-owned data directory |
-| — | `PI_UI_DB_PATH` | `~/.pi/agent/pi-lot-ui.sqlite` | Oyster application database |
+| — | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | Oyster application database |
 
 Check startup configuration without serving HTTP:
 

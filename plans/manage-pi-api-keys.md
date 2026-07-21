@@ -2,10 +2,10 @@
 
 ## Goal
 
-Add an **API Keys…** menu entry that lets an authenticated pi-lot-ui user add,
+Add an **API Keys…** menu entry that lets an authenticated oyster user add,
 replace, and remove API keys used by pi. Store credentials in pi's existing
 `$PI_CODING_AGENT_DIR/auth.json` through the SDK associated with the configured
-`PI_BIN`; never copy secrets into pi-lot-ui's SQLite database, browser storage,
+`PI_BIN`; never copy secrets into oyster's SQLite database, browser storage,
 logs, events, or API responses.
 
 This feature manages credentials stored locally for pi. Removing a key from pi
@@ -31,7 +31,7 @@ explicitly. Provider-side revocation remains the user's responsibility.
 - Never include submitted keys in logs, thrown validation messages, SSE events,
   telemetry, runner metadata, or toast text. Clear key input state immediately
   after a request settles.
-- Require normal pi-lot-ui authentication for every credential route. Keep API
+- Require normal oyster authentication for every credential route. Keep API
   keys out of URL paths and query strings; mutation payloads belong in JSON
   request bodies.
 - Validate provider IDs against pi's current model registry, including custom
@@ -178,11 +178,11 @@ cd tests/e2e && npm test
 - An authenticated user can open **API Keys…**, add or replace an API key for a
   provider known to the configured pi installation, and remove a stored API
   key.
-- pi-lot-ui writes credentials only through pi's `AuthStorage` to the configured
+- oyster writes credentials only through pi's `AuthStorage` to the configured
   agent `auth.json`, preserving locking, permissions, OAuth entries, custom
   providers, and concurrent updates.
 - No API response or browser view reveals existing key material or a stable
-  key-derived identifier, and no key is stored in pi-lot-ui SQLite, browser
+  key-derived identifier, and no key is stored in oyster SQLite, browser
   storage, logs, SSE events, or runner state.
 - Every active pi runner restarts after a confirmed mutation so additions,
   replacements, and removals take effect consistently; inactive runners remain

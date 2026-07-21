@@ -1,6 +1,6 @@
-# pi-lot-ui end-to-end tests (Playwright)
+# oyster end-to-end tests (Playwright)
 
-Browser-driven e2e tests that exercise the real UI against a pi-lot-ui **docker
+Browser-driven e2e tests that exercise the real UI against a oyster **docker
 container on port 4000**. Each spec covers one feature. The container runs a
 **bundled deterministic mock LLM** (see `mock-llm/`), so the whole stack —
 UI + agent + model — is **self-contained in the image: no credential mounts,
@@ -17,8 +17,8 @@ no network model calls, fully deterministic**.
 
 ## Prerequisites
 
-- Docker. The suite uses `pi-lot-ui:published` for the existing JSONL scenarios
-  and `pi-lot-ui:sqlite` for the container-replacement contract. It builds
+- Docker. The suite uses `oyster:published` for the existing JSONL scenarios
+  and `oyster:sqlite` for the container-replacement contract. It builds
   missing images automatically; the SQLite build uses `Dockerfile.local-pi`
   with `/home/ubuntu/pi-coding-agent` (override with `PI_SOURCE_CONTEXT`).
 - Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
@@ -61,8 +61,8 @@ port. Both are removed on teardown.
 |---|---|---|
 | `PI_UI_URL` | `http://localhost:4000` | UI base URL |
 | `PI_UI_TOKEN` | `e2e-test-token` | auth token |
-| `PI_UI_IMAGE` | `pi-lot-ui:published` | published-package JSONL image for the existing scenarios |
-| `PI_UI_SQLITE_IMAGE` | `pi-lot-ui:sqlite` | local-source image for the SQLite persistence scenario |
+| `PI_UI_IMAGE` | `oyster:published` | published-package JSONL image for the existing scenarios |
+| `PI_UI_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
 | `PI_SOURCE_CONTEXT` | `/home/ubuntu/pi-coding-agent` | named BuildKit source used when the SQLite image must be built |
 | `PI_UI_CONTAINER` | allocated per test | name for a container the suite starts |
 
