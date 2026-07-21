@@ -2,6 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
+import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -64,37 +65,10 @@ function lifecycleLog(label, data = {}) {
 
 // ------------------------------------------------------------ token
 
-let token = null;
-{
-  const hash = new URLSearchParams(location.hash.slice(1));
-  const query = new URLSearchParams(location.search);
-  const fromUrl = hash.get("token") || query.get("token");
-  if (fromUrl) {
-    localStorage.setItem("pi_ui_token", fromUrl.trim());
-    history.replaceState(null, "", location.pathname);
-  }
-  token = (localStorage.getItem("pi_ui_token") || "").trim() || null;
-  // also carry the token as a cookie: cookies survive proxies that strip
-  // Authorization/custom headers, and EventSource can't send headers at all
-  if (token) {
-    document.cookie = `pi_ui_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
-  }
-}
-
-// Every same-origin API call carries the token as a header instead of in the
-// URL (query tokens leak into proxy logs / history; the server now rejects
-// them on non-GET requests). Wrapping fetch once beats touching ~40 call
-// sites. EventSource and download links still use ?token= — they can't send
-// headers — which the server allows for GETs.
-{
-  const rawFetch = window.fetch.bind(window);
-  window.fetch = (input, opts = {}) => {
-    if (typeof input === "string" && input.startsWith("/") && token) {
-      opts = { ...opts, headers: { "x-auth-token": token, ...(opts.headers || {}) } };
-    }
-    return rawFetch(input, opts);
-  };
-}
+// Auth/token initialization is runtime-owned; legacy receives its current
+// token for transport and EventSource construction.
+const token = initializeAuth();
+installAuthenticatedFetch(token);
 
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
