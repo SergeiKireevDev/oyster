@@ -871,6 +871,42 @@
     overflow-y: auto;
   }
   #cmdPalette.open { display: flex; }
+  #cmdPalette.path {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    max-width: calc(100vw - 16px);
+    max-height: none !important;
+    overflow: visible;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+  #cmdPalette.path .cmd-row {
+    flex: 0 1 auto;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
+  #cmdPalette.path .cmd-row:last-child { border-bottom: 1px solid var(--border); }
+  #cmdPalette.path .cmd-ico { width: auto; font-size: 14px; }
+  #cmdPalette.path .cmd-body { flex: 0 1 auto; }
+  #cmdPalette.path .cmd-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cmdPalette.path .cmd-desc,
+  #cmdPalette.path .cmd-hint { display: none; }
+  #cmdPalette.path .cmd-row:hover,
+  #cmdPalette.path .cmd-row.active { background: var(--accent-dim); border-color: var(--accent); }
+  #cmdPalette.path .cmd-empty {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
   .cmd-row {
     display: flex;
     align-items: center;

@@ -1,5 +1,7 @@
 /** Calculate the viewport-safe command palette position for a target input. */
 export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420, minWidth = 280, maxHeight = 320 } = {}) {
+  maxWidth = Math.min(maxWidth, viewport.innerWidth - gap * 2);
+  minWidth = Math.min(minWidth, maxWidth);
   const width = Math.min(maxWidth, Math.max(minWidth, rect.width));
   let left = rect.left;
   if (left + width > viewport.innerWidth - gap) left = viewport.innerWidth - width - gap;
@@ -13,19 +15,21 @@ export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420
 
 /** Create Svelte palette state from the active command match. */
 export function commandPaletteView(items, match, active) {
-  if (!items.length) return { open: true, match, emptyText: `no command matches ":${match}"`, items: [] };
-  return { open: true, match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, prefix: ":", highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
+  if (!items.length) return { open: true, mode: "command", match, emptyText: `no command matches ":${match}"`, items: [] };
+  return { open: true, mode: "command", match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, prefix: ":", highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
 }
 
 /** Create palette state for path matches or the file-explorer fallback. */
 export function pathPaletteView(items, trigger, active) {
   return {
     open: true,
+    mode: "path",
     match: trigger.text,
     emptyText: items.length ? "" : `no path matches "${trigger.text}"`,
     items: items.map((item, index) => {
-      const label = item.label ?? item.path;
-      const highlighted = label.toLowerCase().startsWith(trigger.text.toLowerCase()) ? trigger.text.length : 0;
+      const label = item.label ?? item.name ?? item.path;
+      const query = trigger.text.slice(trigger.text.lastIndexOf("/") + 1);
+      const highlighted = label.toLowerCase().startsWith(query.toLowerCase()) ? query.length : 0;
       return {
         icon: item.icon ?? (item.directory ? "📁" : "📄"),
         desc: item.desc ?? (item.directory ? "folder" : "file"),

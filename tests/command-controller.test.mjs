@@ -9,13 +9,15 @@ test("command palette navigation wraps active command selection", () => {
 
 test("command palette view marks the active filtered command", () => {
   const view = commandPaletteView([{ name: "file", icon: "📁", desc: "browse" }], "fi", 0);
+  assert.equal(view.mode, "command");
   assert.deepEqual(view.items[0], { icon: "📁", desc: "browse", prefix: ":", highlight: "fi", rest: "le", active: true });
   assert.equal(commandPaletteView([], "x", 0).emptyText, 'no command matches ":x"');
 });
 
 test("path palette view labels files without a command colon", () => {
-  const view = pathPaletteView([{ path: "./src/app.js", directory: false }], { text: "./src/a" }, 0);
-  assert.deepEqual(view.items[0], { icon: "📄", desc: "file", prefix: "", highlight: "./src/a", rest: "pp.js", active: true });
+  const view = pathPaletteView([{ path: "./src/app.js", name: "app.js", directory: false }], { text: "./src/a" }, 0);
+  assert.equal(view.mode, "path");
+  assert.deepEqual(view.items[0], { icon: "📄", desc: "file", prefix: "", highlight: "a", rest: "pp.js", active: true });
 });
 
 test("command palette position stays within the viewport", () => {
@@ -23,6 +25,14 @@ test("command palette position stays within the viewport", () => {
   assert.equal(patch.left, "692px");
   assert.equal(patch.top, "138px");
   assert.equal(patch.bottom, "auto");
+});
+
+test("path palette position expands for pills and clamps to narrow viewports", () => {
+  const wide = commandPalettePosition({ left: 200, width: 400, top: 500, bottom: 530 }, { innerWidth: 1280, innerHeight: 800 }, { minWidth: 860, maxWidth: 860, maxHeight: 480 });
+  assert.equal(wide.width, "860px");
+  const narrow = commandPalettePosition({ left: 10, width: 300, top: 500, bottom: 530 }, { innerWidth: 390, innerHeight: 800 }, { minWidth: 860, maxWidth: 860, maxHeight: 480 });
+  assert.equal(narrow.width, "374px");
+  assert.equal(narrow.left, "8px");
 });
 
 test("command palette position opens upward when there is room", () => {

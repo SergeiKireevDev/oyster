@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 
 export const commandPalette = writable({
   open: false,
+  mode: "command",
   left: "0px",
   top: "auto",
   bottom: "auto",
@@ -17,5 +18,5 @@ export function setCommandPaletteState(patch) {
 }
 
 export function closeCommandPaletteState() {
-  commandPalette.update((state) => ({ ...state, open: false, items: [], emptyText: "" }));
+  commandPalette.update((state) => ({ ...state, open: false, mode: "command", items: [], emptyText: "" }));
 }

@@ -136,9 +136,13 @@ export function createComposerAssembly(deps) {
         ? commandPaletteView(items, state.match, state.active)
         : pathPaletteView(items, state.trigger, state.active));
     };
-    const position = (element) => commandDeps.setPaletteState(commandPalettePosition(element.getBoundingClientRect(), commandDeps.windowTarget));
-    const openCommand = (element, match, trigger) => { state = { mode: "command", target: element, match: match || "", active: 0, trigger }; position(element); render(); };
-    const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element); render(); };
+    const position = (element, mode = state?.mode) => commandDeps.setPaletteState(commandPalettePosition(
+      element.getBoundingClientRect(),
+      commandDeps.windowTarget,
+      mode === "path" ? { maxWidth: 860, minWidth: 860, maxHeight: 480 } : undefined,
+    ));
+    const openCommand = (element, match, trigger) => { state = { mode: "command", target: element, match: match || "", active: 0, trigger }; position(element, "command"); render(); };
+    const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "path"); render(); };
     function close() { requestVersion++; state = null; commandDeps.closePaletteState(); }
     const move = (direction) => {
       if (!state) return;
