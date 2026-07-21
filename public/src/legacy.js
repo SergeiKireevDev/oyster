@@ -1708,7 +1708,8 @@ const routineController = createRoutineController({
   refresh: loadRoutines,
   toast: addToast,
 });
-createRoutineEventController({ windowTarget: window, run: routineController.run }).attach();
+const routineEventController = createRoutineEventController({ windowTarget: window, run: routineController.run });
+routineEventController.attach();
 
 // ------------------------------------------------------------ session picker
 
@@ -2173,5 +2174,6 @@ export function teardownLegacyRuntime() {
   fileExplorerEventController.detach();
   managedHublotEventController.detach();
   hublotSidebarEventController.detach();
+  routineEventController.detach();
   connectionState.lost();
 }
