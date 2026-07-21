@@ -1326,13 +1326,14 @@ createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex }).at
 setupCommandPalette(input);
 
 // global keydown: palette navigation while it's open (capture = fires first)
-createCommandPaletteKeyboardController({
+const commandPaletteKeyboardController = createCommandPaletteKeyboardController({
   documentTarget: document,
   isOpen: () => cmdPalette.classList.contains("open"),
   move: moveCmd,
   run: runActiveCmd,
   close: closeCmdPalette,
-}).attach();
+});
+commandPaletteKeyboardController.attach();
 
 // ------------------------------------------------------------ menu & actions
 
@@ -2157,5 +2158,6 @@ export function teardownLegacyRuntime() {
   settingsChangeController.detach();
   menuEventController.detach();
   composerEventController.detach();
+  commandPaletteKeyboardController.detach();
   connectionState.lost();
 }
