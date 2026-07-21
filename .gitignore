@@ -1,6 +1,6 @@
 .ui-token
 nohup.out
-.routine-rebuild-docker-image.state
+.routine*
 node_modules/
 dist/
 castle/
