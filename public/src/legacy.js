@@ -14,6 +14,7 @@ import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createRuntimeTeardown } from "./runtime/teardownController.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
+import { createEventConnectionController } from "./runtime/eventConnectionController.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -526,55 +527,20 @@ const teardownReconnectWatchdog = registerReconnectWatchdog({
   },
 });
 
-function connect({ replay = true } = {}) {
-  if (!token) { requireToken(); return; }
-  eventStream.close();
-  const connectStarted = performance.now();
-  lastEventAt = Date.now();
-  const skipTranscriptGate = currentRunner && emptySessionRunners.has(currentRunner);
-  setTranscriptGateRequired(!skipTranscriptGate);
-  // Brand-new empty runners have no transcript to replay. Do not enter the
-  // replay gate at all; otherwise a fast first response can be treated like
-  // replay and dropped even though the composer is intentionally enabled.
-  setReplaying(!skipTranscriptGate, skipTranscriptGate ? null : "replay");
-  replayDoneSeen = false;
-  replayBufferedEvents = [];
-  const replayParam = replay ? "1" : "0";
-  lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
-  const eventHandlers = { onopen: async () => {
-    lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
-    connectionState.opened();
-    lifecycleLog("connect:onopen:reloadTranscript:start");
-    await runCanonicalReload({
-      skipTranscriptGate,
-      isReplaying: () => replaying,
-      setReplaying,
-      refreshState,
-      reloadTranscript,
-      onError: (e) => {
-        lifecycleLog("connect:onopen:reloadTranscript:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - connectStarted) });
-        if (!String(e.message).includes("unauthorized")) addToast(`init failed: ${e.message}`, "error");
-      },
-    });
-    lifecycleLog("connect:onopen:reloadTranscript:done", { ms: Math.round(performance.now() - connectStarted) });
+const connect = createEventConnectionController({
+  getToken: () => token, requireToken, close: () => eventStream.close(),
+  setLastEventAt: (value) => { lastEventAt = value; }, setGate: setTranscriptGateRequired, setReplaying,
+  setReplayDoneSeen: (value) => { replayDoneSeen = value; }, setReplayBuffer: (value) => { replayBufferedEvents = value; },
+  getSkipTranscriptGate: () => currentRunner && emptySessionRunners.has(currentRunner), log: lifecycleLog,
+  connect: ({ token, replay }, handlers) => eventStream.connect({ token, runner: currentRunner, replay }, handlers), setSource: (source) => { es = source; },
+  onOpen: async ({ replay, skipTranscriptGate, started }) => {
+    lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); connectionState.opened();
+    await runCanonicalReload({ skipTranscriptGate, isReplaying: () => replaying, setReplaying, refreshState, reloadTranscript,
+      onError: (error) => { if (!String(error.message).includes("unauthorized")) addToast(`init failed: ${error.message}`, "error"); }, });
   },
-  onerror: () => {
-    lifecycleLog("connect:onerror", { ms: Math.round(performance.now() - connectStarted) });
-    connectionState.reconnecting();
-    // EventSource can't see HTTP status codes, so a 401 (bad stored token)
-    // looks identical to a network blip and would retry forever. Probe
-    // /authcheck to tell them apart, at most once per 10s.
-    probeTokenValidity();
-  },
-  onmessage: (ev) => processEventMessage(ev.data, {
-    onReceived: () => { lastEventAt = Date.now(); },
-    dedupe: isDuplicateSseEvent,
-    dispatch: handleEvent,
-    onError: (error, message) => console.error("event handling failed", error, message),
-  }),
-  };
-  es = eventStream.connect({ token, runner: currentRunner, replay }, eventHandlers);
-}
+  onError: () => { connectionState.reconnecting(); probeTokenValidity(); },
+  onMessage: (event) => processEventMessage(event.data, { onReceived: () => { lastEventAt = Date.now(); }, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
+});
 
 // True from (re)connect until the canonical transcript's tail is rendered.
 // This covers BOTH the SSE replay buffer and the live events of a busy
