@@ -14,7 +14,6 @@
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
-  import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
@@ -84,9 +83,6 @@
       {:else if $modalState.content === "confirmPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
-      {:else if $modalState.content === "checkpointModelPicker"}
-        <span class="chip" role="button" tabindex="0" onclick={cancelCheckpointModelPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelCheckpointModelPicker(); }}>Cancel</span>
-        <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
       {:else if $modalState.content === "hublotManager"}
         <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleManagedHublotScope(); }}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>

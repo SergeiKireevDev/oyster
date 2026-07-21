@@ -83,7 +83,7 @@ application; no global dialog store contains runtime callbacks.
 
 ## 3. Give Each Modal Its Own Footer and Actions
 
-- [ ] Move checkpoint-model-picker footer controls from `Overlays.svelte` to
+- [x] Move checkpoint-model-picker footer controls from `Overlays.svelte` to
   `CheckpointModelPickerModal.svelte`, preserving cancel, submit, and model
   selection behavior with a focused test.
 - [ ] Move hublot-manager footer controls from `Overlays.svelte` to

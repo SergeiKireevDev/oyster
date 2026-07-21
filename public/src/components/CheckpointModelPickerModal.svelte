@@ -1,7 +1,9 @@
 <script>
   import {
+    cancelCheckpointModelPicker,
     checkpointModelPicker,
     setCheckpointModel,
+    submitCheckpointModelPicker,
   } from "../stores/checkpointModelPicker.js";
 
   $: selected = $checkpointModelPicker.selected;
@@ -27,4 +29,8 @@
   {#if $checkpointModelPicker.loading}
     <span class="spin" title="loading models">⟳</span>
   {/if}
+</div>
+<div class="m-actions">
+  <span class="chip" role="button" tabindex="0" onclick={cancelCheckpointModelPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelCheckpointModelPicker(); }}>Cancel</span>
+  <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
 </div>
