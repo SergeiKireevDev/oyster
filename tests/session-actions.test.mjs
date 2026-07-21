@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createCurrentRunnerController, createRunnerListController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -124,6 +124,16 @@ test("session open controller previews resumed sessions and marks new runners em
   await open({});
   assert.deepEqual(previews, ["/other.jsonl"]);
   assert.deepEqual(empty, ["new"]);
+});
+
+test("search hit controller reloads a runner already selected before focusing", async () => {
+  const calls = [];
+  const open = createSearchHitSessionController({
+    close: () => calls.push("close"), getSessionId: () => "other", open: async () => ({ id: "current" }), getCurrentRunner: () => "current",
+    setWorkdir: () => {}, reload: async () => calls.push("reload"), focus: () => calls.push("focus"), setAfterTranscript: () => {}, switchRunner: () => {}, toast: () => {},
+  });
+  await open("/session", { sessionId: "target" });
+  assert.deepEqual(calls, ["close", "reload", "focus"]);
 });
 
 test("session actions stop runners with normalized errors", async () => {

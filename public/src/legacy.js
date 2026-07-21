@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createCurrentRunnerController, createRunnerListController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -1966,35 +1966,20 @@ const openConfigPicker = settingsController.openConfig;
 
 // ------------------------------------------------------------ session search
 
-/** Switch to the hit's session (if needed) and scroll to / flash the message
- *  containing the matched text. Rendered messages carry no entry ids, so we
- *  locate the bubble by matching the snippet text, longest form first. */
-async function openSearchHit(sessionPath, hit) {
-  closeModal();
-  if (hit.sessionId === state?.sessionId) {
-    await focusSearchHit(hit);
-    return;
-  }
-
-  const focus = () => { focusSearchHit(hit); };
-
-  try {
-    // attach to the session's runner (spawned in the session's own folder if
-    // it comes from elsewhere); other sessions keep running untouched
-    const r = await openSessionRunner({ sessionPath, dir: hit.sessionCwd || sessionUi.workdir });
-    if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
-    toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
-    if (r.id === currentRunner) {
-      await reloadTranscript();
-      focus();
-    } else {
-      afterTranscript = focus;
-      switchToRunner(r.id);
-    }
-  } catch (e) {
-    toast(`switch failed: ${e.message}`, "error");
-  }
-}
+/** Switch to the hit's session (if needed) and scroll to / flash the message. */
+const searchHitSessionController = createSearchHitSessionController({
+  close: closeModal,
+  getSessionId: () => state?.sessionId,
+  open: ({ sessionPath, dir }) => openSessionRunner({ sessionPath, dir: dir || sessionUi.workdir }),
+  getCurrentRunner: () => currentRunner,
+  setWorkdir,
+  reload: reloadTranscript,
+  focus: focusSearchHit,
+  setAfterTranscript: (callback) => { afterTranscript = callback; },
+  switchRunner: switchToRunner,
+  toast,
+});
+const openSearchHit = searchHitSessionController;
 
 async function focusSearchHit(hit) {
   if (hit.entryId) {

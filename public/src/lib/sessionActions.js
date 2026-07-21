@@ -125,6 +125,27 @@ export function createSessionOpenController({ open, getCurrentRunner, getRunners
   };
 }
 
+/** Switch to a search hit's session before focusing its transcript entry. */
+export function createSearchHitSessionController({ close, getSessionId, open, getCurrentRunner, setWorkdir, reload, focus, setAfterTranscript, switchRunner, toast }) {
+  return async (sessionPath, hit) => {
+    close();
+    if (hit.sessionId === getSessionId()) return focus(hit);
+    try {
+      const runner = await open({ sessionPath, dir: hit.sessionCwd || null });
+      if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
+      toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
+      if (runner.id === getCurrentRunner()) {
+        await reload();
+        return focus(hit);
+      }
+      setAfterTranscript(() => focus(hit));
+      switchRunner(runner.id);
+    } catch (error) {
+      toast(`switch failed: ${error.message}`, "error");
+    }
+  };
+}
+
 /** Stop a runner and normalize the endpoint's error payload. */
 export async function stopSessionRunner(fetchImpl, id) {
   const res = await fetchImpl(`/runners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
