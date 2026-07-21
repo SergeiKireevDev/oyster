@@ -97,8 +97,8 @@ export function createApplicationRuntimeDependencies(browser, stores = {}) {
 let platformEvents;
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => ({
-    runner: currentRunner,
-    sessionId: state?.sessionId ?? null,
+    runner: getCurrentRunner(),
+    sessionId: getSessionState()?.sessionId ?? null,
     replaying: platformEvents?.snapshot().replaying ?? true,
     transcriptGateRequired,
     replayDoneSeen: platformEvents?.snapshot().replayDoneSeen ?? false,
@@ -124,7 +124,7 @@ const gate = $("gate");
 const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = createTransportRuntime({
   browser: { document, storage: localStorage },
   gate,
-  getRunner: () => currentRunner,
+  getRunner: () => getCurrentRunner(),
   onInvalidToken: () => updateHeaderState({ stateInfo: "invalid token" }),
   toast: addToast,
 });
@@ -184,9 +184,9 @@ function pickCheckpointModel(options = {}) {
 
 const checkpointFeature = createCheckpointFeature({
   fetchImpl: fetch,
-  marker: { tick, chatElements: () => transcriptOperations.chatElements(), setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => state?.sessionId, fetchSessionEntries },
-  tree: { fetchImpl: fetch, getState: () => state, getRunners: () => runnersNow, getCurrentRunner: () => currentRunner, getWorkdir: () => sessionUi.workdir, setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
-  controller: { pickModel: pickCheckpointModel, getRunner: () => currentRunner, getSessionId: () => state?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
+  marker: { tick, chatElements: () => transcriptOperations.chatElements(), setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => getSessionState()?.sessionId, fetchSessionEntries },
+  tree: { fetchImpl: fetch, getState: () => getSessionState(), getRunners: () => getRunners(), getCurrentRunner: () => getCurrentRunner(), getWorkdir: () => getWorkdir(), setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
+  controller: { pickModel: pickCheckpointModel, getRunner: () => getCurrentRunner(), getSessionId: () => getSessionState()?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
 });
 const { marker: checkpointMarkerController, tree: checkpointTreeController, controller: checkpointController } = checkpointFeature;
 const placeCheckpointBtn = () => checkpointMarkerController.place();
@@ -202,8 +202,6 @@ const detachCheckpointTreeActions = configureCheckpointTreeActions({
 
 // ------------------------------------------------------------ state / header
 
-let state = null;
-
 const sessionAssembly = createSessionAssembly({
   location,
   history,
@@ -212,15 +210,12 @@ const sessionAssembly = createSessionAssembly({
   updateHeaderState,
   stateApplier: {
     applySessionState,
-    getState: () => state,
-    setState: (next) => { state = next; },
-    getCurrentRunner: () => currentRunner,
     getEmptySessionRunners: () => emptySessionRunners,
     getRoutines: () => routineSidebarController.items,
     routineVisible,
     getTunnelScopeAll: () => tunnelScopeAll,
     hooks: {
-      log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: state?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: state?.messageCount ?? null, pendingMessageCount: state?.pendingMessageCount ?? null, isStreaming: !!state?.isStreaming, isCompacting: !!state?.isCompacting, model: state?.model?.id ?? null, sessionFile: state?.sessionFile ?? null }),
+      log: (sessionChanged, sessionState) => lifecycleLog("applyState", { incomingSessionId: sessionState?.sessionId ?? null, previousSessionId: sessionState?.sessionId ?? null, sessionChanged, messageCount: sessionState?.messageCount ?? null, pendingMessageCount: sessionState?.pendingMessageCount ?? null, isStreaming: !!sessionState?.isStreaming, isCompacting: !!sessionState?.isCompacting, model: sessionState?.model?.id ?? null, sessionFile: sessionState?.sessionFile ?? null }),
       updateAppSession,
       setTranscriptGateRequired: (value) => setTranscriptGateRequired(value),
       setRoutines: routines.set,
@@ -239,14 +234,14 @@ const sessionAssembly = createSessionAssembly({
   },
   open: {
     open: (options) => openSession(fetch, options),
-    getCurrentRunner: () => currentRunner,
-    getRunners: () => runnersNow,
+    getCurrentRunner: () => getCurrentRunner(),
+    getRunners: () => getRunners(),
     preview: null,
     markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
     log: lifecycleLog,
   },
   featureDependencies: ({ sessionOpenController, previewController }) => ({
-    getCurrentRunner: () => currentRunner,
+    getCurrentRunner: () => getCurrentRunner(),
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
     stopSession: (id) => stopSessionRunner(fetch, id),
@@ -262,23 +257,22 @@ const sessionAssembly = createSessionAssembly({
     connect,
   }),
 });
-const applyState = sessionAssembly.applyState;
-const runnerState = sessionAssembly.runnerState;
-let currentRunner = runnerState.currentRunner;
-let runnersNow = runnerState.runners;
-updateAppSession({ currentRunner, runners: runnersNow });
-function setRunner(id) { currentRunner = runnerState.setRunner(id); }
-function setRunnersNow(runners) { runnersNow = runnerState.setRunners(runners); }
-const sessionFeature = sessionAssembly.sessionFeature;
-const previewController = sessionAssembly.previewController;
-const sessionOpenController = sessionAssembly.sessionOpenController;
-function getSessionRuntime() { return sessionFeature.get(); }
+const sessionOperations = sessionAssembly.operations;
+const applyState = sessionOperations.applyState;
+const getSessionState = sessionOperations.getState;
+const getCurrentRunner = sessionOperations.getCurrentRunner;
+const getRunners = sessionOperations.getRunners;
+const setRunner = sessionOperations.setRunner;
+const setRunnersNow = sessionOperations.setRunners;
+updateAppSession({ currentRunner: getCurrentRunner(), runners: getRunners() });
+function getSessionRuntime() { return sessionOperations.getRuntime(); }
 /** hook: session picker (when open) re-renders its indicators */
 let onRunnersUpdate = null;
-const sessionUi = sessionAssembly.sessionUi;
-const setWorkdir = (dir) => sessionUi.setWorkdir(dir);
-const setBusy = (value) => sessionUi.setBusy(value);
-const updateUsage = (message) => sessionUi.updateUsage(message);
+const getWorkdir = sessionOperations.getWorkdir;
+const getBusy = sessionOperations.getBusy;
+const setWorkdir = sessionOperations.setWorkdir;
+const setBusy = sessionOperations.setBusy;
+const updateUsage = sessionOperations.updateUsage;
 
 // ------------------------------------------------------------ event stream
 
@@ -292,8 +286,8 @@ const managedConnection = createManagedEventConnection({
   setReplaying,
   setReplayDoneSeen: (value) => platformEvents.markReplayDone(value),
   setReplayBuffer: (value) => platformEvents.setReplayBuffer(value),
-  getSkipTranscriptGate: () => currentRunner && emptySessionRunners.has(currentRunner),
-  getRunner: () => currentRunner,
+  getSkipTranscriptGate: () => getCurrentRunner() && emptySessionRunners.has(getCurrentRunner()),
+  getRunner: () => getCurrentRunner(),
   log: lifecycleLog,
   onOpen: async ({ replay, skipTranscriptGate, started }) => {
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); managedConnection.state.opened();
@@ -329,7 +323,7 @@ platformEvents = createPlatformEventDispatch({
   setWorkdir,
   refreshHublots: () => loadHublots(),
   refreshRoutines: loadRoutines,
-  getRunners: () => runnersNow,
+  getRunners: () => getRunners(),
   onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
   refreshTree: refreshTreeIfOpen,
   updateRoutine: (...args) => routineSidebarController.update(...args),
@@ -353,7 +347,7 @@ transcriptAssembly.configureSynchronization({
   applyState,
   fetchImpl: fetch,
   sessionFileQuery,
-  clearPreview: previewController.clear,
+  clearPreview: sessionOperations.clearPreview,
   log: lifecycleLog,
   setReplaying,
   takeBufferedEvents: platformEvents.takeBufferedEvents,
@@ -362,14 +356,14 @@ transcriptAssembly.configureSynchronization({
   refreshCheckpointMarkers,
   refreshTree: refreshTreeIfOpen,
   isReplaying: () => platformEvents.isReplaying(),
-  hasRunner: () => Boolean(currentRunner),
+  hasRunner: () => Boolean(getCurrentRunner()),
   onSyncError: (label, error) => {
     if (!String(error.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, error);
   },
   setBusy,
   refreshState,
-  getRunner: () => currentRunner,
-  getSessionFile: () => state?.sessionFile,
+  getRunner: () => getCurrentRunner(),
+  getSessionFile: () => getSessionState()?.sessionFile,
   logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
 const reloadTranscript = transcriptOperations.reloadTranscript;
@@ -402,7 +396,7 @@ function composerInputChanged() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setComposerTextValue(input.value);
-  setBusy(sessionUi.busy); // refresh busy state UI
+  setBusy(getBusy()); // refresh busy state UI
   composerHistory.reset(); // typing exits history navigation
 }
 
@@ -454,7 +448,7 @@ const extensionUiAdapters = createExtensionUiAdapters({
 // the pi process or folder changes
 let commandGuard = createCommandGuard({ rpc, confirm: extensionUiAdapters.confirm });
 
-const promptRpcCommand = (text) => promptCommand(text, sessionUi.busy);
+const promptRpcCommand = (text) => promptCommand(text, getBusy());
 
 async function send() {
   const text = input.value.trim();
@@ -466,7 +460,7 @@ async function send() {
   input.value = "";
   setComposerTextValue("");
   input.style.height = "auto";
-  setBusy(sessionUi.busy); // hide the Steer button again
+  setBusy(getBusy()); // hide the Steer button again
   addUserMessage({ role: "user", content: text });
   transcriptOperations.addLocalEcho(text);
   try {
@@ -642,7 +636,7 @@ async function runMenuAction(action) {
   try {
     if (action === "newSession") {
       // a fresh runner, so the current session keeps running in the background
-      await getSessionRuntime().openAndSwitchSession({ dir: sessionUi.workdir });
+      await getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() });
       addToast("new session");
     } else if (action === "newSessionIn") {
       await showFolderBrowser();
@@ -656,7 +650,7 @@ async function runMenuAction(action) {
       clearMessages();
       for (const m of messages) renderFullMessage(m);
     } else if (action === "restart") {
-      await fetch(`/restart?runner=${encodeURIComponent(currentRunner ?? "")}`, { method: "POST" });
+      await fetch(`/restart?runner=${encodeURIComponent(getCurrentRunner() ?? "")}`, { method: "POST" });
       // blank slate while pi respawns; the pi_started event reloads the
       // resumed session's transcript
       clearMessages();
@@ -689,7 +683,7 @@ const filesRuntime = createFilesRuntime({
     closeModal,
     showHublots: () => showHublots(),
     getShowHidden: () => get(filePicker).showHidden,
-    getWorkdir: () => sessionUi.workdir,
+    getWorkdir: () => getWorkdir(),
     setPath: (path) => { state.picker.curDir = path; },
     resetState: ({ path, onPick, onCancel, returnToHublot }) => Object.assign(state.picker, { curDir: path, showHidden: true, onPick, onCancel, returnToHublot }),
     toast: addToast,
@@ -720,7 +714,7 @@ const filesRuntime = createFilesRuntime({
     updateTitle: (title) => updateModal({ title }),
     openModal,
     getShowHidden: () => get(fileExplorer).showHidden,
-    getWorkdir: () => sessionUi.workdir,
+    getWorkdir: () => getWorkdir(),
     getToken: () => token,
     setPath: (path) => { state.explorer.curPath = path; },
     setEditFile: (path, content) => Object.assign(state.explorer, { editPath: path, editContent: content }),
@@ -742,7 +736,7 @@ const loadFileExplorer = fileExplorerController.load;
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
 function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
-  return filePickerController.show({ path: sessionUi.workdir, onPick, onCancel, returnToHublot });
+  return filePickerController.show({ path: getWorkdir(), onPick, onCancel, returnToHublot });
 }
 
 const detachFilePickerActions = configureFilePickerActions({
@@ -773,7 +767,7 @@ function insertIntoComposer(text) {
 
 async function showFolderBrowser() {
   Object.assign(folderBrowserState, {
-    browsePath: sessionUi.workdir,
+    browsePath: getWorkdir(),
     showHidden: true,
     done: null,
   });
@@ -830,7 +824,7 @@ async function sendAgentMessage(text) {
 
 
 // Always open in the current session's working directory.
-const showFileExplorer = () => fileExplorerController.show(sessionUi.workdir);
+const showFileExplorer = () => fileExplorerController.show(getWorkdir());
 
 const uploadExplorerFiles = () => fileExplorerController.chooseFiles(fileExplorerState.curPath);
 
@@ -857,7 +851,7 @@ const detachFileExplorerActions = configureFileExplorerActions({
 let tunnelScopeAll = false;
 
 // Unbound tunnels (opened before session binding existed) stay visible.
-const tunnelVisible = (tunnel) => hublotVisible(tunnel, tunnelScopeAll, state?.sessionId);
+const tunnelVisible = (tunnel) => hublotVisible(tunnel, tunnelScopeAll, getSessionState()?.sessionId);
 
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
 const tunnelForm = { desc: "" };
@@ -874,7 +868,7 @@ const showHublots = hublotManagerController.show;
 
 const hublotController = createHublotFeature({ createController: createHublotController, dependencies: {
   createHublot: (options) => createHublot(fetch, options),
-  getSessionId: () => state?.sessionId ?? null,
+  getSessionId: () => getSessionState()?.sessionId ?? null,
   setDescription: (desc) => { tunnelForm.desc = desc; updateHublotManager({ desc }); },
   setCreating: (creating) => updateHublotManager({ creating }),
   close: closeModal,
@@ -941,13 +935,13 @@ const detachFilesActions = configureFilesActions({
 // progression by printing `::progress <0-100> <message>` lines on stdout.
 
 function routineVisible(routine) {
-  return isRoutineVisible(routine, tunnelScopeAll, state?.sessionId);
+  return isRoutineVisible(routine, tunnelScopeAll, getSessionState()?.sessionId);
 }
 
 const routineSidebarController = createRoutineSidebarController({
   listRoutines: () => listRoutines(fetch),
   isVisible: routineVisible,
-  getSessionId: () => state?.sessionId ?? null,
+  getSessionId: () => getSessionState()?.sessionId ?? null,
   getScopeAll: () => tunnelScopeAll,
   setRoutines: routines.set,
   setTotal: routinesTotal.set,
@@ -966,7 +960,7 @@ function loadRoutines() {
 
 const routineController = createRoutineController({
   runRoutine: (options) => runRoutine(fetch, options),
-  getSessionId: () => state?.sessionId ?? null,
+  getSessionId: () => getSessionState()?.sessionId ?? null,
   refresh: loadRoutines,
   toast: addToast,
 });
@@ -986,14 +980,14 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     return { ok: res.ok, status: res.status, data: await res.json() };
   },
   async fetchSessions(folder) {
-    const dir = folder ?? sessionUi.workdir;
+    const dir = folder ?? getWorkdir();
     const query = dir ? `${folder ? "path" : "dir"}=${encodeURIComponent(dir)}` : "";
     const response = await fetch(`/sessions${query ? `?${query}` : ""}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `failed to list sessions (${response.status})`);
     return data.sessions ?? [];
   },
-  getRunners: () => runnersNow,
+  getRunners: () => getRunners(),
   toast: addToast,
   stopRunner: (id) => getSessionRuntime().stopSession(id),
   async removeSession(path) {
@@ -1008,7 +1002,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   close: closeModal,
   openSessionAtSearchHit: (sessionPath, hit) => getSessionRuntime().openSessionAtSearchHit(sessionPath, hit),
   async loadInitialPickerData() {
-    const dirQ = sessionUi.workdir ? `?dir=${encodeURIComponent(sessionUi.workdir)}` : "";
+    const dirQ = getWorkdir() ? `?dir=${encodeURIComponent(getWorkdir())}` : "";
     const res = await fetch(`/sessions${dirQ}`);
     if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], folders: [], currentFolder: null }; }
     const { sessions } = await res.json();
@@ -1021,23 +1015,23 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     return { sessions, folders, currentFolder };
   },
   getCurrentSessionId: (sessions) => {
-    const currentSessionFile = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
-    return sessions.find((session) => session.path === currentSessionFile)?.id ?? state?.sessionId;
+    const currentSessionFile = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;
+    return sessions.find((session) => session.path === currentSessionFile)?.id ?? getSessionState()?.sessionId;
   },
   setRunnersUpdateHandler: (handler) => { onRunnersUpdate = handler; },
-  getWorkdir: () => sessionUi.workdir,
+  getWorkdir: () => getWorkdir(),
   open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
   async openChosenSession(fullChoice) {
     try {
-      await getSessionRuntime().openAndSwitchSession({ sessionPath: fullChoice.path, dir: fullChoice.cwd || sessionUi.workdir });
+      await getSessionRuntime().openAndSwitchSession({ sessionPath: fullChoice.path, dir: fullChoice.cwd || getWorkdir() });
       addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
     } catch (e) {
       addToast(`switch failed: ${e.message}`, "error");
     }
   },
-  getSessionId: () => state?.sessionId,
-  openSearchSession: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || sessionUi.workdir }),
-  getCurrentRunner: () => currentRunner,
+  getSessionId: () => getSessionState()?.sessionId,
+  openSearchSession: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || getWorkdir() }),
+  getCurrentRunner: () => getCurrentRunner(),
   setWorkdir,
   reloadTranscript,
   focusSearchHit,
@@ -1067,7 +1061,7 @@ async function focusSearchHit(hit) {
 
 const transcriptRuntime = transcriptAssembly.configureFeature({
   fetchEntries: fetchSessionEntries,
-  getSessionId: () => state?.sessionId,
+  getSessionId: () => getSessionState()?.sessionId,
   getOrigin: () => location.origin,
   copy: copyTextToClipboard,
   prompt: extensionUiAdapters.input,
@@ -1082,7 +1076,7 @@ const { focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
 /** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
 /** Read the active session's persisted entries for checkpoint and permalink adapters. */
 async function fetchSessionEntries() {
-  const path = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+  const path = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;
   if (!path) throw new Error("session not saved yet");
   return fetchPersistedSessionEntries(fetch, path);
 }
@@ -1107,7 +1101,7 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   extensionUiAdapters,
   refreshState: () => getSessionRuntime().refreshState(),
   toast: addToast,
-  getState: () => state,
+  getState: getSessionState,
   reloadTranscript,
   documentTarget: document,
   windowTarget: window,
@@ -1115,9 +1109,9 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   setCarouselPage,
   loadScopedResources: () => { loadHublots(); loadRoutines(); },
   loadCheckpointTree,
-  getRunners: () => runnersNow,
-  getCurrentRunner: () => currentRunner,
-  getWorkdir: () => sessionUi.workdir,
+  getRunners: () => getRunners(),
+  getCurrentRunner: () => getCurrentRunner(),
+  getWorkdir: () => getWorkdir(),
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
   hublotsEl: $("hublots"),
   treebarEl: $("treebar"),
@@ -1149,7 +1143,7 @@ const runtimeAttachments = createRuntimeAttachments({
 /** URL-driven boot: /s/<sessionId> attaches to that session's runner before
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
-const boot = sessionAssembly.configureBoot({
+sessionAssembly.configureBoot({
   lookupSession: async (sessionId) => {
     const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
     const data = await res.json().catch(() => ({}));
@@ -1163,6 +1157,7 @@ const boot = sessionAssembly.configureBoot({
   log: lifecycleLog,
   toast: addToast,
 });
+const boot = sessionOperations.boot;
 
 const detachRuntimeEventAdapters = () => {
   carouselEventRegistration.detach();
@@ -1203,7 +1198,7 @@ const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
 
 const featureAssembly = createFeatureAssembly({
   platform: connectionCoordinator,
-  sessions: sessionFeature,
+  sessions: sessionAssembly,
   transcript: transcriptFeature,
   features: {},
 });

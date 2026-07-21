@@ -40,7 +40,7 @@ inspect transcript elements, or own transcript-local mutable state.
 
 - [x] Create `features/sessions/createSessionAssembly.js` and move route parsing, runner state, session UI state, preview, open/switch, and refresh construction into it.
 - [x] Move session boot and session picker integration behind the session assembly boundary.
-- [ ] Expose only boot, current runner/session accessors, runner lists, refresh, open/switch operations, and narrow event callbacks.
+- [x] Expose only boot, current runner/session accessors, runner lists, refresh, open/switch operations, and narrow event callbacks.
 - [ ] Add remount tests for runner state, picker cancellation, route synchronization, and session switching.
 
 **Acceptance:** the root owns no runner, route, picker, preview, or session

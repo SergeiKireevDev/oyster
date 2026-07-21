@@ -47,14 +47,16 @@ function dependencies(pathname = "/s/session-1") {
 
 test("session assembly constructs route runner UI preview open and refresh boundaries", () => {
   const assembly = createSessionAssembly(dependencies());
-  assert.equal(assembly.route.sessionId, "session-1");
-  assert.equal(typeof assembly.syncUrlToSession, "function");
-  assert.equal(typeof assembly.runnerState.setRunner, "function");
-  assert.equal(typeof assembly.sessionUi.setWorkdir, "function");
-  assert.equal(typeof assembly.previewController.renderNow, "function");
-  assert.equal(typeof assembly.sessionOpenController, "function");
-  assert.equal(typeof assembly.applyState, "function");
-  assert.equal(typeof assembly.sessionFeature.get, "function");
+  const operations = assembly.operations;
+  assert.equal(operations.getCurrentRunner(), null);
+  assert.deepEqual(operations.getRunners(), []);
+  assert.equal(typeof operations.getState, "function");
+  assert.equal(typeof operations.getWorkdir, "function");
+  assert.equal(typeof operations.openSession, "function");
+  assert.equal(typeof operations.switchRunner, "function");
+  assert.equal(typeof operations.refresh, "function");
+  assert.equal(typeof operations.applyState, "function");
+  assert.equal(typeof operations.clearPreview, "function");
 
   const refresh = assembly.configureRefresh({ rpc: async () => ({}), applyState() {}, onError() {} });
   assert.equal(typeof refresh, "function");
@@ -70,6 +72,7 @@ test("session assembly constructs route runner UI preview open and refresh bound
   });
   assert.equal(typeof boot, "function");
   assert.equal(assembly.configureBoot({}), boot);
+  assert.equal(typeof operations.boot, "function");
   assembly.teardown();
 });
 

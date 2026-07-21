@@ -19,12 +19,22 @@ export function createSessionAssembly(deps) {
   const route = parseSessionRoute(deps.location.pathname);
   const syncUrlToSession = (sessionId) => syncSessionUrl({ location: deps.location, history: deps.history, sessionId });
   const runnerState = createSessionRunnerState({ storage: deps.storage, updateAppSession: deps.updateAppSession });
+  let state = null;
+  let currentRunner = runnerState.currentRunner;
+  let runners = runnerState.runners;
   const sessionUi = createSessionUiRuntime({ updateAppSession: deps.updateAppSession, updateHeaderState: deps.updateHeaderState });
   const previewController = createSessionPreviewController(deps.preview);
   const sessionOpenController = createSessionOpenController({ ...deps.open, preview: previewController });
   const applyState = createSessionStateApplier({
     ...deps.stateApplier,
-    hooks: { ...deps.stateApplier.hooks, syncUrlToSession },
+    getState: () => state,
+    setState: (next) => { state = next; },
+    getCurrentRunner: () => currentRunner,
+    hooks: {
+      ...deps.stateApplier.hooks,
+      log: (sessionChanged) => deps.stateApplier.hooks.log(sessionChanged, state),
+      syncUrlToSession,
+    },
   });
   const sessionFeature = createLazySessionFeature({
     createRuntime: createSessionRuntime,
@@ -34,15 +44,29 @@ export function createSessionAssembly(deps) {
   let pickerRuntime = null;
   let bootController = null;
 
-  return {
-    route,
-    syncUrlToSession,
-    runnerState,
-    sessionUi,
-    previewController,
-    sessionOpenController,
+  const operations = {
+    boot: (...args) => bootController(...args),
+    getState: () => state,
+    getCurrentRunner: () => currentRunner,
+    getRunners: () => runners,
+    getWorkdir: () => sessionUi.workdir,
+    getBusy: () => sessionUi.busy,
+    setRunner: (id) => { currentRunner = runnerState.setRunner(id); return currentRunner; },
+    setRunners: (next) => { runners = runnerState.setRunners(next); return runners; },
+    getRuntime: () => sessionFeature.get(),
+    openSession: (...args) => sessionFeature.get().openSession(...args),
+    switchRunner: (...args) => sessionFeature.get().switchRunner(...args),
+    refresh: (...args) => refresher?.(...args),
     applyState,
-    sessionFeature,
+    clearPreview: () => previewController.clear(),
+    renderPreview: () => previewController.renderNow(),
+    setWorkdir: (dir) => sessionUi.setWorkdir(dir),
+    setBusy: (value) => sessionUi.setBusy(value),
+    updateUsage: (message) => sessionUi.updateUsage(message),
+  };
+
+  return {
+    operations,
     configureRefresh(refreshDependencies) {
       return refresher ??= createSessionStateRefresher(refreshDependencies);
     },
