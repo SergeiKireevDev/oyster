@@ -59,6 +59,17 @@ export function createCarouselController({
 
 /** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
 /** Coordinate header drawer chips with desktop sidebars and mobile carousel pages. */
+/** Register carousel global listeners once and expose their teardown. */
+export function registerCarouselEvents({ register, state, handlers }) {
+  if (state.attached) return () => {};
+  const remove = register(handlers);
+  state.attached = true;
+  return () => {
+    remove();
+    state.attached = false;
+  };
+}
+
 export function createCarouselHeaderController({ isDesktop, hublots, treebar, loadHublots, loadCheckpointTree, carousel }) {
   function toggleHublots() {
     if (isDesktop()) {

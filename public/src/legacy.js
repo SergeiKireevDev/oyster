@@ -8,7 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
-import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController } from "./runtime/carouselController.js";
+import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2778,19 +2778,19 @@ function switchToAdjacentRunner(dir) {
 }
 
 function attachSwipeListeners() {
-  if (window._piSwipeAttached) return;
-  // capture phase: fires BEFORE the drawer's scroll container sees it, so
-  // horizontal swipes over an open drawer aren't swallowed by overflow-y
-  registerSwipeAndResizeEvents({
-    documentTarget: document,
-    windowTarget: window,
-    onTouchStart: swipeController.onTouchStart,
-    onTouchMove: swipeController.onTouchMove,
-    onTouchEnd: swipeController.onTouchEnd,
-    onTouchCancel: swipeController.onTouchCancel,
-    onResize: applyCarousel,
+  registerCarouselEvents({
+    state: window._piCarouselEvents ??= {},
+    register: registerSwipeAndResizeEvents,
+    handlers: {
+      documentTarget: document,
+      windowTarget: window,
+      onTouchStart: swipeController.onTouchStart,
+      onTouchMove: swipeController.onTouchMove,
+      onTouchEnd: swipeController.onTouchEnd,
+      onTouchCancel: swipeController.onTouchCancel,
+      onResize: applyCarousel,
+    },
   });
-  window._piSwipeAttached = true;
 }
 
 const carouselHeaderController = createCarouselHeaderController({

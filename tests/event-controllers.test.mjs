@@ -1,12 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
   assert.equal(swipeAxis(40, 10), "h");
   assert.equal(swipeAxis(10, -40), "v");
+});
+
+test("carousel listener registration is idempotent and teardown-capable", () => {
+  const state = {};
+  let registrations = 0;
+  let removals = 0;
+  const register = () => { registrations++; return () => removals++; };
+  const remove = registerCarouselEvents({ register, state, handlers: {} });
+  registerCarouselEvents({ register, state, handlers: {} });
+  assert.equal(registrations, 1);
+  remove();
+  assert.equal(removals, 1);
+  assert.equal(state.attached, false);
 });
 
 test("carousel header controller toggles desktop drawers and mobile pages", () => {
