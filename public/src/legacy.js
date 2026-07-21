@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2182,11 +2182,9 @@ window.addEventListener("pi-file-explorer-browse", (event) => loadFileExplorer(e
 window.addEventListener("pi-file-explorer-edit", (event) => editExplorerFile(event.detail));
 window.addEventListener("pi-file-explorer-save", () => saveExplorerFile());
 window.addEventListener("pi-file-explorer-upload", () => uploadExplorerFiles());
+window.addEventListener("pi-file-explorer-back-list", () => loadFileExplorer(fileExplorerState.curPath));
+window.addEventListener("pi-file-explorer-back-hublots", () => showHublots().catch((e) => toast(e.message, "error")));
 
-setFileExplorerHandlers({
-  backToList: () => loadFileExplorer(fileExplorerState.curPath),
-  backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
-});
 
 // Tunnels are bound to the session they were opened in; the modal and the
 // hublot sidebar show the current session's tunnels by default, with a

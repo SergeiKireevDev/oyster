@@ -1,9 +1,4 @@
-let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-
-export function setFileExplorerHandlers(handlers) {
-  fileExplorerHandlers = handlers ?? {};
-}
 
 export function setSessionPickerHandlers(handlers) {
   sessionPickerHandlers = handlers ?? {};
@@ -51,13 +46,5 @@ export function loadPickedSessionFolder(folder) {
 
 export function cancelSessionPicker() {
   return sessionPickerHandlers.cancel?.();
-}
-
-export function backToExploredList() {
-  return fileExplorerHandlers.backToList?.();
-}
-
-export function backToHublotsFromExplorer() {
-  return fileExplorerHandlers.backToHublots?.();
 }
 
