@@ -328,6 +328,22 @@ The wrapper/factory work above does **not** by itself satisfy this section:
   is the only runtime entry and is no more than 400 lines; remove
   `appRuntimeImplementation.js` after no-reference checks.
 
+  **Status correction (2026-07-14):** `appComposition.js` is only a thin
+  re-export while `appRuntimeImplementation.js` remains large; this checkbox
+  was checked prematurely. The following concrete moves remain required:
+
+  - [x] Extract transport/EventSource lifecycle code from
+    `appRuntimeImplementation.js` into `platform/` and delete the root block.
+  - [ ] Extract transcript controller assembly from the root into
+    `features/transcript/` and delete the corresponding root construction.
+  - [ ] Extract session controller assembly from the root into
+    `features/sessions/` and delete the corresponding root construction.
+  - [ ] Move remaining feature-controller construction blocks from the root
+    into their feature factory modules, then remove the root imports.
+  - [ ] Replace the implementation module with an `appComposition.js` wiring
+    module under 400 lines, and add a line-count/import-boundary regression
+    test that prevents regression.
+
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
 reviewable wiring module (a few hundred lines), and every moved feature has a
 fresh mount → teardown → mount lifecycle test.

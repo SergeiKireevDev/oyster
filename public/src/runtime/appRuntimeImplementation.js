@@ -7,7 +7,8 @@ import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./transcriptRuntime.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./eventStream.js";
+import { createConnectionStateTransitions, createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./eventStream.js";
+import { createEventSourceTransport } from "../platform/createEventSourceTransport.js";
 import { installDebugHooks } from "./debugHooks.js";
 import { createDelayedTaskRegistry } from "./delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
@@ -461,7 +462,7 @@ const updateUsage = (message) => sessionUi.updateUsage(message);
 
 let connected = false;
 let es = null;
-const eventStream = createEventStreamRuntime();
+const eventStream = createEventSourceTransport();
 const connectionState = createConnectionStateTransitions({
   setConnected: (value) => { connected = value; updateAppSession({ connected }); },
   setStatus: (stateInfo) => updateHeaderState({ stateInfo }),
