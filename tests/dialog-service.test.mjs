@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
+import { readFileSync } from "node:fs";
 import {
   createDialogService,
   emptyConfirmPrompt,
@@ -8,6 +9,16 @@ import {
   emptyEditorPrompt,
   emptyTextPrompt,
 } from "../public/src/runtime/dialogService.js";
+
+test("text prompt body and footer consume the scoped dialog service", () => {
+  const modal = readFileSync(new URL("../public/src/components/TextPromptModal.svelte", import.meta.url), "utf8");
+  const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
+  assert.match(modal, /getDialogService\(\)/);
+  assert.match(modal, /dialogs\.(?:submitText|cancelText|setTextValue)/);
+  assert.doesNotMatch(modal, /stores\/dialogs\.js/);
+  assert.match(overlays, /onclick=\{dialogs\.cancelText\}/);
+  assert.match(overlays, /onclick=\{dialogs\.submitText\}/);
+});
 
 test("dialog service instances own independent prompt presentation state", () => {
   const first = createDialogService();
@@ -30,6 +41,25 @@ test("dialog service instances own independent prompt presentation state", () =>
 
   first.teardown();
   second.teardown();
+});
+
+test("text prompt replacement and teardown settle pending promises", async () => {
+  const calls = [];
+  const dialogs = createDialogService();
+  dialogs.configureModalShell({ open: (options) => calls.push(["open", options]), close: () => calls.push(["close"]) });
+
+  const replaced = dialogs.openText("First", "", "old");
+  const submitted = dialogs.openText("Second", "placeholder", "new");
+  assert.equal(await replaced, null);
+  dialogs.setTextValue("changed");
+  dialogs.submitText();
+  assert.equal(await submitted, "changed");
+
+  const cancelledByTeardown = dialogs.openText("Third");
+  dialogs.teardown();
+  assert.equal(await cancelledByTeardown, null);
+  assert.equal(calls.filter(([name]) => name === "open").length, 3);
+  assert.equal(calls.filter(([name]) => name === "close").length, 2);
 });
 
 test("dialog service teardown resets only its own state", () => {

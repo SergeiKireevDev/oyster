@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 
 export const emptyTextPrompt = Object.freeze({ title: "", placeholder: "", value: "" });
 export const emptyEditorPrompt = Object.freeze({ title: "", placeholder: "", value: "" });
@@ -18,19 +18,48 @@ export function createDialogService({ createStore = writable } = {}) {
   const confirmPrompt = createStore({ ...emptyConfirmPrompt });
   const optionPicker = createStore({ ...emptyDialogOptionPicker });
   let disposed = false;
+  let modalShell = { open() {}, close() {} };
+  let pendingText = null;
+
+  const settleText = (value) => {
+    const resolve = pendingText;
+    pendingText = null;
+    resolve?.(value);
+    textPrompt.set({ ...emptyTextPrompt });
+    modalShell.close();
+  };
 
   return Object.freeze({
     textPrompt,
     editorPrompt,
     confirmPrompt,
     optionPicker,
+    configureModalShell(shell) {
+      if (disposed) return () => {};
+      modalShell = shell;
+      return () => { if (modalShell === shell) modalShell = { open() {}, close() {} }; };
+    },
+    openText(title, placeholder = "", prefill = "") {
+      if (disposed) return Promise.resolve(null);
+      pendingText?.(null);
+      return new Promise((resolve) => {
+        pendingText = resolve;
+        textPrompt.set({ title, placeholder: placeholder || "", value: prefill || "" });
+        modalShell.open({ title, content: "textPrompt" });
+      });
+    },
+    setTextValue: (value) => !disposed && textPrompt.update((state) => ({ ...state, value })),
+    cancelText: () => settleText(null),
+    submitText: () => settleText(get(textPrompt).value),
     setTextPrompt: (state) => !disposed && textPrompt.set(state),
     setEditorPrompt: (state) => !disposed && editorPrompt.set(state),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
     setOptionPicker: (state) => !disposed && optionPicker.set(state),
     teardown() {
       if (disposed) return;
+      settleText(null);
       disposed = true;
+      modalShell = { open() {}, close() {} };
       textPrompt.set({ ...emptyTextPrompt });
       editorPrompt.set({ ...emptyEditorPrompt });
       confirmPrompt.set({ ...emptyConfirmPrompt });

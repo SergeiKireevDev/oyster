@@ -1,11 +1,9 @@
 <script>
   import { onMount, tick } from "svelte";
-  import {
-    cancelTextPrompt,
-    setTextPromptValue,
-    submitTextPrompt,
-    textPrompt,
-  } from "../stores/dialogs.js";
+  import { getDialogService } from "../runtime/dialogServiceContext.js";
+
+  const dialogs = getDialogService();
+  const textPrompt = dialogs.textPrompt;
 
   let inputEl;
 
@@ -19,9 +17,9 @@
   type="text"
   placeholder={$textPrompt.placeholder}
   value={$textPrompt.value}
-  oninput={(event) => setTextPromptValue(event.currentTarget.value)}
+  oninput={(event) => dialogs.setTextValue(event.currentTarget.value)}
   onkeydown={(event) => {
-    if (event.key === "Enter") submitTextPrompt();
-    else if (event.key === "Escape") cancelTextPrompt();
+    if (event.key === "Enter") dialogs.submitText();
+    else if (event.key === "Escape") dialogs.cancelText();
   }}
 />

@@ -62,7 +62,7 @@ event, and remounting cannot invoke a disposed runtime.
 - [x] Add a dialog-service Svelte context provider in `App.svelte`, and pass
   the same service to `startAppRuntime()`. Test mount → teardown → mount creates
   fresh services.
-- [ ] Move text-prompt open, cancel, and submit promise handling from
+- [x] Move text-prompt open, cancel, and submit promise handling from
   `stores/dialogs.js` into the dialog service. Update `TextPromptModal.svelte`
   and its footer to consume context; test replacement and teardown settlement.
 - [ ] Move editor-prompt open, cancel, and submit promise handling into the

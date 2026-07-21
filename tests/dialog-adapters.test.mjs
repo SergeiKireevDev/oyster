@@ -1,31 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createDialogAdapters } from "../public/src/platform/createDialogAdapters.js";
+import { createDialogService } from "../public/src/runtime/dialogService.js";
 
 function harness() {
   const calls = [];
   let dialogController, optionController;
-  let text = {}, editor = {};
+  let editor = {};
+  const dialogs = createDialogService();
   const adapters = createDialogAdapters({
+    dialogService: dialogs,
     configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
     configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
-    setTextPrompt: (next) => { text = next; }, getTextPrompt: () => text,
     setEditorPrompt: (next) => { editor = next; }, getEditorPrompt: () => editor,
     setConfirmPrompt: (next) => calls.push(["confirmState", next]),
     setOptionPicker: (next) => calls.push(["optionState", next]),
-    emptyPrompt: {}, emptyEditor: {}, emptyConfirm: {}, emptyOptionPicker: {},
+    emptyEditor: {}, emptyConfirm: {}, emptyOptionPicker: {},
     openModal: (options) => calls.push(["open", options]), closeModal: () => calls.push(["close"]),
     updateModal: (options) => calls.push(["update", options]),
     findElement: () => ({ classList: { contains: (name) => name === "open" } }),
     setTitle: (title) => calls.push(["title", title]),
   });
-  return { adapters, calls, get dialogController() { return dialogController; }, get optionController() { return optionController; } };
+  return { adapters, dialogs, calls, get dialogController() { return dialogController; }, get optionController() { return optionController; } };
 }
 
 test("dialog adapters compose modal shell prompts option picker and extension UI", async () => {
   const h = harness();
   const input = h.adapters.input("Input", "placeholder", "prefill");
-  h.dialogController.submitText();
+  h.dialogs.submitText();
   assert.equal(await input, "prefill");
   const selected = h.adapters.select("Pick", ["one"]);
   h.optionController.choose(0);
@@ -33,6 +35,7 @@ test("dialog adapters compose modal shell prompts option picker and extension UI
   h.adapters.modal.showSettings(); h.adapters.modal.update({ title: "Changed" }); h.adapters.modal.close();
   assert.equal(h.adapters.modal.isOverlayOpen(), true);
   h.adapters.teardown();
+  h.dialogs.teardown();
 });
 
 test("dialog resolver state is instance scoped and teardown cancels pending prompts", async () => {
@@ -46,7 +49,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   assert.equal(first.optionController.open, undefined);
   const second = harness();
   const input = second.adapters.input("Input", "", "fresh");
-  second.dialogController.cancelText();
+  second.dialogs.cancelText();
   assert.equal(await input, null);
   const editor = second.adapters.editor("Editor", "", "draft");
   second.dialogController.cancelEditor();
@@ -58,10 +61,12 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   second.dialogController.answerConfirm(true);
   assert.equal(await confirmation, true);
   second.adapters.teardown();
+  second.dialogs.teardown();
 
   const third = harness();
   const remountedEditor = third.adapters.editor("Editor", "", "new instance");
   third.dialogController.submitEditor();
   assert.equal(await remountedEditor, "new instance");
   third.adapters.teardown();
+  third.dialogs.teardown();
 });

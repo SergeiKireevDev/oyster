@@ -15,7 +15,8 @@
   import Toasts from "./Toasts.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
-  import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
+  import { answerConfirmPrompt, cancelEditorPrompt, submitEditorPrompt } from "../stores/dialogs.js";
+  import { getDialogService } from "../runtime/dialogServiceContext.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
@@ -26,6 +27,8 @@
   import { toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
   import { cancelOptionPicker } from "../stores/optionPicker.js";
   import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
+
+  const dialogs = getDialogService();
 </script>
 
 <CarouselDots />
@@ -75,8 +78,8 @@
           onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelOptionPicker(); }}
         >Cancel</span>
       {:else if $modalState.content === "textPrompt"}
-        <span class="chip" role="button" tabindex="0" onclick={cancelTextPrompt} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelTextPrompt(); }}>Cancel</span>
-        <button class="btn" style="padding:6px 16px;" onclick={submitTextPrompt}>OK</button>
+        <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelText} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelText(); }}>Cancel</span>
+        <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitText}>OK</button>
       {:else if $modalState.content === "editorPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={cancelEditorPrompt} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelEditorPrompt(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={submitEditorPrompt}>OK</button>

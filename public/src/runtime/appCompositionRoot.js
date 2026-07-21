@@ -30,7 +30,7 @@ import { setComposerTextValue } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
-import { configureDialogController, confirmPrompt, editorPrompt, emptyDialogStates, textPrompt } from "../stores/dialogs.js";
+import { configureDialogController, confirmPrompt, editorPrompt, emptyDialogStates } from "../stores/dialogs.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { configureOptionPickerController, emptyOptionPicker, optionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
@@ -51,7 +51,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, find } = browser;
-  const { uiActions } = stores;
+  const { uiActions, dialogs: dialogService } = stores;
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -375,15 +375,13 @@ function refreshState() {
 const input = composerOperations.input;
 
 const dialogAdapters = createDialogAdapters({
+  dialogService,
   configureDialogController,
   configureOptionPickerController,
-  setTextPrompt: textPrompt.set,
-  getTextPrompt: () => get(textPrompt),
   setEditorPrompt: editorPrompt.set,
   getEditorPrompt: () => get(editorPrompt),
   setConfirmPrompt: confirmPrompt.set,
   setOptionPicker: optionPicker.set,
-  emptyPrompt: emptyDialogStates.emptyPrompt,
   emptyEditor: emptyDialogStates.emptyEditor,
   emptyConfirm: emptyDialogStates.emptyConfirm,
   emptyOptionPicker,

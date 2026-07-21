@@ -2,7 +2,7 @@ import { createExtensionUiAdapters } from "../runtime/extensionUiAdapters.js";
 
 /** Creates the instance-scoped dialog, modal-shell, resolver, and extension UI boundary. */
 export function createDialogAdapters(deps) {
-  const pending = { text: null, editor: null, confirm: null, option: null };
+  const pending = { editor: null, confirm: null, option: null };
   let tornDown = false;
   const settle = (kind, value, empty, setState) => {
     const resolve = pending[kind];
@@ -11,11 +11,8 @@ export function createDialogAdapters(deps) {
     setState(empty);
     deps.closeModal();
   };
-  const openText = (title, placeholder = "", prefill = "") => new Promise((resolve) => {
-    pending.text?.(null); pending.text = resolve;
-    deps.setTextPrompt({ title, placeholder: placeholder || "", value: prefill || "" });
-    deps.openModal({ title, content: "textPrompt" });
-  });
+  const detachModalShell = deps.dialogService.configureModalShell({ open: deps.openModal, close: deps.closeModal });
+  const openText = (...args) => deps.dialogService.openText(...args);
   const openEditor = (title, placeholder = "", prefill = "") => new Promise((resolve) => {
     pending.editor?.(null); pending.editor = resolve;
     deps.setEditorPrompt({ title, placeholder: placeholder || "", value: prefill || "" });
@@ -32,9 +29,7 @@ export function createDialogAdapters(deps) {
     deps.openModal({ title, content: "optionPicker" });
   });
   const detachDialogController = deps.configureDialogController({
-    openText, openEditor, openConfirm,
-    cancelText: () => settle("text", null, deps.emptyPrompt, deps.setTextPrompt),
-    submitText: () => settle("text", deps.getTextPrompt().value, deps.emptyPrompt, deps.setTextPrompt),
+    openEditor, openConfirm,
     cancelEditor: () => settle("editor", null, deps.emptyEditor, deps.setEditorPrompt),
     submitEditor: () => settle("editor", deps.getEditorPrompt().value, deps.emptyEditor, deps.setEditorPrompt),
     answerConfirm: (answer) => settle("confirm", answer, deps.emptyConfirm, deps.setConfirmPrompt),
@@ -60,7 +55,7 @@ export function createDialogAdapters(deps) {
       if (tornDown) return;
       tornDown = true;
       for (const kind of Object.keys(pending)) { pending[kind]?.(kind === "confirm" ? false : null); pending[kind] = null; }
-      detachDialogController(); detachOptionController();
+      detachDialogController(); detachOptionController(); detachModalShell();
     },
   };
 }
