@@ -156,7 +156,10 @@ export function createSessionRoutes({
           removeRuntime: (stoppedRunners) => {
             for (const runner of stoppedRunners) {
               state.runners.delete(runner.id);
-              if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
+              if (state.defaultRunnerId === runner.id) {
+                state.defaultRunnerId = null;
+                state.appSettings?.setDefaultRunnerId(null);
+              }
             }
           },
           broadcast: () => runnersChanged(),

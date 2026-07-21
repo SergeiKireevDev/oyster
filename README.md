@@ -109,6 +109,10 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 
 A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.
 
+### Mutable-setting precedence
+
+`PI_DIR`/`--dir` is the validated startup default. After `POST /workdir` changes the current directory, that absolute path is stored in `app_settings.current_workdir` and takes precedence on later starts. The selected default runner ID is likewise stored in `app_settings.default_runner_id`. Missing, malformed, or type-invalid persisted values are ignored in favor of the startup workdir or no default runner; valid persisted mutable values never override unrelated startup configuration.
+
 `npm test` includes a process-level contract against the exact local pi path:
 it creates a SQLite conversation with an offline mock model, stops pi, and
 restores the same session with `--continue`. Environments intentionally testing

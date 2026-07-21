@@ -14,7 +14,11 @@ test("workdir validates confinement, switches state, and spawns the selected run
   const root = await mkdtemp(join(tmpdir(), "workdir-route-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const file = join(root, "file"); await writeFile(file, "x");
-  const state = { config: { TOKEN: "x", PI_DIR: root, DIRNAME: root }, currentDir: "/old" };
+  const persisted = [];
+  const state = {
+    config: { TOKEN: "x", PI_DIR: root, DIRNAME: root }, currentDir: "/old",
+    appSettings: { setCurrentWorkdir(value) { persisted.push(value); return value; } },
+  };
   const spawned = [];
   const route = createWorkdirRoutes({
     state, requestContext: createRequestContext(state),
@@ -25,6 +29,7 @@ test("workdir validates confinement, switches state, and spawns the selected run
   const invalid = res(); await route(req(file), invalid); assert.equal(invalid.status, 400);
   const changed = res(); await route(req(root), changed);
   assert.equal(changed.status, 200); assert.equal(state.currentDir, root);
+  assert.deepEqual(persisted, [root]);
   assert.deepEqual(spawned, [{ dir: root }]);
   assert.deepEqual(changed.body, { workdir: root, runner: { id: "r2", dir: root } });
 });

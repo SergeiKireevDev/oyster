@@ -26,6 +26,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
   const migrationStatus = migrate(database);
   const repositories = Object.freeze({
     settings: Object.freeze({
+      get: (key) => {
+        const row = database.prepare("SELECT key, value, updated_at FROM app_settings WHERE key = ?").get(key);
+        return row ? { ...row } : null;
+      },
       list: () => database.prepare("SELECT key, value, updated_at FROM app_settings ORDER BY key").all().map((row) => ({ ...row })),
       set: (key, value, updatedAt) => database.prepare(`
         INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)

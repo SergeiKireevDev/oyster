@@ -24,6 +24,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openAppStore } from "./persistence/appStore.mjs";
+import { createAppSettings } from "./persistence/appSettings.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -150,16 +151,20 @@ const appStore = openAppStore({ databasePath: config.PI_UI_DB_PATH });
 const recoveredOperationCount = appStore.reconcileInterruptedOperations();
 const interruptedRoutineRunCount = appStore.reconcileInterruptedRoutineRuns();
 const appHydration = appStore.hydrate();
+const appSettings = createAppSettings({ repository: appStore.repositories.settings, startupWorkdir: config.PI_DIR });
+const hydratedSettings = appSettings.hydrate();
 
 const state = {
   config,
   appStore,
   /** Rebuildable caches hydrated without starting any OS process. */
-  appSettings: new Map(appHydration.settings.map((entry) => [entry.key, entry])),
+  appSettings,
   incompleteOperations: new Map(appHydration.incompleteOperations.map((entry) => [entry.id, entry])),
   recoveredOperationCount,
   /** cwd for the pi process (changed via POST /workdir) */
-  currentDir: config.PI_DIR,
+  // Persisted mutable settings override startup defaults when valid.
+  currentDir: hydratedSettings.currentWorkdir,
+  defaultRunnerId: hydratedSettings.defaultRunnerId,
   /** @type {Map<string, import('node:child_process').ChildProcess>} ephemeral hublot process handles keyed by persistent process id */
   hublotProcessHandles: new Map(),
   /** @type {Set<http.ServerResponse>} open SSE responses */
@@ -171,7 +176,7 @@ const state = {
    *  Global server events are NOT buffered/replayed: reconnecting clients
    *  rebuild state from replay_done + the GET endpoints, and replaying
    *  stale one-shot events (toasts etc.) would be wrong. Per-runner output
-   *  replay lives in runners.mjs (runner.buffer). */
+   *  replay lives in the runner_events repository. */
   broadcast(line) {
     for (const res of state.sseClients) {
       if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);

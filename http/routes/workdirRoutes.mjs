@@ -15,7 +15,7 @@ export function createWorkdirRoutes({ state, requestContext, spawnRunner, runner
       let directory = false;
       try { directory = statSync(target).isDirectory(); } catch {}
       if (!directory) { json(res, 400, { error: `not a directory: ${target}` }); return; }
-      state.currentDir = target;
+      state.currentDir = state.appSettings?.setCurrentWorkdir(target) ?? target;
       logger.log(`[pi-ui] workdir changed to ${target}, spawning a runner there`);
       const runner = spawnRunner({ dir: target });
       json(res, 200, { workdir: target, runner: runnerInfo(runner) });

@@ -124,7 +124,14 @@ export function createRunnerManager(state, {
     }));
   }
   const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1);
-  if (persistedDefault) state.defaultRunnerId = persistedDefault.id;
+  if (state.defaultRunnerId && !state.runners.has(state.defaultRunnerId)) {
+    state.defaultRunnerId = null;
+    state.appSettings?.setDefaultRunnerId(null);
+  }
+  if (!state.defaultRunnerId && persistedDefault) {
+    state.defaultRunnerId = persistedDefault.id;
+    state.appSettings?.setDefaultRunnerId(persistedDefault.id);
+  }
   for (const runner of state.runners.values()) {
     ensureRunnerRuntimeFields(runner);
     if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
@@ -430,6 +437,7 @@ export function createRunnerManager(state, {
       if (!r) r = spawnRunner({ dir: state.currentDir });
       state.defaultRunnerId = r.id;
       runnerRepository?.setDefault(r.id);
+      state.appSettings?.setDefaultRunnerId(r.id);
     }
     return r;
   }

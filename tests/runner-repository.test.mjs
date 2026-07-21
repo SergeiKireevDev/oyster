@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
+import { createAppSettings } from "../persistence/appSettings.mjs";
 import { createPiProcessLauncher } from "../pi-processes.mjs";
 import { createRunnerManager, RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../runners.mjs";
 import { createSessionReferenceCodec } from "../session-references.mjs";
@@ -36,6 +37,7 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
     sessionReferences,
     serverEvent() {},
   };
+  state.appSettings = createAppSettings({ repository: store.repositories.settings, startupWorkdir: root, now: () => "setting-time" });
   const processes = [];
   state.piProcesses = createPiProcessLauncher({
     config: state.config,
@@ -79,6 +81,7 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
 
   manager.defaultRunner();
   assert.equal(store.repositories.runners.find(runner.id).is_default, 1);
+  assert.equal(state.appSettings.hydrate().defaultRunnerId, runner.id);
   processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "state-response", success: true, command: "get_state", data: { sessionId: "session-1", sessionName: "Named runner" } })}\n`);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal(store.repositories.runners.find(runner.id).session_name, "Named runner");
