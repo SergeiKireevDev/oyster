@@ -321,7 +321,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
 - [x] Move transcript controller construction, stream dispatch, and reload
   wiring into `features/transcript/createTranscriptFeature.js`; delete the
   placeholder wrapper from the root.
-- [ ] Move EventSource/RPC/reconnect state and construction into
+- [x] Move EventSource/RPC/reconnect state and construction into
   `platform/connectionCoordinator.js`, leaving only coordinator construction
   in the root.
 - [ ] Split the root into feature assembly modules until `appComposition.js`

@@ -18,7 +18,7 @@ import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependenc
 import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
-import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
+import { createPlatformConnection } from "../platform/createPlatformConnection.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
 import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
@@ -496,7 +496,7 @@ const connect = createEventConnectionController({
   onMessage: (event) => processEventMessage(event.data, { onReceived: () => { lastEventAt = Date.now(); }, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
 });
 
-const connectionCoordinator = createConnectionCoordinator({
+const connectionCoordinator = createPlatformConnection({
   connect,
   disconnect: () => eventStream.close(),
   refreshState: (...args) => refreshState(...args),
