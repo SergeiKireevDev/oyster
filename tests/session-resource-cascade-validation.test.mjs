@@ -86,3 +86,61 @@ test("deleting one session removes all and only its checkpoints, routines, runs,
   assert.equal(store.repositories.routines.findByName("global.sh").owner_id, null);
   assert.equal(store.repositories.hublots.find("hublot-global").owner_id, null);
 });
+
+test("failed agent deletion preserves every owned durable resource and skips destructive callbacks", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-failed-agent-preservation-"));
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const reference = { backend: "sqlite", id: "session-failed", storagePath: "/sessions/agent.sqlite" };
+  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "owner" });
+  store.repositories.checkpoints.record(reference, { hash: "hash", anchorId: "anchor", sessionRef: reference, timestamp: "checkpoint" });
+  store.repositories.routines.upsert({ id: "routine-failed", ownerId: owner.id, name: "failed.sh", script: "echo preserved", cwd: "/work", now: "routine" });
+  store.repositories.routines.createRun({ id: "run-failed", routineId: "routine-failed", mode: "run", startedAt: "run" });
+  store.repositories.routines.updateProgress("run-failed", 55, "preserve me");
+  store.repositories.routines.appendLog("run-failed", "stdout", "durable log", "logged");
+  store.repositories.hublots.create({
+    id: "hublot-failed", ownerId: owner.id, port: 4310, workdir: "/work", serviceKind: "self_served",
+    status: "open", desiredState: "open", publicUrl: "https://preserved.test", createdAt: "hublot",
+  });
+  store.repositories.hublots.appendLifecycleEvent({ hublotId: "hublot-failed", status: "open", desiredState: "open", publicUrl: "https://preserved.test", createdAt: "event" });
+  store.repositories.hublots.upsertProcess({ id: "process-failed", hublotId: "hublot-failed", role: "tunnel", pid: 8310, status: "running", startedAt: "process" });
+  store.repositories.runners.create({
+    id: "runner-failed0", ownerId: owner.id, dir: "/work", sessionBackend: reference.backend, sessionId: reference.id,
+    sessionStoragePath: reference.storagePath, desiredState: "stopped", lastStatus: "stopped", createdAt: "runner",
+  });
+  store.repositories.runnerEvents.append({ runnerId: "runner-failed0", sseId: "runner-event", payload: '{"preserved":true}', createdAt: "runner-event" });
+  const snapshot = () => ({
+    checkpoints: store.repositories.checkpoints.listForSession(reference),
+    routine: store.repositories.routines.findByName("failed.sh"),
+    run: store.repositories.routines.findRun("run-failed"),
+    logs: store.repositories.routines.listLogs("run-failed"),
+    hublot: store.repositories.hublots.find("hublot-failed"),
+    history: store.repositories.hublots.listLifecycleEvents("hublot-failed"),
+    processes: store.repositories.hublots.listProcesses("hublot-failed"),
+    runner: store.repositories.runners.find("runner-failed0"),
+    replay: store.repositories.runnerEvents.list("runner-failed0"),
+  });
+  const before = snapshot();
+  const destructiveCalls = [];
+  const workflow = createSessionDeletionWorkflow({
+    appStore: store, ensureSessionOwner: () => owner, operationId: () => "failed-agent-delete", now: () => "failed",
+  });
+
+  await assert.rejects(() => workflow({
+    reference,
+    stopRunners: () => ["runner-failed0"],
+    stopRoutines: () => ["failed.sh"],
+    deleteAgentSession: () => { throw new Error("agent store refused deletion"); },
+    closeHublots: () => destructiveCalls.push("hublots"),
+    deleteRoutines: () => destructiveCalls.push("routines"),
+    removeRuntime: () => destructiveCalls.push("runtime"),
+    broadcast: () => destructiveCalls.push("broadcast"),
+  }), /agent store refused deletion/);
+
+  assert.deepEqual(snapshot(), before);
+  assert.deepEqual(destructiveCalls, []);
+  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }).status, "deleting");
+  const operation = store.repositories.operations.find("failed-agent-delete");
+  assert.equal(operation.status, "failed");
+  assert.equal(operation.owner_id, owner.id);
+});

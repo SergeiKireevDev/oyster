@@ -373,7 +373,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify repeated service failure triggers backoff and crash-loop protection rather than an unbounded spawn loop.
 - [x] Verify runner replay and selected workdir survive restart.
 - [x] Verify deleting a session removes all and only its checkpoints, routines, runs, logs, hublots, and lifecycle records.
-- [ ] Verify a failed agent deletion preserves all owned resources.
+- [x] Verify a failed agent deletion preserves all owned resources.
 - [ ] Verify a crash after agent deletion completes the cascade on restart.
 - [ ] Verify fork deletion does not delete ancestor-owned resources.
 - [ ] Verify both SQLite and JSONL session backends can safely reference the app database.
