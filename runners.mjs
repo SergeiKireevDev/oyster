@@ -11,7 +11,8 @@
  *   {
  *     id:          "r<n>"   – handle used by clients (?runner=id)
  *     dir:         string   – cwd the pi process runs in
- *     sessionFile: string?  – session .jsonl this runner is attached to
+ *     sessionRef:  object?  – backend-neutral persisted session identity
+ *     sessionFile: string?  – JSONL compatibility path (never SQLite DB path)
  *     sessionId:   string?  – its session id (from get_state)
  *     sessionName: string?  – its session name (from get_state)
  *     busy:        boolean  – streaming/compacting right now
@@ -46,11 +47,21 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-export function createRunnerManager(state) {
-  const { config, serverEvent } = state;
+export function createRunnerManager(state, { spawnImpl = spawn } = {}) {
+  const { config, serverEvent, sessionReferences } = state;
+  if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // id -> runner
   if (!state.runnerSeq) state.runnerSeq = 0;
+  for (const runner of state.runners.values()) {
+    if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
+      runner.sessionRef = sessionReferences.validate({
+        backend: "jsonl",
+        id: runner.sessionId,
+        storagePath: runner.sessionFile,
+      });
+    }
+  }
 
   // one-time migration from the single-process era: a pre-runner pi process
   // may survive a hot reload as state.pi; its stdout listeners belong to old
@@ -69,8 +80,15 @@ export function createRunnerManager(state) {
 
   function runnerInfo(r) {
     return {
-      id: r.id, dir: r.dir, sessionFile: r.sessionFile, sessionId: r.sessionId,
-      sessionName: r.sessionName, busy: r.busy, alive: !!r.proc,
+      id: r.id,
+      dir: r.dir,
+      sessionRef: r.sessionRef ?? null,
+      sessionKey: r.sessionRef ? sessionReferences.serialize(r.sessionRef) : null,
+      sessionFile: r.sessionRef?.backend === "jsonl" ? r.sessionRef.storagePath : null,
+      sessionId: r.sessionId,
+      sessionName: r.sessionName,
+      busy: r.busy,
+      alive: !!r.proc,
     };
   }
 
@@ -123,9 +141,16 @@ export function createRunnerManager(state) {
     else if (msg.type === "response" && msg.success) {
       if (msg.command === "get_state" && msg.data) {
         const d = msg.data;
-        const changed = runner.sessionFile !== d.sessionFile ||
-          runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
-        runner.sessionFile = d.sessionFile ?? runner.sessionFile;
+        let nextReference = runner.sessionRef ?? null;
+        if (d.sessionId && d.sessionFile) {
+          nextReference = sessionReferences.validate({ backend: "jsonl", id: d.sessionId, storagePath: d.sessionFile });
+        } else if (d.sessionId && config.PERSISTENT_STORE === "sqlite") {
+          nextReference = sessionReferences.validate({ backend: "sqlite", id: d.sessionId, storagePath: config.SQLITE_PATH });
+        }
+        const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
+        const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
+        runner.sessionRef = nextReference;
+        runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
         runner.sessionId = d.sessionId ?? runner.sessionId;
         runner.sessionName = d.sessionName ?? null;
         runner.busy = !!(d.isStreaming || d.isCompacting);
@@ -152,12 +177,14 @@ export function createRunnerManager(state) {
     }
   }
 
-  function spawnRunner({ dir, sessionPath = null }) {
+  function spawnRunner({ dir, sessionRef = null }) {
+    const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
     const runner = {
       id: `r${++state.runnerSeq}`,
       dir,
-      sessionFile: sessionPath,
-      sessionId: null,
+      sessionRef: reference,
+      sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
+      sessionId: reference?.id ?? null,
       sessionName: null,
       busy: false,
       proc: null,
@@ -180,9 +207,14 @@ export function createRunnerManager(state) {
     }
     runner.lastSpawnAt = now;
     runner.startCount++;
-    const args = ["--mode", "rpc", ...config.PI_EXTRA_ARGS];
+    const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
+    const args = ["--mode", "rpc", ...sqliteResumeArgs, ...config.PI_EXTRA_ARGS];
     console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
-    const proc = spawn(config.PI_BIN, args, { cwd: runner.dir, stdio: ["pipe", "pipe", "pipe"] });
+    const proc = spawnImpl(config.PI_BIN, args, {
+      cwd: runner.dir,
+      env: { ...process.env, PERSISTENT_STORE: config.PERSISTENT_STORE ?? "jsonl" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     runner.proc = proc;
 
     // health watchdog bookkeeping: only procs started by watchdog-aware
@@ -223,13 +255,12 @@ export function createRunnerManager(state) {
       }
     });
 
-    // resume the runner's session after a restart (fresh runners with a
-    // requested sessionPath also land here). pi handles a prompt arriving
-    // right behind switch_session concurrently, and the switch then discards
-    // the run — so hold every other command back until the resume completes.
-    if (runner.sessionFile) {
+    // JSONL resumes retain the RPC switch contract. SQLite identity is not a
+    // file, so it is selected atomically at process startup with --session.
+    // Hold commands only for the JSONL switch race.
+    if (runner.sessionRef?.backend === "jsonl") {
       runner.resumeId = srvId();
-      proc.stdin.write(JSON.stringify({ id: runner.resumeId, type: "switch_session", sessionPath: runner.sessionFile }) + "\n");
+      proc.stdin.write(JSON.stringify({ id: runner.resumeId, type: "switch_session", sessionPath: runner.sessionRef.storagePath }) + "\n");
       // safety valve: never hold commands forever if the response goes missing
       clearTimeout(runner.resumeTimer);
       runner.resumeTimer = setTimeout(() => finishResume(runner), 15000);
@@ -283,17 +314,21 @@ export function createRunnerManager(state) {
     return (id && state.runners.get(id)) || defaultRunner();
   }
 
-  /** reuse the runner already attached to a session file, else spawn one */
-  function openSessionRunner({ sessionPath = null, dir = null }) {
-    if (sessionPath) {
+  /** Reuse the runner attached to the full session identity, else spawn one. */
+  function openSessionRunner({ sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
+    const inputReference = sessionRef ?? (sessionPath && sessionId
+      ? { backend: "jsonl", id: sessionId, storagePath: sessionPath }
+      : null);
+    const reference = inputReference ? sessionReferences.validate(inputReference) : null;
+    if (reference) {
       for (const r of state.runners.values()) {
-        if (r.sessionFile === sessionPath) {
+        if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) {
           if (!r.proc) startRunner(r);
           return r;
         }
       }
     }
-    return spawnRunner({ dir: dir || state.currentDir, sessionPath });
+    return spawnRunner({ dir: dir || state.currentDir, sessionRef: reference });
   }
 
   // ------------------------------------------------------------ watchdog

@@ -70,7 +70,7 @@ JSONL is explicit.
   parses JSONL and SQLite references. Use an opaque URL-safe session key for
   HTTP parameters and runner matching; reject malformed keys and database paths
   outside the configured agent/session location.
-- [ ] Change runner state and public runner info from file-only identity to a
+- [x] Change runner state and public runner info from file-only identity to a
   backend-neutral `sessionRef` plus compatibility `sessionFile` for JSONL.
   Start a resumed SQLite runner with `--session <id>` and the configured store
   instead of sending JSONL-only `switch_session`; preserve the reference across

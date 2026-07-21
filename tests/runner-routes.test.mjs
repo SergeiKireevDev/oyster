@@ -37,9 +37,13 @@ function setup() {
     },
     sendToRunner: (_selected, command) => command.type !== "unavailable",
     stopRunner: (selected) => { selected.stopped = true; },
-    runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir }),
-    openSessionRunner: ({ sessionPath, dir }) => ({ id: "opened", sessionPath, dir }),
-    sessionFileParam: (path) => path === "valid.jsonl" ? "/sessions/valid.jsonl" : null,
+    runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir, ...(selected.sessionRef ? { sessionRef: selected.sessionRef } : {}) }),
+    openSessionRunner: ({ sessionRef, dir }) => ({ id: "opened", sessionRef, dir }),
+    sessionReferenceParam: ({ sessionKey, sessionPath }) => {
+      if (sessionKey === "sqlite-key") return { backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite" };
+      if (sessionPath === "valid.jsonl") return { backend: "jsonl", id: "jsonl-id", storagePath: "/sessions/valid.jsonl" };
+      return null;
+    },
     srvId: () => "srv-1",
     runnersChanged: () => {}, 
     setTimeoutImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
@@ -146,7 +150,18 @@ test("open-session validates session and directory inputs before opening a runne
   await route({ body: { sessionPath: "valid.jsonl", dir: "/allowed/project" } }, opened);
   assert.equal(opened.status, 200);
   assert.equal(state.currentDir, "/allowed/project");
-  assert.deepEqual(opened.body.runner, { id: "opened", dir: "/allowed/project" });
+  assert.deepEqual(opened.body.runner, {
+    id: "opened",
+    dir: "/allowed/project",
+    sessionRef: { backend: "jsonl", id: "jsonl-id", storagePath: "/sessions/valid.jsonl" },
+  });
+
+  const sqlite = response();
+  await route({ body: { sessionKey: "sqlite-key" } }, sqlite);
+  assert.equal(sqlite.status, 200);
+  assert.deepEqual(sqlite.body.runner.sessionRef, {
+    backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite",
+  });
 });
 
 test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", () => {

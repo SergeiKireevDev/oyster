@@ -78,7 +78,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           .map((c) => ({ ...c, sessionPath: fork.path }));
         saveCheckpoints(db);
         // 4. attach a runner to the fork and hand it to the client
-        const runner = openSessionRunner({ sessionPath: fork.path, dir: cp.dir });
+        const runner = openSessionRunner({ sessionPath: fork.path, sessionId: fork.id, dir: cp.dir });
         sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
         runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
         logger.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);

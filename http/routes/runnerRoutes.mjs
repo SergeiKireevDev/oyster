@@ -12,7 +12,7 @@ export function createRunnerRoutes({
   stopRunner,
   runnerInfo,
   openSessionRunner,
-  sessionFileParam,
+  sessionReferenceParam,
   srvId,
   runnersChanged,
   setIntervalImpl = setInterval,
@@ -114,9 +114,10 @@ export function createRunnerRoutes({
     "POST /open-session": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const sessionPath = body?.sessionPath ? sessionFileParam(body.sessionPath) : null;
-      if (body?.sessionPath && !sessionPath) {
-        json(res, 400, { error: `not a session file: ${body.sessionPath}` });
+      const requestedSession = body?.sessionKey || body?.sessionPath;
+      const sessionRef = requestedSession ? sessionReferenceParam(body) : null;
+      if (requestedSession && !sessionRef) {
+        json(res, 400, { error: `not a session reference: ${requestedSession}` });
         return;
       }
       const dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : null;
@@ -133,7 +134,7 @@ export function createRunnerRoutes({
         }
         state.currentDir = dir;
       }
-      const runner = openSessionRunner({ sessionPath, dir });
+      const runner = openSessionRunner({ sessionRef, dir });
       json(res, 200, { runner: runnerInfo(runner) });
     },
   };

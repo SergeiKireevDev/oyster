@@ -26,6 +26,7 @@ export async function init(state) {
     await import(bust("checkpoints.mjs"));
   
   const { createRunnerManager } = await import(bust("runners.mjs"));
+  const { createSessionReferenceCodec } = await import(bust("session-references.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -58,6 +59,11 @@ export async function init(state) {
     console.log("[pi-ui] migrated state: removed dead eventBuffer, patched broadcast");
   }
 
+  state.sessionReferences = createSessionReferenceCodec({
+    agentDir: config.PI_AGENT_DIR ?? dirname(SESSIONS_ROOT),
+    jsonlRoot: SESSIONS_ROOT,
+    sqlitePath: config.SQLITE_PATH ?? undefined,
+  });
   const runners = createRunnerManager(state);
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
@@ -76,10 +82,25 @@ export async function init(state) {
 
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
+  const sessionReferenceParam = ({ sessionKey, sessionPath }) => {
+    if (sessionKey) {
+      try { return state.sessionReferences.parse(sessionKey); } catch { return null; }
+    }
+    const file = sessionPath ? sessionFileParam(sessionPath) : null;
+    if (!file) return null;
+    try {
+      const info = readSessionHeaderInfo(file);
+      return info?.id
+        ? state.sessionReferences.validate({ backend: "jsonl", id: info.id, storagePath: file })
+        : null;
+    } catch {
+      return null;
+    }
+  };
   const runnerRoutes = createRunnerRoutes({
     state, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
-    sessionFileParam, srvId, runnersChanged,
+    sessionReferenceParam, srvId, runnersChanged,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });
   const workdirRoutes = createWorkdirRoutes({ state, requestContext, spawnRunner, runnerInfo });
