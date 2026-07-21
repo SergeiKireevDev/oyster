@@ -1,7 +1,6 @@
 import { createSearchHitSessionController, groupSessionSearchResults, markRunnerStopped } from "../../runtime/sessionRuntime.js";
 import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../../lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "../../lib/sessionPickerSearchController.js";
-import { configureSessionPickerActions } from "./sessionPickerActions.js";
 import {
   SESSION_PICKER_CANCEL_ACTION,
   SESSION_PICKER_CHOOSE_ACTION,
@@ -86,7 +85,6 @@ export function createSessionPickerRuntime(deps) {
   };
 
   const cancel = () => { deps.close(); resolvePicker?.(null); };
-  const detachLegacyActions = configureSessionPickerActions((type, ...args) => type === "cancel" ? cancel() : actions[type]?.(...args));
   const detachUiActions = [
     deps.uiActions.register(SESSION_PICKER_SET_SCOPE_ACTION, actions.setScope),
     deps.uiActions.register(SESSION_PICKER_SET_FOLDER_ACTION, actions.setFolder),
@@ -103,7 +101,6 @@ export function createSessionPickerRuntime(deps) {
   const detachActions = () => {
     if (actionsDetached) return;
     actionsDetached = true;
-    detachLegacyActions();
     detachUiActions.splice(0).reverse().forEach((detach) => detach());
   };
 

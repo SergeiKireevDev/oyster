@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createSessionPickerRuntime } from "../public/src/features/sessions/createSessionPickerRuntime.js";
 import * as actionNames from "../public/src/runtime/uiActionNames.js";
 
@@ -67,4 +68,24 @@ test("session picker runtime owns picker actions and search-hit construction", a
   runtime.detachActions();
   assert.equal(registered.size, 0);
   assert.equal(detached.length, 10);
+});
+
+test("session picker component routes every workflow through scoped actions", () => {
+  const source = readFileSync(new URL("../public/src/components/SessionPickerModal.svelte", import.meta.url), "utf8");
+  assert.match(source, /getUiActionRegistry\(\)/);
+  for (const name of [
+    "SESSION_PICKER_SET_SCOPE_ACTION",
+    "SESSION_PICKER_SET_FOLDER_ACTION",
+    "SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION",
+    "SESSION_PICKER_SEARCH_ACTION",
+    "SESSION_PICKER_CHOOSE_ACTION",
+    "SESSION_PICKER_STOP_ACTION",
+    "SESSION_PICKER_DELETE_ACTION",
+    "SESSION_PICKER_OPEN_SEARCH_HIT_ACTION",
+    "SESSION_PICKER_LOAD_FOLDER_ACTION",
+    "SESSION_PICKER_CANCEL_ACTION",
+  ]) {
+    assert.match(source, new RegExp(`uiActions\\.invoke\\(${name}`), `${name} is not routed`);
+  }
+  assert.doesNotMatch(source, /features\/sessions\/sessionPickerActions\.js/);
 });

@@ -96,7 +96,7 @@ module-global feature callback state.
 
 - [x] Add scoped action names for every session-picker operation and register
   them from the session-picker runtime with teardown-safe unregister functions.
-- [ ] Change `SessionPickerModal.svelte` to invoke scoped session-picker
+- [x] Change `SessionPickerModal.svelte` to invoke scoped session-picker
   actions, then delete `features/sessions/sessionPickerActions.js` and its
   configuration call. Preserve search debounce, folder loading, choose, stop,
   delete, and cancellation tests.

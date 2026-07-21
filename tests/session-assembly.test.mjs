@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createSessionAssembly } from "../public/src/features/sessions/createSessionAssembly.js";
-import { sessionPickerAction } from "../public/src/features/sessions/sessionPickerActions.js";
 import { applySessionState } from "../public/src/runtime/sessionRuntime.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
+import { SESSION_PICKER_CANCEL_ACTION } from "../public/src/runtime/uiActionNames.js";
 
 function dependencies(pathname = "/s/session-1", trackers = {}) {
   return {
@@ -79,9 +79,9 @@ test("session assembly constructs route runner UI preview open and refresh bound
   assembly.teardown();
 });
 
-function pickerDependencies(closes) {
+function pickerDependencies(closes, uiActions = createUiActionRegistry()) {
   return {
-    uiActions: createUiActionRegistry(),
+    uiActions,
     storeSnapshot: () => ({ query: "", scope: "all", folderPath: "", excludeTools: true }),
     sessionPickerStore: {}, updateSessionPicker() {},
     fetchSearch: async () => ({ ok: true, status: 200, data: { results: [] } }),
@@ -105,12 +105,14 @@ test("session assembly remounts runner route picker and switching state cleanly"
   first.operations.notifyRunnersChanged([]);
   await first.operations.switchRunner("runner-2");
   first.operations.applyState({ sessionId: "session-2", model: { provider: "test" }, messageCount: 0, isStreaming: false, isCompacting: false });
-  first.configurePicker(pickerDependencies(firstCloses));
-  sessionPickerAction("cancel");
+  const firstUiActions = createUiActionRegistry();
+  first.configurePicker(pickerDependencies(firstCloses, firstUiActions));
+  firstUiActions.invoke(SESSION_PICKER_CANCEL_ACTION);
   assert.deepEqual(switches, ["runner-2"]);
   assert.equal(firstCloses.length, 1);
   assert.equal(routes.length, 1);
   first.teardown();
+  assert.equal(firstUiActions.invoke(SESSION_PICKER_CANCEL_ACTION), undefined);
   first.operations.notifyRunnersChanged([]);
   assert.equal(runnerNotifications, 1);
 
@@ -118,8 +120,9 @@ test("session assembly remounts runner route picker and switching state cleanly"
   const second = createSessionAssembly(dependencies("/", {}));
   assert.equal(second.operations.getCurrentRunner(), null);
   assert.equal(second.operations.getState(), null);
-  second.configurePicker(pickerDependencies(secondCloses));
-  sessionPickerAction("cancel");
+  const secondUiActions = createUiActionRegistry();
+  second.configurePicker(pickerDependencies(secondCloses, secondUiActions));
+  secondUiActions.invoke(SESSION_PICKER_CANCEL_ACTION);
   assert.equal(firstCloses.length, 1);
   assert.equal(secondCloses.length, 1);
   second.teardown();

@@ -1,15 +1,30 @@
 <script>
-  import { cancelSessionPicker, sessionPickerAction as sessionAction } from "../features/sessions/sessionPickerActions.js";
-  const choosePickedSession = (...args) => sessionAction("chooseSession", ...args);
-  const deletePickedSession = (...args) => sessionAction("deleteSession", ...args);
-  const loadPickedSessionFolder = (...args) => sessionAction("loadFolder", ...args);
-  const openPickedSearchHit = (...args) => sessionAction("openSearchHit", ...args);
-  const runSessionPickerSearch = () => sessionAction("runSearch");
-  const setSessionPickerExcludeTools = (...args) => sessionAction("setExcludeTools", ...args);
-  const setSessionPickerFolder = (...args) => sessionAction("setFolder", ...args);
-  const setSessionPickerScope = (...args) => sessionAction("setScope", ...args);
-  const stopPickedSession = (...args) => sessionAction("stopSession", ...args);
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import {
+    SESSION_PICKER_CANCEL_ACTION,
+    SESSION_PICKER_CHOOSE_ACTION,
+    SESSION_PICKER_DELETE_ACTION,
+    SESSION_PICKER_LOAD_FOLDER_ACTION,
+    SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
+    SESSION_PICKER_SEARCH_ACTION,
+    SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION,
+    SESSION_PICKER_SET_FOLDER_ACTION,
+    SESSION_PICKER_SET_SCOPE_ACTION,
+    SESSION_PICKER_STOP_ACTION,
+  } from "../runtime/uiActionNames.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
+
+  const uiActions = getUiActionRegistry();
+  const choosePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, ...args);
+  const deletePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, ...args);
+  const loadPickedSessionFolder = (...args) => uiActions.invoke(SESSION_PICKER_LOAD_FOLDER_ACTION, ...args);
+  const openPickedSearchHit = (...args) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, ...args);
+  const runSessionPickerSearch = () => uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
+  const setSessionPickerExcludeTools = (...args) => uiActions.invoke(SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION, ...args);
+  const setSessionPickerFolder = (...args) => uiActions.invoke(SESSION_PICKER_SET_FOLDER_ACTION, ...args);
+  const setSessionPickerScope = (...args) => uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, ...args);
+  const stopPickedSession = (...args) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, ...args);
+  const cancelSessionPicker = () => uiActions.invoke(SESSION_PICKER_CANCEL_ACTION);
 
   function fmtSessionDate(ts) {
     const d = new Date(ts);
