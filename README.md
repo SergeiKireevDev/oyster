@@ -115,24 +115,44 @@ A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token st
 
 Non-secret browser preferences are a separate policy domain and **do not sync to SQLite** in this migration. Thinking visibility (`pi_show_thinking`), carousel position (`pi_carousel`), checkpoint model choice (`pi_ckpt_model`), and browser runner selection (`pi_runner`) remain device-local in `localStorage`. They do not affect server ownership or recovery, and keeping them local avoids surprising cross-device UI changes. Authentication material is not a preference and is governed separately. The server token comes only from `PI_UI_TOKEN`, `--token`, the dedicated `.ui-token` file, or a process-memory random fallback; the browser auth client uses its dedicated `pi_ui_token` key. Token, secret, password, credential, and API-key fields are rejected by the general `app_settings` repository and never participate in preference synchronization.
 
-### Pi credential ownership and precedence
+### Pi credential ownership, OAuth, and precedence
 
-The authenticated **API Keys…** menu manages local pi credentials through the
-`AuthStorage` exported by the installation that owns the configured `PI_BIN`.
-Credentials remain in `PI_CODING_AGENT_DIR/auth.json` (normally
+The authenticated **Credentials…** menu manages local pi credentials through
+the `AuthStorage` exported by the installation that owns the configured
+`PI_BIN`. Credentials remain in `PI_CODING_AGENT_DIR/auth.json` (normally
 `~/.pi/agent/auth.json`, mode `0600`); pi-lot-ui never copies them into its
-SQLite database, browser storage, responses, or event stream. Custom provider
-choices come from that same installation's `models.json` and model registry.
-If the configured executable does not expose the required SDK, credential
-management fails closed instead of loading another globally installed pi.
+SQLite database, browser storage, responses, logs, or event stream. Custom
+API-key provider choices come from that same installation's `models.json` and
+model registry. OAuth sign-in is offered only for providers returned by that
+configured SDK's `AuthStorage.getOAuthProviders()`—normally ChatGPT Plus/Pro
+(Codex), Claude Pro/Max, and GitHub Copilot. The UI server does not execute
+project extensions merely to discover additional OAuth implementations. Stored
+OAuth credentials whose implementation is unavailable remain visible and can
+be removed. If the configured executable does not expose the required SDK,
+credential management fails closed instead of loading another global pi.
+
+OAuth protocol details stay owned by Pi: provider discovery, PKCE/state checks,
+token exchange, refresh, and locked persistence all use Pi's SDK. pi-lot-ui
+adapts Pi's browser-authorization, device-code, selection, prompt, progress, and
+manual-code callbacks into an authenticated, transient modal. Authorization
+URLs, device codes, redirect URLs, and prompt answers remain in memory only for
+the bounded active flow; they never enter URLs controlled by pi-lot-ui, SQLite,
+local/session storage, logs, SSE, or runner state. Flows expire after 15 minutes
+of inactivity and can be cancelled. If the browser runs on another machine and
+a provider redirects to a loopback callback on that browser, copy the final
+redirect URL or authorization code from the unreachable page and paste it into
+the modal. Device-code providers instead show a verification link and user code.
+The main pi-lot-ui window never navigates to a provider automatically. When the
+app starts with no entries in `auth.json`, it opens **Credentials…** setup once;
+opening an upstream authorization page still requires a user click.
 
 A stored `auth.json` credential takes precedence over process-environment and
-`models.json` authentication. Saving, replacing, or removing a key restarts
-every pi runner that was active when the operation began; inactive runners
-remain stopped. After removal, environment or `models.json` fallback
-credentials may therefore continue to authenticate the provider. **Remove from
-pi** only deletes the local stored credential: it does not revoke the key at
-the upstream provider. Revoke compromised keys with the provider itself.
+`models.json` authentication. Saving/replacing an API key or completing OAuth
+sign-in/sign-out restarts every pi runner that was active when the credential
+mutation completed; inactive runners remain stopped. Cancellation and failed
+sign-in do not restart runners. A partial restart is reported without rolling
+back the already durable credential. After removal, environment or `models.json` fallback credentials may still authenticate the provider. **Remove from pi** and **Sign out from pi** only delete local stored credentials. Removing a key from pi does not revoke the key at the upstream provider, and signing out does not revoke its OAuth grant. Revoke compromised keys
+or connected-app access with the provider itself.
 
 `npm test` includes a process-level contract against the exact local pi path:
 it creates a SQLite conversation with an offline mock model, stops pi, and
@@ -165,6 +185,11 @@ Before cutover, follow the full [application-data migration runbook](docs/app-da
 | `GET /api-keys` | yes | list provider IDs, display names, credential types, and safe source/status metadata; never returns key material |
 | `POST /api-keys` | yes | store or replace through pi `AuthStorage` using `{ "provider": "…", "key": "…", "restart": true }`; restarts runners active at capture time |
 | `DELETE /api-keys` | yes | remove a stored API key using `{ "provider": "…", "restart": true }`; does not revoke it upstream and fallback auth may remain |
+| `POST /oauth/start` | yes | start a transient Pi-owned OAuth login with `{ "provider": "…", "replace": false }`; `replace: true` is required to replace a stored API key/OAuth credential |
+| `POST /oauth/status` | yes | poll with `{ "flowId": "…" }`; returns only the current transient interaction and safe terminal/restart state |
+| `POST /oauth/respond` | yes | answer one pending prompt/selection/manual-code request once with `{ "flowId": "…", "requestId": "…", "value": "…" }` |
+| `POST /oauth/cancel` | yes | cancel a pending flow with `{ "flowId": "…" }`, aborting Pi's callback server or device polling |
+| `DELETE /oauth` | yes | sign out locally with `{ "provider": "…", "restart": true }`; does not revoke upstream access and reports fallback auth |
 | `POST /restart` | yes | kill and respawn one selected runner (`?runner=…`) |
 | `GET /runners` / `DELETE /runners?id=…` | yes | list runners or stop one runner |
 | `POST /open-session` | yes | create/resume a runner using `{ "sessionKey": "ps1_…", "dir": "…" }`; legacy `sessionPath` remains JSONL-only compatibility input |
@@ -194,7 +219,7 @@ denied.
 - Streaming assistant output with markdown rendering, collapsible **thinking** blocks, and per-tool-call cards (args, live partial output, result, error state).
 - Send prompts (Enter), steer mid-stream (send while streaming), **Stop** to abort. Tap the microphone to dictate into the composer; dictation stays as an editable draft and is never sent automatically. Chrome/Edge use the Web Speech API. Brave and browsers without that API record locally and transcribe on-device with quantized Whisper Base English; its roughly 75 MB of model weights are downloaded and browser-cached on first use, so the initial transcription is slower but remains practical on modern mobile devices.
 - Model picker, thinking-level cycling, new session, context compaction, pi process restart — from the header chips / ☰ menu.
-- **API Keys…** — the ☰ menu opens a credential status and management modal. It shows safe provider/source labels only, keeps OAuth entries read-only, and can add, replace, or remove stored API keys with explicit all-active-runner restart confirmations. The form is never prefilled and removal explicitly distinguishes deleting from pi from upstream revocation.
+- **Credentials…** — the ☰ menu opens Pi credential setup and status. It shows safe provider/source labels only; adds, replaces, or removes API keys; and signs in, re-authenticates, cancels, or signs out for OAuth-capable providers through browser, device-code, selection, prompt, and manual redirect flows. Inputs are never prefilled or redisplayed. Credential mutations use explicit all-active-runner restart confirmations, and local removal/sign-out is clearly distinguished from upstream revocation. An empty `auth.json` opens this setup workflow automatically once per page mount without navigating upstream.
 - **Tunnels** — ☰ → *Tunnels…* opens a modal listing live tunnels and lets you spawn a new one deterministically for the current session: pick a local port, describe *what the agent should expose through it*, and (by default) the UI briefs the agent with the public URL and that description so it starts the right server on that port. Tunnels are cloudflared quick tunnels by default (`--tunnel-bin` to change), survive server code hot-reloads, and are killed on shutdown. Requires [`cloudflared`](https://pkg.cloudflare.com) (or an equivalent tool) to be installed.
 - **Checkpoints** — an iceberg button (🧊) rides on the latest message of the transcript; tapping it opens a model picker, then commits every pending change in the session's workdir (`git add -A && git commit`), freezing the state the conversation reached at that point (a clean workdir is marked at HEAD instead). Pick a model and a one-shot pi sub-agent (`--no-session --no-tools -p`) summarizes the staged diff into the commit message (`checkpoint: <summary>`); pick *no summary* (or if the sub-agent fails) and it falls back to a `checkpoint <timestamp>` message. The last-used model is remembered and offered first. Checkpoints are anchored to the message they were taken at and persisted in `~/.pi/agent/checkpoints.json`. Every checkpointed message then carries a return arrow (↩) and an icy accent on its bubble so rollbackable messages stand out at a glance: tapping ↩ opens the same model modal (the summary applies to the pending changes that get auto-committed first, so nothing is ever lost), then deterministically rolls the workdir back to that commit via `git reset --hard` and automatically opens a **forked session** whose history ends at that message (the fork inherits the ancestors' checkpoint markers, so you can hop between states freely, including back "forward" to the auto-saved tip). No LLM is involved anywhere. The 🌳 header chip toggles a right sidebar visualising the whole family as a tree: the session's root ancestor, every fork nested under the checkpoint it was created from (🌱 root · 🌿 forks, with live/busy dots), and each session's 🧊 checkpoints — tap a session to switch to it, tap a checkpoint to roll back and fork right from the sidebar. Forks are born named `⏪ <hash>` and automatically take a short title from the first message you send them (`⏪ make the login page blue…`), so they read like what they went on to do. The sessions picker keeps things tidy too: forked sessions are collapsed under their main session (🌿 *n forks*), and a whole fork family counts as “active” if any member has a live process.
 - **Routines** — a second sidebar section lists runnable scripts from the global store `~/.pi/routines/` (any executable file). Starting one **binds it to the current session**: it runs in that session's workdir, other sessions can't start it until it is **released**, and the binding (plus workdir) is persisted in `~/.pi/routines/bindings.json` so teardown finds the byproducts even across server restarts. Each routine can be **started** (`<script> run`), **stopped** (SIGTERM/SIGKILL to its process group) and **torn down** (`<script> teardown`, expected to remove the run's byproducts); deleting a session stops and releases its routines. Routines natively report progression: any stdout line of the form `::progress <0-100> <message>` drives a live progress bar and status message in the sidebar; other output is kept as a log tail (hover the message). Terminal states (finished / failed / stopped / torn down) surface as toasts.
@@ -283,7 +308,7 @@ cloudflared tunnel --url http://localhost:8080
 ssh -R 80:localhost:8080 nokey@localhost.run
 ```
 
-The token is your only line of defense once tunneled — treat the URL-with-token like a password. Every `/api-keys` request requires this normal pi-lot-ui authentication; provider keys are accepted only in bounded JSON mutation bodies, never in URL paths or query strings. Existing key values, masks, prefixes, suffixes, fingerprints, and lengths are never returned.
+The token is your only line of defense once tunneled — treat the URL-with-token like a password. Every `/api-keys` and `/oauth*` request requires normal pi-lot-ui authentication. Provider keys, OAuth flow IDs, authorization codes, redirect URLs, and prompt responses are accepted only in bounded JSON bodies, never in URL paths or query strings. Existing keys and OAuth tokens—including masks, prefixes, suffixes, fingerprints, and lengths—are never returned. Authorization URLs and device/manual interaction data are returned transiently only to the authenticated browser participating in that flow.
 
 ## Running the local SQLite pi as a service
 

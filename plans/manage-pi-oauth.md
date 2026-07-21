@@ -227,7 +227,7 @@ jobs. Existing API-key secret-boundary tests continue to pass unchanged.
 
 ## 6. Document and Validate
 
-- [ ] Update README feature, endpoint, configuration, security, and operational
+- [x] Update README feature, endpoint, configuration, security, and operational
   sections for **Credentials…**, supported OAuth providers, configured-SDK
   ownership, transient browser/device/manual flows, remote callback-server
   behavior, `auth.json` storage/refresh, runner restarts, local logout versus
