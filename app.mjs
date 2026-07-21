@@ -1440,11 +1440,25 @@ export function init(state) {
         } else {
           let cur = -1;
           try { cur = statSync(tmp).size; } catch {}
-          if (cur !== offset) {
-            json(res, 409, { error: `chunk out of sequence: have ${cur} bytes, got offset ${offset}` });
-            return;
+          if (cur === -1 && last) {
+            // retried final chunk whose first attempt already renamed the temp file
+            let doneSize = -1;
+            try { doneSize = statSync(target).size; } catch {}
+            if (doneSize === offset + buf.length) {
+              json(res, 200, { saved: target, bytes: doneSize });
+              return;
+            }
           }
-          appendFileSync(tmp, buf);
+          if (cur >= offset + buf.length) {
+            // retried chunk that was already applied (response was lost) — idempotent ok
+            if (!last) { json(res, 200, { received: cur }); return; }
+            // last chunk already appended but not yet renamed: fall through to rename
+          } else if (cur !== offset) {
+            json(res, 409, { error: `chunk out of sequence: have ${cur} bytes, got offset ${offset}`, have: Math.max(cur, 0) });
+            return;
+          } else {
+            appendFileSync(tmp, buf);
+          }
         }
         if (last) renameSync(tmp, target);
       } catch (e) {

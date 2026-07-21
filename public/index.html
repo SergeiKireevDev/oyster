@@ -638,7 +638,7 @@
     background: rgba(0,0,0,.55);
     display: none;
     align-items: center; justify-content: center;
-    z-index: 50;
+    z-index: 58; /* above the slide-over sidebars (55), below toasts (60) */
     padding: 16px;
   }
   #overlay.open { display: flex; }
@@ -886,6 +886,8 @@
   .toast.warning { border-color: var(--yellow); }
   .toast.error { border-color: var(--red); }
   @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
+  .chip .spin { display: inline-block; animation: chipspin 1s linear infinite; }
+  @keyframes chipspin { to { transform: rotate(360deg); } }
 
   /* token gate */
   #gate {
@@ -2681,7 +2683,7 @@ async function showFileExplorer() {
     up.className = "chip";
     up.textContent = "\u2B06 Upload\u2026";
     up.title = `upload local files to ${data.path}`;
-    up.addEventListener("click", () => uploadFiles(data.path));
+    up.addEventListener("click", () => uploadFiles(data.path, up));
     const back = document.createElement("span");
     back.className = "chip";
     back.textContent = "\u2190 Hublots";
@@ -2693,7 +2695,7 @@ async function showFileExplorer() {
     actions.append(up, back, closeBtn);
   }
 
-  function uploadFiles(dir) {
+  function uploadFiles(dir, chip) {
     const inp = document.createElement("input");
     inp.type = "file";
     inp.multiple = true;
@@ -2701,21 +2703,59 @@ async function showFileExplorer() {
       const files = [...inp.files];
       if (!files.length) return;
       const CHUNK = 8 * 1024 * 1024; // 8 MB — safe through server cap and cloudflare tunnel
+      const MAX_RETRIES = 6;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
+      let uploadedBytes = 0;
+      const setProgress = () => {
+        if (!chip) return;
+        chip.innerHTML = `<span class="spin">\u27F3</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%`;
+      };
+      if (chip) chip.style.pointerEvents = "none";
+      setProgress();
       let done = 0;
       for (const f of files) {
         try {
-          toast(`uploading ${f.name}\u2026`);
-          for (let offset = 0; offset === 0 || offset < f.size; offset += CHUNK) {
+          let offset = 0;
+          let attempts = 0;
+          let finished = false;
+          while (!finished) {
             const end = Math.min(offset + CHUNK, f.size);
             const isLast = end >= f.size;
-            const r = await fetch(
-              `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
-                `&offset=${offset}&last=${isLast ? 1 : 0}`,
-              { method: "POST", body: f.slice(offset, end) }
-            );
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(d.error || `upload failed (${r.status})`);
-            if (!isLast) toast(`uploading ${f.name}\u2026 ${Math.round((end / f.size) * 100)}%`);
+            let r, d;
+            try {
+              r = await fetch(
+                `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
+                  `&offset=${offset}&last=${isLast ? 1 : 0}`,
+                { method: "POST", body: f.slice(offset, end) }
+              );
+              d = await r.json().catch(() => ({}));
+            } catch {
+              // network drop / tunnel hiccup — retry same chunk with backoff
+              if (++attempts > MAX_RETRIES) throw new Error(`connection lost (gave up after ${MAX_RETRIES} retries)`);
+              await sleep(1000 * attempts);
+              continue;
+            }
+            if (r.ok) {
+              attempts = 0;
+              if (isLast || d.saved) finished = true;
+              else offset = typeof d.received === "number" ? d.received : end;
+              uploadedBytes = files.slice(0, done).reduce((s, x) => s + x.size, 0) + (finished ? f.size : offset);
+              setProgress();
+              continue;
+            }
+            if (r.status === 409 && typeof d.have === "number") {
+              // server tells us how much it actually has — resume from there
+              if (++attempts > MAX_RETRIES) throw new Error(d.error || "upload out of sync");
+              offset = d.have;
+              continue;
+            }
+            if (r.status >= 500 || r.status === 429) {
+              if (++attempts > MAX_RETRIES) throw new Error(d.error || `upload failed (${r.status})`);
+              await sleep(1000 * attempts);
+              continue;
+            }
+            throw new Error(d.error || `upload failed (${r.status})`);
           }
           done++;
         } catch (e) {
@@ -2723,7 +2763,7 @@ async function showFileExplorer() {
         }
       }
       if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
-      await load(dir); // refresh the listing
+      await load(dir); // refresh the listing (rebuilds the chip)
     });
     inp.click();
   }
@@ -2804,6 +2844,9 @@ const tunnelForm = { desc: "" };
 
 async function showHublots() {
   const body = $("mBody"), actions = $("mActions");
+  // close the slide-over sidebars so they don't sit on top of the modal
+  $("hublots").classList.remove("open");
+  $("treebar").classList.remove("open");
 
   async function load() {
     const res = await fetch(`/tunnels?token=${encodeURIComponent(token)}`);
