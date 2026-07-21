@@ -20,6 +20,10 @@ test("goal-loop contains no project-specific defaults", () => {
   assert.doesNotMatch(source, /docker build|npm (?:run build|test)/i);
 });
 
+test("goal-loop can start regardless of pi project trust", () => {
+  assert.doesNotMatch(source, /isProjectTrusted|untrusted project/);
+});
+
 test("goal-loop infers the required validation block from a plan", async () => {
   const inferValidation = await loadInferValidation();
   const plan = `# Plan

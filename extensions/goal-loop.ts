@@ -277,10 +277,6 @@ export default function goalLoop(pi: ExtensionAPI) {
         ctx.ui.notify("Provide a plan path or create PLAN.md.", "error");
         return;
       }
-      if (!ctx.isProjectTrusted()) {
-        ctx.ui.notify("Goal loop will not execute validation commands from an untrusted project.", "error");
-        return;
-      }
       const dirty = await command("git", ["status", "--porcelain"], ctx);
       if (dirty.code !== 0) {
         ctx.ui.notify(`Cannot start goal loop: ${clipped(dirty)}`, "error");
