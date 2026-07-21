@@ -17,9 +17,8 @@ export async function init(state) {
     await import(bust("routines.mjs"));
   
   const {
-    SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions, listSessionFolders,
-    searchSessions, sessionEntries, sessionMessages, findSessionById, forkSessionAt,
-    readSessionHeaderInfo, sessionFileParam, sessionFileFromSearch,
+    SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
+    sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
   
   const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
@@ -59,6 +58,14 @@ export async function init(state) {
     console.log("[pi-ui] migrated state: removed dead eventBuffer, patched broadcast");
   }
 
+  const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}`;
+  if (state.sessionCatalogKey !== catalogKey) {
+    state.sessionCatalog?.close?.();
+    state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
+      ? (await import(bust("sessions/sqliteCatalog.mjs"))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
+      : jsonlSessionCatalog;
+    state.sessionCatalogKey = catalogKey;
+  }
   state.sessionReferences = createSessionReferenceCodec({
     agentDir: config.PI_AGENT_DIR ?? dirname(SESSIONS_ROOT),
     jsonlRoot: SESSIONS_ROOT,
@@ -120,10 +127,10 @@ export async function init(state) {
     state,
     requestContext,
     sessions: {
-      root: SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions,
-      listSessionFolders, searchSessions, sessionEntries, sessionMessages, findSessionById,
-      readSessionHeaderInfo, sessionFileParam, sessionFileFromSearch,
-      sessionReferenceFor, sessionTargetFromSearch,
+      catalog: state.sessionCatalog,
+      readSessionHeaderInfo,
+      sessionReferenceFor,
+      sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
     resources: { closeTunnel, releaseSessionRoutines },

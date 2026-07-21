@@ -451,5 +451,6 @@ export function createJsonlSessionCatalog() {
     search: searchSessions,
     resolvePath: sessionFileParam,
     resolveFromSearch: sessionFileFromSearch,
+    close() {},
   });
 }

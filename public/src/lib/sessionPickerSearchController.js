@@ -1,3 +1,5 @@
+import { sessionIdentity } from "./sessionIdentity.js";
+
 export function createSessionPickerSearchController({ getSnapshot, update, fetchSearch, groupResults }) {
   async function search() {
     const snap = getSnapshot();
@@ -8,7 +10,7 @@ export function createSessionPickerSearchController({ getSnapshot, update, fetch
     if (scope === "session") {
       const current = snap.sessions.find((session) => session.id === snap.currentId) ?? snap.sessions[0];
       if (!current) return update({ searchStatus: "no saved session to search", searchResults: [] });
-      path = current.path;
+      path = sessionIdentity(current);
     }
     update({ searchStatus: "searching…", searchResults: [], searching: true });
     try {

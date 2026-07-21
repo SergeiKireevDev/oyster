@@ -22,18 +22,18 @@ function setup() {
     state,
     requestContext: { json(res, status, body) { res.status = status; res.body = body; } },
     sessions: {
-      root: "/sessions",
-      sessionDirFor: (dir) => `/sessions/${dir.replaceAll("/", "-")}`,
-      summarizeSessionFile: () => ({ id: "session-a", name: "A" }),
-      listSessions: (dir) => [{ id: "session-a", path: "/sessions/folder/a.jsonl", dir }],
-      listSessionFolders: () => ["/sessions/folder"],
-      searchSessions: (options) => { searches.push(options); return { results: [{ sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text" }] }; },
-      sessionEntries: (path) => [{ id: "entry", path }],
-      sessionMessages: (path) => [{ role: "user", path }],
-      findSessionById: (id) => id === "session-a" ? "/sessions/folder/a.jsonl" : null,
+      catalog: {
+        backend: "jsonl",
+        root: "/sessions",
+        locationForCwd: (dir) => `/sessions/${dir.replaceAll("/", "-")}`,
+        list: ({ location }) => [{ id: "session-a", path: "/sessions/folder/a.jsonl", dir: location }],
+        folders: () => ["/sessions/folder"],
+        search: (options) => { searches.push(options); return { results: [{ sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text" }] }; },
+        entries: (path) => [{ id: "entry", path }],
+        messages: (path) => [{ role: "user", path }],
+        findById: (id) => id === "session-a" ? { id: "session-a", name: "A", path: "/sessions/folder/a.jsonl" } : null,
+      },
       readSessionHeaderInfo: () => ({ id: "session-a" }),
-      sessionFileParam: (path) => path === "folder/a.jsonl" ? "/sessions/folder/a.jsonl" : null,
-      sessionFileFromSearch: (url) => url.searchParams.get("path") === "folder/a.jsonl" ? "/sessions/folder/a.jsonl" : null,
       sessionReferenceFor: ({ id, path }) => ({ backend: "jsonl", id, storagePath: path }),
       sessionTargetFromSearch: (url) => ["folder/a.jsonl", "key-session-a"].includes(url.searchParams.get("path") ?? url.searchParams.get("key")) ? "/sessions/folder/a.jsonl" : null,
     },
@@ -72,6 +72,8 @@ test("session listing preserves root scope and live runner annotations", () => {
     busy: true,
     sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
     sessionKey: "key-session-a",
+    parentSession: null,
+    parentSessionKey: null,
   });
 });
 
@@ -83,6 +85,8 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
     path: "/sessions/folder/a.jsonl", id: "session-a", name: "A",
     sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
     sessionKey: "key-session-a",
+    parentSession: null,
+    parentSessionKey: null,
   } });
 
   const missingId = response();

@@ -94,7 +94,7 @@ UI and runner manager, while existing JSONL session links still open.
   decode ordered entry payloads into the same domain shape as JSONL; derive the
   active branch from `active_leaf_id`, preserve parent session IDs, and close
   handles deterministically. Add malformed-row and concurrent-WAL-read tests.
-- [ ] Select and lifecycle-manage the catalog from stable configuration, then
+- [x] Select and lifecycle-manage the catalog from stable configuration, then
   make session list, lookup-by-ID, entries, messages, folders, and search routes
   backend-neutral. Keep response fields needed by existing clients while adding
   `sessionKey` and `sessionRef` as the canonical identity.

@@ -243,5 +243,6 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     messages,
     tree,
     search,
+    close() {},
   });
 }

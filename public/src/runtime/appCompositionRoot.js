@@ -641,7 +641,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   updateSessionPicker,
   async fetchSearch({ q, scope, path, includeTools }) {
     const params = new URLSearchParams({ token, q, scope });
-    if (path) params.set("path", path);
+    if (path) params.set(path.startsWith("ps1_") ? "key" : "path", path);
     if (includeTools) params.set("tools", "1");
     const res = await fetch(`/search?${params}`);
     return { ok: res.ok, status: res.status, data: await res.json() };

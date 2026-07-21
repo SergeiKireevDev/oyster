@@ -1,7 +1,7 @@
 import { unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 
-/** Build saved-session and history routes from injected domain operations. */
+/** Build saved-session and history routes from the configured catalog. */
 export function createSessionRoutes({
   state,
   requestContext,
@@ -13,53 +13,84 @@ export function createSessionRoutes({
   logger = console,
 }) {
   const { json } = requestContext;
-  const {
-    root,
-    sessionDirFor,
-    summarizeSessionFile,
-    listSessions,
-    listSessionFolders,
-    searchSessions,
-    sessionEntries,
-    sessionMessages,
-    findSessionById,
-    readSessionHeaderInfo,
-    sessionFileParam,
-    sessionFileFromSearch,
-    sessionReferenceFor,
-    sessionTargetFromSearch,
-  } = sessions;
+  const { catalog, sessionReferenceFor, sessionTargetFromSearch, readSessionHeaderInfo } = sessions;
   const { stopRunner, runnersChanged } = runners;
   const { closeTunnel, releaseSessionRoutines } = resources;
+  const sqlite = catalog.backend === "sqlite";
+
+  function referenceFor(session) {
+    return sqlite
+      ? state.sessionReferences.validate({ backend: "sqlite", id: session.id, storagePath: catalog.storagePath })
+      : sessionReferenceFor(session);
+  }
+
+  function decorate(session, byLegacyPath = new Map()) {
+    const sessionRef = referenceFor(session);
+    let parentSessionKey = null;
+    if (sqlite && session.parentSessionId) {
+      parentSessionKey = state.sessionReferences.serialize(referenceFor({ id: session.parentSessionId }));
+    } else if (session.parentSession && byLegacyPath.has(session.parentSession)) {
+      parentSessionKey = state.sessionReferences.serialize(referenceFor(byLegacyPath.get(session.parentSession)));
+    }
+    return {
+      ...session,
+      path: sqlite ? null : session.path,
+      parentSession: sqlite ? null : (session.parentSession ?? null),
+      parentSessionKey,
+      sessionRef,
+      sessionKey: state.sessionReferences.serialize(sessionRef),
+    };
+  }
+
+  function requestedIdentity(url) {
+    const key = url.searchParams.get("key");
+    if (key) {
+      try {
+        const reference = state.sessionReferences.parse(key);
+        return reference.backend === catalog.backend ? (sqlite ? reference.id : reference.storagePath) : null;
+      } catch { return null; }
+    }
+    return sqlite ? null : sessionTargetFromSearch(url);
+  }
 
   return {
     "GET /sessions": (_req, res, url) => {
-      let dir;
+      let cwd;
+      let location;
       if (url.searchParams.get("path")) {
-        dir = resolvePath(String(url.searchParams.get("path")));
-        if (dir !== root && !dir.startsWith(`${root}/`)) {
-          json(res, 400, { error: "folder must be under the sessions root" });
-          return;
+        const requested = resolvePath(String(url.searchParams.get("path")));
+        if (sqlite) cwd = requested;
+        else {
+          location = requested;
+          if (location !== catalog.root && !location.startsWith(`${catalog.root}/`)) {
+            json(res, 400, { error: "folder must be under the sessions root" });
+            return;
+          }
         }
-      } else if (url.searchParams.get("dir")) {
-        dir = sessionDirFor(resolvePath(String(url.searchParams.get("dir"))));
-      }
+      } else if (url.searchParams.get("dir")) cwd = resolvePath(String(url.searchParams.get("dir")));
+      else cwd = state.currentDir;
+
+      const summaries = catalog.list({ cwd, location });
+      const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
       const live = [...state.runners.values()];
-      const result = listSessions(dir ?? sessionDirFor(state.currentDir)).map((session) => {
-        const sessionRef = sessionReferenceFor(session);
-        const sessionKey = state.sessionReferences.serialize(sessionRef);
+      const result = summaries.map((summary) => {
+        const session = decorate(summary, byLegacyPath);
         const runner = live.find((candidate) => candidate.sessionRef
-          ? state.sessionReferences.equals(candidate.sessionRef, sessionRef)
+          ? state.sessionReferences.equals(candidate.sessionRef, session.sessionRef)
           : candidate.sessionFile === session.path);
-        return { ...session, sessionRef, sessionKey, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
+        return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
       });
       json(res, 200, { sessions: result });
     },
 
     "DELETE /session": (_req, res, url) => {
+      if (sqlite) {
+        json(res, 409, { error: "SQLite session deletion is unavailable until a supported pi delete operation is configured" });
+        return;
+      }
       const target = sessionTargetFromSearch(url);
       if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
+        json(res, 400, { error: `not a session file: ${url.searchParams.get("path") ?? url.searchParams.get("key")}` });
         return;
       }
       try {
@@ -74,14 +105,11 @@ export function createSessionRoutes({
         let sessionId = null;
         try { sessionId = readSessionHeaderInfo(target)?.id ?? null; } catch {}
         const closedHublots = [];
-        if (sessionId) {
-          for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
-            if (tunnel.sessionId === sessionId) {
-              closeTunnel(state, tunnel.id);
-              closedHublots.push(tunnel.port);
-              logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${sessionId} deleted)`);
-            }
-          }
+        if (sessionId) for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
+          if (tunnel.sessionId !== sessionId) continue;
+          closeTunnel(state, tunnel.id);
+          closedHublots.push(tunnel.port);
+          logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${sessionId} deleted)`);
         }
         const releasedRoutines = sessionId ? releaseSessionRoutines(state, sessionId) : [];
         unlinkFile(target);
@@ -93,90 +121,77 @@ export function createSessionRoutes({
 
     "GET /session-by-id": (_req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
-      if (!id) {
-        json(res, 400, { error: "id required" });
-        return;
-      }
-      const path = findSessionById(id);
-      if (!path) {
-        json(res, 404, { error: `no session with id ${id}` });
-        return;
-      }
+      if (!id) { json(res, 400, { error: "id required" }); return; }
       try {
-        const session = { path, ...summarizeSessionFile(path) };
-        const sessionRef = sessionReferenceFor(session);
-        json(res, 200, { session: { ...session, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) } });
+        const session = catalog.findById(id);
+        if (!session) { json(res, 404, { error: `no session with id ${id}` }); return; }
+        json(res, 200, { session: decorate(session) });
       } catch (error) {
         json(res, 500, { error: `failed to read session: ${error.message}` });
       }
     },
 
     "GET /session-entries": (_req, res, url) => {
-      const target = sessionTargetFromSearch(url);
-      if (!target) {
-        json(res, 404, { error: "session file not found" });
-        return;
-      }
-      try {
-        json(res, 200, sessionEntries(target));
-      } catch (error) {
-        json(res, 500, { error: `failed to parse session: ${error.message}` });
-      }
+      const identity = requestedIdentity(url);
+      if (!identity) { json(res, 404, { error: "session not found" }); return; }
+      try { json(res, 200, catalog.entries(identity)); }
+      catch (error) { json(res, 500, { error: `failed to parse session: ${error.message}` }); }
     },
 
     "GET /session-messages": (_req, res, url) => {
-      const target = sessionTargetFromSearch(url);
-      if (!target) {
-        json(res, 404, { error: "session file not found" });
-        return;
-      }
-      try {
-        json(res, 200, sessionMessages(target));
-      } catch (error) {
-        json(res, 500, { error: `failed to parse session: ${error.message}` });
-      }
+      const identity = requestedIdentity(url);
+      if (!identity) { json(res, 404, { error: "session not found" }); return; }
+      try { json(res, 200, catalog.messages(identity)); }
+      catch (error) { json(res, 500, { error: `failed to parse session: ${error.message}` }); }
     },
 
     "GET /session-folders": (_req, res, url) => {
-      const forDir = url.searchParams.get("dir")
-        ? resolvePath(String(url.searchParams.get("dir")))
-        : state.currentDir;
-      json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(forDir) });
+      const forDir = url.searchParams.get("dir") ? resolvePath(String(url.searchParams.get("dir"))) : state.currentDir;
+      json(res, 200, { folders: catalog.folders(), current: catalog.locationForCwd(forDir) });
     },
 
     "GET /search": (_req, res, url) => {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const scope = String(url.searchParams.get("scope") ?? "folder");
-      const path = url.searchParams.get("path")
-        ? resolvePath(String(url.searchParams.get("path")))
-        : null;
-      if (query.length < 2) {
-        json(res, 400, { error: "query must be at least 2 characters" });
-        return;
+      const rawPath = url.searchParams.get("path");
+      const key = url.searchParams.get("key");
+      let path = rawPath ? resolvePath(String(rawPath)) : null;
+      let sessionIdentity = null;
+      if (key) {
+        try {
+          const reference = state.sessionReferences.parse(key);
+          if (reference.backend === catalog.backend) sessionIdentity = sqlite ? reference.id : reference.storagePath;
+        } catch {}
       }
-      if (!["session", "folder", "all"].includes(scope)) {
-        json(res, 400, { error: `invalid scope: ${scope}` });
-        return;
+      if (query.length < 2) { json(res, 400, { error: "query must be at least 2 characters" }); return; }
+      if (!["session", "folder", "all"].includes(scope)) { json(res, 400, { error: `invalid scope: ${scope}` }); return; }
+      if (scope === "session") {
+        if (sqlite && !sessionIdentity) { json(res, 400, { error: "scope=session requires a session key" }); return; }
+        if (!sqlite && sessionIdentity) path = sessionIdentity;
+        if (!sqlite && (!path || !path.startsWith(`${catalog.root}/`) || !path.endsWith(".jsonl"))) {
+          json(res, 400, { error: "scope=session requires a session file path" }); return;
+        }
       }
-      if (scope === "session" && (!path || !path.startsWith(`${root}/`) || !path.endsWith(".jsonl"))) {
-        json(res, 400, { error: "scope=session requires a session file path" });
-        return;
+      if (scope === "folder" && !sqlite && path && path !== catalog.root && !path.startsWith(`${catalog.root}/`)) {
+        json(res, 400, { error: "folder must be under the sessions root" }); return;
       }
-      if (scope === "folder" && path && path !== root && !path.startsWith(`${root}/`)) {
-        json(res, 400, { error: "folder must be under the sessions root" });
-        return;
-      }
-      const includeTools = url.searchParams.get("tools") === "1";
       try {
-        const result = searchSessions({
+        const result = catalog.search(sqlite ? {
+          q: query,
+          scope,
+          path: scope === "session" ? sessionIdentity : path,
+          cwd: path ?? state.currentDir,
+          includeTools: url.searchParams.get("tools") === "1",
+        } : {
           q: query,
           scope,
           path,
-          includeTools,
-          defaultDir: sessionDirFor(state.currentDir),
+          includeTools: url.searchParams.get("tools") === "1",
+          defaultDir: catalog.locationForCwd(state.currentDir),
         });
         result.results = result.results.map((hit) => {
-          const sessionRef = sessionReferenceFor({ id: hit.sessionId, path: hit.sessionPath });
+          const source = sqlite ? { id: hit.sessionId } : { id: hit.sessionId, path: hit.sessionPath };
+          const sessionRef = referenceFor(source);
           return { ...hit, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) };
         });
         json(res, 200, { q: query, scope, ...result });
