@@ -44,6 +44,7 @@ import { createCheckpointTreeController } from "./lib/checkpointTreeController.j
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
+import { createFolderBrowserController } from "./lib/folderBrowserController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
@@ -1616,27 +1617,15 @@ let folderBrowserState = {
   done: null,
 };
 
-async function loadFolderBrowser(path) {
-  updateFolderBrowser({ loading: true });
-  const q = path ? `?path=${encodeURIComponent(path)}` : "";
-  const res = await fetch(`/browse${q}`);
-  const data = await res.json();
-  if (!res.ok) {
-    updateFolderBrowser({ loading: false });
-    toast(data.error || "cannot open folder", "error");
-    return;
-  }
-  folderBrowserState.browsePath = data.path;
-  updateModal({ title: "New session in folder" });
-  updateFolderBrowser({
-    path: data.path,
-    home: data.home,
-    parent: data.parent,
-    dirs: data.dirs ?? [],
-    showHidden: get(folderBrowser).showHidden,
-    loading: false,
-  });
-}
+const folderBrowserController = createFolderBrowserController({
+  async browse(path) { const q = path ? `?path=${encodeURIComponent(path)}` : ""; const res = await fetch(`/browse${q}`); const data = await res.json(); if (!res.ok) throw new Error(data.error || "cannot open folder"); return data; },
+  update: updateFolderBrowser,
+  updateTitle: (title) => updateModal({ title }),
+  getShowHidden: () => get(folderBrowser).showHidden,
+  setPath: (path) => { folderBrowserState.browsePath = path; },
+  toast,
+});
+const loadFolderBrowser = folderBrowserController.load;
 
 async function showFolderBrowser() {
   folderBrowserState = {
