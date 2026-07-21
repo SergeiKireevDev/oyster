@@ -41,6 +41,7 @@ import { commandTrigger, createCommandGuard, filterCommands } from "./lib/comman
 import { commandPalettePosition, commandPaletteView, moveCommandPaletteActive } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
+import { createComposerHistoryController } from "./lib/composerHistoryController.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController } from "./lib/hublotController.js";
@@ -373,16 +374,8 @@ function addUserMessage(message, options = {}) {
 }
 
 // Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
-const promptHistory = [];
-let histIdx = null;   // null = not navigating; otherwise index into promptHistory
-let histDraft = "";   // what was typed before navigation started
-
-function rememberPrompt(text) {
-  if (!text) return;
-  if (promptHistory[promptHistory.length - 1] === text) return; // skip consecutive dupes
-  promptHistory.push(text);
-  histIdx = null;
-}
+let composerHistory;
+const rememberPrompt = (text) => composerHistory.remember(text);
 
 // Texts we already rendered locally on send; pi echoes each prompt back as a
 // user message_start, which must not be rendered a second time.
@@ -485,9 +478,7 @@ function clearMessages() {
   resetTranscriptItems();
   toolCards.clear();
   assistantStream.clear();
-  promptHistory.length = 0;
-  histIdx = null;
-  histDraft = "";
+  composerHistory.clear();
 }
 
 // ---- transcript rendering: tail first, history backfilled above -----------
@@ -1110,7 +1101,7 @@ function composerInputChanged() {
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setComposerTextValue(input.value);
   setBusy(sessionUi.busy); // refresh busy state UI
-  histIdx = null; // typing exits history navigation
+  composerHistory.reset(); // typing exits history navigation
 }
 
 function setComposerText(text) {
@@ -1121,38 +1112,16 @@ function setComposerText(text) {
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
 }
 
+composerHistory = createComposerHistoryController({
+  getValue: () => input.value,
+  getSelection: () => ({ start: input.selectionStart, end: input.selectionEnd }),
+  setValue: setComposerText,
+});
+
 // ↑/↓ recall previous prompts, shell-style: ↑ only when the caret is on the
 // first line, ↓ only on the last line, so arrows still move within multiline
 // drafts. Typing resets navigation; ↓ past the newest entry restores the draft.
-function navigateHistory(dir) {
-  if (!promptHistory.length) return false;
-  const caret = input.selectionStart;
-  const onFirstLine = !input.value.slice(0, caret).includes("\n");
-  const onLastLine = !input.value.slice(input.selectionEnd).includes("\n");
-  if (dir === -1) {
-    if (!onFirstLine) return false;
-    if (histIdx === null) {
-      histDraft = input.value;
-      histIdx = promptHistory.length - 1;
-    } else if (histIdx > 0) {
-      histIdx--;
-    } else {
-      return true; // already at oldest; swallow the key
-    }
-    setComposerText(promptHistory[histIdx]);
-    return true;
-  }
-  // dir === +1
-  if (histIdx === null || !onLastLine) return false;
-  if (histIdx < promptHistory.length - 1) {
-    histIdx++;
-    setComposerText(promptHistory[histIdx]);
-  } else {
-    histIdx = null;
-    setComposerText(histDraft);
-  }
-  return true;
-}
+const navigateHistory = (direction) => composerHistory.navigate(direction);
 
 function composerKeydown(e) {
   if (e.isComposing) return;
