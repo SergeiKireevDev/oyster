@@ -13,3 +13,13 @@ test("checkpoint model picker owns its footer actions", () => {
   assert.match(component, /onclick=\{submitCheckpointModelPicker\}/);
   assert.doesNotMatch(overlays, /cancelCheckpointModelPicker|submitCheckpointModelPicker|\$checkpointModelPicker/);
 });
+
+test("hublot manager owns its footer actions", () => {
+  const component = read("HublotManagerModal.svelte");
+  const overlays = read("Overlays.svelte");
+
+  assert.match(component, /class="m-actions"/);
+  assert.match(component, /onclick=\{toggleManagedHublotScope\}/);
+  assert.match(component, /onclick=\{closeModalState\}/);
+  assert.doesNotMatch(overlays, /toggleManagedHublotScope|\$hublotManager/);
+});

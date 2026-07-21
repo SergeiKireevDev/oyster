@@ -1,9 +1,10 @@
 <script>
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
+  import { closeModalState } from "../stores/modal.js";
   import { addToast } from "../stores/toasts.js";
   import { openFilesExplorer as openManagedFileExplorer } from "../features/files/filesActions.js";
-  import { createManagedHublot, openManagedHublotCommandPalette } from "../features/hublots/hublotActions.js";
+  import { createManagedHublot, openManagedHublotCommandPalette, toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
 
   async function closeManagedHublot(id) {
     try {
@@ -94,4 +95,8 @@
   <button class="btn" disabled={$hublotManager.creating} onclick={() => createManagedHublot($hublotManager.desc)}>
     {$hublotManager.creating ? "Opening…" : "Open hublot"}
   </button>
+</div>
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope} onkeydown={(event) => keyActivate(event, toggleManagedHublotScope)}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
+  <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => keyActivate(event, closeModalState)}>Close</span>
 </div>

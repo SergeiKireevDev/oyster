@@ -21,8 +21,6 @@
   import { cancelFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
   import { cancelFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
-  import { hublotManager } from "../stores/hublotManager.js";
-  import { toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
   import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
 
   const dialogs = getDialogService();
@@ -83,9 +81,6 @@
       {:else if $modalState.content === "confirmPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
-      {:else if $modalState.content === "hublotManager"}
-        <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleManagedHublotScope(); }}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "folderBrowser"}
         <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ showHidden: !$folderBrowser.showHidden }); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>

@@ -86,7 +86,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Move checkpoint-model-picker footer controls from `Overlays.svelte` to
   `CheckpointModelPickerModal.svelte`, preserving cancel, submit, and model
   selection behavior with a focused test.
-- [ ] Move hublot-manager footer controls from `Overlays.svelte` to
+- [x] Move hublot-manager footer controls from `Overlays.svelte` to
   `HublotManagerModal.svelte`, preserving scope toggle and close behavior with
   a focused test.
 - [ ] Move folder-browser footer controls from `Overlays.svelte` to
