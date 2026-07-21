@@ -66,6 +66,8 @@ creation into store-backed action modules.
   hublot manager action module.
 - ✅ Hublot Manager description input now writes directly to its store; its
   bridge export and registration were removed.
+- ✅ Hublot creation request transport is isolated in `hublotActions.js` with
+  request-contract regression coverage.
 - Refresh manager and sidebar stores atomically after mutations, respecting
   current session scope.
 - Keep File Explorer opening as a store/modal action, not a bridge callback.
