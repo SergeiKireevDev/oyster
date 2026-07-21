@@ -1321,7 +1321,8 @@ function setupCommandPalette(el) {
   }).attach();
 }
 
-createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex }).attach();
+const commandPaletteRunController = createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex });
+commandPaletteRunController.attach();
 
 setupCommandPalette(input);
 
@@ -2159,5 +2160,6 @@ export function teardownLegacyRuntime() {
   menuEventController.detach();
   composerEventController.detach();
   commandPaletteKeyboardController.detach();
+  commandPaletteRunController.detach();
   connectionState.lost();
 }
