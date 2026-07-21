@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createAssistantStream, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+
+test("transcript sync scheduler retries during replay before reloading", async () => {
+  const timers = []; let replaying = true; let reloads = 0;
+  const scheduler = createTranscriptSyncScheduler({ isReplaying: () => replaying, hasRunner: () => true, reload: async () => reloads++, setTimeoutImpl: (fn, delay) => { timers.push([fn, delay]); return timers.length; } });
+  scheduler.schedule("sync");
+  assert.equal(timers[0][1], 250);
+  timers.shift()[0]();
+  assert.equal(timers[0][1], 500);
+  replaying = false;
+  timers.shift()[0]();
+  await Promise.resolve();
+  assert.equal(reloads, 1);
+});
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);

@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -1067,19 +1067,17 @@ async function reloadTranscript() {
   lifecycleLog("reloadTranscript:render-complete", { complete, ms: Math.round(performance.now() - started) });
 }
 
+const transcriptSyncScheduler = createTranscriptSyncScheduler({
+  isReplaying: () => replaying,
+  hasRunner: () => Boolean(currentRunner),
+  reload: reloadTranscript,
+  onError: (label, error) => {
+    if (!String(error.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, error);
+  },
+});
 let postAgentTranscriptSyncTimer = null;
 let postSendFileSyncTimer = null;
-function syncTranscriptSoon(label, delay = 250) {
-  return setTimeout(() => {
-    if (replaying || !currentRunner) {
-      syncTranscriptSoon(label, 500);
-      return;
-    }
-    reloadTranscript().catch((e) => {
-      if (!String(e.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, e);
-    });
-  }, delay);
-}
+const syncTranscriptSoon = transcriptSyncScheduler.schedule;
 
 function schedulePostAgentTranscriptSync() {
   clearTimeout(postAgentTranscriptSyncTimer);

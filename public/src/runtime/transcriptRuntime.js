@@ -34,6 +34,15 @@ export async function reconcileTranscriptReload({ messages, render, setReplaying
   return complete;
 }
 
+/** Delay canonical sync until the selected runner is ready, retrying through replay. */
+export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout }) {
+  const schedule = (label, delay = 250) => setTimeoutImpl(() => {
+    if (isReplaying() || !hasRunner()) return schedule(label, 500);
+    reload().catch((error) => onError(label, error));
+  }, delay);
+  return { schedule };
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);
