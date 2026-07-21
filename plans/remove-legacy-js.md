@@ -31,10 +31,11 @@ cd tests/e2e && npm test
 
 Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 
-- Move initialization from `legacy.js` behind an explicit `startAppRuntime()`.
-- Hold shared non-Svelte dependencies there: token access, fetch wrapper,
-  lifecycle logging, document/window event registration, and teardown hooks.
-- Make `main.js`/`App.svelte` start it instead of importing `legacy.js`.
+- ✅ Moved app startup behind an explicit `startAppRuntime()` composition root;
+  `App.svelte` no longer imports `legacy.js` directly.
+- Move shared non-Svelte dependencies there incrementally: token access, fetch
+  wrapper, lifecycle logging, document/window event registration, and teardown
+  hooks.
 - Do not move feature logic in this step.
 
 **Acceptance:** application startup behavior is unchanged, with a small

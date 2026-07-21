@@ -5,9 +5,10 @@
   import ChatLayout from "./components/ChatLayout.svelte";
   import Overlays from "./components/Overlays.svelte";
   import AuthGate from "./components/AuthGate.svelte";
+  import { startAppRuntime } from "./runtime/appRuntime.js";
 
   onMount(() => {
-    import("./legacy.js");
+    startAppRuntime();
   });
 </script>
 
