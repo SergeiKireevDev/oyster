@@ -50,7 +50,7 @@ import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
-import { createSessionPickerController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
+import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -1898,6 +1898,21 @@ const sessionPickerController = createSessionPickerController({
   toast,
 });
 
+const sessionPickerDeleteController = createSessionPickerDeleteController({
+  async removeSession(path) {
+    const response = await fetch(`/session?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `delete failed (${response.status})`);
+    return data;
+  },
+  getSessions: () => sessionPickerSessions,
+  setSessions: (sessions) => { sessionPickerSessions = sessions; updateSessionPicker({ sessions }); },
+  toast,
+  refreshHublots: loadHublots,
+  refreshRoutines: loadRoutines,
+  confirm,
+});
+
 const sessionPickerActions = {
   setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
   setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
@@ -1908,24 +1923,7 @@ const sessionPickerActions = {
     sessionPickerResolve?.(sessionPickerController.chooseSession(sessionPath, sessionPickerSessions));
   },
   stopSession: sessionPickerController.stopSession,
-  deleteSession: async (session) => {
-    if (!confirm(`Delete session "${session.name || session.preview || session.id?.slice(0, 8) || "?"}"?`)) return;
-    try {
-      const res = await fetch(`/session?path=${encodeURIComponent(session.path)}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast(data.error || `delete failed (${res.status})`, "error"); return; }
-      sessionPickerSessions = sessionPickerSessions.filter((s) => s.path !== session.path);
-      updateSessionPicker({ sessions: sessionPickerSessions });
-      const bits = [];
-      if (data.closedHublots?.length) bits.push(`closed hublot${data.closedHublots.length > 1 ? "s" : ""} :${data.closedHublots.join(", :")}`);
-      if (data.releasedRoutines?.length) bits.push(`released routine${data.releasedRoutines.length > 1 ? "s" : ""} ${data.releasedRoutines.join(", ")}`);
-      toast(bits.length ? `session deleted · ${bits.join(" · ")}` : "session deleted");
-      if (data.closedHublots?.length) loadHublots();
-      if (data.releasedRoutines?.length) loadRoutines();
-    } catch (err) {
-      toast(`delete failed: ${err.message}`, "error");
-    }
-  },
+  deleteSession: sessionPickerDeleteController.deleteSession,
   openSearchHit: (sessionPath, hit) => {
     sessionPickerResolve?.(null);
     openSearchHit(sessionPath, hit);

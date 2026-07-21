@@ -17,6 +17,26 @@ export function createSessionPickerController({ stopRunner, getRunners, markStop
   return { stopSession, chooseSession };
 }
 
+export function createSessionPickerDeleteController({ removeSession, getSessions, setSessions, toast, refreshHublots, refreshRoutines, confirm }) {
+  async function deleteSession(session) {
+    const label = session.name || session.preview || session.id?.slice(0, 8) || "?";
+    if (!confirm(`Delete session "${label}"?`)) return;
+    try {
+      const data = await removeSession(session.path);
+      setSessions(getSessions().filter((item) => item.path !== session.path));
+      const bits = [];
+      if (data.closedHublots?.length) bits.push(`closed hublot${data.closedHublots.length > 1 ? "s" : ""} :${data.closedHublots.join(", :")}`);
+      if (data.releasedRoutines?.length) bits.push(`released routine${data.releasedRoutines.length > 1 ? "s" : ""} ${data.releasedRoutines.join(", ")}`);
+      toast(bits.length ? `session deleted · ${bits.join(" · ")}` : "session deleted");
+      if (data.closedHublots?.length) refreshHublots();
+      if (data.releasedRoutines?.length) refreshRoutines();
+    } catch (error) {
+      toast(`delete failed: ${error.message}`, "error");
+    }
+  }
+  return { deleteSession };
+}
+
 export function createSessionPickerFolderController({ fetchSessions, getSnapshot, update, getRunners, setSessions, toast }) {
   async function refreshCurrent() {
     const sessions = await fetchSessions();
