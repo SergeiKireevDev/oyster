@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
 import { createPiProcessLauncher } from "../pi-processes.mjs";
-import { createRunnerManager } from "../runners.mjs";
+import { createRunnerManager, RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../runners.mjs";
 import { createSessionReferenceCodec } from "../session-references.mjs";
 
 function fakeProcess() {
@@ -68,8 +68,10 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(persisted.start_count, 1);
   assert.equal(persisted.created_at, "time");
   assert.equal(persisted.last_started_at, "time");
+  const streamReader = runner.stdoutReader;
   const reloadedManager = createRunnerManager(state, { appStore: store, ensureSessionOwner: () => owner, now: () => "reload" });
   assert.equal(state.runners.get(runner.id).proc, processes[0], "hot reload retains the live process handle");
+  assert.equal(state.runners.get(runner.id).stdoutReader, streamReader, "hot reload retains the stream reader");
   assert.equal(store.repositories.runners.find(runner.id).last_status, "running", "hot reload must not interrupt a retained process");
   assert.equal(reloadedManager.runnerFromReq(new URL(`http://localhost/?runner=${runner.id}`)), runner);
   assert.equal("buffer" in runner, false, "durable replay must not retain a second in-memory copy");
@@ -136,6 +138,13 @@ test("startup restores runner descriptors and replay without spawning until sele
   assert.equal(restored.sessionName, "Persisted name");
   assert.equal(restored.startCount, 4);
   assert.equal(restored.proc, null);
+  for (const field of RUNNER_EPHEMERAL_FIELDS) assert.equal(Object.hasOwn(restored, field), true, `missing runtime field ${field}`);
+  const persistedFields = new Set(Object.keys(store.repositories.runners.find(runnerId)));
+  for (const field of RUNNER_EPHEMERAL_FIELDS) assert.equal(persistedFields.has(field), false, `${field} must not be durable`);
+  for (const field of RUNNER_MANAGER_EPHEMERAL_FIELDS) {
+    assert.ok(state[field], `stable runtime state must own ${field}`);
+    assert.equal(persistedFields.has(field), false, `${field} must not be durable`);
+  }
   assert.equal(state.defaultRunnerId, runnerId);
   assert.equal(store.repositories.runners.find(runnerId).last_status, "interrupted");
   assert.equal(store.repositories.runners.find(runnerId).desired_state, "stopped");
@@ -149,6 +158,8 @@ test("startup restores runner descriptors and replay without spawning until sele
   assert.equal(spawnCount, 0, "descriptor lookup alone remains lazy");
   manager.sendToRunner(restored, { type: "get_state" });
   assert.equal(spawnCount, 1, "the selected runner starts on first command demand");
+  assert.ok(restored.proc);
+  assert.ok(restored.stdoutReader);
   assert.equal(restored.startCount, 5);
 });
 

@@ -77,7 +77,6 @@ ServerState {
 
   // lazily added
   runners?: Map<string, Runner>
-  runnerSeq?: number
   defaultRunnerId?: string | null
   runnerWatchdogTimer?: Timeout
   runnerReaperTimer?: Timeout
@@ -99,24 +98,27 @@ This object is the server's in-memory system of record for live resources. It de
 
 ```text
 Runner {
-  id: "r<n>"
+  // durable descriptor fields mirrored from SQLite
+  id: "r-<uuid>"
   dir: path
+  sessionRef: SessionReference | null
   sessionFile: path | null
   sessionId: string | null
   sessionName: string | null
+  startCount: number
+
+  // explicitly ephemeral runtime fields
   busy: boolean
   proc: ChildProcess | null
-  buffer: string[]
-  startCount: number
+  stdoutReader: Interface | null
   lastSpawnAt: epoch-ms
-
-  resumeId?: string | null
-  resumeQueue?: RpcCommand[]
-  resumeTimer?: Timeout
-  watchdogOk?: boolean
-  lastLineAt?: epoch-ms
-  probeSentAt?: epoch-ms | null
-  probeMisses?: number
+  resumeId: string | null
+  resumeQueue: RpcCommand[]
+  resumeTimer: Timeout | null
+  watchdogOk: boolean
+  lastLineAt: epoch-ms
+  probeSentAt: epoch-ms | null
+  probeMisses: number
 }
 ```
 
@@ -126,7 +128,7 @@ Runner {
 { id, dir, sessionFile, sessionId, sessionName, busy, alive: boolean }
 ```
 
-A runner is related to a session by both `sessionFile` and pi-reported `sessionId`; neither is enforced as unique. `openSessionRunner` attempts uniqueness by `sessionFile`. Runner IDs and sequences reset on server restart. Dead runner shells remain in the map unless their session is deleted or the server restarts.
+A runner is related to a session by its backend-neutral `sessionRef`. Durable descriptors and UUID-based IDs survive restart; process handles and the explicitly classified runtime fields above survive only hot reload. Dead runner descriptors remain available for lazy restart until their owning session is deleted.
 
 The `/rpc` command is intentionally opaque except for requiring an object with a string `type`; it is forwarded to pi's JSONL RPC protocol. Server-created commands add `id`, `type`, and command-specific fields.
 
@@ -143,7 +145,7 @@ Important server event variants include:
 - Resource events: `tunnel_opened`, `tunnel_closed`, `hublot_ready`, `hublot_failed`, `routine_update`.
 - Reload events: `code_reloaded`, `code_reload_failed`, `ui_reload`.
 
-Global server events are not replayed. Only `Runner.buffer` is replayed, capped at 400 lines. `ServerResponse` objects are used as subscription records by attaching `runnerId`, coupling transport objects to application state.
+Global server events are not replayed. Runner replay is stored in SQLite `runner_events`, capped at 400 lines per runner; no replay copy is retained on the runtime runner object. `ServerResponse` objects are used as subscription records by attaching `runnerId`, coupling transport objects to application state.
 
 ### 5. Auth-failure model
 

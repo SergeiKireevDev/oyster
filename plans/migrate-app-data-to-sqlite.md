@@ -343,7 +343,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Replace the in-memory replay buffer with a bounded `runner_events` repository.
 - [x] Restore descriptors on startup but spawn processes only on demand.
 - [x] Mark previously live runners as interrupted/stopped after restart.
-- [ ] Keep process handles, watchdog state, resume queues, timers, and streams in memory.
+- [x] Keep process handles, watchdog state, resume queues, timers, and streams in memory.
 
 ### 8. Persist server-level settings
 

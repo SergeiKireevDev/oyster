@@ -46,6 +46,37 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
+export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
+  "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer",
+  "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
+]);
+export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
+
+function initializeRunnerRuntime(descriptor) {
+  return {
+    ...descriptor,
+    proc: null,
+    stdoutReader: null,
+    busy: false,
+    resumeId: null,
+    resumeQueue: [],
+    resumeTimer: null,
+    lastSpawnAt: 0,
+    lastLineAt: 0,
+    probeSentAt: null,
+    probeMisses: 0,
+    watchdogOk: false,
+  };
+}
+
+function ensureRunnerRuntimeFields(runner) {
+  const defaults = initializeRunnerRuntime({});
+  for (const field of RUNNER_EPHEMERAL_FIELDS) {
+    if (!(field in runner)) runner[field] = field === "resumeQueue" ? [] : defaults[field];
+  }
+  return runner;
+}
+
 export function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = state.appStore, now = () => new Date().toISOString(),
@@ -82,22 +113,20 @@ export function createRunnerManager(state, {
         storagePath: persisted.session_storage_path,
       })
       : null;
-    state.runners.set(persisted.id, {
+    state.runners.set(persisted.id, initializeRunnerRuntime({
       id: persisted.id,
       dir: persisted.dir,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
       sessionName: persisted.session_name,
-      busy: false,
-      proc: null,
       startCount: persisted.start_count,
-      lastSpawnAt: 0,
-    });
+    }));
   }
   const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1);
   if (persistedDefault) state.defaultRunnerId = persistedDefault.id;
   for (const runner of state.runners.values()) {
+    ensureRunnerRuntimeFields(runner);
     if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
       runner.sessionRef = sessionReferences.validate({
         backend: "jsonl",
@@ -231,6 +260,7 @@ export function createRunnerManager(state, {
     if (!runner.resumeId) return;
     runner.resumeId = null;
     clearTimeout(runner.resumeTimer);
+    runner.resumeTimer = null;
     const queued = runner.resumeQueue ?? [];
     runner.resumeQueue = [];
     for (const obj of queued) {
@@ -260,18 +290,15 @@ export function createRunnerManager(state, {
       sessionStoragePath: reference?.storagePath ?? null,
       desiredState: "running", lastStatus: "starting", createdAt,
     });
-    const runner = {
+    const runner = initializeRunnerRuntime({
       id,
       dir,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
       sessionName: null,
-      busy: false,
-      proc: null,
       startCount: 0,
-      lastSpawnAt: 0,
-    };
+    });
     state.runners.set(runner.id, runner);
     startRunner(runner);
     return runner;
@@ -309,6 +336,7 @@ export function createRunnerManager(state, {
     runner.probeMisses = 0;
 
     const rl = createInterface({ input: proc.stdout });
+    runner.stdoutReader = rl;
     rl.on("line", (line) => {
       line = line.trim();
       if (!line) return;
@@ -326,6 +354,7 @@ export function createRunnerManager(state, {
       console.error(`[pi-ui] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
       if (runner.proc === proc) runner.proc = null;
+      if (runner.stdoutReader === rl) runner.stdoutReader = null;
       runnerRepository?.update(runner.id, { last_status: "dead" });
       runnersChanged();
     });
@@ -334,6 +363,7 @@ export function createRunnerManager(state, {
       console.log(`[pi-ui] runner ${runner.id} exited (code=${code}, signal=${signal})`);
       if (runner.proc === proc) {
         runner.proc = null;
+        if (runner.stdoutReader === rl) runner.stdoutReader = null;
         runner.busy = false;
         runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
         runnerEvent(runner, { type: "pi_exit", code, signal });
@@ -364,8 +394,15 @@ export function createRunnerManager(state, {
     if (!proc) return;
     runner.proc = null;
     runner.busy = false;
+    clearTimeout(runner.resumeTimer);
+    runner.resumeTimer = null;
+    runner.resumeId = null;
+    runner.resumeQueue = [];
     proc.removeAllListeners("exit");
-    proc.on("exit", () => runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" }));
+    proc.on("exit", () => {
+      runner.stdoutReader = null;
+      runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" });
+    });
     proc.kill("SIGTERM");
     setTimeout(() => {
       if (proc.exitCode === null && !proc.killed) proc.kill("SIGKILL");

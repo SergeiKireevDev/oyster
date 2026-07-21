@@ -63,7 +63,7 @@ test("SQLite runners start and restart by ID with explicit store environment", (
 
   assert.deepEqual(spawns[0].args, ["--mode", "rpc", "--session", "sqlite-one", "--thinking", "off"]);
   assert.equal(spawns[0].options.env.PERSISTENT_STORE, "sqlite");
-  assert.equal(runner.resumeId, undefined);
+  assert.equal(runner.resumeId, null);
   assert.deepEqual(manager.runnerInfo(runner), {
     id: runner.id,
     dir: "/workspace",
@@ -132,4 +132,11 @@ test("JSONL runners retain file compatibility and switch-session startup", (t) =
   assert.equal(command.type, "switch_session");
   assert.equal(command.sessionPath, sessionRef.storagePath);
   assert.equal(manager.runnerInfo(runner).sessionFile, sessionRef.storagePath);
+  assert.ok(runner.resumeTimer);
+  manager.sendToRunner(runner, { type: "prompt", message: "queued" });
+  assert.equal(runner.resumeQueue.length, 1);
+  manager.stopRunner(runner);
+  assert.equal(runner.resumeId, null);
+  assert.equal(runner.resumeTimer, null);
+  assert.deepEqual(runner.resumeQueue, []);
 });
