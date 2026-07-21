@@ -185,7 +185,7 @@
   }
   #hublotAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
 
-  /* ---------- checkpoint / fork tree (right sidebar, toggled by 🌳) ---------- */
+  /* ---------- checkpoint / fork tree (right sidebar, toggled by ⎇) ---------- */
   #treebar {
     width: 270px;
     flex-shrink: 0;
@@ -976,7 +976,7 @@
   <span class="title" id="sessionTitle">pi-lot</span>
   <span class="spacer"></span>
   <span class="chip" id="hublotChip" title="Show hublots">❖</span>
-  <span class="chip" id="treeChip" title="Checkpoints & forks tree">🌳</span>
+  <span class="chip" id="treeChip" title="Checkpoints & forks tree">⎇</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
@@ -1775,7 +1775,7 @@ async function rollbackToCheckpoint(cp, btn) {
 
 // ------------------------------------------------------------ checkpoint / fork tree sidebar
 //
-// The 🌳 chip toggles a right sidebar showing the current session's whole
+// The ⎇ chip toggles a right sidebar showing the current session's whole
 // family: its root ancestor, every fork (nested under the checkpoint it was
 // created from), and each session's checkpoints. Sessions switch on tap;
 // checkpoints roll back on tap.
