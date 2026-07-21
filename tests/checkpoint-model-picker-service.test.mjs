@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { get } from "svelte/store";
 import {
   createCheckpointModelPickerService,
@@ -55,6 +55,25 @@ test("checkpoint picker modal consumes the scoped service and preserves controls
   assert.doesNotMatch(source, /stores\/checkpointModelPicker\.js/);
 });
 
+test("checkpoint picker has no obsolete global store references", () => {
+  const sourceRoot = new URL("../public/src/", import.meta.url);
+  const references = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
+      if (entry.isDirectory()) visit(url);
+      else if (/\.(?:js|svelte)$/.test(entry.name)) {
+        const source = readFileSync(url, "utf8");
+        if (/stores\/checkpointModelPicker\.js/.test(source)) references.push(url.pathname.slice(sourceRoot.pathname.length));
+      }
+    }
+  };
+  visit(sourceRoot);
+
+  assert.equal(existsSync(new URL("stores/checkpointModelPicker.js", sourceRoot)), false);
+  assert.deepEqual(references, []);
+});
+
 test("opening a replacement settles the previous picker before owning the resolver", async () => {
   const { service, calls } = createHarness("remembered/model");
   const replaced = service.open({ title: "Old" });
@@ -72,4 +91,18 @@ test("opening a replacement settles the previous picker before owning the resolv
   service.cancel();
   assert.deepEqual(await current, { cancelled: true });
   assert.equal(calls.at(-1)[0], "close");
+});
+
+test("checkpoint picker teardown settles an open promise and prevents reuse", async () => {
+  const { service, calls } = createHarness();
+  const pending = service.open({ title: "Pending" });
+
+  service.teardown();
+  service.teardown();
+
+  assert.deepEqual(await pending, { cancelled: true });
+  assert.deepEqual(get(service.state), { ...emptyCheckpointModelPicker });
+  assert.equal(calls.filter(([kind]) => kind === "close").length, 1);
+  assert.deepEqual(await service.open({ title: "Disposed" }), { cancelled: true });
+  assert.equal(calls.filter(([kind]) => kind === "open").length, 1);
 });

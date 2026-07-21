@@ -127,7 +127,7 @@ bridge or direct persistence policy.
 - [x] Change `CheckpointModelPickerModal.svelte` and checkpoint feature calls
   to use the scoped picker service. Preserve model selection, cancellation,
   extension UI, and modal-title contracts.
-- [ ] Delete `stores/checkpointModelPicker.js` after a no-reference check and
+- [x] Delete `stores/checkpointModelPicker.js` after a no-reference check and
   add a teardown test that settles an open picker promise.
 - [ ] Add an auth browser service with token persistence and reload operations,
   provide it through context, and change `AuthGate.svelte` to use it. Test that
