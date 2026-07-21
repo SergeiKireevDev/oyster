@@ -1,7 +1,7 @@
 import { createExtensionUiController } from "../../lib/extensionUiController.js";
 import { createSettingsController } from "../../lib/settingsController.js";
 import { createAdjacentRunnerController } from "../../lib/sessionActions.js";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController } from "../../runtime/carouselController.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "../../runtime/carouselController.js";
 import { createCarouselEventDependencies } from "../../runtime/carouselEventDependencies.js";
 import { createLayoutFeature } from "../layout/createLayoutFeature.js";
 import { createSettingsFeature } from "./createSettingsFeature.js";
@@ -73,6 +73,15 @@ export function createSettingsLayoutRuntime(deps) {
     carousel,
   });
 
+  const mobileDrawer = createMobileDrawerDismissController({
+    documentTarget: deps.documentTarget,
+    windowTarget: deps.windowTarget,
+    hublots: deps.hublotsEl,
+    treebar: deps.treebarEl,
+    getCarousel: () => carousel,
+    isToggleTarget: deps.isDrawerToggleTarget,
+  });
+
   const detachHeaderActions = configureHeaderActions((action, sourceEvent) => ({
     chooseModel: settings.chooseModel,
     cycleThinking: settings.cycleThinking,
@@ -88,8 +97,10 @@ export function createSettingsLayoutRuntime(deps) {
     events,
     detachSettingsActions,
     detachHeaderActions,
+    mobileDrawer,
     teardown() {
       events.detach();
+      mobileDrawer.detach();
       detachHeaderActions();
       detachSettingsActions();
       settings.teardown?.();

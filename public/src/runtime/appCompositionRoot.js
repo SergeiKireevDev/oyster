@@ -22,7 +22,6 @@ import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./carouselController.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
@@ -57,7 +56,6 @@ import { configureFilePickerActions } from "../features/files/filePickerActions.
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { configureRoutineActions } from "../features/routines/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
-import { createSettingsController } from "../lib/settingsController.js";
 import { configureSettingsActions } from "../features/settings/settingsActions.js";
 import { configureHeaderActions } from "../features/settings/headerActions.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
@@ -658,19 +656,6 @@ const detachHublotActions = configureHublotActions({
   openCommandPalette: setupCommandPalette,
 });
 
-// mobile: toggle the hublots sidebar as a slide-over drawer
-// tap outside the drawer closes it (mobile only — on desktop they're
-// docked, not overlays). Sync the carousel state so applyCarousel()
-// doesn't immediately re-open it.
-const mobileDrawerDismissController = createMobileDrawerDismissController({
-  documentTarget: document,
-  windowTarget: window,
-  hublots: $("hublots"),
-  treebar: $("treebar"),
-  getCarousel: () => carouselController,
-  isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
-});
-
 const loadHublots = resourceOperations.loadHublots;
 
 const detachFilesActions = configureFilesActions({
@@ -833,6 +818,7 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
   hublotsEl: $("hublots"),
   treebarEl: $("treebar"),
+  isDrawerToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
 });
 const handleExtensionUI = settingsLayoutRuntime.handleExtensionUI;
 const carouselController = settingsLayoutRuntime.carousel;
@@ -914,10 +900,7 @@ sessionAssembly.configureBoot({
 const boot = sessionOperations.boot;
 
 const detachRuntimeEventAdapters = () => {
-  carouselEventRegistration.detach();
-  mobileDrawerDismissController.detach();
-  detachHeaderActions();
-  detachSettingsActions();
+  settingsLayoutRuntime.teardown();
   detachComposerActions();
   detachCheckpointTreeActions();
   detachFilePickerActions();
@@ -959,7 +942,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
-    mobileDrawerDismissController,
+    settingsLayoutRuntime.mobileDrawer,
     carouselEventRegistration,
   ],
   applyCarousel: () => carouselController.apply(),

@@ -88,7 +88,7 @@ controller construction or shared resource state.
 
 ## [ ] 8. Extract Settings and Layout Assembly
 
-- [ ] Move remaining settings, extension UI, header, carousel, swipe, drawer, and responsive listener wiring into dedicated settings/layout assemblies.
+- [x] Move remaining settings, extension UI, header, carousel, swipe, drawer, and responsive listener wiring into dedicated settings/layout assemblies.
 - [ ] Replace direct root DOM lookups with an explicit component-provided or browser adapter interface.
 - [ ] Expose settings operations, layout apply/reset operations, and teardown only.
 - [ ] Add remount tests proving listeners attach once and detach completely.
