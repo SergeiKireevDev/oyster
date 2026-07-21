@@ -95,7 +95,7 @@ const lifecycleLog = createLifecycleLogger({
 // Auth/token initialization is runtime-owned; legacy receives its current
 // token for transport and EventSource construction.
 const token = initializeAuth();
-installAuthenticatedFetch(token);
+const authenticatedFetchRegistration = installAuthenticatedFetch(token);
 
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
@@ -2190,5 +2190,6 @@ export function teardownLegacyRuntime() {
   commandPaletteInputController?.detach();
   debugHookRegistration.detach();
   delayedTasks.cancelAll();
+  authenticatedFetchRegistration.detach();
   connectionState.lost();
 }

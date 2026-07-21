@@ -67,12 +67,19 @@ export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }
   };
 }
 
-export function installAuthenticatedFetch(token) {
-  const rawFetch = window.fetch.bind(window);
-  window.fetch = (input, opts = {}) => {
+export function installAuthenticatedFetch(token, { windowTarget = window } = {}) {
+  const originalFetch = windowTarget.fetch;
+  const rawFetch = originalFetch.bind(windowTarget);
+  const authenticatedFetch = (input, opts = {}) => {
     if (typeof input === "string" && input.startsWith("/") && token) {
       opts = { ...opts, headers: { "x-auth-token": token, ...(opts.headers || {}) } };
     }
     return rawFetch(input, opts);
+  };
+  windowTarget.fetch = authenticatedFetch;
+  return {
+    detach() {
+      if (windowTarget.fetch === authenticatedFetch) windowTarget.fetch = originalFetch;
+    },
   };
 }

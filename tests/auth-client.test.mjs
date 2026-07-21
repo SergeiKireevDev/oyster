@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearAuthToken, createUnauthorizedHandler, showAuthGate } from "../public/src/runtime/authClient.js";
+import { clearAuthToken, createUnauthorizedHandler, installAuthenticatedFetch, showAuthGate } from "../public/src/runtime/authClient.js";
+
+test("authenticated fetch adapter restores the original fetch on detach", async () => {
+  const calls = [];
+  const originalFetch = async (...args) => { calls.push(args); return "ok"; };
+  const target = { fetch: originalFetch };
+  const registration = installAuthenticatedFetch("token", { windowTarget: target });
+  assert.equal(await target.fetch("/api", { headers: { existing: "value" } }), "ok");
+  assert.deepEqual(calls, [["/api", { headers: { "x-auth-token": "token", existing: "value" } }]]);
+  registration.detach();
+  assert.equal(target.fetch, originalFetch);
+});
 
 test("clearAuthToken removes storage and expires the cookie", () => {
   let removed; const documentTarget = {};
