@@ -1187,13 +1187,14 @@ async function abort() {
   catch (e) { addToast(`abort failed: ${e.message}`, "error"); }
 }
 
-createComposerEventController({
+const composerEventController = createComposerEventController({
   documentTarget: document,
   inputChanged: composerInputChanged,
   keydown: composerKeydown,
   send,
   abort,
-}).attach();
+});
+composerEventController.attach();
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"
@@ -2155,5 +2156,6 @@ export function teardownLegacyRuntime() {
   headerEventController.detach();
   settingsChangeController.detach();
   menuEventController.detach();
+  composerEventController.detach();
   connectionState.lost();
 }
