@@ -17,6 +17,12 @@ export function showAuthGate({ gate, input }) {
   input.focus();
 }
 
+/** Clear persisted authentication when the server explicitly rejects it. */
+export function clearAuthToken({ storage, documentTarget }) {
+  storage.removeItem("pi_ui_token");
+  documentTarget.cookie = "pi_ui_token=; path=/; max-age=0";
+}
+
 export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }) {
   let lastProbeAt = 0;
   return async () => {

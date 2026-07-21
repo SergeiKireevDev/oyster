@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { createAuthProbe, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
+import { clearAuthToken, createAuthProbe, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
@@ -114,8 +114,7 @@ const requireToken = () => showAuthGate({ gate, input: $("gateInput") });
 const probeTokenValidity = createAuthProbe({
   getToken: () => token,
   onUnauthorized: () => {
-    localStorage.removeItem("pi_ui_token");
-    document.cookie = "pi_ui_token=; path=/; max-age=0";
+    clearAuthToken({ storage: localStorage, documentTarget: document });
     updateHeaderState({ stateInfo: "invalid token" });
     requireToken();
   },
