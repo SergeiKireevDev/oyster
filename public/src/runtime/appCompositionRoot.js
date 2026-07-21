@@ -1228,6 +1228,7 @@ const detachRuntimeEventAdapters = () => {
   detachSessionPickerActions();
   detachFilesActions();
   commandPaletteInputController?.detach();
+  transcriptAssembly.teardown();
 };
 const runtimeTeardown = createRuntimeCleanup({
   closeEventStream: () => connectionCoordinator.disconnect(),

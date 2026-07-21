@@ -163,8 +163,10 @@ export function createTranscriptAssembly(deps) {
       hasRunner: syncDeps.hasRunner,
       reload: reloadTranscript,
       onError: syncDeps.onSyncError,
+      setTimeoutImpl: syncDeps.setTimeoutImpl,
+      clearTimeoutImpl: syncDeps.clearTimeoutImpl,
     });
-    const postAgentSync = createDebouncedTranscriptSyncController({ schedule: scheduler.schedule });
+    const postAgentSync = createDebouncedTranscriptSyncController({ schedule: scheduler.schedule, clearTimeoutImpl: syncDeps.clearTimeoutImpl });
     const agentStart = createAgentStartController({ setBusy: syncDeps.setBusy });
     const agentCompletion = createAgentCompletionController({
       setBusy: syncDeps.setBusy,
@@ -180,6 +182,8 @@ export function createTranscriptAssembly(deps) {
       userMessageText,
       renderTranscript,
       log: syncDeps.logPostSend,
+      setTimeoutImpl: syncDeps.setTimeoutImpl,
+      clearTimeoutImpl: syncDeps.clearTimeoutImpl,
     });
     synchronization = {
       reloadTranscript,
@@ -187,6 +191,11 @@ export function createTranscriptAssembly(deps) {
       agentStart,
       agentCompletion,
       schedulePostSendFileTranscriptSync: postSendSync.schedule,
+      teardown() {
+        postAgentSync.teardown();
+        postSendSync.teardown();
+        scheduler.teardown();
+      },
     };
     return synchronization;
   }
@@ -229,6 +238,7 @@ export function createTranscriptAssembly(deps) {
     operations,
     setPermalinkOperations: (next) => { permalinkOperations = next; },
     teardown() {
+      synchronization?.teardown();
       renderer.cancel();
       localEchoes.length = 0;
       afterTranscript = null;

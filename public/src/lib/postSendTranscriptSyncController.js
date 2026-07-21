@@ -16,5 +16,11 @@ export function createPostSendTranscriptSyncController({ getRunner, getSessionFi
     };
     timer = setTimeoutImpl(tick, 750);
   }
-  return { schedule };
+  return {
+    schedule,
+    teardown() {
+      clearTimeoutImpl(timer);
+      timer = null;
+    },
+  };
 }

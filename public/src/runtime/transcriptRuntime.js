@@ -62,12 +62,25 @@ export function isComposerReadyForSend({ connected, replaying, transcriptGateReq
   return connected && (!replaying || !transcriptGateRequired);
 }
 
-export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout }) {
-  const schedule = (label, delay = 250) => setTimeoutImpl(() => {
-    if (isReplaying() || !hasRunner()) return schedule(label, 500);
-    reload().catch((error) => onError(label, error));
-  }, delay);
-  return { schedule };
+export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+  const timers = new Set();
+  const schedule = (label, delay = 250) => {
+    let timer;
+    timer = setTimeoutImpl(() => {
+      timers.delete(timer);
+      if (isReplaying() || !hasRunner()) return schedule(label, 500);
+      reload().catch((error) => onError(label, error));
+    }, delay);
+    timers.add(timer);
+    return timer;
+  };
+  return {
+    schedule,
+    teardown() {
+      for (const timer of timers) clearTimeoutImpl(timer);
+      timers.clear();
+    },
+  };
 }
 
 /** Coalesce post-agent durable transcript refreshes into one pending sync. */
@@ -78,6 +91,10 @@ export function createDebouncedTranscriptSyncController({ schedule, clearTimeout
       if (timer) clearTimeoutImpl(timer);
       timer = schedule(label, delay);
       return timer;
+    },
+    teardown() {
+      if (timer) clearTimeoutImpl(timer);
+      timer = null;
     },
   };
 }
