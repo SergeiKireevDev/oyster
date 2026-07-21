@@ -2595,6 +2595,10 @@ async function getKnownCommands() {
   return knownCommands;
 }
 
+function promptRpcCommand(text) {
+  return { type: "prompt", message: text, ...(busy ? { streamingBehavior: "steer" } : {}) };
+}
+
 async function send() {
   const text = input.value.trim();
   if (!text) return;
@@ -2620,7 +2624,7 @@ async function send() {
   addUserMessage({ role: "user", content: text });
   localEchoes.push(text);
   try {
-    await rpc({ type: "prompt", message: text }, { wait: false });
+    await rpc(promptRpcCommand(text), { wait: false });
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
@@ -3125,7 +3129,7 @@ async function sendAgentMessage(text) {
   addUserMessage({ role: "user", content: text });
   localEchoes.push(text);
   try {
-    await rpc({ type: "prompt", message: text }, { wait: false });
+    await rpc(promptRpcCommand(text), { wait: false });
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);

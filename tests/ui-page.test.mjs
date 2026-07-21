@@ -29,6 +29,16 @@ test("inline script parses (node --check)", () => {
   execFileSync(process.execPath, ["--check", file]); // throws on syntax error
 });
 
+test("composer prompts include steering behavior while busy", () => {
+  const js = inlineScript();
+  assert.match(
+    js,
+    /function promptRpcCommand\(text\) \{\s*return \{ type: "prompt", message: text, \.\.\.\(busy \? \{ streamingBehavior: "steer" \} : \{\}\) \};\s*\}/,
+    "busy composer sends must include streamingBehavior=steer so pi accepts mid-stream steering"
+  );
+  assert.match(js, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
+});
+
 test("every DOM id referenced by the script exists in the markup", () => {
   const js = inlineScript();
   const defined = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
