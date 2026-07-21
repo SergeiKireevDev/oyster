@@ -39,7 +39,7 @@ RUN mkdir -p /opt/pi && npm install --prefix /opt/pi "${PI_PACKAGE_SPEC}"
 WORKDIR /app
 
 # Frontend build dependencies + app sources (see .dockerignore)
-COPY package.json package-lock.json vite.config.js README.md pi-ui.service Dockerfile Dockerfile.local-pi ./
+COPY package.json package-lock.json vite.config.js README.md AGENTS.md pi-ui.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
 COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./

@@ -20,7 +20,7 @@ no network model calls, fully deterministic**.
   and `pi-lot-ui:sqlite` for the container-replacement contract. It builds
   missing images automatically; the SQLite build uses `Dockerfile.local-pi`
   with `/home/ubuntu/pi-coding-agent` (override with `PI_SOURCE_CONTEXT`).
-- Node ≥ 18.
+- Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
 
 Both images bundle a mock LLM, so no host credentials or external model access
 are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`, an

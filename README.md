@@ -40,7 +40,7 @@ new ESM cache entries, so this mechanism is not intended as a production
 rollout strategy: production deployments should replace the Node process to
 bound module-cache growth and guarantee a clean application version.
 
-- **Minimal runtime** — Node ≥ 22.19 is required for SQLite (`node:sqlite`); no npm SQLite driver is used. Tests: `npm test`.
+- **Minimal runtime** — Node ≥ 22.19 is universally required because the stable server uses `node:sqlite` for pi-lot-ui application data, including when pi sessions use JSONL. No npm SQLite driver is used. Tests: `npm test`.
 - **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
 - **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.
 
@@ -80,8 +80,7 @@ cd /home/ubuntu/tree-pi-bak-sql && node server.mjs
 Development defaults to
 `/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js` with
 `PERSISTENT_STORE=sqlite`. The server refuses to start if that executable is
-missing/stale, if SQLite is selected on Node older than 22.19, or if the store
-value is invalid. SQLite sessions are stored in
+missing/stale, when Node is older than 22.19, or if the store value is invalid. SQLite sessions are stored in
 `~/.pi/agent/sessions.sqlite` by default (or `sessions.sqlite` under
 `PI_CODING_AGENT_DIR`/`--session-dir`).
 

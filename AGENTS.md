@@ -31,7 +31,7 @@ This is a zero-dependency Node.js project — there is no install script, no bui
 
 ### Prerequisites
 
-- **Node.js ≥ 18** — check with `node --version`. LTS (20.x or 22.x) is recommended.
+- **Node.js ≥ 22.19** — check with `node --version`. This is required universally because the stable server uses the built-in `node:sqlite` application store, even when pi sessions use JSONL.
 - **`pi` binary** — the [`pi` coding agent](https://github.com/badlogic/pi-mono) must be installed and on `PATH`. Install via npm: `npm install -g @earendil-works/pi-coding-agent` (or whatever package provides `pi`), then verify with `which pi`.
 - **`cloudflared`** (optional) — only needed for the tunnels feature. Install from [pkg.cloudflare.com](https://pkg.cloudflare.com) if you plan to use tunnel functionality.
 

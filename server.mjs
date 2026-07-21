@@ -50,7 +50,7 @@ function defaultTunnelBin() {
 }
 
 const DEFAULT_LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
-const MIN_SQLITE_NODE = [22, 19, 0];
+const MIN_NODE_VERSION = [22, 19, 0];
 
 function resolveExecutable(value) {
   if (value.includes("/") || value.includes("\\")) return resolve(value);
@@ -76,6 +76,12 @@ function newestMtime(path) {
 }
 
 function validateConfig(config) {
+  const currentNode = process.versions.node.split(".").map(Number);
+  const supportedNode = MIN_NODE_VERSION.every((part, index) =>
+    currentNode[index] === part || currentNode[index] > part || currentNode.slice(0, index).some((value, prior) => value > MIN_NODE_VERSION[prior]));
+  if (!supportedNode) {
+    throw new Error(`pi-lot-ui requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
+  }
   if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
     throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
   }
@@ -83,11 +89,6 @@ function validateConfig(config) {
     accessSync(config.PI_BIN, constants.X_OK);
   } catch {
     throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Build /home/ubuntu/pi-coding-agent or set PI_BIN/--pi explicitly.`);
-  }
-  if (config.PERSISTENT_STORE === "sqlite") {
-    const current = process.versions.node.split(".").map(Number);
-    const supported = MIN_SQLITE_NODE.every((part, index) => current[index] === part || current[index] > part || current.slice(0, index).some((value, prior) => value > MIN_SQLITE_NODE[prior]));
-    if (!supported) throw new Error(`SQLite sessions require Node.js >= ${MIN_SQLITE_NODE.join(".")}; current runtime is ${process.versions.node}`);
   }
   if (config.PI_BIN === DEFAULT_LOCAL_PI) {
     const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
