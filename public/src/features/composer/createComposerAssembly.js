@@ -218,9 +218,15 @@ export function createComposerAssembly(deps) {
           }
           const path = pathTrigger(element);
           if (path) {
-            state = null;
-            commandDeps.closePaletteState();
-            updatePathCompletions(element, path, version);
+            if (state?.mode === "command") {
+              state = null;
+              commandDeps.closePaletteState();
+            }
+            commandDeps.schedule(() => {
+              if (version === requestVersion && pathTrigger(element)?.text === path.text) {
+                updatePathCompletions(element, path, version);
+              }
+            }, 140);
           } else if (state?.target === element) close();
         },
         onBlur: () => commandDeps.schedule(() => { if (state?.target === element) close(); }, 150),

@@ -106,6 +106,13 @@ test("composer assembly registers scoped actions until teardown", async () => {
   assert.equal(uiActions.invoke(COMPOSER_SEND_ACTION), undefined);
 });
 
+test("composer path autocomplete debounces refreshes and discards stale drafts", () => {
+  const source = readFileSync(new URL("../public/src/features/composer/createComposerAssembly.js", import.meta.url), "utf8");
+  assert.match(source, /commandDeps\.schedule\(\(\) => \{/);
+  assert.match(source, /version === requestVersion && pathTrigger\(element\)\?\.text === path\.text/);
+  assert.match(source, /\}, 140\);/);
+});
+
 test("composer command palette retains access to the full sessions manager", () => {
   const source = readFileSync(new URL("../public/src/features/composer/createComposerAssembly.js", import.meta.url), "utf8");
   assert.match(source, /name: "sessions"/);
