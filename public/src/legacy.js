@@ -35,6 +35,7 @@ import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
+import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -397,45 +398,15 @@ const localEchoes = [];
 // runner's workdir (server-side `git add -A && git commit`), freezing the
 // state the conversation reached at that point.
 
-let checkpointBusy = false;
 /** Modal with a single model selector for the diff-summary sub-agent; the
- *  choice is remembered (localStorage) and preselected next time.
- *  Resolves { model } (null model = no summary) or { cancelled: true }. */
-function pickCheckpointModel({
-  title = "Freeze checkpoint",
-  hint = "The model summarizes the diff into the commit message. Your choice is remembered.",
-  okLabel = "Freeze \u{1F9CA}",
-} = {}) {
+ *  choice is remembered (localStorage) and preselected next time. */
+function pickCheckpointModel(options = {}) {
   return openModelPicker({
     openPicker: openCheckpointModelPicker,
     rpc,
     setOptions: updateCheckpointModelOptions,
-    options: { title, hint, okLabel },
+    options,
   });
-}
-
-async function handleCheckpointClick(e) {
-  e.stopPropagation();
-  if (checkpointBusy) return;
-  const pick = await pickCheckpointModel();
-  if (pick.cancelled) return; // no checkpoint
-  const model = pick.model;
-  checkpointBusy = true;
-  setCheckpointBusy(true);
-  if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
-  try {
-    const data = await createCheckpoint(fetch, currentRunner, model);
-    toast(checkpointResultMessage(data));
-    if (data.recorded) {
-      refreshCheckpointMarkers().catch(() => {});
-      refreshTreeIfOpen();
-    }
-  } catch (err) {
-    toast(`checkpoint failed: ${err.message}`, "error");
-  } finally {
-    checkpointBusy = false;
-    setCheckpointBusy(false);
-  }
 }
 
 /** keep the Svelte-owned iceberg on the latest user/assistant message */
@@ -475,28 +446,6 @@ async function refreshCheckpointMarkers() {
   setCheckpointRestores(restores);
 }
 
-/** deterministic rollback: restore the checkpoint commit (pending changes are
- *  auto-committed first) and jump into a session forked at that point */
-async function rollbackToCheckpoint(cp, target = null) {
-  // same modal as freeze: the model summarizes the pending changes that get
-  // auto-committed before the reset (the modal doubles as confirmation)
-  const pick = await pickCheckpointModel({
-    title: `Roll back to ${cp.hash}`,
-    hint: "Pending changes are committed first (nothing is lost) — the model summarizes them into that commit's message — then the workdir is reset and a forked session opens at this message.",
-    okLabel: "Roll back \u23EA",
-  });
-  if (pick.cancelled) return;
-  if (target) setCheckpointRestoreBusy(target, true);
-  try {
-    const data = await rollbackCheckpoint(fetch, { sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash, model: pick.model });
-    toast(`\u23EA rolled back to ${data.rolledBack}${data.safety ? ` (pending work saved as ${data.safety})` : ""} — forked session opened`);
-    if (data.runner?.id) switchToRunner(data.runner.id);
-  } catch (err) {
-    toast(`rollback failed: ${err.message}`, "error");
-  } finally {
-    if (target) setCheckpointRestoreBusy(target, false);
-  }
-}
 
 // ------------------------------------------------------------ checkpoint / fork tree sidebar
 //
@@ -519,6 +468,22 @@ const checkpointTreeController = createCheckpointTreeController({
 });
 const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
 const loadCheckpointTree = () => checkpointTreeController.load();
+const checkpointController = createCheckpointController({
+  pickModel: pickCheckpointModel,
+  createCheckpoint: (runner, model) => createCheckpoint(fetch, runner, model),
+  rollbackCheckpoint: (options) => rollbackCheckpoint(fetch, options),
+  resultMessage: checkpointResultMessage,
+  getRunner: () => currentRunner,
+  getSessionId: () => state?.sessionId,
+  setBusy: setCheckpointBusy,
+  setRestoreBusy: setCheckpointRestoreBusy,
+  refreshMarkers: refreshCheckpointMarkers,
+  refreshTree: refreshTreeIfOpen,
+  switchRunner: switchToRunner,
+  toast,
+});
+function handleCheckpointClick(event) { return checkpointController.freeze(event); }
+function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
 
 registerCheckpointTreeEvents(window, {
   openSession: checkpointTreeController.openTreeSession,
