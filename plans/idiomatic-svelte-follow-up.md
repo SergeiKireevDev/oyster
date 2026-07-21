@@ -47,7 +47,7 @@ cd tests/e2e && npm test
 - [x] Change `CommandPalette.svelte` to invoke the scoped action registry for
   mouse selection. Delete the `pi-command-palette-run` `window` event dispatch
   and its event-listener adapter; test mouse and keyboard selection routing.
-- [ ] Run `rg "pi-menu-action|pi-command-palette-run|window\.dispatchEvent" public/src`
+- [x] Run `rg "pi-menu-action|pi-command-palette-run|window\.dispatchEvent" public/src`
   and remove the two legacy custom-event paths. Document any intentional,
   component-local DOM `dispatchEvent` calls in the boundary test.
 
