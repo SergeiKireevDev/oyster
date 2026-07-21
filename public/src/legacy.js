@@ -1963,9 +1963,7 @@ async function showFolderBrowser() {
   }
 }
 
-setFolderBrowserHandlers({
-  browse: loadFolderBrowser,
-  createFolder: async () => {
+const createFolderBrowser = async () => {
     let snapshot;
     const unsubscribe = folderBrowser.subscribe((s) => { snapshot = s; });
     unsubscribe();
@@ -1991,10 +1989,14 @@ setFolderBrowserHandlers({
       toast(`mkdir failed: ${e.message}`, "error");
       updateFolderBrowser({ creating: false });
     }
-  },
+};
+
+setFolderBrowserHandlers({
+  browse: loadFolderBrowser,
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
   submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
 });
+window.addEventListener("pi-folder-browser-create", () => createFolderBrowser());
 
 // ------------------------------------------------------------ tunnels
 

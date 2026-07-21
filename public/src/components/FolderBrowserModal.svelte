@@ -2,7 +2,6 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
     browseFolder,
-    createFolder,
   } from "../lib/legacyBridge.js";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -25,12 +24,12 @@
         value={$folderBrowser.newName}
         oninput={(event) => updateFolderBrowser({ newName: event.currentTarget.value })}
         onkeydown={(event) => {
-          if (event.key === "Enter") createFolder();
+          if (event.key === "Enter") window.dispatchEvent(new Event("pi-folder-browser-create"));
           else if (event.key === "Escape") updateFolderBrowser({ createOpen: false, newName: "" });
         }}
         use:focusOnMount
       />
-      <button class="btn" disabled={$folderBrowser.creating} onclick={createFolder}>Create</button>
+      <button class="btn" disabled={$folderBrowser.creating} onclick={() => window.dispatchEvent(new Event("pi-folder-browser-create"))}>Create</button>
     </div>
   {/if}
 

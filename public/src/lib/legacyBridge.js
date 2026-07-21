@@ -115,10 +115,6 @@ export function browseFolder(path) {
   return folderBrowserHandlers.browse?.(path);
 }
 
-export function createFolder() {
-  return folderBrowserHandlers.createFolder?.();
-}
-
 export function cancelFolderBrowser() {
   return folderBrowserHandlers.cancel?.();
 }
