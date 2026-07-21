@@ -11,7 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, createCodeR
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
-import { createRuntimeTeardown } from "./runtime/teardownController.js";
+import { createLegacyRuntimeCleanup } from "./runtime/legacyRuntimeCleanup.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
 import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependencies.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
@@ -1771,16 +1771,36 @@ const boot = createSessionBootController({
   toast: addToast,
 });
 
-const runtimeTeardown = createRuntimeTeardown([
-  () => eventStream.close(), () => { es = null; }, disposeRpcClient, teardownReconnectWatchdog,
-  () => carouselEventRegistration.detach(), () => mobileDrawerDismissController.detach(), () => headerEventController.detach(),
-  () => settingsChangeController.detach(), () => menuEventController.detach(), () => composerEventController.detach(),
-  () => commandPaletteKeyboardController.detach(), () => commandPaletteRunController.detach(), () => checkpointTreeEventController.detach(),
-  () => filePickerEventController.detach(), () => folderBrowserEventController.detach(), () => fileExplorerEventController.detach(),
-  () => managedHublotEventController.detach(), () => hublotSidebarEventController.detach(), () => routineEventController.detach(),
-  () => sessionPickerEventController.detach(), () => openFileExplorerEventController.detach(), () => commandPaletteInputController?.detach(),
-  () => runtimeAttachments.detach(), () => delayedTasks.cancelAll(), () => connectionState.lost(),
-]);
+const detachRuntimeEventAdapters = () => {
+  carouselEventRegistration.detach();
+  mobileDrawerDismissController.detach();
+  headerEventController.detach();
+  settingsChangeController.detach();
+  menuEventController.detach();
+  composerEventController.detach();
+  commandPaletteKeyboardController.detach();
+  commandPaletteRunController.detach();
+  checkpointTreeEventController.detach();
+  filePickerEventController.detach();
+  folderBrowserEventController.detach();
+  fileExplorerEventController.detach();
+  managedHublotEventController.detach();
+  hublotSidebarEventController.detach();
+  routineEventController.detach();
+  sessionPickerEventController.detach();
+  openFileExplorerEventController.detach();
+  commandPaletteInputController?.detach();
+};
+const runtimeTeardown = createLegacyRuntimeCleanup({
+  closeEventStream: () => eventStream.close(),
+  clearEventSource: () => { es = null; },
+  disposeRpc: disposeRpcClient,
+  stopWatchdog: teardownReconnectWatchdog,
+  detachEventAdapters: detachRuntimeEventAdapters,
+  detachAttachments: () => runtimeAttachments.detach(),
+  cancelDelayedTasks: () => delayedTasks.cancelAll(),
+  loseConnection: () => connectionState.lost(),
+});
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
 
