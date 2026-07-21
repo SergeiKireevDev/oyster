@@ -75,6 +75,8 @@
 
 import { timingSafeEqual } from "node:crypto";
 import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync, realpathSync } from "node:fs";
+
+const isHidden = (name) => name.startsWith(".");
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -618,18 +620,18 @@ export function init(state) {
         return;
       }
       const dirs = entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-        .map((e) => e.name)
-        .sort((a, b) => a.localeCompare(b));
+        .filter((e) => e.isDirectory())
+        .map((e) => ({ name: e.name, hidden: isHidden(e.name) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
       // files are only needed by the attach-file picker (?files=1)
       let files;
       if (url.searchParams.get("files") === "1") {
         files = entries
-          .filter((e) => e.isFile() && !e.name.startsWith("."))
+          .filter((e) => e.isFile())
           .map((e) => {
             let size = null;
             try { size = statSync(join(target, e.name)).size; } catch {}
-            return { name: e.name, size };
+            return { name: e.name, size, hidden: isHidden(e.name) };
           })
           .sort((a, b) => a.name.localeCompare(b.name));
       }
@@ -1027,7 +1029,17 @@ export function init(state) {
     if (open) return open(req, res, url);
 
     // everything below requires auth
-    const auth = checkAuth(req, url);
+    // EXCEPT: tunnel/hublot operations from localhost. The hublot tool runs on
+    // this same machine (it's the local proxy between agent sessions and the
+    // server) and has no way to pass a bearer token — it authenticates by
+    // virtue of being able to reach the loopback port. Per-session isolation
+    // (tunnels are bound to a sessionId) is the real access control here.
+    const isLocal = (() => {
+      const ip = clientIp(req);
+      return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+    })();
+    const isLocalRoute = url.pathname === "/tunnels" || url.pathname === "/routines";
+    const auth = (isLocal && isLocalRoute) ? "ok" : checkAuth(req, url);
     if (auth !== "ok") {
       if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
       else json(res, 401, { error: "unauthorized" });

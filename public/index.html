@@ -828,6 +828,10 @@
   #modal .m-option.dir::before { content: "📁 "; }
   #modal .m-option.up::before { content: "⬆️ "; }
   #modal .m-option.homeDir::before { content: "🏠 "; }
+  /* hidden files/dirs (dotfiles) — dimmed unless hovered */
+  #modal .m-option.hidden-entry { opacity: 0.45; }
+  #modal .m-option.hidden-entry:hover { opacity: 1; }
+  #modal .m-option.hidden-entry.dir::before { content: "👁️ "; }
   #modal .m-actions {
     display: flex; gap: 8px; justify-content: flex-end;
     padding: 10px 16px 14px;
@@ -2838,7 +2842,20 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
   let startPath = workdir;
 
   let curDir = startPath; // tracks the folder currently being viewed
+  let showHidden = true;
   const done = () => { closeModal(); if (returnToHublot) showHublots().catch((e) => toast(e.message, "error")); };
+
+  function addHiddenToggle() {
+    let t = actions.querySelector(".toggle-hidden");
+    if (!t) {
+      t = document.createElement("span");
+      t.className = "chip toggle-hidden";
+      t.addEventListener("click", async () => { showHidden = !showHidden; await load(curDir); });
+      actions.append(t);
+    }
+    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+  }
+
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
     const res = await fetch(`/browse?files=1${q}`);
@@ -2857,6 +2874,8 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
     pathEl.textContent = data.path;
     body.appendChild(pathEl);
 
+    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
+    const files = showHidden ? (data.files ?? []) : (data.files ?? []).filter((f) => !f.hidden);
     const addDir = (label, cls, target) => {
       const b = document.createElement("button");
       b.className = `m-option dir ${cls}`;
@@ -2867,12 +2886,12 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
     if (data.path !== data.home) addDir("home", "homeDir", data.home);
     if (data.workdir && data.path !== data.workdir) addDir("workdir", "", data.workdir);
     if (data.parent) addDir("..", "up", data.parent);
-    for (const name of data.dirs) {
-      addDir(name, "", data.path.replace(/\/$/, "") + "/" + name);
+    for (const d of dirs) {
+      addDir(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
     }
-    for (const f of data.files ?? []) {
+    for (const f of files) {
       const b = document.createElement("button");
-      b.className = "m-option file";
+      b.className = `m-option file ${f.hidden ? "hidden-entry" : ""}`.trim();
       b.textContent = f.name;
       const size = document.createElement("span");
       size.className = "f-size";
@@ -2886,7 +2905,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
       });
       body.appendChild(b);
     }
-    if (!data.dirs.length && !(data.files ?? []).length) {
+    if (!dirs.length && !files.length) {
       const empty = document.createElement("div");
       empty.className = "m-path";
       empty.textContent = "(empty folder)";
@@ -2900,6 +2919,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
   useFolder.textContent = "\u{1F4C1} Use this folder";
   useFolder.title = "Insert the current folder path";
   useFolder.addEventListener("click", () => { onPick(curDir); done(); });
+  addHiddenToggle();
   const cancel = document.createElement("span");
   cancel.className = "chip";
   cancel.textContent = "Cancel";
@@ -2930,8 +2950,19 @@ function insertIntoComposer(text) {
 async function showFolderBrowser() {
   const body = $("mBody"), actions = $("mActions");
   let browsePath = workdir;
+  let showHidden = true;
   let done = null;
   const finished = new Promise((resolve) => { done = resolve; });
+
+  function addHiddenToggle() {
+    const existing = actions.querySelector(".toggle-hidden");
+    if (existing) { existing.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"; return; }
+    const t = document.createElement("span");
+    t.className = "chip toggle-hidden";
+    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+    t.addEventListener("click", async () => { showHidden = !showHidden; await load(browsePath); });
+    actions.append(t);
+  }
 
   async function load(path) {
     const q = path ? `?path=${encodeURIComponent(path)}` : "";
@@ -2945,6 +2976,7 @@ async function showFolderBrowser() {
     pathEl.className = "m-path";
     pathEl.textContent = data.path;
     body.appendChild(pathEl);
+    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
     const addEntry = (label, cls, target) => {
       const b = document.createElement("button");
       b.className = `m-option dir ${cls}`;
@@ -2954,8 +2986,8 @@ async function showFolderBrowser() {
     };
     if (data.path !== data.home) addEntry("home", "homeDir", data.home);
     if (data.parent) addEntry("..", "up", data.parent);
-    for (const name of data.dirs) {
-      addEntry(name, "", data.path.replace(/\/$/, "") + "/" + name);
+    for (const d of dirs) {
+      addEntry(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
     }
     if (!data.dirs.length) {
       const empty = document.createElement("div");
@@ -3060,6 +3092,18 @@ async function showFileExplorer() {
   // always open in the current session's working directory
   let startPath = workdir;
   let curPath = startPath;
+  let showHidden = true;
+
+  function addHiddenToggle() {
+    let t = actions.querySelector(".toggle-hidden");
+    if (!t) {
+      t = document.createElement("span");
+      t.className = "chip toggle-hidden";
+      t.addEventListener("click", async () => { showHidden = !showHidden; await load(curPath); });
+      actions.append(t);
+    }
+    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+  }
 
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
@@ -3078,6 +3122,8 @@ async function showFileExplorer() {
     pathEl.textContent = data.path;
     body.appendChild(pathEl);
 
+    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
+    const files = showHidden ? (data.files ?? []) : (data.files ?? []).filter((f) => !f.hidden);
     const addDir = (label, cls, target) => {
       const b = document.createElement("button");
       b.className = `m-option dir ${cls}`;
@@ -3088,15 +3134,15 @@ async function showFileExplorer() {
     if (data.path !== data.home) addDir("home", "homeDir", data.home);
     if (data.workdir && data.path !== data.workdir) addDir("workdir", "", data.workdir);
     if (data.parent) addDir("..", "up", data.parent);
-    for (const name of data.dirs) {
-      addDir(name, "", data.path.replace(/\/$/, "") + "/" + name);
+    for (const d of dirs) {
+      addDir(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
     }
-    for (const f of data.files ?? []) {
+    for (const f of files) {
       const full = data.path.replace(/\/$/, "") + "/" + f.name;
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:6px;";
       const b = document.createElement("button");
-      b.className = "m-option file";
+      b.className = `m-option file ${f.hidden ? "hidden-entry" : ""}`.trim();
       b.style.cssText = "flex:1;min-width:0;";
       b.textContent = f.name;
       const size = document.createElement("span");
@@ -3120,7 +3166,7 @@ async function showFileExplorer() {
       row.append(b, dl, ed);
       body.appendChild(row);
     }
-    if (!data.dirs.length && !(data.files ?? []).length) {
+    if (!dirs.length && !files.length) {
       const empty = document.createElement("div");
       empty.className = "m-path";
       empty.textContent = "(empty folder)";
@@ -3137,6 +3183,7 @@ async function showFileExplorer() {
     back.className = "chip";
     back.textContent = "\u2190 Hublots";
     back.addEventListener("click", () => showHublots().catch((e) => toast(e.message, "error")));
+    addHiddenToggle();
     const closeBtn = document.createElement("span");
     closeBtn.className = "chip";
     closeBtn.textContent = "Close";
