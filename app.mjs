@@ -80,6 +80,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequestContext } from "./http/createRequestContext.mjs";
 import { createRouteTable } from "./http/createRouteTable.mjs";
+import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -135,10 +136,8 @@ export function init(state) {
   const requestContext = createRequestContext(state);
   const {
     json, readRawBody, readJsonBody, mimeType,
-    tokenMatches, authCandidates, clientIp, recentAuthFailures,
-    recordAuthFailure, checkAuth, resolveSafePath: confinePath,
+    clientIp, checkAuth, resolveSafePath: confinePath,
   } = requestContext;
-  const AUTH_FAIL_MAX = 20;
 
   function forbidden(res, p) {
     json(res, 403, { error: `path outside the allowed roots: ${p}` });
@@ -200,36 +199,7 @@ export function init(state) {
 
   // ---------------------------------------------------------------- routes (no auth)
 
-  const openRoutes = {
-    "GET /health": (req, res) => {
-      json(res, 200, {
-        ok: true,
-        runners: listRunnerInfo(),
-        clients: state.sseClients.size,
-        reloadCount: state.reloadCount,
-      });
-    },
-
-    // debug: shows which auth credentials reached the server (and whether each
-    // validates) without requiring auth — helps diagnose header-stripping proxies
-    "GET /authcheck": (req, res, url) => {
-      const ip = clientIp(req);
-      if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) {
-        json(res, 429, { error: "too many auth failures — try again later" });
-        return;
-      }
-      const candidates = authCandidates(req, url);
-      const report = {};
-      for (const [k, v] of Object.entries(candidates)) {
-        report[k] = v ? (tokenMatches(v) ? "valid" : `present-invalid(len=${String(v).length})`) : "absent";
-      }
-      const authorized = Object.values(candidates).some(tokenMatches);
-      // this endpoint is a validity oracle: count failed probes against the
-      // same budget as regular auth failures
-      if (!authorized && Object.values(candidates).some(Boolean)) recordAuthFailure(ip);
-      json(res, 200, { authorized, credentials: report });
-    },
-  };
+  const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
 
   // ---------------------------------------------------------------- routes (auth required)
 

@@ -65,7 +65,7 @@ collisions fail during construction, before a handler swap.
 
 ## 3. Extract Open and Static Routes
 
-- [ ] Move `GET /health` and `GET /authcheck` into
+- [x] Move `GET /health` and `GET /authcheck` into
   `http/routes/openRoutes.mjs`, preserving their unauthenticated behavior and
   reload-count response contract.
 - [ ] Move UI document serving (`/` and `/s/<sessionId>[/m/<entryId>]`) and
