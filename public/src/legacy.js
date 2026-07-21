@@ -1800,11 +1800,12 @@ const sessionPickerActions = {
   },
   loadFolder: loadSessionPickerFolder,
 };
-createSessionPickerEventController({
+const sessionPickerEventController = createSessionPickerEventController({
   windowTarget: window,
   dispatch: (type, ...args) => sessionPickerActions[type]?.(...args),
   cancel: () => { closeModal(); sessionPickerResolve?.(null); },
-}).attach();
+});
+sessionPickerEventController.attach();
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
@@ -2175,5 +2176,6 @@ export function teardownLegacyRuntime() {
   managedHublotEventController.detach();
   hublotSidebarEventController.detach();
   routineEventController.detach();
+  sessionPickerEventController.detach();
   connectionState.lost();
 }
