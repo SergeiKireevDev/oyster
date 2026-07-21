@@ -24,6 +24,7 @@
 
 import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 
 const URL_TIMEOUT_MS = 20_000;
@@ -49,6 +50,22 @@ export function pidsOnPort(port) {
 
 function killPid(pid, signal = "SIGTERM") {
   try { process.kill(pid, signal); return true; } catch { return false; }
+}
+
+/** When a process started, from /proc (Linux). Null if unknown. */
+function pidStartedAt(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    // fields after the parenthesized comm (which can contain spaces):
+    // index 19 here = starttime (22nd field overall), in clock ticks since boot
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    const startTicks = Number(fields[19]);
+    const btime = Number((readFileSync("/proc/stat", "utf8").match(/^btime (\d+)$/m) ?? [])[1]);
+    if (!btime || !Number.isFinite(startTicks)) return null;
+    return new Date((btime + startTicks / 100) * 1000); // USER_HZ = 100
+  } catch {
+    return null;
+  }
 }
 
 export function listTunnels(state) {
@@ -152,11 +169,20 @@ export function closeTunnel(state, id) {
   const t = state.tunnels?.get(id);
   if (!t) return null;
 
-  // 1. the service on the port: tracked pid first, plus a live lookup in case
-  //    it forked/respawned under a different pid
-  const pids = new Set(pidsOnPort(t.port));
-  if (t.servicePid) pids.add(t.servicePid);
-  for (const pid of pids) {
+  // 1. the service on the port: the tracked pid is killed unconditionally;
+  //    the live port scan (service may have forked/respawned under another
+  //    pid) only kills processes that STARTED AFTER the tunnel was created —
+  //    an unrelated pre-existing listener must not die with the hublot
+  const createdAt = new Date(t.createdAt).getTime() - 5000; // clock slack
+  for (const pid of new Set([t.servicePid, ...pidsOnPort(t.port)])) {
+    if (!pid) continue;
+    if (pid !== t.servicePid) {
+      const started = pidStartedAt(pid);
+      if (!started || started.getTime() < createdAt) {
+        console.log(`[pi-ui] NOT killing pid ${pid} on port ${t.port} (predates the hublot)`);
+        continue;
+      }
+    }
     if (killPid(pid)) console.log(`[pi-ui] killed hublot service pid ${pid} (port ${t.port})`);
     setTimeout(() => killPid(pid, "SIGKILL"), 3000).unref();
   }
