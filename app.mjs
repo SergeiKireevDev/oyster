@@ -3,12 +3,10 @@
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
-
 export async function init(state) {
   const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
@@ -27,7 +25,7 @@ export async function init(state) {
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
-  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
+  const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -76,7 +74,9 @@ export async function init(state) {
   });
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
-  const runners = createRunnerManager(state, { appStore });
+  const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
+    sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
+  const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner,
@@ -118,16 +118,16 @@ export async function init(state) {
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
     state, appStore, config, requestContext, listTunnels, openTunnel, closeTunnel,
-    spawnHublotAgent,
+    spawnHublotAgent, ensureSessionOwner,
   });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch,
+    recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
     git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });
   const routineRoutes = createRoutineRoutes({
-    state, appStore, requestContext,
+    state, appStore, requestContext, ensureSessionOwner,
     routines: {
       listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
       teardownRoutine, releaseRoutine, deleteRoutine,

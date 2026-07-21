@@ -19,6 +19,7 @@ function fakeProcess() {
 
 function setup(t) {
   const spawns = [];
+  const owners = [];
   const sqlitePath = "/agent/sessions.sqlite";
   const sessionReferences = createSessionReferenceCodec({
     agentDir: "/agent",
@@ -46,13 +47,13 @@ function setup(t) {
       return proc;
     },
   });
-  const manager = createRunnerManager(state);
+  const manager = createRunnerManager(state, { ensureSessionOwner: (reference) => owners.push(reference) });
   t.after(() => {
     clearInterval(state.runnerWatchdogTimer);
     clearInterval(state.runnerReaperTimer);
     manager.stopPi();
   });
-  return { manager, sessionReferences, spawns, state, sqlitePath };
+  return { manager, sessionReferences, spawns, owners, state, sqlitePath };
 }
 
 test("SQLite runners start and restart by ID with explicit store environment", (t) => {
@@ -82,7 +83,7 @@ test("SQLite runners start and restart by ID with explicit store environment", (
 });
 
 test("runner deduplication compares the full reference, not the shared SQLite path", (t) => {
-  const { manager, sqlitePath, state } = setup(t);
+  const { manager, sqlitePath, owners, state } = setup(t);
   const firstRef = { backend: "sqlite", id: "first", storagePath: sqlitePath };
   const secondRef = { backend: "sqlite", id: "second", storagePath: sqlitePath };
   const first = manager.openSessionRunner({ sessionRef: firstRef, dir: "/workspace" });
@@ -90,6 +91,7 @@ test("runner deduplication compares the full reference, not the shared SQLite pa
   const second = manager.openSessionRunner({ sessionRef: secondRef, dir: "/workspace" });
   assert.notEqual(second, first);
   assert.equal(state.runners.size, 2);
+  assert.deepEqual(owners, [firstRef, secondRef]);
 });
 
 test("JSONL runners retain file compatibility and switch-session startup", (t) => {

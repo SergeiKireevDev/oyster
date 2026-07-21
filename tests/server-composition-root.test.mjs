@@ -35,7 +35,7 @@ test("stable core owns one app-store service across application reloads", () => 
 test("composition injects the narrow app store into persistent domains", () => {
   assert.match(appStoreSource, /repositories,[\s\S]*migrationStatus,[\s\S]*transaction,[\s\S]*get closed\(\)[\s\S]*close\(\)/);
   assert.equal(appStoreSource.includes("database,"), false, "raw database handle must remain private");
-  assert.match(source, /createRunnerManager\(state, \{ appStore \}\)/);
+  assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner \}\)/);
   assert.match(source, /createCheckpointRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createRoutineRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createTunnelRoutes\(\{[\s\S]*?state, appStore,/);

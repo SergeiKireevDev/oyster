@@ -4,7 +4,7 @@ import { createCheckpointRoutes } from "../http/routes/checkpointRoutes.mjs";
 
 const response = () => ({});
 test("checkpoint create/list/tree routes preserve validation, model options, persistence, and shapes", async () => {
-  const calls = [];
+  const calls = [], owners = [];
   const runner = { dir: "/work", sessionRef: { backend: "jsonl", id: "session", storagePath: new URL("../package.json", import.meta.url).pathname } };
   const routes = createCheckpointRoutes({
     state: {
@@ -15,6 +15,7 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
     }, config: { PI_BIN: "pi" },
     requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
     runnerFromReq: () => runner,
+    ensureSessionOwner: (reference) => owners.push(reference),
     checkpointWorkdir: async (...args) => { calls.push(args); return { status: 200, body: { hash: "abc123", committed: true } }; },
     recordCheckpoint: () => ({ anchorId: "entry-1" }),
     loadCheckpoints: () => ({ session: [{ hash: "abc123" }] }),
@@ -25,6 +26,7 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
   const created = response(); await routes["POST /checkpoint"]({ body: { label: "save", model: "model/id" } }, created, new URL("http://localhost/checkpoint"));
   assert.equal(created.status, 200); assert.equal(created.body.recorded, true); assert.equal(created.body.anchorId, "entry-1");
   assert.deepEqual(calls[0], [{ bin: "pi" }, "/work", "save", "model/id"]);
+  assert.deepEqual(owners, [runner.sessionRef]);
   const missing = response(); routes["GET /checkpoints"]({}, missing, new URL("http://localhost/checkpoints")); assert.equal(missing.status, 400);
   const listed = response(); routes["GET /checkpoints"]({}, listed, new URL("http://localhost/checkpoints?id=session"));
   assert.deepEqual(listed.body, { checkpoints: [{ hash: "abc123" }] });

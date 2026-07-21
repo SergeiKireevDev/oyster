@@ -1,5 +1,5 @@
 /** Build routine lifecycle routes around stable-core-owned routine state. */
-export function createRoutineRoutes({ state, requestContext, routines }) {
+export function createRoutineRoutes({ state, requestContext, routines, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   const {
     listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
@@ -34,6 +34,7 @@ export function createRoutineRoutes({ state, requestContext, routines }) {
             json(res, 400, { error: "create requires a `script` string (max 256KB)" });
             return;
           }
+          if (sessionId) ensureSessionOwner(sessionId);
           json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
         } else if (action === "start") {
           json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });

@@ -4,11 +4,12 @@ import { createRoutineRoutes } from "../http/routes/routineRoutes.mjs";
 
 const res = () => ({});
 test("routine routes validate and preserve every session-bound lifecycle action", async () => {
-  const calls = [];
+  const calls = [], owners = [];
   const state = { currentDir: "/default", runners: new Map([["r1", { sessionId: "s1", dir: "/session" }]]) };
   const operation = (action) => (...args) => { calls.push([action, ...args.slice(1)]); return { name: "job", action, progress: action === "start" ? 0 : 100 }; };
   const routes = createRoutineRoutes({
     state,
+    ensureSessionOwner: (sessionId) => owners.push(sessionId),
     requestContext: { json(r, status, body) { r.status = status; r.body = body; }, readJsonBody: async (req) => req.body },
     routines: {
       listRoutines: () => [{ name: "job", progress: 50 }], routinesDir: () => "/routines",
@@ -30,6 +31,7 @@ test("routine routes validate and preserve every session-bound lifecycle action"
     assert.equal(response.status, action === "create" ? 201 : 200);
     assert.equal(response.body.routine.action, action);
   }
+  assert.deepEqual(owners, ["s1"]);
   assert.deepEqual(calls[0][1], { name: "job", script: "#!/bin/sh\necho ok", sessionId: "s1", cwd: "/session" });
   assert.deepEqual(calls[1][2], { sessionId: "s1", cwd: "/session" });
 });

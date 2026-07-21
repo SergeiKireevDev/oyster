@@ -47,7 +47,7 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-export function createRunnerManager(state, { spawnImpl = null } = {}) {
+export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwner = () => null } = {}) {
   const { config, serverEvent, sessionReferences } = state;
   const piProcesses = spawnImpl
     ? createPiProcessLauncher({ config, spawnImpl })
@@ -183,6 +183,7 @@ export function createRunnerManager(state, { spawnImpl = null } = {}) {
 
   function spawnRunner({ dir, sessionRef = null }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
+    if (reference) ensureSessionOwner(reference);
     const runner = {
       id: `r${++state.runnerSeq}`,
       dir,

@@ -4,11 +4,12 @@ import { createTunnelRoutes } from "../http/routes/tunnelRoutes.mjs";
 
 const response = () => ({});
 test("tunnel routes prepare the local service before opening and publishing its tunnel", async () => {
-  const events = [], agents = [], closed = [], order = [];
+  const events = [], agents = [], closed = [], owners = [], order = [];
   const state = { tunnels: new Map(), serverEvent: (event) => events.push(event) };
   const listTunnels = () => [...state.tunnels.values()].map(({ proc, ...t }) => t);
   const routes = createTunnelRoutes({
     state, config: { TUNNEL_BIN: "cloudflared" },
+    ensureSessionOwner: (sessionId) => { owners.push(sessionId); order.push(`owner:${sessionId}`); },
     requestContext: {
       json(res, status, body) { res.status = status; res.body = body; },
       readJsonBody: async (req) => req.body,
@@ -20,11 +21,12 @@ test("tunnel routes prepare the local service before opening and publishing its 
   });
   const created = response(); await routes["POST /tunnels"]({ body: { port: 4000, sessionId: "s1", brief: "serve" } }, created);
   assert.equal(created.status, 201);
-  assert.deepEqual(order, ["service", "tunnel"]);
+  assert.deepEqual(order, ["owner:s1", "service", "tunnel"]);
   assert.deepEqual(agents, [[4000, "serve"]]);
   assert.equal(created.body.tunnel.servicePid, 123);
   const rebound = response(); await routes["PATCH /tunnels"]({ body: { id: "t1", sessionId: "s2" } }, rebound);
   assert.equal(rebound.body.tunnel.sessionId, "s2"); assert.equal(events[0].type, "tunnel_opened");
+  assert.deepEqual(owners, ["s1", "s2"]);
   const removed = response(); routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
 });

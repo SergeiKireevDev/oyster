@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, logger = console }) {
+export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, ensureSessionOwner = () => null, logger = console }) {
   const { json, readJsonBody } = requestContext;
   return {
     "POST /checkpoint": async (req, res, url) => {
@@ -14,6 +14,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       // tree was already clean: HEAD marks that state just as well)
       if (status === 200 && out.hash && runner.sessionRef) {
         try {
+          ensureSessionOwner(runner.sessionRef);
           const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog });
           if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
         } catch (e) {
@@ -95,6 +96,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
                 sessionRef: { backend: "jsonl", id: created.id, storagePath: created.path },
               };
             })();
+        ensureSessionOwner(fork.sessionRef);
         const forkEntries = backend === "sqlite"
           ? new Set(state.sessionCatalog.entries(fork.id).entries.map((entry) => entry.id))
           : fork.entryIds;

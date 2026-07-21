@@ -1,4 +1,4 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, openTunnel, closeTunnel, spawnHublotAgent }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -24,6 +24,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
           label: body?.label ? String(body.label).slice(0, 200) : null,
           sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
         };
+        if (options.sessionId) ensureSessionOwner(options.sessionId);
         // Agent-managed hublots are prepared locally first. Nothing is added
         // to state.tunnels (and therefore nothing reaches the UI) until the
         // requested service is actually listening on its allocated port.
@@ -55,7 +56,9 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         json(res, 404, { error: "no such hublot" });
         return;
       }
-      t.sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+      const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+      if (sessionId) ensureSessionOwner(sessionId);
+      t.sessionId = sessionId;
       state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
       json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
     },
