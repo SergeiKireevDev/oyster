@@ -384,9 +384,11 @@ export function init(state) {
       })}\n\n`);
       state.sseClients.add(res);
       // data pings (not SSE comments) so the client can detect a dead
-      // connection: comments never reach onmessage, real events do
+      // connection: comments never reach onmessage, real events do. They
+      // carry the runner list so a client that missed a pi_exit/pi_started
+      // (buffer overflow, reconnect gap) still converges on real liveness.
       const ping = setInterval(
-        () => res.write(`data: {"type":"ping","_server":true}\n\n`),
+        () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true, runners: listRunnerInfo() })}\n\n`),
         25000
       );
       req.on("close", () => {
@@ -405,7 +407,12 @@ export function init(state) {
       const runner = runnerFromReq(url);
       const ok = sendToRunner(runner, cmd);
       if (ok) autoTitleFork(runner, cmd);
-      json(res, ok ? 202 : 503, ok ? { queued: true, runner: runner.id } : { error: "pi process unavailable" });
+      // pendingResume: the command was accepted but is held back until an
+      // in-flight session resume completes — tell the client so "queued"
+      // silence doesn't look like an unresponsive session
+      json(res, ok ? 202 : 503, ok
+        ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
+        : { error: "pi process unavailable" });
     },
 
     "GET /runners": (req, res) => {

@@ -18,13 +18,23 @@
  *     proc:        ChildProcess|null
  *     buffer:      string[] – recent stdout lines, replayed to new clients
  *     resumeId / resumeQueue / resumeTimer – in-flight session resume state
+ *     lastLineAt / probeSentAt / probeMisses / watchdogOk – health watchdog
  *   }
+ *
+ * Watchdog: a live pi process is not necessarily a responsive one (wedged
+ * RPC loop, full stdin pipe). Every WATCHDOG_INTERVAL_MS we send a cheap
+ * get_state to each runner that has subscribed SSE clients; any stdout line
+ * counts as proof of life. Two consecutive silent probes → restart the
+ * runner and tell its clients why. The get_state responses double as a
+ * reconciler for a stuck `busy` flag (isStreaming/isCompacting overwrite it).
  */
 
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
 const RUNNER_BUFFER_MAX = 400;
+const WATCHDOG_INTERVAL_MS = 30000;
+const WATCHDOG_MAX_MISSES = 2;
 
 export function createRunnerManager(state) {
   const { config, serverEvent } = state;
@@ -154,10 +164,18 @@ export function createRunnerManager(state) {
     const proc = spawn(config.PI_BIN, args, { cwd: runner.dir, stdio: ["pipe", "pipe", "pipe"] });
     runner.proc = proc;
 
+    // health watchdog bookkeeping: only procs started by watchdog-aware
+    // code update lastLineAt, so only those are probed (watchdogOk)
+    runner.watchdogOk = true;
+    runner.lastLineAt = Date.now();
+    runner.probeSentAt = null;
+    runner.probeMisses = 0;
+
     const rl = createInterface({ input: proc.stdout });
     rl.on("line", (line) => {
       line = line.trim();
       if (!line) return;
+      runner.lastLineAt = Date.now();
       trackRunner(runner, line);
       runnerWrite(runner, line);
     });
@@ -256,6 +274,56 @@ export function createRunnerManager(state) {
     }
     return spawnRunner({ dir: dir || state.currentDir, sessionPath });
   }
+
+  // ------------------------------------------------------------ watchdog
+
+  /** does any connected SSE client watch this runner? */
+  function hasSubscribers(runner) {
+    for (const res of state.sseClients) {
+      if (res.runnerId === runner.id && !res.writableEnded && !res.destroyed) return true;
+    }
+    return false;
+  }
+
+  function watchdogTick() {
+    for (const runner of state.runners.values()) {
+      // skip: dead proc (nothing to probe), pre-watchdog proc (lastLineAt
+      // never updates), resume in flight (probes would be held in the
+      // resume queue and read as misses)
+      if (!runner.proc || !runner.watchdogOk || runner.resumeId) continue;
+      if (!hasSubscribers(runner)) {
+        runner.probeSentAt = null;
+        runner.probeMisses = 0;
+        continue;
+      }
+      if (runner.probeSentAt && runner.lastLineAt < runner.probeSentAt) {
+        // total silence since the last probe — not even a get_state response
+        runner.probeMisses = (runner.probeMisses ?? 0) + 1;
+        if (runner.probeMisses >= WATCHDOG_MAX_MISSES) {
+          console.warn(`[pi-ui] runner ${runner.id} unresponsive (${runner.probeMisses} silent probes), restarting`);
+          runner.probeSentAt = null;
+          runner.probeMisses = 0;
+          runnerEvent(runner, {
+            type: "runner_unhealthy",
+            reason: "pi did not answer health probes", action: "restart",
+          });
+          stopRunner(runner);
+          startRunner(runner);
+          continue;
+        }
+      } else {
+        runner.probeMisses = 0;
+      }
+      runner.probeSentAt = Date.now();
+      requestState(runner); // any stdout before the next tick counts as alive
+    }
+  }
+
+  // one interval, owned by the CURRENT module version: clear the previous
+  // one on hot reload so ticks never double up or run stale closures
+  clearInterval(state.runnerWatchdogTimer);
+  state.runnerWatchdogTimer = setInterval(watchdogTick, WATCHDOG_INTERVAL_MS);
+  state.runnerWatchdogTimer.unref?.();
 
   // legacy entry points used by server.mjs
   function startPi() { defaultRunner(); }

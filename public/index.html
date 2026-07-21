@@ -1142,6 +1142,11 @@ async function rpc(cmd, { wait = true } = {}) {
   });
   if (res.status === 401) { handleUnauthorized(); throw new Error("unauthorized"); }
   if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
+  // accepted but held behind an in-flight session resume: surface it so a
+  // few seconds of silence doesn't read as an unresponsive session (only
+  // for prompts — background state fetches queue there routinely)
+  const ack = await res.json().catch(() => null);
+  if (ack?.pendingResume && cmd.type === "prompt") toast("session is still resuming — message queued", "warning");
   return wait ? waiter : null;
 }
 
@@ -2141,6 +2146,13 @@ function handleEvent(msg) {
   }
   switch (msg.type) {
     case "ping":
+      // pings carry the authoritative runner list: reconcile liveness the
+      // client may have missed (pi_exit scrolled out of the replay buffer)
+      if (msg.runners && JSON.stringify(msg.runners) !== JSON.stringify(runnersNow)) {
+        runnersNow = msg.runners;
+        onRunnersUpdate?.(runnersNow);
+        refreshTreeIfOpen();
+      }
       return;
 
     case "replay_done":
@@ -2256,13 +2268,24 @@ function handleEvent(msg) {
       if (replaying) return;
       if (msg.startCount > 1) {
         toast("pi process restarted");
-        refreshState();
+        // the runner auto-resumes its session on respawn; rebuild the
+        // transcript from canonical state (get_state/get_messages queue
+        // behind the in-flight resume server-side, so this settles right
+        // after the session is back)
+        reloadTranscript().catch((e) => toast(`session reload failed: ${e.message}`, "error"));
       }
       return;
 
     case "pi_error":
       if (replaying) return;
       toast(`pi spawn error: ${msg.error}`, "error");
+      return;
+
+    case "runner_unhealthy":
+      // server-side watchdog: pi stopped answering health probes
+      if (replaying) return;
+      toast(`pi was unresponsive — restarting it (${msg.reason ?? "health probes failed"})`, "warning");
+      setBusy(false);
       return;
 
     case "ui_reload":
@@ -2533,7 +2556,10 @@ menu.addEventListener("click", async (e) => {
       for (const m of messages) renderFullMessage(m);
     } else if (action === "restart") {
       await fetch(`/restart?runner=${encodeURIComponent(currentRunner ?? "")}`, { method: "POST" });
+      // blank slate while pi respawns; the pi_started event reloads the
+      // resumed session's transcript
       clearMessages();
+      toast("restarting pi…");
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
       document.cookie = "pi_ui_token=; path=/; max-age=0";
