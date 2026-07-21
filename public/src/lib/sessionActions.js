@@ -1,6 +1,6 @@
-import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery, switchSessionRunner } from "../runtime/sessionRuntime.js";
 
-export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery, switchSessionRunner };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -123,23 +123,5 @@ export function createSessionUiController({ updateAppSession, updateHeaderState 
 
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
-}
-
-export function switchSessionRunner({ id, currentRunner, hooks }) {
-  hooks.log({ targetRunner: id, sameRunner: id === currentRunner });
-  if (id === currentRunner) {
-    hooks.resetPreview();
-    hooks.refreshState();
-    return false;
-  }
-  hooks.setRunner(id);
-  hooks.clearTranscript();
-  hooks.resetSessionUi();
-  hooks.renderPreview();
-  hooks.resetCommands();
-  // A deliberate switch always replaces the transcript from canonical history;
-  // never append buffered replay events from the previously selected runner.
-  hooks.connect({ replay: false });
-  return true;
 }
 

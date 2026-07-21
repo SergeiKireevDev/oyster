@@ -210,6 +210,22 @@ export function createSearchHitSessionController({ close, getSessionId, open, ge
   };
 }
 
+export function switchSessionRunner({ id, currentRunner, hooks }) {
+  hooks.log({ targetRunner: id, sameRunner: id === currentRunner });
+  if (id === currentRunner) {
+    hooks.resetPreview();
+    hooks.refreshState();
+    return false;
+  }
+  hooks.setRunner(id);
+  hooks.clearTranscript();
+  hooks.resetSessionUi();
+  hooks.renderPreview();
+  hooks.resetCommands();
+  hooks.connect({ replay: false });
+  return true;
+}
+
 export function createSessionRuntime({
   getCurrentRunner, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
