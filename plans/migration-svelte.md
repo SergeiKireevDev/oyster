@@ -128,39 +128,47 @@ First extract pure utilities with tests:
 
 Avoid changing rendering behavior while extracting utilities.
 
-### 9. Migrate Transcript Rendering Incrementally
+### 9. Migrate Transcript Rendering Incrementally ✅
 
 Do not rewrite transcript rendering all at once.
 
 Suggested phases:
 
-9.1. User message component.
-9.2. Assistant message component.
-9.3. Tool call/result component.
-9.4. Thinking/collapsible block component.
-9.5. Streaming assistant update path.
-9.6. Permalink buttons.
-9.7. Search-hit focus/flash behavior.
+9.1. ✅ User message component.
+9.2. ✅ Assistant message component.
+9.3. ✅ Tool call/result component.
+9.4. ✅ Thinking/collapsible block component.
+9.5. ✅ Streaming assistant update path.
+9.6. ✅ Permalink buttons.
+9.7. ✅ Search-hit focus/flash behavior.
 
 Keep SSE/RPC orchestration in `legacy.js` until rendering is fully store-driven.
 
-### 10. Move App and Session State into Stores Gradually
+### 10. Move App and Session State into Stores Gradually ✅
 
 Move shared state only when a Svelte component needs it.
 
-Candidate stores:
+Completed store ownership:
 
-- Current session/runner.
-- Runner list/status.
-- Workdir.
-- Busy/streaming state.
-- Transcript/messages.
+- ✅ Current session/runner.
+- ✅ Runner list/status.
+- ✅ Workdir.
+- ✅ Busy/streaming/connected state.
+- ✅ Header/app display derived from app/session state.
+- ✅ Composer text/button state derived from stores.
+- ✅ Transcript message rendering is Svelte-owned from Step 9, with legacy retaining orchestration and chunk scheduling by design.
 
 Avoid a large state rewrite.
 
-### 11. Reduce Bridge Surface Over Time
+### 11. Reduce Bridge Surface Over Time ✅
 
 After each feature becomes fully Svelte-owned, remove unnecessary bridge functions.
+
+Completed bridge reductions:
+
+- ✅ Removed composer handlers/exports from `legacyBridge.js`; `Composer.svelte` now dispatches local DOM events consumed by `legacy.js` while composer UI state lives in Svelte stores.
+- ✅ Removed header handlers/exports from `legacyBridge.js`; `Header.svelte` now reads app/session state directly and dispatches local DOM events for remaining legacy orchestration.
+- ✅ `legacyBridge.js` shrank by the removed header/composer surface while legacy orchestration remains intact for actions not yet migrated.
 
 Target direction:
 

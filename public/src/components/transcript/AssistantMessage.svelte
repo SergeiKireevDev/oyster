@@ -1,13 +1,14 @@
 <script>
   import { writable } from "svelte/store";
   import PermalinkButton from "./PermalinkButton.svelte";
+  import ToolCard from "./ToolCard.svelte";
 
-  let { assistantStore = writable({ blocks: [], errorMessage: "" }), onPermalink = () => {} } = $props();
+  let { assistantStore = writable({ blocks: [], errorMessage: "" }), role = "assistant", onPermalink = () => {} } = $props();
   let root = $state();
   const data = $derived($assistantStore);
 </script>
 
-<div class="msg assistant" data-role="assistant" bind:this={root}>
+<div class="msg assistant" data-role={role} bind:this={root}>
   <div>
     {#each data.blocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
       {#if block.type === "text"}
@@ -17,6 +18,8 @@
           <summary>thinking</summary>
           <div class="body">{block.text}</div>
         </details>
+      {:else if block.type === "toolCall"}
+        <ToolCard cardStore={block.cardStore} />
       {/if}
     {/each}
     {#if data.errorMessage}

@@ -4,16 +4,17 @@ import { mount, unmount } from "svelte";
 import { writable } from "svelte/store";
 import UserMessage from "./components/transcript/UserMessage.svelte";
 import AssistantMessage from "./components/transcript/AssistantMessage.svelte";
-import ToolCard from "./components/transcript/ToolCard.svelte";
 import CheckpointButton from "./components/transcript/CheckpointButton.svelte";
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHeaderHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
+import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { updateFileExplorer } from "./stores/fileExplorer.js";
 import { updateFilePicker } from "./stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "./stores/folderBrowser.js";
+import { setComposerTextValue } from "./stores/composer.js";
 import { updateHeaderState } from "./stores/header.js";
 import { updateHublotManager } from "./stores/hublotManager.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
@@ -343,22 +344,17 @@ function scrollToBottom(force) {
   if (force || nearBottom()) scroller.scrollTop = scroller.scrollHeight;
 }
 
-const toolCards = new Map(); // toolCallId -> {el, store}
+const toolCards = new Map(); // toolCallId -> {store}
 
-function createToolCard(tc) {
-  const target = document.createElement("span");
-  const store = writable({ toolCall: tc, status: "running", resultText: "" });
-  mount(ToolCard, { target, props: { cardStore: store } });
-  const details = target.firstElementChild;
-  const card = { el: details, store };
-  toolCards.set(tc.id, card);
-  return details;
-}
-
-function updateToolCard(tc) {
-  const card = toolCards.get(tc.id);
-  if (!card) return;
-  card.store.update((state) => ({ ...state, toolCall: tc }));
+function ensureToolCardStore(tc) {
+  let card = toolCards.get(tc.id);
+  if (!card) {
+    card = { store: writable({ toolCall: tc, status: "running", resultText: "" }) };
+    toolCards.set(tc.id, card);
+  } else {
+    card.store.update((state) => ({ ...state, toolCall: tc }));
+  }
+  return card.store;
 }
 
 function finishToolCard(toolCallId, resultMsgOrText, isError) {
@@ -387,36 +383,6 @@ function unmountTranscriptComponents() {
   }
 }
 
-function renderBlockEl(block) {
-  if (block.type === "thinking") {
-    const showThinking = shouldShowThinking(localStorage);
-    if (!showThinking || !block.thinking?.trim()) return null;   // hidden, or empty/whitespace
-    const d = document.createElement("details");
-    d.className = "block thinking";
-    d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
-    d.querySelector(".body").textContent = block.thinking;
-    return d;
-  }
-  if (block.type === "text") {
-    const div = document.createElement("div");
-    div.className = "md";
-    div.innerHTML = renderMarkdown(block.text || "");
-    return div;
-  }
-  return null;
-}
-
-/**
- * Incremental render: reuse the existing element for every block whose content
- * hasn't changed since the last update. During streaming only the growing
- * block is re-rendered, which avoids flicker, keeps scroll positions inside
- * code/tool output, and preserves the open state of thinking blocks.
- */
-function canRenderAssistantWithSvelte(message) {
-  const blocks = message.content || [];
-  return blocks.length > 0 && blocks.every((block) => block.type === "text" || block.type === "thinking");
-}
-
 function assistantBlockModels(message) {
   return (message.content || []).map((block) => {
     if (block.type === "text") {
@@ -425,6 +391,9 @@ function assistantBlockModels(message) {
     if (block.type === "thinking") {
       if (!shouldShowThinking(localStorage) || !block.thinking?.trim()) return null;
       return { type: "thinking", text: block.thinking, key: block.thinking };
+    }
+    if (block.type === "toolCall") {
+      return { type: "toolCall", id: block.id, key: block.id || JSON.stringify(block), cardStore: ensureToolCardStore(block) };
     }
     return null;
   }).filter(Boolean);
@@ -437,10 +406,11 @@ function assistantModel(message) {
   };
 }
 
-function mountSvelteAssistantMessage(message) {
+function mountSvelteAssistantMessage(message, role = "assistant") {
   const assistantStore = writable(assistantModel(message));
   mountTranscriptComponent(AssistantMessage, {
     assistantStore,
+    role,
     onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
   });
   const el = messagesEl.lastElementChild;
@@ -452,43 +422,13 @@ function updateSvelteAssistant(live, message) {
   live.store.set(assistantModel(message));
 }
 
-function addSvelteAssistantMessage(message) {
-  mountSvelteAssistantMessage(message);
-  placeCheckpointBtn();
+function addSvelteAssistantMessage(message, role = "assistant") {
+  mountSvelteAssistantMessage(message, role);
+  if (role === "assistant") placeCheckpointBtn();
 }
 
-function renderAssistantInto(root, message) {
-  const blocks = message.content || [];
-  const prevKeys = root._blockKeys || [];
-  const prevEls = Array.from(root.children);
-  const els = [], keys = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const key = block.type + ":" + JSON.stringify(block);
-    if (prevKeys[i] === key && prevEls[i]) { els.push(prevEls[i]); keys.push(key); continue; }
-    let el;
-    if (block.type === "toolCall") {
-      const existing = toolCards.get(block.id);
-      if (existing) { updateToolCard(block); el = existing.el; }
-      else el = createToolCard(block);
-    } else {
-      el = renderBlockEl(block);
-      // a re-rendered details at the same position keeps its open state
-      if (el?.tagName === "DETAILS" && prevEls[i]?.tagName === "DETAILS" && prevEls[i].open) el.open = true;
-    }
-    if (!el) continue;
-    els.push(el);
-    keys.push(key);
-  }
-  if (message.stopReason === "error" && message.errorMessage) {
-    const div = document.createElement("div");
-    div.className = "msg error-msg";
-    div.textContent = message.errorMessage;
-    els.push(div);
-    keys.push("err:" + message.errorMessage);
-  }
-  root._blockKeys = keys;
-  root.replaceChildren(...els);
+function addSvelteCustomMessage(role, text) {
+  addSvelteAssistantMessage({ role, content: [{ type: "text", text }] }, role || "custom");
 }
 
 function addUserMessage(message) {
@@ -523,21 +463,6 @@ function rememberPrompt(text) {
 // Texts we already rendered locally on send; pi echoes each prompt back as a
 // user message_start, which must not be rendered a second time.
 const localEchoes = [];
-
-/** Outer .msg wrapper (carries role + permalink button) with an inner body
- *  used as the render root, so renderAssistantInto can replaceChildren()
- *  without wiping the button. */
-function addAssistantContainer() {
-  const wrap = document.createElement("div");
-  wrap.className = "msg assistant";
-  wrap.dataset.role = "assistant";
-  const body = document.createElement("div");
-  wrap.appendChild(body);
-  addPermalinkBtn(wrap);
-  messagesEl.appendChild(wrap);
-  placeCheckpointBtn();
-  return body;
-}
 
 // ------------------------------------------------------------ checkpoints
 //
@@ -734,15 +659,7 @@ setCheckpointTreeHandlers({ openSession: openTreeSession, rollback: rollbackToCh
 function renderFullMessage(message) {
   const role = message.role;
   if (role === "user") { addUserMessage(message); return; }
-  if (role === "assistant") {
-    if (canRenderAssistantWithSvelte(message)) {
-      addSvelteAssistantMessage(message);
-      return;
-    }
-    const root = addAssistantContainer();
-    renderAssistantInto(root, message);
-    return;
-  }
+  if (role === "assistant") { addSvelteAssistantMessage(message); return; }
   if (role === "toolResult") {
     if (toolCards.has(message.toolCallId)) {
       finishToolCard(message.toolCallId, message, message.isError);
@@ -752,12 +669,7 @@ function renderFullMessage(message) {
   // custom messages (extensions etc.) — show generically if they carry text
   if (message.content) {
     const text = toolResultText(message);
-    if (text) {
-      const root = addAssistantContainer();
-      // not a real assistant message: exclude it from permalink alignment
-      root.parentElement.dataset.role = message.role || "custom";
-      root.innerHTML = `<div class="md">${renderMarkdown(text)}</div>`;
-    }
+    if (text) addSvelteCustomMessage(message.role || "custom", text);
   }
 }
 
@@ -844,6 +756,7 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
+  updateAppSession({ state: s });
   if (sessionChanged) {
     routines.set(routinesNow.filter(routineVisible));
     routineScopeAll.set(tunnelScopeAll);
@@ -871,13 +784,20 @@ let workdir = null;
 
 let currentRunner = localStorage.getItem("pi_runner") || null;
 let runnersNow = []; // latest known runner list (for session indicators)
+updateAppSession({ currentRunner, runners: runnersNow });
 /** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
 let afterTranscript = null;
 
 function setRunner(id) {
   currentRunner = id || null;
+  updateAppSession({ currentRunner });
   if (id) localStorage.setItem("pi_runner", id);
   else localStorage.removeItem("pi_runner");
+}
+
+function setRunnersNow(runners) {
+  runnersNow = runners ?? [];
+  updateAppSession({ runners: runnersNow });
 }
 
 /** attach this client to another runner and rebuild the UI from its stream */
@@ -949,6 +869,7 @@ let onRunnersUpdate = null;
 
 function setWorkdir(dir) {
   workdir = dir;
+  updateAppSession({ workdir });
   updateHeaderState({
     workdirText: dir ? `📁 ${dir.length > 40 ? "…" + dir.slice(-39) : dir}` : "",
     workdirTitle: dir || "",
@@ -958,11 +879,10 @@ function setWorkdir(dir) {
 let busy = false;
 function setBusy(b) {
   busy = b;
-  const hasText = !!$("input").value.trim();
+  updateAppSession({ busy });
   updateHeaderState({
     connectionClass: connected ? `dot ${b ? "busy" : "ok"}` : "dot",
     sendText: b ? "Steer" : "Send",
-    sendHidden: b && !hasText,
     stopHidden: !b,
   });
 }
@@ -989,6 +909,7 @@ setInterval(() => {
   if (es && Date.now() - lastEventAt > 70000) {
     es.close();
     connected = false;
+    updateAppSession({ connected });
     updateHeaderState({ connectionClass: "dot", stateInfo: "connection lost — reconnecting…" });
     connect();
   }
@@ -1002,6 +923,7 @@ function connect() {
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
   es.onopen = async () => {
     connected = true;
+    updateAppSession({ connected });
     updateHeaderState({ connectionClass: "dot ok", stateInfo: "connected" });
     try {
       // Always rebuild from the canonical transcript: the SSE replay buffer
@@ -1017,6 +939,7 @@ function connect() {
   };
   es.onerror = () => {
     connected = false;
+    updateAppSession({ connected });
     updateHeaderState({ connectionClass: "dot", stateInfo: "reconnecting…" });
     // EventSource can't see HTTP status codes, so a 401 (bad stored token)
     // looks identical to a network blip and would retry forever. Probe
@@ -1055,7 +978,7 @@ function handleEvent(msg) {
       // pings carry the authoritative runner list: reconcile liveness the
       // client may have missed (pi_exit scrolled out of the replay buffer)
       if (msg.runners && JSON.stringify(msg.runners) !== JSON.stringify(runnersNow)) {
-        runnersNow = msg.runners;
+        setRunnersNow(msg.runners);
         onRunnersUpdate?.(runnersNow);
         refreshTreeIfOpen();
       }
@@ -1065,14 +988,14 @@ function handleEvent(msg) {
       // NOTE: `replaying` stays true here — only the canonical transcript
       // render (reloadTranscript) opens the live-event gate
       if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
-      if (msg.runners) runnersNow = msg.runners;
+      if (msg.runners) setRunnersNow(msg.runners);
       if (msg.workdir) setWorkdir(msg.workdir);
       loadHublots();
       loadRoutines();
       return;
 
     case "runners_update":
-      runnersNow = msg.runners ?? [];
+      setRunnersNow(msg.runners ?? []);
       onRunnersUpdate?.(runnersNow);
       refreshTreeIfOpen(); // keep the live/busy dots in the tree current
       return;
@@ -1099,11 +1022,7 @@ function handleEvent(msg) {
     case "message_start": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (canRenderAssistantWithSvelte(m)) liveAssistant = mountSvelteAssistantMessage(m);
-        else {
-          liveAssistant = { root: addAssistantContainer(), msg: m, svelte: false };
-          renderAssistantInto(liveAssistant.root, m);
-        }
+        liveAssistant = mountSvelteAssistantMessage(m);
         scrollToBottom(true);
       } else if (m.role === "user") {
         const idx = localEchoes.indexOf(userMessageText(m));
@@ -1116,12 +1035,8 @@ function handleEvent(msg) {
     case "message_update": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (!liveAssistant) {
-          if (canRenderAssistantWithSvelte(m)) liveAssistant = mountSvelteAssistantMessage(m);
-          else liveAssistant = { root: addAssistantContainer(), msg: m, svelte: false };
-        }
-        if (liveAssistant.svelte && canRenderAssistantWithSvelte(m)) updateSvelteAssistant(liveAssistant, m);
-        else if (!liveAssistant.svelte) renderAssistantInto(liveAssistant.root, m);
+        if (!liveAssistant) liveAssistant = mountSvelteAssistantMessage(m);
+        updateSvelteAssistant(liveAssistant, m);
         scrollToBottom(false);
       }
       return;
@@ -1130,10 +1045,8 @@ function handleEvent(msg) {
     case "message_end": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (liveAssistant?.svelte && canRenderAssistantWithSvelte(m)) updateSvelteAssistant(liveAssistant, m);
-        else if (liveAssistant) renderAssistantInto(liveAssistant.root, m);
-        else if (canRenderAssistantWithSvelte(m)) addSvelteAssistantMessage(m);
-        else { const root = addAssistantContainer(); renderAssistantInto(root, m); }
+        if (liveAssistant) updateSvelteAssistant(liveAssistant, m);
+        else addSvelteAssistantMessage(m);
         liveAssistant = null;
         updateUsage(m);
       } else if (m.role === "toolResult") {
@@ -1308,6 +1221,7 @@ async function reloadTranscript() {
   // DOM (their targets may live in a backfilled chunk); skip both if this
   // render was superseded by a newer one meanwhile
   if (!complete) return;
+  annotateTranscriptEntries().catch(() => {});
   refreshCheckpointMarkers().catch(() => {});
   refreshTreeIfOpen();
   const cb = afterTranscript;
@@ -1330,12 +1244,14 @@ const input = $("input");
 function composerInputChanged() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  setComposerTextValue(input.value);
   setBusy(busy); // refresh busy state UI
   histIdx = null; // typing exits history navigation
 }
 
 function setComposerText(text) {
   input.value = text;
+  setComposerTextValue(text);
   input.setSelectionRange(text.length, text.length);
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
@@ -1430,6 +1346,7 @@ async function send() {
     }
   }
   input.value = "";
+  setComposerTextValue("");
   input.style.height = "auto";
   setBusy(busy); // hide the Steer button again
   addUserMessage({ role: "user", content: text });
@@ -1448,7 +1365,13 @@ async function abort() {
   catch (e) { toast(`abort failed: ${e.message}`, "error"); }
 }
 
-setComposerHandlers({ inputChanged: composerInputChanged, keydown: composerKeydown, send, abort });
+document.addEventListener("pi:composer", (event) => {
+  const { action, sourceEvent } = event.detail ?? {};
+  if (action === "inputChanged") composerInputChanged();
+  else if (action === "keydown") composerKeydown(sourceEvent);
+  else if (action === "send") send();
+  else if (action === "abort") abort();
+});
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"
@@ -2608,13 +2531,11 @@ async function openConfigPicker() {
 async function openSearchHit(sessionPath, hit) {
   closeModal();
   if (hit.sessionId === state?.sessionId) {
-    if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
+    await focusSearchHit(hit);
     return;
   }
 
-  const focus = () => {
-    if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
-  };
+  const focus = () => { focusSearchHit(hit); };
 
   try {
     // attach to the session's runner (spawned in the session's own folder if
@@ -2632,6 +2553,14 @@ async function openSearchHit(sessionPath, hit) {
   } catch (e) {
     toast(`switch failed: ${e.message}`, "error");
   }
+}
+
+async function focusSearchHit(hit) {
+  if (hit.entryId) {
+    await focusEntryById(hit.entryId);
+    return;
+  }
+  if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
 }
 
 function focusMessageBySnippet(snippet) {
@@ -2668,18 +2597,6 @@ function flashEl(el) {
 // ids, so elements and entries are zipped together by position, with a
 // text-match fallback when the two sides disagree (e.g. mid-stream).
 
-function addPermalinkBtn(el) {
-  const b = document.createElement("span");
-  b.className = "permalink";
-  b.textContent = "\u{1F517}";
-  b.title = "copy a permalink to this message";
-  b.addEventListener("click", (e) => {
-    e.stopPropagation();
-    copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error"));
-  });
-  el.appendChild(b);
-}
-
 /** rendered transcript elements that correspond to persisted user/assistant entries */
 function chatEls() {
   return [...messagesEl.children].filter(
@@ -2705,18 +2622,36 @@ function entryMatchesEl(entry, el) {
   return messageEntryMatchesElement(entry, el);
 }
 
-async function entryIdForElement(el) {
-  const entries = await fetchSessionEntries();
-  const els = chatEls();
+function entryForElement(entries, els, el) {
   const idx = els.indexOf(el);
   if (idx === -1 || !entries.length) return null;
   // same length -> zip by index; otherwise align from the end (the file can
   // briefly run ahead of / behind the rendered transcript while streaming)
   const pos = entries.length === els.length ? idx : entries.length - (els.length - idx);
-  if (pos >= 0 && pos < entries.length && entryMatchesEl(entries[pos], el)) return entries[pos].id;
+  if (pos >= 0 && pos < entries.length && entryMatchesEl(entries[pos], el)) return entries[pos];
   const found = entries.find((e) => e.role === el.dataset.role && e.text && !e.text.startsWith("[")
     && normText(el.textContent).includes(normText(e.text).slice(0, 60)));
-  return found?.id ?? (pos >= 0 && pos < entries.length ? entries[pos].id : null);
+  return found ?? (pos >= 0 && pos < entries.length ? entries[pos] : null);
+}
+
+async function annotateTranscriptEntries() {
+  const entries = await fetchSessionEntries();
+  const els = chatEls();
+  for (const el of els) {
+    const entry = entryForElement(entries, els, el);
+    if (entry?.id) el.dataset.entryId = entry.id;
+  }
+}
+
+async function entryIdForElement(el) {
+  if (el?.dataset?.entryId) return el.dataset.entryId;
+  const entries = await fetchSessionEntries();
+  const entry = entryForElement(entries, chatEls(), el);
+  if (entry?.id) {
+    el.dataset.entryId = entry.id;
+    return entry.id;
+  }
+  return null;
 }
 
 async function copyPermalink(el) {
@@ -2748,6 +2683,9 @@ async function copyText(text) {
 /** opening a /s/<sid>/m/<eid> permalink: scroll to / flash that message */
 async function focusEntryById(entryId) {
   try {
+    await annotateTranscriptEntries();
+    const direct = messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`);
+    if (direct) { flashEl(direct); return; }
     const entries = await fetchSessionEntries();
     const els = chatEls();
     const pos = entries.findIndex((e) => e.id === entryId);
@@ -2763,6 +2701,7 @@ async function focusEntryById(entryId) {
         : null) ?? el;
     }
     if (!el) { toast("linked message not visible in transcript", "warning"); return; }
+    if (entry.id) el.dataset.entryId = entry.id;
     flashEl(el);
   } catch (e) {
     toast(`permalink: ${e.message}`, "warning");
@@ -3044,12 +2983,13 @@ function toggleTreeFromHeader() {
   applyCarousel();
 }
 
-setHeaderHandlers({
-  chooseModel,
-  cycleThinking,
-  openConfig: openConfigPicker,
-  toggleHublots: toggleHublotsFromHeader,
-  toggleTree: toggleTreeFromHeader,
+document.addEventListener("pi:header", (event) => {
+  const { action, sourceEvent } = event.detail ?? {};
+  if (action === "chooseModel") chooseModel();
+  else if (action === "cycleThinking") cycleThinking();
+  else if (action === "openConfig") openConfigPicker();
+  else if (action === "toggleHublots") toggleHublotsFromHeader(sourceEvent);
+  else if (action === "toggleTree") toggleTreeFromHeader(sourceEvent);
 });
 
 // apply initial page on load + whenever the page becomes mobile/desktop

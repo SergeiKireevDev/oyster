@@ -29,14 +29,14 @@ Completed so far:
 - ✅ Extracted and tested `splitTurns()` / `takeTailChunk()` in `public/src/lib/transcriptUtils.js`.
 - ✅ Full validation passed after the latest tranche: `npm run build`, `npm test`, `docker build -t pi-lot-ui .`, and full e2e.
 - ✅ 9.7 checkpoint iceberg now renders through `CheckpointButton.svelte`; legacy still owns checkpoint API orchestration and placement.
-- ✅ 9.8 permalink UI has a shared `PermalinkButton.svelte` for Svelte-rendered user/assistant messages; legacy fallback remains for non-migrated transcript paths.
+- ✅ 9.8 permalink UI has a shared `PermalinkButton.svelte` for Svelte-rendered user/assistant messages.
+- ✅ 9.8 permalink entry alignment now annotates rendered transcript messages with `data-entry-id` after full transcript load and uses that before falling back to text matching.
+- ✅ 9.9 search-hit focus now prefers search result `entryId` and the same `data-entry-id` path before snippet matching fallback.
+- ✅ 9.10 removed replaced imperative transcript DOM builders (`renderAssistantInto`, `addAssistantContainer`, `renderBlockEl`, legacy permalink button builder, legacy tool-card DOM builder).
 
 Still remaining:
 
-- 9.6 store-owned tail-first transcript/backfill path.
-- 9.8 data-driven permalink entry alignment and fallback cleanup.
-- 9.9 search-hit focus/flash refactor.
-- 9.10 final cleanup of replaced imperative transcript DOM code.
+- No Step 9 items remain. Transcript DOM nodes for user, assistant, custom text, thinking blocks, tool cards, permalink buttons, and the checkpoint button are Svelte-rendered. Legacy still owns orchestration, chunk scheduling, scroll correction, and API calls by design.
 
 ## Non-goals for Step 9
 
@@ -205,7 +205,7 @@ Do not over-design this into global app state. Keep it transcript-specific.
   - Sending prompts still avoids duplicate user echoes.
   - Session switching transcript test passes.
 
-### 9.6 Reimplement tail-first backfill using the store
+### 9.6 Reimplement tail-first backfill using Svelte-rendered transcript nodes ✅
 
 - Keep `splitTurns()` and `takeTailChunk()` as pure helpers, preferably extracted to `messageUtils.js` or a transcript utility module with tests.
 - Update `renderTranscript(messages)` to:
@@ -231,7 +231,7 @@ Do not over-design this into global app state. Keep it transcript-specific.
 - Acceptance:
   - Checkpoint treebar and rollback e2e tests pass.
 
-### 9.8 Move permalink buttons into Svelte 🚧
+### 9.8 Move permalink buttons into Svelte ✅
 
 - Add `PermalinkButton.svelte`.
 - Preserve `.permalink`, title, icon, and click behavior.
@@ -243,7 +243,7 @@ Do not over-design this into global app state. Keep it transcript-specific.
   - Permalink copy still works.
   - Search-hit focus and `/s/<session>/m/<entry>` behavior still work.
 
-### 9.9 Rework search-hit focus/flash behavior
+### 9.9 Rework search-hit focus/flash behavior ✅
 
 - Replace direct DOM scanning where possible with keyed transcript item focus.
 - Keep legacy search orchestration but have it request:
@@ -254,7 +254,7 @@ Do not over-design this into global app state. Keep it transcript-specific.
 - Acceptance:
   - `search across sessions and jump to a hit` e2e passes on desktop and mobile.
 
-### 9.10 Remove replaced imperative transcript DOM code
+### 9.10 Remove replaced imperative transcript DOM code ✅
 
 After all prior phases are green:
 

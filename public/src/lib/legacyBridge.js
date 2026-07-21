@@ -1,5 +1,4 @@
 let menuActionHandler = null;
-let composerHandlers = {};
 let hublotHandlers = {};
 let hublotManagerHandlers = {};
 let folderBrowserHandlers = {};
@@ -10,7 +9,6 @@ let routineHandlers = {};
 let commandPaletteHandlers = {};
 let checkpointTreeHandlers = {};
 let settingsHandlers = {};
-let headerHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -18,26 +16,6 @@ export function setMenuActionHandler(handler) {
 
 export async function runMenuAction(action) {
   return menuActionHandler?.(action);
-}
-
-export function setComposerHandlers(handlers) {
-  composerHandlers = handlers ?? {};
-}
-
-export function composerInputChanged() {
-  return composerHandlers.inputChanged?.();
-}
-
-export function composerKeydown(event) {
-  return composerHandlers.keydown?.(event);
-}
-
-export function sendComposerPrompt() {
-  return composerHandlers.send?.();
-}
-
-export function abortComposerPrompt() {
-  return composerHandlers.abort?.();
 }
 
 export function setHublotHandlers(handlers) {
@@ -262,30 +240,4 @@ export function setSettingsHandlers(handlers) {
 
 export function reloadAfterSettingsChange() {
   return settingsHandlers.reload?.();
-}
-
-export function setHeaderHandlers(handlers) {
-  headerHandlers = handlers ?? {};
-}
-
-export function chooseHeaderModel() {
-  return headerHandlers.chooseModel?.();
-}
-
-export function cycleHeaderThinking() {
-  return headerHandlers.cycleThinking?.();
-}
-
-export function openHeaderConfig() {
-  return headerHandlers.openConfig?.();
-}
-
-export function toggleHeaderHublots(event) {
-  event?.stopPropagation?.();
-  return headerHandlers.toggleHublots?.();
-}
-
-export function toggleHeaderTree(event) {
-  event?.stopPropagation?.();
-  return headerHandlers.toggleTree?.();
 }
