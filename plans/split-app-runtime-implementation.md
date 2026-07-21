@@ -353,7 +353,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
     decreases by at least 100 lines.
   - [x] Repeat controller-block extraction commits until the implementation
     file is below 400 lines or removed.
-  - [ ] Make `appComposition.js` define the runtime factory directly rather
+  - [x] Make `appComposition.js` define the runtime factory directly rather
     than re-exporting from `appRuntimeImplementation.js`; delete the legacy
     implementation file and update no-reference tests.
 
