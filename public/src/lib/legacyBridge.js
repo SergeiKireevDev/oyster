@@ -1,4 +1,3 @@
-let menuActionHandler = null;
 let hublotHandlers = {};
 let hublotManagerHandlers = {};
 let folderBrowserHandlers = {};
@@ -6,14 +5,6 @@ let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
 let routineHandlers = {};
-
-export function setMenuActionHandler(handler) {
-  menuActionHandler = handler;
-}
-
-export async function runMenuAction(action) {
-  return menuActionHandler?.(action);
-}
 
 export function setHublotHandlers(handlers) {
   hublotHandlers = handlers ?? {};

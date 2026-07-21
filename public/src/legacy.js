@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -1787,7 +1787,7 @@ async function runMenuAction(action) {
     toast(err.message, "error");
   }
 }
-setMenuActionHandler(runMenuAction);
+window.addEventListener("pi-menu-action", (event) => runMenuAction(event.detail));
 
 // ------------------------------------------------------------ attach file
 

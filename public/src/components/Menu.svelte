@@ -1,14 +1,13 @@
 <script>
   import { menuOpen } from "../stores/ui.js";
-  import { runMenuAction } from "../lib/legacyBridge.js";
 
   function close() {
     menuOpen.set(false);
   }
 
-  async function run(action) {
+  function run(action) {
     close();
-    await runMenuAction(action);
+    window.dispatchEvent(new CustomEvent("pi-menu-action", { detail: action }));
   }
 </script>
 
