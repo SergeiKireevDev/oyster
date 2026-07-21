@@ -30,8 +30,9 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
   expect(after.status).toBe(200);
   expect(after.json.sessions.some((session) => session.id === sessionId && session.sessionRef?.backend === "sqlite")).toBe(true);
 
-  await page.click("#menuBtn");
-  await page.click('#menu button[data-action="sessions"]');
+  await page.locator("#input").fill(":sessions");
+  await expect(page.locator("#cmdPalette")).toHaveClass(/open/);
+  await page.locator("#input").press("Enter");
   await expect(page.locator("#mTitle")).toHaveText("Sessions");
   const row = page.locator(".m-option", { hasText: token });
   await expect(row).toBeVisible({ timeout: 15000 });

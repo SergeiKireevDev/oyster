@@ -33,8 +33,9 @@ async function newSession(page) {
 }
 
 async function openSessions(page) {
-  await page.click("#menuBtn");
-  await page.click('#menu button[data-action="sessions"]');
+  await page.locator("#input").fill(":sessions");
+  await expect(page.locator("#cmdPalette")).toHaveClass(/open/);
+  await page.locator("#input").press("Enter");
   await expect(page.locator("#mTitle")).toHaveText("Sessions");
 }
 

@@ -10,7 +10,6 @@
     SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
     SESSION_PICKER_SEARCH_ACTION,
     SESSION_PICKER_SET_SCOPE_ACTION,
-    SESSION_PICKER_SHOW_ACTION,
     SESSION_PICKER_STOP_ACTION,
     SESSION_SIDEBAR_REFRESH_ACTION,
     SESSION_SWITCH_RUNNER_ACTION,
@@ -18,7 +17,6 @@
 
   const uiActions = getUiActionRegistry();
   const switchRunner = (id) => uiActions.invoke(SESSION_SWITCH_RUNNER_ACTION, id);
-  const showAllSessions = () => uiActions.invoke(SESSION_PICKER_SHOW_ACTION);
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
   const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
   const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
@@ -146,5 +144,4 @@
       <div class="r-empty">(no active sessions)</div>
     {/if}
   </div>
-  <button type="button" class="session-sidebar-all" onclick={showAllSessions}>All sessions…</button>
 </aside>

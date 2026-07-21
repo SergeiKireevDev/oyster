@@ -117,8 +117,8 @@ async function main() {
   // ---- Scenario 3: two-finger swipe switches sessions ----
   console.log("Recording: two-finger swipe...");
   // first, open the sessions picker to see what's available
-  await page.click("#menuBtn");
-  await page.click('button[data-action="sessions"]');
+  await page.locator("#input").fill(":sessions");
+  await page.locator("#input").press("Enter");
   await page.waitForSelector("#mTitle");
   await page.waitForTimeout(1500);
   // close modal

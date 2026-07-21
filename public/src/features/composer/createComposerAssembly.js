@@ -115,18 +115,29 @@ export function createComposerAssembly(deps) {
     const guard = createCommandGuard({ rpc: deps.rpc, confirm: commandDeps.confirm });
     let state = null;
     let inputController = null;
-    const commands = [{
-      name: "file",
-      desc: "Open file explorer and insert a path",
-      icon: "📂",
-      run() {
-        const trigger = commandTrigger(state.target);
-        const placeholder = trigger ? trigger.text : null;
-        const target = state.target;
-        close();
-        commandDeps.showFilePicker((path) => insertAtTextarea(target, placeholder, path), null, commandDeps.isOverlayOpen());
+    const commands = [
+      {
+        name: "file",
+        desc: "Open file explorer and insert a path",
+        icon: "📂",
+        run() {
+          const trigger = commandTrigger(state.target);
+          const placeholder = trigger ? trigger.text : null;
+          const target = state.target;
+          close();
+          commandDeps.showFilePicker((path) => insertAtTextarea(target, placeholder, path), null, commandDeps.isOverlayOpen());
+        },
       },
-    }];
+      {
+        name: "sessions",
+        desc: "Open the full sessions manager",
+        icon: "◫",
+        run() {
+          close();
+          commandDeps.dialogs.showSessionPicker();
+        },
+      },
+    ];
     const filtered = (match) => filterCommands(commands, match);
     const render = () => state && commandDeps.setPaletteState(commandPaletteView(filtered(state.match), state.match, state.active));
     const position = (element) => commandDeps.setPaletteState(commandPalettePosition(element.getBoundingClientRect(), commandDeps.windowTarget));

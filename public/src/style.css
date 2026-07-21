@@ -210,18 +210,6 @@
   .session-sidebar-name, .session-sidebar-folder { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-name { font-size: 13px; font-weight: 600; }
   .session-sidebar-folder { color: var(--muted); font-size: 11px; }
-  .session-sidebar-all {
-    margin-top: auto;
-    padding: 7px 9px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--panel-2);
-    color: var(--muted);
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .session-sidebar-all:hover { color: var(--accent); border-color: var(--accent-dim); }
   #hublots {
     width: 230px;
     flex-shrink: 0;

@@ -9,7 +9,6 @@ import {
   SESSION_PICKER_LOAD_FOLDER_ACTION,
   SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
   SESSION_PICKER_SEARCH_ACTION,
-  SESSION_PICKER_SHOW_ACTION,
   SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION,
   SESSION_PICKER_SET_FOLDER_ACTION,
   SESSION_PICKER_SET_SCOPE_ACTION,
@@ -155,7 +154,6 @@ export function createSessionPickerRuntime(deps) {
     deps.uiActions.register(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, actions.openSearchHit),
     deps.uiActions.register(SESSION_PICKER_LOAD_FOLDER_ACTION, actions.loadFolder),
     deps.uiActions.register(SESSION_PICKER_CANCEL_ACTION, cancel),
-    deps.uiActions.register(SESSION_PICKER_SHOW_ACTION, show),
     deps.uiActions.register(SESSION_SWITCH_RUNNER_ACTION, async (runnerId) => {
       if (!runnerId || runnerId === deps.getCurrentRunner()) return;
       try {

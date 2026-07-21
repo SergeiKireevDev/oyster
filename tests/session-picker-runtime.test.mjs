@@ -80,7 +80,6 @@ test("session picker runtime owns picker actions and search-hit construction", a
     actionNames.SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
     actionNames.SESSION_PICKER_LOAD_FOLDER_ACTION,
     actionNames.SESSION_PICKER_CANCEL_ACTION,
-    actionNames.SESSION_PICKER_SHOW_ACTION,
     actionNames.SESSION_SWITCH_RUNNER_ACTION,
     actionNames.SESSION_SIDEBAR_REFRESH_ACTION,
   ].sort());
@@ -90,7 +89,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
   runtime.detachActions();
   runtime.detachActions();
   assert.equal(registered.size, 0);
-  assert.equal(detached.length, 13);
+  assert.equal(detached.length, 12);
 });
 
 test("session picker component routes every workflow through scoped actions", () => {
@@ -113,10 +112,16 @@ test("session picker component routes every workflow through scoped actions", ()
   assert.doesNotMatch(source, /features\/sessions\/sessionPickerActions\.js/);
 });
 
-test("session sidebar routes switching and the full picker through scoped actions", () => {
+test("session navigation omits the redundant full-picker buttons", () => {
+  const sidebar = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
+  const menu = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
+  assert.doesNotMatch(sidebar, /All sessions…|session-sidebar-all/);
+  assert.doesNotMatch(menu, /data-action="sessions"|Sessions…/);
+});
+
+test("session sidebar routes switching and management through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
   assert.match(source, /uiActions\.invoke\(SESSION_SWITCH_RUNNER_ACTION/);
-  assert.match(source, /uiActions\.invoke\(SESSION_PICKER_SHOW_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_REFRESH_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_SEARCH_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION/);
