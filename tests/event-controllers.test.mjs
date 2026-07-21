@@ -5,7 +5,7 @@ import { createComposerEventController } from "../public/src/lib/composerControl
 import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
-import { createExtensionUiEventController, createHublotEventController } from "../public/src/runtime/eventControllers.js";
+import { createExtensionUiEventController, createHublotEventController, createRunnerPingEventController } from "../public/src/runtime/eventControllers.js";
 
 test("extension UI event controller delegates stream requests", () => {
   const requests = [];
@@ -13,6 +13,19 @@ test("extension UI event controller delegates stream requests", () => {
   const message = { type: "extension_ui_request", id: "request-1" };
   assert.equal(controller(message), true);
   assert.deepEqual(requests, [message]);
+});
+
+test("runner ping event controller updates changed runner liveness", () => {
+  const calls = [];
+  const controller = createRunnerPingEventController({
+    currentRunners: () => [{ id: "r1", alive: true }],
+    setRunners: (runners) => calls.push(["set", runners]),
+    onRunnersChanged: (runners) => calls.push(["changed", runners]),
+    refreshTree: () => calls.push(["tree"]),
+  });
+  const runners = [{ id: "r1", alive: false }];
+  assert.equal(controller({ type: "ping", runners }), true);
+  assert.deepEqual(calls, [["set", runners], ["changed", runners], ["tree"]]);
 });
 
 test("hublot stream controller refreshes previews and schedules ready retries", () => {

@@ -115,8 +115,10 @@ Classify each remaining `document`/`window` listener:
 - [x] Extracted lifecycle/global adapters and focused SSE event controllers for
   runner exit/unhealthy, Pi errors/restarts, reload notices, response refresh,
   hublots, routines, and runner lists.
-- [ ] Move the `extension_ui_request` SSE branch into
+- [x] Moved the `extension_ui_request` SSE branch into
   `createExtensionUiEventController()`.
+- [ ] Move the `ping` runner-liveness SSE projection into a focused event
+  controller.
 - [ ] Classify and move the remaining feature-specific document/window/custom
   event listeners from `legacy.js`.
 

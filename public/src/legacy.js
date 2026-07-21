@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { createExtensionUiEventController, createHublotEventController, createRoutineStreamEventController, createRunnersUpdateController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
+import { createExtensionUiEventController, createHublotEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController, handleReplayDone } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
@@ -573,6 +573,12 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
 });
 
 const extensionUiEvent = createExtensionUiEventController({ handleRequest: (message) => handleExtensionUI(message) });
+const runnerPingEvent = createRunnerPingEventController({
+  currentRunners: () => runnersNow,
+  setRunners: setRunnersNow,
+  onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
+  refreshTree: refreshTreeIfOpen,
+});
 const runnersUpdate = createRunnersUpdateController({ setRunners: setRunnersNow, onRunnersChanged: (runners) => onRunnersUpdate?.(runners), refreshTree: refreshTreeIfOpen });
 const routineEvent = createRoutineStreamEventController({ isReplaying: () => replaying, update: (...args) => routineSidebarController.update(...args), toast: addToast });
 const hublotEvent = createHublotEventController({
@@ -617,14 +623,8 @@ function handleEvent(msg) {
   if (replayEventGate(msg)) return;
   switch (msg.type) {
     case "ping":
-      // Pings carry authoritative runner liveness, handled by the runtime
-      // controller while legacy supplies store/tree adapters.
-      handleRunnerPing(msg, {
-        currentRunners: () => runnersNow,
-        setRunners: setRunnersNow,
-        onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
-        refreshTree: refreshTreeIfOpen,
-      });
+      // Pings carry authoritative runner liveness via the runtime controller.
+      runnerPingEvent(msg);
       return;
 
     case "replay_done":

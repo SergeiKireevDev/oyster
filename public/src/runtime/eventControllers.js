@@ -71,3 +71,7 @@ export function handleRunnerPing(message, { currentRunners, setRunners, onRunner
   refreshTree();
   return true;
 }
+
+export function createRunnerPingEventController(dependencies) {
+  return (message) => handleRunnerPing(message, dependencies);
+}
