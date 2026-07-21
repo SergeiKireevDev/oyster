@@ -1,6 +1,6 @@
-import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery, switchSessionRunner } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "../runtime/sessionRuntime.js";
 
-export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery, switchSessionRunner };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -46,26 +46,6 @@ export function createRunnerListController({ updateAppSession }) {
       return runners;
     },
   };
-}
-
-/** Open or resume a runner, normalizing the server's response and errors. */
-export async function openSession(fetchImpl, { sessionPath = null, dir = null } = {}) {
-  const res = await fetchImpl("/open-session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sessionPath, dir }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
-  return data.runner;
-}
-
-/** Stop a runner and normalize the endpoint's error payload. */
-export async function stopSessionRunner(fetchImpl, id) {
-  const res = await fetchImpl(`/runners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `stop failed (${res.status})`);
-  return data;
 }
 
 /** Return runner metadata after a process has been stopped. */

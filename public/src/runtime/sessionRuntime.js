@@ -39,6 +39,22 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+/** Open or resume a runner, normalizing the server's response and errors. */
+export async function openSession(fetchImpl, { sessionPath = null, dir = null } = {}) {
+  const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionPath, dir }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
+  return data.runner;
+}
+
+/** Stop a runner and normalize the endpoint's error payload. */
+export async function stopSessionRunner(fetchImpl, id) {
+  const res = await fetchImpl(`/runners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `stop failed (${res.status})`);
+  return data;
+}
+
 /** Convert an absolute session file path into the server's session-root query. */
 export function sessionFileQuery(sessionPath) {
   const raw = String(sessionPath ?? "");
