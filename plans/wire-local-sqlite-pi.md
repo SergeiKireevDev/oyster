@@ -144,7 +144,7 @@ the intended persistence policy.
 
 ## 6. Make Local and Container Wiring Reproducible
 
-- [ ] Update the systemd template and README commands to build the local
+- [x] Update the systemd template and README commands to build the local
   coding-agent checkout, set `PI_BIN` and `PERSISTENT_STORE=sqlite`, restart the
   service, verify health, and roll back to JSONL. Document that SQLite backups
   require stopping pi writers or using SQLite's online backup API and include

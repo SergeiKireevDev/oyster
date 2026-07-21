@@ -12,7 +12,6 @@ preview-gallery
 foobar.py
 Dockerfile
 .dockerignore
-pi-ui.service
 
 # e2e: keep the build context small (mock-llm/ is copied explicitly in Dockerfile)
 tests/e2e/node_modules

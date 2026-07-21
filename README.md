@@ -141,7 +141,42 @@ denied.
 PI_UI_TOKEN=$(cat .ui-token) nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
 ```
 
-or a systemd user unit if you want it supervised.
+or use the SQLite-configured systemd unit below.
+
+## SQLite backup and rollback
+
+SQLite runs in WAL mode. For an online backup while pi processes are active,
+use Node's SQLite backup API (the destination is a consistent standalone copy):
+
+```sh
+mkdir -p "$HOME/pi-backups"
+node --input-type=module -e 'import { DatabaseSync, backup } from "node:sqlite"; const source = new DatabaseSync(`${process.env.HOME}/.pi/agent/sessions.sqlite`, { readOnly: true }); const day = new Date().toISOString().slice(0, 10); await backup(source, `${process.env.HOME}/pi-backups/sessions-${day}.sqlite`); source.close()'
+```
+
+For a filesystem-level backup, stop every pi writer first and copy the main
+file together with any WAL/SHM sidecars; copying only `sessions.sqlite` while
+the service is active is not a valid backup:
+
+```sh
+systemctl --user stop pi-ui.service
+mkdir -p "$HOME/pi-backups/stopped"
+for file in "$HOME/.pi/agent/sessions.sqlite"{,-wal,-shm}; do
+  test ! -e "$file" || cp --preserve "$file" "$HOME/pi-backups/stopped/"
+done
+systemctl --user start pi-ui.service
+```
+
+Switching backends does not migrate or delete either store. To roll back to
+JSONL under systemd, add an override and restart:
+
+```sh
+mkdir -p ~/.config/systemd/user/pi-ui.service.d
+printf '[Service]\nEnvironment=PERSISTENT_STORE=jsonl\n' > ~/.config/systemd/user/pi-ui.service.d/rollback.conf
+systemctl --user daemon-reload
+systemctl --user restart pi-ui.service
+```
+
+Remove `rollback.conf`, reload, and restart to select SQLite again.
 
 ## Tunnel notes
 
@@ -154,15 +189,28 @@ ssh -R 80:localhost:8080 nokey@localhost.run
 
 The token is your only line of defense once tunneled — treat the URL-with-token like a password.
 
-## Running as a service
+## Running the local SQLite pi as a service
 
-A systemd user unit keeps the UI alive across crashes and logouts:
+The unit pins the built local CLI, `PERSISTENT_STORE=sqlite`, and
+`~/.pi/agent/sessions.sqlite`. Build pi, render the UI directory placeholder,
+then enable the user service:
 
 ```sh
-cp pi-ui.service ~/.config/systemd/user/
+npm -C /home/ubuntu/pi-coding-agent run build
+mkdir -p ~/.config/systemd/user
+sed "s|__PI_UI_DIR__|$(pwd)|g" pi-ui.service > ~/.config/systemd/user/pi-ui.service
 systemctl --user daemon-reload
 systemctl --user enable --now pi-ui.service
 sudo loginctl enable-linger ubuntu   # keep it running with no active login session
 ```
 
-The token comes from `.ui-token` next to `server.mjs`. Logs: `journalctl --user -u pi-ui -f`.
+Verify that the running service—not merely its environment file—reports the
+intended executable, backend, and database:
+
+```sh
+curl -fsS http://127.0.0.1:8080/health | node -e 'let s=""; process.stdin.on("data",c=>s+=c).on("end",()=>{const h=JSON.parse(s); console.log(h.pi); if(h.pi.persistentStore!=="sqlite" || !h.pi.bin.includes("/home/ubuntu/pi-coding-agent/")) process.exit(1)})'
+```
+
+After changing or rebuilding pi, use `systemctl --user restart pi-ui.service`
+and run the health check again. The token comes from `.ui-token` next to
+`server.mjs`. Logs: `journalctl --user -u pi-ui -f`.

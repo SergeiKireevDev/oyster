@@ -33,7 +33,7 @@ RUN npm install -g @earendil-works/pi-coding-agent@0.80.3
 WORKDIR /app
 
 # Frontend build dependencies + app sources (see .dockerignore)
-COPY package.json package-lock.json vite.config.js ./
+COPY package.json package-lock.json vite.config.js README.md pi-ui.service ./
 RUN npm ci
 COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
