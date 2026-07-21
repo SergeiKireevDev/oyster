@@ -243,6 +243,35 @@ test("OAuth flow coordinator cancels, expires, and shuts down flows with cleanup
   assert.equal(timers.size, 0);
 });
 
+test("replacement coordinator can poll and answer a hot-reloaded active flow", async () => {
+  const registry = new Map();
+  const login = deferred();
+  let callbacks;
+  const first = createPiOAuthFlowService({
+    registry,
+    credentialService: { loginOAuth(_provider, value) { callbacks = value; return login.promise; } },
+    restartActiveRunners: restartNoRunners,
+    randomBytes: deterministicBytes(),
+  });
+  const started = first.start("hot-reload");
+  await settle();
+  const answer = callbacks.onPrompt({ message: "Continue" });
+
+  const replacement = createPiOAuthFlowService({
+    registry,
+    credentialService: { async loginOAuth() { throw new Error("must not restart flow"); } },
+    restartActiveRunners: restartNoRunners,
+    randomBytes: deterministicBytes(),
+  });
+  const request = replacement.getStatus(started.flowId).requests[0];
+  replacement.respond(started.flowId, request.requestId, "hot-answer-canary");
+  assert.equal(await answer, "hot-answer-canary");
+  login.resolve({ credentialType: "oauth" });
+  await settle();
+  assert.equal(replacement.getStatus(started.flowId).status, "succeeded");
+  assert.doesNotMatch(JSON.stringify(replacement.getStatus(started.flowId)), /hot-answer-canary/);
+});
+
 test("OAuth flow coordinator redacts provider failures and reuses supplied state", async () => {
   const registry = new Map();
   const first = createPiOAuthFlowService({

@@ -193,6 +193,6 @@ export async function init(state) {
   return {
     handleRequest, startPi, stopPi,
     stopTunnels: () => { state.hublotSupervisor?.stop(); return shutdownHublots(state); },
-    stopRoutines: () => stopAllRoutines(state),
+    stopRoutines: () => stopAllRoutines(state), stopOAuth: () => oauthFlowService.shutdown(),
   };
 }

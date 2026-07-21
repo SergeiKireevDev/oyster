@@ -158,6 +158,32 @@ test("credentials controller logs out locally with fallback and partial restart 
   assert.deepEqual(JSON.parse(item.calls[1].options.body), { provider: "mock", restart: true });
 });
 
+test("credentials controller cancels an abandoned OAuth flow on modal teardown", async () => {
+  const flowId = "c".repeat(64);
+  const calls = [];
+  const responses = [
+    response(200, { providers: [{ provider: "mock", credentialType: null, oauthCapable: true }] }),
+    response(202, { flow: { flowId, provider: "mock", status: "pending" } }),
+    response(200, { flow: { flowId, status: "cancelled" } }),
+  ];
+  const controller = createCredentialsController({
+    async fetchImpl(path, options = {}) { calls.push({ path, options }); return responses.shift(); },
+    confirm: async () => true,
+    setState() {},
+    setTimer: () => ({ unref() {} }),
+    clearTimer() {},
+  });
+  controller.activate();
+  await controller.load();
+  await controller.startOAuth("mock");
+  controller.deactivate();
+  await new Promise((resolve) => setImmediate(resolve));
+  const cancellation = calls.find((call) => call.path === "/oauth/cancel");
+  assert.deepEqual(JSON.parse(cancellation.options.body), { flowId });
+  assert.equal(cancellation.options.signal, undefined);
+  controller.teardown();
+});
+
 test("API-key controller teardown aborts requests and clears safe state", async () => {
   let observedSignal;
   const states = [];

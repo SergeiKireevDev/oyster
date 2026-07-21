@@ -299,6 +299,7 @@ function shutdown() {
     await Promise.resolve().then(() => app.stopTunnels?.());
     const cleanup = Promise.allSettled([
       Promise.resolve().then(() => app.stopRoutines?.()),
+      Promise.resolve().then(() => app.stopOAuth?.()),
       Promise.resolve().then(() => app.stopPi()),
     ]);
     const timeout = new Promise((resolveTimeout) => setTimeout(resolveTimeout, 5000));

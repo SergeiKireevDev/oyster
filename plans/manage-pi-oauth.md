@@ -216,7 +216,7 @@ layout, and remount teardown.
   exist only in temporary Pi `auth.json`; transient user-facing values exist
   only in the active flow/browser state; and none appear in SQLite, logs, SSE
   events, runner state, terminal status, server error payloads, or built assets.
-- [ ] Add lifecycle tests for hot reload, server shutdown, browser/modal teardown,
+- [x] Add lifecycle tests for hot reload, server shutdown, browser/modal teardown,
   abandoned flows, provider callback failure, timeout, and concurrent Pi token
   refresh. Prove cleanup removes transient values and does not delete or corrupt
   a previously stored credential.

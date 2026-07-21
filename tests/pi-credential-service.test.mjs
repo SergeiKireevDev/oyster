@@ -211,8 +211,8 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
       list() { return Object.keys(this.data); }
       get(id) { return this.data[id]; }
       getOAuthProviders() { return providers; }
-      set(id, value) { this.data = { ...this.data, [id]: { type: value.type ?? "oauth", ...value } }; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
-      remove(id) { const next = { ...this.data }; delete next[id]; this.data = next; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      set(id, value) { this.reload(); this.data = { ...this.data, [id]: { type: value.type ?? "oauth", ...value } }; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      remove(id) { this.reload(); const next = { ...this.data }; delete next[id]; this.data = next; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
       async login(id, callbacks) { const provider = providers.find((item) => item.id === id); this.set(id, { type: "oauth", ...(await provider.login(callbacks)) }); }
       logout(id) { this.remove(id); }
     }
@@ -278,6 +278,9 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     await assert.rejects(service.removeApiKey("mock-oauth"), { code: "credential_busy" });
     await assert.rejects(service.logoutOAuth("mock-oauth"), { code: "credential_busy" });
     await service.setApiKey("api-only", "unrelated-replacement-canary");
+    const sdk = await import(pathToFileURL(resolveConfiguredPiSdk(item.cli).entry).href);
+    const concurrentStorage = sdk.AuthStorage.create(authPath);
+    concurrentStorage.set("concurrent-refresh", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
     releasePrompt("done");
     await pending;
     assert.deepEqual(await service.logoutOAuth("mock-oauth"), { provider: "mock-oauth", removed: true });
@@ -286,6 +289,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(stored["orphan-oauth"], undefined);
     assert.equal(stored["api-only"].key, "unrelated-replacement-canary");
+    assert.equal(stored["concurrent-refresh"].refresh, "fresh-refresh");
   } finally {
     item.cleanup();
   }
