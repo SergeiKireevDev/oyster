@@ -85,8 +85,8 @@ manager UI orchestration remain legacy-owned pending a concrete bridge reduction
 (create/start/stop/teardown/status). Store refresh/error presentation remains
 legacy-owned.
 
-4.4. ✅ `fileBrowserActions.js`: extracted File Explorer browse requests.
-Read/download/save/upload operations and picker reuse remain legacy-owned until
+4.4. ✅ `fileBrowserActions.js`: extracted File Explorer browse, read, and save
+requests. Download/upload operations and picker reuse remain legacy-owned until
 their response contracts can be extracted without combining UI changes.
 
 **Acceptance:** each extraction preserves existing response contracts and e2e
