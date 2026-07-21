@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper, watchdogExpired } from "./runtime/eventStreamUtils.js";
-import { bindEventStreamHandlers, closeEventStream, openEventStream } from "./runtime/eventStream.js";
+import { createEventStreamRuntime } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -834,6 +834,7 @@ function updateUsage(message) {
 
 let connected = false;
 let es = null;
+const eventStream = createEventStreamRuntime();
 
 // Watchdog: the server sends a ping event every 25s. Through a tunnel, a
 // connection can die without the browser noticing (EventSource stays OPEN
@@ -842,7 +843,7 @@ let es = null;
 let lastEventAt = Date.now();
 setInterval(() => {
   if (es && watchdogExpired(lastEventAt)) {
-    closeEventStream(es);
+    eventStream.close();
     connected = false;
     updateAppSession({ connected });
     updateHeaderState({ stateInfo: "connection lost — reconnecting…" });
@@ -852,7 +853,7 @@ setInterval(() => {
 
 function connect({ replay = true } = {}) {
   if (!token) { requireToken(); return; }
-  closeEventStream(es);
+  eventStream.close();
   const connectStarted = performance.now();
   lastEventAt = Date.now();
   const skipTranscriptGate = currentRunner && emptySessionRunners.has(currentRunner);
@@ -865,7 +866,6 @@ function connect({ replay = true } = {}) {
   replayBufferedEvents = [];
   const replayParam = replay ? "1" : "0";
   lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
-  es = openEventStream({ token, runner: currentRunner, replay });
   const eventHandlers = { onopen: async () => {
     connected = true;
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
@@ -911,7 +911,7 @@ function connect({ replay = true } = {}) {
     }
   },
   };
-  bindEventStreamHandlers(es, eventHandlers);
+  es = eventStream.connect({ token, runner: currentRunner, replay }, eventHandlers);
 }
 
 // True from (re)connect until the canonical transcript's tail is rendered.

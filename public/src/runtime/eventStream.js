@@ -1,4 +1,17 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+export function createEventStreamRuntime({ EventSourceImpl = EventSource } = {}) {
+  let source = null;
+  return {
+    connect(options, handlers) {
+      closeEventStream(source);
+      source = openEventStream({ ...options, EventSourceImpl });
+      return bindEventStreamHandlers(source, handlers);
+    },
+    close() { closeEventStream(source); source = null; },
+    get source() { return source; },
+  };
+}
+
 export function bindEventStreamHandlers(source, handlers) {
   Object.assign(source, handlers);
   return source;
