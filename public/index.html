@@ -22,6 +22,17 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+
+  /* scrollbars — thin and dark so they blend with the page */
+  * { scrollbar-width: thin; scrollbar-color: #333a47 transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #333a47;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #414a5b; }
+  ::-webkit-scrollbar-corner { background: transparent; }
   body {
     margin: 0;
     background: var(--bg);
@@ -154,6 +165,28 @@
     margin: 0 0 .7em;
   }
   .md pre code { background: none; border: none; padding: 0; font-size: 13px; }
+  .md .codeblock { position: relative; margin: 0 0 .7em; }
+  .md .codeblock pre { margin: 0; }
+  .md .codeblock .code-lang {
+    position: absolute;
+    top: 5px; right: 9px;
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--panel-2);
+    padding: 0 5px;
+    border-radius: 4px;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* syntax highlighting */
+  .tok-com { color: #565f89; font-style: italic; }
+  .tok-str { color: #9ece6a; }
+  .tok-num { color: #ff9e64; }
+  .tok-kw  { color: #bb9af7; }
+  .tok-fn  { color: #7aa2f7; }
+  .tok-lit { color: #e0af68; }
+  .tok-var { color: #7dcfff; }
   .md blockquote {
     border-left: 3px solid var(--accent-dim);
     margin: 0 0 .7em;
@@ -525,6 +558,68 @@ function escapeHtml(s) {
           .replace(/"/g, "&quot;");
 }
 
+// ------------------------------------------------------------ syntax highlighting
+// Tokenizes raw source, escapes each piece, wraps tokens in .tok-* spans.
+
+const KEYWORDS = {
+  js: "const let var function return if else for while do switch case break continue new class extends implements interface import export from default async await try catch finally throw typeof instanceof in of delete void yield static super this enum type namespace declare readonly public private protected abstract satisfies as keyof infer",
+  py: "def return if elif else for while in not and or import from as class try except finally with lambda yield global nonlocal pass break continue raise assert del is async await match case print",
+  sh: "if then else elif fi for while until do done case esac function in select echo exit return local export declare source alias set unset shift trap read printf cd test sudo",
+  go: "func return if else for range switch case default break continue goto package import type struct interface map chan go defer select const var fallthrough nil make new len cap append",
+  rust: "fn let mut return if else for while loop match impl struct enum trait use mod pub crate super const static ref move async await dyn box where unsafe extern type as in break continue",
+  sql: "select from where insert update delete into values join left right inner outer full cross on group by order limit offset having as and or not null create table view index drop alter add primary foreign key references union all distinct case when then else end exists between like is in",
+  c: "if else for while do switch case break continue return goto struct union enum typedef sizeof static extern const volatile inline void int char float double long short unsigned signed bool auto class public private protected virtual template typename namespace using new delete this nullptr try catch throw final override",
+};
+for (const [alias, base] of Object.entries({
+  ts: "js", jsx: "js", tsx: "js", javascript: "js", typescript: "js", json: "js", solidity: "js", java: "c",
+  python: "py", bash: "sh", shell: "sh", zsh: "sh", sh: "sh", console: "sh", golang: "go",
+  cpp: "c", cc: "c", h: "c", hpp: "c", cs: "c", kotlin: "c", swift: "c",
+})) KEYWORDS[alias] = KEYWORDS[base];
+
+const LITERALS = new Set("true false null undefined None True False nil NULL Some Ok Err self".split(" "));
+
+function highlightCode(src, lang) {
+  lang = (lang || "").toLowerCase();
+  const kwSet = new Set((KEYWORDS[lang] ?? KEYWORDS.js).split(" "));
+  const hashComments = ["py", "python", "sh", "bash", "shell", "zsh", "console", "yaml", "yml", "toml", "rb", "ruby", "dockerfile", "makefile", ""].includes(lang);
+  const dashComments = ["sql", "lua", "hs", "haskell"].includes(lang);
+  const slashComments = !["py", "python", "yaml", "yml", "toml", "rb", "ruby"].includes(lang);
+  const parts = [
+    slashComments ? String.raw`\/\*[\s\S]*?\*\/|\/\/[^\n]*` : null,
+    hashComments ? String.raw`#[^\n]*` : null,
+    dashComments ? String.raw`--[^\n]*` : null,
+    String.raw`"""[\s\S]*?"""|'''[\s\S]*?'''`,
+    String.raw`"(?:\\.|[^"\\\n])*"`,
+    String.raw`'(?:\\.|[^'\\\n])*'`,
+    "`(?:\\\\.|[^`\\\\])*`",
+    String.raw`\b0[xX][0-9a-fA-F_]+n?\b`,
+    String.raw`\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?\w*`,
+    String.raw`[A-Za-z_$][A-Za-z0-9_$]*`,
+  ].filter(Boolean);
+  const re = new RegExp(parts.join("|"), "g");
+  let out = "", pos = 0, m;
+  while ((m = re.exec(src))) {
+    out += escapeHtml(src.slice(pos, m.index));
+    const t = m[0];
+    const c0 = t[0];
+    let cls = null;
+    if ((c0 === "/" && (t[1] === "/" || t[1] === "*")) || c0 === "#" || (c0 === "-" && t[1] === "-")) cls = "com";
+    else if (c0 === '"' || c0 === "'" || c0 === "`") cls = "str";
+    else if (c0 >= "0" && c0 <= "9") cls = "num";
+    else if (c0 === "$") cls = "var";
+    else if (kwSet.has(t)) cls = "kw";
+    else if (LITERALS.has(t)) cls = "lit";
+    else {
+      let j = m.index + t.length;
+      while (src[j] === " ") j++;
+      if (src[j] === "(") cls = "fn";
+    }
+    out += cls ? `<span class="tok-${cls}">${escapeHtml(t)}</span>` : escapeHtml(t);
+    pos = m.index + t.length;
+  }
+  return out + escapeHtml(src.slice(pos));
+}
+
 function inlineMd(s) {
   // s is already HTML-escaped
   return s
@@ -550,11 +645,13 @@ function renderMarkdown(src) {
     const fence = line.match(/^\s*```(.*)$/);
     if (fence) {
       flushPara();
+      const lang = fence[1].trim().split(/\s+/)[0] || "";
       const buf = [];
       i++;
       while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
       i++; // skip closing fence
-      out.push(`<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>`);
+      const label = lang ? `<div class="code-lang">${escapeHtml(lang)}</div>` : "";
+      out.push(`<div class="codeblock">${label}<pre><code>${highlightCode(buf.join("\n"), lang)}</code></pre></div>`);
       continue;
     }
     const h = line.match(/^(#{1,4})\s+(.*)$/);
@@ -678,32 +775,61 @@ function finishToolCard(toolCallId, resultMsgOrText, isError) {
 
 let liveAssistant = null; // { root, msg }
 
+function renderBlockEl(block) {
+  if (block.type === "thinking") {
+    const d = document.createElement("details");
+    d.className = "block thinking";
+    d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
+    d.querySelector(".body").textContent = block.thinking || "";
+    return d;
+  }
+  if (block.type === "text") {
+    const div = document.createElement("div");
+    div.className = "md";
+    div.innerHTML = renderMarkdown(block.text || "");
+    return div;
+  }
+  return null;
+}
+
+/**
+ * Incremental render: reuse the existing element for every block whose content
+ * hasn't changed since the last update. During streaming only the growing
+ * block is re-rendered, which avoids flicker, keeps scroll positions inside
+ * code/tool output, and preserves the open state of thinking blocks.
+ */
 function renderAssistantInto(root, message) {
-  root.innerHTML = "";
-  for (const block of message.content || []) {
-    if (block.type === "thinking") {
-      const d = document.createElement("details");
-      d.className = "block thinking";
-      d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
-      d.querySelector(".body").textContent = block.thinking || "";
-      root.appendChild(d);
-    } else if (block.type === "text") {
-      const div = document.createElement("div");
-      div.className = "md";
-      div.innerHTML = renderMarkdown(block.text || "");
-      root.appendChild(div);
-    } else if (block.type === "toolCall") {
+  const blocks = message.content || [];
+  const prevKeys = root._blockKeys || [];
+  const prevEls = Array.from(root.children);
+  const els = [], keys = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const key = block.type + ":" + JSON.stringify(block);
+    if (prevKeys[i] === key && prevEls[i]) { els.push(prevEls[i]); keys.push(key); continue; }
+    let el;
+    if (block.type === "toolCall") {
       const existing = toolCards.get(block.id);
-      if (existing) { updateToolCard(block); root.appendChild(existing.el); }
-      else root.appendChild(createToolCard(block));
+      if (existing) { updateToolCard(block); el = existing.el; }
+      else el = createToolCard(block);
+    } else {
+      el = renderBlockEl(block);
+      // a re-rendered details at the same position keeps its open state
+      if (el?.tagName === "DETAILS" && prevEls[i]?.tagName === "DETAILS" && prevEls[i].open) el.open = true;
     }
+    if (!el) continue;
+    els.push(el);
+    keys.push(key);
   }
   if (message.stopReason === "error" && message.errorMessage) {
     const div = document.createElement("div");
     div.className = "msg error-msg";
     div.textContent = message.errorMessage;
-    root.appendChild(div);
+    els.push(div);
+    keys.push("err:" + message.errorMessage);
   }
+  root._blockKeys = keys;
+  root.replaceChildren(...els);
 }
 
 function addUserMessage(message) {
