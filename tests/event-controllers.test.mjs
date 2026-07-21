@@ -1,12 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { swipeAxis } from "../public/src/runtime/carouselController.js";
+import { createCarouselController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
   assert.equal(swipeAxis(40, 10), "h");
   assert.equal(swipeAxis(10, -40), "v");
+});
+
+test("carousel controller persists and applies mobile drawer pages", () => {
+  const classes = () => {
+    const values = new Set();
+    return { values, add: (name) => values.add(name), remove: (name) => values.delete(name), toggle: (name, force) => force ? values.add(name) : values.delete(name) };
+  };
+  const hublots = { classList: classes() };
+  const treebar = { classList: classes() };
+  const writes = [];
+  const pages = [];
+  const controller = createCarouselController({
+    documentTarget: { getElementById: (id) => id === "hublots" ? hublots : treebar },
+    windowTarget: { matchMedia: () => ({ matches: true }) },
+    storage: { getItem: () => "0", setItem: (...args) => writes.push(args) },
+    setPage: (page) => pages.push(page),
+    loadHublots: () => pages.push("hublots"),
+    loadCheckpointTree: () => pages.push("tree"),
+  });
+  controller.step(2);
+  assert.equal(controller.get(), 2);
+  assert.deepEqual([...hublots.classList.values], ["open"]);
+  assert.deepEqual([...treebar.classList.values], ["open"]);
+  assert.deepEqual(writes, [["pi_carousel", "2"]]);
+  assert.deepEqual(pages, ["tree", 2]);
 });
 
 test("file upload input adapter registers and tears down its change listener", () => {

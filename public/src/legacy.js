@@ -8,7 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
-import { swipeAxis } from "./runtime/carouselController.js";
+import { createCarouselController, swipeAxis } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -716,10 +716,9 @@ function switchToRunner(id) {
     clearTranscript: clearMessages,
     resetSessionUi: () => {
       // The new session has its own tree; do not leave stale sidebars visible.
-      if (carousel !== 0) { carousel = 0; localStorage.setItem("pi_carousel", "0"); }
+      carouselController.set(0, { apply: false });
       $("hublots").classList.remove("open");
       $("treebar").classList.remove("open");
-      setCarouselDots();
     },
     renderPreview: renderPreviewNow,
     resetCommands: () => { knownCommands = null; },
@@ -2090,9 +2089,7 @@ async function showHublots() {
   // close the slide-over sidebars so they don't sit on top of the modal
   $("hublots").classList.remove("open");
   $("treebar").classList.remove("open");
-  carousel = 0;
-  localStorage.setItem("pi_carousel", "0");
-  setCarouselDots();
+  carouselController.set(0, { apply: false });
 
   openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true, content: "hublotManager" });
   await refreshHublotManager({ loading: true });
@@ -2154,9 +2151,7 @@ registerMobileDrawerDismiss(document, {
   close: () => {
     $("hublots").classList.remove("open");
     $("treebar").classList.remove("open");
-    carousel = 0;
-    localStorage.setItem("pi_carousel", "0");
-    setCarouselDots();
+    carouselController.set(0, { apply: false });
   },
 });
 
@@ -2752,48 +2747,17 @@ function toast(text, kind, { onClick, sticky } = {}) {
 // Pages: 0 = chat (no sidebar); 1 = hublots drawer; 2 = checkpoints drawer.
 // Right swipe advances, left swipe goes back.
 
-const CAROUSEL_PAGES = [
-  { /* 0 — chat */ },
-  { /* 1 — hublots */ sidebar: "hublots", load: () => { loadHublots(); loadRoutines(); } },
-  { /* 2 — checkpoints */ sidebar: "treebar", load: () => loadCheckpointTree() },
-];
+const carouselController = createCarouselController({
+  documentTarget: document,
+  windowTarget: window,
+  storage: localStorage,
+  setPage: setCarouselPage,
+  loadHublots: () => { loadHublots(); loadRoutines(); },
+  loadCheckpointTree,
+});
 
-let carousel = parseInt(localStorage.getItem("pi_carousel") || "0", 10);
-
-function applyCarousel() {
-  const onMobile = window.matchMedia("(max-width: 760px)").matches;
-  const hublots = $("hublots");
-  const treebar = $("treebar");
-  if (!onMobile) {
-    // desktop: reset to chat, let the docked sidebars show on their own
-    hublots.classList.remove("open");
-    treebar.classList.remove("open");
-    carousel = 0;
-    setCarouselDots();
-    return;
-  }
-  const page = Math.max(0, Math.min(CAROUSEL_PAGES.length - 1, carousel));
-  const wantHublots = page >= 1;
-  const wantTree = page >= 2;
-  if (wantHublots) hublots.classList.add("open"); else hublots.classList.remove("open");
-  if (wantTree) treebar.classList.add("open"); else treebar.classList.remove("open");
-  CAROUSEL_PAGES[page]?.load?.();
-  setCarouselDots();
-}
-
-function setCarouselDots() {
-  setCarouselPage(carousel);
-}
-
-// turn page via swipe; dir = +1 (right) or -1 (left)
-function carouselStep(dir) {
-  if (!window.matchMedia("(max-width: 760px)").matches) return;
-  const next = Math.max(0, Math.min(CAROUSEL_PAGES.length - 1, carousel + dir));
-  if (next === carousel) return;
-  carousel = next;
-  localStorage.setItem("pi_carousel", String(carousel));
-  applyCarousel();
-}
+const applyCarousel = () => carouselController.apply();
+const carouselStep = (direction) => carouselController.step(direction);
 
 // ---- touch tracking ----
 // We listen for horizontal one-finger swipes and two-finger swipes.
@@ -2910,9 +2874,7 @@ function toggleHublotsFromHeader() {
   }
   // mobile: carousel
   const opening = !hublots.classList.contains("open");
-  carousel = opening ? 1 : 0;
-  localStorage.setItem("pi_carousel", String(carousel));
-  applyCarousel();
+  carouselController.set(opening ? 1 : 0);
 }
 
 function toggleTreeFromHeader() {
@@ -2923,9 +2885,7 @@ function toggleTreeFromHeader() {
     return;
   }
   const opening = !treebar.classList.contains("open");
-  carousel = opening ? 2 : 0;
-  localStorage.setItem("pi_carousel", String(carousel));
-  applyCarousel();
+  carouselController.set(opening ? 2 : 0);
 }
 
 registerHeaderEvents(document, {
