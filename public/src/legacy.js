@@ -1,6 +1,9 @@
 "use strict";
 
-import { setComposerHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+import { setComposerHandlers, setHublotHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+import { setCarouselPage } from "./stores/carousel.js";
+import { updateHeaderState } from "./stores/header.js";
+import { hublots, hublotsLoading } from "./stores/hublots.js";
 import { addToast } from "./stores/toasts.js";
 
 // ------------------------------------------------------------ token
@@ -76,7 +79,7 @@ async function probeTokenValidity() {
     if (data.authorized === false) {
       localStorage.removeItem("pi_ui_token");
       document.cookie = "pi_ui_token=; path=/; max-age=0";
-      $("stateInfo").textContent = "invalid token";
+      updateHeaderState({ stateInfo: "invalid token" });
       requireToken();
     }
   } catch {
@@ -959,14 +962,15 @@ function applyState(s) {
   state = s;
   if (sessionChanged) { loadHublots(); loadRoutines(); } // sidebar tunnels are session-scoped; routines follow the workdir
   if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
-  $("sessionTitle").textContent = s.sessionName || "pi-lot";
-  $("modelChip").textContent = s.model ? s.model.id : "no model";
-  $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
-  $("cfgChip").textContent = `${s.model ? s.model.id : "no model"} · ${s.thinkingLevel}`;
+  updateHeaderState({
+    sessionTitle: s.sessionName || "pi-lot",
+    modelChip: s.model ? s.model.id : "no model",
+    thinkChip: `think: ${s.thinkingLevel}`,
+    cfgChip: `${s.model ? s.model.id : "no model"} · ${s.thinkingLevel}`,
+    stateInfo: `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
+      (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : ""),
+  });
   setBusy(s.isStreaming || s.isCompacting);
-  $("stateInfo").textContent =
-    `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
-    (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : "");
 }
 
 let workdir = null;
@@ -1056,27 +1060,30 @@ let onRunnersUpdate = null;
 
 function setWorkdir(dir) {
   workdir = dir;
-  const el = $("workdirInfo");
-  el.textContent = dir ? `📁 ${dir.length > 40 ? "…" + dir.slice(-39) : dir}` : "";
-  el.title = dir || "";
+  updateHeaderState({
+    workdirText: dir ? `📁 ${dir.length > 40 ? "…" + dir.slice(-39) : dir}` : "",
+    workdirTitle: dir || "",
+  });
 }
 
 let busy = false;
 function setBusy(b) {
   busy = b;
-  const dot = $("connDot");
-  if (connected) dot.className = "dot " + (b ? "busy" : "ok");
   const hasText = !!$("input").value.trim();
-  $("sendBtn").textContent = b ? "Steer" : "Send";
-  $("sendBtn").hidden = b && !hasText;
-  $("stopBtn").hidden = !b;
+  updateHeaderState({
+    connectionClass: connected ? `dot ${b ? "busy" : "ok"}` : "dot",
+    sendText: b ? "Steer" : "Send",
+    sendHidden: b && !hasText,
+    stopHidden: !b,
+  });
 }
 
 function updateUsage(message) {
   const u = message?.usage;
   if (!u) return;
-  $("usageInfo").textContent =
-    `↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()} tok · ${fmtCost(u.cost?.total ?? 0)}`;
+  updateHeaderState({
+    usageInfo: `↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()} tok · ${fmtCost(u.cost?.total ?? 0)}`,
+  });
 }
 
 // ------------------------------------------------------------ event stream
@@ -1093,8 +1100,7 @@ setInterval(() => {
   if (es && Date.now() - lastEventAt > 70000) {
     es.close();
     connected = false;
-    $("connDot").className = "dot";
-    $("stateInfo").textContent = "connection lost — reconnecting…";
+    updateHeaderState({ connectionClass: "dot", stateInfo: "connection lost — reconnecting…" });
     connect();
   }
 }, 15000);
@@ -1107,8 +1113,7 @@ function connect() {
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
   es.onopen = async () => {
     connected = true;
-    $("connDot").className = "dot ok";
-    $("stateInfo").textContent = "connected";
+    updateHeaderState({ connectionClass: "dot ok", stateInfo: "connected" });
     try {
       // Always rebuild from the canonical transcript: the SSE replay buffer
       // re-delivers recent events on reconnect, so rendering them onto the
@@ -1123,8 +1128,7 @@ function connect() {
   };
   es.onerror = () => {
     connected = false;
-    $("connDot").className = "dot";
-    $("stateInfo").textContent = "reconnecting…";
+    updateHeaderState({ connectionClass: "dot", stateInfo: "reconnecting…" });
     // EventSource can't see HTTP status codes, so a 401 (bad stored token)
     // looks identical to a network blip and would retry forever. Probe
     // /authcheck to tell them apart, at most once per 10s.
@@ -2480,78 +2484,26 @@ document.addEventListener("click", (e) => {
 
 async function loadHublots() {
   if (!token) return;
-  // show a lightweight loading hint so the wait doesn't read as a blank/stuck sidebar
-  const list = $("hublotList");
-  list.innerHTML = '<div class="sidebar-loading"><span class="spin"></span> loading hublots…</div>';
+  hublotsLoading.set(true);
   let tunnels = [];
   try {
     const res = await fetch(`/tunnels`);
     const data = await res.json();
     if (res.ok) tunnels = data.tunnels.filter(tunnelVisible);
-  } catch { list.innerHTML = ""; /* sidebar is best-effort */ }
-  renderHublots(tunnels);
+  } catch { /* sidebar is best-effort */ }
+  hublots.set(tunnels);
+  hublotsLoading.set(false);
 }
 
-function renderHublots(tunnels) {
-  const list = $("hublotList");
-  list.innerHTML = "";
-
-  // built-in file explorer always comes first
-  {
-    const block = document.createElement("div");
-    block.className = "hublot-block";
-    const preview = document.createElement("div");
-    preview.className = "preview builtin";
-    preview.textContent = "\u{1F4C1}";
-    preview.title = "browse server files, download or edit any of them";
-    const cap = document.createElement("div");
-    cap.className = "cap";
-    const lbl = document.createElement("span");
-    lbl.className = "lbl";
-    lbl.textContent = "file explorer · built-in";
-    lbl.title = "browse server files, download or edit any of them";
-    cap.appendChild(lbl);
-    block.append(preview, cap);
-    block.addEventListener("click", () => showFileExplorer().catch((e) => toast(e.message, "error")));
-    list.appendChild(block);
-  }
-
-  for (const t of tunnels) {
-    const block = document.createElement("div");
-    block.className = "hublot-block";
-
-    const preview = document.createElement("div");
-    preview.className = "preview";
-    const frame = document.createElement("iframe");
-    frame.src = t.url;
-    frame.loading = "lazy";
-    frame.sandbox = "allow-scripts allow-same-origin";
-    const hit = document.createElement("div");
-    hit.className = "hit";
-    hit.title = `open ${t.url}`;
-    hit.addEventListener("click", () => window.open(t.url, "_blank", "noopener"));
-    preview.append(frame, hit);
-
-    const cap = document.createElement("div");
-    cap.className = "cap";
-    const lbl = document.createElement("span");
-    lbl.className = "lbl";
-    lbl.textContent = t.label || new URL(t.url).hostname;
-    lbl.title = `${t.url} → :${t.port}\n${t.label ?? ""}`;
-    const x = document.createElement("span");
-    x.className = "x";
-    x.textContent = "✕";
-    x.title = "close this tunnel";
-    x.addEventListener("click", async () => {
-      await fetch(`/tunnels?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
-      loadHublots();
-    });
-    cap.append(lbl, x);
-
-    block.append(preview, cap);
-    list.appendChild(block);
-  }
+async function closeHublot(id) {
+  await fetch(`/tunnels?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  loadHublots();
 }
+
+setHublotHandlers({
+  openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
+  closeHublot,
+});
 
 // ------------------------------------------------------------ routines sidebar
 //
@@ -3706,7 +3658,7 @@ async function handleExtensionUI(req) {
       return;
     }
     case "setTitle":
-      $("sessionTitle").textContent = req.title;
+      updateHeaderState({ sessionTitle: req.title });
       return;
     default:
       return; // setStatus / setWidget / set_editor_text: no-op in web UI
@@ -3758,9 +3710,7 @@ function applyCarousel() {
 }
 
 function setCarouselDots() {
-  const dots = [...document.querySelectorAll("#carouselDots .dot")];
-  const active = Math.max(0, Math.min(dots.length - 1, carousel));
-  dots.forEach((d, i) => d.classList.toggle("active", i === active));
+  setCarouselPage(carousel);
 }
 
 // turn page via swipe; dir = +1 (right) or -1 (left)

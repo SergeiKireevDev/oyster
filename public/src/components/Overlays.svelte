@@ -1,8 +1,9 @@
 <script>
+  import CarouselDots from "./CarouselDots.svelte";
   import Toasts from "./Toasts.svelte";
 </script>
 
-<div id="carouselDots" aria-hidden="true"><span class="dot"></span><span class="dot active"></span><span class="dot"></span></div>
+<CarouselDots />
 
 <div id="overlay"><div id="modal">
   <div class="m-title" id="mTitle"></div>

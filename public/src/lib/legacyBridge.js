@@ -1,5 +1,7 @@
 let menuActionHandler = null;
 let composerHandlers = {};
+let hublotHandlers = {};
+let routineHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -27,4 +29,24 @@ export function sendComposerPrompt() {
 
 export function abortComposerPrompt() {
   return composerHandlers.abort?.();
+}
+
+export function setHublotHandlers(handlers) {
+  hublotHandlers = handlers ?? {};
+}
+
+export function openFileExplorer() {
+  return hublotHandlers.openFileExplorer?.();
+}
+
+export function closeHublot(id) {
+  return hublotHandlers.closeHublot?.(id);
+}
+
+export function setRoutineHandlers(handlers) {
+  routineHandlers = handlers ?? {};
+}
+
+export function runRoutineAction(name, action) {
+  return routineHandlers.runAction?.(name, action);
 }

@@ -5,6 +5,7 @@
     composerKeydown,
     sendComposerPrompt,
   } from "../lib/legacyBridge.js";
+  import { headerState } from "../stores/header.js";
 </script>
 
 <div id="composer">
@@ -16,12 +17,12 @@
       oninput={composerInputChanged}
       onkeydown={composerKeydown}
     ></textarea>
-    <button class="btn" id="sendBtn" onclick={sendComposerPrompt}>Send</button>
-    <button class="btn stop" id="stopBtn" hidden onclick={abortComposerPrompt}>Stop</button>
+    <button class="btn" id="sendBtn" hidden={$headerState.sendHidden} onclick={sendComposerPrompt}>{$headerState.sendText}</button>
+    <button class="btn stop" id="stopBtn" hidden={$headerState.stopHidden} onclick={abortComposerPrompt}>Stop</button>
   </div>
   <div id="statusbar">
-    <span id="stateInfo">connecting…</span>
-    <span id="workdirInfo" title="pi working directory"></span>
-    <span id="usageInfo"></span>
+    <span id="stateInfo">{$headerState.stateInfo}</span>
+    <span id="workdirInfo" title={$headerState.workdirTitle}>{$headerState.workdirText}</span>
+    <span id="usageInfo">{$headerState.usageInfo}</span>
   </div>
 </div>
