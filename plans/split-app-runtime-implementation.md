@@ -219,7 +219,7 @@ session identity but not on each other:
   - [x] Add feature construction/teardown tests and retain focused picker, folder-browser, explorer, upload, and editor regression coverage.
 - [x] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
 - [x] **Routines** — sidebar, visibility, actions, and routine stream updates.
-- [ ] **Settings/extensions** — settings modal, extension UI prompt adapters, and
+- [x] **Settings/extensions** — settings modal, extension UI prompt adapters, and
   header model/thinking actions.
 - [ ] **Layout** — carousel, mobile drawer dismissal, swipes, and header/sidebar
   toggles.

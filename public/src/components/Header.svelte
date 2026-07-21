@@ -1,10 +1,7 @@
 <script>
   import { appHeader } from "../stores/appSession.js";
   import { menuOpen } from "../stores/ui.js";
-
-  function runHeaderAction(action, sourceEvent = null) {
-    document.dispatchEvent(new CustomEvent("pi:header", { detail: { action, sourceEvent } }));
-  }
+  import { runHeaderAction } from "../features/settings/headerActions.js";
 
   function onActionKeydown(event, action) {
     if (event.key === "Enter" || event.key === " ") {

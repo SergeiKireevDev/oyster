@@ -1,4 +1,5 @@
 <script>
+  import { settingsChanged } from "../features/settings/settingsActions.js";
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
   ];
@@ -9,7 +10,7 @@
 
   function changed(key, event) {
     localStorage.setItem(key, event.currentTarget.checked ? "1" : "0");
-    if (key === "pi_show_thinking") window.dispatchEvent(new Event("pi-settings-changed"));
+    if (key === "pi_show_thinking") settingsChanged();
   }
 </script>
 

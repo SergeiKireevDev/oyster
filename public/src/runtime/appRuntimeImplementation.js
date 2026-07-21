@@ -22,7 +22,7 @@ import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./sessionRuntime.js";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./carouselController.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./carouselController.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
@@ -73,7 +73,9 @@ import { configureFilePickerActions } from "../features/files/filePickerActions.
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "../lib/routineController.js";
 import { configureRoutineActions } from "../features/routines/routineActions.js";
-import { createSettingsChangeController, createSettingsController } from "../lib/settingsController.js";
+import { createSettingsController } from "../lib/settingsController.js";
+import { configureSettingsActions } from "../features/settings/settingsActions.js";
+import { configureHeaderActions } from "../features/settings/headerActions.js";
 import { createSessionPickerController, createSessionPickerEventController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "../lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
@@ -1594,8 +1596,7 @@ function closeModal() {
   closeModalState();
 }
 
-const settingsChangeController = createSettingsChangeController({
-  windowTarget: window,
+const detachSettingsActions = configureSettingsActions({
   changed: () => reloadTranscript().catch(() => {}),
 });
 
@@ -1669,14 +1670,11 @@ const carouselHeaderController = createCarouselHeaderController({
   carousel: carouselController,
 });
 
-const headerEventController = createHeaderEventController({
-  documentTarget: document,
-  chooseModel,
-  cycleThinking,
-  openConfig: openConfigPicker,
+const detachHeaderActions = configureHeaderActions((action, sourceEvent) => ({
+  chooseModel, cycleThinking, openConfig: openConfigPicker,
   toggleHublots: carouselHeaderController.toggleHublots,
   toggleTree: carouselHeaderController.toggleTree,
-});
+})[action]?.(sourceEvent));
 
 // Carousel event registration and initial layout are deferred until the
 // runtime starts, after Svelte has mounted.
@@ -1716,8 +1714,8 @@ const boot = createSessionBootController(createSessionBootDependencies({
 const detachRuntimeEventAdapters = () => {
   carouselEventRegistration.detach();
   mobileDrawerDismissController.detach();
-  headerEventController.detach();
-  settingsChangeController.detach();
+  detachHeaderActions();
+  detachSettingsActions();
   menuEventController.detach();
   detachComposerActions();
   commandPaletteKeyboardController.detach();
@@ -1754,8 +1752,8 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
     mobileDrawerDismissController,
-    sessionPickerEventController, settingsChangeController,
-    headerEventController, carouselEventRegistration,
+    sessionPickerEventController,
+    carouselEventRegistration,
   ],
   applyCarousel: () => carouselController.apply(),
 });
