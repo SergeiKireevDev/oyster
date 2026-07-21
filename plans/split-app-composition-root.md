@@ -20,7 +20,7 @@ wrapping the existing root as extraction.
 ## [ ] 1. Inventory Current Root Ownership
 
 - [x] Record all imports, mutable bindings, DOM lookups, controller constructors, action registrations, and teardown registrations in `appCompositionRoot.js`.
-- [ ] Map every root block to one owner: platform, sessions, transcript, checkpoints, composer, files, hublots, routines, settings/layout, dialogs, or lifecycle.
+- [x] Map every root block to one owner: platform, sessions, transcript, checkpoints, composer, files, hublots, routines, settings/layout, dialogs, or lifecycle.
 - [ ] Add an inventory regression test that reports new root-owned DOM access, mutable state, and controller construction.
 
 **Acceptance:** every remaining block has a documented owner and new root

@@ -256,3 +256,63 @@ collected by the root.
 
 The final lifecycle return delegates teardown to this `runtimeTeardown`
 controller.
+
+## Owner Map
+
+Every root block is assigned to exactly one extraction owner. Shared calls are
+owned by the assembly that constructs them; cross-feature callbacks remain
+narrow interfaces supplied by the final composition module.
+
+| Root lines / block | Owner | Destination boundary |
+|---|---|---|
+| 107–118 lifecycle logger and delayed-task setup | lifecycle | `runtime/createLifecycleAssembly.js` |
+| 119–145 token, transport, auth gate, URL route parsing, URL synchronization | platform | `platform/createPlatformAssembly.js` |
+| 146–253 transcript DOM, scrolling, tool cards, transcript actions, assistant stream, local echoes, stream dispatch | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 254–315 checkpoint model picker, feature construction, marker/tree helpers, checkpoint action registration | checkpoints | `features/checkpoints/createCheckpointAssembly.js` |
+| 316–354 transcript renderer, clear/render orchestration, tail-first backfill | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 355–382 hydrated state application and header/session store updates | sessions | `features/sessions/createSessionAssembly.js` |
+| 383–457 runner state, lazy session runtime, session preview/open, session UI state | sessions | `features/sessions/createSessionAssembly.js` |
+| 458–525 managed connection, replay gate bridge, platform event dispatch | platform | `platform/createPlatformAssembly.js` |
+| 526–618 canonical reload, transcript sync, agent completion, post-send reconciliation | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 619–634 debounced session state refresh | sessions | `features/sessions/createSessionAssembly.js` |
+| 635–734 composer input, prompt history, send/abort, command guard, composer action registration | composer | `features/composer/createComposerAssembly.js` |
+| 735–877 command palette state, positioning, input/run/keyboard controllers | composer | `features/composer/createComposerAssembly.js` |
+| 878–914 menu action routing and browser menu controller | composer | `features/composer/createComposerAssembly.js` |
+| 915–1009 file-picker state/dependencies/actions | files | `features/resources/createResourceAssembly.js` |
+| 1010–1051 folder-browser workflow/actions | files | `features/resources/createResourceAssembly.js` |
+| 1052–1066 agent-message helper used by resource actions | hublots | `features/resources/createResourceAssembly.js` |
+| 1067–1096 file-explorer workflow/actions | files | `features/resources/createResourceAssembly.js` |
+| 1097–1144 hublot scope, manager, feature factory, scope refresh | hublots | `features/resources/createResourceAssembly.js` |
+| 1145–1156 hublot action registration | hublots | `features/resources/createResourceAssembly.js` |
+| 1157–1167 mobile drawer dismissal | settings/layout | `features/settings/createSettingsLayoutAssembly.js` |
+| 1168–1172 files open action registration | files | `features/resources/createResourceAssembly.js` |
+| 1173–1214 routine visibility, sidebar/controller construction, routine actions | routines | `features/resources/createResourceAssembly.js` |
+| 1215–1290 session picker construction, initial data, search-hit callbacks | sessions | `features/sessions/createSessionAssembly.js` |
+| 1291–1299 search-hit focus adapter | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 1300–1336 transcript permalink runtime, transcript element adapters, durable entry fetch | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 1337–1349 modal close/settings modal shell helpers | dialogs | `platform/createDialogAdapters.js` |
+| 1350–1377 settings, extension UI, header, carousel/layout construction | settings/layout | `features/settings/createSettingsLayoutAssembly.js` |
+| 1378–1393 authenticated-fetch and debug attachments | platform | `platform/createPlatformAssembly.js` |
+| 1394–1477 session boot, aggregate detach order, runtime cleanup/start, feature assembly, event adapters, lifecycle return | lifecycle | `runtime/createLifecycleAssembly.js` |
+
+### Mutable-State Owners
+
+| Binding | Owner |
+|---|---|
+| `platformEvents`, `connected`, `transcriptGateRequired` | platform |
+| `composerHistory`, `commandGuard`, `cmdState`, `commandPaletteInputController` | composer |
+| `transcriptRenderer`, `afterTranscript` | transcript |
+| `state`, `currentRunner`, `runnersNow`, `sessionOpenController`, `onRunnersUpdate` | sessions |
+| `tunnelScopeAll` | hublots/resources |
+| function-local `sessionFile` | transcript |
+| function-local `folders`, `currentFolder` | sessions |
+
+### DOM-Access Owners
+
+- Transcript owns `#messages`, `#scroller`, transcript queries, and entry focus.
+- Composer owns `#input`, `#cmdPalette`, and command-palette class checks.
+- Checkpoints owns the tree-open query only through an injected layout adapter.
+- Settings/layout owns `#hublots`, `#treebar`, drawer class checks, and responsive
+  browser integration.
+- Dialogs owns `#gate` and `#overlay` through explicit browser/store adapters.
+- The final composition root must not perform these lookups directly.
