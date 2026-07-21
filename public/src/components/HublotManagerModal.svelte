@@ -1,6 +1,4 @@
 <script>
-  import {
-  } from "../lib/legacyBridge.js";
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { addToast } from "../stores/toasts.js";

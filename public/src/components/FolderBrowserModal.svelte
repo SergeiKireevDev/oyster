@@ -1,7 +1,5 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
-  import {
-  } from "../lib/legacyBridge.js";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
 

@@ -1,7 +1,5 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
-  import {
-  } from "../lib/legacyBridge.js";
   import { updateFileExplorer } from "../stores/fileExplorer.js";
   import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";

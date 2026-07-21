@@ -1,15 +1,14 @@
 <script>
-  import {
-    choosePickedSession,
-    deletePickedSession,
-    loadPickedSessionFolder,
-    openPickedSearchHit,
-    runSessionPickerSearch,
-    setSessionPickerExcludeTools,
-    setSessionPickerFolder,
-    setSessionPickerScope,
-    stopPickedSession,
-  } from "../lib/legacyBridge.js";
+  const sessionAction = (type, ...args) => window.dispatchEvent(new CustomEvent("pi-session-picker-action", { detail: { type, args } }));
+  const choosePickedSession = (...args) => sessionAction("chooseSession", ...args);
+  const deletePickedSession = (...args) => sessionAction("deleteSession", ...args);
+  const loadPickedSessionFolder = (...args) => sessionAction("loadFolder", ...args);
+  const openPickedSearchHit = (...args) => sessionAction("openSearchHit", ...args);
+  const runSessionPickerSearch = () => sessionAction("runSearch");
+  const setSessionPickerExcludeTools = (...args) => sessionAction("setExcludeTools", ...args);
+  const setSessionPickerFolder = (...args) => sessionAction("setFolder", ...args);
+  const setSessionPickerScope = (...args) => sessionAction("setScope", ...args);
+  const stopPickedSession = (...args) => sessionAction("stopSession", ...args);
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 
   function fmtSessionDate(ts) {

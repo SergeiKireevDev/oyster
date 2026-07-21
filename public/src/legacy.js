@@ -2,7 +2,6 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -45,9 +44,8 @@ import { resetTranscriptItems } from "./stores/transcriptItems.js";
  * - Feature workflows (checkpoints, hublots, routines, and file browsers) are
  *   still orchestrated here, but are extraction candidates for focused action
  *   modules.
- * - legacyBridge exports are temporary component-to-legacy DOM-event adapters:
- *   menu/session/browser/hublot/routine/command-palette/settings groups will
- *   move to direct actions; checkpoint rollback is a temporary API adapter.
+ * - Components dispatch narrow custom events only for actions that still
+ *   require legacy-owned transport or session lifecycle coordination.
  */
 
 const lifecycleStartedAt = performance.now();
@@ -2471,7 +2469,7 @@ async function loadSessionPickerFolder(folder) {
   }
 }
 
-setSessionPickerHandlers({
+const sessionPickerActions = {
   setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
   setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
   setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },
@@ -2517,6 +2515,10 @@ setSessionPickerHandlers({
     openSearchHit(sessionPath, hit);
   },
   loadFolder: loadSessionPickerFolder,
+};
+window.addEventListener("pi-session-picker-action", (event) => {
+  const { type, args } = event.detail ?? {};
+  return sessionPickerActions[type]?.(...(args ?? []));
 });
 window.addEventListener("pi-session-picker-cancel", () => { closeModal(); sessionPickerResolve?.(null); });
 
