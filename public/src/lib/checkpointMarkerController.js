@@ -1,3 +1,5 @@
+import { alignedTranscriptIndex } from "./transcriptUtils.js";
+
 export function createCheckpointMarkerController({ tick, chatElements, setTarget, setRestores, fetchImpl, getSessionId, fetchSessionEntries }) {
   function place() {
     void tick().then(() => {
@@ -21,7 +23,7 @@ export function createCheckpointMarkerController({ tick, chatElements, setTarget
     for (let index = 0; index < entries.length; index++) {
       const checkpoint = { ...byAnchor.get(entries[index].id), sessionId };
       if (!checkpoint.hash) continue;
-      const position = entries.length === elements.length ? index : elements.length - (entries.length - index);
+      const position = alignedTranscriptIndex(entries.length, elements.length, index);
       if (elements[position]) restores.push({ target: elements[position], checkpoint, busy: false });
     }
     setRestores(restores);
