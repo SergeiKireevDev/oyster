@@ -47,6 +47,15 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
   pi: entry("ephemeral", "legacy migration-only ChildProcess handle"),
 });
 
+export function createStableEphemeralState() {
+  return {
+    hublotProcessHandles: new Map(),
+    sseClients: new Set(),
+    authFails: new Map(),
+    reloadCount: 0,
+  };
+}
+
 export function assertStableStateInventory(state) {
   for (const key of Object.keys(state)) {
     if (!STABLE_STATE_INVENTORY[key]) throw new Error(`stable state field ${key} has no durability classification`);

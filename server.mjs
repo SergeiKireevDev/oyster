@@ -25,7 +25,7 @@ import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openAppStore } from "./persistence/appStore.mjs";
 import { createAppSettings } from "./persistence/appSettings.mjs";
-import { assertStableStateInventory } from "./persistence/stateInventory.mjs";
+import { assertStableStateInventory, createStableEphemeralState } from "./persistence/stateInventory.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -166,12 +166,8 @@ const state = {
   // Persisted mutable settings override startup defaults when valid.
   currentDir: hydratedSettings.currentWorkdir,
   defaultRunnerId: hydratedSettings.defaultRunnerId,
-  /** @type {Map<string, import('node:child_process').ChildProcess>} ephemeral hublot process handles keyed by persistent process id */
-  hublotProcessHandles: new Map(),
-  /** @type {Set<http.ServerResponse>} open SSE responses */
-  sseClients: new Set(),
-  /** how many times app.mjs has been (re)loaded */
-  reloadCount: 0,
+  // Fresh per-process handles, connections, throttle buckets, and counters.
+  ...createStableEphemeralState(),
   /** broadcast lives in the core so closures created by OLD versions of
    *  app.mjs (e.g. pi stdout listeners) keep working after a reload.
    *  Global server events are NOT buffered/replayed: reconnecting clients
