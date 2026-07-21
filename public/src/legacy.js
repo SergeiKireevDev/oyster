@@ -5,6 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
+import { createRenderJobs } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -593,7 +594,7 @@ function renderFullMessage(message, options = {}) {
 }
 
 function clearMessages() {
-  renderJob++; // cancel any in-flight transcript backfill
+  renderJobs.cancel(); // cancel any in-flight transcript backfill
   setCheckpointTarget(null);
   setCheckpointRestores([]);
   resetTranscriptItems();
@@ -613,7 +614,7 @@ function clearMessages() {
 // the visible area never moves. Chunks split at user messages only, keeping
 // toolCall/toolResult pairs (which finish each other's cards) together.
 
-let renderJob = 0;      // bumped to cancel in-flight backfills
+const renderJobs = createRenderJobs();
 let backfilling = false; // suppresses per-message scroll/history side effects
 
 const TAIL_MSGS = 40;    // rendered synchronously (visible screenful + slack)
@@ -634,7 +635,7 @@ function renderChunk(chunk, { prepend = false } = {}) {
 async function renderTranscript(messages) {
   lifecycleLog("renderTranscript:start", { messages: messages?.length ?? 0 });
   clearMessages(); // also bumps renderJob, cancelling any older backfill
-  const myJob = ++renderJob;
+  const myJob = renderJobs.begin();
   // ↑/↓ prompt recall must stay chronological even though rendering is
   // tail-first: prefill it from the full list (same skip rule as addUserMessage)
   for (const m of messages) {
@@ -652,7 +653,7 @@ async function renderTranscript(messages) {
     turns,
     takeTailChunk,
     chunkSize: CHUNK_MSGS,
-    isCurrent: () => myJob === renderJob,
+    isCurrent: () => renderJobs.isCurrent(myJob),
     beforePrepend: () => ({
       pinned: nearBottom(),
       height: scroller.scrollHeight,
@@ -668,7 +669,7 @@ async function renderTranscript(messages) {
     },
   });
   if (!complete) {
-    lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
+    lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJobs.current });
     return false;
   }
   placeCheckpointBtn();
