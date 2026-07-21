@@ -61,7 +61,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 # local-source BuildKit context is added. It also keeps build-time server
 # fixtures from resolving the host-only development default.
 ENV PI_BIN=/usr/local/bin/pi \
-    PERSISTENT_STORE=jsonl
+    PERSISTENT_STORE=jsonl \
+    PI_SQLITE_CONTRACT_TEST=skip
 
 # Run the test suite at build time — the build fails if the repo is broken
 RUN npm test

@@ -53,7 +53,7 @@ pass.
   `sqlite`, while retaining explicit overrides and a documented JSONL rollback
   command. Validate the executable, Node version, and store value at startup
   with actionable errors.
-- [ ] Add a deterministic process-contract test that launches the configured
+- [x] Add a deterministic process-contract test that launches the configured
   local CLI in RPC mode with a temporary agent/session directory and mock
   model, creates a SQLite session, restarts with `--continue`, and proves the
   same session ID and entries return without any session `.jsonl` file. Skip

@@ -93,6 +93,13 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 
 A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.
 
+`npm test` includes a process-level contract against the exact local pi path:
+it creates a SQLite conversation with an offline mock model, stops pi, and
+restores the same session with `--continue`. Environments intentionally testing
+the published JSONL fallback (the current release-image build path) must opt out
+explicitly with `PI_SQLITE_CONTRACT_TEST=skip`; the test never substitutes a
+global `pi` binary silently.
+
 ## Endpoints
 
 | Route | Auth | Purpose |
