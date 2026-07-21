@@ -82,6 +82,29 @@ test("SQLite runners start and restart by ID with explicit store environment", (
   assert.deepEqual(spawns[1].args, spawns[0].args);
 });
 
+test("new runners use unique persistence-safe IDs that survive manager reconstruction", (t) => {
+  const { manager, state } = setup(t);
+  const first = manager.spawnRunner({ dir: "/workspace" });
+  const second = manager.spawnRunner({ dir: "/workspace" });
+  assert.match(first.id, /^r-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.match(second.id, /^r-[0-9a-f-]{36}$/);
+  assert.notEqual(first.id, second.id);
+  assert.equal("runnerSeq" in state, false, "IDs must not depend on a process-local counter");
+
+  const reconstructed = createRunnerManager(state, { ensureSessionOwner: () => null });
+  assert.equal(reconstructed.runnerFromReq(new URL(`http://localhost/?runner=${first.id}`)), first);
+  assert.equal(state.runners.get(first.id), first);
+  assert.equal(reconstructed.listRunnerInfo().some((runner) => runner.id === first.id), true);
+});
+
+test("runner ID generation rejects collisions instead of replacing a durable descriptor", (t) => {
+  const { state } = setup(t);
+  const manager = createRunnerManager(state, { createRunnerId: () => "same-runner-token", ensureSessionOwner: () => null });
+  manager.spawnRunner({ dir: "/workspace" });
+  assert.throws(() => manager.spawnRunner({ dir: "/other" }), /repeatedly returned an existing ID/);
+  assert.equal(state.runners.size, 1);
+});
+
 test("runner deduplication compares the full reference, not the shared SQLite path", (t) => {
   const { manager, sqlitePath, owners, state } = setup(t);
   const firstRef = { backend: "sqlite", id: "first", storagePath: sqlitePath };

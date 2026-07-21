@@ -9,7 +9,7 @@
  * Live runners are kept in `state.runners` (a Map owned by the stable core's
  * state object) so they survive hot reloads of app.mjs. Each value:
  *   {
- *     id:          "r<n>"   – handle used by clients (?runner=id)
+ *     id:          "r-<uuid>" – durable opaque handle used by clients (?runner=id)
  *     dir:         string   – cwd the pi process runs in
  *     sessionRef:  object?  – backend-neutral persisted session identity
  *     sessionFile: string?  – JSONL compatibility path (never SQLite DB path)
@@ -47,7 +47,7 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwner = () => null } = {}) {
+export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID } = {}) {
   const { config, serverEvent, sessionReferences } = state;
   const piProcesses = spawnImpl
     ? createPiProcessLauncher({ config, spawnImpl })
@@ -55,8 +55,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
   if (!piProcesses) throw new Error("pi process launcher is required");
   if (!sessionReferences) throw new Error("session reference codec is required");
 
-  if (!state.runners) state.runners = new Map(); // id -> runner
-  if (!state.runnerSeq) state.runnerSeq = 0;
+  if (!state.runners) state.runners = new Map(); // stable id -> runner
   for (const runner of state.runners.values()) {
     if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
       runner.sessionRef = sessionReferences.validate({
@@ -181,11 +180,21 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
     }
   }
 
+  function allocateRunnerId() {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const token = String(createRunnerId());
+      const id = `r-${token}`;
+      if (!/^r-[a-zA-Z0-9_-]{8,128}$/.test(id)) throw new Error("runner ID generator returned an invalid persistence-safe token");
+      if (!state.runners.has(id)) return id;
+    }
+    throw new Error("runner ID generator repeatedly returned an existing ID");
+  }
+
   function spawnRunner({ dir, sessionRef = null }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
     if (reference) ensureSessionOwner(reference);
     const runner = {
-      id: `r${++state.runnerSeq}`,
+      id: allocateRunnerId(),
       dir,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
