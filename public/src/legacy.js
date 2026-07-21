@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createSessionPreviewController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -622,7 +622,7 @@ function setRunnersNow(runners) {
 function switchToRunner(id) {
   switchSessionRunner({ id, currentRunner, hooks: {
     log: (details) => lifecycleLog("switchToRunner:start", details),
-    resetPreview: () => { lastPreview = null; },
+    resetPreview: previewController.clear,
     refreshState,
     setRunner,
     clearTranscript: clearMessages,
@@ -630,7 +630,7 @@ function switchToRunner(id) {
       // The new session has its own tree; do not leave stale sidebars visible.
       carouselController.reset();
     },
-    renderPreview: renderPreviewNow,
+    renderPreview: previewController.renderNow,
     resetCommands: () => commandGuard?.reset(),
     connect,
   } });
@@ -645,33 +645,13 @@ function switchToRunner(id) {
 // ready. `lastPreview` is cleared the moment canonical content lands, so a
 // slow preview response can never overwrite fresh state.
 
-let lastPreview = null; // { sessionPath, messages|null }
-
-function renderPreviewNow() {
-  if (!lastPreview?.messages?.length) return;
-  lifecycleLog("preview:render", { sessionPath: lastPreview.sessionPath, messages: lastPreview.messages.length });
-  // no checkpoint markers here: `state` still describes the previous session
-  // until get_state answers; the canonical reload adds them right after
-  renderTranscript(lastPreview.messages);
-}
-
-async function fetchPreview(sessionPath) {
-  const started = performance.now();
-  lifecycleLog("preview:fetch:start", { sessionPath });
-  try {
-    const messages = await fetchSessionPreview(fetch, sessionPath);
-    if (messages === null) {
-      lifecycleLog("preview:fetch:not-ok", { sessionPath, ms: Math.round(performance.now() - started) });
-      return;
-    }
-    lifecycleLog("preview:fetch:done", { sessionPath, messages: messages.length, ms: Math.round(performance.now() - started), superseded: lastPreview?.sessionPath !== sessionPath });
-    if (lastPreview?.sessionPath !== sessionPath) return; // superseded meanwhile
-    lastPreview.messages = messages;
-    renderPreviewNow();
-  } catch (e) {
-    lifecycleLog("preview:fetch:error", { sessionPath, error: e?.message ?? String(e), ms: Math.round(performance.now() - started) });
-  }
-}
+const previewController = createSessionPreviewController({
+  fetchPreview: (sessionPath) => fetchSessionPreview(fetch, sessionPath),
+  // No checkpoint markers here: state still describes the previous session;
+  // the canonical reload adds them immediately after the runner resumes.
+  render: renderTranscript,
+  log: lifecycleLog,
+});
 
 /** get-or-spawn a runner for a session file / folder */
 async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
@@ -681,8 +661,7 @@ async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
   // target session is the one already on screen (don't clobber live state)
   const cur = runnersNow.find((r) => r.id === currentRunner);
   if (sessionPath && sessionPath !== cur?.sessionFile) {
-    lastPreview = { sessionPath, messages: null };
-    fetchPreview(sessionPath);
+    previewController.begin(sessionPath);
   }
   const runner = await openSession(fetch, { sessionPath, dir });
   if (!sessionPath && runner?.id) emptySessionRunners.add(runner.id);
@@ -1083,7 +1062,7 @@ async function reloadTranscript() {
     onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
     onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
-  lastPreview = null; // canonical content from pi supersedes the file preview
+  previewController.clear(); // canonical content from pi supersedes the file preview
   const complete = await reconcileTranscriptReload({
     messages,
     render: renderTranscript,

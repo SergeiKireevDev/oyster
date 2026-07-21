@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createSessionPreviewController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -52,6 +52,32 @@ test("session actions fetch durable transcript previews", async () => {
   assert.deepEqual(await fetchSessionPreview(fetchImpl, "/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), [{ role: "user", content: "saved" }]);
   assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl");
   assert.equal(await fetchSessionPreview(async () => ({ ok: false }), "/other.jsonl"), null);
+});
+
+test("session preview controller renders only the current non-empty preview", async () => {
+  const pending = new Map();
+  const rendered = [];
+  const controller = createSessionPreviewController({
+    fetchPreview: (path) => new Promise((resolve) => pending.set(path, resolve)),
+    render: (messages) => rendered.push(messages),
+    now: () => 10,
+  });
+  controller.begin("old");
+  controller.begin("current");
+  pending.get("old")([{ role: "user", content: "stale" }]);
+  pending.get("current")([]);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(rendered, []);
+  controller.clear();
+});
+
+test("session preview controller renders a current successful preview", async () => {
+  const rendered = [];
+  const controller = createSessionPreviewController({ fetchPreview: async () => [{ role: "user", content: "saved" }], render: (messages) => rendered.push(messages) });
+  controller.begin("current");
+  await Promise.resolve();
+  assert.deepEqual(rendered, [[{ role: "user", content: "saved" }]]);
 });
 
 test("session actions open a runner with normalized server errors", async () => {
