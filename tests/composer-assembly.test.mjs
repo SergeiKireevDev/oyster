@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { createComposerAssembly } from "../public/src/features/composer/createComposerAssembly.js";
 import { runComposerAction } from "../public/src/features/composer/composerActions.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
-import { MENU_ACTION } from "../public/src/runtime/uiActionNames.js";
+import { COMMAND_PALETTE_RUN_ACTION, MENU_ACTION } from "../public/src/runtime/uiActionNames.js";
 
 function createHarness({ rpc = async () => ({}) } = {}) {
   const calls = [];
@@ -86,6 +86,7 @@ test("composer assembly owns command guard palette menu and listener constructio
   assert.equal(typeof commands.setup, "function");
   assert.equal(typeof commands.runController.attach, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
+  assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), false);
   for (const action of ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"]) {
     await uiActions.invoke(MENU_ACTION, action);
   }
@@ -98,6 +99,7 @@ test("composer assembly owns command guard palette menu and listener constructio
   assembly.teardown();
   const clearCount = calls.filter((call) => call[0] === "clear").length;
   assert.equal(uiActions.invoke(MENU_ACTION, "compact"), undefined);
+  assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), undefined);
   assert.equal(calls.filter((call) => call[0] === "clear").length, clearCount);
   uiActions.teardown();
 });

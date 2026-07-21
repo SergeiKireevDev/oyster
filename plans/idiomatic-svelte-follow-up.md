@@ -40,7 +40,7 @@ cd tests/e2e && npm test
 - [x] Change `Menu.svelte` to obtain the registry from context and invoke the
   named menu action. Delete the `pi-menu-action` `window` event dispatch and
   its event-listener adapter; test all menu action values still route.
-- [ ] Register the existing command-palette selection implementation with the
+- [x] Register the existing command-palette selection implementation with the
   runtime's UI action registry under one named action. Do not change
   `CommandPalette.svelte` in this step; test registry invocation reaches the
   existing implementation.
