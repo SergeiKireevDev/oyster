@@ -228,3 +228,57 @@ export function createRenderJobs() {
     get current() { return current; },
   };
 }
+
+/** Own tail-first transcript rendering and cancellation while callers retain item construction. */
+export function createTailFirstTranscriptRenderer({
+  messagesElement, scroller, splitTurns, takeTailChunk, backfillTurns, renderMessage,
+  clear, rememberPrompt, userMessageText, scrollToBottom, nearBottom, afterRender,
+  tick, tailMessages = 40, chunkMessages = 60,
+}) {
+  const jobs = createRenderJobs();
+  let backfilling = false;
+
+  function renderChunk(chunk, { prepend = false } = {}) {
+    backfilling = true;
+    try {
+      const messages = prepend ? [...chunk].reverse() : chunk;
+      for (const message of messages) renderMessage(message, { prepend });
+    } finally { backfilling = false; }
+  }
+
+  async function render(messages) {
+    clear();
+    const job = jobs.begin();
+    for (const message of messages) {
+      if (message.role !== "user") continue;
+      const text = userMessageText(message);
+      if (text && !/^Opening interface: /.test(text)) rememberPrompt(text);
+    }
+    const turns = splitTurns(messages);
+    renderChunk(takeTailChunk(turns, tailMessages));
+    await tick();
+    scrollToBottom(true);
+    const complete = await backfillTurns({
+      turns,
+      takeTailChunk,
+      chunkSize: chunkMessages,
+      isCurrent: () => jobs.isCurrent(job),
+      beforePrepend: () => ({ pinned: nearBottom(), height: scroller.scrollHeight, top: scroller.scrollTop }),
+      renderPrepend: async (chunk) => { renderChunk(chunk, { prepend: true }); await tick(); },
+      afterPrepend: ({ pinned, height, top }) => {
+        if (pinned) scrollToBottom(true);
+        else scroller.scrollTop = top + (scroller.scrollHeight - height);
+      },
+    });
+    if (complete) afterRender();
+    return complete;
+  }
+
+  return {
+    render,
+    cancel: () => jobs.cancel(),
+    get backfilling() { return backfilling; },
+    get currentJob() { return jobs.current; },
+    get messageCount() { return messagesElement.children.length; },
+  };
+}

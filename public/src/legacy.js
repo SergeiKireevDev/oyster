@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -220,7 +220,7 @@ function addUserMessage(message, options = {}) {
     return;
   }
   placeCheckpointBtn();
-  if (!backfilling) {
+  if (!transcriptRenderer?.backfilling) {
     scrollToBottom(true);
     rememberPrompt(text); // bulk renders prefill history in chronological order
   }
@@ -327,7 +327,7 @@ function renderFullMessage(message, options = {}) {
 }
 
 function clearMessages() {
-  renderJobs.cancel(); // cancel any in-flight transcript backfill
+  transcriptRenderer?.cancel(); // cancel any in-flight transcript backfill
   setCheckpointTarget(null);
   setCheckpointRestores([]);
   resetTranscriptItems();
@@ -345,66 +345,33 @@ function clearMessages() {
 // the visible area never moves. Chunks split at user messages only, keeping
 // toolCall/toolResult pairs (which finish each other's cards) together.
 
-const renderJobs = createRenderJobs();
-let backfilling = false; // suppresses per-message scroll/history side effects
-
-const TAIL_MSGS = 40;    // rendered synchronously (visible screenful + slack)
-const CHUNK_MSGS = 60;   // per backfill timeslice
-
-function renderChunk(chunk, { prepend = false } = {}) {
-  backfilling = true;
-  try {
-    // Prepending individual items reverses their order, so consume older
-    // chunks backwards to retain chronological transcript order.
-    const messages = prepend ? [...chunk].reverse() : chunk;
-    for (const m of messages) renderFullMessage(m, { prepend });
-  } finally { backfilling = false; }
-}
+let transcriptRenderer;
+transcriptRenderer = createTailFirstTranscriptRenderer({
+  messagesElement: messagesEl,
+  scroller,
+  splitTurns,
+  takeTailChunk,
+  backfillTurns: backfillTranscriptTurns,
+  renderMessage: renderFullMessage,
+  clear: clearMessages,
+  rememberPrompt,
+  userMessageText,
+  scrollToBottom,
+  nearBottom,
+  tick,
+  afterRender: () => placeCheckpointBtn(),
+});
 
 /** Render `messages`; resolves true when the FULL transcript is in the DOM
  *  (false if superseded by a newer render). */
 async function renderTranscript(messages) {
   lifecycleLog("renderTranscript:start", { messages: messages?.length ?? 0 });
-  clearMessages(); // also bumps renderJob, cancelling any older backfill
-  const myJob = renderJobs.begin();
-  // ↑/↓ prompt recall must stay chronological even though rendering is
-  // tail-first: prefill it from the full list (same skip rule as addUserMessage)
-  for (const m of messages) {
-    if (m.role !== "user") continue;
-    const t = userMessageText(m);
-    if (t && !/^Opening interface: /.test(t)) rememberPrompt(t);
-  }
-  const turns = splitTurns(messages);
-  const tail = takeTailChunk(turns, TAIL_MSGS);
-  renderChunk(tail);
-  await tick();
-  scrollToBottom(true);
-
-  const complete = await backfillTranscriptTurns({
-    turns,
-    takeTailChunk,
-    chunkSize: CHUNK_MSGS,
-    isCurrent: () => renderJobs.isCurrent(myJob),
-    beforePrepend: () => ({
-      pinned: nearBottom(),
-      height: scroller.scrollHeight,
-      top: scroller.scrollTop,
-    }),
-    renderPrepend: async (chunk) => {
-      renderChunk(chunk, { prepend: true });
-      await tick();
-    },
-    afterPrepend: ({ pinned, height, top }) => {
-      if (pinned) scrollToBottom(true); // stay glued to the newest message
-      else scroller.scrollTop = top + (scroller.scrollHeight - height); // keep reading position
-    },
-  });
+  const complete = await transcriptRenderer.render(messages);
   if (!complete) {
-    lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJobs.current });
+    lifecycleLog("renderTranscript:superseded", { activeJob: transcriptRenderer.currentJob });
     return false;
   }
-  placeCheckpointBtn();
-  lifecycleLog("renderTranscript:complete", { job: myJob, domMessages: messagesEl.children.length });
+  lifecycleLog("renderTranscript:complete", { domMessages: transcriptRenderer.messageCount });
   return true;
 }
 

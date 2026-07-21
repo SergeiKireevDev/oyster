@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -172,6 +172,29 @@ test("tool card registry assembles and completes streamed tool cards", () => {
   registry.clear();
   assert.equal(registry.has("tool-1"), false);
   assert.ok(store);
+});
+
+test("tail-first renderer preserves prompt history and scroll position during backfill", async () => {
+  const rendered = []; const remembered = []; const scrolls = []; let cleared = 0; let complete = 0;
+  const scroller = { scrollHeight: 100, scrollTop: 20 };
+  const renderer = createTailFirstTranscriptRenderer({
+    messagesElement: { children: [1, 2] }, scroller,
+    splitTurns: (messages) => messages, takeTailChunk: (turns) => turns.slice(-1),
+    backfillTurns: async ({ renderPrepend, beforePrepend, afterPrepend }) => {
+      const position = beforePrepend(); scroller.scrollHeight = 160;
+      await renderPrepend([{ role: "user", content: "older" }]); afterPrepend(position); return true;
+    },
+    renderMessage: (message, options) => rendered.push([message.content, options.prepend]), clear: () => cleared++,
+    rememberPrompt: (text) => remembered.push(text), userMessageText: (message) => message.content,
+    scrollToBottom: (force) => scrolls.push(force), nearBottom: () => false, tick: async () => {}, afterRender: () => complete++,
+  });
+  await renderer.render([{ role: "user", content: "older" }, { role: "user", content: "newer" }]);
+  assert.equal(cleared, 1);
+  assert.deepEqual(remembered, ["older", "newer"]);
+  assert.deepEqual(rendered, [["newer", false], ["older", true]]);
+  assert.equal(scroller.scrollTop, 80);
+  assert.deepEqual(scrolls, [true]);
+  assert.equal(complete, 1);
 });
 
 test("render jobs cancel stale backfills", () => {
