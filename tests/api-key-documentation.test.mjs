@@ -22,9 +22,11 @@ test("API-key endpoint documentation captures auth, body, restart, and removal s
   assert.match(readme, /restarts\s+every pi runner that was active/);
 });
 
-test("API-key route composition and UI ownership remain explicit", () => {
+test("credential route composition and UI ownership remain explicit", () => {
   assert.match(app, /createCredentialRoutes/);
+  assert.match(app, /createOAuthRoutes/);
   assert.match(app, /credential: credentialRoutes/);
+  assert.match(app, /oauth: oauthRoutes/);
   assert.match(menu, /data-action="credentials"/);
   assert.match(overlays, /content === "credentials"[\s\S]*?<CredentialsModal/);
   assert.match(root, /createCredentialsAssembly/);
@@ -32,7 +34,19 @@ test("API-key route composition and UI ownership remain explicit", () => {
   assert.doesNotMatch(root, /showSettingsModal[^\n]*credentials|credentials[^\n]*showSettingsModal/);
 });
 
-test("API-key modal participates in generic modal history without owning browser history", () => {
+test("OAuth documentation covers transient flow and local sign-out semantics", () => {
+  for (const route of ["POST /oauth/start", "POST /oauth/status", "POST /oauth/respond", "POST /oauth/cancel", "DELETE /oauth"]) {
+    assert.ok(readme.includes(`\`${route}\``), `missing ${route}`);
+  }
+  assert.match(readme, /AuthStorage\.getOAuthProviders/);
+  assert.match(readme, /PKCE\/state checks/);
+  assert.match(readme, /Flows expire after 15 minutes/);
+  assert.match(readme, /loopback callback[\s\S]*?paste it into\s+the modal/);
+  assert.match(readme, /does not revoke its OAuth grant/);
+  assert.match(readme, /no entries in `auth\.json`[\s\S]*?setup once/);
+});
+
+test("Credentials modal participates in generic modal history without owning browser history", () => {
   assert.match(modalHistory, /pushState/);
   assert.match(modalHistory, /popstate/);
   const credentialsModal = read("../public/src/components/CredentialsModal.svelte");

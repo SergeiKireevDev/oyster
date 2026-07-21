@@ -232,7 +232,7 @@ jobs. Existing API-key secret-boundary tests continue to pass unchanged.
   ownership, transient browser/device/manual flows, remote callback-server
   behavior, `auth.json` storage/refresh, runner restarts, local logout versus
   upstream revocation, fallback sources, cancellation, and timeout.
-- [ ] Update route composition, action ownership, modal history, listener
+- [x] Update route composition, action ownership, modal history, listener
   inventory, and documentation tests. Add mock-SDK integration coverage that
   never contacts a real provider and proves the server delegates login, refresh
   compatibility, and logout to Pi rather than implementing token exchange.

@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createCredentialsAssembly } from "../public/src/features/credentials/createCredentialsAssembly.js";
-import { CREDENTIALS_OPEN_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../public/src/runtime/uiActionNames.js";
+import {
+  CREDENTIALS_CANCEL_OAUTH_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION, CREDENTIALS_OPEN_ACTION,
+  CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_RESPOND_OAUTH_ACTION,
+  CREDENTIALS_SAVE_API_KEY_ACTION, CREDENTIALS_START_OAUTH_ACTION,
+} from "../public/src/runtime/uiActionNames.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
@@ -20,13 +24,15 @@ test("credentials assembly owns API-key action registration and teardown", () =>
   let loads = 0;
   let saves = 0;
   let removals = 0;
+  let oauthActions = 0;
   const assembly = createCredentialsAssembly({
     uiActions,
     openModal: (state) => opened.push(state),
     setState() {},
     createController: () => ({
       activate() {}, deactivate() {}, load() { loads += 1; }, save() { saves += 1; }, remove() { removals += 1; },
-      startOAuth() {}, respondOAuth() {}, cancelOAuth() {}, logoutOAuth() {}, teardown() {},
+      startOAuth() { oauthActions += 1; }, respondOAuth() { oauthActions += 1; },
+      cancelOAuth() { oauthActions += 1; }, logoutOAuth() { oauthActions += 1; }, teardown() {},
     }),
   });
 
@@ -37,13 +43,23 @@ test("credentials assembly owns API-key action registration and teardown", () =>
   assert.equal(saves, 1);
   uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, "openai");
   assert.equal(removals, 1);
+  uiActions.invoke(CREDENTIALS_START_OAUTH_ACTION, "openai");
+  uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: "request", value: "value" });
+  uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
+  uiActions.invoke(CREDENTIALS_LOGOUT_OAUTH_ACTION, "openai");
+  assert.equal(oauthActions, 4);
   assembly.teardown();
   uiActions.invoke(CREDENTIALS_OPEN_ACTION);
   uiActions.invoke(CREDENTIALS_SAVE_API_KEY_ACTION, { provider: "openai", key: "ignored" });
   uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, "openai");
+  uiActions.invoke(CREDENTIALS_START_OAUTH_ACTION, "openai");
+  uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, {});
+  uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
+  uiActions.invoke(CREDENTIALS_LOGOUT_OAUTH_ACTION, "openai");
   assert.equal(opened.length, 1);
   assert.equal(saves, 1);
   assert.equal(removals, 1);
+  assert.equal(oauthActions, 4);
   assembly.teardown();
 });
 

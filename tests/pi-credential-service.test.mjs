@@ -191,7 +191,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
           const prompt = await callbacks.onPrompt({ message: "Prompt" });
           const selected = await callbacks.onSelect({ message: "Choose", options: [{ id: "one", label: "One" }] });
           const manual = await callbacks.onManualCodeInput?.();
-          return { refresh: "refresh-" + prompt, access: "access-" + selected + "-" + manual, expires: 42 };
+          return { refresh: "refresh-" + prompt, access: "access-" + selected + "-" + manual, expires: 42, enterpriseUrl: "https://enterprise.invalid" };
         },
         async refreshToken(value) { return value; },
         getApiKey(value) { return value.access; },
@@ -283,6 +283,9 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     concurrentStorage.set("concurrent-refresh", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
     releasePrompt("done");
     await pending;
+    let oauthStored = JSON.parse(readFileSync(authPath, "utf8"));
+    assert.equal(oauthStored["mock-oauth"].enterpriseUrl, "https://enterprise.invalid");
+    assert.equal(oauthStored["concurrent-refresh"].refresh, "fresh-refresh");
     assert.deepEqual(await service.logoutOAuth("mock-oauth"), { provider: "mock-oauth", removed: true });
 
     assert.deepEqual(await service.logoutOAuth("orphan-oauth"), { provider: "orphan-oauth", removed: true });
@@ -316,6 +319,17 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("OAuth adapter delegates provider discovery, login, persistence, refresh compatibility, and logout to Pi SDK storage", () => {
+  const source = readFileSync(new URL("../pi-credential-service.mjs", import.meta.url), "utf8");
+  assert.match(source, /authStorage\.getOAuthProviders\(\)/);
+  assert.match(source, /await authStorage\.login\(providerId, safeCallbacks\)/);
+  assert.match(source, /authStorage\.logout\(providerId\)/);
+  assert.doesNotMatch(source, /fetch\(|token_endpoint|code_verifier|client_secret|grant_type/);
+  const coordinator = readFileSync(new URL("../pi-oauth-flow-service.mjs", import.meta.url), "utf8");
+  assert.match(coordinator, /credentialService\.loginOAuth\(id, callbacksFor\(flow\)/);
+  assert.doesNotMatch(coordinator, /auth\.json|access_token|refresh_token|token_endpoint/);
 });
 
 test("credential service requires the validated absolute PI_AGENT_DIR", () => {
