@@ -2700,16 +2700,23 @@ async function showFileExplorer() {
     inp.addEventListener("change", async () => {
       const files = [...inp.files];
       if (!files.length) return;
+      const CHUNK = 8 * 1024 * 1024; // 8 MB — safe through server cap and cloudflare tunnel
       let done = 0;
       for (const f of files) {
         try {
           toast(`uploading ${f.name}\u2026`);
-          const r = await fetch(
-            `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}`,
-            { method: "POST", body: f }
-          );
-          const d = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(d.error || `upload failed (${r.status})`);
+          for (let offset = 0; offset === 0 || offset < f.size; offset += CHUNK) {
+            const end = Math.min(offset + CHUNK, f.size);
+            const isLast = end >= f.size;
+            const r = await fetch(
+              `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
+                `&offset=${offset}&last=${isLast ? 1 : 0}`,
+              { method: "POST", body: f.slice(offset, end) }
+            );
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || `upload failed (${r.status})`);
+            if (!isLast) toast(`uploading ${f.name}\u2026 ${Math.round((end / f.size) * 100)}%`);
+          }
           done++;
         } catch (e) {
           toast(`${f.name}: ${e.message}`, "error");

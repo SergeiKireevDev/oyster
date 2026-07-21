@@ -56,7 +56,7 @@
 import { spawn, execFile } from "node:child_process";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createConnection } from "node:net";
-import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
@@ -1411,7 +1411,10 @@ export function init(state) {
     }
 
     if (req.method === "POST" && url.pathname === "/file-upload") {
-      // raw body upload: ?dir=<target folder>&name=<file name>
+      // chunked raw body upload:
+      //   ?dir=<target folder>&name=<file name>&offset=<byte offset>&last=<0|1>
+      // chunks must arrive in order; offset=0 starts a fresh upload, last=1 finalizes.
+      // single-shot uploads (no offset/last params) behave as before.
       const dir = resolve(String(url.searchParams.get("dir") ?? ""));
       const name = String(url.searchParams.get("name") ?? "").trim();
       if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
@@ -1421,17 +1424,41 @@ export function init(state) {
       let dirOk = false;
       try { dirOk = statSync(dir).isDirectory(); } catch {}
       if (!dirOk) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const last = url.searchParams.get("last") !== "0"; // default: single-shot = final
+      if (!Number.isInteger(offset) || offset < 0) {
+        json(res, 400, { error: "invalid offset" });
+        return;
+      }
       let buf;
       try { buf = await readRawBody(req); } catch (e) { json(res, 413, { error: e.message }); return; }
       const target = join(dir, name);
+      const tmp = join(dir, `.${name}.upload`);
       try {
-        writeFileSync(target, buf);
+        if (offset === 0) {
+          writeFileSync(tmp, buf); // start fresh (truncates any stale partial)
+        } else {
+          let cur = -1;
+          try { cur = statSync(tmp).size; } catch {}
+          if (cur !== offset) {
+            json(res, 409, { error: `chunk out of sequence: have ${cur} bytes, got offset ${offset}` });
+            return;
+          }
+          appendFileSync(tmp, buf);
+        }
+        if (last) renameSync(tmp, target);
       } catch (e) {
+        try { unlinkSync(tmp); } catch {}
         json(res, 500, { error: `upload failed: ${e.message}` });
         return;
       }
-      console.log(`[pi-ui] file uploaded via explorer: ${target} (${buf.length} bytes)`);
-      json(res, 200, { saved: target, bytes: buf.length });
+      if (last) {
+        const bytes = statSync(target).size;
+        console.log(`[pi-ui] file uploaded via explorer: ${target} (${bytes} bytes)`);
+        json(res, 200, { saved: target, bytes });
+      } else {
+        json(res, 200, { received: offset + buf.length });
+      }
       return;
     }
 
