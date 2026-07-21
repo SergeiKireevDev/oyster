@@ -12,12 +12,15 @@ test("Credentials modal is owned by the overlay and covers safe provider states"
   for (const label of ["stored API key", "stored OAuth", "environment", "models.json", "not configured"]) {
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
-  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only/);
+  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
 });
 
-test("API Keys modal exposes removal only for stored API keys with revocation and fallback warnings", () => {
-  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only[\s\S]*?provider\.credentialType === "api_key"[\s\S]*?Remove from pi and restart/);
+test("Credentials modal exposes API-key and OAuth actions with revocation and fallback warnings", () => {
+  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?provider\.oauthCapable[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
+  assert.match(modal, /provider\.credentialType === "api_key"[\s\S]*?Remove from pi and restart/);
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_REMOVE_API_KEY_ACTION, provider\)/);
+  assert.match(modal, /uiActions\.invoke\(CREDENTIALS_START_OAUTH_ACTION, provider\)/);
+  assert.match(modal, /uiActions\.invoke\(CREDENTIALS_LOGOUT_OAUTH_ACTION, provider\)/);
   assert.match(modal, /does not revoke it at the upstream provider/);
   assert.match(modal, /environment or models\.json fallback remains/);
   assert.match(modal, /pi may continue to authenticate after removal/);

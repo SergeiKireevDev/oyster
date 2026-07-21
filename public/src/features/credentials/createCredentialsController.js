@@ -261,6 +261,9 @@ export function createCredentialsController({
       if (error.name === "AbortError" || tornDown) return { ok: false };
       const removed = Boolean(error.details?.credential);
       publish({ loading: false, error: error.message, lastRestart: error.details?.restart ?? null });
+      if (removed && error.details?.source && error.details.source !== "not_configured") {
+        notify(`pi may still authenticate ${name} using ${error.details.source === "models_json" ? "models.json" : error.details.source}`);
+      }
       notify(removed ? "Signed out from pi, but restart was incomplete" : "OAuth credential was not removed", "error");
       if (removed) await load({ quiet: true });
       return { ok: false, removed, restart: error.details?.restart ?? null, source: error.details?.source };

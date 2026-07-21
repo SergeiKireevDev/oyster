@@ -3,7 +3,10 @@
   import { credentialsState } from "../stores/credentials.js";
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { CREDENTIALS_CLOSE_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../runtime/uiActionNames.js";
+  import {
+    CREDENTIALS_CLOSE_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION,
+    CREDENTIALS_SAVE_API_KEY_ACTION, CREDENTIALS_START_OAUTH_ACTION,
+  } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   let selectedProvider = "";
@@ -50,6 +53,14 @@
     await uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, provider);
   }
 
+  async function startOAuth(provider) {
+    await uiActions.invoke(CREDENTIALS_START_OAUTH_ACTION, provider);
+  }
+
+  async function logoutOAuth(provider) {
+    await uiActions.invoke(CREDENTIALS_LOGOUT_OAUTH_ACTION, provider);
+  }
+
   function close() {
     clearKey();
     uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
@@ -85,11 +96,25 @@
           <div class="api-key-status">
             <span class="api-key-source">{sourceLabel(provider.source)}</span>
             {#if provider.credentialType === "oauth"}
-              <span class="api-key-readonly">Read-only</span>
-            {:else if provider.credentialType === "api_key"}
-              <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$credentialsState.loading}>
-                Remove from pi and restart
+              {#if provider.oauthCapable}
+                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading}>
+                  Re-authenticate
+                </button>
+              {/if}
+              <button class="api-key-remove" type="button" onclick={() => logoutOAuth(provider.provider)} disabled={$credentialsState.loading}>
+                Sign out from pi
               </button>
+            {:else}
+              {#if provider.credentialType === "api_key"}
+                <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$credentialsState.loading}>
+                  Remove from pi and restart
+                </button>
+              {/if}
+              {#if provider.oauthCapable}
+                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading}>
+                  {provider.credentialType === "api_key" ? "Sign in instead" : "Sign in"}
+                </button>
+              {/if}
             {/if}
           </div>
         </div>
@@ -108,7 +133,7 @@
   {/if}
 
   <p class="api-key-removal-note">
-    Removing a key from pi does not revoke it at the upstream provider. If an environment or models.json fallback remains, pi may continue to authenticate after removal.
+    Removing a key or signing out from pi does not revoke it at the upstream provider. Revoke upstream access separately in the provider account. If an environment or models.json fallback remains, pi may continue to authenticate after removal.
   </p>
 
   <form class="api-key-form" onsubmit={saveKey}>

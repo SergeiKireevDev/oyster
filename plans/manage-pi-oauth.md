@@ -183,7 +183,7 @@ responses other than the intentional transient callback snapshot, or events.
   treat environment or `models.json` fallback as an `auth.json` entry, do not
   automatically navigate to an upstream provider, and do not reopen over a
   higher-priority modal or during teardown.
-- [ ] Extend the credentials modal to present OAuth-capable providers with
+- [x] Extend the credentials modal to present OAuth-capable providers with
   **Sign in**, **Re-authenticate**, and **Sign out from pi** actions as
   applicable. Require provider-specific replacement/re-authentication and
   logout confirmations, explain that logout does not revoke upstream access,
