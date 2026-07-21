@@ -1,5 +1,6 @@
 <script>
   import CarouselDots from "./CarouselDots.svelte";
+  import CommandPalette from "./CommandPalette.svelte";
   import Toasts from "./Toasts.svelte";
 </script>
 
@@ -13,4 +14,4 @@
 
 <Toasts />
 
-<div id="cmdPalette"></div>
+<CommandPalette />

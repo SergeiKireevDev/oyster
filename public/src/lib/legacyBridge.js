@@ -2,6 +2,7 @@ let menuActionHandler = null;
 let composerHandlers = {};
 let hublotHandlers = {};
 let routineHandlers = {};
+let commandPaletteHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -49,4 +50,16 @@ export function setRoutineHandlers(handlers) {
 
 export function runRoutineAction(name, action) {
   return routineHandlers.runAction?.(name, action);
+}
+
+export function setCommandPaletteHandlers(handlers) {
+  commandPaletteHandlers = handlers ?? {};
+}
+
+export function setCommandPaletteActive(index) {
+  return commandPaletteHandlers.setActive?.(index);
+}
+
+export function runCommandPaletteIndex(index) {
+  return commandPaletteHandlers.runIndex?.(index);
 }

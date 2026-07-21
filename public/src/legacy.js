@@ -1,7 +1,8 @@
 "use strict";
 
-import { setComposerHandlers, setHublotHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+import { setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
+import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { updateHeaderState } from "./stores/header.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
 import { addToast } from "./stores/toasts.js";
@@ -1603,30 +1604,29 @@ function positionCmdPalette(el) {
   let left = rect.left;
   if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
   let top;
+  const patch = { left: left + "px", width: pw + "px" };
   if (rect.top > maxH + gap) {
     top = rect.top - gap; // place above
-    cmdPalette.style.bottom = window.innerHeight - top + "px";
-    cmdPalette.style.top = "auto";
+    patch.bottom = window.innerHeight - top + "px";
+    patch.top = "auto";
   } else {
     top = rect.bottom + gap; // place below
-    cmdPalette.style.top = top + "px";
-    cmdPalette.style.bottom = "auto";
+    patch.top = top + "px";
+    patch.bottom = "auto";
   }
-  cmdPalette.style.left = left + "px";
-  cmdPalette.style.width = pw + "px";
-  cmdPalette.style.maxHeight = Math.min(maxH, window.innerHeight - (rect.top > maxH ? top : rect.bottom) - gap * 2) + "px";
+  patch.maxHeight = Math.min(maxH, window.innerHeight - (rect.top > maxH ? top : rect.bottom) - gap * 2) + "px";
+  setCommandPaletteState(patch);
 }
 
 function openCmdPalette(el, match, trigger) {
   cmdState = { target: el, match: match || "", active: 0, trigger };
   positionCmdPalette(el);
   renderCmdPalette();
-  cmdPalette.classList.add("open");
 }
 
 function closeCmdPalette() {
   cmdState = null;
-  cmdPalette.classList.remove("open");
+  closeCommandPaletteState();
 }
 
 function moveCmd(dir) {
@@ -1643,6 +1643,20 @@ function runActiveCmd() {
   if (!items.length) { closeCmdPalette(); return false; }
   items[cmdState.active].run();
   return true;
+}
+
+function setActiveCmd(index) {
+  if (!cmdState || cmdState.active === index) return;
+  const items = getFilteredCommands(cmdState.match);
+  if (index < 0 || index >= items.length) return;
+  cmdState.active = index;
+  renderCmdPalette();
+}
+
+function runCmdIndex(index) {
+  if (!cmdState) return false;
+  setActiveCmd(index);
+  return runActiveCmd();
 }
 
 /** Insert text into a textarea, optionally replacing a placeholder token. */
@@ -1678,38 +1692,26 @@ function renderCmdPalette() {
   if (!cmdState) return;
   const { match, active } = cmdState;
   const items = getFilteredCommands(match);
-  cmdPalette.innerHTML = "";
   if (!items.length) {
-    const empty = document.createElement("div");
-    empty.className = "cmd-empty";
-    empty.textContent = `no command matches ":${match}"`;
-    cmdPalette.appendChild(empty);
+    setCommandPaletteState({
+      open: true,
+      match,
+      emptyText: `no command matches ":${match}"`,
+      items: [],
+    });
     return;
   }
-  items.forEach((cmd, i) => {
-    const row = document.createElement("div");
-    row.className = "cmd-row" + (i === active ? " active" : "");
-    const hl = cmd.name.slice(0, match.length);
-    const rest = cmd.name.slice(match.length);
-    row.innerHTML =
-      `<span class="cmd-ico">${cmd.icon}</span>` +
-      `<div class="cmd-body">` +
-        `<div class="cmd-name">:<mark>${escapeHtml(hl)}</mark>${escapeHtml(rest)}</div>` +
-        `<div class="cmd-desc">${escapeHtml(cmd.desc)}</div>` +
-      `</div>` +
-      `<span class="cmd-hint">${i === active ? "enter \u21B5" : ""}</span>`;
-    row.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      cmdState.active = i;
-      runActiveCmd();
-    });
-    row.addEventListener("mousemove", () => {
-      if (cmdState && cmdState.active !== i) {
-        cmdState.active = i;
-        renderCmdPalette();
-      }
-    });
-    cmdPalette.appendChild(row);
+  setCommandPaletteState({
+    open: true,
+    match,
+    emptyText: "",
+    items: items.map((cmd, i) => ({
+      icon: cmd.icon,
+      desc: cmd.desc,
+      highlight: cmd.name.slice(0, match.length),
+      rest: cmd.name.slice(match.length),
+      active: i === active,
+    })),
   });
 }
 
@@ -1735,6 +1737,8 @@ function setupCommandPalette(el) {
     if (cmdState?.target === el) closeCmdPalette();
   }, 150));
 }
+
+setCommandPaletteHandlers({ setActive: setActiveCmd, runIndex: runCmdIndex });
 
 setupCommandPalette(input);
 
