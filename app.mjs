@@ -659,10 +659,9 @@ export function init(state) {
       if (req.method === "DELETE") {
         const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
         if (!runner) { json(res, 404, { error: "no such runner" }); return; }
+        // stop the process but KEEP the runner entry: it remembers its
+        // session, so the next rpc/prompt to it respawns pi and resumes
         stopRunner(runner);
-        state.runners.delete(runner.id);
-        if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
-        runnersChanged();
         json(res, 200, { stopped: runner.id });
         return;
       }
