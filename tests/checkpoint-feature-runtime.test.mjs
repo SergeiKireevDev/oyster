@@ -12,5 +12,8 @@ test("checkpoint tree node routes open-session and rollback through scoped actio
   assert.match(source, /getUiActionRegistry\(\)/);
   assert.match(source, /uiActions\.invoke\(CHECKPOINT_TREE_OPEN_ACTION, node\)/);
   assert.match(source, /uiActions\.invoke\(CHECKPOINT_TREE_ROLLBACK_ACTION, checkpoint, target\)/);
+  assert.match(source, /<button[\s\S]*class="t-session"[\s\S]*class:current=\{node\.id === currentSessionId\}/);
+  assert.match(source, /<button[\s\S]*class="t-ckpt"[\s\S]*event\.currentTarget/);
+  assert.doesNotMatch(source, /<div[^>]*class="t-(?:session|ckpt)"|role="button"|tabindex="0"/);
   assert.doesNotMatch(source, /features\/checkpoints\/checkpointTreeActions\.js/);
 });

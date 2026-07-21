@@ -139,7 +139,7 @@ services rather than global stores or component platform calls.
 
 ## 6. Finish Semantic and Boundary Cleanup
 
-- [ ] Replace the clickable checkpoint-tree `div[role="button"]` controls with
+- [x] Replace the clickable checkpoint-tree `div[role="button"]` controls with
   native buttons while preserving tree nesting, current-session styling,
   keyboard activation, and rollback target behavior.
 - [ ] Replace clickable hublot preview/list `div[role="button"]` controls with

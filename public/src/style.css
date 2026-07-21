@@ -195,8 +195,14 @@
   #treeView { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
   .t-session {
     display: flex; align-items: center; gap: 6px;
+    width: 100%;
     padding: 4px 6px;
+    border: 0;
     border-radius: 7px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     min-width: 0;
   }
@@ -217,8 +223,13 @@
   }
   .t-ckpt {
     display: flex; align-items: center; gap: 6px;
+    width: 100%;
     padding: 3px 6px;
+    border: 0;
     border-radius: 7px;
+    background: none;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     color: var(--muted);
     min-width: 0;

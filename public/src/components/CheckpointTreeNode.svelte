@@ -34,45 +34,31 @@
 </script>
 
 <div>
-  <div
+  <button
+    type="button"
     class="t-session"
     class:current={node.id === currentSessionId}
     title={node.path}
-    role="button"
-    tabindex="0"
     onclick={() => openCheckpointTreeSession(node)}
-    onkeydown={(event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openCheckpointTreeSession(node);
-      }
-    }}
   >
     <span>{node.parentSession ? "🌿" : "🌱"}</span>
     <span class="t-name">{node.name || node.id.slice(0, 8)}</span>
     {#if live}
       <span class="t-dot" class:busy={live.busy} title={live.busy ? "working" : "live"}></span>
     {/if}
-  </div>
+  </button>
 
   {#if (node.checkpoints?.length || 0) || unslottedChildren.length}
     <div class="t-kids">
       {#each node.checkpoints ?? [] as checkpoint}
-        <div
+        <button
+          type="button"
           class="t-ckpt"
           title={`${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`}
-          role="button"
-          tabindex="0"
           onclick={(event) => rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, event.currentTarget)}
-          onkeydown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, event.currentTarget);
-            }
-          }}
         >
           🧊<span class="t-hash">{checkpoint.hash}</span><span class="t-msg">{checkpointMessage(checkpoint)}</span><span class="t-time">{checkpointTime(checkpoint)}</span>
-        </div>
+        </button>
         <div class="t-forks">
           {#each forkChildren(checkpoint.hash) as child (child.id)}
             <svelte:self node={child} {currentSessionId} {runners} />
