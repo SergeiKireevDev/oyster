@@ -119,7 +119,43 @@
     flex-direction: column;
     gap: 10px;
   }
-  .session-sidebar-list { display: flex; flex-direction: column; gap: 4px; }
+  .session-sidebar-search {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+  }
+  .session-sidebar-search:focus { border-color: var(--accent); }
+  .session-sidebar-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+  .session-sidebar-status { padding: 4px 2px; color: var(--muted); font-size: 11px; }
+  .session-sidebar-hit {
+    display: flex; flex-direction: column; gap: 3px;
+    width: 100%; min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .session-sidebar-hit:hover { border-color: var(--accent-dim); }
+  .session-sidebar-snippet {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .session-sidebar-snippet mark { background: rgba(224,175,104,.3); color: var(--text); border-radius: 2px; }
   .session-sidebar-row {
     display: flex; align-items: center; gap: 8px;
     width: 100%; min-width: 0;

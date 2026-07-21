@@ -160,11 +160,14 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await swipe(page, "right");
     }
     await expect(page.locator("#sessions")).toBeVisible();
-    await expect(page.locator("#sessions .session-sidebar-row", { hasText: A })).toBeVisible({ timeout: 15000 });
     const first = page.locator("#sessions .session-sidebar-row", { hasText: A });
-    await first.click();
+    await expect(first).toBeVisible({ timeout: 15000 });
+    await page.locator("#sessions .session-sidebar-search").fill(A);
+    const result = page.locator("#sessions .session-sidebar-hit", { hasText: A });
+    await expect(result).toBeVisible({ timeout: 15000 });
+    await expect(result.locator(".session-sidebar-snippet").first()).toContainText(A);
+    await result.click();
     await expect(page.locator("#messages")).toContainText(A, { timeout: 15000 });
-    await expect(first).toHaveClass(/current/);
   });
 
   test("start sessions and stop a session's background process", async ({ page }) => {
