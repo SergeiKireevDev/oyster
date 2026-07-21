@@ -5,6 +5,7 @@ export function createHublotSupervisor({
   appStore,
   recordTransition,
   recoverTunnel = null,
+  checkService = null,
   restartService = null,
   verifyIdentity = verifyPersistedProcessIdentity,
   intervalMs = 5_000,
@@ -23,7 +24,7 @@ export function createHublotSupervisor({
   let reconciling = false;
 
   async function reconcile({ includeOpening = false } = {}) {
-    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0 });
+    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0, interrupted: 0 });
     reconciling = true;
     let checked = 0;
     let recovering = 0;
@@ -31,6 +32,7 @@ export function createHublotSupervisor({
     let recoveredTunnels = 0;
     let deferred = 0;
     let crashLooped = 0;
+    let interrupted = 0;
     const resetRestartState = (id) => appStore.repositories.hublots.update(id, { restart_count: 0, next_restart_at: null });
     const recordRestartFailure = (id, error) => {
       const current = appStore.repositories.hublots.find(id);
@@ -69,11 +71,19 @@ export function createHublotSupervisor({
         });
 
         const serviceRows = processes.filter((process) => process.role === "service");
+        const selfServiceMissing = hublot.service_kind === "self_served" && checkService
+          ? !(await checkService(hublot))
+          : false;
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
-        const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy);
+        const needsSelfRecovery = hublot.service_kind === "self_served" && hublot.status === "interrupted" && !selfServiceMissing;
+        const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy) || selfServiceMissing || needsSelfRecovery;
         if (criticalIdentityMissing) {
-          if (hublot.restart_count >= restartLimit) {
+          const serviceDead = hublot.service_kind === "agent_managed" && !serviceHealthy;
+          const selfServedMissing = selfServiceMissing && !hublot.service_start_script;
+          const selfServedError = `self-served service is not answering on port ${hublot.port} and no startup script is available; restart it manually`;
+          const alreadySelfInterrupted = selfServedMissing && hublot.status === "interrupted" && hublot.last_error === selfServedError;
+          if (!selfServedMissing && hublot.restart_count >= restartLimit) {
             const message = `automatic restart disabled after ${hublot.restart_count} consecutive failures`;
             if (hublot.status !== "interrupted" || !hublot.last_error?.startsWith(message)) {
               recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: message });
@@ -81,18 +91,23 @@ export function createHublotSupervisor({
             crashLooped++;
             continue;
           }
-          if (hublot.next_restart_at && Date.parse(hublot.next_restart_at) > clock()) {
+          if (!selfServedMissing && hublot.next_restart_at && Date.parse(hublot.next_restart_at) > clock()) {
             deferred++;
             continue;
           }
-          const serviceDead = hublot.service_kind === "agent_managed" && !serviceHealthy;
           const missing = serviceDead ? "service" : "tunnel";
           const error = `persisted ${missing} process identity is not live`;
-          if (hublot.status !== "recovering" || hublot.public_url !== null || hublot.last_error !== error) {
+          if (!alreadySelfInterrupted && (hublot.status !== "recovering" || hublot.public_url !== null || hublot.last_error !== error)) {
             recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
             recovering++;
           }
-          if (!tunnelHealthy && recoverTunnel) {
+          if (selfServedMissing) {
+            if (!alreadySelfInterrupted) recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: selfServedError, at: observedAt });
+            resetRestartState(hublot.id);
+            interrupted++;
+            continue;
+          }
+          if ((!tunnelHealthy || needsSelfRecovery) && recoverTunnel) {
             try {
               const recovery = await recoverTunnel(hublot);
               if (recovery?.recovered) { resetRestartState(hublot.id); recoveredTunnels++; continue; }
@@ -110,7 +125,7 @@ export function createHublotSupervisor({
           resetRestartState(hublot.id);
         }
       }
-      return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels, deferred, crashLooped });
+      return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels, deferred, crashLooped, interrupted });
     } finally {
       reconciling = false;
     }

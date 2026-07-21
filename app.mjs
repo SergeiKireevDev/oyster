@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir } =
     await import(bust("routines.mjs"));
@@ -70,7 +70,7 @@ export async function init(state) {
     state.checkpointImport = importLegacyCheckpoints({ repository: checkpointRepository, sessionReferences: state.sessionReferences });
     state.legacyCheckpointsImported = true;
   }
-  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options), recoverTunnel: (hublot) => recoverAnsweringHublotService(state, hublot), restartService: (hublot) => restartHublotService(state, hublot) }); if (!state.hublotStartupReconciled) { state.hublotStartupReconciliation = await state.hublotSupervisor.reconcile({ includeOpening: true }); state.hublotStartupReconciled = true; } state.hublotSupervisor.start();
+  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options), recoverTunnel: (hublot) => recoverAnsweringHublotService(state, hublot), checkService: (hublot) => localPortAnswers(hublot.port), restartService: (hublot) => restartHublotService(state, hublot) }); if (!state.hublotStartupReconciled) { state.hublotStartupReconciliation = await state.hublotSupervisor.reconcile({ includeOpening: true }); state.hublotStartupReconciled = true; } state.hublotSupervisor.start();
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });

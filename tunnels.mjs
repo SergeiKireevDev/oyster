@@ -458,6 +458,7 @@ export async function recoverAnsweringHublotService(state, hublot, {
   const current = hublotRepository(state).find(hublot.id);
   if (!current || current.desired_state !== "open") throw new Error(`hublot ${hublot.id} is not desired open`);
   if (!(await checkPort(current.port))) return Object.freeze({ recovered: false, answering: false, hublotId: current.id });
+  if (current.status !== "recovering") recordHublotTransition(state, current.id, "recovering", { publicUrl: null, lastError: null });
   try {
     const servicePid = discoverPids(current.port)[0] ?? null;
     if (!servicePid) throw new Error(`answering service on port ${current.port} has no discoverable PID`);

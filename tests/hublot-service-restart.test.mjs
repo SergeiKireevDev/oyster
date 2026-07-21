@@ -109,6 +109,41 @@ test("failed port verification records failure and never reopens a tunnel", asyn
   assert.equal(store.repositories.hublots.find(hublot.id).last_error, "port remained down");
 });
 
+test("missing self-served services without startup scripts become actionable interruptions", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4236 });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale-self.test" });
+  persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: process.pid });
+  let restartAttempts = 0;
+  let recoveryChecks = 0;
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    verifyIdentity: (row) => row.role === "tunnel",
+    checkService: async () => { recoveryChecks++; return false; },
+    recoverTunnel: async () => { throw new Error("missing self-served services must not be tunneled"); },
+    restartService: async () => { restartAttempts++; },
+    now: () => "observed",
+  });
+
+  const result = await supervisor.reconcile();
+  const interrupted = store.repositories.hublots.find(hublot.id);
+  assert.equal(result.interrupted, 1);
+  assert.equal(interrupted.status, "interrupted");
+  assert.equal(interrupted.desired_state, "open");
+  assert.equal(interrupted.public_url, null);
+  assert.match(interrupted.last_error, /self-served service is not answering on port 4236/);
+  assert.match(interrupted.last_error, /restart it manually/);
+  assert.equal(interrupted.service_start_script, null);
+  assert.equal(restartAttempts, 0);
+
+  const historyLength = store.repositories.hublots.listLifecycleEvents(hublot.id).length;
+  await supervisor.reconcile();
+  assert.equal(recoveryChecks, 2, "interrupted self-served services remain eligible for manual recovery");
+  assert.equal(store.repositories.hublots.listLifecycleEvents(hublot.id).length, historyLength, "unchanged interruption must not churn history");
+  assert.equal(restartAttempts, 0);
+});
+
 test("supervisor recovers an answering service before considering service restart", async (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4235, brief: "serve preview" });
