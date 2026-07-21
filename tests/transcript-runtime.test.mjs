@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, createToolCardRegistry, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
@@ -40,6 +40,26 @@ test("durable transcript fetch uses the session-file query", async () => {
   const messages = await fetchDurableTranscript(async (value) => { url = value; return { ok: true, json: async () => ({ messages: [] }) }; }, "/a.jsonl", (file) => `path=${file}`);
   assert.equal(url, "/session-messages?path=/a.jsonl");
   assert.deepEqual(messages, { messages: [] });
+});
+
+test("tool card registry assembles and completes streamed tool cards", () => {
+  let state;
+  const registry = createToolCardRegistry({
+    createStore(initial) {
+      state = initial;
+      return { update(fn) { state = fn(state); } };
+    },
+    resultText: (result) => result.text,
+  });
+  const store = registry.ensure({ id: "tool-1", name: "read" });
+  registry.ensure({ id: "tool-1", name: "read-again" });
+  assert.equal(registry.has("tool-1"), true);
+  assert.equal(registry.finish("tool-1", { text: "done" }, false), true);
+  assert.deepEqual(state, { toolCall: { id: "tool-1", name: "read-again" }, status: "ok", resultText: "done" });
+  assert.equal(registry.finish("unknown", "ignored", false), false);
+  registry.clear();
+  assert.equal(registry.has("tool-1"), false);
+  assert.ok(store);
 });
 
 test("render jobs cancel stale backfills", () => {

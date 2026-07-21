@@ -41,6 +41,32 @@ export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   return res.json();
 }
 
+/** Own streaming tool-card state without coupling it to Svelte stores. */
+export function createToolCardRegistry({ createStore, resultText }) {
+  const cards = new Map();
+  return {
+    ensure(toolCall) {
+      let card = cards.get(toolCall.id);
+      if (!card) {
+        card = { store: createStore({ toolCall, status: "running", resultText: "" }) };
+        cards.set(toolCall.id, card);
+      } else {
+        card.store.update((state) => ({ ...state, toolCall }));
+      }
+      return card.store;
+    },
+    finish(toolCallId, resultOrText, isError) {
+      const card = cards.get(toolCallId);
+      if (!card) return false;
+      const text = typeof resultOrText === "string" ? resultOrText : resultText(resultOrText);
+      card.store.update((state) => ({ ...state, status: isError ? "error" : "ok", resultText: text }));
+      return true;
+    },
+    has(toolCallId) { return cards.has(toolCallId); },
+    clear() { cards.clear(); },
+  };
+}
+
 export function createRenderJobs() {
   let current = 0;
   return {

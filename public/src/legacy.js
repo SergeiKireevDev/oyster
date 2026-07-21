@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, createToolCardRegistry, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -311,28 +311,17 @@ function scrollToBottom(force) {
   if (force || nearBottom()) scroller.scrollTop = scroller.scrollHeight;
 }
 
-const toolCards = new Map(); // toolCallId -> {store}
+const toolCards = createToolCardRegistry({
+  createStore: writable,
+  resultText: toolResultText,
+});
 
-function ensureToolCardStore(tc) {
-  let card = toolCards.get(tc.id);
-  if (!card) {
-    card = { store: writable({ toolCall: tc, status: "running", resultText: "" }) };
-    toolCards.set(tc.id, card);
-  } else {
-    card.store.update((state) => ({ ...state, toolCall: tc }));
-  }
-  return card.store;
+function ensureToolCardStore(toolCall) {
+  return toolCards.ensure(toolCall);
 }
 
 function finishToolCard(toolCallId, resultMsgOrText, isError) {
-  const card = toolCards.get(toolCallId);
-  if (!card) return;
-  const text = typeof resultMsgOrText === "string" ? resultMsgOrText : toolResultText(resultMsgOrText);
-  card.store.update((state) => ({
-    ...state,
-    status: isError ? "error" : "ok",
-    resultText: text,
-  }));
+  toolCards.finish(toolCallId, resultMsgOrText, isError);
 }
 
 let liveAssistant = null; // { item, msg }
