@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -99,6 +99,14 @@ test("transcript entry matcher aligns persisted entries from the tail", () => {
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("response"), false);
+});
+
+test("replay buffer flusher dispatches only filtered live events", () => {
+  const calls = [];
+  createReplayBufferFlusher({ log: (name, detail) => calls.push([name, detail.events]), assistantAlreadyRendered: () => true, dispatch: (event) => calls.push(event.type) })([
+    { type: "message_end", message: { role: "assistant" } }, { type: "response" },
+  ]);
+  assert.deepEqual(calls, [["replayBuffer:flush", 2], "response"]);
 });
 
 test("replay filtering drops completed assistant and tool duplicates", () => {

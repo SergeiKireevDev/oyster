@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -571,15 +571,11 @@ function setReplaying(value, phase = null) {
   replaying = next;
   updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
 }
-function flushReplayBufferedEvents(events) {
-  lifecycleLog("replayBuffer:flush", { events: events.length, types: events.map((event) => event.type).slice(0, 20) });
-  // If get_messages completed after the live assistant already finished, the
-  // canonical render already contains that answer. In that case, dropping the
-  // buffered assistant/tool sequence avoids painting a duplicate while still
-  // preserving the normal in-progress case (no message_end yet) where buffered
-  // deltas are the only copy the user can see without a refresh.
-  for (const event of filterReplayEvents(events, assistantAlreadyRendered)) handleEvent(event);
-}
+const flushReplayBufferedEvents = createReplayBufferFlusher({
+  log: lifecycleLog,
+  assistantAlreadyRendered,
+  dispatch: handleEvent,
+});
 
 function handleEvent(msg) {
   if (["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"].includes(msg.type)) {

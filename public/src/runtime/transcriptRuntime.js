@@ -19,6 +19,14 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
   });
 }
 
+/** Flush buffered live events after canonical rendering while suppressing duplicate completions. */
+export function createReplayBufferFlusher({ log = () => {}, assistantAlreadyRendered, dispatch }) {
+  return (events) => {
+    log("replayBuffer:flush", { events: events.length, types: events.map((event) => event.type).slice(0, 20) });
+    for (const event of filterReplayEvents(events, assistantAlreadyRendered)) dispatch(event);
+  };
+}
+
 export function filterReplayEvents(events, assistantAlreadyRendered) {
   const finished = events.some((event) => event.type === "message_end" && event.message?.role === "assistant" && assistantAlreadyRendered(event.message));
   if (!finished) return events;
