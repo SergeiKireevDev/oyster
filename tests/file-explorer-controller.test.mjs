@@ -56,6 +56,37 @@ test("file explorer reports an editor load error", async () => {
   assert.deepEqual(calls, [["cannot open file", "error"]]);
 });
 
+test("file explorer saves editor content and clears its saving state", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    saveFile: async (options) => { calls.push(["save", options]); return { bytes: 5 }; },
+    update: (value) => calls.push(["update", value]),
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  await controller.saveEditor("/work/a.txt", "hello");
+
+  assert.deepEqual(calls, [
+    ["update", { saving: true }],
+    ["save", { path: "/work/a.txt", content: "hello" }],
+    ["toast", "saved a.txt (5 bytes)"],
+    ["update", { saving: false }],
+  ]);
+});
+
+test("file explorer clears saving state after a save error", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    saveFile: async () => { throw new Error("save failed"); },
+    update: (value) => calls.push(value),
+    toast: (...args) => calls.push(args),
+  });
+
+  await controller.saveEditor("/work/a.txt", "hello");
+
+  assert.deepEqual(calls, [{ saving: true }, ["save failed", "error"], { saving: false }]);
+});
+
 test("file explorer retries its workdir after another folder cannot load", async () => {
   const calls = [];
   const controller = createFileExplorerController({

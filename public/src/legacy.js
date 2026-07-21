@@ -1705,6 +1705,7 @@ let fileExplorerState = {
 const fileExplorerController = createFileExplorerController({
   browse: (path) => browseFiles(fetch, path),
   readFile: (path) => readFile(fetch, path),
+  saveFile: (options) => saveFile(fetch, options),
   update: updateFileExplorer,
   updateTitle: (title) => updateModal({ title }),
   getShowHidden: () => get(fileExplorer).showHidden,
@@ -1820,18 +1821,10 @@ async function uploadExplorerFiles() {
 
 const editExplorerFile = fileExplorerController.openEditor;
 
-async function saveExplorerFile() {
-  const path = fileExplorerState.editPath;
-  updateFileExplorer({ saving: true });
-  try {
-    const d = await saveFile(fetch, { path, content: get(fileExplorer).editContent });
-    toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
-  } catch (e) {
-    toast(e.message, "error");
-  } finally {
-    updateFileExplorer({ saving: false });
-  }
-}
+const saveExplorerFile = () => fileExplorerController.saveEditor(
+  fileExplorerState.editPath,
+  get(fileExplorer).editContent,
+);
 
 registerFileExplorerEvents(window, {
   browse: loadFileExplorer,

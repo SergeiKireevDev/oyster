@@ -1,4 +1,4 @@
-export function createFileExplorerController({ browse, readFile, update, updateTitle, getShowHidden, getWorkdir, getToken, setPath, setEditFile, toast }) {
+export function createFileExplorerController({ browse, readFile, saveFile, update, updateTitle, getShowHidden, getWorkdir, getToken, setPath, setEditFile, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });
     let data;
@@ -41,5 +41,17 @@ export function createFileExplorerController({ browse, readFile, update, updateT
     update({ mode: "edit", loading: false, token: getToken(), editPath: path, editContent: data.content, saving: false });
   }
 
-  return { load, openEditor };
+  async function saveEditor(path, content) {
+    update({ saving: true });
+    try {
+      const data = await saveFile({ path, content });
+      toast(`saved ${path.split("/").pop()} (${data.bytes} bytes)`);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      update({ saving: false });
+    }
+  }
+
+  return { load, openEditor, saveEditor };
 }
