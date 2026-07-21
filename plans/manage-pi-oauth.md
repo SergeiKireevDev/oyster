@@ -211,7 +211,7 @@ layout, and remount teardown.
   cannot use general settings or app-data repositories, flow state is
   host-owned/transient, and browser preference/history policies exclude OAuth
   fields, codes, URLs, tokens, prompts, and flow snapshots.
-- [ ] Add canary tests covering access/refresh tokens, authorization codes,
+- [x] Add canary tests covering access/refresh tokens, authorization codes,
   redirect URLs, device codes, and prompt responses. Assert credential tokens
   exist only in temporary Pi `auth.json`; transient user-facing values exist
   only in the active flow/browser state; and none appear in SQLite, logs, SSE
