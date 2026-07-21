@@ -85,7 +85,7 @@ UI and runner manager, while existing JSONL session links still open.
 
 ## 3. Add a Read-Only SQLite Session Catalog
 
-- [ ] Split `sessions.mjs` behind a backend-neutral catalog interface and move
+- [x] Split `sessions.mjs` behind a backend-neutral catalog interface and move
   the current parser into a JSONL catalog without changing its behavior or LRU
   guarantees. Add shared contract fixtures for summaries, headers, entries,
   active-branch messages, lookup, folders/workdirs, and search.

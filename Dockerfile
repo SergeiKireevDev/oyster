@@ -39,6 +39,7 @@ COPY server.mjs app.mjs sessions.mjs session-references.mjs runners.mjs tunnels.
      routines.mjs checkpoints.mjs ./
 COPY public ./public
 COPY http ./http
+COPY sessions ./sessions
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build
