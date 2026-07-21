@@ -76,7 +76,7 @@ operations.
 **Acceptance:** the root creates one dialog adapter and contains no dialog
 business logic or resolver state.
 
-## [ ] 7. Extract Resource Assembly
+## [x] 7. Extract Resource Assembly
 
 - [x] Create `features/resources/createResourceAssembly.js` to compose files, hublots, and routines with injected session and platform interfaces.
 - [x] Move shared scope and cross-refresh coordination behind the resource assembly.
