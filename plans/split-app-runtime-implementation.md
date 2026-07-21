@@ -334,7 +334,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
 
   - [x] Extract transport/EventSource lifecycle code from
     `appRuntimeImplementation.js` into `platform/` and delete the root block.
-  - [ ] Extract transcript controller assembly from the root into
+  - [x] Extract transcript controller assembly from the root into
     `features/transcript/` and delete the corresponding root construction.
   - [ ] Extract session controller assembly from the root into
     `features/sessions/` and delete the corresponding root construction.

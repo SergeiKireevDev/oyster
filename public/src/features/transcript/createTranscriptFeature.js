@@ -10,5 +10,6 @@ export function createTranscriptFeature({ createRuntime, dependencies, domAdapte
     dispatch: (...args) => runtime.handleStreamEvent?.(...args),
     getDomAdapter: () => adapter,
     teardown: () => { adapter = null; runtime.teardown?.(); },
+    runtime,
   };
 }
