@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(root, "public", "src");
 const html = readFileSync(join(root, "public", "index.html"), "utf8");
-const runtimeImplementation = readFileSync(join(src, "runtime", "appRuntimeImplementation.js"), "utf8");
+const runtimeImplementation = readFileSync(join(src, "runtime", "appCompositionRoot.js"), "utf8");
 const entry = readFileSync(join(src, "main.js"), "utf8");
 const appRuntime = readFileSync(join(src, "runtime", "appRuntime.js"), "utf8");
 const svelteFiles = [
@@ -45,7 +45,7 @@ test("application runtime composition root does not grow browser DOM coupling", 
   assert.equal(occurrences(".addEventListener"), 0);
 });
 
-test("application runtime implementation parses (node --check)", () => {
+test("application composition root parses (node --check)", () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-ui-test-"));
   const file = join(dir, "ui.js");
   writeFileSync(file, runtimeImplementation);
@@ -68,7 +68,7 @@ test("application runtime delegates integration debug hooks to a runtime adapter
   assert.doesNotMatch(runtimeImplementation, /Object\.assign\(window,/);
 });
 
-test("every DOM id referenced by the application runtime implementation exists in Svelte markup", () => {
+test("every DOM id referenced by the application composition root exists in Svelte markup", () => {
   const defined = new Set([...svelteMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
   const used = new Set([
     ...[...runtimeImplementation.matchAll(/\$\("([^"]+)"\)/g)].map((m) => m[1]),

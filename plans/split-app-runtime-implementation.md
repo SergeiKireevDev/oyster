@@ -371,7 +371,7 @@ verified goal loop can match it exactly.
 - [x] Extract session picker and search construction blocks into `features/sessions/` and replace them with one factory call.
 - [x] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.
 - [x] Move remaining RPC and event-dispatch state into `platform/` and replace root event handling with injected coordinator callbacks.
-- [ ] Delete `appRuntimeImplementation.js` make `appComposition.js` the direct composition factory and update runtime entrypoint imports.
+- [x] Delete `appRuntimeImplementation.js` make `appComposition.js` the direct composition factory and update runtime entrypoint imports.
 - [ ] Add a composition-root size and import-boundary test that enforces fewer than 400 lines and forbids feature-local mutable state.
 
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
