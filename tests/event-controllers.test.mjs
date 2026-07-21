@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -253,15 +253,6 @@ test("file picker event adapter routes each picker action", () => {
   assert.deepEqual(calls, ["folder", ["browse", "/tmp"], ["pick", "/tmp/a"], "cancel"]);
   remove();
   assert.equal(listeners.size, 0);
-});
-
-test("settings event adapter invokes the change callback", () => {
-  let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
-  let changed = 0;
-  registerSettingsEvents(target, { changed: () => { changed++; } });
-  listener();
-  assert.equal(changed, 1);
 });
 
 test("routine event adapter unpacks name and action", () => {

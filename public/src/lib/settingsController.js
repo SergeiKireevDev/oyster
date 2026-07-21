@@ -27,3 +27,16 @@ export function createSettingsController({ rpc, pickOption, refreshState, toast,
   }
   return { chooseModel, cycleThinking, openConfig };
 }
+
+/** Own the settings-changed custom-event lifecycle for the settings workflow. */
+export function createSettingsChangeController({ windowTarget, changed }) {
+  const onChanged = () => changed();
+  function attach() {
+    windowTarget.addEventListener("pi-settings-changed", onChanged);
+    return detach;
+  }
+  function detach() {
+    windowTarget.removeEventListener("pi-settings-changed", onChanged);
+  }
+  return { attach, detach };
+}

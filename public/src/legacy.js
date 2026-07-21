@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -53,7 +53,7 @@ import { createFileExplorerController } from "./lib/fileExplorerController.js";
 import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "./lib/routineController.js";
-import { createSettingsController } from "./lib/settingsController.js";
+import { createSettingsChangeController, createSettingsController } from "./lib/settingsController.js";
 import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "./lib/storeSnapshot.js";
@@ -1982,7 +1982,10 @@ function closeModal() {
   closeModalState();
 }
 
-registerSettingsEvents(window, { changed: () => reloadTranscript().catch(() => {}) });
+createSettingsChangeController({
+  windowTarget: window,
+  changed: () => reloadTranscript().catch(() => {}),
+}).attach();
 
 /** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {
