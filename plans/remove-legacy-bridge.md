@@ -130,7 +130,9 @@ and their dispatch exports.
 Move settings persistence and post-change reload/reconnect behavior into a
 settings action module with an injected transport/session-refresh callback.
 
-**Acceptance:** remove `setSettingsHandlers` and `reloadAfterSettingsChange`.
+✅ Removed `setSettingsHandlers` and `reloadAfterSettingsChange`; the Settings
+component emits a direct settings-change event that legacy transport handling
+uses to reconcile the transcript.
 
 ## 8. Delete the Bridge
 
