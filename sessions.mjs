@@ -367,6 +367,24 @@ export function sessionEntries(path) {
   return { sessionId: header?.id ?? null, leafId, entries: out };
 }
 
+/** Full message objects of the ACTIVE branch, in order — the same shape
+ *  pi's get_messages returns. Lets the UI render a transcript straight from
+ *  the (cached) file while the pi process is still spawning/resuming. */
+export function sessionMessages(path) {
+  const { header, entries, byId } = parseSessionFile(path);
+  let leafId = null;
+  for (const e of entries) if (e.id) leafId = e.id;
+  const chain = [];
+  for (let cur = leafId ? byId.get(leafId) : null; cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
+    chain.push(cur);
+  }
+  chain.reverse();
+  return {
+    sessionId: header?.id ?? null,
+    messages: chain.filter((e) => e.type === "message" && e.message).map((e) => e.message),
+  };
+}
+
 // ---------------------------------------------------------------- forking
 
 /** Deterministic session fork: copy the active-branch chain up to `leafId`

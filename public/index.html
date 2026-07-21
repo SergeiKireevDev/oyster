@@ -1883,15 +1883,54 @@ function setRunner(id) {
 
 /** attach this client to another runner and rebuild the UI from its stream */
 function switchToRunner(id) {
-  if (id === currentRunner) { refreshState(); return; }
+  if (id === currentRunner) { lastPreview = null; refreshState(); return; }
   setRunner(id);
   clearMessages();
+  renderPreviewNow(); // instant transcript from the session file, if fetched
   knownCommands = null; // commands can differ per project
   connect(); // reopen SSE on the new runner; onopen reloads the transcript
 }
 
+// ---- instant transcript preview -------------------------------------------
+// Opening a session waits on a pi process spawning AND resuming the session
+// before get_messages can answer (the server holds commands back during the
+// resume). The transcript itself lives in the session .jsonl though, which
+// the server parses from an mtime cache — so fetch it in parallel and render
+// it immediately; the canonical get_messages render replaces it when pi is
+// ready. `lastPreview` is cleared the moment canonical content lands, so a
+// slow preview response can never overwrite fresh state.
+
+let lastPreview = null; // { sessionPath, messages|null }
+
+function renderPreviewNow() {
+  if (!lastPreview?.messages?.length) return;
+  clearMessages();
+  for (const m of lastPreview.messages) renderFullMessage(m);
+  scrollToBottom(true);
+  // no checkpoint markers here: `state` still describes the previous session
+  // until get_state answers; the canonical reload adds them right after
+}
+
+async function fetchPreview(sessionPath) {
+  try {
+    const res = await fetch(`/session-messages?path=${encodeURIComponent(sessionPath)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (lastPreview?.sessionPath !== sessionPath) return; // superseded meanwhile
+    lastPreview.messages = data.messages;
+    renderPreviewNow();
+  } catch {}
+}
+
 /** get-or-spawn a runner for a session file / folder */
 async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
+  // kick off the file-based transcript preview in parallel — unless the
+  // target session is the one already on screen (don't clobber live state)
+  const cur = runnersNow.find((r) => r.id === currentRunner);
+  if (sessionPath && sessionPath !== cur?.sessionFile) {
+    lastPreview = { sessionPath, messages: null };
+    fetchPreview(sessionPath);
+  }
   const res = await fetch(`/open-session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -2212,9 +2251,14 @@ function handleEvent(msg) {
 }
 
 async function reloadTranscript() {
-  const s = await rpc({ type: "get_state" });
+  // one parallel round trip instead of two serial ones (both commands queue
+  // behind an in-flight session resume anyway, so order doesn't matter)
+  const [s, { messages }] = await Promise.all([
+    rpc({ type: "get_state" }),
+    rpc({ type: "get_messages" }),
+  ]);
   applyState(s);
-  const { messages } = await rpc({ type: "get_messages" });
+  lastPreview = null; // canonical content from pi supersedes the file preview
   clearMessages();
   for (const m of messages) renderFullMessage(m);
   scrollToBottom(true);

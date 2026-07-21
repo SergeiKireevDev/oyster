@@ -19,7 +19,7 @@ const {
   SESSIONS_ROOT, sessionDirFor, decodeFolderName, parseSessionFile,
   textOf, labelOf, summarizeSessionFile, listSessions, listSessionFolders,
   readSessionHeaderInfo, findSessionById, searchSessions, searchSessionFile,
-  sessionTree, sessionEntries, forkSessionAt,
+  sessionTree, sessionEntries, sessionMessages, forkSessionAt,
 } = await import("../sessions.mjs");
 
 after(() => rmSync(FAKE_HOME, { recursive: true, force: true }));
@@ -148,6 +148,15 @@ test("sessionEntries follows the ACTIVE branch (file tail up to root)", () => {
   // active branch is u1 -> a1 -> u3 -> a3 (u2/a2 belong to the abandoned one)
   assert.deepEqual(entries.map((e) => e.id), ["u1", "a1", "u3", "a3"]);
   assert.equal(entries[3].text, "done via other path");
+});
+
+test("sessionMessages returns full message objects of the active branch", () => {
+  const { sessionId, messages } = sessionMessages(MAIN);
+  assert.equal(sessionId, "sess-1");
+  // active branch only (u2/a2 abandoned), full objects incl. content blocks
+  assert.deepEqual(messages.map((m) => m.role), ["user", "assistant", "user", "assistant"]);
+  assert.equal(messages[0].content, "hello world");
+  assert.equal(messages[3].content[0].text, "done via other path");
 });
 
 test("sessionTree exposes both branches with parent links", () => {
