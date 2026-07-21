@@ -81,6 +81,23 @@ export async function openSession(fetchImpl, { sessionPath = null, dir = null } 
   return data.runner;
 }
 
+/** Orchestrate a runner open while retaining the durable-preview fast path. */
+export function createSessionOpenController({ open, getCurrentRunner, getRunners, preview, markEmpty, log = () => {}, now = () => performance.now() }) {
+  return async ({ sessionPath = null, dir = null } = {}) => {
+    const started = now();
+    log("openSessionRunner:start", { sessionPath, dir });
+    const current = getRunners().find((runner) => runner.id === getCurrentRunner());
+    if (sessionPath && sessionPath !== current?.sessionFile) preview.begin(sessionPath);
+    const runner = await open({ sessionPath, dir });
+    if (!sessionPath && runner?.id) markEmpty(runner.id);
+    log("openSessionRunner:done", {
+      runner: runner?.id, sessionPath: runner?.sessionFile, sessionId: runner?.sessionId,
+      ms: Math.round(now() - started),
+    });
+    return runner;
+  };
+}
+
 /** Stop a runner and normalize the endpoint's error payload. */
 export async function stopSessionRunner(fetchImpl, id) {
   const res = await fetchImpl(`/runners?id=${encodeURIComponent(id)}`, { method: "DELETE" });

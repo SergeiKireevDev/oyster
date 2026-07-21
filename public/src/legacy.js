@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -643,6 +643,7 @@ function switchToRunner(id) {
 // ready. `lastPreview` is cleared the moment canonical content lands, so a
 // slow preview response can never overwrite fresh state.
 
+let sessionOpenController;
 const previewController = createSessionPreviewController({
   fetchPreview: (sessionPath) => fetchSessionPreview(fetch, sessionPath),
   // No checkpoint markers here: state still describes the previous session;
@@ -650,21 +651,18 @@ const previewController = createSessionPreviewController({
   render: renderTranscript,
   log: lifecycleLog,
 });
+sessionOpenController = createSessionOpenController({
+  open: (options) => openSession(fetch, options),
+  getCurrentRunner: () => currentRunner,
+  getRunners: () => runnersNow,
+  preview: previewController,
+  markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
+  log: lifecycleLog,
+});
 
 /** get-or-spawn a runner for a session file / folder */
-async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
-  const started = performance.now();
-  lifecycleLog("openSessionRunner:start", { sessionPath, dir });
-  // kick off the file-based transcript preview in parallel — unless the
-  // target session is the one already on screen (don't clobber live state)
-  const cur = runnersNow.find((r) => r.id === currentRunner);
-  if (sessionPath && sessionPath !== cur?.sessionFile) {
-    previewController.begin(sessionPath);
-  }
-  const runner = await openSession(fetch, { sessionPath, dir });
-  if (!sessionPath && runner?.id) emptySessionRunners.add(runner.id);
-  lifecycleLog("openSessionRunner:done", { runner: runner?.id, sessionPath: runner?.sessionFile, sessionId: runner?.sessionId, ms: Math.round(performance.now() - started) });
-  return runner;
+async function openSessionRunner(options) {
+  return sessionOpenController(options);
 }
 
 /** hook: session picker (when open) re-renders its indicators */

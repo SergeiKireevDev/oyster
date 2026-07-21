@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -89,6 +89,22 @@ test("session actions open a runner with normalized server errors", async () => 
   assert.deepEqual(runner, { id: "r2" });
   assert.deepEqual(JSON.parse(calls[0][1].body), { sessionPath: "/a.jsonl", dir: "/work" });
   await assert.rejects(() => openSession(async () => ({ ok: false, status: 409, json: async () => ({ error: "busy" }) })), /busy/);
+});
+
+test("session open controller previews resumed sessions and marks new runners empty", async () => {
+  const previews = [];
+  const empty = [];
+  const open = createSessionOpenController({
+    open: async (options) => ({ id: options.sessionPath ? "resumed" : "new" }),
+    getCurrentRunner: () => "current",
+    getRunners: () => [{ id: "current", sessionFile: "/current.jsonl" }],
+    preview: { begin: (path) => previews.push(path) },
+    markEmpty: (id) => empty.push(id),
+  });
+  await open({ sessionPath: "/other.jsonl" });
+  await open({});
+  assert.deepEqual(previews, ["/other.jsonl"]);
+  assert.deepEqual(empty, ["new"]);
 });
 
 test("session actions stop runners with normalized errors", async () => {
