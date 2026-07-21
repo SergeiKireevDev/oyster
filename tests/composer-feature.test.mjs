@@ -10,4 +10,5 @@ test("composer component routes input, keydown, send, and abort through scoped a
   assert.match(source, /uiActions\.invoke\(COMPOSER_SEND_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(COMPOSER_ABORT_ACTION\)/);
   assert.doesNotMatch(source, /features\/composer\/composerActions\.js/);
+  assert.doesNotMatch(source, /usageInfo/);
 });

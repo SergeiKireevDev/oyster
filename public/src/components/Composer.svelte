@@ -33,6 +33,5 @@
   <div id="statusbar">
     <span id="stateInfo">{$headerState.stateInfo}</span>
     <span id="workdirInfo" title={$appHeader.workdirTitle}>{$appHeader.workdirText}</span>
-    <span id="usageInfo">{$headerState.usageInfo}</span>
   </div>
 </div>
