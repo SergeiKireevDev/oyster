@@ -626,10 +626,13 @@ export function init(state) {
       let st;
       try { st = statSync(target); } catch (e) { json(res, 404, { error: e.message }); return; }
       if (!st.isFile()) { json(res, 400, { error: "not a file" }); return; }
+      // header-safe filename: strip control chars (CR/LF would smuggle
+      // headers) and non-ASCII, neutralize quotes/backslashes
+      const safeName = basename(target).replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "'") || "download";
       res.writeHead(200, {
         "content-type": "application/octet-stream",
         "content-length": st.size,
-        "content-disposition": `attachment; filename="${target.split("/").pop().replace(/"/g, "'")}"`,
+        "content-disposition": `attachment; filename="${safeName}"`,
       });
       createReadStream(target).pipe(res);
     },

@@ -68,7 +68,9 @@ export function createRunnerManager(state) {
     runner.buffer.push(line);
     if (runner.buffer.length > RUNNER_BUFFER_MAX) runner.buffer.shift();
     for (const res of state.sseClients) {
-      if (res.runnerId === runner.id) res.write(`data: ${line}\n\n`);
+      if (res.runnerId !== runner.id) continue;
+      if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
+      res.write(`data: ${line}\n\n`);
     }
   }
 
