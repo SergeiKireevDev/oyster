@@ -163,8 +163,14 @@ export function createComposerAssembly(deps) {
     };
     const runIndex = (index) => { if (!state) return false; setActive(index); return runActive(); };
     async function updatePathCompletions(element, trigger, version) {
-      const request = pathCompletionRequest(trigger.text, commandDeps.getWorkdir());
       try {
+        let workdir = commandDeps.getWorkdir();
+        if (!workdir && trigger.text.startsWith("./")) {
+          const root = await commandDeps.browseFiles("");
+          if (version !== requestVersion || pathTrigger(element)?.text !== trigger.text) return;
+          workdir = root.workdir ?? root.path;
+        }
+        const request = pathCompletionRequest(trigger.text, workdir);
         const data = await commandDeps.browseFiles(request.browsePath);
         if (version !== requestVersion || pathTrigger(element)?.text !== trigger.text) return;
         const matches = pathCompletionItems(trigger, request, data);
