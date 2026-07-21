@@ -13,6 +13,8 @@
   let selectedProvider = "";
   let keyInput;
   let hasKey = false;
+  let oauthInputs = new Set();
+  let requestSignature = "";
 
   const sourceLabels = {
     stored_api_key: "stored API key",
@@ -32,10 +34,29 @@
     selectedProvider = eligibleProviders[0]?.provider ?? "";
   }
   $: selected = eligibleProviders.find((provider) => provider.provider === selectedProvider);
+  $: nextRequestSignature = `${$credentialsState.flow?.flowId ?? ""}:${$credentialsState.flow?.status ?? ""}:${($credentialsState.flow?.requests ?? []).map((request) => request.requestId).join(",")}`;
+  $: if (nextRequestSignature !== requestSignature) {
+    requestSignature = nextRequestSignature;
+    clearOAuthInputs();
+  }
 
   function clearKey() {
     if (keyInput) keyInput.value = "";
     hasKey = false;
+  }
+
+  function clearOAuthInputs() {
+    for (const input of oauthInputs) input.value = "";
+  }
+
+  function trackOAuthInput(node) {
+    oauthInputs.add(node);
+    return {
+      destroy() {
+        node.value = "";
+        oauthInputs.delete(node);
+      },
+    };
   }
 
   async function saveKey(event) {
@@ -78,17 +99,21 @@
   }
 
   async function cancelOAuth() {
+    clearOAuthInputs();
     await uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
   }
 
   function close() {
     clearKey();
+    clearOAuthInputs();
     uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
     closeModalState();
   }
 
   onDestroy(() => {
     clearKey();
+    clearOAuthInputs();
+    oauthInputs.clear();
     uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
   });
 </script>
@@ -134,6 +159,7 @@
                 <span>{request.message}</span>
                 <input
                   name="oauthResponse"
+                  use:trackOAuthInput
                   type={request.kind === "manual_code" ? "password" : "text"}
                   placeholder={request.placeholder ?? ""}
                   autocomplete="off"

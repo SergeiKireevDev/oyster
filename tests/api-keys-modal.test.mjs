@@ -40,6 +40,18 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   }
 });
 
+test("OAuth callback inputs stay component-local and clear on every lifecycle transition", () => {
+  assert.match(modal, /let oauthInputs = new Set\(\)/);
+  assert.match(modal, /use:trackOAuthInput/);
+  assert.match(modal, /destroy\(\) \{[\s\S]*?node\.value = ""[\s\S]*?oauthInputs\.delete/);
+  assert.match(modal, /nextRequestSignature !== requestSignature[\s\S]*?clearOAuthInputs\(\)/);
+  assert.match(modal, /finally \{[\s\S]*?input\.value = ""/);
+  assert.match(modal, /function cancelOAuth\(\) \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?CREDENTIALS_CANCEL_OAUTH_ACTION/);
+  assert.match(modal, /function close\(\) \{[\s\S]*?clearOAuthInputs\(\)/);
+  assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?oauthInputs\.clear\(\)/);
+  assert.doesNotMatch(modal, /bind:value=\{[^}]*oauth|localStorage|sessionStorage/);
+});
+
 test("API Keys modal form keeps submitted keys local and clears them on every exit", () => {
   assert.match(modal, /type="password"/);
   assert.match(modal, /autocomplete="off"/);

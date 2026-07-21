@@ -193,7 +193,7 @@ responses other than the intentional transient callback snapshot, or events.
   progress, selection controls, text/manual redirect input, cancellation, expiry,
   and terminal restart status. For callback-server providers, explain the remote
   loopback limitation and allow the redirect URL/code to be pasted.
-- [ ] Treat callback input as ephemeral secret-bearing form state: do not use a
+- [x] Treat callback input as ephemeral secret-bearing form state: do not use a
   global store for values; disable autocomplete/spelling correction where
   applicable; clear values immediately after response success/failure,
   cancellation, modal close, flow transition, and component teardown. Do not
