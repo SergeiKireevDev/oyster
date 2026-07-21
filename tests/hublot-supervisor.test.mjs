@@ -48,7 +48,7 @@ test("supervisor reconciles every desired-open hublot against persisted identiti
   });
   const result = await supervisor.reconcile();
 
-  assert.deepEqual(result, { skipped: false, checked: 2, recovering: 1, restarted: 0, recoveredTunnels: 0 });
+  assert.deepEqual(result, { skipped: false, checked: 2, recovering: 1, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0 });
   assert.equal(store.repositories.hublots.find(healthy.id).status, "open");
   assert.equal(store.repositories.hublots.find(healthy.id).public_url, "https://healthy.test");
   assert.equal(store.repositories.hublots.findProcess("healthy-tunnel").observed_at, "observed");
@@ -87,6 +87,56 @@ test("startup reconciliation includes every persisted desired-open state", async
     assert.equal(store.repositories.hublots.find(row.id).public_url, null);
   }
   assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
+});
+
+test("automatic recovery uses persisted bounded backoff and stops crash loops", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4221, brief: "managed service" });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://crashing.test" });
+  let time = Date.parse("2026-01-01T00:00:00.000Z");
+  let restartAttempts = 0;
+  const options = {
+    appStore: store,
+    recordTransition: (id, status, details) => recordHublotTransition(state, id, status, details),
+    recoverTunnel: async () => ({ recovered: false, answering: false }),
+    restartService: async () => { restartAttempts++; throw new Error(`crash-${restartAttempts}`); },
+    verifyIdentity: () => false,
+    clock: () => time,
+    now: () => new Date(time).toISOString(),
+    restartBaseDelayMs: 100,
+    restartMaxDelayMs: 150,
+    restartLimit: 3,
+    logger: { error() {} },
+  };
+  let supervisor = createHublotSupervisor(options);
+
+  await supervisor.reconcile();
+  assert.equal(restartAttempts, 1);
+  assert.equal(store.repositories.hublots.find(hublot.id).restart_count, 1);
+  assert.equal(store.repositories.hublots.find(hublot.id).next_restart_at, "2026-01-01T00:00:00.100Z");
+
+  supervisor = createHublotSupervisor(options); // restart state must survive supervisor replacement
+  const deferred = await supervisor.reconcile();
+  assert.equal(deferred.deferred, 1);
+  assert.equal(restartAttempts, 1);
+
+  time += 100;
+  await supervisor.reconcile();
+  assert.equal(restartAttempts, 2);
+  assert.equal(store.repositories.hublots.find(hublot.id).restart_count, 2);
+  assert.equal(store.repositories.hublots.find(hublot.id).next_restart_at, "2026-01-01T00:00:00.250Z");
+
+  time += 150;
+  const limited = await supervisor.reconcile();
+  assert.equal(restartAttempts, 3);
+  assert.equal(limited.crashLooped, 1);
+  assert.equal(store.repositories.hublots.find(hublot.id).status, "interrupted");
+  assert.equal(store.repositories.hublots.find(hublot.id).restart_count, 3);
+  assert.equal(store.repositories.hublots.find(hublot.id).next_restart_at, null);
+  assert.match(store.repositories.hublots.find(hublot.id).last_error, /automatic restart disabled after 3 consecutive failures/);
+
+  await supervisor.reconcile();
+  assert.equal(restartAttempts, 3, "crash-looped hublots must not spawn again");
 });
 
 test("periodic supervisor starts and stops one unrefed timer", async (t) => {

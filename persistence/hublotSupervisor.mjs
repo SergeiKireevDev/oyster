@@ -8,6 +8,10 @@ export function createHublotSupervisor({
   restartService = null,
   verifyIdentity = verifyPersistedProcessIdentity,
   intervalMs = 5_000,
+  restartBaseDelayMs = 5_000,
+  restartMaxDelayMs = 5 * 60_000,
+  restartLimit = 5,
+  clock = () => Date.now(),
   setIntervalFn = setInterval,
   clearIntervalFn = clearInterval,
   now = () => new Date().toISOString(),
@@ -19,12 +23,33 @@ export function createHublotSupervisor({
   let reconciling = false;
 
   async function reconcile({ includeOpening = false } = {}) {
-    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0 });
+    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0 });
     reconciling = true;
     let checked = 0;
     let recovering = 0;
     let restarted = 0;
     let recoveredTunnels = 0;
+    let deferred = 0;
+    let crashLooped = 0;
+    const resetRestartState = (id) => appStore.repositories.hublots.update(id, { restart_count: 0, next_restart_at: null });
+    const recordRestartFailure = (id, error) => {
+      const current = appStore.repositories.hublots.find(id);
+      const count = current.restart_count + 1;
+      if (current.status !== "failed") recordTransition(id, "failed", { publicUrl: null, lastError: error.message });
+      if (count >= restartLimit) {
+        const message = `automatic restart disabled after ${count} consecutive failures: ${error.message}`;
+        recordTransition(id, "interrupted", { publicUrl: null, lastError: message });
+        appStore.repositories.hublots.update(id, { restart_count: count, next_restart_at: null });
+        crashLooped++;
+        return;
+      }
+      const delay = Math.min(restartMaxDelayMs, restartBaseDelayMs * (2 ** (count - 1)));
+      appStore.repositories.hublots.update(id, {
+        restart_count: count,
+        next_restart_at: new Date(clock() + delay).toISOString(),
+        last_error: error.message,
+      });
+    };
     try {
       const desired = appStore.repositories.hublots.list()
         .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
@@ -48,6 +73,18 @@ export function createHublotSupervisor({
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
         const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy);
         if (criticalIdentityMissing) {
+          if (hublot.restart_count >= restartLimit) {
+            const message = `automatic restart disabled after ${hublot.restart_count} consecutive failures`;
+            if (hublot.status !== "interrupted" || !hublot.last_error?.startsWith(message)) {
+              recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: message });
+            }
+            crashLooped++;
+            continue;
+          }
+          if (hublot.next_restart_at && Date.parse(hublot.next_restart_at) > clock()) {
+            deferred++;
+            continue;
+          }
           const serviceDead = hublot.service_kind === "agent_managed" && !serviceHealthy;
           const missing = serviceDead ? "service" : "tunnel";
           const error = `persisted ${missing} process identity is not live`;
@@ -58,19 +95,22 @@ export function createHublotSupervisor({
           if (!tunnelHealthy && recoverTunnel) {
             try {
               const recovery = await recoverTunnel(hublot);
-              if (recovery?.recovered) { recoveredTunnels++; continue; }
+              if (recovery?.recovered) { resetRestartState(hublot.id); recoveredTunnels++; continue; }
             } catch (error) {
+              recordRestartFailure(hublot.id, error);
               logger.error(`[pi-ui] hublot ${hublot.id} tunnel recovery failed: ${error.message}`);
               continue;
             }
           }
           if (serviceDead && restartService) {
-            try { await restartService(hublot); restarted++; }
-            catch (error) { logger.error(`[pi-ui] hublot ${hublot.id} service restart failed: ${error.message}`); }
+            try { await restartService(hublot); resetRestartState(hublot.id); restarted++; }
+            catch (error) { recordRestartFailure(hublot.id, error); logger.error(`[pi-ui] hublot ${hublot.id} service restart failed: ${error.message}`); }
           }
+        } else if (hublot.restart_count || hublot.next_restart_at) {
+          resetRestartState(hublot.id);
         }
       }
-      return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels });
+      return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels, deferred, crashLooped });
     } finally {
       reconciling = false;
     }
