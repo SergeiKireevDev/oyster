@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, fetchDurableTranscript } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, loadDurableCanonicalTranscript } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -33,7 +33,6 @@ import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
-import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -1206,13 +1205,13 @@ async function reloadTranscript() {
   // available. Existing sessions can have a slow transcript replay/resume;
   // the header/composer/session-scoped sidebars should still converge without
   // waiting for the full message list to render.
-  const { messages } = await loadCanonicalTranscript({
-    getState: () => rpc({ type: "get_state" }),
-    getMessages: () => rpc({ type: "get_messages" }),
+  const { messages } = await loadDurableCanonicalTranscript({
+    rpc,
     applyState,
+    fetchImpl: fetch,
+    sessionFileQuery,
     onState: (s) => lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null }),
     onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
-    getDurableMessages: (s) => fetchDurableTranscript(fetch, s.sessionFile, sessionFileQuery),
     onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
   lastPreview = null; // canonical content from pi supersedes the file preview

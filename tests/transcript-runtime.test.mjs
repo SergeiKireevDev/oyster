@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, fetchDurableTranscript } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, fetchDurableTranscript, loadDurableCanonicalTranscript } from "../public/src/runtime/transcriptRuntime.js";
+
+test("canonical reload delegates state and durable transcript dependencies", async () => {
+  const applied = [];
+  const result = await loadDurableCanonicalTranscript({
+    rpc: async ({ type }) => type === "get_state" ? { sessionFile: "/a.jsonl" } : { messages: [{ role: "user", content: "fallback" }] },
+    applyState: (state) => applied.push(state),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [{ role: "user", content: "durable" }] }) }),
+    sessionFileQuery: (file) => `file=${file}`,
+  });
+  assert.deepEqual(applied, [{ sessionFile: "/a.jsonl" }]);
+  assert.deepEqual(result.messages, [{ role: "user", content: "durable" }]);
+});
 
 test("durable transcript fetch uses the session-file query", async () => {
   let url;
