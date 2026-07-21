@@ -147,7 +147,7 @@ moving their durable process state out of `state`.
 - [x] Move rollback route handling into the checkpoint factory. Preserve dirty
   worktree checkpointing, fork/session creation, runner opening, and broadcast
   behavior with rollback API tests.
-- [ ] Remove checkpoint route bodies from `app.mjs` and verify the factory
+- [x] Remove checkpoint route bodies from `app.mjs` and verify the factory
   receives all git/session/runner operations explicitly through its context.
 
 **Acceptance:** checkpoint HTTP orchestration is isolated without changing git
