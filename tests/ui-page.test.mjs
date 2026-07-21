@@ -33,6 +33,10 @@ test("legacy UI module parses (node --check)", () => {
   execFileSync(process.execPath, ["--check", file]);
 });
 
+test("legacy controller injections use the Svelte toast store action", () => {
+  assert.doesNotMatch(js, /\n\s*toast,\n/);
+});
+
 test("composer prompts delegate busy steering behavior to prompt actions", () => {
   assert.match(js, /import \{ promptCommand \} from "\.\/lib\/promptActions\.js";/);
   assert.match(js, /const promptRpcCommand = \(text\) => promptCommand\(text, sessionUi\.busy\);/);

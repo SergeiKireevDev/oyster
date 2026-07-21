@@ -23,6 +23,35 @@ export function clearAuthToken({ storage, documentTarget }) {
   documentTarget.cookie = "pi_ui_token=; path=/; max-age=0";
 }
 
+/**
+ * Confirm an RPC unauthorized response before discarding a saved token. This
+ * avoids logging the user out for transient proxy or network failures.
+ */
+export function createUnauthorizedHandler({ fetchImpl = fetch, storage, documentTarget, requireToken, toast }) {
+  let verifying = false;
+  return async () => {
+    if (verifying) return;
+    verifying = true;
+    try {
+      const res = await fetchImpl("/rpc", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "get_state" }),
+      });
+      if (res.status === 401) {
+        clearAuthToken({ storage, documentTarget });
+        requireToken();
+      } else {
+        toast("temporary auth hiccup — retry", "warning");
+      }
+    } catch {
+      toast("network error — retry", "warning");
+    } finally {
+      verifying = false;
+    }
+  };
+}
+
 export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }) {
   let lastProbeAt = 0;
   return async () => {

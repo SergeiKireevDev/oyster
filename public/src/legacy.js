@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { clearAuthToken, createAuthProbe, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
+import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
@@ -122,29 +122,12 @@ const probeTokenValidity = createAuthProbe({
 
 // Only drop the stored token if the server itself rejects it on a direct
 // probe — a stripped header or transient proxy error must not log the user out.
-let verifyingToken = false;
-async function handleUnauthorized() {
-  if (verifyingToken) return;
-  verifyingToken = true;
-  try {
-    const res = await fetch(`/rpc`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "get_state" }),
-    });
-    if (res.status === 401) {
-      localStorage.removeItem("pi_ui_token");
-      document.cookie = "pi_ui_token=; path=/; max-age=0";
-      requireToken();
-    } else {
-      addToast("temporary auth hiccup — retry", "warning");
-    }
-  } catch {
-    addToast("network error — retry", "warning");
-  } finally {
-    verifyingToken = false;
-  }
-}
+const handleUnauthorized = createUnauthorizedHandler({
+  storage: localStorage,
+  documentTarget: document,
+  requireToken,
+  toast: addToast,
+});
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
@@ -452,7 +435,7 @@ const checkpointTreeController = createCheckpointTreeController({
   isOpen: () => $("treebar").classList.contains("open"),
   openSession: openSessionRunner,
   switchRunner: switchToRunner,
-  toast,
+  toast: addToast,
 });
 const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
 const loadCheckpointTree = () => checkpointTreeController.load();
@@ -468,7 +451,7 @@ const checkpointController = createCheckpointController({
   refreshMarkers: refreshCheckpointMarkers,
   refreshTree: refreshTreeIfOpen,
   switchRunner: switchToRunner,
-  toast,
+  toast: addToast,
 });
 function handleCheckpointClick(event) { return checkpointController.freeze(event); }
 function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
@@ -1432,7 +1415,7 @@ const filePickerController = createFilePickerController({
   resetState: ({ path, onPick, onCancel, returnToHublot }) => {
     filePickerState = { curDir: path, showHidden: true, onPick, onCancel, returnToHublot };
   },
-  toast,
+  toast: addToast,
 });
 const loadFilePicker = filePickerController.load;
 
@@ -1488,7 +1471,7 @@ const folderBrowserController = createFolderBrowserController({
   openSessionRunner,
   setWorkdir,
   switchToRunner,
-  toast,
+  toast: addToast,
 });
 const loadFolderBrowser = folderBrowserController.load;
 
@@ -1571,7 +1554,7 @@ const fileExplorerController = createFileExplorerController({
   setPath: (path) => { fileExplorerState.curPath = path; },
   setEditFile: (path, content) => { fileExplorerState.editPath = path; fileExplorerState.editContent = content; },
   resetState: (path) => { fileExplorerState = { curPath: path, showHidden: true, editPath: "", editContent: "" }; },
-  toast,
+  toast: addToast,
 });
 const loadFileExplorer = fileExplorerController.load;
 
@@ -1636,7 +1619,7 @@ const hublotController = createHublotController({
   setDescription: (desc) => { tunnelForm.desc = desc; updateHublotManager({ desc }); },
   setCreating: (creating) => updateHublotManager({ creating }),
   close: closeModal,
-  toast,
+  toast: addToast,
   listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
   listSidebarHublots: () => listHublots(fetch, tunnelVisible),
   isAuthenticated: () => Boolean(token),
@@ -1728,7 +1711,7 @@ const routineController = createRoutineController({
   runRoutine: (options) => runRoutine(fetch, options),
   getSessionId: () => state?.sessionId ?? null,
   refresh: loadRoutines,
-  toast,
+  toast: addToast,
 });
 registerRoutineEvents(window, { run: routineController.run });
 
@@ -1776,7 +1759,7 @@ const sessionPickerFolderController = createSessionPickerFolderController({
   update: updateSessionPicker,
   getRunners: () => runnersNow,
   setSessions: (sessions) => { sessionPickerSessions = sessions; },
-  toast,
+  toast: addToast,
 });
 const refreshSessionPickerCurrentFolder = sessionPickerFolderController.refreshCurrent;
 const loadSessionPickerFolder = sessionPickerFolderController.loadFolder;
@@ -1786,7 +1769,7 @@ const sessionPickerController = createSessionPickerController({
   getRunners: () => runnersNow,
   markStopped: markRunnerStopped,
   setRunners: updateSessionPickerRunners,
-  toast,
+  toast: addToast,
 });
 
 const sessionPickerDeleteController = createSessionPickerDeleteController({
@@ -1798,7 +1781,7 @@ const sessionPickerDeleteController = createSessionPickerDeleteController({
   },
   getSessions: () => sessionPickerSessions,
   setSessions: (sessions) => { sessionPickerSessions = sessions; updateSessionPicker({ sessions }); },
-  toast,
+  toast: addToast,
   refreshHublots: loadHublots,
   refreshRoutines: loadRoutines,
   confirm,
@@ -1891,7 +1874,7 @@ async function showSessionPicker() {
   }
 }
 
-const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast, getState: () => state });
+const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast: addToast, getState: () => state });
 const chooseModel = settingsController.chooseModel;
 const cycleThinking = settingsController.cycleThinking;
 const openConfigPicker = settingsController.openConfig;
@@ -1909,7 +1892,7 @@ const searchHitSessionController = createSearchHitSessionController({
   focus: focusSearchHit,
   setAfterTranscript: (callback) => { afterTranscript = callback; },
   switchRunner: switchToRunner,
-  toast,
+  toast: addToast,
 });
 const openSearchHit = searchHitSessionController;
 
@@ -1978,7 +1961,7 @@ const copyPermalink = createPermalinkController({
   getOrigin: () => location.origin,
   copy: (url) => copyText(url),
   prompt: promptText,
-  toast,
+  toast: addToast,
 });
 
 const copyText = copyTextToClipboard;
@@ -2046,7 +2029,7 @@ function promptEditor(title, placeholder, prefill) {
 
 const handleExtensionUI = createExtensionUiController({
   respond: (id, payload) => rpc({ type: "extension_ui_response", id, ...payload }, { wait: false }).catch(() => {}),
-  toast,
+  toast: addToast,
   confirm: confirmDialog,
   select: pickOption,
   input: promptText,
@@ -2092,7 +2075,7 @@ adjacentRunnerController = createAdjacentRunnerController({
   getCurrentRunner: () => currentRunner,
   getWorkdir: () => sessionUi.workdir,
   switchRunner: switchToRunner,
-  toast,
+  toast: addToast,
 });
 
 function attachSwipeListeners() {
