@@ -39,7 +39,7 @@ Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 - [x] Deferred debug-hook registration until runtime start.
 - [x] Deferred authenticated-fetch registration until runtime start.
 - [x] Moved startup/teardown lifecycle composition into a runtime module
-  consumed by this root (`f2c6b6f`).
+  consumed by this root (`f2c6b6f`; verification recorded in `445e007`).
 - [x] Kept feature logic out of the initial bootstrap extraction.
 
 **Acceptance:** application startup behavior is unchanged, with a small
