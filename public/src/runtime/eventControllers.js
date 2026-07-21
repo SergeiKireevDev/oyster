@@ -8,6 +8,10 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   refreshRoutines();
 }
 
+export function createReplayDoneEventController(dependencies) {
+  return (message) => handleReplayDone(message, dependencies);
+}
+
 export function createRoutineStreamEventController({ isReplaying, update, toast }) {
   return (message) => {
     if (isReplaying() || !message.routine) return false;

@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { createExtensionUiEventController, createHublotEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController, handleReplayDone } from "./runtime/eventControllers.js";
+import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
@@ -573,6 +573,16 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
 });
 
 const extensionUiEvent = createExtensionUiEventController({ handleRequest: (message) => handleExtensionUI(message) });
+const replayDoneEvent = createReplayDoneEventController({
+  markReplayDone: () => { replayDoneSeen = true; },
+  isReplaying: () => replaying,
+  setReplaying,
+  setRunner,
+  setRunners: setRunnersNow,
+  setWorkdir,
+  refreshHublots: () => loadHublots(),
+  refreshRoutines: loadRoutines,
+});
 const runnerPingEvent = createRunnerPingEventController({
   currentRunners: () => runnersNow,
   setRunners: setRunnersNow,
@@ -629,16 +639,7 @@ function handleEvent(msg) {
 
     case "replay_done":
       // The canonical transcript render, not this event, opens the live gate.
-      handleReplayDone(msg, {
-        markReplayDone: () => { replayDoneSeen = true; },
-        isReplaying: () => replaying,
-        setReplaying,
-        setRunner,
-        setRunners: setRunnersNow,
-        setWorkdir,
-        refreshHublots: loadHublots,
-        refreshRoutines: loadRoutines,
-      });
+      replayDoneEvent(msg);
       return;
 
     case "runners_update":

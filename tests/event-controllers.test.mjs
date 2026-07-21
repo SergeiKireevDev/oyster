@@ -5,7 +5,7 @@ import { createComposerEventController } from "../public/src/lib/composerControl
 import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
-import { createExtensionUiEventController, createHublotEventController, createRunnerPingEventController } from "../public/src/runtime/eventControllers.js";
+import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController } from "../public/src/runtime/eventControllers.js";
 
 test("extension UI event controller delegates stream requests", () => {
   const requests = [];
@@ -13,6 +13,22 @@ test("extension UI event controller delegates stream requests", () => {
   const message = { type: "extension_ui_request", id: "request-1" };
   assert.equal(controller(message), true);
   assert.deepEqual(requests, [message]);
+});
+
+test("replay done event controller refreshes runtime state", () => {
+  const calls = [];
+  const controller = createReplayDoneEventController({
+    markReplayDone: () => calls.push("done"),
+    isReplaying: () => true,
+    setReplaying: (...args) => calls.push(["replaying", ...args]),
+    setRunner: (runner) => calls.push(["runner", runner]),
+    setRunners: (runners) => calls.push(["runners", runners]),
+    setWorkdir: (workdir) => calls.push(["workdir", workdir]),
+    refreshHublots: () => calls.push("hublots"),
+    refreshRoutines: () => calls.push("routines"),
+  });
+  controller({ type: "replay_done", runner: "r1", runners: ["r1"], workdir: "/workspace" });
+  assert.deepEqual(calls, ["done", ["replaying", true, "canonical"], ["runner", "r1"], ["runners", ["r1"]], ["workdir", "/workspace"], "hublots", "routines"]);
 });
 
 test("runner ping event controller updates changed runner liveness", () => {

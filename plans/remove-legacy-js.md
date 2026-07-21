@@ -117,7 +117,9 @@ Classify each remaining `document`/`window` listener:
   hublots, routines, and runner lists.
 - [x] Moved the `extension_ui_request` SSE branch into
   `createExtensionUiEventController()`.
-- [ ] Move the `ping` runner-liveness SSE projection into a focused event
+- [x] Moved the `ping` runner-liveness SSE projection into
+  `createRunnerPingEventController()`.
+- [ ] Move the `replay_done` state-refresh SSE projection into a focused event
   controller.
 - [ ] Classify and move the remaining feature-specific document/window/custom
   event listeners from `legacy.js`.
