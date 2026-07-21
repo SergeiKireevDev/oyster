@@ -49,10 +49,8 @@ import { createCheckpointFeature } from "../features/checkpoints/checkpointFeatu
 import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "../lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "../lib/commandController.js";
-import { promptCommand } from "../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../lib/textInsertion.js";
-import { createComposerHistoryController } from "../lib/composerHistoryController.js";
-import { configureComposerActions } from "../features/composer/composerActions.js";
+import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController } from "../lib/hublotController.js";
 import { configureHublotActions } from "../features/hublots/hublotActions.js";
@@ -134,9 +132,23 @@ const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handle
 
 // ------------------------------------------------------------ markdown (small, escape-first)
 
-// Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
-let composerHistory;
-const rememberPrompt = (text) => composerHistory.remember(text);
+const composerAssembly = createComposerAssembly({
+  findElement: $,
+  setTextValue: setComposerTextValue,
+  setBusy: (value) => setBusy(value),
+  getBusy: () => getBusy(),
+  composerReadyForSend: () => composerReadyForSend(),
+  confirmKnownCommand: (text) => commandGuard.confirmKnownCommand(text),
+  addUserMessage: (message) => transcriptOperations.addUserMessage(message),
+  addLocalEcho: (text) => transcriptOperations.addLocalEcho(text),
+  removeLocalEcho: (text) => transcriptOperations.removeLocalEcho(text),
+  rpc: (...args) => rpc(...args),
+  schedulePostSendSync: (text) => schedulePostSendFileTranscriptSync(text),
+  toast: addToast,
+  isCommandPaletteOpen: () => cmdPalette.classList.contains("open"),
+});
+const composerOperations = composerAssembly.operations;
+const rememberPrompt = composerOperations.rememberPrompt;
 
 const transcriptAssembly = createTranscriptAssembly({
   findElement: $,
@@ -149,7 +161,7 @@ const transcriptAssembly = createTranscriptAssembly({
   rollbackCheckpoint: (checkpoint, target) => rollbackToCheckpoint(checkpoint, target),
   placeCheckpoint: () => placeCheckpointBtn(),
   rememberPrompt,
-  clearComposerHistory: () => composerHistory.clear(),
+  clearComposerHistory: composerOperations.clearHistory,
   updateUsage: (message) => updateUsage(message),
   clearCheckpointState: () => {
     setCheckpointTarget(null);
@@ -388,51 +400,7 @@ function refreshState() {
 
 // ------------------------------------------------------------ composer
 
-const input = $("input");
-
-function composerInputChanged() {
-  input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 200) + "px";
-  setComposerTextValue(input.value);
-  setBusy(getBusy()); // refresh busy state UI
-  composerHistory.reset(); // typing exits history navigation
-}
-
-function setComposerText(text) {
-  input.value = text;
-  setComposerTextValue(text);
-  input.setSelectionRange(text.length, text.length);
-  input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 200) + "px";
-}
-
-composerHistory = createComposerHistoryController({
-  getValue: () => input.value,
-  getSelection: () => ({ start: input.selectionStart, end: input.selectionEnd }),
-  setValue: setComposerText,
-});
-
-// ↑/↓ recall previous prompts, shell-style: ↑ only when the caret is on the
-// first line, ↓ only on the last line, so arrows still move within multiline
-// drafts. Typing resets navigation; ↓ past the newest entry restores the draft.
-const navigateHistory = (direction) => composerHistory.navigate(direction);
-
-function composerKeydown(e) {
-  if (e.isComposing) return;
-
-  // when the palette is open the global capture handler already consumed
-  // Enter/Tab/Arrows/Escape — bail so we don't double-handle
-  if (cmdPalette.classList.contains("open")) return;
-
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    send();
-    return;
-  }
-  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
-    if (navigateHistory(e.key === "ArrowUp" ? -1 : 1)) e.preventDefault();
-  }
-}
+const input = composerOperations.input;
 
 const extensionUiAdapters = createExtensionUiAdapters({
   openOptionPicker,
@@ -446,44 +414,8 @@ const extensionUiAdapters = createExtensionUiAdapters({
 // the pi process or folder changes
 let commandGuard = createCommandGuard({ rpc, confirm: extensionUiAdapters.confirm });
 
-const promptRpcCommand = (text) => promptCommand(text, getBusy());
-
-async function send() {
-  const text = input.value.trim();
-  if (!text || !composerReadyForSend()) return;
-  // guard against typos like "/goal": an unknown slash command is not
-  // expanded by pi — it goes to the model as plain text, which can kick off
-  // a long unwanted agent run
-  if (!await commandGuard.confirmKnownCommand(text)) return; // text stays in the composer
-  input.value = "";
-  setComposerTextValue("");
-  input.style.height = "auto";
-  setBusy(getBusy()); // hide the Steer button again
-  addUserMessage({ role: "user", content: text });
-  transcriptOperations.addLocalEcho(text);
-  try {
-    await rpc(promptRpcCommand(text), { wait: false });
-    // Cloudflare/EventSource can occasionally stall live SSE delivery. Poll the
-    // canonical session file with ordinary fetch as a bounded fallback so a
-    // fast first response appears without a manual refresh.
-    schedulePostSendFileTranscriptSync(text);
-  } catch (e) {
-    transcriptOperations.removeLocalEcho(text);
-    addToast(`send failed: ${e.message}`, "error");
-  }
-}
-
-async function abort() {
-  try { await rpc({ type: "abort" }, { wait: false }); addToast("aborted"); }
-  catch (e) { addToast(`abort failed: ${e.message}`, "error"); }
-}
-
-const detachComposerActions = configureComposerActions({
-  inputChanged: composerInputChanged,
-  keydown: composerKeydown,
-  send,
-  abort,
-});
+const promptRpcCommand = composerOperations.promptRpcCommand;
+const detachComposerActions = () => composerAssembly.teardown();
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"

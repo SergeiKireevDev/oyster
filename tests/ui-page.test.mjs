@@ -15,6 +15,7 @@ const html = readFileSync(join(root, "public", "index.html"), "utf8");
 const runtimeImplementation = readFileSync(join(src, "runtime", "appCompositionRoot.js"), "utf8");
 const entry = readFileSync(join(src, "main.js"), "utf8");
 const appRuntime = readFileSync(join(src, "runtime", "appRuntime.js"), "utf8");
+const composerAssembly = readFileSync(join(src, "features", "composer", "createComposerAssembly.js"), "utf8");
 const svelteFiles = [
   join(src, "App.svelte"),
   ...readdirSync(join(src, "components")).filter((f) => f.endsWith(".svelte")).map((f) => join(src, "components", f)),
@@ -57,9 +58,10 @@ test("application runtime controller injections use the Svelte toast store actio
 });
 
 test("composer prompts delegate busy steering behavior to prompt actions", () => {
-  assert.match(runtimeImplementation, /import \{ promptCommand \} from "\.\.\/lib\/promptActions\.js";/);
-  assert.match(runtimeImplementation, /const promptRpcCommand = \(text\) => promptCommand\(text, getBusy\(\)\);/);
-  assert.match(runtimeImplementation, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
+  assert.match(runtimeImplementation, /import \{ createComposerAssembly \} from "\.\.\/features\/composer\/createComposerAssembly\.js";/);
+  assert.match(runtimeImplementation, /const promptRpcCommand = composerOperations\.promptRpcCommand;/);
+  assert.match(composerAssembly, /promptCommand\(text, deps\.getBusy\(\)\)/);
+  assert.match(composerAssembly, /await deps\.rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });
 
 test("application runtime delegates integration debug hooks to a runtime adapter", () => {
