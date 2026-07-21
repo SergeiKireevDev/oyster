@@ -66,7 +66,7 @@ test("credential service rejects an SDK without pi credential exports", async ()
     await assert.rejects(
       createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } }).load(),
       (error) => error.code === "credential_service_unavailable"
-        && error.message.includes("does not export AuthStorage and ModelRegistry")
+        && error.message.includes("does not expose supported credential APIs")
         && error.message.includes(join(item.packageRoot, "dist", "index.js")),
     );
   } finally {
@@ -153,9 +153,8 @@ test("credential operations preserve unrelated credentials, provider env, concur
     // provider IDs are rejected.
     await service.setApiKey("alpha", "alpha-new-canary");
 
-    const sdk = await import(pathToFileURL(resolveConfiguredPiSdk(LOCAL_PI).entry).href);
-    const concurrentStorage = sdk.AuthStorage.create(authPath);
-    concurrentStorage.set("refreshed-oauth", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
+    const concurrentService = createPiCredentialService({ config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: agentDir } });
+    await concurrentService.setApiKey("anthropic", "fresh-concurrent-key");
     await service.setApiKey("openai", "added-canary");
 
     let stored = JSON.parse(readFileSync(authPath, "utf8"));
@@ -163,7 +162,7 @@ test("credential operations preserve unrelated credentials, provider env, concur
     assert.deepEqual(stored.oauth, oauth);
     assert.equal(stored.untouched.key, "untouched-canary");
     assert.equal(stored.openai.key, "added-canary");
-    assert.equal(stored["refreshed-oauth"].refresh, "fresh-refresh");
+    assert.equal(stored.anthropic.key, "fresh-concurrent-key");
     assert.equal(statSync(authPath).mode & 0o777, 0o600);
 
     await assert.rejects(service.setApiKey("oauth", "must-not-write"), { code: "oauth_conflict" });
@@ -324,8 +323,10 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
 test("OAuth adapter delegates provider discovery, login, persistence, refresh compatibility, and logout to Pi SDK storage", () => {
   const source = readFileSync(new URL("../server/pi-credential-service.mjs", import.meta.url), "utf8");
   assert.match(source, /authStorage\.getOAuthProviders\(\)/);
-  assert.match(source, /await authStorage\.login\(providerId, safeCallbacks\)/);
-  assert.match(source, /authStorage\.logout\(providerId\)/);
+  assert.match(source, /await adapter\.authStorage\.login\(providerId, safeCallbacks\)/);
+  assert.match(source, /await adapter\.modelRuntime\.login\(providerId, "oauth", runtimeOAuthInteraction\(safeCallbacks\)\)/);
+  assert.match(source, /adapter\.authStorage\.logout\(providerId\)/);
+  assert.match(source, /await adapter\.modelRuntime\.logout\(providerId\)/);
   assert.doesNotMatch(source, /fetch\(|token_endpoint|code_verifier|client_secret|grant_type/);
   const coordinator = readFileSync(new URL("../server/pi-oauth-flow-service.mjs", import.meta.url), "utf8");
   assert.match(coordinator, /credentialService\.loginOAuth\(id, callbacksFor\(flow\)/);

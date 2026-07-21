@@ -19,7 +19,12 @@ async function copyStableServer(root) {
 }
 
 function serverEnv(root) {
-  return { ...process.env, HOME: root, PI_UI_DB_PATH: join(root, "oyster.sqlite") };
+  return {
+    ...process.env,
+    HOME: root,
+    PI_BIN: process.execPath,
+    PI_UI_DB_PATH: join(root, "oyster.sqlite"),
+  };
 }
 
 async function availablePort() {

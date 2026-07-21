@@ -39,11 +39,11 @@ jobs:
       - name: Build bundled pi
         run: npm run build:pi
 
-      - name: Run test suite
-        run: npm test
-
       - name: Build frontend
         run: npm run build
+
+      - name: Run test suite
+        run: npm test
 
       - name: Build documentation
         run: npm run docs:build

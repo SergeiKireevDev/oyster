@@ -4,7 +4,7 @@ description: Safely manage pi API keys and OAuth credentials from the browser.
 tags: credentials, oauth, security
 ---
 
-Open **Credentials…** from the application menu. The modal reads and writes credentials through the `AuthStorage` exported by the configured pi installation.
+Open **Credentials…** from the application menu. The modal reads and writes credentials through pi-owned `AuthStorage` and `ModelRuntime` primitives loaded from the configured pi installation.
 
 ## Credential ownership
 

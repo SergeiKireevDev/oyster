@@ -101,16 +101,21 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return provider.trim();
   }
 
-  function reloadOrFail(authStorage) {
-    // Initialization errors are intentionally drained only immediately before a
-    // fresh reload: malformed storage must fail closed instead of serving the
-    // last in-memory snapshot retained by AuthStorage.
+  function reloadOrFail(authStorage, authPath, modern = false) {
+    // Modern AuthStorage deliberately retains its last valid snapshot when a
+    // reload fails. Validate the file first so Oyster still fails closed.
+    if (modern && existsSync(authPath)) {
+      try {
+        const value = JSON.parse(readFileSync(authPath, "utf8"));
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid credential root");
+      } catch {
+        throw capabilityError("configured pi auth storage could not be loaded");
+      }
+    }
     authStorage.drainErrors?.();
     authStorage.reload();
     const errors = authStorage.drainErrors?.() ?? [];
-    if (errors.length) {
-      throw capabilityError("configured pi auth storage could not be loaded");
-    }
+    if (errors.length) throw capabilityError("configured pi auth storage could not be loaded");
   }
 
   function safeCredential(provider, credential) {
@@ -138,6 +143,16 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       const name = typeof item?.name === "string" ? item.name.trim() : "";
       if (!id || !name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
       providers.set(id, Object.freeze({ id, name }));
+    }
+    return providers;
+  }
+
+  function runtimeOAuthProviders(modelRuntime) {
+    const providers = new Map();
+    for (const provider of modelRuntime.getProviders()) {
+      const id = typeof provider?.id === "string" ? provider.id.trim() : "";
+      const name = typeof provider?.auth?.oauth?.name === "string" ? provider.auth.oauth.name.trim() : "";
+      if (id && name) providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
   }
@@ -189,6 +204,27 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     });
   }
 
+  function runtimeOAuthInteraction(callbacks) {
+    return Object.freeze({
+      ...(callbacks.signal ? { signal: callbacks.signal } : {}),
+      notify(event) {
+        if (event?.type === "auth_url") callbacks.onAuth({ url: event.url, instructions: event.instructions });
+        else if (event?.type === "device_code") callbacks.onDeviceCode({
+          userCode: event.userCode,
+          verificationUri: event.verificationUri,
+          intervalSeconds: event.intervalSeconds,
+          expiresInSeconds: event.expiresInSeconds,
+        });
+        else if (event?.type === "progress" || event?.type === "info") callbacks.onProgress?.(event.message);
+      },
+      prompt(prompt) {
+        if (prompt?.type === "select") return callbacks.onSelect(prompt);
+        if (prompt?.type === "manual_code" && callbacks.onManualCodeInput) return callbacks.onManualCodeInput(prompt);
+        return callbacks.onPrompt(prompt);
+      },
+    });
+  }
+
   let adapterPromise;
   async function load() {
     if (!adapterPromise) {
@@ -200,17 +236,31 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         } catch (cause) {
           throw capabilityError(`configured pi SDK could not be imported for credential support: ${location.entry}`, cause);
         }
-        if (typeof sdk?.AuthStorage?.create !== "function" || typeof sdk?.ModelRegistry?.create !== "function") {
-          throw capabilityError(`configured pi SDK does not export AuthStorage and ModelRegistry: ${location.entry}`);
-        }
 
         const authPath = join(agentDir, "auth.json");
         const modelsPath = join(agentDir, "models.json");
         try {
-          const authStorage = sdk.AuthStorage.create(authPath);
-          const modelRegistry = sdk.ModelRegistry.create(authStorage, modelsPath);
-          return Object.freeze({ authStorage, modelRegistry, authPath, modelsPath, sdkEntry: location.entry });
+          if (typeof sdk?.AuthStorage?.create === "function" && typeof sdk?.ModelRegistry?.create === "function") {
+            const authStorage = sdk.AuthStorage.create(authPath);
+            const modelRegistry = sdk.ModelRegistry.create(authStorage, modelsPath);
+            return Object.freeze({ kind: "legacy", authStorage, modelRegistry, authPath, modelsPath, sdkEntry: location.entry });
+          }
+          if (typeof sdk?.ModelRuntime?.create === "function" && typeof sdk?.readStoredCredential === "function") {
+            const authEntry = resolve(dirname(location.entry), "core", "auth-storage.js");
+            if (!authEntry.startsWith(`${location.packageRoot}/`) || !existsSync(authEntry)) {
+              throw capabilityError(`configured pi SDK does not expose its credential store: ${location.entry}`);
+            }
+            const authSdk = await importSdk(pathToFileURL(authEntry).href);
+            if (typeof authSdk?.AuthStorage?.create !== "function") {
+              throw capabilityError(`configured pi SDK does not expose its credential store: ${authEntry}`);
+            }
+            const authStorage = authSdk.AuthStorage.create(authPath);
+            const modelRuntime = await sdk.ModelRuntime.create({ credentials: authStorage, modelsPath, allowModelNetwork: false });
+            return Object.freeze({ kind: "runtime", authStorage, modelRuntime, sdk, authPath, modelsPath, sdkEntry: location.entry });
+          }
+          throw capabilityError(`configured pi SDK does not expose supported credential APIs: ${location.entry}`);
         } catch (cause) {
+          if (cause?.code === CAPABILITY_ERROR) throw cause;
           throw capabilityError(`configured pi credential storage could not be initialized in PI_AGENT_DIR: ${agentDir}`, cause);
         }
       })();
@@ -218,31 +268,71 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return adapterPromise;
   }
 
+  async function prepare(adapter) {
+    reloadOrFail(adapter.authStorage, adapter.authPath, adapter.kind === "runtime");
+  }
+
+  async function credentialEntries(adapter) {
+    if (adapter.kind === "runtime") return adapter.authStorage.list();
+    return adapter.authStorage.list().map((providerId) => ({ providerId, type: adapter.authStorage.get(providerId)?.type }));
+  }
+
+  function storedCredential(adapter, provider) {
+    return adapter.kind === "runtime"
+      ? adapter.sdk.readStoredCredential(provider, adapter.authPath)
+      : adapter.authStorage.get(provider);
+  }
+
+  function registeredProviders(adapter) {
+    return adapter.kind === "runtime"
+      ? new Set(adapter.modelRuntime.getProviders().map((provider) => provider.id))
+      : refreshRegistry(adapter.modelRegistry);
+  }
+
+  function providerMetadata(adapter) {
+    if (adapter.kind === "runtime") {
+      return {
+        registered: registeredProviders(adapter),
+        oauthProviders: runtimeOAuthProviders(adapter.modelRuntime),
+        status: (provider) => adapter.modelRuntime.getProviderAuthStatus(provider),
+        displayName: (provider) => adapter.modelRuntime.getProvider(provider)?.name ?? provider,
+      };
+    }
+    return {
+      registered: registeredProviders(adapter),
+      oauthProviders: safeOAuthProviders(adapter.authStorage),
+      status: (provider) => adapter.modelRegistry.getProviderAuthStatus(provider),
+      displayName: (provider) => adapter.modelRegistry.getProviderDisplayName(provider),
+    };
+  }
+
   async function listStoredCredentials() {
-    const { authStorage } = await load();
-    reloadOrFail(authStorage);
-    return authStorage.list()
-      .sort((left, right) => left.localeCompare(right))
-      .map((provider) => safeCredential(provider, authStorage.get(provider)));
+    const adapter = await load();
+    await prepare(adapter);
+    const entries = await credentialEntries(adapter);
+    return entries
+      .sort((left, right) => left.providerId.localeCompare(right.providerId))
+      .map(({ providerId, type }) => safeCredential(providerId, { type }));
   }
 
   async function listProviders() {
-    const { authStorage, modelRegistry } = await load();
-    reloadOrFail(authStorage);
-    const registered = refreshRegistry(modelRegistry);
-    const oauthProviders = safeOAuthProviders(authStorage);
-    const providers = new Set([...registered, ...authStorage.list(), ...oauthProviders.keys()]);
+    const adapter = await load();
+    await prepare(adapter);
+    const entries = await credentialEntries(adapter);
+    const credentials = new Map(entries.map(({ providerId, type }) => [providerId, type]));
+    const metadata = providerMetadata(adapter);
+    const providers = new Set([...metadata.registered, ...credentials.keys(), ...metadata.oauthProviders.keys()]);
     return [...providers]
       .sort((left, right) => left.localeCompare(right))
       .map((provider) => {
-        const credential = authStorage.get(provider);
-        const credentialType = credential ? safeCredential(provider, credential).credentialType : null;
-        const status = modelRegistry.getProviderAuthStatus(provider);
-        const oauth = oauthProviders.get(provider);
+        const type = credentials.get(provider);
+        const credentialType = type ? safeCredential(provider, { type }).credentialType : null;
+        const status = metadata.status(provider);
+        const oauth = metadata.oauthProviders.get(provider);
         return Object.freeze({
           provider,
-          displayName: modelRegistry.getProviderDisplayName(provider),
-          registered: registered.has(provider),
+          displayName: metadata.displayName(provider),
+          registered: metadata.registered.has(provider),
           oauthCapable: Boolean(oauth),
           oauthDisplayName: oauth?.name ?? null,
           credentialType,
@@ -256,20 +346,22 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const providerId = normalizedProvider(provider);
     if (typeof key !== "string" || !key) throw credentialError("invalid_key", "API key is required");
     return withProviderReservation(providerId, async () => {
-      const { authStorage, modelRegistry } = await load();
-      reloadOrFail(authStorage);
-      const current = authStorage.get(providerId);
+      const adapter = await load();
+      await prepare(adapter);
+      const current = storedCredential(adapter, providerId);
       if (current?.type === "oauth") {
         throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
       }
       if (current && current.type !== "api_key") {
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
-      if (!current && !refreshRegistry(modelRegistry).has(providerId)) {
+      if (!current && !registeredProviders(adapter).has(providerId)) {
         throw credentialError("unknown_provider", `provider ${providerId} is not registered by the configured pi installation`);
       }
       const env = current?.env ? { ...current.env } : undefined;
-      authStorage.set(providerId, { type: "api_key", key, ...(env ? { env } : {}) });
+      const credential = { type: "api_key", key, ...(env ? { env } : {}) };
+      if (adapter.kind === "runtime") await adapter.authStorage.modify(providerId, async () => credential);
+      else adapter.authStorage.set(providerId, credential);
       return Object.freeze({ provider: providerId, credentialType: "api_key" });
     });
   }
@@ -277,9 +369,9 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
   async function removeApiKey(provider) {
     const providerId = normalizedProvider(provider);
     return withProviderReservation(providerId, async () => {
-      const { authStorage } = await load();
-      reloadOrFail(authStorage);
-      const current = authStorage.get(providerId);
+      const adapter = await load();
+      await prepare(adapter);
+      const current = storedCredential(adapter, providerId);
       if (current?.type === "oauth") {
         throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
       }
@@ -287,7 +379,8 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       if (current.type !== "api_key") {
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
-      authStorage.remove(providerId);
+      if (adapter.kind === "runtime") await adapter.authStorage.delete(providerId);
+      else adapter.authStorage.remove(providerId);
       return Object.freeze({ provider: providerId, removed: true });
     });
   }
@@ -296,19 +389,26 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const providerId = normalizedProvider(provider);
     const safeCallbacks = normalizedOAuthCallbacks(callbacks);
     return withProviderReservation(providerId, async () => {
-      const { authStorage } = await load();
-      reloadOrFail(authStorage);
-      if (!safeOAuthProviders(authStorage).has(providerId)) {
+      const adapter = await load();
+      await prepare(adapter);
+      const oauthProviders = adapter.kind === "runtime"
+        ? runtimeOAuthProviders(adapter.modelRuntime)
+        : safeOAuthProviders(adapter.authStorage);
+      if (!oauthProviders.has(providerId)) {
         throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth in the configured pi installation`);
       }
-      const current = authStorage.get(providerId);
+      const current = storedCredential(adapter, providerId);
       if (current && current.type !== "oauth" && current.type !== "api_key") {
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
       if (current && replace !== true) {
         throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
       }
-      await authStorage.login(providerId, safeCallbacks);
+      if (adapter.kind === "runtime") {
+        await adapter.modelRuntime.login(providerId, "oauth", runtimeOAuthInteraction(safeCallbacks));
+      } else {
+        await adapter.authStorage.login(providerId, safeCallbacks);
+      }
       return Object.freeze({ provider: providerId, credentialType: "oauth" });
     });
   }
@@ -316,9 +416,9 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
   async function logoutOAuth(provider) {
     const providerId = normalizedProvider(provider);
     return withProviderReservation(providerId, async () => {
-      const { authStorage } = await load();
-      reloadOrFail(authStorage);
-      const current = authStorage.get(providerId);
+      const adapter = await load();
+      await prepare(adapter);
+      const current = storedCredential(adapter, providerId);
       if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored OAuth credential`);
       if (current.type !== "oauth") {
         if (current.type === "api_key") {
@@ -326,7 +426,8 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         }
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
-      authStorage.logout(providerId);
+      if (adapter.kind === "runtime") await adapter.modelRuntime.logout(providerId);
+      else adapter.authStorage.logout(providerId);
       return Object.freeze({ provider: providerId, removed: true });
     });
   }
