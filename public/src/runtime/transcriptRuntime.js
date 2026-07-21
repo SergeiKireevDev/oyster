@@ -194,6 +194,16 @@ export function createTranscriptEntryFocusController({ annotate, findDirect, fet
 
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 /** Run transcript post-render side effects through injected UI adapters. */
+/** Apply the transcript consistency work required when an agent run completes. */
+export function createAgentCompletionController({ setBusy, clearAssistant, refreshState, scheduleSync }) {
+  return () => {
+    setBusy(false);
+    clearAssistant();
+    refreshState();
+    scheduleSync();
+  };
+}
+
 export function createTranscriptAfterRenderController({ annotate, refreshCheckpointMarkers, refreshTree, takeAfterTranscript }) {
   return async () => {
     annotate().catch(() => {});

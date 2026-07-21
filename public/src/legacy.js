@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAgentCompletionController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -639,14 +639,7 @@ function handleEvent(msg) {
       return;
 
     case "agent_end":
-      setBusy(false);
-      assistantStream.clear();
-      refreshState();
-      // Belt-and-suspenders consistency check: if any message delta/end was
-      // missed by EventSource or by the reconnect replay gate, the canonical
-      // transcript still has the final assistant turn. Sync shortly after the
-      // run finishes so the user does not need to refresh to see the answer.
-      schedulePostAgentTranscriptSync();
+      agentCompletion();
       return;
 
     case "message_start":
@@ -814,6 +807,12 @@ const transcriptSyncScheduler = createTranscriptSyncScheduler({
 const postAgentTranscriptSyncController = createDebouncedTranscriptSyncController({ schedule: transcriptSyncScheduler.schedule });
 const syncTranscriptSoon = transcriptSyncScheduler.schedule;
 const schedulePostAgentTranscriptSync = () => postAgentTranscriptSyncController.schedule();
+const agentCompletion = createAgentCompletionController({
+  setBusy,
+  clearAssistant: () => assistantStream.clear(),
+  refreshState,
+  scheduleSync: schedulePostAgentTranscriptSync,
+});
 const postSendTranscriptSyncController = createPostSendTranscriptSyncController({
   getRunner: () => currentRunner,
   getSessionFile: () => state?.sessionFile,
