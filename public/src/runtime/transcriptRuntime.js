@@ -193,6 +193,16 @@ export function createTranscriptEntryFocusController({ annotate, findDirect, fet
 }
 
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
+/** Run transcript post-render side effects through injected UI adapters. */
+export function createTranscriptAfterRenderController({ annotate, refreshCheckpointMarkers, refreshTree, takeAfterTranscript }) {
+  return async () => {
+    annotate().catch(() => {});
+    refreshCheckpointMarkers().catch(() => {});
+    refreshTree();
+    takeAfterTranscript()?.();
+  };
+}
+
 export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {
     const started = now();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptAfterRenderController, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -130,6 +130,12 @@ test("reload reconciliation releases buffered events only after rendering begins
   });
   assert.equal(complete, true);
   assert.deepEqual(calls, [["render", [1]], ["replay", false], ["flush", ["event"]], ["after"]]);
+});
+
+test("transcript post-render controller refreshes markers and deferred focus", async () => {
+  const calls = []; const after = createTranscriptAfterRenderController({ annotate: async () => calls.push("annotate"), refreshCheckpointMarkers: async () => calls.push("markers"), refreshTree: () => calls.push("tree"), takeAfterTranscript: () => () => calls.push("focus") });
+  await after();
+  assert.deepEqual(calls, ["annotate", "markers", "tree", "focus"]);
 });
 
 test("canonical transcript controller clears previews after durable reload", async () => {

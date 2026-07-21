@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -774,6 +774,17 @@ function handleEvent(msg) {
   }
 }
 
+const afterTranscriptRender = createTranscriptAfterRenderController({
+  annotate: () => annotateTranscriptEntries(),
+  refreshCheckpointMarkers,
+  refreshTree: refreshTreeIfOpen,
+  takeAfterTranscript: () => {
+    const callback = afterTranscript;
+    afterTranscript = null;
+    return callback;
+  },
+});
+
 const reloadTranscript = createCanonicalTranscriptController({
   rpc,
   applyState,
@@ -789,14 +800,7 @@ const reloadTranscript = createCanonicalTranscriptController({
     return buffered;
   },
   flushBufferedEvents: flushReplayBufferedEvents,
-  afterRender: async () => {
-    annotateTranscriptEntries().catch(() => {});
-    refreshCheckpointMarkers().catch(() => {});
-    refreshTreeIfOpen();
-    const callback = afterTranscript;
-    afterTranscript = null;
-    callback?.();
-  },
+  afterRender: afterTranscriptRender,
 });
 
 const transcriptSyncScheduler = createTranscriptSyncScheduler({
