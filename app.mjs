@@ -81,6 +81,7 @@ import { fileURLToPath } from "node:url";
 import { createRequestContext } from "./http/createRequestContext.mjs";
 import { createRouteTable } from "./http/createRouteTable.mjs";
 import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
+import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -135,7 +136,7 @@ export function init(state) {
 
   const requestContext = createRequestContext(state);
   const {
-    json, readRawBody, readJsonBody, mimeType,
+    json, readRawBody, readJsonBody,
     clientIp, checkAuth, resolveSafePath: confinePath,
   } = requestContext;
 
@@ -176,10 +177,6 @@ export function init(state) {
 
   // ---------------------------------------------------------------- http helpers
 
-  const PUBLIC_DIR = join(config.DIRNAME, "public");
-  const DIST_DIR = join(config.DIRNAME, "dist");
-  const SERVE_DIR = existsSync(join(DIST_DIR, "index.html")) ? DIST_DIR : PUBLIC_DIR;
-  const INDEX_PATH = join(SERVE_DIR, "index.html");
 
   // ---------------------------------------------------------------- misc app logic
 
@@ -200,6 +197,7 @@ export function init(state) {
   // ---------------------------------------------------------------- routes (no auth)
 
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
+  const staticRoutes = createStaticRoutes({ config, requestContext });
 
   // ---------------------------------------------------------------- routes (auth required)
 
@@ -838,51 +836,17 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ open: openRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch
-
-  // permalink routes are client-side: /s/<sessionId> and /s/<sessionId>/m/<entryId>
-  // both serve the UI; the client parses the path and opens the session
-  function isAppRoute(pathname) {
-    return pathname === "/" || pathname === "/index.html" ||
-      /^\/s\/[\w.-]+(\/m\/[\w.-]+)?$/.test(pathname);
-  }
-
-  function serveApp(res) {
-    if (!existsSync(INDEX_PATH)) {
-      res.writeHead(500, { "content-type": "text/plain" });
-      res.end("public/index.html missing");
-      return;
-    }
-    res.writeHead(200, {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-cache",
-    });
-    res.end(readFileSync(INDEX_PATH));
-  }
-
-  function servePublicAsset(pathname, res) {
-    let decoded;
-    try { decoded = decodeURIComponent(pathname); } catch { return false; }
-    const rel = decoded.replace(/^\/+/, "");
-    const target = resolve(SERVE_DIR, rel);
-    if (!(target === SERVE_DIR || target.startsWith(SERVE_DIR + "/")) || !existsSync(target) || statSync(target).isDirectory()) return false;
-    res.writeHead(200, {
-      "content-type": mimeType(target),
-      "cache-control": "no-cache",
-    });
-    createReadStream(target).pipe(res);
-    return true;
-  }
 
   async function handleRequest(req, res) {
     const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
     const key = `${req.method} ${url.pathname}`;
 
-    if (req.method === "GET" && isAppRoute(url.pathname)) return serveApp(res);
-    if (req.method === "GET" && servePublicAsset(url.pathname, res)) return;
+    const staticFallback = routeTable.get(`${req.method} /*`);
+    if (staticFallback?.(req, res, url)) return;
 
     const open = openRouteKeys.has(key) ? routeTable.get(key) : undefined;
     if (open) return open(req, res, url);
