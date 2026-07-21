@@ -2521,8 +2521,8 @@ setSessionPickerHandlers({
     openSearchHit(sessionPath, hit);
   },
   loadFolder: loadSessionPickerFolder,
-  cancel: () => { closeModal(); sessionPickerResolve?.(null); },
 });
+window.addEventListener("pi-session-picker-cancel", () => { closeModal(); sessionPickerResolve?.(null); });
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's

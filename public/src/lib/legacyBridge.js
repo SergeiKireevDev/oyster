@@ -44,7 +44,3 @@ export function loadPickedSessionFolder(folder) {
   return sessionPickerHandlers.loadFolder?.(folder);
 }
 
-export function cancelSessionPicker() {
-  return sessionPickerHandlers.cancel?.();
-}
-

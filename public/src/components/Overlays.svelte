@@ -16,7 +16,6 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { cancelSessionPicker } from "../lib/legacyBridge.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -105,7 +104,7 @@
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-back-hublots"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-back-hublots")); }}>← Hublots</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "sessionPicker"}
-        <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelSessionPicker(); }}>Cancel</span>
+        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-session-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-session-picker-cancel")); }}>Cancel</span>
       {/if}
     </div>
   {/if}
