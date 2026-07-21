@@ -1,0 +1,15 @@
+{
+  "name": "pi-lot-ui-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright end-to-end tests that drive the pi-lot-ui web UI against a docker container on port 4000",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

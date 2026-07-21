@@ -13,3 +13,9 @@ foobar.py
 Dockerfile
 .dockerignore
 pi-ui.service
+
+# e2e: keep the build context small (mock-llm/ is copied explicitly in Dockerfile)
+tests/e2e/node_modules
+tests/e2e/playwright-report
+tests/e2e/test-results
+tests/e2e/.e2e-state.json

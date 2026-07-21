@@ -1,0 +1,77 @@
+// Feature 1 — Start a session, create a hublot for a simple button interface.
+//
+// Drives the real UI: open a fresh session, open the Hublots panel, describe a
+// button page in the "New hublot" form, and submit. The server opens a real
+// cloudflared tunnel and hands a background pi agent the brief; the agent
+// builds the page and serves it on the allocated port. We assert the hublot
+// shows up bound to the session, and that the served page actually contains
+// the button.
+
+import { test, expect } from "@playwright/test";
+import { login, api, dexec, waitFor, currentSessionId } from "./lib/harness.js";
+
+test("start a session and open a hublot serving a button interface", async ({ page }) => {
+  const marker = `e2e-btn-${Date.now()}`;
+  const brief =
+    `Serve a minimal static web page on the local port. Its HTML body must contain ` +
+    `exactly one <button> element with the visible text "Click me" and a title tag "${marker}". ` +
+    `No frameworks — a plain HTML response is fine. Keep the server running detached.`;
+
+  await login(page);
+
+  // the hublot binds to the session the UI currently shows; capture its id
+  // (don't open a new session here — the id only settles after the new
+  // runner's get_state lands, which would race this read)
+  const sessionId = await waitFor(() => currentSessionId(page), {
+    timeout: 30000, label: "a session id",
+  });
+
+  // open the Hublots modal via the sidebar "+" and fill the New hublot form
+  await page.click("#hublotAdd");
+  await expect(page.locator("#overlay")).toHaveClass(/open/);
+  const desc = page.locator('#mBody textarea');
+  await desc.fill(brief);
+  await page.getByRole("button", { name: "Open hublot" }).click();
+
+  // the tunnel record should appear, bound to this session, once cloudflared
+  // reports its public URL (usually seconds). The server truncates the label
+  // to 200 chars, so match on the unique marker (which is near the start of
+  // the brief) rather than the full text.
+  const tunnel = await waitFor(
+    async () => {
+      const { json } = await api("GET", "/tunnels");
+      return (json.tunnels ?? []).find((t) => (t.label ?? "").includes(marker));
+    },
+    { timeout: 60000, interval: 1000, label: "hublot tunnel to register" }
+  );
+  expect(tunnel.sessionId).toEqual(sessionId);
+  expect(tunnel.url).toMatch(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+  expect(tunnel.port).toBeGreaterThan(0);
+
+  // it should also render as a live block in the sidebar (non-builtin: has an iframe)
+  await expect(page.locator("#hublotList .hublot-block .preview iframe")).toHaveCount(1, {
+    timeout: 30000,
+  });
+
+  // the background agent builds the page and serves it — poll the local port
+  // (inside the container) until the button markup is actually being served
+  const served = await waitFor(
+    () => {
+      const html = dexec(`curl -s --max-time 3 http://127.0.0.1:${tunnel.port}/ || true`, { allowFail: true });
+      return /<button/i.test(html) && /click me/i.test(html) ? html : null;
+    },
+    { timeout: 4 * 60 * 1000, interval: 3000, label: "the hublot to serve the button page" }
+  );
+  expect(served).toMatch(/<button/i);
+  expect(served).toMatch(/click me/i);
+
+  // close the hublot from the UI (✕ on the block) and confirm it goes away
+  await page.locator("#hublotList .hublot-block .cap .x").first().click();
+  await waitFor(
+    async () => {
+      const { json } = await api("GET", "/tunnels");
+      return !(json.tunnels ?? []).some((t) => t.id === tunnel.id);
+    },
+    { timeout: 30000, interval: 1000, label: "hublot to close" }
+  );
+});

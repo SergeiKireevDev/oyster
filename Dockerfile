@@ -1,7 +1,15 @@
 # pi-lot-ui — end-to-end test image
 #
 # Build:  docker build -t pi-lot-ui .
-# Run:    docker run -d -p 4000:4000 -e ANTHROPIC_API_KEY=sk-... --name pi-lot-ui pi-lot-ui
+# Run:    docker run -d -p 4000:4000 \
+#           -e PI_UI_TOKEN=<token> \
+#           -v ~/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro \
+#           -v ~/.pi/agent/models.json:/root/.pi/agent/models.json:ro \
+#           --name pi-lot-ui pi-lot-ui
+#
+#         The auth.json/models.json mounts give the pi agent its LLM
+#         credentials — without them the chat gets no answers (model shows
+#         as "unknown"). Alternatively pass -e ANTHROPIC_API_KEY=sk-...
 # Token:  docker logs pi-lot-ui | grep "auth token"
 # Open:   http://localhost:4000/#token=<TOKEN>
 
@@ -33,6 +41,15 @@ COPY extensions ./extensions
 RUN mkdir -p /root/.pi/agent/extensions \
     && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
 
+# Bundle the deterministic mock LLM (OpenAI-compatible) used by the e2e suite,
+# plus the entrypoint that activates it when E2E_MOCK_LLM=1. This keeps the
+# whole test stack (UI + agent + model) self-contained in the image — no
+# credential mounts, no external model calls. Production behavior is unchanged
+# unless E2E_MOCK_LLM=1 is set.
+COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Run the test suite at build time — the build fails if the repo is broken
 RUN npm test
 
@@ -46,4 +63,5 @@ ENV PORT=4000 \
 
 EXPOSE 4000
 
-CMD ["node", "server.mjs"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD []
