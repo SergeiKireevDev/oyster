@@ -1,13 +1,14 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
-    editExploredFile,
     saveExploredFile,
   } from "../lib/legacyBridge.js";
   import { updateFileExplorer } from "../stores/fileExplorer.js";
   import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
+
+  const editExploredFile = (path) => window.dispatchEvent(new CustomEvent("pi-file-explorer-edit", { detail: path }));
 
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
 </script>
