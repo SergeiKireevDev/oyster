@@ -1145,6 +1145,15 @@
   .api-key-remove { padding: 4px 7px; border: 1px solid rgba(255,100,100,.25); border-radius: 6px; background: transparent; color: var(--red); font-size: 10px; }
   .api-key-remove:hover:not(:disabled) { background: rgba(255,80,80,.08); }
   .api-key-removal-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  .oauth-flow { display: grid; gap: 10px; margin: 12px 0; padding: 12px; border: 1px solid var(--accent-dim); border-radius: 8px; background: var(--panel); }
+  .oauth-flow h3, .oauth-flow p { margin: 0; }
+  .oauth-auth-link { width: fit-content; text-decoration: none; }
+  .oauth-device-code, .oauth-request { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+  .oauth-device-code label, .oauth-request label { display: grid; flex: 1 1 220px; gap: 5px; color: var(--muted); font-size: 11px; }
+  .oauth-device-code input, .oauth-request input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
+  .oauth-request { min-width: 0; margin: 0; padding: 0; border: 0; }
+  .oauth-request legend { width: 100%; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+  .oauth-cancel { width: fit-content; }
   .api-key-form { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1.3fr) auto; align-items: end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .api-key-form label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
   .api-key-form select, .api-key-form input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }

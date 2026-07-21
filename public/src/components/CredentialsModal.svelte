@@ -4,7 +4,8 @@
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
-    CREDENTIALS_CLOSE_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION,
+    CREDENTIALS_CANCEL_OAUTH_ACTION, CREDENTIALS_CLOSE_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION,
+    CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_RESPOND_OAUTH_ACTION,
     CREDENTIALS_SAVE_API_KEY_ACTION, CREDENTIALS_START_OAUTH_ACTION,
   } from "../runtime/uiActionNames.js";
 
@@ -61,6 +62,25 @@
     await uiActions.invoke(CREDENTIALS_LOGOUT_OAUTH_ACTION, provider);
   }
 
+  async function respondOAuth(event, request) {
+    event.preventDefault();
+    const input = event.currentTarget.elements.namedItem("oauthResponse");
+    const value = input?.value ?? "";
+    try {
+      await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
+    } finally {
+      if (input) input.value = "";
+    }
+  }
+
+  async function chooseOAuth(request, value) {
+    await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
+  }
+
+  async function cancelOAuth() {
+    await uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
+  }
+
   function close() {
     clearKey();
     uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
@@ -77,6 +97,71 @@
   <p class="api-keys-intro">Credentials are stored by pi in its own auth file. Existing key values are never displayed.</p>
   {#if $credentialsState.setupMode}
     <p class="api-keys-state" role="status">Choose a provider below to authenticate pi.</p>
+  {/if}
+
+  {#if $credentialsState.flow}
+    <section class="oauth-flow" aria-label="OAuth sign-in" aria-live="polite">
+      {#if $credentialsState.flow.status === "pending"}
+        <h3>Sign in to {$credentialsState.flow.provider}</h3>
+        {#if $credentialsState.flow.authorization}
+          {#if $credentialsState.flow.authorization.instructions}<p>{$credentialsState.flow.authorization.instructions}</p>{/if}
+          <a class="btn oauth-auth-link" href={$credentialsState.flow.authorization.url} target="_blank" rel="noopener noreferrer">Open authorization page</a>
+        {/if}
+        {#if $credentialsState.flow.deviceCode}
+          <div class="oauth-device-code">
+            <label>
+              <span>Device code</span>
+              <input readonly value={$credentialsState.flow.deviceCode.userCode} aria-label="Device code" onfocus={(event) => event.currentTarget.select()} />
+            </label>
+            <a href={$credentialsState.flow.deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">Open device verification</a>
+            {#if $credentialsState.flow.deviceCode.expiresInSeconds}
+              <span>Expires in {$credentialsState.flow.deviceCode.expiresInSeconds} seconds</span>
+            {/if}
+          </div>
+        {/if}
+        {#if $credentialsState.flow.progress}<p role="status">{$credentialsState.flow.progress}</p>{/if}
+        {#each $credentialsState.flow.requests ?? [] as request (request.requestId)}
+          {#if request.kind === "select"}
+            <fieldset class="oauth-request">
+              <legend>{request.message}</legend>
+              {#each request.options as option (option.id)}
+                <button type="button" class="btn" onclick={() => chooseOAuth(request, option.id)}>{option.label}</button>
+              {/each}
+            </fieldset>
+          {:else}
+            <form class="oauth-request" onsubmit={(event) => respondOAuth(event, request)}>
+              <label>
+                <span>{request.message}</span>
+                <input
+                  name="oauthResponse"
+                  type={request.kind === "manual_code" ? "password" : "text"}
+                  placeholder={request.placeholder ?? ""}
+                  autocomplete="off"
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck="false"
+                  required
+                />
+              </label>
+              {#if request.kind === "manual_code"}
+                <p>If the provider redirects to an unreachable loopback page, paste the redirect URL or authorization code here.</p>
+              {/if}
+              <button class="btn" type="submit">Continue</button>
+            </form>
+          {/if}
+        {/each}
+        <button class="btn oauth-cancel" type="button" onclick={cancelOAuth}>Cancel sign-in</button>
+      {:else if $credentialsState.flow.status === "succeeded"}
+        <p role="status">Sign-in completed.</p>
+      {:else if $credentialsState.flow.status === "cancelled"}
+        <p role="status">{$credentialsState.flow.failureCode === "oauth_flow_expired" ? "Sign-in expired." : "Sign-in cancelled."}</p>
+      {:else}
+        <p class="api-keys-state error" role="alert">Sign-in failed. Try again.</p>
+      {/if}
+      {#if $credentialsState.flow.restart}
+        <p role="status">Pi restart: {$credentialsState.flow.restart.status}</p>
+      {/if}
+    </section>
   {/if}
 
   {#if $credentialsState.loading && !$credentialsState.providers.length}

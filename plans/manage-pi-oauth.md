@@ -188,7 +188,7 @@ responses other than the intentional transient callback snapshot, or events.
   applicable. Require provider-specific replacement/re-authentication and
   logout confirmations, explain that logout does not revoke upstream access,
   and retain API-key precedence/fallback messaging.
-- [ ] Render each interactive flow state accessibly: a user-initiated external
+- [x] Render each interactive flow state accessibly: a user-initiated external
   authorization link, copyable device user code and verification link, safe
   progress, selection controls, text/manual redirect input, cancellation, expiry,
   and terminal restart status. For callback-server providers, explain the remote

@@ -26,6 +26,20 @@ test("Credentials modal exposes API-key and OAuth actions with revocation and fa
   assert.match(modal, /pi may continue to authenticate after removal/);
 });
 
+test("Credentials modal renders accessible browser, device, prompt, selection, cancellation, and terminal OAuth states", () => {
+  assert.match(modal, /aria-label="OAuth sign-in"[^>]*aria-live="polite"/);
+  assert.match(modal, /target="_blank" rel="noopener noreferrer">Open authorization page/);
+  assert.match(modal, /Device code[\s\S]*?readonly[\s\S]*?\.select\(\)/);
+  assert.match(modal, /Open device verification/);
+  assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
+  assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);
+  assert.match(modal, /unreachable loopback page[\s\S]*?redirect URL or authorization code/);
+  assert.match(modal, /CREDENTIALS_CANCEL_OAUTH_ACTION/);
+  for (const text of ["Sign-in completed", "Sign-in expired", "Sign-in cancelled", "Sign-in failed", "Pi restart:"]) {
+    assert.ok(modal.includes(text), `missing OAuth state: ${text}`);
+  }
+});
+
 test("API Keys modal form keeps submitted keys local and clears them on every exit", () => {
   assert.match(modal, /type="password"/);
   assert.match(modal, /autocomplete="off"/);
