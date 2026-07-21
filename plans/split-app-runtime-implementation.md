@@ -98,9 +98,24 @@ Before the first extraction:
   evidence.
 - [x] Add a runtime lifecycle regression test covering two complete cycles: `start → teardown → start → teardown`. Verify attachment ordering and that a fresh transport/event-stream runtime is used after restart.
 - [x] Add a test or static guard that the composition root does not grow new `document.getElementById`, `querySelector`, `classList`, or feature-specific custom-event registrations.
-- [ ] Inventory every `pi-*`/`pi:*` custom event with its sender, receiver, and
-   replacement feature API. Keep this inventory in this plan while migration
-   is active.
+- [x] Inventory every `pi-*`/`pi:*` custom event with its sender, receiver, and replacement feature API. Keep this inventory in this plan while migration is active.
+
+### Custom-event inventory (2026-07-14)
+
+| Events | Sender | Current receiver | Replacement feature API |
+| --- | --- | --- | --- |
+| `pi:composer` | `Composer.svelte` | composer event controller | Composer context action: `send` / `abort` |
+| `pi-command-palette-run`, `pi-menu-action` | command palette, menu | command/menu controllers | Composer and menu callback props |
+| `pi:header` | `Header.svelte` | carousel header controller | Layout/header context actions |
+| `pi-settings-changed` | `SettingsModal.svelte` | settings change controller | Settings action: `reloadTranscript` |
+| `pi-checkpoint-tree-open-session`, `pi-checkpoint-tree-rollback` | checkpoint tree node | checkpoint tree controller | Checkpoint feature actions |
+| `pi-file-picker-browse`, `pi-file-picker-pick`, `pi-file-picker-use-folder`, `pi-file-picker-cancel` | picker modal and overlay actions | file picker controller | Files feature picker actions |
+| `pi-folder-browser-browse`, `pi-folder-browser-create`, `pi-folder-browser-submit`, `pi-folder-browser-cancel` | folder modal and overlay actions | folder browser controller | Files feature folder actions |
+| `pi-file-explorer-browse`, `pi-file-explorer-edit`, `pi-file-explorer-save`, `pi-file-explorer-upload`, `pi-file-explorer-back-list`, `pi-file-explorer-back-hublots` | explorer modal and overlay actions | explorer controller | Files feature explorer actions |
+| `pi-open-file-explorer` | hublot list and manager | open-file-explorer controller | Files feature `openExplorer` action |
+| `pi-hublot-show`, `pi-managed-hublot-create`, `pi-managed-hublot-toggle-scope`, `pi-managed-command-palette` | hublot sidebar/manager and overlay | hublot controllers | Hublots feature actions |
+| `pi-routine-action` | routine list | routine controller | Routines feature action |
+| `pi-session-picker-action`, `pi-session-picker-cancel` | session picker and overlay | session picker controller | Sessions feature actions |
 
 **Acceptance:** baseline behavior is characterized; no production behavior is
 changed.
