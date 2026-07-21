@@ -89,6 +89,25 @@ export async function resolveTranscriptEntryId({ element, fetchEntries, elements
   return entry.id;
 }
 
+/** Compose durable-entry lookup, annotation, focus, and permalink copying for a transcript DOM adapter. */
+export function createTranscriptPermalinkRuntime({
+  fetchEntries, elements, matches, findDirect, alignedIndex, flash, toast,
+  getSessionId, getOrigin, copy, prompt, normalize = (value) => value.replace(/\s+/g, " ").trim(),
+}) {
+  const findEntry = (entries, element) => findTranscriptEntryForElement({
+    entries, elements: elements(), element, matches, normalize,
+  });
+  const annotate = () => annotateTranscriptEntries({ fetchEntries, elements, findEntry });
+  const getEntryId = (element) => resolveTranscriptEntryId({ element, fetchEntries, elements, findEntry });
+  return {
+    annotate,
+    copyPermalink: createPermalinkController({ getSessionId, getEntryId, getOrigin, copy, prompt, toast }),
+    focusEntryById: createTranscriptEntryFocusController({
+      annotate, findDirect, fetchEntries, elements, matches, normalize, alignedIndex, flash, toast,
+    }),
+  };
+}
+
 /** Scroll to and briefly highlight a transcript element. */
 export function flashTranscriptElement(element, { setTimeoutImpl = setTimeout } = {}) {
   element.scrollIntoView({ behavior: "smooth", block: "center" });

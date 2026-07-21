@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -53,6 +53,20 @@ test("permalink controller copies an entry URL", async () => {
   const copy = createPermalinkController({ getSessionId: () => "session", getEntryId: async () => "entry", getOrigin: () => "https://host", copy: async (url) => { calls.push(url); return true; }, prompt: () => {}, toast: (...args) => calls.push(args) });
   await copy({});
   assert.deepEqual(calls, ["https://host/s/session/m/entry", ["permalink copied"]]);
+});
+
+test("transcript permalink runtime composes durable entry adapters", async () => {
+  const element = { dataset: { role: "assistant" }, textContent: "saved response" };
+  const calls = [];
+  const runtime = createTranscriptPermalinkRuntime({
+    fetchEntries: async () => [{ id: "entry", role: "assistant", text: "saved response" }], elements: () => [element],
+    matches: () => true, findDirect: () => null, alignedIndex: () => 0, flash: (target) => calls.push(["flash", target]), toast: (...args) => calls.push(["toast", args]),
+    getSessionId: () => "session", getOrigin: () => "https://host", copy: async (url) => { calls.push(["copy", url]); return true; }, prompt: () => {},
+  });
+  await runtime.copyPermalink(element);
+  await runtime.focusEntryById("entry");
+  assert.equal(element.dataset.entryId, "entry");
+  assert.deepEqual(calls, [["copy", "https://host/s/session/m/entry"], ["toast", ["permalink copied"]], ["flash", element]]);
 });
 
 test("transcript flash scrolls and schedules highlight cleanup", () => {

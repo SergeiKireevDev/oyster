@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptEntryFocusController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -1711,68 +1711,36 @@ const flashEl = flashTranscriptElement;
 // ids, so elements and entries are zipped together by position, with a
 // text-match fallback when the two sides disagree (e.g. mid-stream).
 
-/** rendered transcript elements that correspond to persisted user/assistant entries */
-function chatEls() {
-  return [...messagesEl.children].filter(
-    (el) => el.dataset.role === "user" || el.dataset.role === "assistant"
-  );
-}
-
-async function fetchSessionEntries() {
-  const path = state?.sessionFile
-    ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
-  if (!path) throw new Error("session not saved yet");
-  return fetchPersistedSessionEntries(fetch, path);
-}
-
-const normText = (s) => s.replace(/\s+/g, " ").trim();
-
-/** does this entry plausibly describe this element? (labels like "[tool: …]"
- *  never appear verbatim in the DOM, so only verify real text) */
-function entryMatchesEl(entry, el) {
-  return messageEntryMatchesElement(entry, el);
-}
-
-const entryForElement = (entries, els, el) => findTranscriptEntryForElement({
-  entries, elements: els, element: el, matches: entryMatchesEl, normalize: normText,
-});
-
-const annotateTranscriptEntries = () => annotateTranscriptEntryIds({
-  fetchEntries: fetchSessionEntries,
-  elements: chatEls,
-  findEntry: (entries, element) => entryForElement(entries, chatEls(), element),
-});
-
-const entryIdForElement = (element) => resolveTranscriptEntryId({
-  element,
-  fetchEntries: fetchSessionEntries,
-  elements: chatEls,
-  findEntry: (entries, target) => entryForElement(entries, chatEls(), target),
-});
-
-const copyPermalink = createPermalinkController({
-  getSessionId: () => state?.sessionId,
-  getEntryId: entryIdForElement,
-  getOrigin: () => location.origin,
-  copy: (url) => copyText(url),
-  prompt: promptText,
-  toast: addToast,
-});
-
-const copyText = copyTextToClipboard;
-
-/** opening a /s/<sid>/m/<eid> permalink: scroll to / flash that message */
-const focusEntryById = createTranscriptEntryFocusController({
-  annotate: annotateTranscriptEntries,
+const transcriptPermalinkRuntime = createTranscriptPermalinkRuntime({
+  fetchEntries: async () => {
+    const path = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+    if (!path) throw new Error("session not saved yet");
+    return fetchPersistedSessionEntries(fetch, path);
+  },
+  elements: () => [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
+  matches: messageEntryMatchesElement,
   findDirect: (entryId) => messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`),
-  fetchEntries: fetchSessionEntries,
-  elements: chatEls,
-  matches: entryMatchesEl,
-  normalize: normText,
   alignedIndex: alignedTranscriptIndex,
   flash: flashEl,
   toast: addToast,
+  getSessionId: () => state?.sessionId,
+  getOrigin: () => location.origin,
+  copy: copyTextToClipboard,
+  prompt: promptText,
 });
+const { annotate: annotateTranscriptEntries, copyPermalink, focusEntryById } = transcriptPermalinkRuntime;
+
+/** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
+function chatEls() {
+  return [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant");
+}
+
+/** Read the active session's persisted entries for checkpoint and permalink adapters. */
+async function fetchSessionEntries() {
+  const path = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+  if (!path) throw new Error("session not saved yet");
+  return fetchPersistedSessionEntries(fetch, path);
+}
 
 // ------------------------------------------------------------ modal helpers
 
