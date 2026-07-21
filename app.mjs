@@ -860,15 +860,32 @@ export function init(state) {
       root = byPath.get(root.parentSession);
     }
     const db = loadCheckpoints();
-    const build = (info, depth) => ({
-      ...info,
-      checkpoints: (db[info.id] ?? []).map(({ hash, anchorId, message, timestamp }) =>
-        ({ hash, anchorId, message, timestamp })),
-      children: depth > 25 ? [] : infos
-        .filter((i) => i.parentSession === info.path)
-        .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
-        .map((i) => build(i, depth + 1)),
-    });
+    // forks inherit their ancestors' checkpoint records (so ↩ works inside
+    // them), but the tree must not display those twice: each node only shows
+    // checkpoints an ancestor hasn't already shown
+    const build = (info, depth, shownAbove = new Set()) => {
+      const all = db[info.id] ?? [];
+      const key = (c) => `${c.hash}@${c.anchorId}`;
+      const shown = new Set([...shownAbove, ...all.map(key)]);
+      // legacy forks (pre-forkedAtHash headers): the newest record inherited
+      // from an ancestor IS the checkpoint the fork was created from
+      const inherited = all.filter((c) => shownAbove.has(key(c)));
+      const forkedAtHash = info.forkedAtHash
+        ?? (inherited.length
+          ? inherited.reduce((a, b) => ((a.timestamp ?? "") > (b.timestamp ?? "") ? a : b)).hash
+          : null);
+      return {
+        ...info,
+        forkedAtHash,
+        checkpoints: all
+          .filter((c) => !shownAbove.has(key(c)))
+          .map(({ hash, anchorId, message, timestamp }) => ({ hash, anchorId, message, timestamp })),
+        children: depth > 25 ? [] : infos
+          .filter((i) => i.parentSession === info.path)
+          .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
+          .map((i) => build(i, depth + 1, shown)),
+      };
+    };
     return { root: build(root, 0) };
   }
 
