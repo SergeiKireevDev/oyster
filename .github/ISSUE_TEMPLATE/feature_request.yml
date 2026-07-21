@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose an improvement to Oyster
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem before proposing implementation details. For substantial changes, this issue is the place to agree on scope before opening a pull request.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find this request.
+          required: true
+        - label: This request does not contain credentials, tokens, or private data.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is difficult or impossible today, and who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the behavior or user experience you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing workarounds or simpler approaches.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Operational and security impact
+      description: Note effects on remote access, permissions, credentials, persistence, compatibility, or deployment.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

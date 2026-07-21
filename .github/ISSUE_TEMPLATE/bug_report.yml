@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible problem in Oyster
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Oyster. Search existing issues first. Do not include UI tokens, provider credentials, OAuth data, private transcripts, or other secrets. Report security vulnerabilities privately using SECURITY.md.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I removed or replaced all sensitive information.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start Oyster with …
+        2. Open …
+        3. Select …
+        4. Observe …
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Oyster version or commit
+      placeholder: Commit SHA, release, or image tag
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: Output of node --version
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Session backend
+      options:
+        - SQLite
+        - JSONL
+        - Unknown or not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, browser, pi version/source, container or service mode, and relevant non-secret configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Paste only the smallest useful excerpt. Redact paths or content when needed; never paste secrets.
+      render: shell
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

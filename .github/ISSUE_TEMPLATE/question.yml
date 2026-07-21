@@ -1,0 +1,40 @@
+name: Question or support request
+description: Ask for help using, configuring, or contributing to Oyster
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the README and docs first. Do not include UI tokens, provider credentials, OAuth data, private transcripts, or other secrets. Security vulnerabilities must be reported privately using SECURITY.md.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I checked the documentation and searched existing issues.
+          required: true
+        - label: I removed or replaced all sensitive information.
+          required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to accomplish, and where are you blocked?
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried?
+      description: Link the documentation followed and include sanitized commands or errors.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the Oyster commit/version, Node.js version, OS, deployment mode, and relevant non-secret configuration.
+    validations:
+      required: true
