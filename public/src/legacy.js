@@ -1644,14 +1644,15 @@ createHublotSidebarEventController({
 // tap outside the drawer closes it (mobile only — on desktop they're
 // docked, not overlays). Sync the carousel state so applyCarousel()
 // doesn't immediately re-open it.
-createMobileDrawerDismissController({
+const mobileDrawerDismissController = createMobileDrawerDismissController({
   documentTarget: document,
   windowTarget: window,
   hublots: $("hublots"),
   treebar: $("treebar"),
   getCarousel: () => carouselController,
   isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
-}).attach();
+});
+mobileDrawerDismissController.attach();
 
 const loadHublots = hublotController.refreshSidebar;
 
@@ -2147,5 +2148,6 @@ export function teardownLegacyRuntime() {
   es = null;
   teardownReconnectWatchdog();
   carouselEventRegistration.detach();
+  mobileDrawerDismissController.detach();
   connectionState.lost();
 }
