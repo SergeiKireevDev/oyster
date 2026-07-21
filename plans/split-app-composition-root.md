@@ -106,7 +106,7 @@ feature-local browser listeners.
 **Acceptance:** platform and lifecycle state are instance-scoped and the root
 only wires their public interfaces.
 
-## [ ] 10. Reduce the Final Composition Root
+## [x] 10. Reduce the Final Composition Root
 
 - [x] Rewrite `appCompositionRoot.js` to contain only adapter creation, assembly construction order, cross-feature interface wiring, and lifecycle return values.
 - [x] Remove obsolete imports, compatibility exports, stale migration comments, and dead tests after no-reference checks.
