@@ -64,7 +64,7 @@ import { createHublotController, createHublotSidebarEventController, createManag
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { createFolderBrowserController, createFolderBrowserEventController } from "../lib/folderBrowserController.js";
 import { createFileExplorerController, createFileExplorerEventController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
-import { createFilePickerController, createFilePickerEventController } from "../lib/filePickerController.js";
+import { createFilePickerController } from "../lib/filePickerController.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "../lib/routineController.js";
@@ -1082,15 +1082,9 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
 }
 
 const detachFilePickerActions = configureFilePickerActions({
-  browse: (path) => loadFilePicker(path),
-  pick: (path) => filePickerController.complete({ ...filePickerState, path }),
-});
-
-const filePickerEventController = createFilePickerEventController({
-  windowTarget: window,
-  useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   browse: loadFilePicker,
   pick: (path) => filePickerController.complete({ ...filePickerState, path }),
+  useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
 });
 
@@ -1731,7 +1725,6 @@ const detachRuntimeEventAdapters = () => {
   commandPaletteRunController.detach();
   detachCheckpointTreeActions();
   detachFilePickerActions();
-  filePickerEventController.detach();
   folderBrowserEventController.detach();
   fileExplorerEventController.detach();
   managedHublotEventController.detach();
@@ -1761,7 +1754,7 @@ const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
 const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
-    commandPaletteKeyboardController, menuEventController, filePickerEventController,
+    commandPaletteKeyboardController, menuEventController,
     folderBrowserEventController, fileExplorerEventController, managedHublotEventController,
     hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
     routineEventController, sessionPickerEventController, settingsChangeController,

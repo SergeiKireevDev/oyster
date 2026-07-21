@@ -18,6 +18,7 @@
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
+  import { cancelFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
   import { hublotManager } from "../stores/hublotManager.js";
   import { cancelOptionPicker } from "../stores/optionPicker.js";
@@ -90,9 +91,9 @@
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-folder-browser-cancel")); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-submit"))}>Start session here</button>
       {:else if $modalState.content === "filePicker"}
-        <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={() => window.dispatchEvent(new Event("pi-file-picker-use-folder"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-use-folder")); }}>📁 Use this folder</span>
+        <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={useFilePickerFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") useFilePickerFolder(); }}>📁 Use this folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-cancel")); }}>Cancel</span>
+        <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-save"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-save")); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
         <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
