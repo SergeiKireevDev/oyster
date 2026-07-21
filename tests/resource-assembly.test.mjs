@@ -29,4 +29,27 @@ test("resource assembly composes files hublots and routines with one teardown bo
   assert.deepEqual(calls, ["sync:scope", "toggle", "loadHublots", "loadRoutines", "showHublots", "files:/tmp", "createHublot", "runRoutine"]);
   assembly.teardown();
   assert.deepEqual(calls.slice(-3), ["files", "routines", "hublots"]);
+  const afterFirstTeardown = calls.length;
+  assembly.teardown();
+  assert.equal(calls.length, afterFirstTeardown);
+});
+
+test("resource assemblies remount without retaining controllers or cross-refresh callbacks", () => {
+  const calls = [];
+  const mount = (name) => createResourceAssembly({
+    files: {}, hublots: {}, routines: { isVisible: () => true },
+    createFilesRuntime: () => ({ explorer: { show() {} }, teardown: () => calls.push(`${name}:files`) }),
+    createHublotRuntime: (deps) => ({ deps, getScopeAll: () => false, toggleScope() {}, load() {}, show() {}, create() {}, teardown: () => calls.push(`${name}:hublots`) }),
+    createRoutineRuntime: () => ({ load() {}, sync: () => calls.push(`${name}:sync`), controller: { run() {} }, sidebar: { items: [], update() {} }, teardown: () => calls.push(`${name}:routines`) }),
+  });
+  const first = mount("first");
+  const staleRefresh = first.hublots.deps.refreshRoutines;
+  first.teardown();
+  const second = mount("second");
+  second.hublots.deps.refreshRoutines();
+  assert.equal(calls.filter((entry) => entry === "second:sync").length, 1);
+  assert.equal(calls.filter((entry) => entry === "first:sync").length, 0);
+  staleRefresh();
+  assert.equal(calls.filter((entry) => entry === "first:sync").length, 0);
+  second.teardown();
 });

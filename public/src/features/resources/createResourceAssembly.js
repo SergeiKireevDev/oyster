@@ -7,10 +7,11 @@ export function createResourceAssembly(deps) {
   const buildHublots = deps.createHublotRuntime ?? createHublotRuntime;
   const buildRoutines = deps.createRoutineRuntime ?? createRoutineRuntime;
   const buildFiles = deps.createFilesRuntime ?? createFilesRuntime;
+  let tornDown = false;
   let routines;
   const hublots = buildHublots({
     ...deps.hublots,
-    refreshRoutines: (options) => routines?.sync(options),
+    refreshRoutines: (options) => !tornDown && routines?.sync(options),
   });
   routines = buildRoutines({
     ...deps.routines,
@@ -18,18 +19,19 @@ export function createResourceAssembly(deps) {
     isVisible: (routine) => deps.routines.isVisible(routine, hublots.getScopeAll()),
   });
   const files = buildFiles(deps.files);
+  const active = (fn, ...args) => !tornDown ? fn(...args) : undefined;
   const operations = Object.freeze({
-    getScopeAll: hublots.getScopeAll,
-    toggleScope: (...args) => hublots.toggleScope(...args),
-    loadHublots: (...args) => hublots.load(...args),
-    loadRoutines: (...args) => routines.load(...args),
-    syncRoutines: (...args) => routines.sync(...args),
-    showHublots: (...args) => hublots.show(...args),
-    showFileExplorer: (workdir) => files.explorer.show(workdir),
-    createHublot: (...args) => hublots.create(...args),
-    runRoutine: (...args) => routines.controller.run(...args),
-    updateRoutine: (...args) => routines.sidebar.update(...args),
-    getRoutineItems: () => routines.sidebar.items,
+    getScopeAll: () => active(hublots.getScopeAll),
+    toggleScope: (...args) => active(hublots.toggleScope, ...args),
+    loadHublots: (...args) => active(hublots.load, ...args),
+    loadRoutines: (...args) => active(routines.load, ...args),
+    syncRoutines: (...args) => active(routines.sync, ...args),
+    showHublots: (...args) => active(hublots.show, ...args),
+    showFileExplorer: (workdir) => active(files.explorer.show, workdir),
+    createHublot: (...args) => active(hublots.create, ...args),
+    runRoutine: (...args) => active(routines.controller.run, ...args),
+    updateRoutine: (...args) => active(routines.sidebar.update, ...args),
+    getRoutineItems: () => !tornDown ? routines.sidebar.items : [],
   });
   return {
     files,
@@ -37,6 +39,8 @@ export function createResourceAssembly(deps) {
     routines,
     operations,
     teardown() {
+      if (tornDown) return;
+      tornDown = true;
       files.teardown?.();
       routines.teardown();
       hublots.teardown();

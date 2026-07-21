@@ -81,7 +81,7 @@ business logic or resolver state.
 - [x] Create `features/resources/createResourceAssembly.js` to compose files, hublots, and routines with injected session and platform interfaces.
 - [x] Move shared scope and cross-refresh coordination behind the resource assembly.
 - [x] Expose only load/show/action operations required by layout, debug hooks, and session state application.
-- [ ] Add tests for scope changes, cross-refresh ordering, listener uniqueness, and remount teardown.
+- [x] Add tests for scope changes, cross-refresh ordering, listener uniqueness, and remount teardown.
 
 **Acceptance:** the root contains one resource assembly call and no resource
 controller construction or shared resource state.
