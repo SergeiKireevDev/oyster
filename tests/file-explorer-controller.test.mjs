@@ -81,6 +81,51 @@ test("file explorer reports an editor load error", async () => {
   assert.deepEqual(calls, [["cannot open file", "error"]]);
 });
 
+test("file explorer uploads files, reports progress, and reloads the directory", async () => {
+  const calls = [];
+  const file = { name: "a.txt", size: 3, slice: (start, end) => `${start}-${end}` };
+  const controller = createFileExplorerController({
+    uploadChunk: async (options) => { calls.push(["chunk", options]); return { res: { ok: true }, data: { saved: true } }; },
+    browse: async (path) => { calls.push(["browse", path]); return { path, dirs: [], files: [] }; },
+    update: (value) => calls.push(["update", value]),
+    updateTitle: () => {},
+    getShowHidden: () => true,
+    getToken: () => "token",
+    setPath: () => {},
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  await controller.uploadFiles("/work", [file]);
+
+  assert.deepEqual(calls.slice(0, 5), [
+    ["update", { uploading: true, uploadText: '<span class="spin">⟳</span> 0%' }],
+    ["chunk", { dir: "/work", name: "a.txt", offset: 0, last: true, body: "0-3" }],
+    ["update", { uploading: true, uploadText: '<span class="spin">⟳</span> 100%' }],
+    ["toast", "uploaded 1 file to /work"],
+    ["update", { uploading: false, uploadText: "⬆ Upload…" }],
+  ]);
+  assert.equal(calls[6][1], "/work");
+});
+
+test("file explorer reports an unrecoverable upload error and resets progress", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    uploadChunk: async () => ({ res: { ok: false, status: 400 }, data: { error: "invalid file" } }),
+    browse: async (path) => ({ path, dirs: [], files: [] }),
+    update: (value) => calls.push(value),
+    updateTitle: () => {}, getShowHidden: () => true, getToken: () => "token", setPath: () => {},
+    toast: (...args) => calls.push(args),
+  });
+
+  await controller.uploadFiles("/work", [{ name: "a.txt", size: 1, slice: () => "body" }]);
+
+  assert.deepEqual(calls.slice(0, 3), [
+    { uploading: true, uploadText: '<span class="spin">⟳</span> 0%' },
+    ["a.txt: invalid file", "error"],
+    { uploading: false, uploadText: "⬆ Upload…" },
+  ]);
+});
+
 test("file explorer saves editor content and clears its saving state", async () => {
   const calls = [];
   const controller = createFileExplorerController({

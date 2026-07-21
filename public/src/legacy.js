@@ -1675,6 +1675,7 @@ const fileExplorerController = createFileExplorerController({
   browse: (path) => browseFiles(fetch, path),
   readFile: (path) => readFile(fetch, path),
   saveFile: (options) => saveFile(fetch, options),
+  uploadChunk: (options) => uploadFileChunk(fetch, options),
   update: updateFileExplorer,
   updateTitle: (title) => updateModal({ title }),
   openModal,
@@ -1691,77 +1692,16 @@ const loadFileExplorer = fileExplorerController.load;
 // Always open in the current session's working directory.
 const showFileExplorer = () => fileExplorerController.show(workdir);
 
-async function uploadExplorerFiles() {
+function uploadExplorerFiles() {
   const dir = fileExplorerState.curPath;
-  const inp = document.createElement("input");
-  inp.type = "file";
-  inp.multiple = true;
-  registerFileUploadInput(inp, async () => {
-    const files = [...inp.files];
-    if (!files.length) return;
-    const CHUNK = 8 * 1024 * 1024; // 8 MB — safe through server cap and cloudflare tunnel
-    const MAX_RETRIES = 6;
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
-    let uploadedBytes = 0;
-    const setProgress = () => {
-      updateFileExplorer({
-        uploading: true,
-        uploadText: `<span class="spin">⟳</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%`,
-      });
-    };
-    setProgress();
-    let done = 0;
-    for (const f of files) {
-      try {
-        let offset = 0;
-        let attempts = 0;
-        let finished = false;
-        while (!finished) {
-          const end = Math.min(offset + CHUNK, f.size);
-          const isLast = end >= f.size;
-          let r, d;
-          try {
-            ({ res: r, data: d } = await uploadFileChunk(fetch, {
-              dir, name: f.name, offset, last: isLast, body: f.slice(offset, end),
-            }));
-          } catch {
-            // network drop / tunnel hiccup — retry same chunk with backoff
-            if (++attempts > MAX_RETRIES) throw new Error(`connection lost (gave up after ${MAX_RETRIES} retries)`);
-            await sleep(1000 * attempts);
-            continue;
-          }
-          if (r.ok) {
-            attempts = 0;
-            if (isLast || d.saved) finished = true;
-            else offset = typeof d.received === "number" ? d.received : end;
-            uploadedBytes = files.slice(0, done).reduce((s, x) => s + x.size, 0) + (finished ? f.size : offset);
-            setProgress();
-            continue;
-          }
-          if (r.status === 409 && typeof d.have === "number") {
-            // server tells us how much it actually has — resume from there
-            if (++attempts > MAX_RETRIES) throw new Error(d.error || "upload out of sync");
-            offset = d.have;
-            continue;
-          }
-          if (r.status >= 500 || r.status === 429) {
-            if (++attempts > MAX_RETRIES) throw new Error(d.error || `upload failed (${r.status})`);
-            await sleep(1000 * attempts);
-            continue;
-          }
-          throw new Error(d.error || `upload failed (${r.status})`);
-        }
-        done++;
-      } catch (e) {
-        toast(`${f.name}: ${e.message}`, "error");
-      }
-    }
-    if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
-    updateFileExplorer({ uploading: false, uploadText: "⬆ Upload…" });
-    await loadFileExplorer(dir); // refresh the listing
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  registerFileUploadInput(input, () => {
+    const files = [...input.files];
+    if (files.length) return fileExplorerController.uploadFiles(dir, files);
   });
-  inp.click();
+  input.click();
 }
 
 const editExplorerFile = fileExplorerController.openEditor;

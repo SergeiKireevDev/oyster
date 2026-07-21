@@ -1,4 +1,4 @@
-export function createFileExplorerController({ browse, readFile, saveFile, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
+export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });
     let data;
@@ -48,6 +48,58 @@ export function createFileExplorerController({ browse, readFile, saveFile, updat
     update({ mode: "edit", loading: false, token: getToken(), editPath: path, editContent: data.content, saving: false });
   }
 
+  async function uploadFiles(dir, files) {
+    const chunkSize = 8 * 1024 * 1024;
+    const maxRetries = 6;
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
+    let uploadedBytes = 0;
+    const setProgress = () => update({ uploading: true, uploadText: `<span class="spin">⟳</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%` });
+    setProgress();
+    let done = 0;
+    for (const file of files) {
+      try {
+        let offset = 0;
+        let attempts = 0;
+        let finished = false;
+        while (!finished) {
+          const end = Math.min(offset + chunkSize, file.size);
+          const last = end >= file.size;
+          let response;
+          try { response = await uploadChunk({ dir, name: file.name, offset, last, body: file.slice(offset, end) }); }
+          catch {
+            if (++attempts > maxRetries) throw new Error(`connection lost (gave up after ${maxRetries} retries)`);
+            await sleep(1000 * attempts);
+            continue;
+          }
+          const { res, data } = response;
+          if (res.ok) {
+            attempts = 0;
+            if (last || data.saved) finished = true;
+            else offset = typeof data.received === "number" ? data.received : end;
+            uploadedBytes = files.slice(0, done).reduce((sum, item) => sum + item.size, 0) + (finished ? file.size : offset);
+            setProgress();
+            continue;
+          }
+          if (res.status === 409 && typeof data.have === "number") {
+            if (++attempts > maxRetries) throw new Error(data.error || "upload out of sync");
+            offset = data.have;
+            continue;
+          }
+          if (res.status >= 500 || res.status === 429) {
+            if (++attempts > maxRetries) throw new Error(data.error || `upload failed (${res.status})`);
+            await sleep(1000 * attempts);
+            continue;
+          }
+          throw new Error(data.error || `upload failed (${res.status})`);
+        }
+        done++;
+      } catch (error) { toast(`${file.name}: ${error.message}`, "error"); }
+    }
+    if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
+    update({ uploading: false, uploadText: "⬆ Upload…" });
+    await load(dir);
+  }
+
   async function saveEditor(path, content) {
     update({ saving: true });
     try {
@@ -60,5 +112,5 @@ export function createFileExplorerController({ browse, readFile, saveFile, updat
     }
   }
 
-  return { load, show, openEditor, saveEditor };
+  return { load, show, openEditor, uploadFiles, saveEditor };
 }
