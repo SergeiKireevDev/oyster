@@ -9,6 +9,11 @@
 
 import { test, expect } from "@playwright/test";
 import { login, api, dexec, waitFor, currentSessionId } from "./lib/harness.js";
+import { ensureContainer, teardownContainer } from "./lib/reset.js";
+
+// Per-test container lifecycle — see checkpoint-rollback.spec.js
+test.beforeEach(async () => { await ensureContainer(); });
+test.afterEach(() => { teardownContainer(); });
 
 test("start a session and open a hublot serving a button interface", async ({ page }) => {
   const marker = `e2e-btn-${Date.now()}`;

@@ -41,6 +41,19 @@ const launchOptions = SHELL ? { executablePath: SHELL } : {};
 // workspace) through the real browser UI, so they must run sequentially — no
 // parallelism, one worker. The hublot spec spawns a background agent and a
 // real cloudflared tunnel, so timeouts are generous.
+//
+// Every test is authored once in a `body(mobile)` helper and then DUPLICATED
+// as a desktop test (wide viewport) and a mobile test (narrow viewport that
+// triggers the slide-over drawer + swipe carousel). Both run on the same
+// container — desktop first, then mobile (or vice-versa) — which catches bugs
+// that only surface at one breakpoint (e.g. a handler that works on desktop
+// but is dead on mobile because the click target is behind a drawer).
+//
+// The two top-level test.describe("desktop") / test.describe("mobile") blocks
+// are intentionally tagged so you can run just one with `--grep`.
+const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
+const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui";
+
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
@@ -54,7 +67,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: process.env.PI_UI_URL ?? "http://localhost:4000",
-    viewport: { width: 1400, height: 900 }, // wide: hublot/routine sidebar visible
+    viewport: { width: 1400, height: 900 }, // desktop is the default
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     launchOptions,

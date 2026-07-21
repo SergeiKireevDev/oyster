@@ -1,13 +1,17 @@
 // Shared helpers for the pi-lot-ui Playwright e2e suite.
 //
-// The tests target a SELF-CONTAINED pi-lot-ui container on port 4000 whose image
-// bundles the deterministic mock LLM (activated via E2E_MOCK_LLM=1), so there
-// are no credential mounts and no external model calls. They drive the product
-// two ways:
+// The tests target a SELF-CONTAINED pi-lot-ui container on its own port whose
+// image bundles a deterministic mock LLM (activated via E2E_MOCK_LLM=1), so
+// there are NO credential mounts and no external model calls. They drive the
+// product two ways:
 //   - through the browser UI (Playwright) — the primary surface under test
 //   - through `docker exec` into the container for out-of-band setup and
 //     assertions on the container filesystem (git repos, served ports, …)
 // and through the HTTP API for a few read-only cross-checks.
+//
+// Desktop and mobile run as SEPARATE projects with separate containers. The
+// per-project PI_UI_URL / PI_UI_TOKEN / PI_UI_CONTAINER are wired by the
+// playwright config `use` block — this module just consumes process.env.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
@@ -137,6 +141,92 @@ export async function waitForCount(page, selector, n, timeout = 60000) {
     [selector, n],
     { timeout }
   );
+}
+
+// mobile viewport (iPhone 14 — narrow enough to trigger the
+// max-width:760px media query where sidebars become slide-over drawers
+// and the swipe carousel is active)
+export const MOBILE_VIEWPORT = { width: 390, height: 844 };
+
+// Force a brand-new session for this test: current sessions are reused across
+// tests in the same file (one container), so a session that already has
+// checkpoints/forks from a prior test would otherwise bleed into this one.
+// We click the menu's "New session" and wait for the session id to change.
+export async function forceNewSession(page) {
+  const before = await currentSessionId(page);
+  await page.click("#menuBtn");
+  await page.click('button[data-action="newSession"]');
+  // wait for the id to flip to something new (or null on a truly fresh one)
+  await page.waitForFunction(
+    (b) => {
+      let cur = null;
+      try { cur = typeof state !== "undefined" ? state?.sessionId : null; } catch {}
+      if (!cur) {
+        const m = location.pathname.match(/^\/s\/([\w.-]+)/);
+        cur = m ? m[1] : null;
+      }
+      return cur !== b;
+    },
+    before,
+    { timeout: 30000 }
+  );
+  // small grace period for the new runner to spawn and the SSE to connect
+  await waitFor(() => currentSessionId(page), {
+    timeout: 30000, label: "new session id after force",
+  });
+  // clear any slide-over drawer the previous session left open
+  await page.evaluate(() => {
+    document.getElementById("hublots")?.classList.remove("open");
+    document.getElementById("treebar")?.classList.remove("open");
+  });
+}
+
+// horizontal swipe inside the page. Used on mobile where the sidebar is
+// toggled by swiping instead of clicking a chip. dir='left' advances the
+// carousel (chat -> hublots -> checkpoints); 'right' goes back.
+export async function swipe(page, dir, opts = {}) {
+  const x0 = opts.x0, y0 = opts.y0, dx = opts.dx || 200, dy = opts.dy || 0;
+  const startX = x0 !== undefined ? x0 : MOBILE_VIEWPORT.width * 0.2;
+  const endX = startX + (dir === "left" ? -dx : dx);
+  const y = y0 !== undefined ? y0 : MOBILE_VIEWPORT.height * 0.5;
+  // dispatch real touch events (the carousel listens on touchstart/touchend,
+  // not mouse events — so page.mouse would be ignored)
+  const touch = await page.evaluateHandle(async ({ startX, endX, y }) => {
+    const target = document.documentElement;
+    const ts = (type, x, y) => {
+      const touch = new Touch({ identifier: 1, target, clientX: x, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, {
+        bubbles: true, cancelable: true, touches: type === "touchend" ? [] : [touch],
+        changedTouches: [touch], targetTouches: type === "touchend" ? [] : [touch],
+      }));
+    };
+    ts("touchstart", startX, y);
+    ts("touchmove", endX, y);
+    ts("touchend", endX, y);
+  }, { startX, endX, y });
+  await touch.dispose();
+}
+
+// Two-finger swipe (simulated as a fast single drag across most of the
+// viewport) — switches to the next active session.
+export async function swipeTwoFinger(page, dir) {
+  const y = MOBILE_VIEWPORT.height * 0.5;
+  const startX = MOBILE_VIEWPORT.width * (dir === "left" ? 0.9 : 0.1);
+  const endX = MOBILE_VIEWPORT.width * (dir === "left" ? 0.1 : 0.9);
+  await page.evaluate(({ startX, endX, y }) => {
+    const target = document.documentElement;
+    const ts = (type, x, y, id) => {
+      const touch = new Touch({ identifier: id, target, clientX: x, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, {
+        bubbles: true, cancelable: true,
+        touches: type === "touchend" ? [] : [touch],
+        changedTouches: [touch], targetTouches: type === "touchend" ? [] : [touch],
+      }));
+    };
+    ts("touchstart", startX, y, 1);
+    ts("touchmove", endX, y, 1);
+    ts("touchend", endX, y, 1);
+  }, { startX, endX, y });
 }
 
 /** Make the workspace a git repo and return its path. */

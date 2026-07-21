@@ -12,6 +12,11 @@
 
 import { test, expect } from "@playwright/test";
 import { login, sendPrompt, waitFor, api } from "./lib/harness.js";
+import { ensureContainer, teardownContainer } from "./lib/reset.js";
+
+// Per-test container lifecycle — see checkpoint-rollback.spec.js
+test.beforeEach(async () => { await ensureContainer(); });
+test.afterEach(() => { teardownContainer(); });
 
 // The mock container persists sessions in /workspace across runs, and other
 // specs also send "Reply with exactly the word X" prompts — so every session

@@ -1830,9 +1830,15 @@ async function loadCheckpointTree() {
     view.innerHTML = `<div class="t-empty">no session file yet — send a message first</div>`;
     return;
   }
+  // the session file is only written to disk once the first message has
+  // been sent — until then the server 400s. Treat that as "no tree yet".
   try {
     const res = await fetch(`/checkpoint-tree?path=${encodeURIComponent(path)}`);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 400 && /not a session file|no such file/i.test(data.error || "")) {
+      view.innerHTML = `<div class="t-empty">no session file yet — send a message first</div>`;
+      return;
+    }
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
     view.replaceChildren(renderTreeNode(data.root));
   } catch (e) {
@@ -2074,6 +2080,12 @@ function switchToRunner(id) {
   if (id === currentRunner) { lastPreview = null; refreshState(); return; }
   setRunner(id);
   clearMessages();
+  // the new session has its own tree — reset the carousel/sidebar so a
+  // lingering open sidebar from the previous session doesn't show stale data
+  if (carousel !== 0) { carousel = 0; localStorage.setItem("pi_carousel", "0"); }
+  $("hublots").classList.remove("open");
+  $("treebar").classList.remove("open");
+  setCarouselDots();
   renderPreviewNow(); // instant transcript from the session file, if fetched
   knownCommands = null; // commands can differ per project
   connect(); // reopen SSE on the new runner; onopen reloads the transcript

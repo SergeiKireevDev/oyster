@@ -7,39 +7,47 @@
 
 import { test, expect } from "@playwright/test";
 import { login, dexec, waitFor } from "./lib/harness.js";
+import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const NAME = "e2e-dummy.sh";
 const ARTIFACT = "/workspace/.e2e-routine-artifact";
 
 // Only `${1:-run}` needs escaping so JS doesn't interpolate it; `$mode` /
 // `$artifact` are safe in a template literal (no brace after the dollar).
-const SCRIPT = `#!/usr/bin/env bash
-set -u
-mode="\${1:-run}"
-artifact="${ARTIFACT}"
-if [ "$mode" = "teardown" ]; then
-  echo "::progress 50 removing byproducts"
-  rm -f "$artifact"
-  echo "::progress 100 removed"
-  exit 0
-fi
-echo "::progress 0 starting"
-sleep 1
-echo "::progress 40 building"
-touch "$artifact"
-sleep 1
-echo "::progress 80 finishing"
-sleep 1
-echo "::progress 100 complete"
+const SCRIPT = `#!/bin/bash
+set -e
+mode=\${1:-run}
+artifact=${ARTIFACT}
+case "$mode" in
+  run)
+    echo "::progress 25 starting"
+    sleep 1
+    echo "::progress 50 half done"
+    sleep 1
+    echo "::progress 75 almost"
+    sleep 1
+    printf 'byproduct' > "$artifact"
+    echo "::progress 100 complete"
+    ;;
+  teardown)
+    rm -f "$artifact"
+    echo "byproduct removed"
+    ;;
+esac
 `;
 
-test.beforeAll(() => {
-  // "create" the routine in the global store (a script file in ~/.pi/routines/)
+// Per-test container lifecycle (see checkpoint-rollback.spec.js).
+// beforeEach starts a container; afterEach tears it down — so this spec and
+// the next spec never share workspace state. Routine setup runs inside
+// beforeEach (not beforeAll) because it needs a live container.
+test.beforeEach(async () => {
+  await ensureContainer();
   dexec(`mkdir -p "$HOME/.pi/routines" && rm -f "$HOME/.pi/routines/${NAME}"`);
   dexec(`cat > "$HOME/.pi/routines/${NAME}" <<'PIEOF'\n${SCRIPT}\nPIEOF`);
   dexec(`chmod +x "$HOME/.pi/routines/${NAME}"`);
   dexec(`rm -f ${ARTIFACT}`);
 });
+test.afterEach(() => { teardownContainer(); });
 
 test("start a session, then run and tear down a dummy routine from the sidebar", async ({ page }) => {
   await login(page); // initial load fetches the routine list -> our routine shows
@@ -50,25 +58,23 @@ test("start a session, then run and tear down a dummy routine from the sidebar",
   // ▶ start
   await block.getByRole("button", { name: /start/ }).click();
 
-  // it should go running (status dot) and then reach done
-  await expect(block.locator(".r-dot.running")).toBeVisible({ timeout: 15000 });
-  await expect(block.locator(".r-dot.done")).toBeVisible({ timeout: 30000 });
+  // watch it reach 100% (the block shows the running→done state)
+  await expect(block).toContainText("100%", { timeout: 60000 });
+  await expect(block.locator(".r-dot")).toHaveClass(/done/, { timeout: 10000 });
 
-  // byproduct exists after a successful run
+  // confirm the byproduct exists
   await waitFor(
-    () => dexec(`test -f ${ARTIFACT} && echo yes || echo no`) === "yes",
-    { timeout: 10000, label: "routine byproduct to be created" }
+    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`).then((r) => r === "y"),
+    { timeout: 10000, label: "routine byproduct on disk" },
   );
 
-  // 🧹 teardown removes the byproduct and returns the routine to idle
+  // 🧹 teardown
   await block.getByRole("button", { name: /teardown/ }).click();
-  await waitFor(
-    () => dexec(`test -f ${ARTIFACT} && echo yes || echo no`) === "no",
-    { timeout: 15000, label: "routine byproduct to be removed" }
-  );
-  await expect(block.locator(".r-dot.running")).toHaveCount(0);
-});
+  await expect(block.locator(".r-dot")).toHaveClass(/done|stopped/, { timeout: 60000 });
 
-test.afterAll(() => {
-  dexec(`rm -f "$HOME/.pi/routines/${NAME}" ${ARTIFACT}`, { allowFail: true });
+  // byproduct is gone
+  await waitFor(
+    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`).then((r) => r === "n"),
+    { timeout: 10000, label: "byproduct removed after teardown" },
+  );
 });

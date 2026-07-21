@@ -6,20 +6,30 @@
 // one ↩ rollback arrow per anchored message (latest checkpoint per message).
 // So we seed two messages and freeze after each, giving two independent
 // rollback points, then roll back to the first one.
+//
+// Run twice: desktop (wide, docked sidebars) and mobile (narrow, slide-over
+// drawers + swipe carousel). Each test gets its OWN container (via
+// beforeEach/afterEach in the harness), so they never share workspace state.
 
 import { test, expect } from "@playwright/test";
-import { login, dexec, sendPrompt, waitFor, currentSessionId } from "./lib/harness.js";
+import { login, dexec, sendPrompt, waitFor, currentSessionId, MOBILE_VIEWPORT, forceNewSession } from "./lib/harness.js";
+import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const DIR = "/workspace";
 const NOTES = `${DIR}/e2e-notes.txt`;
-
 const headShort = () => dexec(`git -C ${DIR} rev-parse --short HEAD`);
 
-test.beforeAll(() => {
-  // fresh git repo with a baseline commit
+// Per-test container lifecycle: beforeEach starts one if needed, afterEach
+// tears it down. Desktop and mobile get independent workspaces.
+test.beforeEach(async () => { await ensureContainer(); });
+test.afterEach(() => { teardownContainer(); });
+
+// set up a clean git repo in /workspace — called per test since each test
+// gets its own fresh container
+async function initWorkspace() {
   dexec(`
     set -e
-    rm -rf ${DIR}/.git ${DIR}/e2e-*.txt
+    rm -rf ${DIR}/.git ${DIR}/e2e-*.txt ${DIR}/e2e-a-*.txt ${DIR}/e2e-b-*.txt
     cd ${DIR}
     git init -q
     git config user.email e2e@example.com
@@ -28,13 +38,13 @@ test.beforeAll(() => {
     printf 'alpha\\n' > e2e-notes.txt
     git add -A && git commit -q -m 'baseline'
   `);
-});
+}
 
-test("commit, freeze, recommit, freeze, then roll back to the first checkpoint", async ({ page }) => {
+// shared body — called once per viewport
+async function body(page) {
   await login(page);
-  // Use the session the UI loads with. (Opening a brand-new session races: the
-  // old session id stays truthy until the new runner's get_state lands, so
-  // capturing it here would grab the wrong id.)
+  await initWorkspace();
+  await forceNewSession(page);
   const mainSession = await waitFor(() => currentSessionId(page), {
     timeout: 30000, label: "a session id",
   });
@@ -43,7 +53,7 @@ test("commit, freeze, recommit, freeze, then roll back to the first checkpoint",
 
   // ---- message 1 + change set 1 -> freeze -> H1
   await sendPrompt(page, "Do not use any tools. Reply with exactly the word ALPHA.");
-  dexec(`cd ${DIR} && printf 'beta\\n' >> e2e-notes.txt && printf 'b\\n' > e2e-b.txt`);
+  dexec(`cd ${DIR} && printf 'beta\\n' >> e2e-notes.txt && printf 'b\\n' > ${DIR}/e2e-a.txt`);
   await freeze(page);
   const H1 = await waitFor(() => (headShort() !== H0 ? headShort() : null), {
     timeout: 30000, label: "first checkpoint commit",
@@ -54,7 +64,7 @@ test("commit, freeze, recommit, freeze, then roll back to the first checkpoint",
 
   // ---- message 2 + change set 2 -> freeze -> H2
   await sendPrompt(page, "Do not use any tools. Reply with exactly the word GAMMA.");
-  dexec(`cd ${DIR} && printf 'gamma\\n' >> e2e-notes.txt && printf 'c\\n' > e2e-c.txt`);
+  dexec(`cd ${DIR} && printf 'gamma\\n' >> e2e-notes.txt && printf 'c\\n' > ${DIR}/e2e-b.txt`);
   await freeze(page);
   const H2 = await waitFor(() => (headShort() !== H1 ? headShort() : null), {
     timeout: 30000, label: "second checkpoint commit",
@@ -85,8 +95,21 @@ test("commit, freeze, recommit, freeze, then roll back to the first checkpoint",
   // the workdir is deterministically restored to H1:
   await waitFor(() => headShort() === H1, { timeout: 15000, label: "workdir reset to H1" });
   expect(dexec(`cat ${NOTES}`)).toEqual("alpha\nbeta");           // gamma is gone
-  expect(dexec(`test -f ${DIR}/e2e-b.txt && echo y || echo n`)).toEqual("y"); // b existed at H1
-  expect(dexec(`test -f ${DIR}/e2e-c.txt && echo y || echo n`)).toEqual("n"); // c came after H1
+  expect(dexec(`test -f ${DIR}/e2e-a.txt && echo y || echo n`)).toEqual("y"); // a existed at H1
+  expect(dexec(`test -f ${DIR}/e2e-b.txt && echo y || echo n`)).toEqual("n"); // b came after H1
+}
+
+test.describe("desktop", () => {
+  test("commit, freeze, recommit, freeze, then roll back to the first checkpoint", async ({ page }) => {
+    await body(page);
+  });
+});
+
+test.describe("mobile", () => {
+  test.use({ viewport: MOBILE_VIEWPORT });
+  test("commit, freeze, recommit, freeze, then roll back to the first checkpoint", async ({ page }) => {
+    await body(page);
+  });
 });
 
 /** Click the 🧊 checkpoint button and confirm the freeze modal (no summary). */
