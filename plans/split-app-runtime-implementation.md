@@ -217,7 +217,7 @@ session identity but not on each other:
   - [x] Move explorer state and actions (`browse`, `edit`, `save`, `upload`, `back`) behind the files feature; retain file-input creation only in an explicit browser adapter.
   - [x] Replace `pi-open-file-explorer` with the files feature’s `openExplorer` action and remove its global listener.
   - [x] Add feature construction/teardown tests and retain focused picker, folder-browser, explorer, upload, and editor regression coverage.
-- [ ] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
+- [x] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
 - [ ] **Routines** — sidebar, visibility, actions, and routine stream updates.
 - [ ] **Settings/extensions** — settings modal, extension UI prompt adapters, and
   header model/thinking actions.

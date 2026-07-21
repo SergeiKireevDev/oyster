@@ -23,6 +23,7 @@
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
   import { cancelFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
   import { hublotManager } from "../stores/hublotManager.js";
+  import { toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
   import { cancelOptionPicker } from "../stores/optionPicker.js";
 </script>
 
@@ -85,7 +86,7 @@
         <span class="chip" role="button" tabindex="0" onclick={cancelCheckpointModelPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelCheckpointModelPicker(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
       {:else if $modalState.content === "hublotManager"}
-        <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={() => window.dispatchEvent(new Event("pi-managed-hublot-toggle-scope"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-managed-hublot-toggle-scope")); }}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
+        <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleManagedHublotScope(); }}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "folderBrowser"}
         <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>

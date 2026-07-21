@@ -60,7 +60,8 @@ import { insertionAtCaret, insertionReplacing } from "../lib/textInsertion.js";
 import { createComposerHistoryController } from "../lib/composerHistoryController.js";
 import { configureComposerActions } from "../features/composer/composerActions.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
-import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "../lib/hublotController.js";
+import { createHublotController } from "../lib/hublotController.js";
+import { configureHublotActions } from "../features/hublots/hublotActions.js";
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { createFolderBrowserController } from "../lib/folderBrowserController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
@@ -1290,18 +1291,13 @@ async function toggleManagedHublotScope() {
   });
 }
 
-const managedHublotEventController = createManagedHublotEventController({
-  windowTarget: window,
-  create: createManagedHublot,
-  openCommandPalette: setupCommandPalette,
-  toggleScope: toggleManagedHublotScope,
-});
-
 // ------------------------------------------------------------ hublot sidebar
 
-const hublotSidebarEventController = createHublotSidebarEventController({
-  windowTarget: window,
+const detachHublotActions = configureHublotActions({
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
+  create: createManagedHublot,
+  toggleScope: toggleManagedHublotScope,
+  openCommandPalette: setupCommandPalette,
 });
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
@@ -1729,8 +1725,7 @@ const detachRuntimeEventAdapters = () => {
   detachFilePickerActions();
   detachFolderBrowserActions();
   detachFileExplorerActions();
-  managedHublotEventController.detach();
-  hublotSidebarEventController.detach();
+  detachHublotActions();
   routineEventController.detach();
   sessionPickerEventController.detach();
   detachFilesActions();
@@ -1757,8 +1752,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
-    managedHublotEventController,
-    hublotSidebarEventController, mobileDrawerDismissController,
+    mobileDrawerDismissController,
     routineEventController, sessionPickerEventController, settingsChangeController,
     headerEventController, carouselEventRegistration,
   ],

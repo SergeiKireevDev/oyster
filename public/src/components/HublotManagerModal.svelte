@@ -3,6 +3,7 @@
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { addToast } from "../stores/toasts.js";
   import { openFilesExplorer as openManagedFileExplorer } from "../features/files/filesActions.js";
+  import { createManagedHublot, openManagedHublotCommandPalette } from "../features/hublots/hublotActions.js";
 
   async function closeManagedHublot(id) {
     try {
@@ -13,11 +14,8 @@
     }
   }
 
-  const createManagedHublot = (desc) => window.dispatchEvent(new CustomEvent("pi-managed-hublot-create", { detail: desc }));
 
-  function commandPalette(node) {
-    window.dispatchEvent(new CustomEvent("pi-managed-command-palette", { detail: node }));
-  }
+  const commandPalette = openManagedHublotCommandPalette;
 
   function keyActivate(event, fn) {
     if (event.key === "Enter" || event.key === " ") {

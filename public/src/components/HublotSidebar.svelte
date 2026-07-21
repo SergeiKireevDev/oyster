@@ -1,8 +1,7 @@
 <script>
   import HublotList from "./HublotList.svelte";
   import RoutineList from "./RoutineList.svelte";
-
-  const showHublotManager = () => window.dispatchEvent(new Event("pi-hublot-show"));
+  import { showHublots as showHublotManager } from "../features/hublots/hublotActions.js";
 </script>
 
 <aside id="hublots">
