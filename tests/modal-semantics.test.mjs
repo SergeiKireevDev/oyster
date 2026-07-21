@@ -49,7 +49,7 @@ test("file folder session and overlay controls use native semantics", () => {
   assert.match(read("FolderBrowserModal.svelte"), /<button class="chip" onclick=\{cancelFolderBrowser\}>Cancel<\/button>/);
 
   const sessions = read("SessionPickerModal.svelte");
-  assert.match(sessions, /<button class="s-session-main" onclick=\{\(\) => choosePickedSession\(session\.path\)\}>/);
+  assert.match(sessions, /<button class="s-session-main" onclick=\{\(\) => choosePickedSession\(sessionIdentity\(session\)\)\}>/);
   assert.match(sessions, /<button class="s-del s-stop"[^>]*title="Stop this session's process \(keeps the session\)"/);
   assert.match(sessions, /<button class="s-del" title="Delete session"/);
   assert.match(sessions, /<button class="chip" onclick=\{cancelSessionPicker\}>Cancel<\/button>/);

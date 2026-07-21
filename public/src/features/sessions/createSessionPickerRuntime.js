@@ -1,6 +1,7 @@
 import { createSearchHitSessionController, groupSessionSearchResults, markRunnerStopped } from "../../runtime/sessionRuntime.js";
 import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../../lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "../../lib/sessionPickerSearchController.js";
+import { runnerSessionIdentity, sameSession, sessionIdentity } from "../../lib/sessionIdentity.js";
 import {
   SESSION_PICKER_CANCEL_ACTION,
   SESSION_PICKER_CHOOSE_ACTION,
@@ -17,9 +18,9 @@ import {
 const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
 
 function mergeSessions(existing, additions) {
-  const byPath = new Map(existing.map((session) => [session.path, session]));
-  for (const session of additions) byPath.set(session.path, session);
-  return [...byPath.values()];
+  const byIdentity = new Map(existing.map((session) => [sessionIdentity(session), session]));
+  for (const session of additions) byIdentity.set(sessionIdentity(session), session);
+  return [...byIdentity.values()];
 }
 
 export function createSessionPickerRuntime(deps) {
@@ -58,18 +59,18 @@ export function createSessionPickerRuntime(deps) {
     getSessions: () => sessions,
     setSessions: (next, deletedSession) => {
       pickerRevision++;
-      const removed = deletedSession ?? sessions.find((session) => !next.some((item) => item.path === session.path));
+      const removed = deletedSession ?? sessions.find((session) => !next.some((item) => sameSession(item, session)));
       sessions = next;
       const state = snapshot();
       const removedFolder = folderOfSessionPath(removed?.path);
       const otherFolderSessions = Object.fromEntries(Object.entries(state.otherFolderSessions)
-        .map(([dir, items]) => [dir, items.filter((item) => item.path !== removed?.path)]));
+        .map(([dir, items]) => [dir, items.filter((item) => !sameSession(item, removed))]));
       const folders = state.folders
         .map((item) => item.dir === removedFolder ? { ...item, count: Math.max(0, item.count - 1) } : item)
         .filter((item) => item.count > 0);
       if (removedFolder && !otherFolderSessions[removedFolder]?.length) delete otherFolderSessions[removedFolder];
       deps.updateSessionPicker({
-        sessions: state.sessions.filter((item) => item.path !== removed?.path),
+        sessions: state.sessions.filter((item) => !sameSession(item, removed)),
         otherFolderSessions,
         folders,
       });
@@ -98,15 +99,15 @@ export function createSessionPickerRuntime(deps) {
     setFolder: search.setFolder,
     setExcludeTools: search.setExcludeTools,
     runSearch: search.search,
-    chooseSession: (sessionPath) => {
+    chooseSession: (identity) => {
       deps.close();
-      resolvePicker?.(picker.chooseSession(sessionPath, sessions));
+      resolvePicker?.(picker.chooseSession(identity, sessions));
     },
     stopSession: picker.stopSession,
     deleteSession: deletion.deleteSession,
-    openSearchHit: (sessionPath, hit) => {
+    openSearchHit: (identity, hit) => {
       resolvePicker?.(null);
-      deps.openSessionAtSearchHit(sessionPath, hit);
+      deps.openSessionAtSearchHit(identity, hit);
     },
     loadFolder: folder.loadFolder,
   };
@@ -165,7 +166,7 @@ export function createSessionPickerRuntime(deps) {
     let syncing = false;
     deps.setRunnersUpdateHandler(async (runners) => {
       deps.updateSessionPicker({ runners });
-      if (syncing || !runners.some((runner) => runner.sessionFile && !sessions.some((session) => session.path === runner.sessionFile))) return;
+      if (syncing || !runners.some((runner) => runnerSessionIdentity(runner) && !sessions.some((session) => sameSession(session, runnerSessionIdentity(runner))))) return;
       syncing = true;
       const revision = pickerRevision;
       try {
@@ -206,7 +207,7 @@ export function createSessionPickerRuntime(deps) {
     });
     deps.setRunnersUpdateHandler(null);
     resolvePicker = null;
-    const fullChoice = chosen ? (sessions.find((session) => session.path === chosen.path || session.id === chosen.id) ?? chosen) : null;
+    const fullChoice = chosen ? (sessions.find((session) => sameSession(session, chosen) || session.id === chosen.id) ?? chosen) : null;
     if (!fullChoice) return;
     await deps.openChosenSession(fullChoice);
   }

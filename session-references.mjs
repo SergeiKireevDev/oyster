@@ -88,3 +88,32 @@ export function createSessionReferenceCodec({ agentDir, sqlitePath, jsonlRoot } 
     equals,
   });
 }
+
+/** Adapt opaque and legacy HTTP inputs at the JSONL compatibility boundary. */
+export function createSessionRequestResolver({ codec, sessionFileParam, sessionFileFromSearch, readSessionHeaderInfo }) {
+  const referenceFor = ({ id, path }) => codec.validate({ backend: "jsonl", id, storagePath: path });
+  const targetFromSearch = (url) => {
+    const key = url.searchParams.get("key");
+    if (!key) return sessionFileFromSearch(url);
+    try {
+      const reference = codec.parse(key);
+      return reference.backend === "jsonl" ? sessionFileParam(reference.storagePath) : null;
+    } catch {
+      return null;
+    }
+  };
+  const referenceParam = ({ sessionKey, sessionPath }) => {
+    if (sessionKey) {
+      try { return codec.parse(sessionKey); } catch { return null; }
+    }
+    const file = sessionPath ? sessionFileParam(sessionPath) : null;
+    if (!file) return null;
+    try {
+      const info = readSessionHeaderInfo(file);
+      return info?.id ? referenceFor({ id: info.id, path: file }) : null;
+    } catch {
+      return null;
+    }
+  };
+  return Object.freeze({ referenceFor, targetFromSearch, referenceParam });
+}

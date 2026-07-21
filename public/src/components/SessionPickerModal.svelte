@@ -14,6 +14,7 @@
   } from "../runtime/uiActionNames.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { groupSessionFamilies, partitionSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
+  import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
 
   const uiActions = getUiActionRegistry();
   const choosePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, ...args);
@@ -48,7 +49,7 @@
   }
 
   function runnerFor(session) {
-    return $sessionPicker.runners.find((runner) => runner.sessionFile === session.path) ?? { id: session.runnerId, alive: session.alive, busy: session.busy };
+    return $sessionPicker.runners.find((runner) => runnerSessionIdentity(runner) === sessionIdentity(session)) ?? { id: session.runnerId, alive: session.alive, busy: session.busy };
   }
 
   function isAlive(session) {
@@ -121,11 +122,11 @@
     exclude tool output (search only user/ai text)
   </label>
   <div class="m-path">{$sessionPicker.searchStatus}</div>
-  {#each $sessionPicker.searchResults as group (group.sessionPath)}
-    <button class="m-option search-hit" title={group.sessionPath} onclick={(event) => {
+  {#each $sessionPicker.searchResults as group (group.sessionKey)}
+    <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => {
       const snippet = event.target.closest?.(".s-snippet");
       const idx = snippet?.dataset?.hitIndex;
-      openPickedSearchHit(group.sessionPath, group.hits[Number(idx ?? 0)] ?? group.hits[0]);
+      openPickedSearchHit(group.sessionKey, group.hits[Number(idx ?? 0)] ?? group.hits[0]);
     }}>
       <div class="s-title">
         <span class="s-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
@@ -189,7 +190,7 @@
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
   <div class={`m-option session-row${current ? " current" : ""}`}>
-    <button class="s-session-main" onclick={() => choosePickedSession(session.path)}>
+    <button class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
       <div class="s-title">
         <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
         <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
@@ -207,12 +208,12 @@
 {/snippet}
 
 {#snippet SessionRows({ sessions })}
-  {#each groupSessionFamilies(sessions) as family (family.session.path)}
+  {#each groupSessionFamilies(sessions) as family (sessionIdentity(family.session))}
     {@render sessionRow(family.session)}
     {#if family.forks.length}
       <details class="s-forkgroup" open={family.forks.some((fork) => fork.id === $sessionPicker.currentId)}>
         <summary>🌿 {family.forks.length} fork{family.forks.length === 1 ? "" : "s"}</summary>
-        {#each family.forks as fork (fork.path)}
+        {#each family.forks as fork (sessionIdentity(fork))}
           {@render sessionRow(fork)}
         {/each}
       </details>

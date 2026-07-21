@@ -14,7 +14,7 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
     recordCheckpoint: () => ({ anchorId: "entry-1" }),
     loadCheckpoints: () => ({ session: [{ hash: "abc123" }] }),
     checkpointTree: (path) => ({ path, children: [] }),
-    sessionFileParam: (path) => path === "valid.jsonl" ? "/session.jsonl" : null,
+    sessionFileParam: (url) => url.searchParams.get("path") === "valid.jsonl" ? "/session.jsonl" : null,
     logger: { error() {} },
   });
   const created = response(); await routes["POST /checkpoint"]({ body: { label: "save", model: "model/id" } }, created, new URL("http://localhost/checkpoint"));

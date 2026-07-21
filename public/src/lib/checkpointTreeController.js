@@ -1,3 +1,5 @@
+import { runnerSessionIdentity, sessionIdentity, sessionIdentityQuery, sessionOpenSelection } from "./sessionIdentity.js";
+
 export function createCheckpointTreeEventController({ windowTarget, openSession, rollback }) {
   const onOpen = (event) => openSession(event.detail);
   const onRollback = (event) => rollback(event.detail.checkpoint, event.detail.target);
@@ -33,17 +35,17 @@ export function createCheckpointTreeController({
   async function load() {
     const state = getState();
     const runners = getRunners();
-    const path = state?.sessionFile ?? runners.find((runner) => runner.id === getCurrentRunner())?.sessionFile;
+    const identity = state?.sessionFile ?? runnerSessionIdentity(runners.find((runner) => runner.id === getCurrentRunner()));
     setTreeState({
-      loading: !!path,
+      loading: !!identity,
       error: "",
-      empty: path ? "" : "no session file yet — send a message first",
+      empty: identity ? "" : "no saved session yet — send a message first",
       currentSessionId: state?.sessionId ?? null,
       runners,
     });
-    if (!path) return;
+    if (!identity) return;
     try {
-      const response = await fetchImpl(`/checkpoint-tree?path=${encodeURIComponent(path)}`);
+      const response = await fetchImpl(`/checkpoint-tree?${sessionIdentityQuery(identity)}`);
       const data = await response.json().catch(() => ({}));
       if (response.status === 400 && /not a session file|no such file/i.test(data.error || "")) {
         setTreeState({ loading: false, root: null, empty: "no session file yet — send a message first" });
@@ -59,7 +61,7 @@ export function createCheckpointTreeController({
   async function openTreeSession(node) {
     if (node.id === getState()?.sessionId) return;
     try {
-      await openAndSwitchSession({ sessionPath: node.path, dir: node.cwd || getWorkdir() });
+      await openAndSwitchSession({ ...sessionOpenSelection(sessionIdentity(node)), dir: node.cwd || getWorkdir() });
       toast(`switched to: ${node.name || node.id.slice(0, 8)}`);
     } catch (error) {
       toast(`switch failed: ${error.message}`, "error");

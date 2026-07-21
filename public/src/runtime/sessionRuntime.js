@@ -1,3 +1,5 @@
+import { runnerSessionIdentity, sessionIdentityQuery, sessionOpenSelection } from "../lib/sessionIdentity.js";
+
 /**
  * Compose deliberate runner switches without coupling session actions to DOM
  * or transport implementations. The supplied connect adapter preserves the
@@ -44,14 +46,15 @@ export function createRunnerListController({ updateAppSession }) {
   };
 }
 
-/** Group search results by durable session file for the session picker. */
+/** Group search results by canonical persisted-session identity. */
 export function groupSessionSearchResults(results) {
   const groups = new Map();
   for (const hit of results) {
-    if (!groups.has(hit.sessionPath)) groups.set(hit.sessionPath, []);
-    groups.get(hit.sessionPath).push(hit);
+    const identity = hit.sessionKey ?? hit.sessionPath;
+    if (!groups.has(identity)) groups.set(identity, []);
+    groups.get(identity).push(hit);
   }
-  return [...groups.entries()].map(([sessionPath, hits]) => ({ sessionPath, hits, first: hits[0] }));
+  return [...groups.entries()].map(([sessionKey, hits]) => ({ sessionKey, sessionPath: hits[0]?.sessionPath ?? null, hits, first: hits[0] }));
 }
 
 /** Format a session timestamp for compact picker display. */
@@ -106,8 +109,9 @@ export function markRunnerStopped(runners, id) {
 }
 
 /** Open or resume a runner, normalizing the server's response and errors. */
-export async function openSession(fetchImpl, { sessionPath = null, dir = null } = {}) {
-  const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionPath, dir }) });
+export async function openSession(fetchImpl, { sessionKey = null, sessionPath = null, dir = null } = {}) {
+  const selection = sessionOpenSelection(sessionKey ?? sessionPath);
+  const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...selection, dir }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
   return data.runner;
@@ -121,14 +125,8 @@ export async function stopSessionRunner(fetchImpl, id) {
   return data;
 }
 
-/** Convert an absolute session file path into the server's session-root query. */
-export function sessionFileQuery(sessionPath) {
-  const raw = String(sessionPath ?? "");
-  const marker = "/.pi/agent/sessions/";
-  const index = raw.indexOf(marker);
-  const relative = index !== -1 ? raw.slice(index + marker.length) : raw.replace(/^\/+/, "");
-  return `path=${encodeURIComponent(relative)}`;
-}
+/** Compatibility export while callers migrate from file paths to identities. */
+export const sessionFileQuery = sessionIdentityQuery;
 
 /** Read durable transcript history for an optimistic session-switch preview. */
 export async function fetchSessionPreview(fetchImpl, sessionPath) {
@@ -237,15 +235,16 @@ export function createSessionStateApplier({ applySessionState, getState, setStat
 
 /** Orchestrate a runner open while retaining the durable-preview fast path. */
 export function createSessionOpenController({ open, getCurrentRunner, getRunners, preview, markEmpty, log = () => {}, now = () => performance.now() }) {
-  return async ({ sessionPath = null, dir = null } = {}) => {
+  return async ({ sessionKey = null, sessionPath = null, dir = null } = {}) => {
     const started = now();
-    log("openSessionRunner:start", { sessionPath, dir });
+    const identity = sessionKey ?? sessionPath;
+    log("openSessionRunner:start", { sessionIdentity: identity, dir });
     const current = getRunners().find((runner) => runner.id === getCurrentRunner());
-    if (sessionPath && sessionPath !== current?.sessionFile) preview.begin(sessionPath);
-    const runner = await open({ sessionPath, dir });
-    if (!sessionPath && runner?.id) markEmpty(runner.id);
+    if (identity && identity !== runnerSessionIdentity(current)) preview.begin(identity);
+    const runner = await open({ ...sessionOpenSelection(identity), dir });
+    if (!identity && runner?.id) markEmpty(runner.id);
     log("openSessionRunner:done", {
-      runner: runner?.id, sessionPath: runner?.sessionFile, sessionId: runner?.sessionId,
+      runner: runner?.id, sessionIdentity: runnerSessionIdentity(runner), sessionId: runner?.sessionId,
       ms: Math.round(now() - started),
     });
     return runner;
@@ -277,11 +276,11 @@ export function createAdjacentRunnerController({ getRunners, getCurrentRunner, g
 }
 
 export function createSearchHitSessionController({ close, getSessionId, open, getCurrentRunner, setWorkdir, reload, focus, setAfterTranscript, switchRunner, toast }) {
-  return async (sessionPath, hit) => {
+  return async (sessionKey, hit) => {
     close();
     if (hit.sessionId === getSessionId()) return focus(hit);
     try {
-      const runner = await open({ sessionPath, dir: hit.sessionCwd || null });
+      const runner = await open({ ...sessionOpenSelection(sessionKey), dir: hit.sessionCwd || null });
       if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
       toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
       if (runner.id === getCurrentRunner()) {

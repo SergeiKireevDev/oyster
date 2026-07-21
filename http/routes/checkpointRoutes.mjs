@@ -30,7 +30,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
     },
 
     "GET /checkpoint-tree": (req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
+      const target = sessionFileParam(url);
       if (!target) {
         json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;

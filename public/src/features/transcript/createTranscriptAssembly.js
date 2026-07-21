@@ -153,6 +153,7 @@ export function createTranscriptAssembly(deps) {
       applyState: syncDeps.applyState,
       fetchImpl: syncDeps.fetchImpl,
       sessionFileQuery: syncDeps.sessionFileQuery,
+      getSessionIdentity: syncDeps.getSessionIdentity,
       clearPreview: syncDeps.clearPreview,
       log: syncDeps.log,
       render: renderTranscript,

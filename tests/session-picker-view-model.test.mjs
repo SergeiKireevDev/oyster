@@ -19,6 +19,14 @@ test("session picker groups nested forks under their root in input order", () =>
   ]);
 });
 
+test("session picker groups SQLite families by opaque keys despite a shared database", () => {
+  const sqlite = [
+    { sessionKey: "ps1_root", path: "/agent/sessions.sqlite", name: "root" },
+    { sessionKey: "ps1_fork", path: "/agent/sessions.sqlite", parentSessionKey: "ps1_root", name: "fork" },
+  ];
+  assert.deepEqual(groupSessionFamilies(sqlite), [{ session: sqlite[0], forks: [sqlite[1]] }]);
+});
+
 test("session picker partitions whole families by whether any member is alive", () => {
   const partition = partitionSessionFamilies(sessions, (session) => session.path === "/nested.jsonl");
   assert.deepEqual(partition, {

@@ -16,6 +16,7 @@ import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
 import { createBrowserDomAdapters } from "../platform/createBrowserDomAdapters.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
+import { runnerSessionIdentity, sameSession, sessionOpenSelection } from "../lib/sessionIdentity.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
@@ -327,6 +328,7 @@ transcriptAssembly.configureSynchronization({
   applyState,
   fetchImpl: fetch,
   sessionFileQuery,
+  getSessionIdentity: () => runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner())) ?? getSessionState()?.sessionFile,
   clearPreview: sessionOperations.clearPreview,
   log: lifecycleLog,
   setReplaying,
@@ -343,7 +345,7 @@ transcriptAssembly.configureSynchronization({
   setBusy,
   refreshState,
   getRunner: () => getCurrentRunner(),
-  getSessionFile: () => getSessionState()?.sessionFile,
+  getSessionFile: () => runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner())) ?? getSessionState()?.sessionFile,
   logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
 const reloadTranscript = transcriptOperations.reloadTranscript;
@@ -655,8 +657,8 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   getRunners: () => getRunners(),
   toast: addToast,
   stopRunner: (id) => getSessionRuntime().stopSession(id),
-  async removeSession(path) {
-    const response = await fetch(`/session?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+  async removeSession(sessionQuery) {
+    const response = await fetch(`/session?${sessionQuery}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `delete failed (${response.status})`);
     return data;
@@ -683,22 +685,23 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     return { sessions, ...folderData };
   },
   getCurrentSessionId: (sessions) => {
-    const currentSessionFile = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;
-    return sessions.find((session) => session.path === currentSessionFile)?.id ?? getSessionState()?.sessionId;
+    const currentIdentity = runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner()))
+      ?? getSessionState()?.sessionFile;
+    return sessions.find((session) => sameSession(session, currentIdentity))?.id ?? getSessionState()?.sessionId;
   },
   setRunnersUpdateHandler: sessionOperations.setRunnersUpdateHandler,
   getWorkdir: () => getWorkdir(),
   open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
   async openChosenSession(fullChoice) {
     try {
-      await getSessionRuntime().openAndSwitchSession({ sessionPath: fullChoice.path, dir: fullChoice.cwd || getWorkdir() });
+      await getSessionRuntime().openAndSwitchSession({ ...sessionOpenSelection(fullChoice), dir: fullChoice.cwd || getWorkdir() });
       addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
     } catch (e) {
       addToast(`switch failed: ${e.message}`, "error");
     }
   },
   getSessionId: () => getSessionState()?.sessionId,
-  openSearchSession: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || getWorkdir() }),
+  openSearchSession: ({ sessionKey, sessionPath, dir }) => getSessionRuntime().openSession({ sessionKey, sessionPath, dir: dir || getWorkdir() }),
   getCurrentRunner: () => getCurrentRunner(),
   setWorkdir,
   reloadTranscript,
@@ -744,9 +747,10 @@ const { focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
 /** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
 /** Read the active session's persisted entries for checkpoint and permalink adapters. */
 async function fetchSessionEntries() {
-  const path = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;
-  if (!path) throw new Error("session not saved yet");
-  return fetchPersistedSessionEntries(fetch, path);
+  const identity = runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner()))
+    ?? getSessionState()?.sessionFile;
+  if (!identity) throw new Error("session not saved yet");
+  return fetchPersistedSessionEntries(fetch, identity);
 }
 
 // ------------------------------------------------------------ extension UI bridge

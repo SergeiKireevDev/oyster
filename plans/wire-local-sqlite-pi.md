@@ -75,7 +75,7 @@ JSONL is explicit.
   Start a resumed SQLite runner with `--session <id>` and the configured store
   instead of sending JSONL-only `switch_session`; preserve the reference across
   watchdog restarts and deduplicate runners by the full reference.
-- [ ] Update browser session actions, stores, picker view models, transcript
+- [x] Update browser session actions, stores, picker view models, transcript
   loading, permalink lookup, and checkpoint-tree entry points to use the opaque
   session key/reference rather than assuming every persisted session has a
   `.jsonl` path. Keep compatibility tests for old JSONL links.

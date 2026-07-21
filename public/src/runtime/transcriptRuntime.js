@@ -7,14 +7,14 @@ export const REPLAY_GATED_EVENT_TYPES = new Set([
 ]);
 
 /** Load state and authoritative durable messages while applying state promptly. */
-export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, sessionFileQuery, onState, onMessages, onDurableMessages }) {
+export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity = (state) => state.sessionFile, onState, onMessages, onDurableMessages }) {
   return loadCanonicalTranscript({
     getState: () => rpc({ type: "get_state" }),
     getMessages: () => rpc({ type: "get_messages" }),
     applyState,
     onState,
     onMessages,
-    getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, state.sessionFile, sessionFileQuery),
+    getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, getSessionIdentity(state), sessionFileQuery),
     onDurableMessages,
   });
 }
@@ -235,12 +235,12 @@ export function createTranscriptAfterRenderController({ annotate, refreshCheckpo
   };
 }
 
-export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {
     const started = now();
     log("reloadTranscript:start");
     const { messages } = await loadDurableCanonicalTranscript({
-      rpc, applyState, fetchImpl, sessionFileQuery,
+      rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity,
       onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
       onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
       onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),

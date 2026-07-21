@@ -26,7 +26,7 @@ export async function init(state) {
     await import(bust("checkpoints.mjs"));
   
   const { createRunnerManager } = await import(bust("runners.mjs"));
-  const { createSessionReferenceCodec } = await import(bust("session-references.mjs"));
+  const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -82,21 +82,16 @@ export async function init(state) {
 
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
-  const sessionReferenceParam = ({ sessionKey, sessionPath }) => {
-    if (sessionKey) {
-      try { return state.sessionReferences.parse(sessionKey); } catch { return null; }
-    }
-    const file = sessionPath ? sessionFileParam(sessionPath) : null;
-    if (!file) return null;
-    try {
-      const info = readSessionHeaderInfo(file);
-      return info?.id
-        ? state.sessionReferences.validate({ backend: "jsonl", id: info.id, storagePath: file })
-        : null;
-    } catch {
-      return null;
-    }
-  };
+  const {
+    referenceFor: sessionReferenceFor,
+    targetFromSearch: sessionTargetFromSearch,
+    referenceParam: sessionReferenceParam,
+  } = createSessionRequestResolver({
+    codec: state.sessionReferences,
+    sessionFileParam,
+    sessionFileFromSearch,
+    readSessionHeaderInfo,
+  });
   const runnerRoutes = createRunnerRoutes({
     state, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
@@ -110,7 +105,7 @@ export async function init(state) {
   });
   const checkpointRoutes = createCheckpointRoutes({
     state, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, loadCheckpoints, checkpointTree, sessionFileParam,
+    recordCheckpoint, loadCheckpoints, checkpointTree, sessionFileParam: sessionTargetFromSearch,
     git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });
@@ -128,6 +123,7 @@ export async function init(state) {
       root: SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions,
       listSessionFolders, searchSessions, sessionEntries, sessionMessages, findSessionById,
       readSessionHeaderInfo, sessionFileParam, sessionFileFromSearch,
+      sessionReferenceFor, sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
     resources: { closeTunnel, releaseSessionRoutines },

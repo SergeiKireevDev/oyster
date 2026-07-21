@@ -26,6 +26,8 @@ export function createSessionRoutes({
     readSessionHeaderInfo,
     sessionFileParam,
     sessionFileFromSearch,
+    sessionReferenceFor,
+    sessionTargetFromSearch,
   } = sessions;
   const { stopRunner, runnersChanged } = runners;
   const { closeTunnel, releaseSessionRoutines } = resources;
@@ -44,14 +46,18 @@ export function createSessionRoutes({
       }
       const live = [...state.runners.values()];
       const result = listSessions(dir ?? sessionDirFor(state.currentDir)).map((session) => {
-        const runner = live.find((candidate) => candidate.sessionFile === session.path);
-        return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
+        const sessionRef = sessionReferenceFor(session);
+        const sessionKey = state.sessionReferences.serialize(sessionRef);
+        const runner = live.find((candidate) => candidate.sessionRef
+          ? state.sessionReferences.equals(candidate.sessionRef, sessionRef)
+          : candidate.sessionFile === session.path);
+        return { ...session, sessionRef, sessionKey, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
       });
       json(res, 200, { sessions: result });
     },
 
     "DELETE /session": (_req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
+      const target = sessionTargetFromSearch(url);
       if (!target) {
         json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;
@@ -97,14 +103,16 @@ export function createSessionRoutes({
         return;
       }
       try {
-        json(res, 200, { session: { path, ...summarizeSessionFile(path) } });
+        const session = { path, ...summarizeSessionFile(path) };
+        const sessionRef = sessionReferenceFor(session);
+        json(res, 200, { session: { ...session, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) } });
       } catch (error) {
         json(res, 500, { error: `failed to read session: ${error.message}` });
       }
     },
 
     "GET /session-entries": (_req, res, url) => {
-      const target = sessionFileFromSearch(url);
+      const target = sessionTargetFromSearch(url);
       if (!target) {
         json(res, 404, { error: "session file not found" });
         return;
@@ -117,7 +125,7 @@ export function createSessionRoutes({
     },
 
     "GET /session-messages": (_req, res, url) => {
-      const target = sessionFileFromSearch(url);
+      const target = sessionTargetFromSearch(url);
       if (!target) {
         json(res, 404, { error: "session file not found" });
         return;
@@ -160,17 +168,18 @@ export function createSessionRoutes({
       }
       const includeTools = url.searchParams.get("tools") === "1";
       try {
-        json(res, 200, {
+        const result = searchSessions({
           q: query,
           scope,
-          ...searchSessions({
-            q: query,
-            scope,
-            path,
-            includeTools,
-            defaultDir: sessionDirFor(state.currentDir),
-          }),
+          path,
+          includeTools,
+          defaultDir: sessionDirFor(state.currentDir),
         });
+        result.results = result.results.map((hit) => {
+          const sessionRef = sessionReferenceFor({ id: hit.sessionId, path: hit.sessionPath });
+          return { ...hit, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) };
+        });
+        json(res, 200, { q: query, scope, ...result });
       } catch (error) {
         json(res, 500, { error: `search failed: ${error.message}` });
       }

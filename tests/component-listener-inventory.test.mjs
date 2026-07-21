@@ -42,6 +42,6 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/HublotManagerModal.svelte:76:use:commandPalette",
     "components/Menu.svelte:18:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
-    "components/SessionPickerModal.svelte:99:use:focusOnMount",
+    "components/SessionPickerModal.svelte:100:use:focusOnMount",
   ]);
 });

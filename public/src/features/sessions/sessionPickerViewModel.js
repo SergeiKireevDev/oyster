@@ -1,12 +1,14 @@
+import { parentSessionIdentity, sessionIdentity } from "../../lib/sessionIdentity.js";
+
 /** Groups a flat session list into root sessions and their forks without mutating input. */
 export function groupSessionFamilies(sessions) {
-  const byPath = new Map(sessions.map((session) => [session.path, session]));
+  const byIdentity = new Map(sessions.map((session) => [sessionIdentity(session), session]));
   const rootOf = (input) => {
     let session = input;
     const seen = new Set();
-    while (session.parentSession && byPath.has(session.parentSession) && !seen.has(session.path)) {
-      seen.add(session.path);
-      session = byPath.get(session.parentSession);
+    while (parentSessionIdentity(session) && byIdentity.has(parentSessionIdentity(session)) && !seen.has(sessionIdentity(session))) {
+      seen.add(sessionIdentity(session));
+      session = byIdentity.get(parentSessionIdentity(session));
     }
     return session;
   };
@@ -14,8 +16,9 @@ export function groupSessionFamilies(sessions) {
   const families = new Map();
   for (const session of sessions) {
     const root = rootOf(session);
-    if (!families.has(root.path)) families.set(root.path, { session: root, forks: [] });
-    if (session.path !== root.path) families.get(root.path).forks.push(session);
+    const rootIdentity = sessionIdentity(root);
+    if (!families.has(rootIdentity)) families.set(rootIdentity, { session: root, forks: [] });
+    if (sessionIdentity(session) !== rootIdentity) families.get(rootIdentity).forks.push(session);
   }
   return [...families.values()];
 }

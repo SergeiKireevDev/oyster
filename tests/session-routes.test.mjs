@@ -13,6 +13,10 @@ function setup() {
     defaultRunnerId: "r1",
     runners: new Map([[runner.id, runner]]),
     tunnels: new Map([["t1", { id: "t1", port: 4000, sessionId: "session-a" }]]),
+    sessionReferences: {
+      serialize: (reference) => `key-${reference.id}`,
+      equals: (left, right) => left.backend === right.backend && left.id === right.id && left.storagePath === right.storagePath,
+    },
   };
   const dependencies = {
     state,
@@ -23,13 +27,15 @@ function setup() {
       summarizeSessionFile: () => ({ id: "session-a", name: "A" }),
       listSessions: (dir) => [{ id: "session-a", path: "/sessions/folder/a.jsonl", dir }],
       listSessionFolders: () => ["/sessions/folder"],
-      searchSessions: (options) => { searches.push(options); return { hits: [{ snippet: "matching text" }] }; },
+      searchSessions: (options) => { searches.push(options); return { results: [{ sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text" }] }; },
       sessionEntries: (path) => [{ id: "entry", path }],
       sessionMessages: (path) => [{ role: "user", path }],
       findSessionById: (id) => id === "session-a" ? "/sessions/folder/a.jsonl" : null,
       readSessionHeaderInfo: () => ({ id: "session-a" }),
       sessionFileParam: (path) => path === "folder/a.jsonl" ? "/sessions/folder/a.jsonl" : null,
       sessionFileFromSearch: (url) => url.searchParams.get("path") === "folder/a.jsonl" ? "/sessions/folder/a.jsonl" : null,
+      sessionReferenceFor: ({ id, path }) => ({ backend: "jsonl", id, storagePath: path }),
+      sessionTargetFromSearch: (url) => ["folder/a.jsonl", "key-session-a"].includes(url.searchParams.get("path") ?? url.searchParams.get("key")) ? "/sessions/folder/a.jsonl" : null,
     },
     runners: {
       stopRunner: (selected) => stopped.push(selected.id),
@@ -64,6 +70,8 @@ test("session listing preserves root scope and live runner annotations", () => {
     runnerId: "r1",
     alive: true,
     busy: true,
+    sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
+    sessionKey: "key-session-a",
   });
 });
 
@@ -71,7 +79,11 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
   const { routes } = setup();
   const lookup = response();
   routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=session-a"));
-  assert.deepEqual(lookup.body, { session: { path: "/sessions/folder/a.jsonl", id: "session-a", name: "A" } });
+  assert.deepEqual(lookup.body, { session: {
+    path: "/sessions/folder/a.jsonl", id: "session-a", name: "A",
+    sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
+    sessionKey: "key-session-a",
+  } });
 
   const missingId = response();
   routes["GET /session-by-id"]({}, missingId, new URL("http://localhost/session-by-id"));
@@ -106,7 +118,11 @@ test("search validates scope and preserves filtering options, snippets, and resp
   assert.deepEqual(found.body, {
     q: "find",
     scope: "session",
-    hits: [{ snippet: "matching text" }],
+    results: [{
+      sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text",
+      sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
+      sessionKey: "key-session-a",
+    }],
   });
   assert.deepEqual(searches, [{
     q: "find",

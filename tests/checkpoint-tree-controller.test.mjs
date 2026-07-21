@@ -40,8 +40,19 @@ test("checkpoint tree controller loads the current session tree", async () => {
     return { ok: true, status: 200, json: async () => ({ root: { id: "root" } }) };
   } });
   await tree.load();
-  assert.equal(requests[0], "/checkpoint-tree?path=%2Fsessions%2Fcurrent.jsonl");
+  assert.equal(requests[0], "/checkpoint-tree?path=sessions%2Fcurrent.jsonl");
   assert.deepEqual(states.at(-1), { loading: false, root: { id: "root" }, empty: "", error: "" });
+});
+
+test("checkpoint tree controller loads SQLite sessions by opaque runner key", async () => {
+  const requests = [];
+  const { controller: tree } = controller({
+    getState: () => ({ sessionId: "sqlite", sessionFile: null }),
+    getRunners: () => [{ id: "runner", sessionKey: "ps1_sqlite", sessionFile: null }],
+    fetchImpl: async (url) => { requests.push(url); return { ok: true, status: 200, json: async () => ({ root: {} }) }; },
+  });
+  await tree.load();
+  assert.equal(requests[0], "/checkpoint-tree?key=ps1_sqlite");
 });
 
 test("checkpoint tree controller treats an unwritten session as empty", async () => {

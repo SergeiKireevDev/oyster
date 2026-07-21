@@ -1,3 +1,5 @@
+import { runnerSessionIdentity, sameSession, sessionIdentity, sessionIdentityQuery } from "./sessionIdentity.js";
+
 export function createSessionPickerEventController({ windowTarget, dispatch, cancel }) {
   const onAction = (event) => {
     const { type, args } = event.detail ?? {};
@@ -17,7 +19,7 @@ export function createSessionPickerEventController({ windowTarget, dispatch, can
 
 export function createSessionPickerController({ stopRunner, getRunners, markStopped, setRunners, toast }) {
   async function stopSession(session) {
-    const runner = getRunners().find((item) => item.sessionFile === session.path) ?? { id: session.runnerId };
+    const runner = getRunners().find((item) => runnerSessionIdentity(item) === sessionIdentity(session)) ?? { id: session.runnerId };
     if (!runner.id) return;
     try {
       await stopRunner(runner.id);
@@ -27,8 +29,8 @@ export function createSessionPickerController({ stopRunner, getRunners, markStop
       toast(`stop failed: ${error.message}`, "error");
     }
   }
-  function chooseSession(sessionPath, sessions) {
-    return sessions.find((session) => session.path === sessionPath) ?? null;
+  function chooseSession(identity, sessions) {
+    return sessions.find((session) => sameSession(session, identity)) ?? null;
   }
 
   return { stopSession, chooseSession };
@@ -39,8 +41,8 @@ export function createSessionPickerDeleteController({ removeSession, getSessions
     const label = session.name || session.preview || session.id?.slice(0, 8) || "?";
     if (!confirm(`Delete session "${label}"?`)) return;
     try {
-      const data = await removeSession(session.path);
-      setSessions(getSessions().filter((item) => item.path !== session.path), session);
+      const data = await removeSession(sessionIdentityQuery(session));
+      setSessions(getSessions().filter((item) => !sameSession(item, session)), session);
       const bits = [];
       if (data.closedHublots?.length) bits.push(`closed hublot${data.closedHublots.length > 1 ? "s" : ""} :${data.closedHublots.join(", :")}`);
       if (data.releasedRoutines?.length) bits.push(`released routine${data.releasedRoutines.length > 1 ? "s" : ""} ${data.releasedRoutines.join(", ")}`);

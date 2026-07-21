@@ -2,9 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { adjacentActiveRunner, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
-test("session actions group search hits by session", () => {
-  const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
-  assert.deepEqual(grouped.map((group) => [group.sessionPath, group.hits.length, group.first.id]), [["a", 2, 1], ["b", 1, 3]]);
+test("session actions group search hits by canonical session identity", () => {
+  const grouped = groupSessionSearchResults([
+    { sessionKey: "ps1_a", sessionPath: "/shared.sqlite", id: 1 },
+    { sessionKey: "ps1_a", sessionPath: "/shared.sqlite", id: 2 },
+    { sessionKey: "ps1_b", sessionPath: "/shared.sqlite", id: 3 },
+  ]);
+  assert.deepEqual(grouped.map((group) => [group.sessionKey, group.hits.length, group.first.id]), [["ps1_a", 2, 1], ["ps1_b", 1, 3]]);
 });
 
 test("session actions format session dates", () => {
@@ -29,8 +33,9 @@ test("session actions persist the current runner", () => {
   assert.equal(readPersistedRunner(storage), null);
 });
 
-test("session actions use session-root-relative file queries", () => {
+test("session actions use opaque keys with session-root-relative file compatibility", () => {
   assert.equal(sessionFileQuery("/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), "path=--workspace--%2Fa.jsonl");
+  assert.equal(sessionFileQuery("ps1_sqlite_session"), "key=ps1_sqlite_session");
 });
 
 test("current runner controller persists and publishes selection", () => {
@@ -123,6 +128,10 @@ test("session actions open a runner with normalized server errors", async () => 
   }, { sessionPath: "/a.jsonl", dir: "/work" });
   assert.deepEqual(runner, { id: "r2" });
   assert.deepEqual(JSON.parse(calls[0][1].body), { sessionPath: "/a.jsonl", dir: "/work" });
+  await openSession(async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { sessionKey: "ps1_sqlite", dir: null });
+    return { ok: true, json: async () => ({ runner: { id: "sqlite" } }) };
+  }, { sessionKey: "ps1_sqlite" });
   await assert.rejects(() => openSession(async () => ({ ok: false, status: 409, json: async () => ({ error: "busy" }) })), /busy/);
 });
 
