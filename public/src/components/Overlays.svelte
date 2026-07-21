@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from "svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
   import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
   import CommandPalette from "./CommandPalette.svelte";
@@ -13,11 +14,13 @@
   import SessionPickerModal from "./SessionPickerModal.svelte";
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
+  import { createModalHistoryController } from "../lib/modalHistoryController.js";
   import { modalState } from "../stores/modal.js";
 
   const optionSelector = "button.m-option:not(:disabled), .session-row > button.s-session-main:not(:disabled), label.m-option";
   let keyboardOption = null;
   let modalElement;
+  let overlayElement;
 
   $: if ($modalState.open && modalElement) {
     queueMicrotask(() => {
@@ -46,12 +49,6 @@
   function modalKeydown(event) {
     if (!$modalState.open) return;
     const overlay = event.currentTarget;
-    if (event.key === "Enter" && overlay.clientWidth <= 760) {
-      event.preventDefault();
-      event.stopPropagation();
-      cancelModal(overlay);
-      return;
-    }
     if ($modalState.content === "optionPicker") return;
     if (event.key === "Escape") {
       event.preventDefault();
@@ -87,11 +84,21 @@
     const option = event.target.closest?.(optionSelector);
     if (option && event.currentTarget.contains(option)) activateOption(option);
   }
+
+  onMount(() => {
+    const controller = createModalHistoryController({
+      windowTarget: modalElement.ownerDocument.defaultView,
+      subscribe: modalState.subscribe,
+      isOpen: () => $modalState.open,
+      cancel: () => cancelModal(overlayElement),
+    });
+    return controller.detach;
+  });
 </script>
 
 <CarouselIndicator />
 
-<div id="overlay" class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
+<div id="overlay" bind:this={overlayElement} class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
   <div class="m-title" id="mTitle">{$modalState.title}</div>
 
   {#if $modalState.content === null}

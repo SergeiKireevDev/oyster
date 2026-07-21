@@ -424,13 +424,15 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 
     for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowDown");
     await expect(modal.locator(".m-option.keyboard-active")).toContainText("match-01.txt");
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#overlay")).not.toHaveClass(/open/);
 
     if (mobile) {
-      // Mobile Return dismisses only; it must not activate the highlighted row.
+      // Android Back dismisses only; it must not activate the highlighted row.
+      await page.evaluate(() => history.back());
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
       await expect(page.locator("#input")).toHaveValue(`./${large}/match-`);
     } else {
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
       await expect(page.locator("#input")).toHaveValue(`/workspace/${large}/match-01.txt`);
       await page.fill("#input", `./${large}/match-`);
       await expect(palette.locator(".cmd-row", { hasText: "Open file explorer" })).toBeVisible();
@@ -442,7 +444,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
   });
 
   if (mobile) {
-    test("mobile Return dismisses model selection, settings, and the built-in file explorer", async ({ page }) => {
+    test("Android Back dismisses model selection, settings, and the built-in file explorer", async ({ page }) => {
       await installSecondMockModel();
       await login(page);
       await expect(modelChip(page, true)).toContainText("e2e-mock", { timeout: 15000 });
@@ -455,21 +457,21 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
       await expect(page.locator("#mBody .m-option.active")).toContainText("e2e-mock-b");
-      await page.keyboard.press("Enter");
+      await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
       await expect(modelChip(page, true)).toHaveText(originalModel ?? "");
 
       await page.click("#menuBtn");
       await page.click('#menu button[data-action="settings"]');
       await expect(page.locator("#mTitle")).toHaveText("Settings");
-      await page.keyboard.press("Enter");
+      await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
 
       await page.click("#hublotChip");
       await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
       await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
       await expect(page.locator("#mTitle")).toHaveText("📁 File explorer");
-      await page.keyboard.press("Enter");
+      await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
     });
   }

@@ -36,9 +36,8 @@ test("overlay provides shared keyboard navigation and cancellation", () => {
   assert.match(overlays, /event\.key (?:===|!==) "ArrowDown"/);
   assert.match(overlays, /event\.key (?:===|!==) "ArrowUp"/);
   assert.match(overlays, /event\.key === "Enter"/);
-  assert.match(overlays, /event\.key === "Enter" && overlay\.clientWidth <= 760/);
+  assert.doesNotMatch(overlays, /clientWidth <= 760/);
   assert.match(overlays, /scrollIntoView\(\{ block: "nearest" \}\)/);
-  assert.match(read("OptionPickerModal.svelte"), /event\.key === "Enter" && event\.currentTarget\.documentElement\.clientWidth <= 760/);
   for (const name of [
     "TextPromptModal.svelte", "EditorPromptModal.svelte", "ConfirmPromptModal.svelte",
     "CheckpointModelPickerModal.svelte", "FileExplorerModal.svelte", "FilePickerModal.svelte",
