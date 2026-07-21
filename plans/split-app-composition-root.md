@@ -61,7 +61,7 @@ does not own composer-local mutable state.
 - [x] Create `features/checkpoints/createCheckpointAssembly.js` and move checkpoint model picker, marker, tree, freeze, rollback, and action construction into it.
 - [x] Inject session identity, transcript element access, fetch, modal, and toast interfaces.
 - [x] Expose marker placement/refresh, tree load/refresh, checkpoint actions, and teardown.
-- [ ] Add fresh mount → teardown → mount tests for marker, tree, and action registration ownership.
+- [x] Add fresh mount → teardown → mount tests for marker, tree, and action registration ownership.
 
 **Acceptance:** the root only consumes the checkpoint assembly’s narrow public
 operations.
