@@ -96,7 +96,7 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(store.repositories.runners.find(runner.id), null, "session ownership cascades runner descriptors");
 });
 
-test("startup restores runner descriptors and replay without spawning until selection demands it", (t) => {
+test("runner replay and selected workdir survive restart without eager process spawning", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-restore-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
@@ -109,18 +109,22 @@ test("startup restores runner descriptors and replay without spawning until sele
     sessionName: "Persisted name", isDefault: true, desiredState: "running", lastStatus: "running",
     startCount: 4, createdAt: "created", lastStartedAt: "previous-start",
   });
-  store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event", payload: '{"type":"persisted"}', createdAt: "event" });
+  store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event-1", payload: '{"type":"persisted","part":1}', createdAt: "event-1" });
+  store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event-2", payload: '{"type":"persisted","part":2}', createdAt: "event-2" });
   store.repositories.runners.create({
     id: "r-stopped0000", dir: "/stopped", desiredState: "stopped", lastStatus: "stopped", createdAt: "stopped-created", lastStoppedAt: "already-stopped",
   });
+  createAppSettings({ repository: store.repositories.settings, startupWorkdir: "/startup", now: () => "selected" })
+    .setCurrentWorkdir("/persisted/workspace");
   store.close();
   store = openAppStore({ databasePath });
   const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });
+  const hydratedSettings = createAppSettings({ repository: store.repositories.settings, startupWorkdir: "/other" }).hydrate();
   let spawnCount = 0;
   const state = {
     appStore: store,
     config: { PI_BIN: "/pi", PI_EXTRA_ARGS: [], PERSISTENT_STORE: "sqlite", SQLITE_PATH: sqlitePath },
-    currentDir: "/other",
+    currentDir: hydratedSettings.currentWorkdir,
     sseClients: new Set(),
     sessionReferences,
     serverEvent() {},
@@ -136,6 +140,7 @@ test("startup restores runner descriptors and replay without spawning until sele
   });
 
   const restored = state.runners.get(runnerId);
+  assert.equal(state.currentDir, "/persisted/workspace", "persisted selected workdir overrides the new startup default");
   assert.equal(restored.dir, "/persisted/workspace");
   assert.equal(restored.sessionId, "restored-session");
   assert.equal(restored.sessionName, "Persisted name");
@@ -154,7 +159,12 @@ test("startup restores runner descriptors and replay without spawning until sele
   assert.equal(store.repositories.runners.find(runnerId).last_stopped_at, "now");
   assert.equal(store.repositories.runners.find("r-stopped0000").last_status, "stopped");
   assert.equal(store.repositories.runners.find("r-stopped0000").last_stopped_at, "already-stopped");
-  assert.deepEqual(manager.replayRunnerEvents(restored), ['{"type":"persisted"}']);
+  assert.deepEqual(manager.replayRunnerEvents(restored), [
+    '{"type":"persisted","part":1}', '{"type":"persisted","part":2}',
+  ]);
+  assert.deepEqual(store.repositories.runnerEvents.list(runnerId).map(({ sequence, sse_id }) => [sequence, sse_id]), [
+    [1, "persisted-event-1"], [2, "persisted-event-2"],
+  ]);
   manager.startPi();
   assert.equal(spawnCount, 0, "server startup must not eagerly spawn restored runners");
   assert.equal(manager.runnerFromReq(new URL(`http://localhost/?runner=${runnerId}`)), restored);

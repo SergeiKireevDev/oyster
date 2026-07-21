@@ -371,7 +371,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify a dead desired-open service is restarted from its persisted script, receives a new persisted PID, and has its tunnel reopened.
 - [x] Verify a missing startup-script file is rematerialized from its SQLite contents and hash.
 - [x] Verify repeated service failure triggers backoff and crash-loop protection rather than an unbounded spawn loop.
-- [ ] Verify runner replay and selected workdir survive restart.
+- [x] Verify runner replay and selected workdir survive restart.
 - [ ] Verify deleting a session removes all and only its checkpoints, routines, runs, logs, hublots, and lifecycle records.
 - [ ] Verify a failed agent deletion preserves all owned resources.
 - [ ] Verify a crash after agent deletion completes the cascade on restart.
