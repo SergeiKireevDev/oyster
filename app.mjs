@@ -34,6 +34,8 @@
  *                        the commit is recorded as a checkpoint anchored to the
  *                        session's latest message
  *   GET  /checkpoints -> checkpoint records of one session (?id=<sessionId>)
+ *   GET  /checkpoint-tree -> the session family (root ancestor + all forks) of
+ *                        one session as a tree, checkpoints attached (?path=…)
  *   POST /rollback    -> { sessionId, hash } — deterministically restore the
  *                        workdir to that checkpoint (pending changes are
  *                        auto-committed first, then git reset --hard) and
@@ -776,7 +778,7 @@ export function init(state) {
   /** Deterministic session fork: copy the active-branch chain up to `leafId`
    *  into a new .jsonl (same entry ids, parentSession lineage) — the same
    *  shape pi's own /fork produces, minus any LLM involvement. */
-  function forkSessionAt(sessionPath, leafId) {
+  function forkSessionAt(sessionPath, leafId, forkedAtHash = null) {
     const text = readFileSync(sessionPath, "utf8");
     let header = null;
     const byId = new Map();
@@ -794,10 +796,66 @@ export function init(state) {
     chain.reverse();
     const id = randomUUID();
     const now = new Date();
-    const newHeader = { ...header, id, timestamp: now.toISOString(), parentSession: sessionPath };
+    const newHeader = { ...header, id, timestamp: now.toISOString(), parentSession: sessionPath,
+      ...(forkedAtHash ? { forkedAtHash } : {}) }; // extra field: pi ignores it, the tree view uses it
     const path = join(dirname(sessionPath), `${now.toISOString().replace(/[:.]/g, "-")}_${id}.jsonl`);
     writeFileSync(path, [newHeader, ...chain].map((e) => JSON.stringify(e)).join("\n") + "\n");
     return { path, id, entryIds: new Set(chain.map((e) => e.id)) };
+  }
+
+  /** header + name of one session file (cheap enough: session folders are small) */
+  function readSessionHeaderInfo(path) {
+    const text = readFileSync(path, "utf8");
+    let header = null, name = null;
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === "session" && !header) header = e;
+      else if (e.type === "session_info") name = e.name ?? name;
+    }
+    if (!header?.id) return null;
+    return {
+      path, id: header.id, name,
+      cwd: header.cwd ?? null,
+      createdAt: header.timestamp ?? null,
+      parentSession: header.parentSession ?? null,
+      forkedAtHash: header.forkedAtHash ?? null,
+    };
+  }
+
+  /** The session family of `sessionPath` as a tree: walk parentSession links up
+   *  to the root ancestor, then nest every descendant fork, with each session's
+   *  checkpoint records attached. */
+  function checkpointTree(sessionPath) {
+    const dir = dirname(sessionPath);
+    const infos = [];
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        const info = readSessionHeaderInfo(join(dir, f));
+        if (info) infos.push(info);
+      } catch {}
+    }
+    const byPath = new Map(infos.map((i) => [i.path, i]));
+    let root = byPath.get(sessionPath);
+    if (!root) throw new Error("session not found in its folder");
+    const seen = new Set();
+    while (root.parentSession && byPath.has(root.parentSession) && !seen.has(root.path)) {
+      seen.add(root.path);
+      root = byPath.get(root.parentSession);
+    }
+    const db = loadCheckpoints();
+    const build = (info, depth) => ({
+      ...info,
+      checkpoints: (db[info.id] ?? []).map(({ hash, anchorId, message, timestamp }) =>
+        ({ hash, anchorId, message, timestamp })),
+      children: depth > 25 ? [] : infos
+        .filter((i) => i.parentSession === info.path)
+        .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
+        .map((i) => build(i, depth + 1)),
+    });
+    return { root: build(root, 0) };
   }
 
   /** run git in a workdir; resolves with { code, stdout, stderr } (never rejects) */
@@ -1425,6 +1483,20 @@ export function init(state) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/checkpoint-tree") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+        json(res, 400, { error: `not a session file: ${target}` });
+        return;
+      }
+      try {
+        json(res, 200, checkpointTree(target));
+      } catch (e) {
+        json(res, 500, { error: `tree failed: ${e.message}` });
+      }
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/rollback") {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
@@ -1452,7 +1524,7 @@ export function init(state) {
           return;
         }
         // 3. fork the session at the checkpointed entry — no LLM involved
-        const fork = forkSessionAt(cp.sessionPath, cp.leafId ?? cp.anchorId);
+        const fork = forkSessionAt(cp.sessionPath, cp.leafId ?? cp.anchorId, hash);
         // the fork keeps its ancestors' entry ids: inherit their checkpoints
         const db = loadCheckpoints();
         db[fork.id] = (db[sessionId] ?? [])

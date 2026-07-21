@@ -180,6 +180,73 @@
   }
   #hublotAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
 
+  /* ---------- checkpoint / fork tree (right sidebar, toggled by 🌳) ---------- */
+  #treebar {
+    width: 270px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 10px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #treebar.open { display: flex; }
+  #treeView { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+  .t-session {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 6px;
+    border-radius: 7px;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .t-session:hover { background: var(--panel-2); }
+  .t-session.current { color: var(--accent); font-weight: 600; cursor: default; }
+  .t-session .t-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .t-session .t-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .t-session .t-dot.busy { background: var(--accent); animation: rpulse 1.2s ease-in-out infinite; }
+  .t-kids {
+    margin-left: 9px;
+    padding-left: 9px;
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+  }
+  .t-ckpt {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--muted);
+    min-width: 0;
+  }
+  .t-ckpt:hover { background: var(--panel-2); color: var(--text); }
+  .t-ckpt.busy { opacity: .35; cursor: wait; }
+  .t-ckpt .t-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .t-ckpt .t-time { margin-left: auto; font-size: 10.5px; opacity: .8; flex-shrink: 0; }
+  .t-forks {
+    margin-left: 9px;
+    padding-left: 9px;
+    border-left: 1px dashed var(--border);
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+  }
+  .t-forks:empty { display: none; }
+  .t-empty { color: var(--muted); font-size: 12px; }
+  @media (max-width: 760px) {
+    #treebar.open {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: min(78vw, 320px);
+      z-index: 55;
+      box-shadow: -8px 0 30px rgba(0,0,0,.5);
+    }
+  }
+
   /* ---------- routines (same sidebar, second section) ---------- */
   .side-head {
     font-size: 11px;
@@ -814,6 +881,7 @@
   <span class="title" id="sessionTitle">pi-lot</span>
   <span class="spacer"></span>
   <span class="chip" id="hublotChip" title="Show hublots">❖</span>
+  <span class="chip" id="treeChip" title="Checkpoints & forks tree">🌳</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
@@ -855,6 +923,11 @@
     <div id="hublotAdd" title="Open a new hublot">+</div>
     <div class="side-head routines">Routines</div>
     <div id="routineList" style="display:contents"></div>
+  </aside>
+
+  <aside id="treebar">
+    <div class="side-head">Checkpoints &amp; forks</div>
+    <div id="treeView"></div>
   </aside>
 </div>
 
@@ -1420,7 +1493,10 @@ checkpointBtn.addEventListener("click", async (e) => {
     } else {
       toast(`\u{1F9CA} nothing to commit — ${data.reason ?? "workdir is clean"}`);
     }
-    if (data.recorded) refreshCheckpointMarkers().catch(() => {});
+    if (data.recorded) {
+      refreshCheckpointMarkers().catch(() => {});
+      refreshTreeIfOpen();
+    }
   } catch (err) {
     toast(`checkpoint failed: ${err.message}`, "error");
   } finally {
@@ -1451,8 +1527,8 @@ async function refreshCheckpointMarkers() {
   try { entries = await fetchSessionEntries(); } catch { return; }
   const els = chatEls();
   for (let i = 0; i < entries.length; i++) {
-    const cp = byAnchor.get(entries[i].id);
-    if (!cp) continue;
+    const cp = { ...byAnchor.get(entries[i].id), sessionId: sid };
+    if (!cp.hash) continue;
     // same zip-by-position logic as the permalinks (align from the end when
     // the file and the rendered transcript briefly disagree)
     const pos = entries.length === els.length ? i : els.length - (entries.length - i);
@@ -1480,7 +1556,7 @@ async function rollbackToCheckpoint(cp, btn) {
     const res = await fetch(`/rollback?token=${encodeURIComponent(token)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: state?.sessionId, hash: cp.hash }),
+      body: JSON.stringify({ sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
@@ -1490,6 +1566,99 @@ async function rollbackToCheckpoint(cp, btn) {
     toast(`rollback failed: ${err.message}`, "error");
   } finally {
     btn?.classList.remove("busy");
+  }
+}
+
+// ------------------------------------------------------------ checkpoint / fork tree sidebar
+//
+// The 🌳 chip toggles a right sidebar showing the current session's whole
+// family: its root ancestor, every fork (nested under the checkpoint it was
+// created from), and each session's checkpoints. Sessions switch on tap;
+// checkpoints roll back on tap.
+
+function refreshTreeIfOpen() {
+  if ($("treebar").classList.contains("open")) loadCheckpointTree();
+}
+
+async function loadCheckpointTree() {
+  const view = $("treeView");
+  const path = state?.sessionFile
+    ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
+  if (!path) {
+    view.innerHTML = `<div class="t-empty">no session file yet — send a message first</div>`;
+    return;
+  }
+  try {
+    const res = await fetch(`/checkpoint-tree?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    view.replaceChildren(renderTreeNode(data.root));
+  } catch (e) {
+    view.innerHTML = `<div class="t-empty"></div>`;
+    view.firstChild.textContent = `tree unavailable: ${e.message}`;
+  }
+}
+
+function renderTreeNode(node) {
+  const box = document.createElement("div");
+
+  const row = document.createElement("div");
+  row.className = "t-session" + (node.id === state?.sessionId ? " current" : "");
+  row.title = node.path;
+  const ico = document.createElement("span");
+  ico.textContent = node.parentSession ? "\u{1F33F}" : "\u{1F331}";
+  const name = document.createElement("span");
+  name.className = "t-name";
+  name.textContent = node.name || node.id.slice(0, 8);
+  row.append(ico, name);
+  const live = runnersNow.find((r) => r.sessionFile === node.path && r.alive);
+  if (live) {
+    const dot = document.createElement("span");
+    dot.className = "t-dot" + (live.busy ? " busy" : "");
+    dot.title = live.busy ? "working" : "live";
+    row.appendChild(dot);
+  }
+  row.addEventListener("click", () => openTreeSession(node));
+  box.appendChild(row);
+
+  const kids = document.createElement("div");
+  kids.className = "t-kids";
+  // checkpoints in order; each gets a slot where its forks nest
+  const forkSlots = new Map();
+  for (const c of node.checkpoints ?? []) {
+    const cr = document.createElement("div");
+    cr.className = "t-ckpt";
+    const hash = document.createElement("span");
+    hash.className = "t-hash";
+    hash.textContent = c.hash;
+    const time = document.createElement("span");
+    time.className = "t-time";
+    const d = new Date(c.timestamp ?? NaN);
+    time.textContent = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    cr.append("\u{1F9CA}", hash, time);
+    cr.title = `${c.message ?? "checkpoint"}\nroll the workdir back to ${c.hash} and fork the session there`;
+    cr.addEventListener("click", () => rollbackToCheckpoint({ hash: c.hash, sessionId: node.id }, cr));
+    kids.appendChild(cr);
+    const slot = document.createElement("div");
+    slot.className = "t-forks";
+    kids.appendChild(slot);
+    forkSlots.set(c.hash, slot);
+  }
+  for (const child of node.children ?? []) {
+    (forkSlots.get(child.forkedAtHash) ?? kids).appendChild(renderTreeNode(child));
+  }
+  if (kids.children.length) box.appendChild(kids);
+  return box;
+}
+
+async function openTreeSession(node) {
+  if (node.id === state?.sessionId) return;
+  try {
+    const r = await openSessionRunner({ sessionPath: node.path, dir: node.cwd || workdir });
+    switchToRunner(r.id);
+    toast(`switched to: ${node.name || node.id.slice(0, 8)}`);
+  } catch (e) {
+    toast(`switch failed: ${e.message}`, "error");
   }
 }
 
@@ -1703,6 +1872,7 @@ function handleEvent(msg) {
     case "runners_update":
       runnersNow = msg.runners ?? [];
       onRunnersUpdate?.(runnersNow);
+      refreshTreeIfOpen(); // keep the live/busy dots in the tree current
       return;
 
     case "response":
@@ -1905,6 +2075,7 @@ async function reloadTranscript() {
   for (const m of messages) renderFullMessage(m);
   scrollToBottom(true);
   refreshCheckpointMarkers().catch(() => {});
+  refreshTreeIfOpen();
   const cb = afterTranscript;
   afterTranscript = null;
   cb?.();
@@ -2645,11 +2816,22 @@ $("hublotChip").addEventListener("click", (e) => {
   const open = $("hublots").classList.toggle("open");
   if (open) { loadHublots(); loadRoutines(); } // fresh content when opening
 });
+$("treeChip").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("treebar").classList.toggle("open");
+  if (open) loadCheckpointTree();
+});
 // tap outside the drawer closes it
 document.addEventListener("click", (e) => {
   const hublots = $("hublots");
   if (hublots.classList.contains("open") && !hublots.contains(e.target)) {
     hublots.classList.remove("open");
+  }
+  // the tree sidebar is a drawer only on small screens; leave it docked on desktop
+  const treebar = $("treebar");
+  if (window.matchMedia("(max-width: 760px)").matches &&
+      treebar.classList.contains("open") && !treebar.contains(e.target)) {
+    treebar.classList.remove("open");
   }
 });
 
