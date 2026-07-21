@@ -22,7 +22,7 @@ export async function init(state) {
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
-  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs"));
+  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
@@ -42,10 +42,7 @@ export async function init(state) {
   const checkpointRepository = appStore.repositories.checkpoints;
   const deleteSessionCheckpoints = (id) => checkpointRepository.deleteBySessionId(id, state.sessionCatalog.backend);
 
-  // ---- state migrations --------------------------------------------------
-  // The core (server.mjs) only changes on a real restart; state it created
-  // under an OLDER core version is patched here so fixes apply on hot reload
-  // too. Each migration must be idempotent.
+  // Patch state created by an older stable core; migrations are idempotent.
   if (state.eventBuffer) {
     // pre-runner era: global server events were buffered but never replayed
     // (per-runner replay lives in runner.buffer). Drop the dead buffer and
@@ -82,6 +79,7 @@ export async function init(state) {
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
+  const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
@@ -122,7 +120,7 @@ export async function init(state) {
   });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, checkpointRepository, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
+    recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
     git, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });

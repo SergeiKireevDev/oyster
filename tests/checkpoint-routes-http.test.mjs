@@ -3,6 +3,18 @@ import assert from "node:assert/strict";
 import { createCheckpointRoutes } from "../http/routes/checkpointRoutes.mjs";
 
 const response = () => ({});
+const rollbackJournal = (events = []) => ({
+  start(input) {
+    let stage = "persisted";
+    events.push([stage, input]);
+    return {
+      get stage() { return stage; },
+      advance(next, details) { stage = next; events.push([next, details]); },
+      complete(details) { stage = "completed"; events.push([stage, details]); },
+      fail(error) { events.push(["failed", stage, error.message]); },
+    };
+  },
+});
 const repository = (records = {}) => ({
   listBySessionId: (id) => records[id] ?? [],
   findBySessionId: (id, _backend, hash) => (records[id] ?? []).find((checkpoint) => checkpoint.hash === hash) ?? null,
@@ -26,6 +38,7 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
     checkpointWorkdir: async (...args) => { calls.push(args); return { status: 200, body: { hash: "abc123", committed: true } }; },
     recordCheckpoint: () => ({ anchorId: "entry-1" }),
     checkpointRepository: repository({ session: [{ hash: "abc123" }] }),
+    checkpointRollbackJournal: rollbackJournal(),
     checkpointTree: (reference) => ({ path: reference.storagePath, children: [] }),
     sessionReferenceFromSearch: (url) => url.searchParams.get("path") === "valid.jsonl" ? { backend: "jsonl", id: "session", storagePath: "/session.jsonl" } : null,
     logger: { error() {} },
@@ -56,6 +69,7 @@ test("SQLite rollback capability rejection occurs before git or safety-checkpoin
     config: { PI_BIN: "pi" },
     requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
     checkpointRepository: repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", sessionRef }] }),
+    checkpointRollbackJournal: rollbackJournal(),
     git: async () => { calls.push("git"); return { code: 0, stdout: "" }; },
     checkpointWorkdir: async () => { calls.push("checkpoint"); return {}; },
   });
@@ -69,7 +83,7 @@ test("SQLite rollback forks the exact entry before resetting and opens the fork 
   const order = [];
   const sessionRef = { backend: "sqlite", id: "sqlite", storagePath: "/agent/sessions.sqlite" };
   const forkRef = { backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" };
-  const saved = [];
+  const saved = [], journalEvents = [];
   const routes = createCheckpointRoutes({
     state: {
       sessionCatalog: {
@@ -88,6 +102,7 @@ test("SQLite rollback forks the exact entry before resetting and opens the fork 
       ...repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", leafId: "e1", sessionRef }] }),
       replaceForSession: (reference, checkpoints) => saved.push({ reference, checkpoints }),
     },
+    checkpointRollbackJournal: rollbackJournal(journalEvents),
     git: async (_dir, args) => { order.push(["git", args[0]]); return { code: 0, stdout: "" }; },
     checkpointWorkdir: async () => ({ status: 200, body: {} }),
     openSessionRunner: ({ sessionRef: opened }) => ({ id: "r2", sessionRef: opened }),
@@ -101,6 +116,10 @@ test("SQLite rollback forks the exact entry before resetting and opens the fork 
   assert.deepEqual(result.body.fork, { id: "fork", path: null, sessionRef: forkRef, sessionKey: "fork-key" });
   assert.deepEqual(saved[0].reference, forkRef);
   assert.deepEqual(saved[0].checkpoints[0].sessionRef, forkRef);
+  assert.deepEqual(journalEvents.map(([stage]) => stage), [
+    "persisted", "safety_checkpointed", "session_forked", "git_reset",
+    "inheritance_recorded", "runner_opened", "completed",
+  ]);
 });
 
 test("rollback saves dirty work, resets, forks, opens a runner, and preserves response shape", async () => {
@@ -117,6 +136,7 @@ test("rollback saves dirty work, resets, forks, opens a runner, and preserves re
       ...repository(structuredClone(db)),
       replaceForSession: (reference, checkpoints) => saved.push({ reference, checkpoints }),
     },
+    checkpointRollbackJournal: rollbackJournal(),
     git: async (_dir, args) => args[0] === "status" ? { code: 0, stdout: " M file" } : { code: 0, stdout: "" },
     checkpointWorkdir: async () => ({ status: 200, body: { committed: true, hash: "safety" } }), recordCheckpoint: () => ({}),
     forkSessionAt: () => ({ id: "fork", path: "/fork.jsonl", entryIds: new Set(["e1"]) }),

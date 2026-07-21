@@ -150,6 +150,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         return row ? { ...row } : null;
       },
       update: (id, { status, stage, error = null, updatedAt }) => database.prepare("UPDATE operations SET status = ?, stage = ?, error = ?, updated_at = ? WHERE id = ?").run(status, stage, error, updatedAt, id).changes,
+      updateWithPayload: (id, { status, stage, payload, error = null, updatedAt }) => database.prepare("UPDATE operations SET status = ?, stage = ?, payload = ?, error = ?, updated_at = ? WHERE id = ?").run(status, stage, payload, error, updatedAt, id).changes,
       listIncomplete: () => database.prepare("SELECT id, owner_id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),
       markRunningInterrupted: (updatedAt) => database.prepare("UPDATE operations SET status = 'interrupted', error = COALESCE(error, 'server restarted during operation'), updated_at = ? WHERE status = 'running'").run(updatedAt).changes,
     }),

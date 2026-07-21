@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 
-export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, checkpointRepository: repository, checkpointTree, sessionReferenceFromSearch, git, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, ensureSessionOwner = () => null, logger = console }) {
+export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, checkpointRepository: repository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, git, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, ensureSessionOwner = () => null, logger = console }) {
   if (!repository) throw new Error("checkpoint repository is required");
+  if (!checkpointRollbackJournal) throw new Error("checkpoint rollback journal is required");
   const { json, readJsonBody } = requestContext;
   return {
     "POST /checkpoint": async (req, res, url) => {
@@ -74,7 +75,9 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       if (backend === "sqlite" && !state.sessionCatalog.findById(sessionRef.id)) {
         json(res, 410, { error: "session of this checkpoint is gone" }); return;
       }
+      let rollbackOperation = null;
       try {
+        rollbackOperation = checkpointRollbackJournal.start({ reference: sessionRef, hash, dir: cp.dir });
         // 1. nothing may be lost: auto-commit pending changes and record them
         //    as a checkpoint at the session's current tip (→ roll forward later)
         let safety = null;
@@ -86,6 +89,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
             try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog, repository }); } catch {}
           }
         }
+        rollbackOperation.advance("safety_checkpointed", { safetyHash: safety });
         // 2. fork before touching the worktree. Unsupported or failed backend
         //    operations therefore cannot leave git reset to a different state.
         const fork = backend === "sqlite"
@@ -98,15 +102,19 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
               };
             })();
         ensureSessionOwner(fork.sessionRef);
+        rollbackOperation.advance("session_forked", { forkReference: fork.sessionRef });
         const forkEntries = backend === "sqlite"
           ? new Set(state.sessionCatalog.entries(fork.id).entries.map((entry) => entry.id))
           : fork.entryIds;
         // 3. deterministic restore of the checkpointed state
         const rs = await git(cp.dir, ["reset", "--hard", hash]);
         if (rs.code !== 0) {
-          json(res, 500, { error: `git reset failed: ${(rs.stderr || rs.stdout).trim()}` });
+          const error = new Error(`git reset failed: ${(rs.stderr || rs.stdout).trim()}`);
+          rollbackOperation.fail(error);
+          json(res, 500, { error: error.message });
           return;
         }
+        rollbackOperation.advance("git_reset", { resetHash: hash });
         // The fork keeps its ancestors' entry ids: inherit their checkpoints.
         const inheritedCheckpoints = repository.listForSession(sessionRef)
           .filter((checkpoint) => forkEntries.has(checkpoint.anchorId))
@@ -116,11 +124,14 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
             ...(backend === "jsonl" ? { sessionPath: fork.path } : { sessionPath: undefined }),
           }));
         repository.replaceForSession(fork.sessionRef, inheritedCheckpoints);
+        rollbackOperation.advance("inheritance_recorded", { inheritedCheckpointCount: inheritedCheckpoints.length });
         // 4. attach a runner to the fork and hand it to the client
         const runner = openSessionRunner({ sessionRef: fork.sessionRef, dir: cp.dir });
+        rollbackOperation.advance("runner_opened", { runnerId: runner.id });
         sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
         runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
         logger.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
+        rollbackOperation.complete();
         json(res, 200, {
           rolledBack: hash,
           safety,
@@ -133,6 +144,9 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           runner: runnerInfo(runner),
         });
       } catch (e) {
+        if (rollbackOperation && rollbackOperation.stage !== "completed") {
+          try { rollbackOperation.fail(e); } catch {}
+        }
         json(res, 500, { error: `rollback failed: ${e.message}` });
       }
     },  };
