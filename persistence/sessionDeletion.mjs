@@ -39,12 +39,12 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
     try {
       const stoppedRunners = await stopRunners();
       update("running", "runners_stopped");
-      const closedHublots = await closeHublots();
-      update("running", "hublots_closed");
       const stoppedRoutines = await stopRoutines();
       update("running", "routines_stopped");
       const agentResult = await deleteAgentSession();
       update("running", "agent_deleted");
+      const closedHublots = await closeHublots();
+      update("running", "hublots_closed");
       const deletedRoutines = await deleteRoutines();
       update("running", "routines_deleted");
       appStore.transaction((repositories) => {
