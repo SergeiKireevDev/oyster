@@ -1704,12 +1704,14 @@ let fileExplorerState = {
 
 const fileExplorerController = createFileExplorerController({
   browse: (path) => browseFiles(fetch, path),
+  readFile: (path) => readFile(fetch, path),
   update: updateFileExplorer,
   updateTitle: (title) => updateModal({ title }),
   getShowHidden: () => get(fileExplorer).showHidden,
   getWorkdir: () => workdir,
   getToken: () => token,
   setPath: (path) => { fileExplorerState.curPath = path; },
+  setEditFile: (path, content) => { fileExplorerState.editPath = path; fileExplorerState.editContent = content; },
   toast,
 });
 const loadFileExplorer = fileExplorerController.load;
@@ -1816,23 +1818,7 @@ async function uploadExplorerFiles() {
   inp.click();
 }
 
-async function editExplorerFile(path) {
-  let data;
-  try { data = await readFile(fetch, path); }
-  catch (error) { toast(error.message, "error"); return; }
-
-  fileExplorerState.editPath = path;
-  fileExplorerState.editContent = data.content;
-  updateModal({ title: `✎ ${path.split("/").pop()}` });
-  updateFileExplorer({
-    mode: "edit",
-    loading: false,
-    token,
-    editPath: path,
-    editContent: data.content,
-    saving: false,
-  });
-}
+const editExplorerFile = fileExplorerController.openEditor;
 
 async function saveExplorerFile() {
   const path = fileExplorerState.editPath;

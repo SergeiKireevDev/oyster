@@ -24,6 +24,38 @@ test("file explorer loads a directory into its list state", async () => {
   ]);
 });
 
+test("file explorer opens a file in editor state", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    readFile: async (path) => ({ content: "hello" }),
+    getToken: () => "token",
+    setEditFile: (path, content) => calls.push(["edit", path, content]),
+    updateTitle: (title) => calls.push(["title", title]),
+    update: (value) => calls.push(["update", value]),
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  await controller.openEditor("/work/a.txt");
+
+  assert.deepEqual(calls, [
+    ["edit", "/work/a.txt", "hello"],
+    ["title", "✎ a.txt"],
+    ["update", { mode: "edit", loading: false, token: "token", editPath: "/work/a.txt", editContent: "hello", saving: false }],
+  ]);
+});
+
+test("file explorer reports an editor load error", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    readFile: async () => { throw new Error("cannot open file"); },
+    toast: (...args) => calls.push(args),
+  });
+
+  await controller.openEditor("/work/a.txt");
+
+  assert.deepEqual(calls, [["cannot open file", "error"]]);
+});
+
 test("file explorer retries its workdir after another folder cannot load", async () => {
   const calls = [];
   const controller = createFileExplorerController({
