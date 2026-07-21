@@ -137,10 +137,10 @@ async function handleUnauthorized() {
       document.cookie = "pi_ui_token=; path=/; max-age=0";
       requireToken();
     } else {
-      toast("temporary auth hiccup — retry", "warning");
+      addToast("temporary auth hiccup — retry", "warning");
     }
   } catch {
-    toast("network error — retry", "warning");
+    addToast("network error — retry", "warning");
   } finally {
     verifyingToken = false;
   }
@@ -153,7 +153,7 @@ const rpcClient = createRpcClient({
   getRunner: () => currentRunner,
   getToken: () => token,
   onUnauthorized: handleUnauthorized,
-  onPendingResume: () => toast("session is still resuming — message queued", "warning"),
+  onPendingResume: () => addToast("session is still resuming — message queued", "warning"),
 });
 const { rpc, handleResponse } = rpcClient;
 
@@ -330,7 +330,7 @@ function finishToolCard(toolCallId, resultMsgOrText, isError) {
 }
 
 const transcriptCallbacks = {
-  onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+  onPermalink: (el) => copyPermalink(el).catch((err) => addToast(`permalink failed: ${err.message}`, "error")),
   onCheckpoint: handleCheckpointClick,
   onRollback: rollbackToCheckpoint,
 };
@@ -723,7 +723,7 @@ function connect({ replay = true } = {}) {
       reloadTranscript,
       onError: (e) => {
         lifecycleLog("connect:onopen:reloadTranscript:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - connectStarted) });
-        if (!String(e.message).includes("unauthorized")) toast(`init failed: ${e.message}`, "error");
+        if (!String(e.message).includes("unauthorized")) addToast(`init failed: ${e.message}`, "error");
       },
     });
     lifecycleLog("connect:onopen:reloadTranscript:done", { ms: Math.round(performance.now() - connectStarted) });
@@ -916,31 +916,31 @@ function handleEvent(msg) {
     case "pi_exit":
       // replayed copies describe past restarts, not the current process
       if (replaying) return;
-      toast("pi process exited — it will restart on next message", "warning");
+      addToast("pi process exited — it will restart on next message", "warning");
       setBusy(false);
       return;
 
     case "pi_started":
       if (replaying) return;
       if (msg.startCount > 1) {
-        toast("pi process restarted");
+        addToast("pi process restarted");
         // the runner auto-resumes its session on respawn; rebuild the
         // transcript from canonical state (get_state/get_messages queue
         // behind the in-flight resume server-side, so this settles right
         // after the session is back)
-        reloadTranscript().catch((e) => toast(`session reload failed: ${e.message}`, "error"));
+        reloadTranscript().catch((e) => addToast(`session reload failed: ${e.message}`, "error"));
       }
       return;
 
     case "pi_error":
       if (replaying) return;
-      toast(`pi spawn error: ${msg.error}`, "error");
+      addToast(`pi spawn error: ${msg.error}`, "error");
       return;
 
     case "runner_unhealthy":
       // server-side watchdog: pi stopped answering health probes
       if (replaying) return;
-      toast(`pi was unresponsive — restarting it (${msg.reason ?? "health probes failed"})`, "warning");
+      addToast(`pi was unresponsive — restarting it (${msg.reason ?? "health probes failed"})`, "warning");
       setBusy(false);
       return;
 
@@ -948,20 +948,20 @@ function handleEvent(msg) {
       // the page on disk changed; offer a refresh. Ignore replayed copies of
       // this event — after a refresh we already run the newest version.
       if (replaying) return;
-      toast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
+      addToast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
       return;
 
     case "code_reloaded":
-      if (!replaying) toast("server code hot-reloaded");
+      if (!replaying) addToast("server code hot-reloaded");
       return;
 
     case "code_reload_failed":
-      if (!replaying) toast(`server reload failed: ${msg.error}`, "error");
+      if (!replaying) addToast(`server reload failed: ${msg.error}`, "error");
       return;
 
     case "tunnel_opened":
       if (!replaying) {
-        toast(`hublot up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
+        addToast(`hublot up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
           onClick: () => window.open(msg.tunnel?.url, "_blank"),
         });
         loadHublots();
@@ -970,7 +970,7 @@ function handleEvent(msg) {
 
     case "hublot_ready":
       if (!replaying) {
-        toast(`hublot ready: ${msg.tunnel?.url}`, "info", {
+        addToast(`hublot ready: ${msg.tunnel?.url}`, "info", {
           onClick: () => window.open(msg.tunnel?.url, "_blank"),
         });
         // rebuild previews now, then again shortly after: recreating the
@@ -983,12 +983,12 @@ function handleEvent(msg) {
       return;
 
     case "hublot_failed":
-      if (!replaying) toast(`hublot failed: ${msg.error ?? "unknown error"}`, "error");
+      if (!replaying) addToast(`hublot failed: ${msg.error ?? "unknown error"}`, "error");
       return;
 
     case "tunnel_closed":
       if (!replaying) {
-        toast(`hublot closed: :${msg.tunnel?.port}`, "warning");
+        addToast(`hublot closed: :${msg.tunnel?.port}`, "warning");
         loadHublots();
       }
       return;
@@ -998,27 +998,27 @@ function handleEvent(msg) {
       const r = msg.routine;
       if (!r) return;
       routineSidebarController.update(r, msg.reason);
-      if (msg.reason === "created") { toast(`routine “${r.name}” created`); return; }
-      if (msg.reason === "updated") { toast(`routine “${r.name}” updated`); return; }
-      if (msg.reason === "deleted") { toast(`routine “${r.name}” deleted`, "warning"); return; }
+      if (msg.reason === "created") { addToast(`routine “${r.name}” created`); return; }
+      if (msg.reason === "updated") { addToast(`routine “${r.name}” updated`); return; }
+      if (msg.reason === "deleted") { addToast(`routine “${r.name}” deleted`, "warning"); return; }
       // progression notifications surface as toasts only for terminal states;
       // live progress is shown on the block's bar/message
       if (msg.reason === "finished") {
-        toast(
+        addToast(
           r.exitCode === 0 ? `routine “${r.name}” finished` : `routine “${r.name}” failed (exit ${r.exitCode})`,
           r.exitCode === 0 ? "info" : "error"
         );
       } else if (msg.reason === "stopped") {
-        toast(`routine “${r.name}” stopped`, "warning");
+        addToast(`routine “${r.name}” stopped`, "warning");
       } else if (msg.reason === "teardown_finished") {
-        toast(
+        addToast(
           r.status === "idle" ? `routine “${r.name}” torn down — byproducts removed` : `routine “${r.name}” teardown failed`,
           r.status === "idle" ? "info" : "error"
         );
       } else if (msg.reason === "error") {
-        toast(`routine “${r.name}”: ${r.message ?? "spawn failed"}`, "error");
+        addToast(`routine “${r.name}”: ${r.message ?? "spawn failed"}`, "error");
       } else if (msg.reason === "released") {
-        toast(`routine “${r.name}” released`);
+        addToast(`routine “${r.name}” released`);
       }
       return;
     }
@@ -1216,13 +1216,13 @@ async function send() {
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
-    toast(`send failed: ${e.message}`, "error");
+    addToast(`send failed: ${e.message}`, "error");
   }
 }
 
 async function abort() {
-  try { await rpc({ type: "abort" }, { wait: false }); toast("aborted"); }
-  catch (e) { toast(`abort failed: ${e.message}`, "error"); }
+  try { await rpc({ type: "abort" }, { wait: false }); addToast("aborted"); }
+  catch (e) { addToast(`abort failed: ${e.message}`, "error"); }
 }
 
 registerComposerEvents(document, {
@@ -1376,15 +1376,15 @@ async function runMenuAction(action) {
       // a fresh runner, so the current session keeps running in the background
       const r = await openSessionRunner({ dir: sessionUi.workdir });
       switchToRunner(r.id);
-      toast("new session");
+      addToast("new session");
     } else if (action === "newSessionIn") {
       await showFolderBrowser();
     } else if (action === "sessions") {
       await showSessionPicker();
     } else if (action === "compact") {
-      toast("compacting…");
+      addToast("compacting…");
       await rpc({ type: "compact" });
-      toast("compacted");
+      addToast("compacted");
       const { messages } = await rpc({ type: "get_messages" });
       clearMessages();
       for (const m of messages) renderFullMessage(m);
@@ -1393,7 +1393,7 @@ async function runMenuAction(action) {
       // blank slate while pi respawns; the pi_started event reloads the
       // resumed session's transcript
       clearMessages();
-      toast("restarting pi…");
+      addToast("restarting pi…");
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
       document.cookie = "pi_ui_token=; path=/; max-age=0";
@@ -1402,7 +1402,7 @@ async function runMenuAction(action) {
       await showSettingsModal();
     }
   } catch (err) {
-    toast(err.message, "error");
+    addToast(err.message, "error");
   }
 }
 registerMenuEvents(window, { run: runMenuAction });
@@ -1542,7 +1542,7 @@ async function sendAgentMessage(text) {
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
-    toast(`send failed: ${e.message}`, "error");
+    addToast(`send failed: ${e.message}`, "error");
   }
 }
 
@@ -1603,7 +1603,7 @@ registerFileExplorerEvents(window, {
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
-  backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
+  backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
 });
 
 
@@ -1669,7 +1669,7 @@ registerManagedHublotEvents(window, {
 // ------------------------------------------------------------ hublot sidebar
 
 registerHublotSidebarEvents($("hublotAdd"), {
-  show: () => showHublots().catch((e) => toast(e.message, "error")),
+  show: () => showHublots().catch((e) => addToast(e.message, "error")),
 });
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
@@ -1688,7 +1688,7 @@ registerMobileDrawerDismiss(document, {
 
 const loadHublots = hublotController.refreshSidebar;
 
-registerOpenFileExplorerEvent(window, { open: () => showFileExplorer().catch((e) => toast(e.message, "error")) });
+registerOpenFileExplorerEvent(window, { open: () => showFileExplorer().catch((e) => addToast(e.message, "error")) });
 
 // ------------------------------------------------------------ routines sidebar
 //
@@ -1831,9 +1831,9 @@ async function showSessionPicker() {
   // last-set global workdir
   const dirQ = sessionUi.workdir ? `?dir=${encodeURIComponent(sessionUi.workdir)}` : "";
   const res = await fetch(`/sessions${dirQ}`);
-  if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
+  if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
-  if (!sessions.length) { toast("no saved sessions"); return; }
+  if (!sessions.length) { addToast("no saved sessions"); return; }
   sessionPickerSessions = sessions;
   const currentSessionFile = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
   const currentId = sessions.find((session) => session.path === currentSessionFile)?.id ?? state?.sessionId;
@@ -1885,9 +1885,9 @@ async function showSessionPicker() {
     // sessions from other folders spawn in their own recorded cwd
     const runner = await openSessionRunner({ sessionPath: fullChoice.path, dir: fullChoice.cwd || sessionUi.workdir });
     switchToRunner(runner.id);
-    toast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
+    addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
   } catch (e) {
-    toast(`switch failed: ${e.message}`, "error");
+    addToast(`switch failed: ${e.message}`, "error");
   }
 }
 
@@ -1918,7 +1918,7 @@ async function focusSearchHit(hit) {
     await focusEntryById(hit.entryId);
     return;
   }
-  if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
+  if (!focusMessageBySnippet(hit.snippet)) addToast("match not visible in transcript", "warning");
 }
 
 const focusMessageBySnippet = (snippet) => focusTranscriptSnippet([...messagesEl.children], snippet, { flash: flashEl });
@@ -1992,7 +1992,7 @@ async function focusEntryById(entryId) {
     const entries = await fetchSessionEntries();
     const els = chatEls();
     const pos = entries.findIndex((e) => e.id === entryId);
-    if (pos === -1) { toast("linked message not found in this session", "warning"); return; }
+    if (pos === -1) { addToast("linked message not found in this session", "warning"); return; }
     const entry = entries[pos];
     let el = entries.length === els.length
       ? els[pos]
@@ -2003,11 +2003,11 @@ async function focusEntryById(entryId) {
         ? els.find((x) => x.dataset.role === entry.role && normText(x.textContent).includes(t.slice(0, 60)))
         : null) ?? el;
     }
-    if (!el) { toast("linked message not visible in transcript", "warning"); return; }
+    if (!el) { addToast("linked message not visible in transcript", "warning"); return; }
     if (entry.id) el.dataset.entryId = entry.id;
     flashEl(el);
   } catch (e) {
-    toast(`permalink: ${e.message}`, "warning");
+    addToast(`permalink: ${e.message}`, "warning");
   }
 }
 
@@ -2055,10 +2055,6 @@ const handleExtensionUI = createExtensionUiController({
 });
 
 // ------------------------------------------------------------ toasts
-
-function toast(text, kind, { onClick, sticky } = {}) {
-  addToast(text, kind, { onClick, sticky });
-}
 
 // ------------------------------------------------------------ swipe carousel
 //
@@ -2164,7 +2160,7 @@ async function boot() {
       }
     } catch (e) {
       lifecycleLog("boot:error", { error: e?.message ?? String(e) });
-      toast(`could not open linked session: ${e.message}`, "warning");
+      addToast(`could not open linked session: ${e.message}`, "warning");
     }
   }
   lifecycleLog("boot:connect");
