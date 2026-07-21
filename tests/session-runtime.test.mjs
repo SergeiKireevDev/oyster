@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionRunnerState, createSessionRuntime } from "../public/src/runtime/sessionRuntime.js";
+import { createSessionRunnerState, createSessionRuntime, createSessionUiRuntime } from "../public/src/runtime/sessionRuntime.js";
+
+test("session UI runtime publishes workdir, busy state, and usage", () => {
+  const app = []; const header = [];
+  const runtime = createSessionUiRuntime({ updateAppSession: (value) => app.push(value), updateHeaderState: (value) => header.push(value) });
+  runtime.setWorkdir("/work"); runtime.setBusy(true); runtime.updateUsage({ usage: { input: 12, output: 3, cost: { total: 0.02 } } });
+  assert.equal(runtime.workdir, "/work"); assert.equal(runtime.busy, true);
+  assert.deepEqual(app, [{ workdir: "/work" }, { busy: true }]);
+  assert.deepEqual(header, [{ usageInfo: "↑12 ↓3 tok · $0.02" }]);
+});
 
 test("session runner state persists selection and publishes runner lists", () => {
   const persisted = new Map([["pi_runner", "saved"]]);
