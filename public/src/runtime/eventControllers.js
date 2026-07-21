@@ -9,6 +9,18 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerSwipeAndResizeEvents({ documentTarget, windowTarget, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onResize }) {
+  const listeners = [
+    [documentTarget, "touchstart", onTouchStart, { passive: true, capture: true }],
+    [documentTarget, "touchmove", onTouchMove, { passive: false, capture: true }],
+    [documentTarget, "touchend", onTouchEnd, { passive: true, capture: true }],
+    [documentTarget, "touchcancel", onTouchCancel, { passive: true, capture: true }],
+    [windowTarget, "resize", onResize],
+  ];
+  for (const [target, type, listener, options] of listeners) target.addEventListener(type, listener, options);
+  return () => listeners.forEach(([target, type, listener, options]) => target.removeEventListener(type, listener, options));
+}
+
 export function registerMobileDrawerDismiss(target, { isMobile, hublots, treebar, isToggleTarget, close }) {
   const onClick = (event) => {
     if (!isMobile() || hublots.contains(event.target) || treebar.contains(event.target) || isToggleTarget(event.target)) return;

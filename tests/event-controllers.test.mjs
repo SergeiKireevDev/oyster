@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+
+test("swipe adapter installs capture touch handlers and resize callback", () => {
+  const calls = [];
+  const documentTarget = { addEventListener: (...args) => calls.push(["add", ...args]), removeEventListener: (...args) => calls.push(["remove", ...args]) };
+  const windowTarget = { addEventListener: (...args) => calls.push(["add", ...args]), removeEventListener: (...args) => calls.push(["remove", ...args]) };
+  const remove = registerSwipeAndResizeEvents({ documentTarget, windowTarget, onTouchStart() {}, onTouchMove() {}, onTouchEnd() {}, onTouchCancel() {}, onResize() {} });
+  assert.equal(calls.filter(([kind]) => kind === "add").length, 5);
+  assert.equal(calls[0][3].capture, true);
+  remove();
+  assert.equal(calls.filter(([kind]) => kind === "remove").length, 5);
+});
 
 test("mobile drawer adapter closes only an open drawer on outside mobile taps", () => {
   let listener;

@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -2887,11 +2887,15 @@ function attachSwipeListeners() {
   if (window._piSwipeAttached) return;
   // capture phase: fires BEFORE the drawer's scroll container sees it, so
   // horizontal swipes over an open drawer aren't swallowed by overflow-y
-  document.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
-  document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-  document.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
-  document.addEventListener("touchcancel", onTouchCancel, { passive: true, capture: true });
-  window.addEventListener("resize", applyCarousel);
+  registerSwipeAndResizeEvents({
+    documentTarget: document,
+    windowTarget: window,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    onTouchCancel,
+    onResize: applyCarousel,
+  });
   window._piSwipeAttached = true;
 }
 
