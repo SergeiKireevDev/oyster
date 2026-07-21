@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -1606,13 +1606,12 @@ registerCommandPaletteEvents(window, { run: runCmdIndex });
 setupCommandPalette(input);
 
 // global keydown: palette navigation while it's open (capture = fires first)
-document.addEventListener("keydown", (e) => {
-  if (!cmdPalette.classList.contains("open")) return;
-  if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); moveCmd(1); }
-  else if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); moveCmd(-1); }
-  else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); runActiveCmd(); }
-  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCmdPalette(); }
-}, true);
+registerCommandPaletteKeyboard(document, {
+  isOpen: () => cmdPalette.classList.contains("open"),
+  move: moveCmd,
+  run: runActiveCmd,
+  close: closeCmdPalette,
+});
 
 // ------------------------------------------------------------ menu & actions
 
