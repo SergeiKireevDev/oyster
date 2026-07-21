@@ -1699,13 +1699,13 @@ const openConfigPicker = settingsController.openConfig;
 const searchHitSessionController = createSearchHitSessionController({
   close: closeModal,
   getSessionId: () => state?.sessionId,
-  open: ({ sessionPath, dir }) => openSessionRunner({ sessionPath, dir: dir || sessionUi.workdir }),
+  open: ({ sessionPath, dir }) => getSessionRuntime().openSession({ sessionPath, dir: dir || sessionUi.workdir }),
   getCurrentRunner: () => currentRunner,
   setWorkdir,
   reload: reloadTranscript,
   focus: focusSearchHit,
   setAfterTranscript: (callback) => { afterTranscript = callback; },
-  switchRunner: switchToRunner,
+  switchRunner: (id) => getSessionRuntime().switchRunner(id),
   toast: addToast,
 });
 const openSearchHit = (...args) => getSessionRuntime().openSessionAtSearchHit(...args);
