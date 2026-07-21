@@ -488,8 +488,8 @@
       touch-action: pan-x pan-y;
     }
     #sessions .session-sidebar-action {
-      width: 56px;
-      height: 56px;
+      width: 40px;
+      height: 40px;
       font-size: 24px;
       line-height: 1;
     }
