@@ -54,7 +54,7 @@
  */
 
 import { spawn, execFile } from "node:child_process";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { createConnection } from "node:net";
 import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -71,6 +71,14 @@ const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, pidsOnPort } =
 const ROUTINES_PATH = join(dirname(fileURLToPath(import.meta.url)), "routines.mjs");
 const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
   await import(`./routines.mjs?v=${statSync(ROUTINES_PATH).mtimeMs}`);
+
+// all session .jsonl reading/parsing lives in sessions.mjs (mtime-cached)
+const SESSIONS_MOD_PATH = join(dirname(fileURLToPath(import.meta.url)), "sessions.mjs");
+const {
+  SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions, listSessionFolders,
+  searchSessions, sessionTree, sessionEntries, findSessionById, forkSessionAt,
+  readSessionHeaderInfo,
+} = await import(`./sessions.mjs?v=${statSync(SESSIONS_MOD_PATH).mtimeMs}`);
 
 export function init(state) {
   const { config, broadcast, serverEvent } = state;
@@ -511,314 +519,6 @@ export function init(state) {
     json(res, 403, { error: `path outside the allowed roots: ${p}` });
   }
 
-  // ---------------------------------------------------------------- session listing
-
-  /** pi stores sessions per working directory: ~/.pi/agent/sessions/--<cwd with
-   *  separators mapped to "-">--/<timestamp>_<id>.jsonl */
-  function sessionDirFor(cwd) {
-    const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-    return join(homedir(), ".pi", "agent", "sessions", safePath);
-  }
-
-  function summarizeSessionFile(path) {
-    const text = readFileSync(path, "utf8");
-    let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0, cwd = null, parentSession = null;
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let entry;
-      try { entry = JSON.parse(line); } catch { continue; }
-      if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; cwd = entry.cwd ?? null; parentSession = entry.parentSession ?? null; }
-      else if (entry.type === "session_info") { name = entry.name ?? name; }
-      else if (entry.type === "message") {
-        const m = entry.message;
-        if (m?.role === "user" || m?.role === "assistant") messageCount++;
-        if (!firstUserText && m?.role === "user") {
-          const c = m.content;
-          firstUserText = typeof c === "string"
-            ? c
-            : c?.find?.((b) => b.type === "text")?.text ?? null;
-        }
-      }
-    }
-    return { id, createdAt, name, cwd, parentSession, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
-  }
-
-  function listSessions(dir = sessionDirFor(state.currentDir)) {
-    if (!existsSync(dir)) return [];
-    const sessions = [];
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".jsonl")) continue;
-      const path = join(dir, file);
-      try {
-        const summary = summarizeSessionFile(path);
-        sessions.push({ path, modifiedAt: statSync(path).mtime.toISOString(), ...summary });
-      } catch (e) {
-        console.error(`[pi-ui] failed to read session ${file}: ${e.message}`);
-      }
-    }
-    sessions.sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));
-    return sessions;
-  }
-
-  // ---------------------------------------------------------------- search
-
-  const SESSIONS_ROOT = join(homedir(), ".pi", "agent", "sessions");
-
-  /** best-effort human-readable name for a session folder like
-   *  "--home-ubuntu-tree-pi--" -> "/home/ubuntu/tree-pi" (lossy for dashes) */
-  function decodeFolderName(name) {
-    return "/" + name.replace(/^--/, "").replace(/--$/, "").replace(/-/g, "/");
-  }
-
-  function listSessionFolders() {
-    if (!existsSync(SESSIONS_ROOT)) return [];
-    return readdirSync(SESSIONS_ROOT, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => {
-        let count = 0;
-        try { count = readdirSync(join(SESSIONS_ROOT, e.name)).filter((f) => f.endsWith(".jsonl")).length; } catch {}
-        return { dir: join(SESSIONS_ROOT, e.name), name: e.name, label: decodeFolderName(e.name), count };
-      })
-      .filter((f) => f.count > 0)
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }
-
-  /** Pull searchable text blocks out of one jsonl entry. */
-  function entryTexts(e) {
-    const out = [];
-    if (e.type === "message") {
-      const m = e.message ?? {};
-      const c = m.content;
-      if (typeof c === "string") out.push({ role: m.role, kind: "text", text: c });
-      else if (Array.isArray(c)) {
-        for (const b of c) {
-          if (b.type === "text" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
-          else if (b.type === "thinking" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
-          else if (b.type === "toolCall") out.push({ role: m.role, kind: "toolCall", text: `${b.name} ${JSON.stringify(b.arguments ?? {})}` });
-        }
-      }
-    } else if (e.type === "session_info" && e.name) {
-      out.push({ role: "meta", kind: "name", text: e.name });
-    }
-    return out;
-  }
-
-  function makeSnippet(text, idx, qLen, ctx = 70) {
-    const start = Math.max(0, idx - ctx);
-    const end = Math.min(text.length, idx + qLen + ctx);
-    return {
-      before: (start > 0 ? "…" : "") + text.slice(start, idx).replace(/\s+/g, " "),
-      match: text.slice(idx, idx + qLen),
-      after: text.slice(idx + qLen, end).replace(/\s+/g, " ") + (end < text.length ? "…" : ""),
-    };
-  }
-
-  function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
-    const q = query.toLowerCase();
-    let text;
-    try { text = readFileSync(path, "utf8"); } catch { return []; }
-    const hits = [];
-    let meta = { id: null, name: null, preview: null, cwd: null };
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let e;
-      try { e = JSON.parse(line); } catch { continue; }
-      if (e.type === "session") { meta.id = e.id; meta.cwd = e.cwd ?? null; continue; }
-      if (e.type === "session_info") meta.name = e.name ?? meta.name;
-      for (const t of entryTexts(e)) {
-        if (!meta.preview && t.role === "user" && t.kind === "text") meta.preview = t.text.slice(0, 120);
-        // default: only real text responses (user/assistant) and session
-        // names; tool calls, tool RESULTS (role toolResult, kind text) and
-        // thinking blocks are opt-in
-        const isTextResponse = t.kind === "name" ||
-          (t.kind === "text" && (t.role === "user" || t.role === "assistant"));
-        if (!includeTools && !isTextResponse) continue;
-        const idx = t.text.toLowerCase().indexOf(q);
-        if (idx === -1) continue;
-        hits.push({
-          entryId: e.id ?? null,
-          role: t.role ?? null,
-          kind: t.kind,
-          timestamp: e.timestamp ?? null,
-          snippet: makeSnippet(t.text, idx, q.length),
-        });
-        if (hits.length >= maxHitsPerFile) break;
-      }
-      if (hits.length >= maxHitsPerFile) break;
-    }
-    return hits.map((h) => ({ ...h, sessionMeta: meta }));
-  }
-
-  /**
-   * scope:
-   *   session -> path = a session .jsonl file
-   *   folder  -> path = a folder under SESSIONS_ROOT (default: current workdir's)
-   *   all     -> every folder under SESSIONS_ROOT
-   */
-  function searchSessions({ q, scope, path, includeTools = false }, maxResults = 200) {
-    const files = [];
-    if (scope === "session") {
-      files.push(path);
-    } else {
-      const dirs = scope === "all"
-        ? listSessionFolders().map((f) => f.dir)
-        : [path || sessionDirFor(state.currentDir)];
-      for (const dir of dirs) {
-        if (!existsSync(dir)) continue;
-        for (const f of readdirSync(dir)) {
-          if (f.endsWith(".jsonl")) files.push(join(dir, f));
-        }
-      }
-    }
-    // newest first
-    files.sort().reverse();
-    const results = [];
-    let truncated = false;
-    for (const file of files) {
-      const hits = searchSessionFile(file, q, 25, includeTools);
-      if (!hits.length) continue;
-      const folderName = dirname(file).split("/").pop();
-      for (const h of hits) {
-        if (results.length >= maxResults) { truncated = true; break; }
-        const { sessionMeta, ...rest } = h;
-        results.push({
-          ...rest,
-          sessionPath: file,
-          sessionId: sessionMeta.id,
-          sessionName: sessionMeta.name,
-          sessionPreview: sessionMeta.preview,
-          sessionCwd: sessionMeta.cwd,
-          folder: folderName,
-          folderLabel: decodeFolderName(folderName),
-        });
-      }
-      if (truncated) break;
-    }
-    return { results, truncated, filesSearched: files.length };
-  }
-
-  /** Parse a session .jsonl into tree nodes. Every entry has id/parentId, so
-   *  forked conversations form real branches. */
-  function sessionTree(path) {
-    const text = readFileSync(path, "utf8");
-    const nodes = [];
-    let sessionMeta = null;
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let e;
-      try { e = JSON.parse(line); } catch { continue; }
-      if (e.type === "session") { sessionMeta = { id: e.id, timestamp: e.timestamp, cwd: e.cwd }; continue; }
-      if (!e.id) continue;
-      const node = {
-        id: e.id,
-        parentId: e.parentId ?? null,
-        type: e.type,
-        timestamp: e.timestamp ?? null,
-        role: null,
-        label: null,
-      };
-      if (e.type === "message") {
-        const m = e.message ?? {};
-        node.role = m.role ?? null;
-        const c = m.content;
-        let textBlock = typeof c === "string" ? c : c?.find?.((b) => b.type === "text")?.text;
-        if (!textBlock && Array.isArray(c)) {
-          const tc = c.find((b) => b.type === "toolCall");
-          if (tc) textBlock = `[tool: ${tc.name}]`;
-          else if (c.find((b) => b.type === "toolResult" || m.role === "toolResult")) textBlock = "[tool result]";
-          else if (c.find((b) => b.type === "thinking")) textBlock = "[thinking]";
-        }
-        node.label = (textBlock ?? "").slice(0, 200);
-      } else if (e.type === "model_change") {
-        node.label = `model → ${e.modelId ?? "?"}`;
-      } else if (e.type === "thinking_level_change") {
-        node.label = `thinking → ${e.thinkingLevel ?? "?"}`;
-      } else if (e.type === "session_info") {
-        node.label = `named: ${e.name ?? ""}`;
-      } else {
-        node.label = e.type;
-      }
-      nodes.push(node);
-    }
-    return { session: sessionMeta, nodes };
-  }
-
-  /** Locate a session .jsonl file from its session id, across every folder.
-   *  Fast path: files are named <timestamp>_<id>.jsonl; fall back to reading
-   *  each file's session header. */
-  function findSessionById(id) {
-    if (!existsSync(SESSIONS_ROOT)) return null;
-    const folders = readdirSync(SESSIONS_ROOT, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => join(SESSIONS_ROOT, e.name));
-    for (const dir of folders) {
-      let files;
-      try { files = readdirSync(dir); } catch { continue; }
-      for (const f of files) {
-        if (f.endsWith(`_${id}.jsonl`) || f === `${id}.jsonl`) return join(dir, f);
-      }
-    }
-    for (const dir of folders) {
-      let files;
-      try { files = readdirSync(dir); } catch { continue; }
-      for (const f of files) {
-        if (!f.endsWith(".jsonl")) continue;
-        const path = join(dir, f);
-        try {
-          for (const line of readFileSync(path, "utf8").split("\n", 5)) {
-            if (!line.trim()) continue;
-            const e = JSON.parse(line);
-            if (e.type === "session") {
-              if (e.id === id) return path;
-              break;
-            }
-          }
-        } catch {}
-      }
-    }
-    return null;
-  }
-
-  /** Ordered user/assistant message entries of a session's ACTIVE branch
-   *  (the chain from the last entry up to the root). These entry ids are the
-   *  stable anchors used by message permalinks: the client zips them against
-   *  its rendered transcript. */
-  function sessionEntries(path) {
-    const text = readFileSync(path, "utf8");
-    const byId = new Map();
-    let sessionId = null;
-    let leafId = null; // last entry of the file = tip of the active branch
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let e;
-      try { e = JSON.parse(line); } catch { continue; }
-      if (e.type === "session") { sessionId = e.id; continue; }
-      if (!e.id) continue;
-      byId.set(e.id, e);
-      leafId = e.id;
-    }
-    const chain = [];
-    for (let cur = leafId ? byId.get(leafId) : null; cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
-      chain.push(cur);
-    }
-    chain.reverse();
-    const entries = [];
-    for (const e of chain) {
-      if (e.type !== "message") continue;
-      const m = e.message ?? {};
-      if (m.role !== "user" && m.role !== "assistant") continue;
-      const c = m.content;
-      let t = typeof c === "string" ? c : c?.find?.((b) => b.type === "text")?.text;
-      if (!t && Array.isArray(c)) {
-        const tc = c.find((b) => b.type === "toolCall");
-        if (tc) t = `[tool: ${tc.name}]`;
-        else if (c.find((b) => b.type === "thinking")) t = "[thinking]";
-      }
-      entries.push({ id: e.id, role: m.role, text: (t ?? "").slice(0, 200), timestamp: e.timestamp ?? null });
-    }
-    return { sessionId, leafId, entries };
-  }
-
   // ---------------------------------------------------------------- checkpoints
   //
   // A checkpoint = one commit of every pending workdir change, anchored to the
@@ -884,55 +584,6 @@ export function init(state) {
     sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${short}` }, { autostart: false });
     runner.sessionName = `\u23EA ${short}`; // optimistic until get_state confirms
     runnersChanged();
-  }
-
-  /** Deterministic session fork: copy the active-branch chain up to `leafId`
-   *  into a new .jsonl (same entry ids, parentSession lineage) — the same
-   *  shape pi's own /fork produces, minus any LLM involvement. */
-  function forkSessionAt(sessionPath, leafId, forkedAtHash = null) {
-    const text = readFileSync(sessionPath, "utf8");
-    let header = null;
-    const byId = new Map();
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let e;
-      try { e = JSON.parse(line); } catch { continue; }
-      if (e.type === "session") { header = e; continue; }
-      if (e.id) byId.set(e.id, e);
-    }
-    if (!header) throw new Error("session header missing");
-    if (!byId.has(leafId)) throw new Error(`entry ${leafId} not found in session`);
-    const chain = [];
-    for (let cur = byId.get(leafId); cur; cur = cur.parentId ? byId.get(cur.parentId) : null) chain.push(cur);
-    chain.reverse();
-    const id = randomUUID();
-    const now = new Date();
-    const newHeader = { ...header, id, timestamp: now.toISOString(), parentSession: sessionPath,
-      ...(forkedAtHash ? { forkedAtHash } : {}) }; // extra field: pi ignores it, the tree view uses it
-    const path = join(dirname(sessionPath), `${now.toISOString().replace(/[:.]/g, "-")}_${id}.jsonl`);
-    writeFileSync(path, [newHeader, ...chain].map((e) => JSON.stringify(e)).join("\n") + "\n");
-    return { path, id, entryIds: new Set(chain.map((e) => e.id)) };
-  }
-
-  /** header + name of one session file (cheap enough: session folders are small) */
-  function readSessionHeaderInfo(path) {
-    const text = readFileSync(path, "utf8");
-    let header = null, name = null;
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let e;
-      try { e = JSON.parse(line); } catch { continue; }
-      if (e.type === "session" && !header) header = e;
-      else if (e.type === "session_info") name = e.name ?? name;
-    }
-    if (!header?.id) return null;
-    return {
-      path, id: header.id, name,
-      cwd: header.cwd ?? null,
-      createdAt: header.timestamp ?? null,
-      parentSession: header.parentSession ?? null,
-      forkedAtHash: header.forkedAtHash ?? null,
-    };
   }
 
   /** The session family of `sessionPath` as a tree: walk parentSession links up
@@ -1292,7 +943,7 @@ export function init(state) {
       // annotate each session with its live runner (if any) so the picker
       // can show running/busy indicators
       const runners = [...state.runners.values()];
-      const sessions = listSessions(dir).map((s) => {
+      const sessions = listSessions(dir ?? sessionDirFor(state.currentDir)).map((s) => {
         const r = runners.find((x) => x.sessionFile === s.path);
         return { ...s, runnerId: r?.id ?? null, alive: !!r?.proc, busy: !!r?.busy };
       });
@@ -1302,8 +953,7 @@ export function init(state) {
 
     if (req.method === "DELETE" && url.pathname === "/session") {
       const target = resolve(String(url.searchParams.get("path") ?? ""));
-      const sessionsRoot = join(homedir(), ".pi", "agent", "sessions");
-      if (!target.startsWith(sessionsRoot + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
         json(res, 400, { error: `not a session file: ${target}` });
         return;
       }
@@ -1320,13 +970,7 @@ export function init(state) {
         // close any hublots bound to this session (kills service,
         // background agent and cloudflared — see closeTunnel)
         let sessionId = null;
-        try {
-          for (const line of readFileSync(target, "utf8").split("\n")) {
-            if (!line.trim()) continue;
-            const e = JSON.parse(line);
-            if (e.type === "session") { sessionId = e.id; break; }
-          }
-        } catch {}
+        try { sessionId = readSessionHeaderInfo(target)?.id ?? null; } catch {}
         const closedHublots = [];
         if (sessionId) {
           for (const t of [...(state.tunnels?.values() ?? [])]) {
@@ -1349,8 +993,7 @@ export function init(state) {
 
     if (req.method === "GET" && url.pathname === "/session-tree") {
       const target = resolve(String(url.searchParams.get("path") ?? ""));
-      const sessionsRoot = join(homedir(), ".pi", "agent", "sessions");
-      if (!target.startsWith(sessionsRoot + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
         json(res, 400, { error: `not a session file: ${target}` });
         return;
       }
@@ -1418,7 +1061,7 @@ export function init(state) {
       }
       const includeTools = url.searchParams.get("tools") === "1";
       try {
-        json(res, 200, { q, scope, ...searchSessions({ q, scope, path, includeTools }) });
+        json(res, 200, { q, scope, ...searchSessions({ q, scope, path, includeTools, defaultDir: sessionDirFor(state.currentDir) }) });
       } catch (e) {
         json(res, 500, { error: `search failed: ${e.message}` });
       }
