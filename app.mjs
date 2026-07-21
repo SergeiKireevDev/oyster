@@ -943,9 +943,11 @@ export function init(state) {
     if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
     const files = st.stdout.split("\n").filter(Boolean).length;
     if (!files) {
-      // clean tree: nothing to commit, but HEAD still marks this exact state
+      // clean tree: nothing to commit, but HEAD still marks this exact state;
+      // carry its subject so the tree can label the checkpoint
       const head = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-      return { status: 200, body: { committed: false, reason: "workdir is clean", hash: head || undefined } };
+      const subject = (await git(dir, ["log", "-1", "--format=%s"])).stdout.trim();
+      return { status: 200, body: { committed: false, reason: "workdir is clean", hash: head || undefined, message: subject || undefined } };
     }
     const add = await git(dir, ["add", "-A"]);
     if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };

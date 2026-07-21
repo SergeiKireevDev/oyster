@@ -226,7 +226,13 @@
   }
   .t-ckpt:hover { background: var(--panel-2); color: var(--text); }
   .t-ckpt.busy { opacity: .35; cursor: wait; }
-  .t-ckpt .t-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .t-ckpt .t-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; flex-shrink: 0; }
+  .t-ckpt .t-msg {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11.5px;
+    opacity: .85;
+  }
   .t-ckpt .t-time { margin-left: auto; font-size: 10.5px; opacity: .8; flex-shrink: 0; }
   .t-forks {
     margin-left: 9px;
@@ -1713,11 +1719,17 @@ function renderTreeNode(node) {
     const hash = document.createElement("span");
     hash.className = "t-hash";
     hash.textContent = c.hash;
+    // part of the commit message next to the hash (timestamp-fallback
+    // messages carry no information, so those stay hash-only)
+    const msgText = (c.message ?? "").replace(/^checkpoint:?\s*/, "");
+    const msg = document.createElement("span");
+    msg.className = "t-msg";
+    msg.textContent = /^\d{4}-\d{2}-\d{2}T/.test(msgText) ? "" : msgText;
     const time = document.createElement("span");
     time.className = "t-time";
     const d = new Date(c.timestamp ?? NaN);
     time.textContent = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    cr.append("\u{1F9CA}", hash, time);
+    cr.append("\u{1F9CA}", hash, msg, time);
     cr.title = `${c.message ?? "checkpoint"}\nroll the workdir back to ${c.hash} and fork the session there`;
     cr.addEventListener("click", () => rollbackToCheckpoint({ hash: c.hash, sessionId: node.id }, cr));
     kids.appendChild(cr);
