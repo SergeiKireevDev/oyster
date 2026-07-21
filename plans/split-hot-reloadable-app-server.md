@@ -82,7 +82,7 @@ collisions fail during construction, before a handler swap.
 - [x] Move `GET /events` into `http/routes/runnerRoutes.mjs`, injecting runner
   lookup, state-owned SSE client registration, replay behavior, and disconnect
   cleanup. Add reconnect and reload-continuity tests.
-- [ ] Move `POST /rpc`, `GET /runners`, `DELETE /runners`, `POST /restart`, and
+- [x] Move `POST /rpc`, `GET /runners`, `DELETE /runners`, `POST /restart`, and
   `POST /open-session` into the same factory. Preserve runner selection,
   authorization, error normalization, and state broadcasts in tests.
 - [ ] Remove the extracted runner route bodies from `app.mjs` and verify runner

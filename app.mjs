@@ -199,73 +199,16 @@ export function init(state) {
 
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
-  const runnerRoutes = createRunnerRoutes({ state, runnerFromReq, startRunner, listRunnerInfo });
+  const runnerRoutes = createRunnerRoutes({
+    state, requestContext, runnerFromReq, startRunner, listRunnerInfo,
+    sendToRunner, stopRunner, runnerInfo, openSessionRunner,
+    sessionFileParam, autoTitleFork,
+  });
 
   // ---------------------------------------------------------------- routes (auth required)
 
   const routes = {
-    // -------------------------------------------------- runner I/O
-
-    "POST /rpc": async (req, res, url) => {
-      const cmd = await readJsonBody(req, res);
-      if (cmd === undefined) return;
-      if (!cmd || typeof cmd !== "object" || typeof cmd.type !== "string") {
-        json(res, 400, { error: "command must be an object with a string `type`" });
-        return;
-      }
-      const runner = runnerFromReq(url);
-      const ok = sendToRunner(runner, cmd);
-      if (ok) autoTitleFork(runner, cmd);
-      // pendingResume: the command was accepted but is held back until an
-      // in-flight session resume completes — tell the client so "queued"
-      // silence doesn't look like an unresponsive session
-      json(res, ok ? 202 : 503, ok
-        ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
-        : { error: "pi process unavailable" });
-    },
-
-    "GET /runners": (req, res) => {
-      json(res, 200, { runners: listRunnerInfo() });
-    },
-
-    "DELETE /runners": (req, res, url) => {
-      const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
-      if (!runner) { json(res, 404, { error: "no such runner" }); return; }
-      // stop the process but KEEP the runner entry: it remembers its
-      // session, so the next rpc/prompt to it respawns pi and resumes
-      stopRunner(runner);
-      json(res, 200, { stopped: runner.id });
-    },
-
-    "POST /restart": (req, res, url) => {
-      const runner = runnerFromReq(url);
-      stopRunner(runner);
-      setTimeout(() => { if (state.runners.has(runner.id)) startRunner(runner); }, 300);
-      json(res, 202, { restarting: true, runner: runner.id });
-    },
-
     // -------------------------------------------------- sessions
-
-    // get-or-spawn a runner for a session (or a fresh session in a folder)
-    "POST /open-session": async (req, res) => {
-      const body = await readJsonBody(req, res);
-      if (body === undefined) return;
-      let sessionPath = body?.sessionPath ? sessionFileParam(body.sessionPath) : null;
-      if (body?.sessionPath && !sessionPath) {
-        json(res, 400, { error: `not a session file: ${body.sessionPath}` });
-        return;
-      }
-      let dir = body?.dir ? confinePath(resolve(String(body.dir))) : null;
-      if (body?.dir && !dir) { forbidden(res, body.dir); return; }
-      if (dir) {
-        let ok = false;
-        try { ok = statSync(dir).isDirectory(); } catch {}
-        if (!ok) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
-        state.currentDir = dir; // keep /sessions and /browse in this folder
-      }
-      const runner = openSessionRunner({ sessionPath, dir });
-      json(res, 200, { runner: runnerInfo(runner) });
-    },
 
     "GET /sessions": (req, res, url) => {
       // ?path= lists another sessions folder (must live under the sessions root);

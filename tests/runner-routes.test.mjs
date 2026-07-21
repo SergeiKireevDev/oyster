@@ -15,6 +15,8 @@ function setup() {
   const runner = { id: "runner-1", dir: "/workspace", proc: null, buffer: ['{"type":"old"}'] };
   const state = {
     sseClients: new Set(),
+    runners: new Map([[runner.id, runner]]),
+    currentDir: "/workspace",
     broadcast(line) {
       for (const client of this.sseClients) client.write(`data: ${line}\n\n`);
     },
@@ -28,6 +30,20 @@ function setup() {
     listRunnerInfo: () => [{ id: runner.id, alive: !!runner.proc }],
     setIntervalImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
     clearIntervalImpl: (id) => cleared.push(id),
+    requestContext: {
+      json(res, status, value) { res.status = status; res.body = value; },
+      readJsonBody: async (req) => req.body,
+      resolveSafePath: (path) => path.startsWith("/allowed") ? path : null,
+    },
+    sendToRunner: (_selected, command) => command.type !== "unavailable",
+    stopRunner: (selected) => { selected.stopped = true; },
+    runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir }),
+    openSessionRunner: ({ sessionPath, dir }) => ({ id: "opened", sessionPath, dir }),
+    sessionFileParam: (path) => path === "valid.jsonl" ? "/sessions/valid.jsonl" : null,
+    autoTitleFork: (selected, command) => { selected.titledWith = command; },
+    setTimeoutImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
+    resolvePath: (path) => path,
+    isDirectory: (path) => path !== "/allowed/file",
   };
   return { runner, state, intervals, cleared, dependencies };
 }
@@ -61,6 +77,75 @@ test("SSE reconnect can skip replay while still receiving replay completion", ()
   handler(new EventEmitter(), res, new URL("http://localhost/events?replay=0"));
   assert.equal(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')), false);
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
+});
+
+test("runner RPC routes preserve validation, queue status, and listing contracts", async () => {
+  const { runner, dependencies } = setup();
+  const routes = createRunnerRoutes(dependencies);
+
+  const invalid = response();
+  await routes["POST /rpc"]({ body: {} }, invalid, new URL("http://localhost/rpc"));
+  assert.equal(invalid.status, 400);
+
+  const queued = response();
+  await routes["POST /rpc"]({ body: { type: "prompt", message: "hello" } }, queued, new URL("http://localhost/rpc"));
+  assert.equal(queued.status, 202);
+  assert.deepEqual(queued.body, { queued: true, runner: "runner-1" });
+  assert.equal(runner.titledWith.message, "hello");
+
+  const unavailable = response();
+  await routes["POST /rpc"]({ body: { type: "unavailable" } }, unavailable, new URL("http://localhost/rpc"));
+  assert.equal(unavailable.status, 503);
+
+  const listed = response();
+  routes["GET /runners"]({}, listed);
+  assert.deepEqual(listed.body, { runners: [{ id: "runner-1", alive: false }] });
+});
+
+test("runner stop and restart routes preserve selection, status, and delayed restart", () => {
+  const { runner, state, intervals, dependencies } = setup();
+  const routes = createRunnerRoutes(dependencies);
+
+  const missing = response();
+  routes["DELETE /runners"]({}, missing, new URL("http://localhost/runners?id=missing"));
+  assert.equal(missing.status, 404);
+
+  const stopped = response();
+  routes["DELETE /runners"]({}, stopped, new URL("http://localhost/runners?id=runner-1"));
+  assert.equal(stopped.status, 200);
+  assert.equal(runner.stopped, true);
+
+  runner.stopped = false;
+  const restarted = response();
+  routes["POST /restart"]({}, restarted, new URL("http://localhost/restart"));
+  assert.equal(restarted.status, 202);
+  assert.equal(intervals[0].delay, 300);
+  intervals[0].callback();
+  assert.deepEqual(runner.proc, { pid: 42 });
+  assert.equal(state.runners.has(runner.id), true);
+});
+
+test("open-session validates session and directory inputs before opening a runner", async () => {
+  const { state, dependencies } = setup();
+  const route = createRunnerRoutes(dependencies)["POST /open-session"];
+
+  const badSession = response();
+  await route({ body: { sessionPath: "missing.jsonl" } }, badSession);
+  assert.equal(badSession.status, 400);
+
+  const forbidden = response();
+  await route({ body: { dir: "/outside" } }, forbidden);
+  assert.equal(forbidden.status, 403);
+
+  const notDirectory = response();
+  await route({ body: { dir: "/allowed/file" } }, notDirectory);
+  assert.equal(notDirectory.status, 400);
+
+  const opened = response();
+  await route({ body: { sessionPath: "valid.jsonl", dir: "/allowed/project" } }, opened);
+  assert.equal(opened.status, 200);
+  assert.equal(state.currentDir, "/allowed/project");
+  assert.deepEqual(opened.body.runner, { id: "opened", dir: "/allowed/project" });
 });
 
 test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", () => {
