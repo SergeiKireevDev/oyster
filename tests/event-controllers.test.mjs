@@ -1,12 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { createCarouselController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
   assert.equal(swipeAxis(40, 10), "h");
   assert.equal(swipeAxis(10, -40), "v");
+});
+
+test("carousel swipe controller routes horizontal single and multi-touch gestures", () => {
+  const calls = [];
+  let clock = 0;
+  const controller = createCarouselSwipeController({
+    isDesktop: () => false,
+    now: () => clock,
+    step: (direction) => calls.push(["page", direction]),
+    switchRunner: (direction) => calls.push(["runner", direction]),
+  });
+  const gesture = (count, endX, endY = 0) => {
+    controller.onTouchStart({ target: {}, touches: Array.from({ length: count }, () => ({ clientX: 0, clientY: 0 })) });
+    clock = 100;
+    controller.onTouchEnd({ changedTouches: [{ clientX: endX, clientY: endY }] });
+  };
+  gesture(1, -80);
+  gesture(2, 80);
+  gesture(1, 10, 80);
+  assert.deepEqual(calls, [["page", 1], ["runner", -1]]);
 });
 
 test("carousel controller persists and applies mobile drawer pages", () => {

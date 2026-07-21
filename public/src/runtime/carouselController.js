@@ -56,3 +56,51 @@ export function createCarouselController({
 
   return { apply, get: () => current, set, step };
 }
+
+/** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
+export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {
+  let touchStart = null;
+  let handled = false;
+  const ignoredSelector = "textarea, input, select, .toast, #modal, #cmdPalette, #menu";
+
+  function onTouchStart(event) {
+    if (isDesktop() || event.target.closest?.(ignoredSelector)) return;
+    touchStart = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY,
+      t: now(),
+      n: event.touches.length,
+    };
+    handled = false;
+  }
+
+  function onTouchMove(event) {
+    if (!touchStart || handled) return;
+    const dx = event.touches[0].clientX - touchStart.x;
+    const dy = event.touches[0].clientY - touchStart.y;
+    if (swipeAxis(dx, dy) === "h" && Math.abs(dx) > 12) event.preventDefault();
+  }
+
+  function onTouchEnd(event) {
+    if (!touchStart || handled) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.x;
+    const dy = touch.clientY - touchStart.y;
+    const speed = Math.abs(dx) / Math.max(1, now() - touchStart.t);
+    if (swipeAxis(dx, dy) !== "h" || (Math.abs(dx) <= 60 && !(speed > 0.4 && Math.abs(dx) > 30))) {
+      touchStart = null;
+      return;
+    }
+    handled = true;
+    if (touchStart.n >= 2) switchRunner(dx < 0 ? 1 : -1);
+    else step(dx < 0 ? 1 : -1);
+    touchStart = null;
+  }
+
+  function onTouchCancel() {
+    touchStart = null;
+    handled = false;
+  }
+
+  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel };
+}

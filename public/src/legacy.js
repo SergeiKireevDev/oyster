@@ -8,7 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
-import { createCarouselController, swipeAxis } from "./runtime/carouselController.js";
+import { createCarouselController, createCarouselSwipeController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2757,74 +2757,11 @@ const carouselController = createCarouselController({
 });
 
 const applyCarousel = () => carouselController.apply();
-const carouselStep = (direction) => carouselController.step(direction);
-
-// ---- touch tracking ----
-// We listen for horizontal one-finger swipes and two-finger swipes.
-// Vertical scrolling, pinch-zoom and the composer textarea are left alone.
-let touchStart = null; // { x, y, t, n }
-let swipeHandled = false;
-
-function onTouchStart(e) {
-  if (window.matchMedia("(min-width: 761px)").matches) return; // desktop only
-  // let inputs/textareas behave normally — but still capture finger count
-  if (e.target.closest && e.target.closest("textarea, input, select")) return;
-  if (e.target.closest && e.target.closest(".toast, #modal, #cmdPalette, #menu")) return;
-  touchStart = {
-    x: e.touches[0].clientX,
-    y: e.touches[0].clientY,
-    t: Date.now(),
-    n: e.touches.length,
-  };
-  swipeHandled = false;
-}
-
-function onTouchMove(e) {
-  if (!touchStart || swipeHandled) return;
-  const dx = e.touches[0].clientX - touchStart.x;
-  const dy = e.touches[0].clientY - touchStart.y;
-  // once the gesture is clearly horizontal, claim it — stops the drawer's
-  // overflow-y scroller from eating the swipe on iOS
-  if (swipeAxis(dx, dy) === "h" && Math.abs(dx) > 12) {
-    e.preventDefault();
-  }
-}
-
-function onTouchEnd(e) {
-  if (!touchStart || swipeHandled) return;
-  const t = e.changedTouches[0];
-  const dx = t.clientX - touchStart.x;
-  const dy = t.clientY - touchStart.y;
-  const dt = Date.now() - touchStart.t;
-  const speed = Math.abs(dx) / Math.max(1, dt); // px/ms
-  const axis = swipeAxis(dx, dy);
-
-  if (axis !== "h") { touchStart = null; return; }
-
-  // Need enough distance OR high speed on a quick flick
-  const isSwipe = Math.abs(dx) > 60 || (speed > 0.4 && Math.abs(dx) > 30);
-  if (!isSwipe) { touchStart = null; return; }
-
-  swipeHandled = true;
-
-  if (touchStart.n >= 2) {
-    // two-finger horizontal swipe → switch active session
-    switchToAdjacentRunner(dx < 0 ? 1 : -1);
-    touchStart = null;
-    return;
-  }
-
-  // one-finger swipe
-  // swiping LEFT from page 0 opens hublots; left again opens checkpoints.
-  // swiping RIGHT reverses: checkpoints → hublots → chat.
-  carouselStep(dx < 0 ? 1 : -1);
-  touchStart = null;
-}
-
-function onTouchCancel() {
-  touchStart = null;
-  swipeHandled = false;
-}
+const swipeController = createCarouselSwipeController({
+  isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
+  step: (direction) => carouselController.step(direction),
+  switchRunner: switchToAdjacentRunner,
+});
 
 // Find sessions the user would consider "active": alive, has a real
 // session bound (sessionId + sessionName), and lives in the current
@@ -2854,10 +2791,10 @@ function attachSwipeListeners() {
   registerSwipeAndResizeEvents({
     documentTarget: document,
     windowTarget: window,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    onTouchCancel,
+    onTouchStart: swipeController.onTouchStart,
+    onTouchMove: swipeController.onTouchMove,
+    onTouchEnd: swipeController.onTouchEnd,
+    onTouchCancel: swipeController.onTouchCancel,
     onResize: applyCarousel,
   });
   window._piSwipeAttached = true;
