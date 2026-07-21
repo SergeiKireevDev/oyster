@@ -1,4 +1,12 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+export function createConnectionStateTransitions({ setConnected, setStatus }) {
+  return {
+    opened() { setConnected(true); setStatus("connected"); },
+    reconnecting() { setConnected(false); setStatus("reconnecting…"); },
+    lost() { setConnected(false); setStatus("connection lost — reconnecting…"); },
+  };
+}
+
 export function runReconnectWatchdog({ source, lastEventAt, onExpired, now = Date.now() }) {
   if (!source || now - lastEventAt <= 70000) return false;
   onExpired();

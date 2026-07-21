@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createEventStreamRuntime, runReconnectWatchdog } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -835,6 +835,10 @@ function updateUsage(message) {
 let connected = false;
 let es = null;
 const eventStream = createEventStreamRuntime();
+const connectionState = createConnectionStateTransitions({
+  setConnected: (value) => { connected = value; updateAppSession({ connected }); },
+  setStatus: (stateInfo) => updateHeaderState({ stateInfo }),
+});
 
 // Watchdog: the server sends a ping event every 25s. Through a tunnel, a
 // connection can die without the browser noticing (EventSource stays OPEN
@@ -847,9 +851,7 @@ setInterval(() => {
     lastEventAt,
     onExpired: () => {
       eventStream.close();
-      connected = false;
-      updateAppSession({ connected });
-      updateHeaderState({ stateInfo: "connection lost — reconnecting…" });
+      connectionState.lost();
       connect();
     },
   });
@@ -871,10 +873,8 @@ function connect({ replay = true } = {}) {
   const replayParam = replay ? "1" : "0";
   lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
   const eventHandlers = { onopen: async () => {
-    connected = true;
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
-    updateAppSession({ connected });
-    updateHeaderState({ stateInfo: "connected" });
+    connectionState.opened();
     if (skipTranscriptGate) {
       refreshState();
       return;
@@ -897,9 +897,7 @@ function connect({ replay = true } = {}) {
   },
   onerror: () => {
     lifecycleLog("connect:onerror", { ms: Math.round(performance.now() - connectStarted) });
-    connected = false;
-    updateAppSession({ connected });
-    updateHeaderState({ stateInfo: "reconnecting…" });
+    connectionState.reconnecting();
     // EventSource can't see HTTP status codes, so a 401 (bad stored token)
     // looks identical to a network blip and would retry forever. Probe
     // /authcheck to tell them apart, at most once per 10s.
