@@ -38,6 +38,7 @@ import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
+import { commandPalettePosition } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
@@ -1268,25 +1269,7 @@ const getCommandTrigger = commandTrigger;
 const getFilteredCommands = (match) => filterCommands(commands, match);
 
 function positionCmdPalette(el) {
-  const rect = el.getBoundingClientRect();
-  const gap = 8;
-  const pw = Math.min(420, Math.max(280, rect.width));
-  const maxH = 320;
-  let left = rect.left;
-  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-  let top;
-  const patch = { left: left + "px", width: pw + "px" };
-  if (rect.top > maxH + gap) {
-    top = rect.top - gap; // place above
-    patch.bottom = window.innerHeight - top + "px";
-    patch.top = "auto";
-  } else {
-    top = rect.bottom + gap; // place below
-    patch.top = top + "px";
-    patch.bottom = "auto";
-  }
-  patch.maxHeight = Math.min(maxH, window.innerHeight - (rect.top > maxH ? top : rect.bottom) - gap * 2) + "px";
-  setCommandPaletteState(patch);
+  setCommandPaletteState(commandPalettePosition(el.getBoundingClientRect(), window));
 }
 
 function openCmdPalette(el, match, trigger) {
