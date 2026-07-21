@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, commandPaletteView, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteKeyboardController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
 
 test("command palette navigation wraps active command selection", () => {
   assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
@@ -24,4 +24,26 @@ test("command palette position opens upward when there is room", () => {
   const patch = commandPalettePosition({ left: 10, width: 100, top: 500, bottom: 530 }, { innerWidth: 1000, innerHeight: 800 });
   assert.equal(patch.top, "auto");
   assert.equal(patch.bottom, "308px");
+});
+
+test("command palette keyboard controller handles palette keys only while open", () => {
+  let listener;
+  let removed;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
+  const calls = [];
+  let open = true;
+  const controller = createCommandPaletteKeyboardController({
+    documentTarget: target,
+    isOpen: () => open,
+    move: (amount) => calls.push(["move", amount]),
+    run: () => calls.push(["run"]),
+    close: () => calls.push(["close"]),
+  });
+  controller.attach();
+  const event = (key) => ({ key, preventDefault: () => calls.push(["prevent"]), stopPropagation: () => calls.push(["stop"]) });
+  listener(event("ArrowDown")); listener(event("Escape"));
+  open = false; listener(event("Enter"));
+  controller.detach();
+  assert.deepEqual(calls, [["prevent"], ["stop"], ["move", 1], ["prevent"], ["stop"], ["close"]]);
+  assert.equal(removed, listener);
 });

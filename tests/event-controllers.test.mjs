@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -180,18 +180,6 @@ test("composer event adapter routes each composer action", () => {
   listener({ detail: { action: "keydown", sourceEvent: "event" } });
   listener({ detail: { action: "send" } }); listener({ detail: { action: "abort" } });
   assert.deepEqual(calls, ["input", ["keydown", "event"], "send", "abort"]);
-});
-
-test("command palette keyboard adapter handles palette keys only while open", () => {
-  let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
-  const calls = [];
-  let open = true;
-  registerCommandPaletteKeyboard(target, { isOpen: () => open, move: (amount) => calls.push(["move", amount]), run: () => calls.push(["run"]), close: () => calls.push(["close"]) });
-  const event = (key) => ({ key, preventDefault: () => calls.push(["prevent"]), stopPropagation: () => calls.push(["stop"]) });
-  listener(event("ArrowDown")); listener(event("Escape"));
-  open = false; listener(event("Enter"));
-  assert.deepEqual(calls, [["prevent"], ["stop"], ["move", 1], ["prevent"], ["stop"], ["close"]]);
 });
 
 test("open file explorer event adapter invokes its callback", () => {

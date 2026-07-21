@@ -22,3 +22,30 @@ export function moveCommandPaletteActive(active, count, direction) {
   if (!count) return active;
   return (active + direction + count) % count;
 }
+
+/** Own the palette's capture-phase keyboard lifecycle outside component markup. */
+export function createCommandPaletteKeyboardController({ documentTarget, isOpen, move, run, close }) {
+  const onKeydown = (event) => {
+    if (!isOpen()) return;
+    const actions = {
+      ArrowDown: () => move(1), ArrowUp: () => move(-1),
+      Enter: run, Tab: run, Escape: close,
+    };
+    const action = actions[event.key];
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    action();
+  };
+
+  function attach() {
+    documentTarget.addEventListener("keydown", onKeydown, true);
+    return detach;
+  }
+
+  function detach() {
+    documentTarget.removeEventListener("keydown", onKeydown, true);
+  }
+
+  return { attach, detach };
+}

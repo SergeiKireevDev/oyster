@@ -54,23 +54,6 @@ export function registerComposerEvents(target, { inputChanged, keydown, send, ab
   return () => target.removeEventListener("pi:composer", onComposer);
 }
 
-export function registerCommandPaletteKeyboard(target, { isOpen, move, run, close }) {
-  const onKeydown = (event) => {
-    if (!isOpen()) return;
-    const actions = {
-      ArrowDown: () => move(1), ArrowUp: () => move(-1),
-      Enter: run, Tab: run, Escape: close,
-    };
-    const action = actions[event.key];
-    if (!action) return;
-    event.preventDefault();
-    event.stopPropagation();
-    action();
-  };
-  target.addEventListener("keydown", onKeydown, true);
-  return () => target.removeEventListener("keydown", onKeydown, true);
-}
-
 export function registerOpenFileExplorerEvent(target, { open }) {
   const onOpen = () => open();
   target.addEventListener("pi-open-file-explorer", onOpen);
