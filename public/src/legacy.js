@@ -11,7 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, processEven
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
-import { createSessionRuntime } from "./runtime/sessionRuntime.js";
+import { createSessionRuntime, createSessionStateApplier } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -397,15 +397,29 @@ async function renderTranscript(messages) {
 
 let state = null;
 
-function applyState(s) {
-  const result = applySessionState({ incoming: s, previousState: state, currentRunner, emptySessionRunners, routinesNow: routineSidebarController.items, routineVisible, tunnelScopeAll, hooks: {
-    log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: s?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: s?.messageCount ?? null, pendingMessageCount: s?.pendingMessageCount ?? null, isStreaming: !!s?.isStreaming, isCompacting: !!s?.isCompacting, model: s?.model?.id ?? null, sessionFile: s?.sessionFile ?? null }),
-    setState: (next) => { state = next; }, updateAppSession, setTranscriptGateRequired,
-    setRoutines: routines.set, setRoutineScopeAll: routineScopeAll.set, setRoutineCurrentSessionId: routineCurrentSessionId.set,
-    loadHublots, loadRoutines, syncUrlToSession, updateHeaderState, setBusy,
-  } });
-  state = result.state;
-}
+const applyState = createSessionStateApplier({
+  applySessionState,
+  getState: () => state,
+  setState: (next) => { state = next; },
+  getCurrentRunner: () => currentRunner,
+  getEmptySessionRunners: () => emptySessionRunners,
+  getRoutines: () => routineSidebarController.items,
+  routineVisible,
+  getTunnelScopeAll: () => tunnelScopeAll,
+  hooks: {
+    log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: state?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: state?.messageCount ?? null, pendingMessageCount: state?.pendingMessageCount ?? null, isStreaming: !!state?.isStreaming, isCompacting: !!state?.isCompacting, model: state?.model?.id ?? null, sessionFile: state?.sessionFile ?? null }),
+    updateAppSession,
+    setTranscriptGateRequired: (value) => setTranscriptGateRequired(value),
+    setRoutines: routines.set,
+    setRoutineScopeAll: routineScopeAll.set,
+    setRoutineCurrentSessionId: routineCurrentSessionId.set,
+    loadHublots: () => loadHublots(),
+    loadRoutines: () => loadRoutines(),
+    syncUrlToSession,
+    updateHeaderState,
+    setBusy: (value) => setBusy(value),
+  },
+});
 
 // ------------------------------------------------------------ runners
 // The server keeps one pi process ("runner") per open session; this client

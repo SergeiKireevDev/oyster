@@ -3,6 +3,24 @@
  * or transport implementations. The supplied connect adapter preserves the
  * canonical, no-replay session-switch contract.
  */
+/** Apply authoritative get_state responses through injectable session/store adapters. */
+export function createSessionStateApplier({ applySessionState, getState, setState, getCurrentRunner, getEmptySessionRunners, getRoutines, routineVisible, getTunnelScopeAll, hooks }) {
+  return (incoming) => {
+    const result = applySessionState({
+      incoming,
+      previousState: getState(),
+      currentRunner: getCurrentRunner(),
+      emptySessionRunners: getEmptySessionRunners(),
+      routinesNow: getRoutines(),
+      routineVisible,
+      tunnelScopeAll: getTunnelScopeAll(),
+      hooks: { ...hooks, setState },
+    });
+    setState(result.state);
+    return result.state;
+  };
+}
+
 export function createSessionRuntime({
   getCurrentRunner, switchSessionRunner, openSession, log, resetPreview, refreshState,
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
