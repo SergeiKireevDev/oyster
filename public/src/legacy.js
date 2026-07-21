@@ -466,8 +466,6 @@ function getSessionRuntime() {
     connect,
   });
 }
-function switchToRunner(id) { return getSessionRuntime().switchRunner(id); }
-
 // ---- instant transcript preview -------------------------------------------
 // Opening a session waits on a pi process spawning AND resuming the session
 // before get_messages can answer (the server holds commands back during the
@@ -493,11 +491,6 @@ sessionOpenController = createSessionOpenController({
   markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
   log: lifecycleLog,
 });
-
-/** get-or-spawn a runner for a session file / folder */
-async function openSessionRunner(options) {
-  return getSessionRuntime().openSession(options);
-}
 
 /** hook: session picker (when open) re-renders its indicators */
 let onRunnersUpdate = null;
