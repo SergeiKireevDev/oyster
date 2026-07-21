@@ -1,0 +1,11 @@
+[Unit]
+Description=pi-remote-ui - web UI for the pi coding agent
+
+[Service]
+WorkingDirectory=/home/ubuntu/tree-pi
+ExecStart=/usr/bin/node /home/ubuntu/tree-pi/server.mjs
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

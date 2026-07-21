@@ -1017,6 +1017,7 @@ function connect() {
   if (!token) { requireToken(); return; }
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
+  replaying = true;
   es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
   es.onopen = async () => {
     connected = true;
@@ -1048,12 +1049,15 @@ function connect() {
   };
 }
 
+let replaying = true; // true while the SSE replay buffer is being re-delivered
+
 function handleEvent(msg) {
   switch (msg.type) {
     case "ping":
       return;
 
     case "replay_done":
+      replaying = false;
       if (msg.workdir) setWorkdir(msg.workdir);
       return;
 
@@ -1170,17 +1174,18 @@ function handleEvent(msg) {
       return;
 
     case "ui_reload":
-      // the page on disk changed; refresh when it won't interrupt anything
-      if (!busy && !input.value.trim()) location.reload();
-      else toast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
+      // the page on disk changed; offer a refresh. Ignore replayed copies of
+      // this event — after a refresh we already run the newest version.
+      if (replaying) return;
+      toast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
       return;
 
     case "code_reloaded":
-      toast("server code hot-reloaded");
+      if (!replaying) toast("server code hot-reloaded");
       return;
 
     case "code_reload_failed":
-      toast(`server reload failed: ${msg.error}`, "error");
+      if (!replaying) toast(`server reload failed: ${msg.error}`, "error");
       return;
   }
 }

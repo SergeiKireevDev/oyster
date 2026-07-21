@@ -70,3 +70,16 @@ ssh -R 80:localhost:8080 nokey@localhost.run
 ```
 
 The token is your only line of defense once tunneled — treat the URL-with-token like a password.
+
+## Running as a service
+
+A systemd user unit keeps the UI alive across crashes and logouts:
+
+```sh
+cp pi-ui.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now pi-ui.service
+sudo loginctl enable-linger ubuntu   # keep it running with no active login session
+```
+
+The token comes from `.ui-token` next to `server.mjs`. Logs: `journalctl --user -u pi-ui -f`.

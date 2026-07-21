@@ -105,7 +105,11 @@ async function loadApp() {
 
 let reloadTimer = null;
 function watchApp() {
-  watch(APP_PATH, () => {
+  // Watch DIRECTORIES, not files: editors and tools often save via
+  // write-to-temp + rename, which replaces the inode and permanently
+  // detaches a file-based fs.watch. Directory watchers survive renames.
+  watch(__dirname, (_event, filename) => {
+    if (filename !== "app.mjs") return;
     // debounce: editors fire multiple change events per save
     clearTimeout(reloadTimer);
     reloadTimer = setTimeout(async () => {
@@ -121,10 +125,11 @@ function watchApp() {
   });
 
   // notify browsers when the static UI changes so they can refresh themselves
-  const indexPath = join(__dirname, "public", "index.html");
-  if (existsSync(indexPath)) {
+  const publicDir = join(__dirname, "public");
+  if (existsSync(publicDir)) {
     let uiTimer = null;
-    watch(indexPath, () => {
+    watch(publicDir, (_event, filename) => {
+      if (filename !== "index.html") return;
       clearTimeout(uiTimer);
       uiTimer = setTimeout(() => {
         console.log(`[pi-ui] public/index.html changed, notifying browsers`);
