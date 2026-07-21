@@ -5,6 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper, watchdogExpired } from "./runtime/eventStreamUtils.js";
+import { openEventStream } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -864,7 +865,7 @@ function connect({ replay = true } = {}) {
   replayBufferedEvents = [];
   const replayParam = replay ? "1" : "0";
   lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
-  es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}&replay=${replayParam}`);
+  es = openEventStream({ token, runner: currentRunner, replay });
   es.onopen = async () => {
     connected = true;
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
