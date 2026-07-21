@@ -36,7 +36,7 @@ cd tests/e2e && npm test
   temporary hot-reloadable application fixture, makes a request through the
   active handler, reloads successfully, and verifies the replacement handler
   serves the next request.
-- [ ] Extend that fixture test with an intentionally invalid replacement module
+- [x] Extend that fixture test with an intentionally invalid replacement module
   and verify the previous successful handler still serves requests and the
   reload-failure event is emitted.
 - [ ] Extend the fixture test with an open SSE response, reload the request

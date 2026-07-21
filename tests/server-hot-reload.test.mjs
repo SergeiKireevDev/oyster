@@ -21,7 +21,18 @@ function fixture(version) {
   return `
 export function init(state) {
   return {
-    async handleRequest(_req, res) {
+    async handleRequest(req, res) {
+      if (req.url === "/events") {
+        res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        });
+        state.sseClients.add(res);
+        req.on("close", () => state.sseClients.delete(res));
+        res.write(": connected\\n\\n");
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ version: ${JSON.stringify(version)}, reloadCount: state.reloadCount }));
     },
@@ -70,6 +81,18 @@ async function readJson(port) {
   return response.json();
 }
 
+async function nextServerEvent(reader) {
+  const decoder = new TextDecoder();
+  let pending = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error("SSE response ended before a server event arrived");
+    pending += decoder.decode(value, { stream: true });
+    const match = pending.match(/(?:^|\n)data: (.+)\n\n/);
+    if (match) return JSON.parse(match[1]);
+  }
+}
+
 test("the stable server atomically replaces its active application handler", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-"));
   const port = await availablePort();
@@ -97,4 +120,42 @@ test("the stable server atomically replaces its active application handler", asy
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2 });
+});
+
+test("an invalid application replacement keeps the active handler and emits a failure event", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-failure-"));
+  const port = await availablePort();
+  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await writeFile(join(root, "app.mjs"), fixture("working"));
+
+  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    cwd: root,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const eventsAbort = new AbortController();
+  t.after(async () => {
+    eventsAbort.abort();
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      await once(child, "exit");
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await waitForOutput(child, "listening on");
+  const events = await fetch(`http://127.0.0.1:${port}/events`, { signal: eventsAbort.signal });
+  assert.equal(events.status, 200);
+  const eventPromise = nextServerEvent(events.body.getReader());
+
+  const replacement = join(root, "app.invalid.mjs");
+  await writeFile(replacement, "export function init( {");
+  await rename(replacement, join(root, "app.mjs"));
+  await waitForOutput(child, "reload FAILED");
+
+  assert.deepEqual(await readJson(port), { version: "working", reloadCount: 1 });
+  const event = await eventPromise;
+  assert.equal(event.type, "code_reload_failed");
+  assert.equal(event._server, true);
+  assert.equal(typeof event.error, "string");
+  assert.ok(event.error.length > 0);
 });
