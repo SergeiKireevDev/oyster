@@ -122,6 +122,17 @@ the published JSONL fallback (the current release-image build path) must opt out
 explicitly with `PI_SQLITE_CONTRACT_TEST=skip`; the test never substitutes a
 global `pi` binary silently.
 
+### Legacy application-data import
+
+Stop pi-lot-ui before importing legacy checkpoints and routine definitions/bindings. Preview the counts and conflicts first, then apply:
+
+```bash
+npm run migrate-app-data -- --dry-run --service-stopped
+npm run migrate-app-data -- --apply --service-stopped
+```
+
+The command writes an auditable ledger entry to `pi-lot-ui.sqlite` in both modes. Override legacy locations with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`.
+
 ## Endpoints
 
 | Route | Auth | Purpose |

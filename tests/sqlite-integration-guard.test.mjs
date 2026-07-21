@@ -87,10 +87,10 @@ test("only the app-store owner and read-only session catalog can construct SQLit
   assert.deepEqual(sqliteUsers, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
 
   const appStoreImports = sources
-    .filter(({ name }) => name !== "server.mjs")
+    .filter(({ name }) => !["server.mjs", "scripts/migrate-app-data.mjs"].includes(name))
     .filter(({ text }) => /(?:from\s+|import\s*\()\s*["'][^"']*persistence\/appStore\.mjs/.test(text))
     .map(({ name }) => name);
-  assert.deepEqual(appStoreImports, [], `only server.mjs may open the application store: ${appStoreImports.join(", ")}`);
+  assert.deepEqual(appStoreImports, [], `only server.mjs or the stopped-service migration command may open the application store: ${appStoreImports.join(", ")}`);
 
   const catalog = sources.find(({ name }) => name === "sessions/sqliteCatalog.mjs").text;
   assert.match(catalog, /new DatabaseSync\(path, \{ readOnly: true,/);

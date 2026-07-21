@@ -55,6 +55,7 @@ COPY public ./public
 COPY http ./http
 COPY sessions ./sessions
 COPY persistence ./persistence
+COPY scripts ./scripts
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build \

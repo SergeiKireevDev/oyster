@@ -13,6 +13,8 @@ export function importLegacyRoutines({
   sourceDir = LEGACY_ROUTINES_DIR,
   bindingsPath = join(sourceDir, "bindings.json"),
   now = () => new Date().toISOString(),
+  apply = true,
+  onConflict = () => {},
 } = {}) {
   if (!repository) throw new Error("routine repository is required");
   if (typeof resolveOwner !== "function") throw new Error("routine owner resolver is required");
@@ -49,13 +51,19 @@ export function importLegacyRoutines({
   let importedCount = 0;
   let existingCount = 0;
   for (const candidate of candidates) {
-    if (repository.findByName(candidate.name)) {
+    const existing = repository.findByName(candidate.name);
+    if (existing) {
       existingCount++;
+      const owner = candidate.binding.sessionId ? resolveOwner(candidate.binding.sessionId) : null;
+      if (existing.script !== candidate.script || (existing.cwd ?? null) !== (candidate.binding.cwd ?? null)
+        || (candidate.binding.sessionId ?? null) !== (existing.session_id ?? null)) {
+        onConflict({ key: candidate.name, reason: "destination routine definition or binding differs" });
+      }
       continue;
     }
     const owner = candidate.binding.sessionId ? resolveOwner(candidate.binding.sessionId) : null;
     if (candidate.binding.sessionId && !owner?.id) throw new Error(`cannot import legacy binding for ${candidate.name}: session owner was not resolved`);
-    repository.upsert({
+    if (apply) repository.upsert({
       id: randomUUID(),
       ownerId: owner?.id ?? null,
       name: candidate.name,
@@ -71,6 +79,6 @@ export function importLegacyRoutines({
     importedCount,
     existingCount,
     orphanBindingCount,
-    status: "imported",
+    status: apply ? "imported" : "dry-run",
   });
 }

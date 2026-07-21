@@ -145,6 +145,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         const row = database.prepare("SELECT id, backend, session_id, storage_path, status, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath);
         return row ? { ...row } : null;
       },
+      listBySessionId: (sessionId) => database.prepare("SELECT id, backend, session_id, storage_path, status, created_at FROM app_sessions WHERE session_id = ? ORDER BY id").all(sessionId).map((row) => ({ ...row })),
       markDeleting: (id) => database.prepare("UPDATE app_sessions SET status = 'deleting' WHERE id = ?").run(id).changes,
       delete: (id) => database.prepare("DELETE FROM app_sessions WHERE id = ?").run(id).changes,
     }),
