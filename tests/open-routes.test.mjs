@@ -13,7 +13,11 @@ function response() {
 
 function setup() {
   const state = {
-    config: { TOKEN: "open-token", PI_DIR: tmpdir(), DIRNAME: tmpdir() },
+    config: {
+      TOKEN: "open-token", PI_DIR: tmpdir(), DIRNAME: tmpdir(),
+      PI_BIN: "/configured/pi", PERSISTENT_STORE: "sqlite", SQLITE_PATH: "/agent/sessions.sqlite",
+    },
+    piProcesses: { bin: "/running/pi", persistentStore: "sqlite" },
     sseClients: new Set([{}]),
     reloadCount: 7,
   };
@@ -36,7 +40,18 @@ test("health route reports stable state including the reload count without auth"
     runners: [{ id: "runner-1" }],
     clients: 1,
     reloadCount: 7,
+    pi: { bin: "/running/pi", persistentStore: "sqlite", sqlitePath: "/agent/sessions.sqlite" },
   });
+});
+
+test("health diagnostics follow the running launcher and cannot falsely claim SQLite", () => {
+  const { state, routes } = setup();
+  state.piProcesses = { bin: "/global/pi", persistentStore: "jsonl" };
+  const res = response();
+  routes["GET /health"]({ headers: {} }, res);
+  const health = JSON.parse(res.body);
+  assert.deepEqual(health.pi, { bin: "/global/pi", persistentStore: "jsonl", sqlitePath: null });
+  assert.equal(JSON.stringify(health).includes("open-token"), false);
 });
 
 test("authcheck remains an open credential report without exposing token values", () => {

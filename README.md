@@ -105,7 +105,7 @@ global `pi` binary silently.
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /` | no | the UI (static, secret-free) |
-| `GET /health` | no | liveness probe |
+| `GET /health` | no | liveness plus active pi executable/backend/database diagnostics (never tokens or credentials) |
 | `GET /events` | yes | SSE stream of pi's stdout (events + responses), with replay of recent lines |
 | `POST /rpc` | yes | JSON body forwarded verbatim to pi's stdin |
 | `POST /restart` | yes | kill and respawn the pi process |

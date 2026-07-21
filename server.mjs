@@ -252,6 +252,9 @@ watchApp();
 
 server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] listening on http://${config.HOST}:${config.PORT}`);
+  console.log(`[pi-ui] pi executable: ${config.PI_BIN}`);
+  console.log(`[pi-ui] session backend: ${config.PERSISTENT_STORE}`);
+  if (config.SQLITE_PATH) console.log(`[pi-ui] SQLite database: ${config.SQLITE_PATH}`);
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);

@@ -1,3 +1,13 @@
+function piDiagnostics(state) {
+  const bin = state.piProcesses?.bin ?? state.config.PI_BIN;
+  const persistentStore = state.piProcesses?.persistentStore ?? state.config.PERSISTENT_STORE;
+  return {
+    bin,
+    persistentStore,
+    sqlitePath: persistentStore === "sqlite" ? state.config.SQLITE_PATH : null,
+  };
+}
+
 /** Build the routes that intentionally bypass authentication. */
 export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFailMax = 20 }) {
   const {
@@ -16,6 +26,7 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
         runners: listRunnerInfo(),
         clients: state.sseClients.size,
         reloadCount: state.reloadCount,
+        pi: piDiagnostics(state),
       });
     },
 

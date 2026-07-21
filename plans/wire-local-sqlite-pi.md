@@ -134,7 +134,7 @@ database as though it were one session.
   hublot agents all use the validated local executable and an explicit inherited
   store environment. Ensure `--no-session` helpers remain ephemeral and cannot
   create SQLite rows.
-- [ ] Update startup logging, `/health`, and diagnostic output to report the pi
+- [x] Update startup logging, `/health`, and diagnostic output to report the pi
   executable, selected session backend, and database location without exposing
   tokens or credentials. Add tests proving diagnostics cannot claim SQLite
   while a JSONL/global pi process is running.
