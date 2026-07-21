@@ -39,6 +39,42 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+/** Own optimistic durable-transcript previews while a session runner resumes. */
+export function createSessionPreviewController({ fetchPreview, render, log = () => {}, now = () => performance.now() }) {
+  let preview = null;
+  const clear = () => { preview = null; };
+  const renderNow = () => {
+    if (!preview?.messages?.length) return false;
+    log("preview:render", { sessionPath: preview.sessionPath, messages: preview.messages.length });
+    render(preview.messages);
+    return true;
+  };
+  const load = async (sessionPath) => {
+    const started = now();
+    log("preview:fetch:start", { sessionPath });
+    try {
+      const messages = await fetchPreview(sessionPath);
+      if (messages === null) {
+        log("preview:fetch:not-ok", { sessionPath, ms: Math.round(now() - started) });
+        return false;
+      }
+      const superseded = preview?.sessionPath !== sessionPath;
+      log("preview:fetch:done", { sessionPath, messages: messages.length, ms: Math.round(now() - started), superseded });
+      if (superseded) return false;
+      preview.messages = messages;
+      return renderNow();
+    } catch (error) {
+      log("preview:fetch:error", { sessionPath, error: error?.message ?? String(error), ms: Math.round(now() - started) });
+      return false;
+    }
+  };
+  const begin = (sessionPath) => {
+    preview = { sessionPath, messages: null };
+    void load(sessionPath);
+  };
+  return { begin, clear, load, renderNow };
+}
+
 /** Debounce authoritative state refresh requests. */
 export function createSessionStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;
