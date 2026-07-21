@@ -28,7 +28,8 @@
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
  *   GET  /routines    -> runnable scripts in ~/.pi/routines/ (+ live state & session bindings)
- *   POST /routines    -> { name, action: "start" | "stop" | "teardown" | "release", sessionId? }
+ *   POST /routines    -> { name, action: "create" | "start" | "stop" | "teardown" | "release" | "delete",
+ *                          sessionId?, script? (create only) }
  */
 
 import { spawn } from "node:child_process";
@@ -47,7 +48,7 @@ const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, pidsOnPort } =
   await import(`./tunnels.mjs?v=${statSync(TUNNELS_PATH).mtimeMs}`);
 
 const ROUTINES_PATH = join(dirname(fileURLToPath(import.meta.url)), "routines.mjs");
-const { listRoutines, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
+const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
   await import(`./routines.mjs?v=${statSync(ROUTINES_PATH).mtimeMs}`);
 
 export function init(state) {
@@ -1143,18 +1144,28 @@ export function init(state) {
           json(res, 400, { error: `invalid routine name: ${name}` });
           return;
         }
+        // create/start bind the routine to the calling session and run it in
+        // that session's workdir (so byproducts land in the right project)
+        const sessionCwd = () => {
+          const runner = sessionId
+            ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
+            : null;
+          return runner?.dir ?? state.currentDir;
+        };
         try {
-          if (action === "start") {
-            // bind the routine to the calling session and run it in that
-            // session's workdir (so byproducts land in the right project)
-            const runner = sessionId
-              ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
-              : null;
-            json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: runner?.dir ?? state.currentDir }) });
+          if (action === "create") {
+            const script = typeof body?.script === "string" ? body.script : null;
+            if (!script || script.length > 256 * 1024) {
+              json(res, 400, { error: "create requires a `script` string (max 256KB)" });
+              return;
+            }
+            json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
           }
+          else if (action === "start") json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });
           else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
           else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
           else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });
+          else if (action === "delete") json(res, 200, { routine: deleteRoutine(state, name) });
           else json(res, 400, { error: `unknown action: ${action}` });
         } catch (e) {
           json(res, 400, { error: e.message });

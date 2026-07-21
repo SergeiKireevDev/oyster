@@ -44,7 +44,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -194,6 +194,52 @@ function runScript(state, r, mode) {
       emit(state, r, "finished");
     }
   });
+}
+
+/** Create (or overwrite) a routine script in the global store and bind it
+ *  to the calling session. The script must implement the routine protocol:
+ *  `<script> run` and `<script> teardown`, with optional `::progress` lines. */
+export function createRoutine(state, { name, script, sessionId = null, cwd = null }) {
+  if (!/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
+  listRoutines(state);
+  const map = routinesMap(state);
+  const existing = map.get(name);
+  if (existing?.proc) throw new Error(`routine "${name}" is currently ${existing.status} — stop it before overwriting`);
+  if (existing?.sessionId && sessionId && existing.sessionId !== sessionId) {
+    throw new Error(`routine "${name}" exists and is bound to another session`);
+  }
+  mkdirSync(ROUTINES_DIR, { recursive: true });
+  const path = join(ROUTINES_DIR, name);
+  writeFileSync(path, script, { mode: 0o755 });
+  chmodSync(path, 0o755); // writeFileSync's mode is ignored when the file existed
+  const r = existing ?? {
+    name, path, sessionId: null, cwd: null,
+    status: "idle", progress: null, message: null,
+    startedAt: null, finishedAt: null, exitCode: null,
+    log: [], proc: null,
+  };
+  if (sessionId) r.sessionId = sessionId;
+  if (cwd) r.cwd = cwd;
+  map.set(name, r);
+  saveBinding(r);
+  console.log(`[pi-ui] routine ${existing ? "updated" : "created"}: ${path} (session ${r.sessionId ?? "-"})`);
+  emit(state, r, existing ? "updated" : "created");
+  return routineInfo(r);
+}
+
+/** Delete a routine's script and binding. Refuses while it is running;
+ *  byproducts are NOT touched — run teardown first if needed. */
+export function deleteRoutine(state, name) {
+  const r = findRoutine(state, name);
+  if (!r) throw new Error(`no such routine: ${name}`);
+  if (r.proc) throw new Error(`routine "${name}" is ${r.status} — stop it first`);
+  try { unlinkSync(r.path); } catch (e) { throw new Error(`failed to delete ${r.path}: ${e.message}`); }
+  r.sessionId = null;
+  r.cwd = null;
+  saveBinding(r); // removes the bindings.json entry
+  routinesMap(state).delete(name);
+  emit(state, r, "deleted");
+  return routineInfo(r);
 }
 
 /** Start a routine's `run`. Binds it to the calling session (and its

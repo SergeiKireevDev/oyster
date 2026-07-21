@@ -1650,8 +1650,14 @@ function handleEvent(msg) {
       const r = msg.routine;
       if (!r) return;
       const i = routinesNow.findIndex((x) => x.path === r.path);
-      if (i === -1) routinesNow.push(r); else routinesNow[i] = r;
+      if (msg.reason === "deleted") {
+        if (i !== -1) routinesNow.splice(i, 1);
+      } else if (i === -1) routinesNow.push(r);
+      else routinesNow[i] = r;
       renderRoutines();
+      if (msg.reason === "created") { toast(`routine “${r.name}” created`); return; }
+      if (msg.reason === "updated") { toast(`routine “${r.name}” updated`); return; }
+      if (msg.reason === "deleted") { toast(`routine “${r.name}” deleted`, "warning"); return; }
       // progression notifications surface as toasts only for terminal states;
       // live progress is shown on the block's bar/message
       if (msg.reason === "finished") {
@@ -2647,6 +2653,16 @@ function renderRoutines() {
         rel.addEventListener("click", () => routineAction(r.name, "release"));
         actions.appendChild(rel);
       }
+      const del = document.createElement("button");
+      del.className = "r-btn stop";
+      del.textContent = "\u{1F5D1}";
+      del.title = "delete this routine's script (byproducts stay \u2014 teardown first if needed)";
+      del.addEventListener("click", () => {
+        if (confirm(`Delete routine “${r.name}”? Its script is removed from ~/.pi/routines/ (byproducts stay — teardown first if needed).`)) {
+          routineAction(r.name, "delete");
+        }
+      });
+      actions.appendChild(del);
     }
     block.appendChild(actions);
 
