@@ -2,7 +2,7 @@
  * routine.ts — pi extension exposing the pi-remote-ui "routines" feature
  * as the "routine" tool the LLM can call directly from the harness.
  *
- * A routine is a runnable script in the global store ~/.pi/routines/,
+ * A routine is a durable runnable script definition managed by pi-lot-ui,
  * bound to the session using it and driven by the pi-remote-ui server
  * (server.mjs) through a tiny protocol:
  *
@@ -17,7 +17,7 @@
  *
  * Creating/starting a routine binds it to the CURRENT session: it shows up
  * instantly in the UI sidebar (via SSE), other sessions cannot start it
- * until released, and deleting the session stops and releases it.
+ * until released, and deleting the session stops and deletes it.
  *
  * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
  * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
@@ -72,13 +72,13 @@ export default function routineExtension(pi: ExtensionAPI) {
     name: "routine",
     label: "Routine",
     description:
-      "Manage routines — runnable scripts stored in ~/.pi/routines/ and bound to this session, " +
+      "Manage routines — durable runnable scripts managed by pi-lot-ui and bound to this session, " +
       "with native progression reporting in the pi-remote-ui sidebar. When the user asks to " +
       "'create a routine' for some task, use action=create with a `script` implementing the " +
       "protocol: the script receives one argument, `run` (do the job) or `teardown` (remove " +
       "EVERY byproduct the run created), and reports progression by printing " +
       "'::progress <0-100> <message>' lines to stdout. Both modes execute with cwd = this " +
-      "session's workdir. Actions: 'create' writes the script (0755) and binds it to this " +
+      "session's workdir. Actions: 'create' stores the script and binds it to this " +
       "session; 'start' runs it; 'stop' kills it (SIGTERM/SIGKILL to its process group); " +
       "'teardown' removes its byproducts; 'status' reports live state, progress and recent " +
       "output; 'list' shows this session's routines; 'release' unbinds it so other sessions " +
@@ -158,7 +158,7 @@ export default function routineExtension(pi: ExtensionAPI) {
 
       const text = {
         create:
-          `Routine "${routine.name}" created at ${routine.path} and bound to this session ` +
+          `Routine "${routine.name}" registered as ${routine.path} and bound to this session ` +
           `(runs in ${routine.cwd ?? "the session workdir"}). It appears in the UI sidebar; ` +
           `start it with routine action=start.`,
         start:

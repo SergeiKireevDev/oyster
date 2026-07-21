@@ -188,7 +188,9 @@ export function createRoutine(state, { name, script, sessionId = null, ownerId =
   if (existing && activeRuntime(state, existing)?.proc) throw new Error(`routine "${name}" is currently running — stop it before overwriting`);
   if (existing?.session_id && sessionId && existing.session_id !== sessionId) throw new Error(`routine "${name}" exists and is bound to another session`);
   const definition = routineRepository(state).upsert({
-    id: existing?.id ?? randomUUID(), ownerId, name, script, cwd, now: new Date().toISOString(),
+    id: existing?.id ?? randomUUID(),
+    ownerId: sessionId ? ownerId : existing?.owner_id ?? null,
+    name, script, cwd: cwd ?? existing?.cwd ?? null, now: new Date().toISOString(),
   });
   console.log(`[pi-ui] routine ${existing ? "updated" : "created"}: ${join(ROUTINES_DIR, name)} (session ${definition.session_id ?? "-"})`);
   emit(state, definition, existing ? "updated" : "created");
@@ -199,7 +201,7 @@ export function deleteRoutine(state, name) {
   const definition = findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   if (activeRuntime(state, definition)?.proc) throw new Error(`routine "${name}" is running — stop it first`);
-  const view = routineView(state, definition);
+  const view = { ...routineView(state, definition), sessionId: null, cwd: null };
   routineRepository(state).delete(definition.id);
   try { unlinkSync(join(ROUTINES_DIR, name)); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete routine artifact: ${error.message}`); }
   state.serverEvent({ type: "routine_update", reason: "deleted", routine: view });
@@ -214,6 +216,9 @@ export function startRoutine(state, name, { sessionId = null, ownerId = null, cw
   if (sessionId) {
     if (!ownerId) throw new Error("session owner is required to bind a routine");
     routineRepository(state).bind(definition.id, ownerId, cwd, new Date().toISOString());
+    definition = findRoutine(state, name);
+  } else if (cwd) {
+    routineRepository(state).updateCwd(definition.id, cwd, new Date().toISOString());
     definition = findRoutine(state, name);
   }
   runScript(state, definition, "run");

@@ -18,7 +18,7 @@
   {#if $routinesLoading}
     <div class="sidebar-loading"><span class="spin"></span> loading routines…</div>
   {:else if !$routines.length}
-    <div class="r-empty" title="put executable scripts in ~/.pi/routines/ — starting one binds it to the current session; it is run with “run”, torn down with “teardown”, and can print “::progress <0-100> <message>” lines to report progression">
+    <div class="r-empty" title="create routines with the routine tool — starting one binds it to the current session; it is run with “run”, torn down with “teardown”, and can print “::progress <0-100> <message>” lines to report progression">
       {$routinesTotal ? `(none for this session — ${$routinesTotal} bound elsewhere)` : "(none)"}
     </div>
   {:else}

@@ -311,7 +311,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Keep only process handles and stream readers in memory.
 - [x] Mark unfinished runs as interrupted during startup reconciliation.
 - [x] Import existing executable routine files and bindings idempotently.
-- [ ] Preserve current routes, SSE events, extension behavior, and session scoping.
+- [x] Preserve current routes, SSE events, extension behavior, and session scoping.
 - [ ] Verify definition, runs, logs, and runtime handles are removed on session deletion.
 
 ### 6. Migrate and persist hublots

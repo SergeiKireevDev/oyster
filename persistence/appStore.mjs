@@ -166,6 +166,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         `).get(name) };
       },
       bind: (id, ownerId, cwd, updatedAt) => database.prepare("UPDATE routines SET owner_id = ?, cwd = ?, updated_at = ? WHERE id = ?").run(ownerId, cwd, updatedAt, id).changes,
+      updateCwd: (id, cwd, updatedAt) => database.prepare("UPDATE routines SET cwd = ?, updated_at = ? WHERE id = ?").run(cwd, updatedAt, id).changes,
       release: (id, updatedAt) => database.prepare("UPDATE routines SET owner_id = NULL, cwd = NULL, updated_at = ? WHERE id = ?").run(updatedAt, id).changes,
       delete: (id) => database.prepare("DELETE FROM routines WHERE id = ?").run(id).changes,
       createRun: ({ id, routineId, mode, status = "running", startedAt }) => {
