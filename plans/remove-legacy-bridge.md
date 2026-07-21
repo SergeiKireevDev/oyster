@@ -22,14 +22,13 @@ cd tests/e2e && npm test
 
 ## 1. Establish Direct Action Conventions
 
-1.1. Action modules accept injected transport (`fetch`/`rpc`) and return
+1.1. ✅ Action modules accept injected transport (`fetch`/`rpc`) and return
 structured data or throw normalized errors.
 
-1.2. UI/store modules own visible loading, error, and selection state.
+1.2. ✅ UI/store modules own visible loading, error, and selection state.
 
-1.3. For operations requiring session changes, action modules receive narrow
-callbacks such as `switchRunner`, `reloadTranscript`, or `refreshScopedData`;
-they must never import `legacy.js`.
+1.3. ✅ Session actions receive narrow callback hooks for runner switching and
+refresh behavior; action modules do not import `legacy.js`.
 
 ## 2. Remove File Browser Bridges
 
