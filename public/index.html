@@ -179,6 +179,77 @@
     user-select: none;
   }
   #hublotAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ---------- routines (same sidebar, second section) ---------- */
+  .side-head {
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .side-head + .side-head, #routineList + .side-head { margin-top: 4px; }
+  .side-head.routines { border-top: 1px solid var(--border); padding-top: 10px; }
+  .routine-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel-2);
+    padding: 8px 9px;
+    display: flex; flex-direction: column; gap: 6px;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+  .routine-block .r-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .routine-block .r-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4a5164; flex-shrink: 0;
+  }
+  .routine-block .r-dot.running { background: var(--accent); animation: rpulse 1.2s ease-in-out infinite; }
+  .routine-block .r-dot.teardown { background: var(--yellow); animation: rpulse 1.2s ease-in-out infinite; }
+  .routine-block .r-dot.done { background: var(--green); }
+  .routine-block .r-dot.failed { background: var(--red); }
+  .routine-block .r-dot.stopped { background: var(--yellow); }
+  @keyframes rpulse { 50% { opacity: .35; } }
+  .routine-block .r-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 600;
+  }
+  .routine-block .r-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .routine-block .r-bar {
+    height: 4px; border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .routine-block .r-bar > div {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .4s ease;
+  }
+  .routine-block .r-bar.indet > div { width: 30% !important; animation: rslide 1.2s linear infinite; }
+  @keyframes rslide { from { margin-left: -30%; } to { margin-left: 100%; } }
+  .routine-block .r-msg {
+    color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0;
+  }
+  .routine-block .r-actions { display: flex; gap: 6px; align-items: center; }
+  .routine-block .r-actions .spacer { flex: 1; }
+  .r-btn {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 11.5px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .r-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .r-btn.stop:hover { border-color: var(--red); color: var(--red); }
+  .r-btn:disabled { opacity: .45; cursor: default; }
+  .r-empty { color: var(--muted); font-size: 12px; flex-shrink: 0; }
   /* on small screens the sidebar becomes a slide-over drawer, toggled by a
      header chip that only appears there */
   #hublotChip, #cfgChip { display: none; }
@@ -698,8 +769,11 @@
   </div>
 
   <aside id="hublots">
+    <div class="side-head">Hublots</div>
     <div id="hublotList" style="display:contents"></div>
     <div id="hublotAdd" title="Open a new hublot">+</div>
+    <div class="side-head routines">Routines</div>
+    <div id="routineList" style="display:contents"></div>
   </aside>
 </div>
 
@@ -1182,6 +1256,19 @@ function addUserMessage(message) {
   div.textContent = text;
   messagesEl.appendChild(div);
   scrollToBottom(true);
+  rememberPrompt(text);
+}
+
+// Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
+const promptHistory = [];
+let histIdx = null;   // null = not navigating; otherwise index into promptHistory
+let histDraft = "";   // what was typed before navigation started
+
+function rememberPrompt(text) {
+  if (!text) return;
+  if (promptHistory[promptHistory.length - 1] === text) return; // skip consecutive dupes
+  promptHistory.push(text);
+  histIdx = null;
 }
 
 // Texts we already rendered locally on send; pi echoes each prompt back as a
@@ -1223,6 +1310,9 @@ function clearMessages() {
   messagesEl.innerHTML = "";
   toolCards.clear();
   liveAssistant = null;
+  promptHistory.length = 0;
+  histIdx = null;
+  histDraft = "";
 }
 
 // ------------------------------------------------------------ state / header
@@ -1234,7 +1324,7 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
-  if (sessionChanged) loadHublots(); // sidebar tunnels are session-scoped
+  if (sessionChanged) { loadHublots(); loadRoutines(); } // sidebar tunnels are session-scoped; routines follow the workdir
   $("sessionTitle").textContent = s.sessionName || "pi remote";
   $("modelChip").textContent = s.model ? s.model.id : "no model";
   $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
@@ -1392,6 +1482,7 @@ function handleEvent(msg) {
       if (msg.runners) runnersNow = msg.runners;
       if (msg.workdir) setWorkdir(msg.workdir);
       loadHublots();
+      loadRoutines();
       return;
 
     case "runners_update":
@@ -1553,6 +1644,35 @@ function handleEvent(msg) {
         loadHublots();
       }
       return;
+
+    case "routine_update": {
+      if (replaying) return;
+      const r = msg.routine;
+      if (!r) return;
+      const i = routinesNow.findIndex((x) => x.path === r.path);
+      if (i === -1) routinesNow.push(r); else routinesNow[i] = r;
+      renderRoutines();
+      // progression notifications surface as toasts only for terminal states;
+      // live progress is shown on the block's bar/message
+      if (msg.reason === "finished") {
+        toast(
+          r.exitCode === 0 ? `routine “${r.name}” finished` : `routine “${r.name}” failed (exit ${r.exitCode})`,
+          r.exitCode === 0 ? "info" : "error"
+        );
+      } else if (msg.reason === "stopped") {
+        toast(`routine “${r.name}” stopped`, "warning");
+      } else if (msg.reason === "teardown_finished") {
+        toast(
+          r.status === "idle" ? `routine “${r.name}” torn down — byproducts removed` : `routine “${r.name}” teardown failed`,
+          r.status === "idle" ? "info" : "error"
+        );
+      } else if (msg.reason === "error") {
+        toast(`routine “${r.name}”: ${r.message ?? "spawn failed"}`, "error");
+      } else if (msg.reason === "released") {
+        toast(`routine “${r.name}” released`);
+      }
+      return;
+    }
   }
 }
 
@@ -1585,12 +1705,58 @@ input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setBusy(busy); // refresh busy state UI
+  histIdx = null; // typing exits history navigation
 });
 
+function setComposerText(text) {
+  input.value = text;
+  input.setSelectionRange(text.length, text.length);
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 200) + "px";
+}
+
+// ↑/↓ recall previous prompts, shell-style: ↑ only when the caret is on the
+// first line, ↓ only on the last line, so arrows still move within multiline
+// drafts. Typing resets navigation; ↓ past the newest entry restores the draft.
+function navigateHistory(dir) {
+  if (!promptHistory.length) return false;
+  const caret = input.selectionStart;
+  const onFirstLine = !input.value.slice(0, caret).includes("\n");
+  const onLastLine = !input.value.slice(input.selectionEnd).includes("\n");
+  if (dir === -1) {
+    if (!onFirstLine) return false;
+    if (histIdx === null) {
+      histDraft = input.value;
+      histIdx = promptHistory.length - 1;
+    } else if (histIdx > 0) {
+      histIdx--;
+    } else {
+      return true; // already at oldest; swallow the key
+    }
+    setComposerText(promptHistory[histIdx]);
+    return true;
+  }
+  // dir === +1
+  if (histIdx === null || !onLastLine) return false;
+  if (histIdx < promptHistory.length - 1) {
+    histIdx++;
+    setComposerText(promptHistory[histIdx]);
+  } else {
+    histIdx = null;
+    setComposerText(histDraft);
+  }
+  return true;
+}
+
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+  if (e.isComposing) return;
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     send();
+    return;
+  }
+  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+    if (navigateHistory(e.key === "ArrowUp" ? -1 : 1)) e.preventDefault();
   }
 });
 
@@ -2233,6 +2399,7 @@ async function showHublots() {
       tunnelScopeAll = !tunnelScopeAll;
       await load();
       loadHublots(); // keep the sidebar in the same scope
+      renderRoutines(); // the routines section shares the scope toggle
     });
     const closeBtn = document.createElement("span");
     closeBtn.className = "chip";
@@ -2254,7 +2421,7 @@ $("hublotAdd").addEventListener("click", () => showHublots().catch((e) => toast(
 $("hublotChip").addEventListener("click", (e) => {
   e.stopPropagation();
   const open = $("hublots").classList.toggle("open");
-  if (open) loadHublots(); // fresh previews when opening
+  if (open) { loadHublots(); loadRoutines(); } // fresh content when opening
 });
 // tap outside the drawer closes it
 document.addEventListener("click", (e) => {
@@ -2332,6 +2499,157 @@ function renderHublots(tunnels) {
     cap.append(lbl, x);
 
     block.append(preview, cap);
+    list.appendChild(block);
+  }
+}
+
+// ------------------------------------------------------------ routines sidebar
+//
+// A routine is an executable script in ~/.pi/routines/ (global store).
+// Starting one binds it to the current session (and that session's workdir,
+// where run/teardown execute). Unbound routines are visible everywhere;
+// bound ones only in their session (the hublot scope toggle also applies
+// here). The server runs `<script> run` on start, kills its process group
+// on stop, and runs `<script> teardown` to remove byproducts. Scripts report
+// progression by printing `::progress <0-100> <message>` lines on stdout.
+
+let routinesNow = [];
+
+function routineVisible(r) {
+  return tunnelScopeAll || !r.sessionId || r.sessionId === state?.sessionId;
+}
+
+async function loadRoutines() {
+  if (!token) return;
+  try {
+    const res = await fetch(`/routines?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (res.ok) routinesNow = data.routines ?? [];
+  } catch { /* sidebar is best-effort */ }
+  renderRoutines();
+}
+
+async function routineAction(name, action) {
+  try {
+    const res = await fetch(`/routines?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // start binds the routine to the current session (and its workdir)
+      body: JSON.stringify({ name, action, sessionId: state?.sessionId ?? null }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) toast(data.error || `routine ${action} failed (${res.status})`, "error");
+  } catch (e) {
+    toast(`routine ${action} failed: ${e.message}`, "error");
+  }
+  loadRoutines();
+}
+
+function renderRoutines() {
+  const list = $("routineList");
+  list.innerHTML = "";
+
+  const visible = routinesNow.filter(routineVisible);
+  if (!visible.length) {
+    const empty = document.createElement("div");
+    empty.className = "r-empty";
+    empty.textContent = routinesNow.length
+      ? `(none for this session — ${routinesNow.length} bound elsewhere)`
+      : "(none)";
+    empty.title = "put executable scripts in ~/.pi/routines/ \u2014 starting one binds it to the current session; it is run with \u201crun\u201d, torn down with \u201cteardown\u201d, and can print \u201c::progress <0-100> <message>\u201d lines to report progression";
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const r of visible) {
+    const block = document.createElement("div");
+    block.className = "routine-block";
+
+    // head: status dot + name + percent
+    const head = document.createElement("div");
+    head.className = "r-head";
+    const dot = document.createElement("span");
+    const dotCls = { running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[r.status] ?? "";
+    dot.className = `r-dot ${dotCls}`;
+    dot.title = r.status;
+    const name = document.createElement("span");
+    name.className = "r-name";
+    name.textContent = r.name;
+    name.title = `${r.path}\nstatus: ${r.status}`
+      + (r.exitCode !== null ? ` (exit ${r.exitCode})` : "")
+      + (r.sessionId ? `\nbound to session ${r.sessionId}` : "\nnot bound to a session yet")
+      + (r.cwd ? `\nruns in ${r.cwd}` : "");
+    head.append(dot, name);
+    if (r.status === "running" && r.progress !== null) {
+      const pct = document.createElement("span");
+      pct.className = "r-pct";
+      pct.textContent = `${r.progress}%`;
+      head.appendChild(pct);
+    }
+    if (tunnelScopeAll && r.sessionId) {
+      const who = document.createElement("span");
+      who.className = "r-pct";
+      who.textContent = r.sessionId === state?.sessionId ? "this session" : String(r.sessionId).slice(0, 8);
+      who.title = `bound to session ${r.sessionId}`;
+      head.appendChild(who);
+    }
+    block.appendChild(head);
+
+    // progress bar while running / tearing down
+    if (["running", "stopping", "teardown"].includes(r.status)) {
+      const bar = document.createElement("div");
+      // no percent yet (or teardown): indeterminate sweep
+      bar.className = "r-bar" + (r.status === "teardown" || !r.progress ? " indet" : "");
+      const fill = document.createElement("div");
+      fill.style.width = `${r.progress ?? 0}%`;
+      bar.appendChild(fill);
+      block.appendChild(bar);
+    }
+
+    // last progression message (or last log line as fallback)
+    const msgText = r.message ?? r.log?.[r.log.length - 1] ?? null;
+    if (msgText) {
+      const m = document.createElement("div");
+      m.className = "r-msg";
+      m.textContent = msgText;
+      m.title = (r.log ?? []).slice(-15).join("\n") || msgText;
+      block.appendChild(m);
+    }
+
+    // actions: start | stop, teardown
+    const actions = document.createElement("div");
+    actions.className = "r-actions";
+    if (r.alive) {
+      const stop = document.createElement("button");
+      stop.className = "r-btn stop";
+      stop.textContent = "\u25A0 stop";
+      stop.title = r.status === "teardown" ? "kill the teardown script" : "stop this routine (SIGTERM its process group)";
+      stop.disabled = r.status === "stopping";
+      stop.addEventListener("click", () => routineAction(r.name, "stop"));
+      actions.appendChild(stop);
+    } else {
+      const start = document.createElement("button");
+      start.className = "r-btn";
+      start.textContent = "\u25B6 start";
+      start.title = "run this routine";
+      start.addEventListener("click", () => routineAction(r.name, "start"));
+      const td = document.createElement("button");
+      td.className = "r-btn";
+      td.textContent = "\u{1F9F9} teardown";
+      td.title = "remove this routine's byproducts" + (r.cwd ? ` (runs in ${r.cwd})` : "");
+      td.addEventListener("click", () => routineAction(r.name, "teardown"));
+      actions.append(start, td);
+      if (r.sessionId) {
+        const rel = document.createElement("button");
+        rel.className = "r-btn";
+        rel.textContent = "\u2715 release";
+        rel.title = "unbind this routine from its session (byproducts stay \u2014 teardown first if needed)";
+        rel.addEventListener("click", () => routineAction(r.name, "release"));
+        actions.appendChild(rel);
+      }
+    }
+    block.appendChild(actions);
+
     list.appendChild(block);
   }
 }
@@ -2574,12 +2892,12 @@ async function showSessionPicker() {
             const d = await r.json().catch(() => ({}));
             if (!r.ok) { toast(d.error || `delete failed (${r.status})`, "error"); return; }
             b.remove();
-            if (d.closedHublots?.length) {
-              toast(`session deleted · closed hublot${d.closedHublots.length > 1 ? "s" : ""} :${d.closedHublots.join(", :")}`);
-              loadHublots();
-            } else {
-              toast("session deleted");
-            }
+            const bits = [];
+            if (d.closedHublots?.length) bits.push(`closed hublot${d.closedHublots.length > 1 ? "s" : ""} :${d.closedHublots.join(", :")}`);
+            if (d.releasedRoutines?.length) bits.push(`released routine${d.releasedRoutines.length > 1 ? "s" : ""} ${d.releasedRoutines.join(", ")}`);
+            toast(bits.length ? `session deleted · ${bits.join(" · ")}` : "session deleted");
+            if (d.closedHublots?.length) loadHublots();
+            if (d.releasedRoutines?.length) loadRoutines();
           } catch (err) {
             toast(`delete failed: ${err.message}`, "error");
           }

@@ -27,6 +27,8 @@
  *   GET  /tunnels     -> live tunnels spawned by this server
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
+ *   GET  /routines    -> runnable scripts in ~/.pi/routines/ (+ live state & session bindings)
+ *   POST /routines    -> { name, action: "start" | "stop" | "teardown" | "release", sessionId? }
  */
 
 import { spawn } from "node:child_process";
@@ -43,6 +45,10 @@ import { fileURLToPath } from "node:url";
 const TUNNELS_PATH = join(dirname(fileURLToPath(import.meta.url)), "tunnels.mjs");
 const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, pidsOnPort } =
   await import(`./tunnels.mjs?v=${statSync(TUNNELS_PATH).mtimeMs}`);
+
+const ROUTINES_PATH = join(dirname(fileURLToPath(import.meta.url)), "routines.mjs");
+const { listRoutines, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
+  await import(`./routines.mjs?v=${statSync(ROUTINES_PATH).mtimeMs}`);
 
 export function init(state) {
   const { config, broadcast, serverEvent } = state;
@@ -872,8 +878,10 @@ export function init(state) {
             }
           }
         }
+        // release (and stop) any routines bound to this session
+        const releasedRoutines = sessionId ? releaseSessionRoutines(state, sessionId) : [];
         unlinkSync(target);
-        json(res, 200, { deleted: target, closedHublots });
+        json(res, 200, { deleted: target, closedHublots, releasedRoutines });
       } catch (e) {
         json(res, 500, { error: `failed to delete session: ${e.message}` });
       }
@@ -1120,7 +1128,42 @@ export function init(state) {
       return;
     }
 
-
+    if (url.pathname === "/routines") {
+      if (req.method === "GET") {
+        json(res, 200, { routines: listRoutines(state), dir: routinesDir() });
+        return;
+      }
+      if (req.method === "POST") {
+        const body = await readJsonBody(req, res);
+        if (body === undefined) return;
+        const name = String(body?.name ?? "").trim();
+        const action = String(body?.action ?? "");
+        const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+        if (!name || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
+          json(res, 400, { error: `invalid routine name: ${name}` });
+          return;
+        }
+        try {
+          if (action === "start") {
+            // bind the routine to the calling session and run it in that
+            // session's workdir (so byproducts land in the right project)
+            const runner = sessionId
+              ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
+              : null;
+            json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: runner?.dir ?? state.currentDir }) });
+          }
+          else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
+          else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
+          else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });
+          else json(res, 400, { error: `unknown action: ${action}` });
+        } catch (e) {
+          json(res, 400, { error: e.message });
+        }
+        return;
+      }
+      json(res, 405, { error: "method not allowed" });
+      return;
+    }
 
     if (req.method === "POST" && url.pathname === "/restart") {
       const runner = runnerFromReq(url);
@@ -1133,5 +1176,9 @@ export function init(state) {
     json(res, 404, { error: "not found" });
   }
 
-  return { handleRequest, startPi, stopPi, stopTunnels: () => closeAllTunnels(state) };
+  return {
+    handleRequest, startPi, stopPi,
+    stopTunnels: () => closeAllTunnels(state),
+    stopRoutines: () => stopAllRoutines(state),
+  };
 }

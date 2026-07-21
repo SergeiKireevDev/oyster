@@ -176,6 +176,7 @@ server.listen(config.PORT, config.HOST, () => {
 
 function shutdown() {
   app.stopTunnels?.();
+  app.stopRoutines?.();
   app.stopPi();
   process.exit(0);
 }

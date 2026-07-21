@@ -44,6 +44,8 @@ A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token st
 | `GET /tunnels` | yes | list live tunnels spawned by this server |
 | `POST /tunnels` | yes | open a tunnel for a local port: `{ "port": 3000, "label": "…" }` → replies with the public URL |
 | `DELETE /tunnels?id=…` | yes | close a tunnel |
+| `GET /routines` | yes | list runnable scripts in `~/.pi/routines/` with live run state and session bindings |
+| `POST /routines` | yes | drive a routine: `{ "name": "build.sh", "action": "start" \| "stop" \| "teardown" \| "release", "sessionId": "…" }` |
 
 Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
 
@@ -53,6 +55,7 @@ Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
 - Send prompts (Enter), steer mid-stream (send while streaming), **Stop** to abort.
 - Model picker, thinking-level cycling, new session, context compaction, pi process restart — from the header chips / ☰ menu.
 - **Tunnels** — ☰ → *Tunnels…* opens a modal listing live tunnels and lets you spawn a new one deterministically for the current session: pick a local port, describe *what the agent should expose through it*, and (by default) the UI briefs the agent with the public URL and that description so it starts the right server on that port. Tunnels are cloudflared quick tunnels by default (`--tunnel-bin` to change), survive server code hot-reloads, and are killed on shutdown. Requires [`cloudflared`](https://pkg.cloudflare.com) (or an equivalent tool) to be installed.
+- **Routines** — a second sidebar section lists runnable scripts from the global store `~/.pi/routines/` (any executable file). Starting one **binds it to the current session**: it runs in that session's workdir, other sessions can't start it until it is **released**, and the binding (plus workdir) is persisted in `~/.pi/routines/bindings.json` so teardown finds the byproducts even across server restarts. Each routine can be **started** (`<script> run`), **stopped** (SIGTERM/SIGKILL to its process group) and **torn down** (`<script> teardown`, expected to remove the run's byproducts); deleting a session stops and releases its routines. Routines natively report progression: any stdout line of the form `::progress <0-100> <message>` drives a live progress bar and status message in the sidebar; other output is kept as a log tail (hover the message). Terminal states (finished / failed / stopped / torn down) surface as toasts.
 - Extension UI bridge: pi extensions that ask for confirm/select/input get a modal in the browser; notifications become toasts.
 - Reconnects automatically (EventSource); recent events are replayed on reconnect so a page refresh mid-run doesn't lose context.
 - Mobile-friendly layout.
