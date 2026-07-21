@@ -18,13 +18,13 @@ import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependenc
 import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
-import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
+import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
 import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
-import { applySessionState, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./sessionRuntime.js";
+import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./carouselController.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
@@ -119,9 +119,6 @@ const lifecycleLog = createLifecycleLogger({
 // The URL is kept in sync with the active session (history.replaceState),
 // so a reload or a shared link always lands on the same session.
 
-const route = parseSessionRoute(location.pathname);
-const syncUrlToSession = (sessionId) => syncSessionUrl({ location, history, sessionId });
-
 const $ = (id) => document.getElementById(id);
 const delayedTasks = createDelayedTaskRegistry();
 const gate = $("gate");
@@ -210,51 +207,48 @@ const detachCheckpointTreeActions = configureCheckpointTreeActions({
 
 let state = null;
 
-const applyState = createSessionStateApplier({
-  applySessionState,
-  getState: () => state,
-  setState: (next) => { state = next; },
-  getCurrentRunner: () => currentRunner,
-  getEmptySessionRunners: () => emptySessionRunners,
-  getRoutines: () => routineSidebarController.items,
-  routineVisible,
-  getTunnelScopeAll: () => tunnelScopeAll,
-  hooks: {
-    log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: state?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: state?.messageCount ?? null, pendingMessageCount: state?.pendingMessageCount ?? null, isStreaming: !!state?.isStreaming, isCompacting: !!state?.isCompacting, model: state?.model?.id ?? null, sessionFile: state?.sessionFile ?? null }),
-    updateAppSession,
-    setTranscriptGateRequired: (value) => setTranscriptGateRequired(value),
-    setRoutines: routines.set,
-    setRoutineScopeAll: routineScopeAll.set,
-    setRoutineCurrentSessionId: routineCurrentSessionId.set,
-    loadHublots: () => loadHublots(),
-    loadRoutines: () => loadRoutines(),
-    syncUrlToSession,
-    updateHeaderState,
-    setBusy: (value) => setBusy(value),
+const sessionAssembly = createSessionAssembly({
+  location,
+  history,
+  storage: localStorage,
+  updateAppSession,
+  updateHeaderState,
+  stateApplier: {
+    applySessionState,
+    getState: () => state,
+    setState: (next) => { state = next; },
+    getCurrentRunner: () => currentRunner,
+    getEmptySessionRunners: () => emptySessionRunners,
+    getRoutines: () => routineSidebarController.items,
+    routineVisible,
+    getTunnelScopeAll: () => tunnelScopeAll,
+    hooks: {
+      log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: state?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: state?.messageCount ?? null, pendingMessageCount: state?.pendingMessageCount ?? null, isStreaming: !!state?.isStreaming, isCompacting: !!state?.isCompacting, model: state?.model?.id ?? null, sessionFile: state?.sessionFile ?? null }),
+      updateAppSession,
+      setTranscriptGateRequired: (value) => setTranscriptGateRequired(value),
+      setRoutines: routines.set,
+      setRoutineScopeAll: routineScopeAll.set,
+      setRoutineCurrentSessionId: routineCurrentSessionId.set,
+      loadHublots: () => loadHublots(),
+      loadRoutines: () => loadRoutines(),
+      updateHeaderState,
+      setBusy: (value) => setBusy(value),
+    },
   },
-});
-
-// ------------------------------------------------------------ runners
-// The server keeps one pi process ("runner") per open session; this client
-// is attached to exactly one at a time. Other runners keep working in the
-// background.
-
-const runnerState = createSessionRunnerState({ storage: localStorage, updateAppSession });
-let currentRunner = runnerState.currentRunner;
-let runnersNow = runnerState.runners; // latest known runner list (for session indicators)
-updateAppSession({ currentRunner, runners: runnersNow });
-/** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
-
-function setRunner(id) {
-  currentRunner = runnerState.setRunner(id);
-}
-
-function setRunnersNow(runners) {
-  runnersNow = runnerState.setRunners(runners);
-}
-
-/** attach this client to another runner and rebuild the UI from its stream */
-const sessionFeature = createLazySessionFeature({ createRuntime: createSessionRuntime, getDependencies: () => ({
+  preview: {
+    fetchPreview: (sessionPath) => fetchSessionPreview(fetch, sessionPath),
+    render: renderTranscript,
+    log: lifecycleLog,
+  },
+  open: {
+    open: (options) => openSession(fetch, options),
+    getCurrentRunner: () => currentRunner,
+    getRunners: () => runnersNow,
+    preview: null,
+    markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
+    log: lifecycleLog,
+  },
+  featureDependencies: ({ sessionOpenController, previewController }) => ({
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
@@ -265,45 +259,27 @@ const sessionFeature = createLazySessionFeature({ createRuntime: createSessionRu
     refreshState,
     setRunner,
     clearTranscript: clearMessages,
-    resetSessionUi: () => {
-      // The new session has its own tree; do not leave stale sidebars visible.
-      carouselController.reset();
-    },
+    resetSessionUi: () => carouselController.reset(),
     renderPreview: () => previewController.renderNow(),
     resetCommands: () => commandGuard?.reset(),
     connect,
-  }) });
+  }),
+});
+const route = sessionAssembly.route;
+const applyState = sessionAssembly.applyState;
+const runnerState = sessionAssembly.runnerState;
+let currentRunner = runnerState.currentRunner;
+let runnersNow = runnerState.runners;
+updateAppSession({ currentRunner, runners: runnersNow });
+function setRunner(id) { currentRunner = runnerState.setRunner(id); }
+function setRunnersNow(runners) { runnersNow = runnerState.setRunners(runners); }
+const sessionFeature = sessionAssembly.sessionFeature;
+const previewController = sessionAssembly.previewController;
+const sessionOpenController = sessionAssembly.sessionOpenController;
 function getSessionRuntime() { return sessionFeature.get(); }
-// ---- instant transcript preview -------------------------------------------
-// Opening a session waits on a pi process spawning AND resuming the session
-// before get_messages can answer (the server holds commands back during the
-// resume). The transcript itself lives in the session .jsonl though, which
-// the server parses from an mtime cache — so fetch it in parallel and render
-// it immediately; the canonical get_messages render replaces it when pi is
-// ready. `lastPreview` is cleared the moment canonical content lands, so a
-// slow preview response can never overwrite fresh state.
-
-let sessionOpenController;
-const previewController = createSessionPreviewController({
-  fetchPreview: (sessionPath) => fetchSessionPreview(fetch, sessionPath),
-  // No checkpoint markers here: state still describes the previous session;
-  // the canonical reload adds them immediately after the runner resumes.
-  render: renderTranscript,
-  log: lifecycleLog,
-});
-sessionOpenController = createSessionOpenController({
-  open: (options) => openSession(fetch, options),
-  getCurrentRunner: () => currentRunner,
-  getRunners: () => runnersNow,
-  preview: previewController,
-  markEmpty: (runnerId) => emptySessionRunners.add(runnerId),
-  log: lifecycleLog,
-});
-
 /** hook: session picker (when open) re-renders its indicators */
 let onRunnersUpdate = null;
-
-const sessionUi = createSessionUiRuntime({ updateAppSession, updateHeaderState });
+const sessionUi = sessionAssembly.sessionUi;
 const setWorkdir = (dir) => sessionUi.setWorkdir(dir);
 const setBusy = (value) => sessionUi.setBusy(value);
 const updateUsage = (message) => sessionUi.updateUsage(message);
@@ -406,7 +382,7 @@ const agentStart = transcriptOperations.agentStart;
 const agentCompletion = transcriptOperations.agentCompletion;
 const schedulePostSendFileTranscriptSync = transcriptOperations.schedulePostSendFileTranscriptSync;
 
-const refreshStateNow = createSessionStateRefresher({
+const refreshStateNow = sessionAssembly.configureRefresh({
   rpc: async (request) => {
     const started = performance.now();
     lifecycleLog("refreshState:start");
