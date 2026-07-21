@@ -15,11 +15,8 @@ import { createRuntimeCleanup } from "./runtimeCleanup.js";
 import { createRuntimeStarter } from "./startController.js";
 import { createRuntimeStarterDependencies } from "./runtimeStarterDependencies.js";
 import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependencies } from "./runtimeDependencies.js";
-import { createSessionBootController } from "./sessionBootController.js";
-import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
-import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
@@ -265,7 +262,6 @@ const sessionAssembly = createSessionAssembly({
     connect,
   }),
 });
-const route = sessionAssembly.route;
 const applyState = sessionAssembly.applyState;
 const runnerState = sessionAssembly.runnerState;
 let currentRunner = runnerState.currentRunner;
@@ -978,7 +974,7 @@ const detachRoutineActions = configureRoutineActions(routineController.run);
 
 // ------------------------------------------------------------ session picker
 
-const sessionPickerRuntime = createSessionPickerRuntime({
+const sessionPickerRuntime = sessionAssembly.configurePicker({
   storeSnapshot,
   sessionPickerStore: sessionPicker,
   updateSessionPicker,
@@ -1153,8 +1149,7 @@ const runtimeAttachments = createRuntimeAttachments({
 /** URL-driven boot: /s/<sessionId> attaches to that session's runner before
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
-const boot = createSessionBootController(createSessionBootDependencies({
-  route,
+const boot = sessionAssembly.configureBoot({
   lookupSession: async (sessionId) => {
     const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
     const data = await res.json().catch(() => ({}));
@@ -1167,7 +1162,7 @@ const boot = createSessionBootController(createSessionBootDependencies({
   connect,
   log: lifecycleLog,
   toast: addToast,
-}));
+});
 
 const detachRuntimeEventAdapters = () => {
   carouselEventRegistration.detach();

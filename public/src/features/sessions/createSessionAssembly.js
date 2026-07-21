@@ -1,4 +1,7 @@
 import { createLazySessionFeature } from "./createSessionFeature.js";
+import { createSessionPickerRuntime } from "./createSessionPickerRuntime.js";
+import { createSessionBootController } from "../../runtime/sessionBootController.js";
+import { createSessionBootDependencies } from "../../runtime/sessionBootDependencies.js";
 import {
   createSessionOpenController,
   createSessionPreviewController,
@@ -28,6 +31,8 @@ export function createSessionAssembly(deps) {
     getDependencies: () => deps.featureDependencies({ sessionOpenController, previewController }),
   });
   let refresher = null;
+  let pickerRuntime = null;
+  let bootController = null;
 
   return {
     route,
@@ -41,9 +46,18 @@ export function createSessionAssembly(deps) {
     configureRefresh(refreshDependencies) {
       return refresher ??= createSessionStateRefresher(refreshDependencies);
     },
+    configurePicker(pickerDependencies) {
+      return pickerRuntime ??= createSessionPickerRuntime(pickerDependencies);
+    },
+    configureBoot(bootDependencies) {
+      return bootController ??= createSessionBootController(createSessionBootDependencies({ route, ...bootDependencies }));
+    },
     teardown() {
+      pickerRuntime?.detachActions?.();
       sessionFeature.teardown();
       refresher = null;
+      pickerRuntime = null;
+      bootController = null;
     },
   };
 }

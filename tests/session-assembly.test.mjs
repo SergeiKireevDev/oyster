@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createSessionAssembly } from "../public/src/features/sessions/createSessionAssembly.js";
 
 function dependencies(pathname = "/s/session-1") {
@@ -58,5 +59,23 @@ test("session assembly constructs route runner UI preview open and refresh bound
   const refresh = assembly.configureRefresh({ rpc: async () => ({}), applyState() {}, onError() {} });
   assert.equal(typeof refresh, "function");
   assert.equal(assembly.configureRefresh({}), refresh);
+  const boot = assembly.configureBoot({
+    lookupSession: async () => null,
+    openInitialSession: async () => {},
+    setAfterTranscript() {},
+    focusEntry: async () => {},
+    connect() {},
+    log() {},
+    toast() {},
+  });
+  assert.equal(typeof boot, "function");
+  assert.equal(assembly.configureBoot({}), boot);
   assembly.teardown();
+});
+
+test("composition root delegates session picker and boot construction to the session assembly", () => {
+  const source = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
+  assert.match(source, /sessionAssembly\.configurePicker\(/);
+  assert.match(source, /sessionAssembly\.configureBoot\(/);
+  assert.doesNotMatch(source, /createSessionPickerRuntime|createSessionBootController|createSessionBootDependencies/);
 });
