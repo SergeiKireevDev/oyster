@@ -20,6 +20,15 @@ import {
 
 const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
 
+export function activeSessionFolders(runners, currentFolder) {
+  return [...new Set(runners
+    .filter((runner) => runner.alive)
+    .map((runner) => runner.sessionFile
+      ? folderOfSessionPath(runner.sessionFile)
+      : runner.sessionRef?.backend === "sqlite" ? runner.dir : null)
+    .filter((dir) => dir && dir !== currentFolder))];
+}
+
 function preserveSessionLabels(previous, session) {
   if (!previous) return session;
   return {
@@ -168,10 +177,7 @@ export function createSessionPickerRuntime(deps) {
     let allSessions = [...loadedSessions];
     let knownFolders = [...folders];
     const otherFolderSessions = {};
-    const activeFolders = [...new Set(runners
-      .filter((runner) => runner.alive && runner.sessionFile)
-      .map((runner) => folderOfSessionPath(runner.sessionFile))
-      .filter((dir) => dir && dir !== currentFolder))];
+    const activeFolders = activeSessionFolders(runners, currentFolder);
     for (const dir of activeFolders) {
       try {
         const loaded = await deps.fetchSessions(dir);

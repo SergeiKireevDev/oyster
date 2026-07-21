@@ -1,8 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSessionPickerRuntime, preserveLoadedSessionLabels } from "../public/src/features/sessions/createSessionPickerRuntime.js";
+import { activeSessionFolders, createSessionPickerRuntime, preserveLoadedSessionLabels } from "../public/src/features/sessions/createSessionPickerRuntime.js";
 import * as actionNames from "../public/src/runtime/uiActionNames.js";
+
+test("sidebar resolves active folders for SQLite and JSONL runners", () => {
+  assert.deepEqual(activeSessionFolders([
+    { alive: true, sessionFile: "/sessions/work/a.jsonl", dir: "/work" },
+    { alive: true, sessionRef: { backend: "sqlite" }, dir: "/other" },
+    { alive: false, sessionRef: { backend: "sqlite" }, dir: "/stopped" },
+  ], "/sessions/current"), ["/sessions/work", "/other"]);
+});
 
 test("sidebar refreshes retain known titles without retaining removed sessions", () => {
   const existing = [
