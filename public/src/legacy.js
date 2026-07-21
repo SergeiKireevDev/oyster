@@ -25,7 +25,8 @@ import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
-import { appendTranscriptItems, createTranscriptItem, prependTranscriptItems, resetTranscriptItems } from "./stores/transcriptItems.js";
+import { createTranscriptActions } from "./lib/transcriptActions.js";
+import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 const lifecycleStartedAt = performance.now();
 function lifecycleLog(label, data = {}) {
@@ -390,47 +391,16 @@ const transcriptCallbacks = {
   onRollback: rollbackToCheckpoint,
 };
 
-function makeTranscriptItem(item) {
-  const result = createTranscriptItem(item);
-  result.setRoot = (root) => { result.root = root; };
-  return result;
-}
-
-function assistantBlockModels(message) {
-  return (message.content || []).map((block) => {
-    if (block.type === "text") {
-      return { type: "text", html: renderMarkdown(block.text || ""), key: block.text || "" };
-    }
-    if (block.type === "thinking") {
-      if (!shouldShowThinking(localStorage) || !block.thinking?.trim()) return null;
-      return { type: "thinking", text: block.thinking, key: block.thinking };
-    }
-    if (block.type === "toolCall") {
-      return { type: "toolCall", id: block.id, key: block.id || JSON.stringify(block), cardStore: ensureToolCardStore(block) };
-    }
-    return null;
-  }).filter(Boolean);
-}
-
-function assistantModel(message) {
-  return {
-    blocks: assistantBlockModels(message),
-    errorMessage: message.stopReason === "error" ? (message.errorMessage || "") : "",
-  };
-}
-
-function assistantPlainText(message) {
-  const parts = [];
-  for (const block of message?.content || []) {
-    if (block.type === "text" && block.text) parts.push(block.text);
-    else if (block.type === "thinking" && block.thinking) parts.push(block.thinking);
-    else if (block.type === "toolCall") parts.push(block.name || block.id || "tool call");
-  }
-  return parts.join("\n").replace(/\s+/g, " ").trim();
-}
+const transcriptActions = createTranscriptActions({
+  callbacks: transcriptCallbacks,
+  renderMarkdown,
+  shouldShowThinking,
+  storage: localStorage,
+  ensureToolCardStore,
+});
 
 function assistantAlreadyRendered(message) {
-  const text = assistantPlainText(message);
+  const text = transcriptActions.assistantPlainText(message);
   if (!text) return false;
   const needle = text.slice(0, 120);
   return [...messagesEl.querySelectorAll('.msg.assistant')].some((el) =>
@@ -438,16 +408,12 @@ function assistantAlreadyRendered(message) {
   );
 }
 
-function mountSvelteAssistantMessage(message, role = "assistant", { prepend = false } = {}) {
-  const assistantStore = writable(assistantModel(message));
-  const item = makeTranscriptItem({ kind: "assistant", assistantStore, role, ...transcriptCallbacks });
-  (prepend ? prependTranscriptItems : appendTranscriptItems)([item]);
-  return { item, store: assistantStore, msg: message, svelte: true };
+function mountSvelteAssistantMessage(message, role = "assistant", options = {}) {
+  return transcriptActions.addAssistant(message, role, options);
 }
 
 function updateSvelteAssistant(live, message) {
-  live.msg = message;
-  live.store.set(assistantModel(message));
+  transcriptActions.updateAssistant(live, message);
 }
 
 function addSvelteAssistantMessage(message, role = "assistant", options = {}) {
@@ -459,10 +425,9 @@ function addSvelteCustomMessage(role, text) {
   addSvelteAssistantMessage({ role, content: [{ type: "text", text }] }, role || "custom");
 }
 
-function addUserMessage(message, { prepend = false } = {}) {
+function addUserMessage(message, options = {}) {
   const text = userMessageText(message);
-  const item = makeTranscriptItem({ kind: "user", text, ...transcriptCallbacks });
-  (prepend ? prependTranscriptItems : appendTranscriptItems)([item]);
+  transcriptActions.addUser(text, options);
   if (/^Opening interface: /.test(text)) {
     scrollToBottom(true);
     return;
