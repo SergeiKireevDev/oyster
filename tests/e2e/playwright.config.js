@@ -60,13 +60,13 @@ const projectUse = process.env.E2E_VIDEO
 // Specs run in isolated per-test containers. `lib/reset.js` allocates a host
 // port from 4000..4018 for each live test and tears that container down in
 // afterEach, so the suite can run in parallel without workspace/session bleed.
-// Keep concurrency capped to avoid overwhelming Docker, the mock LLM, and the
-// local browser.
+// Run serially by default: checkpoint/transcript reconciliation is timing
+// sensitive under Docker contention. Set E2E_WORKERS to opt into parallelism.
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
   fullyParallel: true,
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 9,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 1,
   retries: 0,
   timeout: 6 * 60 * 1000, // per test (hublot agent + tunnel can take minutes)
   expect: { timeout: 30 * 1000 },
