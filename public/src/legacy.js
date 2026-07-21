@@ -1689,7 +1689,13 @@ async function showSessionPicker() {
   }
 }
 
-const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast: addToast, getState: () => state });
+const settingsController = createSettingsController({
+  rpc,
+  pickOption,
+  refreshState: () => getSessionRuntime().refreshState(),
+  toast: addToast,
+  getState: () => state,
+});
 const chooseModel = settingsController.chooseModel;
 const cycleThinking = settingsController.cycleThinking;
 const openConfigPicker = settingsController.openConfig;
