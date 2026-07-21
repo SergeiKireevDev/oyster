@@ -1489,24 +1489,73 @@ const checkpointBtn = document.createElement("span");
 checkpointBtn.className = "checkpoint";
 checkpointBtn.textContent = "\u{1F9CA}";
 checkpointBtn.title = "checkpoint — commit all workdir changes";
+/** Modal with a single model selector for the diff-summary sub-agent; the
+ *  choice is remembered (localStorage) and preselected next time.
+ *  Resolves { model } (null model = no summary) or { cancelled: true }. */
+function pickCheckpointModel() {
+  return new Promise((resolve) => {
+    $("mTitle").textContent = "Freeze checkpoint";
+    const body = $("mBody");
+    body.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "search-row";
+    const sel = document.createElement("select");
+    sel.style.flex = "1";
+    sel.style.maxWidth = "100%";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "\u{1F4A8} No summary — timestamp message";
+    sel.appendChild(none);
+    const stored = localStorage.getItem("pi_ckpt_model") ?? "";
+    // fill the selector asynchronously; the stored choice works immediately
+    if (stored) {
+      const o = document.createElement("option");
+      o.value = stored;
+      o.textContent = stored;
+      sel.appendChild(o);
+      sel.value = stored;
+    }
+    rpc({ type: "get_available_models" }).then(({ models }) => {
+      for (const m of models) {
+        const id = `${m.provider}/${m.id}`;
+        if (id === stored) continue; // already there
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = id;
+        sel.appendChild(o);
+      }
+    }).catch(() => {});
+    row.appendChild(sel);
+    const hint = document.createElement("div");
+    hint.className = "m-path";
+    hint.textContent = "The model summarizes the diff into the commit message. Your choice is remembered.";
+    body.append(row, hint);
+    const actions = $("mActions");
+    const cancel = document.createElement("span");
+    cancel.className = "chip";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => { closeModal(); resolve({ cancelled: true }); });
+    const ok = document.createElement("button");
+    ok.className = "btn";
+    ok.textContent = "Freeze \u{1F9CA}";
+    ok.style.padding = "6px 16px";
+    ok.addEventListener("click", () => {
+      const model = sel.value || null;
+      localStorage.setItem("pi_ckpt_model", sel.value);
+      closeModal();
+      resolve({ model });
+    });
+    actions.append(cancel, ok);
+    overlay.classList.add("open");
+  });
+}
+
 checkpointBtn.addEventListener("click", async (e) => {
   e.stopPropagation();
   if (checkpointBtn.classList.contains("busy")) return;
-  // ask which model should summarize the diff into the commit message
-  let model = null;
-  try {
-    const { models } = await rpc({ type: "get_available_models" });
-    const ids = models.map((m) => `${m.provider}/${m.id}`);
-    const last = localStorage.getItem("pi_ckpt_model");
-    if (last && ids.includes(last)) ids.unshift(...ids.splice(ids.indexOf(last), 1)); // last used first
-    const options = ["\u{1F4A8} No summary — timestamp message", ...ids];
-    const choice = await pickOption("Summarize the diff with…", options);
-    if (choice === null) return; // cancelled → no checkpoint
-    if (choice > 0) {
-      model = options[choice];
-      localStorage.setItem("pi_ckpt_model", model);
-    }
-  } catch {} // model list unavailable → checkpoint without a summary
+  const pick = await pickCheckpointModel();
+  if (pick.cancelled) return; // no checkpoint
+  const model = pick.model;
   checkpointBtn.classList.add("busy");
   if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
