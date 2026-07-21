@@ -4134,7 +4134,9 @@ async function showSessionPicker() {
           .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
           .then(({ ok, d }) => {
             if (!ok) throw new Error(d.error || "failed");
-            addSessionRows(d.sessions.filter((x) => paths.has(x.path)), holder);
+            const rows = d.sessions.filter((x) => paths.has(x.path));
+            if (!rows.length) return holder.remove(); // no session -> hide the directory
+            addSessionRows(rows, holder);
             onRunnersUpdate?.(runnersNow); // sync freshly added dots
           })
           .catch(() => holder.remove());
