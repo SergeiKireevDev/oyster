@@ -13,6 +13,7 @@ function stableState() {
       PI_DIR: projectRoot,
       DIRNAME: projectRoot,
       PI_BIN: "pi",
+      PI_AGENT_DIR: "/tmp/pi-lot-ui-dispatch-agent",
       PI_EXTRA_ARGS: [],
       TUNNEL_BIN: "cloudflared",
     },
@@ -66,6 +67,11 @@ test("composed dispatch keeps open routes public and authenticated routes protec
   await application.handleRequest(request("/runners"), unauthorized);
   assert.equal(unauthorized.status, 401);
   assert.deepEqual(JSON.parse(unauthorized.body), { error: "unauthorized" });
+
+  const unauthorizedCredentials = response();
+  await application.handleRequest(request("/api-keys"), unauthorizedCredentials);
+  assert.equal(unauthorizedCredentials.status, 401);
+  assert.deepEqual(JSON.parse(unauthorizedCredentials.body), { error: "unauthorized" });
 
   const authorized = response();
   await application.handleRequest(request("/runners", { authorization: "Bearer dispatch-token" }), authorized);

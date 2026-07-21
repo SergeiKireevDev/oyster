@@ -21,6 +21,7 @@ export async function init(state) {
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
+  const { createPiCredentialService } = await import(bust("pi-credential-service.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor } = await import(bust("persistence/hublotSupervisor.mjs"));
@@ -30,11 +31,12 @@ export async function init(state) {
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
     { createSessionRoutes }, { createFileRoutes }, { createWorkdirRoutes },
     { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
+    { createCredentialRoutes },
   ] = await Promise.all([
     "http/createRequestContext.mjs", "http/createRouteTable.mjs",
     ...[
       "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
-      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes",
+      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
   const { config, appStore } = state;
@@ -114,6 +116,8 @@ export async function init(state) {
     state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
     spawnHublotAgent, ensureSessionOwner,
   });
+  const credentialService = createPiCredentialService({ config });
+  const credentialRoutes = createCredentialRoutes({ requestContext, credentialService });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
@@ -143,7 +147,7 @@ export async function init(state) {
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch

@@ -78,7 +78,7 @@ credential material or a key-derived fingerprint.
 
 ## 2. Add Authenticated Credential Routes
 
-- [ ] Add `http/routes/credentialRoutes.mjs` and compose it into `app.mjs` under
+- [x] Add `http/routes/credentialRoutes.mjs` and compose it into `app.mjs` under
   exact authenticated routes:
 
 ```text
