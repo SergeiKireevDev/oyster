@@ -41,6 +41,18 @@ export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   return res.json();
 }
 
+/** DOM scroll adapter injected into transcript orchestration. */
+export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
+  return {
+    nearBottom() {
+      return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < threshold;
+    },
+    scrollToBottom(force = false) {
+      if (force || this.nearBottom()) scroller.scrollTop = scroller.scrollHeight;
+    },
+  };
+}
+
 /** Own streaming tool-card state without coupling it to Svelte stores. */
 export function createToolCardRegistry({ createStore, resultText }) {
   const cards = new Map();

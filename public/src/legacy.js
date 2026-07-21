@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, createToolCardRegistry, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -299,17 +299,13 @@ function renderMarkdown(src) {
 // ------------------------------------------------------------ message rendering
 
 const messagesEl = $("messages");
+const scroller = $("scroller");
+const transcriptScroll = createTranscriptScrollAdapter({ scroller });
+const nearBottom = () => transcriptScroll.nearBottom();
+const scrollToBottom = (force) => transcriptScroll.scrollToBottom(force);
 // late-loading content (images in markdown) grows the transcript after our
 // scroll corrections ran; if the user is at the bottom, stay pinned there
 messagesEl.addEventListener("load", () => scrollToBottom(false), true);
-const scroller = $("scroller");
-
-function nearBottom() {
-  return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
-}
-function scrollToBottom(force) {
-  if (force || nearBottom()) scroller.scrollTop = scroller.scrollHeight;
-}
 
 const toolCards = createToolCardRegistry({
   createStore: writable,

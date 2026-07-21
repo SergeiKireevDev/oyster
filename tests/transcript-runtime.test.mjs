@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, createToolCardRegistry, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
@@ -40,6 +40,20 @@ test("durable transcript fetch uses the session-file query", async () => {
   const messages = await fetchDurableTranscript(async (value) => { url = value; return { ok: true, json: async () => ({ messages: [] }) }; }, "/a.jsonl", (file) => `path=${file}`);
   assert.equal(url, "/session-messages?path=/a.jsonl");
   assert.deepEqual(messages, { messages: [] });
+});
+
+test("scroll adapter preserves reading position unless pinned or forced", () => {
+  const scroller = { scrollHeight: 1000, scrollTop: 500, clientHeight: 400 };
+  const scroll = createTranscriptScrollAdapter({ scroller });
+  assert.equal(scroll.nearBottom(), true);
+  scroll.scrollToBottom();
+  assert.equal(scroller.scrollTop, 1000);
+  scroller.scrollTop = 100;
+  assert.equal(scroll.nearBottom(), false);
+  scroll.scrollToBottom();
+  assert.equal(scroller.scrollTop, 100);
+  scroll.scrollToBottom(true);
+  assert.equal(scroller.scrollTop, 1000);
 });
 
 test("tool card registry assembles and completes streamed tool cards", () => {
