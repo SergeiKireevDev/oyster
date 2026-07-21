@@ -11,6 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, processEven
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
+import { createSessionRuntime } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -428,10 +429,15 @@ function setRunnersNow(runners) {
 }
 
 /** attach this client to another runner and rebuild the UI from its stream */
+let sessionRuntime = null;
 function switchToRunner(id) {
-  switchSessionRunner({ id, currentRunner, hooks: {
+  // Create this only once all feature adapters have initialized; a switch can
+  // occur much later from the picker, tree, or adjacent-runner controls.
+  sessionRuntime ??= createSessionRuntime({
+    getCurrentRunner: () => currentRunner,
+    switchSessionRunner,
     log: (details) => lifecycleLog("switchToRunner:start", details),
-    resetPreview: previewController.clear,
+    resetPreview: () => previewController.clear(),
     refreshState,
     setRunner,
     clearTranscript: clearMessages,
@@ -439,10 +445,11 @@ function switchToRunner(id) {
       // The new session has its own tree; do not leave stale sidebars visible.
       carouselController.reset();
     },
-    renderPreview: previewController.renderNow,
+    renderPreview: () => previewController.renderNow(),
     resetCommands: () => commandGuard?.reset(),
     connect,
-  } });
+  });
+  return sessionRuntime.switchRunner(id);
 }
 
 // ---- instant transcript preview -------------------------------------------
