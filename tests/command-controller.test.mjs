@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView } from "../public/src/lib/commandController.js";
+
+test("command palette view marks the active filtered command", () => {
+  const view = commandPaletteView([{ name: "file", icon: "📁", desc: "browse" }], "fi", 0);
+  assert.deepEqual(view.items[0], { icon: "📁", desc: "browse", highlight: "fi", rest: "le", active: true });
+  assert.equal(commandPaletteView([], "x", 0).emptyText, 'no command matches ":x"');
+});
 
 test("command palette position stays within the viewport", () => {
   const patch = commandPalettePosition({ left: 900, width: 300, top: 100, bottom: 130 }, { innerWidth: 1000, innerHeight: 800 });

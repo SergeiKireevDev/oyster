@@ -38,7 +38,7 @@ import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
-import { commandPalettePosition } from "./lib/commandController.js";
+import { commandPalettePosition, commandPaletteView } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
@@ -1332,29 +1332,7 @@ function appendAtCaret(element, text) {
 
 function renderCmdPalette() {
   if (!cmdState) return;
-  const { match, active } = cmdState;
-  const items = getFilteredCommands(match);
-  if (!items.length) {
-    setCommandPaletteState({
-      open: true,
-      match,
-      emptyText: `no command matches ":${match}"`,
-      items: [],
-    });
-    return;
-  }
-  setCommandPaletteState({
-    open: true,
-    match,
-    emptyText: "",
-    items: items.map((cmd, i) => ({
-      icon: cmd.icon,
-      desc: cmd.desc,
-      highlight: cmd.name.slice(0, match.length),
-      rest: cmd.name.slice(match.length),
-      active: i === active,
-    })),
-  });
+  setCommandPaletteState(commandPaletteView(getFilteredCommands(cmdState.match), cmdState.match, cmdState.active));
 }
 
 /** Wire a textarea/input to the shared command palette. */
