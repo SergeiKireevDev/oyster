@@ -28,6 +28,7 @@ import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
+import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
@@ -299,6 +300,26 @@ export function closeAllTunnels(state) {
 }
 
 // ---------------------------------------------------------------- hublot agents
+
+/** Restore the authoritative startup artifact before any app-owned invocation. */
+export function materializeHublotStartupScript(state, id) {
+  const record = hublotRepository(state).find(id);
+  if (!record) throw new Error(`no such hublot: ${id}`);
+  const agentDir = state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  return materializeHublotStartupScriptRecord(record, { agentDir });
+}
+
+/** Invoke only the freshly verified/materialized SQLite-owned startup source. */
+export function invokeHublotStartupScript(state, id, { spawnProcess = spawn } = {}) {
+  const materialized = materializeHublotStartupScript(state, id);
+  const record = hublotRepository(state).find(id);
+  const proc = spawnProcess(materialized.path, [], {
+    cwd: record.workdir,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  return { proc, ...materialized };
+}
 
 const START_SCRIPT_MAX_BYTES = 256 * 1024;
 

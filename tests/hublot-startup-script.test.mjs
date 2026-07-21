@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
-import { hublotAgentPrompt, reserveHublot, validateAndStoreHublotStartupScript } from "../tunnels.mjs";
+import {
+  hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
+  reserveHublot, validateAndStoreHublotStartupScript,
+} from "../tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-script-"));
@@ -56,6 +59,51 @@ test("validated startup source and SHA-256 become authoritative in SQLite", (t) 
   const persisted = store.repositories.hublots.find(hublot.id);
   assert.equal(persisted.service_start_script, script);
   assert.equal(persisted.service_start_script_sha256, sha256);
+});
+
+test("missing and mismatched startup artifacts are atomically restored before invocation", (t) => {
+  const { root, state } = fixture(t);
+  const hublot = reserve(state);
+  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\nexit 0\n";
+  writeScript(hublot.service_start_script_path, script);
+  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+
+  rmSync(hublot.service_start_script_path);
+  const restored = materializeHublotStartupScript(state, hublot.id);
+  assert.equal(restored.rematerialized, true);
+  assert.equal(readFileSync(restored.path, "utf8"), script);
+  assert.equal(lstatSync(restored.path).mode & 0o777, 0o700);
+  assert.equal(lstatSync(join(root, "agent", "hublots")).mode & 0o777, 0o700);
+
+  writeFileSync(restored.path, "#!/bin/sh\necho tampered\n", { mode: 0o755 });
+  let observedAtInvoke = null;
+  const invoked = invokeHublotStartupScript(state, hublot.id, {
+    spawnProcess(path) {
+      observedAtInvoke = readFileSync(path, "utf8");
+      return { pid: 1234 };
+    },
+  });
+  assert.equal(invoked.rematerialized, true);
+  assert.equal(observedAtInvoke, script);
+  assert.deepEqual(invoked.proc, { pid: 1234 });
+  assert.equal(materializeHublotStartupScript(state, hublot.id).rematerialized, false);
+});
+
+test("rematerialization replaces symlinks without changing their targets", (t) => {
+  const { root, state } = fixture(t);
+  const hublot = reserve(state);
+  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\nexit 0\n";
+  writeScript(hublot.service_start_script_path, script);
+  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+  const victim = join(root, "victim.sh");
+  writeScript(victim, "victim", 0o700);
+  rmSync(hublot.service_start_script_path);
+  symlinkSync(victim, hublot.service_start_script_path);
+
+  assert.equal(materializeHublotStartupScript(state, hublot.id).rematerialized, true);
+  assert.equal(lstatSync(hublot.service_start_script_path).isSymbolicLink(), false);
+  assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
+  assert.equal(readFileSync(victim, "utf8"), "victim");
 });
 
 test("startup validation rejects unsafe or non-protocol artifacts without persisting them", (t) => {
