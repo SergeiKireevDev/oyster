@@ -37,6 +37,9 @@ refresh behavior; action modules do not import `legacy.js`.
 Move browse/edit/save/upload/navigation/hidden-toggle handlers from the
 `fileExplorerHandlers` registry into direct File Explorer component actions.
 
+✅ Edit-content updates now write directly to the `fileExplorer` store; save
+reads the store value, and its bridge export/handler has been removed.
+
 - Retain `fileBrowserActions.js` for browse/read/save/upload/download transport.
 - Move explorer navigation and editing state entirely to `fileExplorer` store.
 - Replace modal return-to-hublots behavior with a store action/callback that
