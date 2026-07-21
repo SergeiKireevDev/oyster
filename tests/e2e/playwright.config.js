@@ -56,25 +56,16 @@ const projectUse = process.env.E2E_VIDEO
     }
   : { ...devices["Desktop Chrome"], launchOptions };
 
-// These specs drive ONE shared pi-lot-ui container (and one shared pi agent /
-// workspace) through the real browser UI, so they must run sequentially — no
-// parallelism, one worker. The hublot spec spawns a background agent and a
-// real cloudflared tunnel, so timeouts are generous.
-//
-// Every test is authored once in a `body(mobile)` helper and then DUPLICATED
-// as a desktop test (wide viewport) and a mobile test (narrow viewport that
-// triggers the slide-over drawer + swipe carousel). Both run on the same
-// container — desktop first, then mobile (or vice-versa) — which catches bugs
-// that only surface at one breakpoint (e.g. a handler that works on desktop
-// but is dead on mobile because the click target is behind a drawer).
-//
-// The two top-level test.describe("desktop") / test.describe("mobile") blocks
-// are intentionally tagged so you can run just one with `--grep`.
+// Specs run in isolated per-test containers. `lib/reset.js` allocates a host
+// port from 4000..4018 for each live test and tears that container down in
+// afterEach, so the suite can run in parallel without workspace/session bleed.
+// Keep concurrency capped to avoid overwhelming Docker, the mock LLM, and the
+// local browser.
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
-  fullyParallel: false,
-  workers: 1,
+  fullyParallel: true,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 9,
   retries: 0,
   timeout: 6 * 60 * 1000, // per test (hublot agent + tunnel can take minutes)
   expect: { timeout: 30 * 1000 },

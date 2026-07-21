@@ -25,8 +25,17 @@ export const BASE = process.env.PI_UI_URL ?? "http://localhost:4000";
 export const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
 const DEFAULT_CONTAINER = process.env.PI_UI_CONTAINER ?? "pi-lot-e2e";
 
+function baseUrl() {
+  return process.env.PI_UI_URL ?? BASE;
+}
+
+function authToken() {
+  return process.env.PI_UI_TOKEN ?? TOKEN;
+}
+
 /** Name of the container the suite drives (recorded by global-setup). */
 export function containerName() {
+  if (process.env.PI_UI_CONTAINER) return process.env.PI_UI_CONTAINER;
   if (existsSync(STATE_FILE)) {
     try { return JSON.parse(readFileSync(STATE_FILE, "utf8")).container; } catch {}
   }
@@ -48,10 +57,10 @@ export function dexec(cmd, { allowFail = false } = {}) {
 
 /** HTTP call against the server with the bearer token. */
 export async function api(method, path, body) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${baseUrl()}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${TOKEN}`,
+      authorization: `Bearer ${authToken()}`,
       ...(body ? { "content-type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -81,7 +90,7 @@ export async function waitFor(fn, { timeout = 30000, interval = 500, label = "co
  * connected (green dot). Returns once the composer is ready.
  */
 export async function login(page) {
-  await page.goto(`/#token=${TOKEN}`);
+  await page.goto(`${baseUrl()}/#token=${authToken()}`);
   await page.waitForSelector("#connDot.ok", { timeout: 30000 });
   await page.waitForSelector("#input", { state: "visible" });
 }
