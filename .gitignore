@@ -1,3 +1,6 @@
 .ui-token
 nohup.out
 node_modules/
+castle/
+hello/
+mario/
