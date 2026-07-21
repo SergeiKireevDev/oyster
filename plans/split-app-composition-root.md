@@ -70,7 +70,7 @@ operations.
 
 - [x] Create `platform/createDialogAdapters.js` for modal shell, confirm, text, editor, option-picker, and extension UI adapters.
 - [x] Move dialog resolver state and response handling behind instance-scoped adapter factories.
-- [ ] Ensure teardown cancels pending prompts and clears configured actions.
+- [x] Ensure teardown cancels pending prompts and clears configured actions.
 - [ ] Add cancellation and remount tests for every asynchronous dialog adapter.
 
 **Acceptance:** the root creates one dialog adapter and contains no dialog

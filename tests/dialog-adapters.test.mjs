@@ -7,8 +7,8 @@ function harness() {
   let dialogController, optionController;
   let text = {}, editor = {};
   const adapters = createDialogAdapters({
-    configureDialogController: (next) => { dialogController = next; return () => { dialogController = {}; }; },
-    configureOptionPickerController: (next) => { optionController = next; return () => { optionController = {}; }; },
+    configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
+    configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
     setTextPrompt: (next) => { text = next; }, getTextPrompt: () => text,
     setEditorPrompt: (next) => { editor = next; }, getEditorPrompt: () => editor,
     setConfirmPrompt: (next) => calls.push(["confirmState", next]),
@@ -39,7 +39,11 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   const first = harness();
   const pending = first.adapters.confirm("Confirm", "Continue?");
   first.adapters.teardown();
+  first.adapters.teardown();
   assert.equal(await pending, false);
+  assert.equal(first.calls.filter(([name]) => name.startsWith("detach")).length, 2);
+  assert.equal(first.dialogController.openText, undefined);
+  assert.equal(first.optionController.open, undefined);
   const second = harness();
   const input = second.adapters.input("Input", "", "fresh");
   second.dialogController.cancelText();

@@ -3,6 +3,7 @@ import { createExtensionUiAdapters } from "../runtime/extensionUiAdapters.js";
 /** Creates the instance-scoped dialog, modal-shell, resolver, and extension UI boundary. */
 export function createDialogAdapters(deps) {
   const pending = { text: null, editor: null, confirm: null, option: null };
+  let tornDown = false;
   const settle = (kind, value, empty, setState) => {
     const resolve = pending[kind];
     pending[kind] = null;
@@ -56,6 +57,8 @@ export function createDialogAdapters(deps) {
     extensionUi, modal,
     confirm: extensionUi.confirm, input: extensionUi.input, editor: extensionUi.editor, select: extensionUi.select,
     teardown() {
+      if (tornDown) return;
+      tornDown = true;
       for (const kind of Object.keys(pending)) { pending[kind]?.(kind === "confirm" ? false : null); pending[kind] = null; }
       detachDialogController(); detachOptionController();
     },
