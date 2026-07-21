@@ -39,6 +39,31 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+/** Convert an absolute session file path into the server's session-root query. */
+export function sessionFileQuery(sessionPath) {
+  const raw = String(sessionPath ?? "");
+  const marker = "/.pi/agent/sessions/";
+  const index = raw.indexOf(marker);
+  const relative = index !== -1 ? raw.slice(index + marker.length) : raw.replace(/^\/+/, "");
+  return `path=${encodeURIComponent(relative)}`;
+}
+
+/** Read durable transcript history for an optimistic session-switch preview. */
+export async function fetchSessionPreview(fetchImpl, sessionPath) {
+  const res = await fetchImpl(`/session-messages?${sessionFileQuery(sessionPath)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.messages ?? [];
+}
+
+/** Read persisted session entries used for permalink resolution. */
+export async function fetchSessionEntries(fetchImpl, sessionPath) {
+  const res = await fetchImpl(`/session-entries?${sessionFileQuery(sessionPath)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `session-entries failed (${res.status})`);
+  return data.entries ?? [];
+}
+
 /** Own optimistic durable-transcript previews while a session runner resumes. */
 export function createSessionPreviewController({ fetchPreview, render, log = () => {}, now = () => performance.now() }) {
   let preview = null;

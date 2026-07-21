@@ -1,6 +1,6 @@
-import { createSessionPreviewController, createSessionStateRefresher } from "../runtime/sessionRuntime.js";
+import { createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery } from "../runtime/sessionRuntime.js";
 
-export { createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher };
+export { createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, sessionFileQuery };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -46,30 +46,6 @@ export function createRunnerListController({ updateAppSession }) {
       return runners;
     },
   };
-}
-
-export function sessionFileQuery(sessionPath) {
-  const raw = String(sessionPath ?? "");
-  const marker = "/.pi/agent/sessions/";
-  const index = raw.indexOf(marker);
-  const relative = index !== -1 ? raw.slice(index + marker.length) : raw.replace(/^\/+/, "");
-  return `path=${encodeURIComponent(relative)}`;
-}
-
-/** Read durable transcript history for an optimistic session-switch preview. */
-export async function fetchSessionPreview(fetchImpl, sessionPath) {
-  const res = await fetchImpl(`/session-messages?${sessionFileQuery(sessionPath)}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.messages ?? [];
-}
-
-/** Read persisted session entries used for permalink resolution. */
-export async function fetchSessionEntries(fetchImpl, sessionPath) {
-  const res = await fetchImpl(`/session-entries?${sessionFileQuery(sessionPath)}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `session-entries failed (${res.status})`);
-  return data.entries ?? [];
 }
 
 /** Open or resume a runner, normalizing the server's response and errors. */
