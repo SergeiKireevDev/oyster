@@ -43,6 +43,7 @@ import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController } from "./lib/hublotController.js";
+import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
@@ -1919,13 +1920,13 @@ const tunnelForm = { desc: "" };
 
 async function refreshHublotManager(options) { return hublotController.refresh(options); }
 
-async function showHublots() {
-  // close the slide-over sidebars so they don't sit on top of the modal
-  carouselController.reset();
-
-  openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true, content: "hublotManager" });
-  await refreshHublotManager({ loading: true });
-}
+const hublotManagerController = createHublotManagerController({
+  resetCarousel: () => carouselController.reset(),
+  openModal,
+  refresh: refreshHublotManager,
+  getScopeAll: () => tunnelScopeAll,
+});
+const showHublots = hublotManagerController.show;
 
 const hublotController = createHublotController({
   createHublot: (options) => createHublot(fetch, options),
