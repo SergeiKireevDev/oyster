@@ -1524,8 +1524,6 @@ routineEventController.attach();
 const fmtSessionDate = formatSessionDate;
 
 let sessionPickerResolve = null;
-let sessionPickerFolders = [];
-let sessionPickerCurrentFolder = null;
 let sessionPickerSessions = [];
 
 const sessionPickerSnapshot = () => storeSnapshot(sessionPicker);
@@ -1634,9 +1632,6 @@ async function showSessionPicker() {
     const d = await r.json();
     if (r.ok) { folders = d.folders; currentFolder = d.current; }
   } catch {}
-  sessionPickerFolders = folders;
-  sessionPickerCurrentFolder = currentFolder;
-
   onRunnersUpdate = (runners) => updateSessionPicker({ runners });
 
   const chosen = await new Promise((resolve) => {
