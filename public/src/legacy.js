@@ -48,7 +48,7 @@ import { createFolderBrowserController } from "./lib/folderBrowserController.js"
 import { createFileExplorerController } from "./lib/fileExplorerController.js";
 import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
-import { createRoutineController } from "./lib/routineController.js";
+import { createRoutineController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
 import { createSessionPickerController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
@@ -585,7 +585,7 @@ async function renderTranscript(messages) {
 let state = null;
 
 function applyState(s) {
-  const result = applySessionState({ incoming: s, previousState: state, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks: {
+  const result = applySessionState({ incoming: s, previousState: state, currentRunner, emptySessionRunners, routinesNow: routineSidebarController.items, routineVisible, tunnelScopeAll, hooks: {
     log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: s?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: s?.messageCount ?? null, pendingMessageCount: s?.pendingMessageCount ?? null, isStreaming: !!s?.isStreaming, isCompacting: !!s?.isCompacting, model: s?.model?.id ?? null, sessionFile: s?.sessionFile ?? null }),
     setState: (next) => { state = next; }, updateAppSession, setTranscriptGateRequired,
     setRoutines: routines.set, setRoutineScopeAll: routineScopeAll.set, setRoutineCurrentSessionId: routineCurrentSessionId.set,
@@ -1039,12 +1039,7 @@ function handleEvent(msg) {
       if (replaying) return;
       const r = msg.routine;
       if (!r) return;
-      const i = routinesNow.findIndex((x) => x.path === r.path);
-      if (msg.reason === "deleted") {
-        if (i !== -1) routinesNow.splice(i, 1);
-      } else if (i === -1) routinesNow.push(r);
-      else routinesNow[i] = r;
-      syncRoutinesStore();
+      routineSidebarController.update(r, msg.reason);
       if (msg.reason === "created") { toast(`routine “${r.name}” created`); return; }
       if (msg.reason === "updated") { toast(`routine “${r.name}” updated`); return; }
       if (msg.reason === "deleted") { toast(`routine “${r.name}” deleted`, "warning"); return; }
@@ -1814,36 +1809,28 @@ registerOpenFileExplorerEvent(window, { open: () => showFileExplorer().catch((e)
 // on stop, and runs `<script> teardown` to remove byproducts. Scripts report
 // progression by printing `::progress <0-100> <message>` lines on stdout.
 
-let routinesNow = [];
-let routinesLoadSeq = 0;
-
-function syncRoutinesStore({ loading = false } = {}) {
-  routines.set(routinesNow.filter(routineVisible));
-  routinesTotal.set(routinesNow.length);
-  routineScopeAll.set(tunnelScopeAll);
-  routineCurrentSessionId.set(state?.sessionId ?? null);
-  routinesLoading.set(loading);
-}
-
 function routineVisible(routine) {
   return isRoutineVisible(routine, tunnelScopeAll, state?.sessionId);
 }
 
-async function loadRoutines() {
-  if (!token) return;
-  const seq = ++routinesLoadSeq;
-  const sessionAtStart = state?.sessionId ?? null;
-  routinesLoading.set(true);
-  routines.set([]);
-  routineScopeAll.set(tunnelScopeAll);
-  routineCurrentSessionId.set(sessionAtStart);
-  try {
-    routinesNow = await listRoutines(fetch);
-  } catch { /* sidebar is best-effort */ }
-  // Session switches can issue overlapping sidebar refreshes; ignore stale
-  // responses so the previous session's routines don't overwrite the current view.
-  if (seq !== routinesLoadSeq || sessionAtStart !== (state?.sessionId ?? null)) return;
-  syncRoutinesStore({ loading: false });
+const routineSidebarController = createRoutineSidebarController({
+  listRoutines: () => listRoutines(fetch),
+  isVisible: routineVisible,
+  getSessionId: () => state?.sessionId ?? null,
+  getScopeAll: () => tunnelScopeAll,
+  setRoutines: routines.set,
+  setTotal: routinesTotal.set,
+  setScopeAll: routineScopeAll.set,
+  setCurrentSessionId: routineCurrentSessionId.set,
+  setLoading: routinesLoading.set,
+});
+
+function syncRoutinesStore(options) {
+  routineSidebarController.sync(options);
+}
+
+function loadRoutines() {
+  if (token) return routineSidebarController.load();
 }
 
 const routineController = createRoutineController({
