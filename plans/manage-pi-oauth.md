@@ -84,7 +84,7 @@ Run build and full end-to-end validation only in the final checklist item.
   `PI_BIN`, and merge `oauthCapable`/OAuth display-name metadata into provider
   status without exposing credentials. Stored OAuth entries with no available
   implementation must remain visible with `oauthCapable: false`.
-- [ ] Add narrow adapter operations for OAuth login and logout that use Pi's
+- [x] Add narrow adapter operations for OAuth login and logout that use Pi's
   `AuthStorage` APIs, reload malformed storage fail-closed, accept the complete
   Pi callback contract (`onAuth`, `onDeviceCode`, `onPrompt`, `onSelect`,
   `onProgress`, `onManualCodeInput`, and `signal`), and reject unknown,

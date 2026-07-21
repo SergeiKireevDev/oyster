@@ -178,6 +178,114 @@ test("credential operations preserve unrelated credentials, provider env, concur
   }
 });
 
+test("OAuth adapter forwards Pi callbacks, protects credential types, and preserves failed logins", async () => {
+  const item = fixture({ sdkSource: `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const providers = [
+      {
+        id: "mock-oauth", name: "Mock OAuth",
+        async login(callbacks) {
+          callbacks.onAuth({ url: "https://auth.invalid/start", instructions: "Continue" });
+          callbacks.onDeviceCode({ userCode: "DEVICE-CODE", verificationUri: "https://auth.invalid/device" });
+          callbacks.onProgress?.("Waiting");
+          const prompt = await callbacks.onPrompt({ message: "Prompt" });
+          const selected = await callbacks.onSelect({ message: "Choose", options: [{ id: "one", label: "One" }] });
+          const manual = await callbacks.onManualCodeInput?.();
+          return { refresh: "refresh-" + prompt, access: "access-" + selected + "-" + manual, expires: 42 };
+        },
+        async refreshToken(value) { return value; },
+        getApiKey(value) { return value.access; },
+      },
+      {
+        id: "failed-oauth", name: "Failed OAuth",
+        async login(callbacks) { callbacks.onProgress?.("Failing"); throw new Error("provider failed"); },
+        async refreshToken(value) { return value; },
+        getApiKey(value) { return value.access; },
+      },
+    ];
+    export class AuthStorage {
+      static create(path) { return new AuthStorage(path); }
+      constructor(path) { this.path = path; this.data = {}; this.reload(); }
+      reload() { try { this.data = JSON.parse(readFileSync(this.path, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; this.data = {}; } }
+      drainErrors() { return []; }
+      list() { return Object.keys(this.data); }
+      get(id) { return this.data[id]; }
+      getOAuthProviders() { return providers; }
+      set(id, value) { this.data = { ...this.data, [id]: { type: value.type ?? "oauth", ...value } }; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      remove(id) { const next = { ...this.data }; delete next[id]; this.data = next; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      async login(id, callbacks) { const provider = providers.find((item) => item.id === id); this.set(id, { type: "oauth", ...(await provider.login(callbacks)) }); }
+      logout(id) { this.remove(id); }
+    }
+    export class ModelRegistry {
+      static create() { return {}; }
+    }
+  ` });
+  const authPath = join(item.agentDir, "auth.json");
+  writeFileSync(authPath, JSON.stringify({
+    "api-only": { type: "api_key", key: "api-key-canary" },
+    "mock-oauth": { type: "api_key", key: "replace-conflict-canary" },
+    "failed-oauth": { type: "oauth", access: "old-access", refresh: "old-refresh", expires: 1 },
+    "orphan-oauth": { type: "oauth", access: "orphan-access", refresh: "orphan-refresh", expires: 1 },
+  }), { mode: 0o600 });
+
+  try {
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } });
+    const callbacks = {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
+    };
+    await assert.rejects(service.loginOAuth("mock-oauth", callbacks), { code: "credential_type_conflict" });
+    await service.removeApiKey("mock-oauth");
+
+    const events = [];
+    const signal = new AbortController().signal;
+    const credential = await service.loginOAuth("mock-oauth", {
+      onAuth: (value) => events.push(["auth", value]),
+      onDeviceCode: (value) => events.push(["device", value]),
+      onProgress: (value) => events.push(["progress", value]),
+      onPrompt: async (value) => { events.push(["prompt", value]); return "prompt-answer"; },
+      onSelect: async (value) => { events.push(["select", value]); return "one"; },
+      onManualCodeInput: async () => { events.push(["manual"]); return "manual-answer"; },
+      signal,
+    });
+    assert.deepEqual(credential, { provider: "mock-oauth", credentialType: "oauth" });
+    assert.deepEqual(events.map(([type]) => type), ["auth", "device", "progress", "prompt", "select", "manual"]);
+    assert.equal(statSync(authPath).mode & 0o777, 0o600);
+
+    await assert.rejects(service.loginOAuth("unknown", {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
+    }), { code: "oauth_provider_not_found" });
+    await assert.rejects(service.loginOAuth("api-only", {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
+    }), { code: "oauth_provider_not_found" });
+    await assert.rejects(service.logoutOAuth("api-only"), { code: "credential_type_conflict" });
+
+    await assert.rejects(service.loginOAuth("failed-oauth", {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {}, onProgress() {},
+    }), /provider failed/);
+    let stored = JSON.parse(readFileSync(authPath, "utf8"));
+    assert.equal(stored["failed-oauth"].access, "old-access");
+
+    let releasePrompt;
+    const pending = service.loginOAuth("mock-oauth", {
+      onAuth() {}, onDeviceCode() {}, onPrompt: () => new Promise((resolve) => { releasePrompt = resolve; }),
+      async onSelect() { return "one"; }, async onManualCodeInput() { return "manual"; },
+    });
+    while (!releasePrompt) await new Promise((resolve) => setImmediate(resolve));
+    await assert.rejects(service.loginOAuth("mock-oauth", {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
+    }), { code: "credential_busy" });
+    releasePrompt("done");
+    await pending;
+
+    assert.deepEqual(await service.logoutOAuth("orphan-oauth"), { provider: "orphan-oauth", removed: true });
+    stored = JSON.parse(readFileSync(authPath, "utf8"));
+    assert.equal(stored["orphan-oauth"], undefined);
+    assert.equal(stored["api-only"].key, "api-key-canary");
+  } finally {
+    item.cleanup();
+  }
+});
+
 test("credential operations create auth.json as 0600 and fail closed on malformed storage", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-credential-malformed-"));
   const agentDir = join(root, "agent");

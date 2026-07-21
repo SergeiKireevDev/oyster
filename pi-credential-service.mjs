@@ -150,6 +150,33 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return "not_configured";
   }
 
+  const activeOAuthProviders = new Set();
+
+  function normalizedOAuthCallbacks(callbacks) {
+    if (!callbacks || typeof callbacks !== "object" || Array.isArray(callbacks)) {
+      throw credentialError("invalid_oauth_callbacks", "OAuth callbacks are required");
+    }
+    for (const name of ["onAuth", "onDeviceCode", "onPrompt", "onSelect"]) {
+      if (typeof callbacks[name] !== "function") {
+        throw credentialError("invalid_oauth_callbacks", `OAuth callback ${name} is required`);
+      }
+    }
+    for (const name of ["onProgress", "onManualCodeInput"]) {
+      if (callbacks[name] !== undefined && typeof callbacks[name] !== "function") {
+        throw credentialError("invalid_oauth_callbacks", `OAuth callback ${name} is invalid`);
+      }
+    }
+    return Object.freeze({
+      onAuth: callbacks.onAuth,
+      onDeviceCode: callbacks.onDeviceCode,
+      onPrompt: callbacks.onPrompt,
+      onSelect: callbacks.onSelect,
+      ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
+      ...(callbacks.onManualCodeInput ? { onManualCodeInput: callbacks.onManualCodeInput } : {}),
+      ...(callbacks.signal ? { signal: callbacks.signal } : {}),
+    });
+  }
+
   let adapterPromise;
   async function load() {
     if (!adapterPromise) {
@@ -249,5 +276,52 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return Object.freeze({ provider: providerId, removed: true });
   }
 
-  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey });
+  async function loginOAuth(provider, callbacks) {
+    const providerId = normalizedProvider(provider);
+    const safeCallbacks = normalizedOAuthCallbacks(callbacks);
+    if (activeOAuthProviders.has(providerId)) {
+      throw credentialError("credential_busy", `provider ${providerId} already has an active OAuth operation`);
+    }
+    const { authStorage } = await load();
+    reloadOrFail(authStorage);
+    if (!safeOAuthProviders(authStorage).has(providerId)) {
+      throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth in the configured pi installation`);
+    }
+    const current = authStorage.get(providerId);
+    if (current && current.type !== "oauth") {
+      if (current.type === "api_key") {
+        throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+      }
+      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    }
+
+    activeOAuthProviders.add(providerId);
+    try {
+      await authStorage.login(providerId, safeCallbacks);
+      return Object.freeze({ provider: providerId, credentialType: "oauth" });
+    } finally {
+      activeOAuthProviders.delete(providerId);
+    }
+  }
+
+  async function logoutOAuth(provider) {
+    const providerId = normalizedProvider(provider);
+    if (activeOAuthProviders.has(providerId)) {
+      throw credentialError("credential_busy", `provider ${providerId} already has an active OAuth operation`);
+    }
+    const { authStorage } = await load();
+    reloadOrFail(authStorage);
+    const current = authStorage.get(providerId);
+    if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored OAuth credential`);
+    if (current.type !== "oauth") {
+      if (current.type === "api_key") {
+        throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+      }
+      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    }
+    authStorage.logout(providerId);
+    return Object.freeze({ provider: providerId, removed: true });
+  }
+
+  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth });
 }
