@@ -124,8 +124,13 @@ async function runOAuthFlow(page) {
   await expect(page.getByLabel("Device code")).toHaveValue("MOCK-DEVICE-CODE");
   await page.getByRole("button", { name: "Manual callback" }).click();
   const manual = page.locator('input[name="oauthResponse"]');
+  const continueButton = page.getByRole("button", { name: "Continue" });
+  await expect(continueButton).toBeDisabled();
+  await manual.fill("   ");
+  await expect(continueButton).toBeDisabled();
   await manual.fill("http://localhost/callback?code=e2e-manual-code-canary");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(continueButton).toBeEnabled();
+  await continueButton.click();
   await expect(page.getByText("Sign-in completed.")).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Pi restart: restarted")).toBeVisible();
   await expectAnthropicAvailability(page, true);

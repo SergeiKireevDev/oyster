@@ -56,6 +56,8 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /Open device verification/);
   assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
   assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);
+  assert.match(modal, /oninput=\{\(event\) => updateOAuthInput\(event, request\.requestId\)\}/);
+  assert.match(modal, /disabled=\{!oauthInputReady\[request\.requestId\]\}>Continue/);
   assert.match(modal, /unreachable loopback page[\s\S]*?redirect URL or authorization code/);
   assert.match(modal, /CREDENTIALS_CANCEL_OAUTH_ACTION/);
   for (const text of ["Sign-in completed", "Sign-in expired", "Sign-in cancelled", "Sign-in failed", "Pi restart:"]) {
@@ -65,10 +67,14 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
 
 test("OAuth callback inputs stay component-local and clear on every lifecycle transition", () => {
   assert.match(modal, /let oauthInputs = new Set\(\)/);
+  assert.match(modal, /let oauthInputReady = \{\}/);
+  assert.match(modal, /updateOAuthInput[\s\S]*?value\.trim\(\)[\s\S]*?\[requestId\]: ready/);
   assert.match(modal, /use:trackOAuthInput/);
   assert.match(modal, /destroy\(\) \{[\s\S]*?node\.value = ""[\s\S]*?oauthInputs\.delete/);
   assert.match(modal, /nextRequestSignature !== requestSignature[\s\S]*?clearOAuthInputs\(\)/);
-  assert.match(modal, /finally \{[\s\S]*?input\.value = ""/);
+  assert.match(modal, /clearOAuthInputs[\s\S]*?oauthInputReady = \{\}/);
+  assert.match(modal, /if \(!value\.trim\(\)\) return/);
+  assert.match(modal, /finally \{[\s\S]*?input\.value = ""[\s\S]*?oauthInputReady/);
   assert.match(modal, /function cancelOAuth\(\) \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?CREDENTIALS_CANCEL_OAUTH_ACTION/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearOAuthInputs\(\)/);
   assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?oauthInputs\.clear\(\)/);
