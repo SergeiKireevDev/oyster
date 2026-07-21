@@ -101,7 +101,9 @@ function checkCompletedStep(ctx: ExtensionContext, planPath: string, step: strin
     if (!unchecked) continue;
     const section = headings.filter(Boolean).join(" > ");
     const qualifiedStep = `${section ? `${section}: ` : ""}${unchecked[1]}`;
-    if (step === unchecked[1] || step === qualifiedStep) matches.push(index);
+    // Checklist prose may wrap across indented continuation lines. Match its
+    // first line as a stable prefix while still rejecting ambiguity.
+    if (step === unchecked[1] || step === qualifiedStep || step.startsWith(`${unchecked[1]} `)) matches.push(index);
   }
 
   if (matches.length !== 1) {
@@ -275,6 +277,8 @@ export default function goalLoop(pi: ExtensionAPI) {
       }
       if (!state.active) throw new Error("Goal loop is inactive. Start it with /goal-loop start [plan-path].");
       if (params.action === "complete") {
+        const next = findNextUncheckedStep(readPlan(ctx, state.planPath));
+        if (next) throw new Error(`Cannot complete goal loop while an unchecked plan item remains: ${next}`);
         state = { ...state, active: false, currentStep: "", lastResult: params.result?.trim() || "No remaining plan steps." };
         persist();
         updateStatus(ctx);
@@ -340,6 +344,8 @@ export default function goalLoop(pi: ExtensionAPI) {
         ...state,
         baseline: head.stdout.trim(),
         retries: 0,
+        continuationsAfterVerify: 0,
+        currentStep: "",
         lastCommit: head.stdout.trim(),
         lastResult: `Validated and committed: ${commitMessage}`,
       };
@@ -367,7 +373,7 @@ Current step: ${state.currentStep || "choose one incomplete step"}
 Baseline commit: ${state.baseline}
 Retries: ${state.retries}/${state.maxRetries}
 
-Implement exactly one plan step at a time. You MUST call goal_loop verify after changing code; it runs build, unit tests, Docker build, and full e2e, then commits only on success. On verification failure, the extension leaves the worktree unchanged—analyze the reports, fix the current attempt in-place, and verify again. After every passing commit, inspect the plan for another incomplete step. Call goal_loop complete only when none remain.`,
+Implement exactly one unchecked checklist item now. Do not only select, summarize, defer, or describe work: inspect code and make the change. If the recorded step is checked, use the first unchecked item in the plan. Call goal_loop verify after changing code; on failure, fix the same item in place and verify again. After every passing commit, inspect the plan and implement the next unchecked item. Call goal_loop complete only when none remain.`,
       },
     };
   });
@@ -383,7 +389,7 @@ Implement exactly one plan step at a time. You MUST call goal_loop verify after 
       };
       persist();
       await pi.sendUserMessage(
-        firstContinuationAfterVerify ? continuationPrompt(ctx, state) : simpleContinuationPrompt(),
+        firstContinuationAfterVerify ? continuationPrompt(ctx, state) : simpleContinuationPrompt(state),
         { deliverAs: "followUp" },
       );
     } finally {

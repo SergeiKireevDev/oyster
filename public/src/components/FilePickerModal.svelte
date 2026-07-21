@@ -2,6 +2,7 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker } from "../stores/filePicker.js";
+  import { browseFilePicker, pickFilePicker } from "../features/files/filePickerActions.js";
 
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
 </script>
@@ -17,11 +18,11 @@
     dirs={$filePicker.dirs}
     showHidden={$filePicker.showHidden}
     showWorkdir={true}
-    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-file-picker-browse", { detail: path }))}
+    onBrowse={browseFilePicker}
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($filePicker.path, file)}
-    <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} title={fullPath} onclick={() => window.dispatchEvent(new CustomEvent("pi-file-picker-pick", { detail: fullPath }))}>
+    <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} title={fullPath} onclick={() => pickFilePicker(fullPath)}>
       {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
     </button>
   {/each}

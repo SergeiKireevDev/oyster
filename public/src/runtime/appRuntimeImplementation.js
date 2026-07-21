@@ -65,6 +65,7 @@ import { createHublotManagerController } from "../lib/hublotManagerController.js
 import { createFolderBrowserController, createFolderBrowserEventController } from "../lib/folderBrowserController.js";
 import { createFileExplorerController, createFileExplorerEventController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
 import { createFilePickerController, createFilePickerEventController } from "../lib/filePickerController.js";
+import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "../lib/routineController.js";
 import { createSettingsChangeController, createSettingsController } from "../lib/settingsController.js";
@@ -1080,6 +1081,11 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
   return filePickerController.show({ path: sessionUi.workdir, onPick, onCancel, returnToHublot });
 }
 
+const detachFilePickerActions = configureFilePickerActions({
+  browse: (path) => loadFilePicker(path),
+  pick: (path) => filePickerController.complete({ ...filePickerState, path }),
+});
+
 const filePickerEventController = createFilePickerEventController({
   windowTarget: window,
   useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
@@ -1724,6 +1730,7 @@ const detachRuntimeEventAdapters = () => {
   commandPaletteKeyboardController.detach();
   commandPaletteRunController.detach();
   detachCheckpointTreeActions();
+  detachFilePickerActions();
   filePickerEventController.detach();
   folderBrowserEventController.detach();
   fileExplorerEventController.detach();
