@@ -27,6 +27,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
   const repositories = Object.freeze({
     settings: Object.freeze({
       list: () => database.prepare("SELECT key, value, updated_at FROM app_settings ORDER BY key").all().map((row) => ({ ...row })),
+      set: (key, value, updatedAt) => database.prepare(`
+        INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(key, value, updatedAt),
     }),
     operations: Object.freeze({
       listIncomplete: () => database.prepare("SELECT id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, copyFile, writeFile, rename, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rename, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -135,6 +135,58 @@ test("the stable server atomically replaces its active application handler", asy
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
+});
+
+test("full restart restores app-store data and shutdown awaits callbacks before closing it", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-ui-store-restart-"));
+  const port = await availablePort();
+  const marker = join(root, "shutdown-marker.txt");
+  await copyStableServer(root);
+  await writeFile(join(root, "app.mjs"), `
+import { writeFile } from "node:fs/promises";
+export function init(state) {
+  return {
+    async handleRequest(req, res) {
+      if (req.method === "POST") {
+        state.appStore.transaction((repositories) => repositories.settings.set("restart-proof", JSON.stringify("durable"), "saved"));
+      }
+      res.end(JSON.stringify(state.appStore.repositories.settings.list()));
+    },
+    startPi() {}, stopTunnels() {}, stopRoutines() {},
+    async stopPi() {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await writeFile(${JSON.stringify(marker)}, state.appStore.closed ? "closed-too-early" : "callback-before-close");
+    },
+  };
+}
+`);
+  let child;
+  t.after(async () => {
+    if (child?.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const start = async () => {
+    const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+      cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+    });
+    await waitForOutput(child, "listening on");
+    return child;
+  };
+
+  child = await start();
+  const written = await fetch(`http://127.0.0.1:${port}/`, { method: "POST" });
+  assert.equal(written.status, 200);
+  child.kill("SIGTERM");
+  await once(child, "exit");
+  assert.equal(await readFile(marker, "utf8"), "callback-before-close");
+
+  child = await start();
+  const restored = await readJson(port);
+  assert.deepEqual(restored, [{ key: "restart-proof", value: '"durable"', updated_at: "saved" }]);
+  child.kill("SIGTERM");
+  await once(child, "exit");
+  assert.equal(await readFile(marker, "utf8"), "callback-before-close");
 });
 
 test("an open SSE response survives an application reload and receives the state-owned broadcast", async (t) => {
