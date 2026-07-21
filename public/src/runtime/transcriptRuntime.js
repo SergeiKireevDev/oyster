@@ -195,6 +195,11 @@ export function createTranscriptEntryFocusController({ annotate, findDirect, fet
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 /** Run transcript post-render side effects through injected UI adapters. */
 /** Apply the transcript consistency work required when an agent run completes. */
+/** Mark an in-progress agent run as busy. */
+export function createAgentStartController({ setBusy }) {
+  return () => setBusy(true);
+}
+
 export function createAgentCompletionController({ setBusy, clearAssistant, refreshState, scheduleSync }) {
   return () => {
     setBusy(false);
