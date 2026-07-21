@@ -100,7 +100,7 @@ SSE state remains state-owned.
 - [x] Move `GET /search` into the session route factory, preserving scope,
   tool-output filtering, snippets, and error behavior with search contract
   tests.
-- [ ] Remove extracted session route bodies from `app.mjs` and verify route
+- [x] Remove extracted session route bodies from `app.mjs` and verify route
   factory dependencies are injected rather than imported from application
   module state.
 
