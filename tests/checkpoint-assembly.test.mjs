@@ -26,6 +26,8 @@ test("checkpoint assembly owns model marker tree freeze rollback and action cons
   assert.equal(typeof assembly.operations.loadTree, "function");
   assert.equal(typeof assembly.operations.freeze, "function");
   assert.equal(typeof assembly.operations.rollback, "function");
+  assert.deepEqual(Object.keys(assembly.operations).sort(), ["freeze", "loadTree", "placeMarker", "refreshMarkers", "refreshTreeIfOpen", "rollback"]);
+  assert.equal(Object.isFrozen(assembly.operations), true);
   assembly.teardown();
 });
 

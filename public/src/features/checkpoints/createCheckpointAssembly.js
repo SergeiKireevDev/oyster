@@ -46,15 +46,16 @@ export function createCheckpointAssembly(deps) {
     openSession: (...args) => feature.tree.openTreeSession(...args),
     rollback: (checkpoint, target) => feature.controller.rollback(checkpoint, target),
   });
-  return {
-    operations: {
+  const operations = Object.freeze({
       placeMarker: () => feature.marker.place(),
       refreshMarkers: () => feature.marker.refresh(),
       refreshTreeIfOpen: () => feature.tree.refreshIfOpen(),
       loadTree: () => feature.tree.load(),
       freeze: (event) => feature.controller.freeze(event),
       rollback: (checkpoint, target = null) => feature.controller.rollback(checkpoint, target),
-    },
+  });
+  return {
+    operations,
     teardown() {
       detachActions();
       feature.teardown?.();
