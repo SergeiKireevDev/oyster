@@ -1665,7 +1665,6 @@ async function showSessionPicker() {
 
   onRunnersUpdate = null;
   sessionPickerResolve = null;
-  const currentPath = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
   const fullChoice = chosen ? (sessionPickerSessions.find((session) => session.path === chosen.path || session.id === chosen.id) ?? chosen) : null;
   if (!fullChoice) return;
   try {
