@@ -13,6 +13,7 @@ import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createRuntimeTeardown } from "./runtime/teardownController.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
+import { createLegacyRuntimeLifecycle } from "./runtime/legacyRuntimeLifecycle.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
@@ -1821,15 +1822,20 @@ function attachRuntimeEventAdapters() {
   carouselController.apply();
 }
 
+const runtimeLifecycle = createLegacyRuntimeLifecycle({
+  attachAuthenticatedFetch,
+  attachEventAdapters: attachRuntimeEventAdapters,
+  attachDebugHooks,
+  start: runtimeStarter,
+  teardown: runtimeTeardown,
+});
+
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
 export function startLegacyRuntime() {
-  attachAuthenticatedFetch();
-  attachRuntimeEventAdapters();
-  attachDebugHooks();
-  return runtimeStarter();
+  return runtimeLifecycle.start();
 }
 
 /** Release runtime-owned long-lived transport resources on app unmount. */
 export function teardownLegacyRuntime() {
-  return runtimeTeardown();
+  return runtimeLifecycle.teardown();
 }
