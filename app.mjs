@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
-  const { listTunnels, reserveHublot, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
+  const { listTunnels, reserveHublot, recordHublotTransition, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir } =
     await import(bust("routines.mjs"));
@@ -117,7 +117,7 @@ export async function init(state) {
   const fileRoutes = createFileRoutes({ state, requestContext });
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
-    state, appStore, config, requestContext, listTunnels, reserveHublot, openTunnel, closeTunnel,
+    state, appStore, config, requestContext, listTunnels, reserveHublot, recordHublotTransition, openTunnel, closeTunnel,
     spawnHublotAgent, ensureSessionOwner,
   });
   const checkpointRoutes = createCheckpointRoutes({

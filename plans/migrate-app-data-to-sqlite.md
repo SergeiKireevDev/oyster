@@ -321,7 +321,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Require the setup agent to create and invoke an idempotent startup script at the allocated path; validate and store its contents and SHA-256 in SQLite.
 - [x] Rematerialize a missing or mismatched startup script from SQLite before invoking it.
 - [x] Persist the PID and verifiable process identity of every service, cloudflared tunnel, and setup agent immediately after spawn or discovery.
-- [ ] Record transitions through `opening`, `open`, `recovering`, `closing`, `closed`, `failed`, and `interrupted`.
+- [x] Record transitions through `opening`, `open`, `recovering`, `closing`, `closed`, `failed`, and `interrupted`.
 - [ ] Persist session rebinding and process metadata updates transactionally.
 - [ ] Keep only `ChildProcess` handles in an in-memory registry keyed by persistent process/hublot ID.
 - [ ] Replace `state.nextHublotPort` with transactional allocation plus a live port check.

@@ -1,4 +1,4 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, recordHublotTransition, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -49,8 +49,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });
       } catch (e) {
         if (reserved && state.appStore?.repositories?.hublots?.find(reserved.id)?.status === "opening") {
-          state.appStore.repositories.hublots.update(reserved.id, { status: "failed", last_error: e.message });
-          state.appStore.repositories.hublots.appendLifecycleEvent({ hublotId: reserved.id, status: "failed", desiredState: "open", error: e.message, createdAt: new Date().toISOString() });
+          recordHublotTransition(state, reserved.id, "failed", { publicUrl: null, lastError: e.message });
         }
         if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
         if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}

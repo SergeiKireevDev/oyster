@@ -106,6 +106,34 @@ function finishPersistedProcess(state, processRow, { status = "ended", exitCode 
   });
 }
 
+const HUBLOT_STATUSES = new Set(["opening", "open", "recovering", "closing", "closed", "failed", "interrupted"]);
+
+/** Atomically persist observed state and its immutable lifecycle record. */
+export function recordHublotTransition(state, id, status, {
+  desiredState, publicUrl, lastError, openedAt, closedAt,
+  at = new Date().toISOString(),
+} = {}) {
+  if (!HUBLOT_STATUSES.has(status)) throw new Error(`invalid hublot status: ${status}`);
+  return state.appStore.transaction((repositories) => {
+    const current = repositories.hublots.find(id);
+    if (!current) throw new Error(`no such hublot: ${id}`);
+    const desired = desiredState ?? current.desired_state;
+    const changes = { status, desired_state: desired };
+    if (publicUrl !== undefined) changes.public_url = publicUrl;
+    if (lastError !== undefined) changes.last_error = lastError;
+    if (openedAt !== undefined) changes.opened_at = openedAt;
+    if (closedAt !== undefined) changes.closed_at = closedAt;
+    repositories.hublots.update(id, changes);
+    repositories.hublots.appendLifecycleEvent({
+      hublotId: id, status, desiredState: desired,
+      publicUrl: publicUrl === undefined ? current.public_url : publicUrl,
+      error: lastError === undefined ? current.last_error : lastError,
+      createdAt: at,
+    });
+    return repositories.hublots.find(id);
+  });
+}
+
 function persistedTunnelInfo(state, row) {
   const service = hublotRepository(state).listProcesses(row.id).find((process) => process.role === "service" && process.status === "running");
   return {
@@ -142,25 +170,23 @@ export function reserveHublot(state, {
   const serviceStartScriptPath = serviceKind === "agent_managed"
     ? join(scriptRoot, "hublots", id, "start.sh")
     : null;
-  const row = hublotRepository(state).create({
-    id, ownerId, port, label, brief, workdir: state.currentDir, serviceKind,
-    serviceStartScriptPath, status: "opening", desiredState: "open", createdAt,
+  return state.appStore.transaction((repositories) => {
+    repositories.hublots.create({
+      id, ownerId, port, label, brief, workdir: state.currentDir, serviceKind,
+      serviceStartScriptPath, status: "opening", desiredState: "open", createdAt,
+    });
+    repositories.hublots.appendLifecycleEvent({
+      hublotId: id, status: "opening", desiredState: "open", createdAt,
+    });
+    return repositories.hublots.find(id);
   });
-  hublotRepository(state).appendLifecycleEvent({
-    hublotId: id, status: "opening", desiredState: "open", createdAt,
-  });
-  return row;
 }
 
 function failOpeningHublot(state, id, error) {
   const row = hublotRepository(state).find(id);
   if (!row || row.status !== "opening") return;
   const message = error instanceof Error ? error.message : String(error);
-  hublotRepository(state).update(id, { status: "failed", public_url: null, last_error: message });
-  hublotRepository(state).appendLifecycleEvent({
-    hublotId: id, status: "failed", desiredState: row.desired_state,
-    error: message, createdAt: new Date().toISOString(),
-  });
+  recordHublotTransition(state, id, "failed", { publicUrl: null, lastError: message });
 }
 
 /**
@@ -217,14 +243,10 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
         settled = true;
         clearTimeout(timer);
         tunnel.url = m[0];
-        hublotRepository(state).update(id, {
-          public_url: tunnel.url, status: "open", opened_at: new Date().toISOString(), last_error: null,
+        const openedAt = new Date().toISOString();
+        const row = recordHublotTransition(state, id, "open", {
+          desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
         });
-        hublotRepository(state).appendLifecycleEvent({
-          hublotId: tunnel.id, status: "open", desiredState: "open",
-          publicUrl: tunnel.url, createdAt: new Date().toISOString(),
-        });
-        const row = hublotRepository(state).find(id);
         state.tunnels.set(tunnel.id, tunnel);
         console.log(`[pi-ui] tunnel up: ${tunnel.url} -> localhost:${port}`);
         state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
@@ -261,16 +283,10 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       if (state.tunnels.delete(tunnel.id)) {
         const current = hublotRepository(state).find(tunnel.id);
         const manuallyClosed = current?.desired_state === "closed";
-        hublotRepository(state).update(tunnel.id, {
-          status: manuallyClosed ? "closed" : "interrupted",
-          public_url: null,
-          closed_at: new Date().toISOString(),
-          last_error: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`,
-        });
-        hublotRepository(state).appendLifecycleEvent({
-          hublotId: tunnel.id, status: manuallyClosed ? "closed" : "interrupted",
-          desiredState: current?.desired_state ?? "open", error: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`,
-          createdAt: new Date().toISOString(),
+        const closedAt = new Date().toISOString();
+        recordHublotTransition(state, tunnel.id, manuallyClosed ? "closed" : "interrupted", {
+          desiredState: current?.desired_state ?? "open", publicUrl: null, closedAt,
+          lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
         });
         console.log(`[pi-ui] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
         state.serverEvent({ type: "tunnel_closed", tunnel: { ...tunnelInfo(tunnel), url: null } });
@@ -286,12 +302,11 @@ export function closeTunnel(state, id) {
   const row = hublotRepository(state).find(id);
   if (!row || row.status === "closed") return null;
   const closedInfo = persistedTunnelInfo(state, row);
-  hublotRepository(state).update(id, { desired_state: "closed", status: "closing", public_url: null, last_error: null });
-  hublotRepository(state).appendLifecycleEvent({ hublotId: id, status: "closing", desiredState: "closed", createdAt: new Date().toISOString() });
+  recordHublotTransition(state, id, "closing", { desiredState: "closed", publicUrl: null, lastError: null });
   const t = state.tunnels?.get(id);
   if (!t) {
-    hublotRepository(state).update(id, { status: "closed", closed_at: new Date().toISOString() });
-    hublotRepository(state).appendLifecycleEvent({ hublotId: id, status: "closed", desiredState: "closed", createdAt: new Date().toISOString() });
+    const closedAt = new Date().toISOString();
+    recordHublotTransition(state, id, "closed", { desiredState: "closed", publicUrl: null, closedAt, at: closedAt });
     return closedInfo;
   }
 
@@ -346,13 +361,21 @@ export function materializeHublotStartupScript(state, id) {
 
 /** Invoke only the freshly verified/materialized SQLite-owned startup source. */
 export function invokeHublotStartupScript(state, id, { spawnProcess = spawn } = {}) {
-  const materialized = materializeHublotStartupScript(state, id);
-  const record = hublotRepository(state).find(id);
-  const proc = spawnProcess(materialized.path, [], {
-    cwd: record.workdir,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
+  recordHublotTransition(state, id, "recovering", { publicUrl: null, lastError: null });
+  let materialized;
+  let proc;
+  try {
+    materialized = materializeHublotStartupScript(state, id);
+    const record = hublotRepository(state).find(id);
+    proc = spawnProcess(materialized.path, [], {
+      cwd: record.workdir,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+  } catch (error) {
+    recordHublotTransition(state, id, "failed", { publicUrl: null, lastError: error.message });
+    throw error;
+  }
   const processRow = persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: proc.pid, status: "starting" });
   proc.once?.("error", () => finishPersistedProcess(state, processRow, { status: "failed" }));
   proc.once?.("exit", (exitCode, signal) => finishPersistedProcess(state, processRow, { exitCode, signal }));
