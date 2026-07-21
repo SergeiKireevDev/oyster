@@ -1526,12 +1526,10 @@ let sessionPickerSessions = [];
 
 const sessionPickerSnapshot = () => storeSnapshot(sessionPicker);
 
-const groupSearchResults = groupSessionSearchResults;
-
 const sessionPickerSearchController = createSessionPickerSearchController({
   getSnapshot: sessionPickerSnapshot,
   update: updateSessionPicker,
-  groupResults: groupSearchResults,
+  groupResults: groupSessionSearchResults,
   async fetchSearch({ q, scope, path, includeTools }) {
     const params = new URLSearchParams({ token, q, scope });
     if (path) params.set("path", path);
