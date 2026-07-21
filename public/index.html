@@ -104,7 +104,12 @@
   #menu button:hover { background: var(--accent-dim); }
 
   /* ---------- messages ---------- */
-  #scroller { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  /* NO scroll-behavior:smooth here: it would ANIMATE every programmatic
+     scrollTop write — the initial bottom-pin became a visible glide through
+     the whole transcript ("replay"), and backfill corrections sampled
+     scrollTop mid-animation, accumulating drift. Deliberate smooth scrolling
+     (permalink focus) requests it explicitly via scrollIntoView(). */
+  #scroller { flex: 1; overflow-y: auto; }
 
   /* ---------- main row: chat column + hublots sidebar ---------- */
   #main { flex: 1; display: flex; min-height: 0; }
