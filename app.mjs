@@ -56,10 +56,10 @@
 import { spawn, execFile } from "node:child_process";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createConnection } from "node:net";
-import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync } from "node:fs";
+import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // import tunnels.mjs with a cache-busting query so hot reloads of app.mjs
@@ -431,15 +431,84 @@ export function init(state) {
     };
   }
 
+  /** best-effort client identity for rate limiting: the tunnel edge puts the
+   *  real address in a header (everything arrives from localhost otherwise) */
+  function clientIp(req) {
+    return req.headers["cf-connecting-ip"]
+      || String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim()
+      || req.socket.remoteAddress || "?";
+  }
+
+  // brute-force guard: after too many bad tokens from one address, reject
+  // outright for a while (state-owned so it survives hot reloads)
+  const AUTH_FAIL_WINDOW_MS = 10 * 60 * 1000;
+  const AUTH_FAIL_MAX = 20;
+
+  function recentAuthFailures(ip) {
+    const fails = (state.authFails ??= new Map());
+    const now = Date.now();
+    const recent = (fails.get(ip) ?? []).filter((t) => now - t < AUTH_FAIL_WINDOW_MS);
+    if (recent.length) fails.set(ip, recent); else fails.delete(ip);
+    return recent;
+  }
+
+  function recordAuthFailure(ip) {
+    recentAuthFailures(ip).push(Date.now());
+  }
+
+  /** @returns {"ok" | "fail" | "throttled"} */
   function checkAuth(req, url) {
+    const ip = clientIp(req);
+    if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) return "throttled";
     const candidates = authCandidates(req, url);
-    if (Object.values(candidates).some(tokenMatches)) return true;
+    // tokens in query strings leak into proxy logs, browser history and
+    // Referer headers: only GETs may use one (EventSource can't send headers,
+    // download links can't either) — mutating requests need a header or cookie
+    if (req.method !== "GET") candidates.query = null;
+    if (Object.values(candidates).some(tokenMatches)) {
+      state.authFails?.delete(ip);
+      return "ok";
+    }
+    recordAuthFailure(ip);
     // diagnostic: show which credentials arrived (masked) so stripped headers are visible
     const seen = Object.entries(candidates)
       .map(([k, v]) => `${k}=${v ? `${String(v).slice(0, 4)}…(${String(v).length})` : "-"}`)
       .join(" ");
-    console.log(`[auth-fail] ${req.method} ${url.pathname} from ${req.socket.remoteAddress} | ${seen} | ua=${req.headers["user-agent"] ?? "-"}`);
-    return false;
+    console.log(`[auth-fail] ${req.method} ${url.pathname} from ${ip} | ${seen} | ua=${req.headers["user-agent"] ?? "-"}`);
+    return "fail";
+  }
+
+  // ---------------------------------------------------------------- path confinement
+  //
+  // The file explorer endpoints operate on arbitrary paths behind a single
+  // bearer token. Confine them to a small set of roots and deny credential
+  // stores, so a leaked token doesn't expose the whole account.
+
+  const FS_ROOTS = [...new Set([homedir(), "/tmp", config.PI_DIR].map((p) => resolve(p)))];
+  const FS_DENIED = [
+    ...[".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".config/gh"].map((n) => join(homedir(), n)),
+    join(config.DIRNAME, ".ui-token"),
+  ];
+
+  const within = (p, root) => p === root || p.startsWith(root + "/");
+
+  /** Resolve symlinks and enforce the allowlist/denylist. Returns the real
+   *  path, or null if it is out of bounds. */
+  function confinePath(p) {
+    let real = p;
+    try {
+      real = realpathSync(p);
+    } catch {
+      // target may not exist yet (file-save, upload): resolve its parent
+      try { real = join(realpathSync(dirname(p)), basename(p)); } catch {}
+    }
+    if (!FS_ROOTS.some((r) => within(real, r))) return null;
+    if (FS_DENIED.some((d) => within(real, d))) return null;
+    return real;
+  }
+
+  function forbidden(res, p) {
+    json(res, 403, { error: `path outside the allowed roots: ${p}` });
   }
 
   // ---------------------------------------------------------------- session listing
@@ -1075,18 +1144,29 @@ export function init(state) {
     // debug: shows which auth credentials reached the server (and whether each
     // validates) without requiring auth — helps diagnose header-stripping proxies
     if (req.method === "GET" && url.pathname === "/authcheck") {
+      const ip = clientIp(req);
+      if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) {
+        json(res, 429, { error: "too many auth failures — try again later" });
+        return;
+      }
       const candidates = authCandidates(req, url);
       const report = {};
       for (const [k, v] of Object.entries(candidates)) {
         report[k] = v ? (tokenMatches(v) ? "valid" : `present-invalid(len=${String(v).length})`) : "absent";
       }
-      json(res, 200, { authorized: Object.values(candidates).some(tokenMatches), credentials: report });
+      const authorized = Object.values(candidates).some(tokenMatches);
+      // this endpoint is a validity oracle: count failed probes against the
+      // same budget as regular auth failures
+      if (!authorized && Object.values(candidates).some(Boolean)) recordAuthFailure(ip);
+      json(res, 200, { authorized, credentials: report });
       return;
     }
 
     // everything below requires auth
-    if (!checkAuth(req, url)) {
-      json(res, 401, { error: "unauthorized" });
+    const auth = checkAuth(req, url);
+    if (auth !== "ok") {
+      if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
+      else json(res, 401, { error: "unauthorized" });
       return;
     }
 
@@ -1166,7 +1246,8 @@ export function init(state) {
         json(res, 400, { error: `not a session file: ${sessionPath}` });
         return;
       }
-      let dir = body?.dir ? resolve(String(body.dir)) : null;
+      let dir = body?.dir ? confinePath(resolve(String(body.dir))) : null;
+      if (body?.dir && !dir) { forbidden(res, body.dir); return; }
       if (dir) {
         let ok = false;
         try { ok = statSync(dir).isDirectory(); } catch {}
@@ -1328,7 +1409,8 @@ export function init(state) {
     }
 
     if (req.method === "GET" && url.pathname === "/browse") {
-      const target = resolve(url.searchParams.get("path") || state.currentDir);
+      const target = confinePath(resolve(url.searchParams.get("path") || state.currentDir));
+      if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let entries;
       try {
         entries = readdirSync(target, { withFileTypes: true });
@@ -1366,7 +1448,8 @@ export function init(state) {
     // ---- built-in file explorer: download / read / save arbitrary files
 
     if (req.method === "GET" && url.pathname === "/file-download") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      const target = confinePath(resolve(String(url.searchParams.get("path") ?? "")));
+      if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let st;
       try { st = statSync(target); } catch (e) { json(res, 404, { error: e.message }); return; }
       if (!st.isFile()) { json(res, 400, { error: "not a file" }); return; }
@@ -1380,7 +1463,8 @@ export function init(state) {
     }
 
     if (req.method === "GET" && url.pathname === "/file-content") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      const target = confinePath(resolve(String(url.searchParams.get("path") ?? "")));
+      if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let st;
       try { st = statSync(target); } catch (e) { json(res, 404, { error: e.message }); return; }
       if (!st.isFile()) { json(res, 400, { error: "not a file" }); return; }
@@ -1394,7 +1478,8 @@ export function init(state) {
     if (req.method === "POST" && url.pathname === "/file-save") {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const target = resolve(String(body?.path ?? ""));
+      const target = confinePath(resolve(String(body?.path ?? "")));
+      if (!target) { forbidden(res, body?.path); return; }
       if (typeof body?.content !== "string") { json(res, 400, { error: "content must be a string" }); return; }
       let dirOk = false;
       try { dirOk = statSync(dirname(target)).isDirectory(); } catch {}
@@ -1415,7 +1500,8 @@ export function init(state) {
       //   ?dir=<target folder>&name=<file name>&offset=<byte offset>&last=<0|1>
       // chunks must arrive in order; offset=0 starts a fresh upload, last=1 finalizes.
       // single-shot uploads (no offset/last params) behave as before.
-      const dir = resolve(String(url.searchParams.get("dir") ?? ""));
+      const dir = confinePath(resolve(String(url.searchParams.get("dir") ?? "")));
+      if (!dir) { forbidden(res, url.searchParams.get("dir")); return; }
       const name = String(url.searchParams.get("name") ?? "").trim();
       if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
         json(res, 400, { error: "invalid file name" });
@@ -1479,7 +1565,8 @@ export function init(state) {
     if (req.method === "POST" && url.pathname === "/mkdir") {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const parent = resolve(String(body?.path ?? ""));
+      const parent = confinePath(resolve(String(body?.path ?? "")));
+      if (!parent) { forbidden(res, body?.path); return; }
       const name = String(body?.name ?? "").trim();
       if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
         json(res, 400, { error: "invalid folder name" });
@@ -1510,7 +1597,8 @@ export function init(state) {
     if (req.method === "POST" && url.pathname === "/workdir") {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const target = resolve(String(body?.path ?? ""));
+      const target = confinePath(resolve(String(body?.path ?? "")));
+      if (!target) { forbidden(res, body?.path); return; }
       let ok = false;
       try { ok = statSync(target).isDirectory(); } catch {}
       if (!ok) {

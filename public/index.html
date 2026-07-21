@@ -1010,6 +1010,21 @@ let token = null;
   }
 }
 
+// Every same-origin API call carries the token as a header instead of in the
+// URL (query tokens leak into proxy logs / history; the server now rejects
+// them on non-GET requests). Wrapping fetch once beats touching ~40 call
+// sites. EventSource and download links still use ?token= — they can't send
+// headers — which the server allows for GETs.
+{
+  const rawFetch = window.fetch.bind(window);
+  window.fetch = (input, opts = {}) => {
+    if (typeof input === "string" && input.startsWith("/") && token) {
+      opts = { ...opts, headers: { "x-auth-token": token, ...(opts.headers || {}) } };
+    }
+    return rawFetch(input, opts);
+  };
+}
+
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
 // /s/<sessionId>/m/<entryId> -> …and scroll to / flash that message
@@ -1043,7 +1058,7 @@ async function probeTokenValidity() {
   if (now - lastProbeAt < 10000 || !token) return;
   lastProbeAt = now;
   try {
-    const res = await fetch(`/authcheck?token=${encodeURIComponent(token)}`);
+    const res = await fetch(`/authcheck`);
     if (!res.ok) return; // server not healthy — treat as network issue
     const data = await res.json();
     if (data.authorized === false) {
@@ -1057,14 +1072,14 @@ async function probeTokenValidity() {
   }
 }
 
-// Only drop the stored token if the server itself rejects it via the query-param
-// path — a stripped header or transient proxy error must not log the user out.
+// Only drop the stored token if the server itself rejects it on a direct
+// probe — a stripped header or transient proxy error must not log the user out.
 let verifyingToken = false;
 async function handleUnauthorized() {
   if (verifyingToken) return;
   verifyingToken = true;
   try {
-    const res = await fetch(`/rpc?token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`/rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "get_state" }),
@@ -1115,7 +1130,7 @@ async function rpc(cmd, { wait = true } = {}) {
   }
   // token goes in the query string + x-auth-token header: some tunnels/proxies
   // strip or overwrite the Authorization header, which showed up as 401s
-  const res = await fetch(`/rpc?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`, {
+  const res = await fetch(`/rpc?runner=${encodeURIComponent(currentRunner ?? "")}`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-auth-token": token },
     body: JSON.stringify(cmd),
@@ -1592,7 +1607,7 @@ checkpointBtn.addEventListener("click", async (e) => {
   if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
     const res = await fetch(
-      `/checkpoint?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`,
+      `/checkpoint?runner=${encodeURIComponent(currentRunner ?? "")}`,
       { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model }) }
     );
     const data = await res.json().catch(() => ({}));
@@ -1632,7 +1647,7 @@ async function refreshCheckpointMarkers() {
   document.querySelectorAll(".ckpt-frozen").forEach((el) => el.classList.remove("ckpt-frozen"));
   const sid = state?.sessionId;
   if (!sid) return;
-  const res = await fetch(`/checkpoints?token=${encodeURIComponent(token)}&id=${encodeURIComponent(sid)}`);
+  const res = await fetch(`/checkpoints?id=${encodeURIComponent(sid)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return;
   const checkpoints = data.checkpoints ?? [];
@@ -1676,7 +1691,7 @@ async function rollbackToCheckpoint(cp, btn) {
   if (pick.cancelled) return;
   btn?.classList.add("busy");
   try {
-    const res = await fetch(`/rollback?token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`/rollback`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash, model: pick.model }),
@@ -1712,7 +1727,7 @@ async function loadCheckpointTree() {
     return;
   }
   try {
-    const res = await fetch(`/checkpoint-tree?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+    const res = await fetch(`/checkpoint-tree?path=${encodeURIComponent(path)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
     view.replaceChildren(renderTreeNode(data.root));
@@ -1877,7 +1892,7 @@ function switchToRunner(id) {
 
 /** get-or-spawn a runner for a session file / folder */
 async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
-  const res = await fetch(`/open-session?token=${encodeURIComponent(token)}`, {
+  const res = await fetch(`/open-session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sessionPath, dir }),
@@ -2366,7 +2381,7 @@ menu.addEventListener("click", async (e) => {
       clearMessages();
       for (const m of messages) renderFullMessage(m);
     } else if (action === "restart") {
-      await fetch(`/restart?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`, { method: "POST" });
+      await fetch(`/restart?runner=${encodeURIComponent(currentRunner ?? "")}`, { method: "POST" });
       clearMessages();
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
@@ -2396,7 +2411,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
 
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse?token=${encodeURIComponent(token)}&files=1${q}`);
+    const res = await fetch(`/browse?files=1${q}`);
     const data = await res.json();
     if (!res.ok) {
       toast(data.error || "cannot open folder", "error");
@@ -2486,7 +2501,7 @@ async function showFolderBrowser() {
 
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse?token=${encodeURIComponent(token)}${q}`);
+    const res = await fetch(`/browse${q}`);
     const data = await res.json();
     if (!res.ok) { toast(data.error || "cannot open folder", "error"); return; }
     browsePath = data.path;
@@ -2532,7 +2547,7 @@ async function showFolderBrowser() {
       if (!name) { inp.focus(); return; }
       create.disabled = true;
       try {
-        const res = await fetch(`/mkdir?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/mkdir`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ path: browsePath, name }),
@@ -2614,7 +2629,7 @@ async function showFileExplorer() {
 
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse?token=${encodeURIComponent(token)}&files=1${q}`);
+    const res = await fetch(`/browse?files=1${q}`);
     const data = await res.json();
     if (!res.ok) {
       toast(data.error || "cannot open folder", "error");
@@ -2725,7 +2740,7 @@ async function showFileExplorer() {
             let r, d;
             try {
               r = await fetch(
-                `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
+                `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
                   `&offset=${offset}&last=${isLast ? 1 : 0}`,
                 { method: "POST", body: f.slice(offset, end) }
               );
@@ -2769,7 +2784,7 @@ async function showFileExplorer() {
   }
 
   async function editFile(path) {
-    const res = await fetch(`/file-content?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+    const res = await fetch(`/file-content?path=${encodeURIComponent(path)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
 
@@ -2791,7 +2806,7 @@ async function showFileExplorer() {
     save.addEventListener("click", async () => {
       save.textContent = "Saving\u2026";
       try {
-        const r = await fetch(`/file-save?token=${encodeURIComponent(token)}`, {
+        const r = await fetch(`/file-save`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ path, content: ta.value }),
@@ -2849,7 +2864,7 @@ async function showHublots() {
   $("treebar").classList.remove("open");
 
   async function load() {
-    const res = await fetch(`/tunnels?token=${encodeURIComponent(token)}`);
+    const res = await fetch(`/tunnels`);
     const data = await res.json();
     if (!res.ok) { toast(data.error || "failed to load tunnels", "error"); return; }
     const visible = data.tunnels.filter(tunnelVisible);
@@ -2915,7 +2930,7 @@ async function showHublots() {
         x.textContent = "✕";
         x.title = "close this hublot";
         x.addEventListener("click", async () => {
-          await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+          await fetch(`/tunnels?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
           await load();
           loadHublots();
         });
@@ -2967,7 +2982,7 @@ async function showHublots() {
       try {
         // no port sent: the server allocates the next free one from 3000 up;
         // a `brief` makes the server hand the setup to a background pi agent
-        const res2 = await fetch(`/tunnels?token=${encodeURIComponent(token)}`, {
+        const res2 = await fetch(`/tunnels`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -3047,7 +3062,7 @@ async function loadHublots() {
   if (!token) return;
   let tunnels = [];
   try {
-    const res = await fetch(`/tunnels?token=${encodeURIComponent(token)}`);
+    const res = await fetch(`/tunnels`);
     const data = await res.json();
     if (res.ok) tunnels = data.tunnels.filter(tunnelVisible);
   } catch { /* sidebar is best-effort */ }
@@ -3105,7 +3120,7 @@ function renderHublots(tunnels) {
     x.textContent = "✕";
     x.title = "close this tunnel";
     x.addEventListener("click", async () => {
-      await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+      await fetch(`/tunnels?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
       loadHublots();
     });
     cap.append(lbl, x);
@@ -3134,7 +3149,7 @@ function routineVisible(r) {
 async function loadRoutines() {
   if (!token) return;
   try {
-    const res = await fetch(`/routines?token=${encodeURIComponent(token)}`);
+    const res = await fetch(`/routines`);
     const data = await res.json();
     if (res.ok) routinesNow = data.routines ?? [];
   } catch { /* sidebar is best-effort */ }
@@ -3143,7 +3158,7 @@ async function loadRoutines() {
 
 async function routineAction(name, action) {
   try {
-    const res = await fetch(`/routines?token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`/routines`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       // start binds the routine to the current session (and its workdir)
@@ -3293,7 +3308,7 @@ async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
   // last-set global workdir
   const dirQ = workdir ? `&dir=${encodeURIComponent(workdir)}` : "";
-  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}${dirQ}`);
+  const res = await fetch(`/sessions${dirQ}`);
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
   if (!sessions.length) { toast("no saved sessions"); return; }
@@ -3315,7 +3330,7 @@ async function showSessionPicker() {
   // folders for the search scope selector and the "other folders" section
   let folders = [], currentFolder = null;
   try {
-    const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}${dirQ}`);
+    const r = await fetch(`/session-folders${dirQ}`);
     const d = await r.json();
     if (r.ok) { folders = d.folders; currentFolder = d.current; }
   } catch {}
@@ -3503,7 +3518,7 @@ async function showSessionPicker() {
         const r = runnersNow.find((x) => x.sessionFile === s.path) ?? { id: s.runnerId };
         if (!r.id) return;
         try {
-          const res2 = await fetch(`/runners?token=${encodeURIComponent(token)}&id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
+          const res2 = await fetch(`/runners?id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
           const d2 = await res2.json().catch(() => ({}));
           if (!res2.ok) { toast(d2.error || `stop failed (${res2.status})`, "error"); return; }
           toast("process stopped");
@@ -3525,7 +3540,7 @@ async function showSessionPicker() {
           e.stopPropagation();
           if (!confirm(`Delete session "${s.name || s.preview || s.id?.slice(0, 8) || "?"}"?`)) return;
           try {
-            const r = await fetch(`/session?token=${encodeURIComponent(token)}&path=${encodeURIComponent(s.path)}`, { method: "DELETE" });
+            const r = await fetch(`/session?path=${encodeURIComponent(s.path)}`, { method: "DELETE" });
             const d = await r.json().catch(() => ({}));
             if (!r.ok) { toast(d.error || `delete failed (${r.status})`, "error"); return; }
             b.remove();
@@ -3642,7 +3657,7 @@ async function showSessionPicker() {
         addFolderLabel(fd, holder);
         listEl.appendChild(holder);
         // fetch that folder's session summaries to render full rows
-        fetch(`/sessions?token=${encodeURIComponent(token)}&path=${encodeURIComponent(fd)}`)
+        fetch(`/sessions?path=${encodeURIComponent(fd)}`)
           .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
           .then(({ ok, d }) => {
             if (!ok) throw new Error(d.error || "failed");
@@ -3686,7 +3701,7 @@ async function showSessionPicker() {
           if (!fd.open || loaded) return;
           loaded = true;
           try {
-            const r = await fetch(`/sessions?token=${encodeURIComponent(token)}&path=${encodeURIComponent(f.dir)}`);
+            const r = await fetch(`/sessions?path=${encodeURIComponent(f.dir)}`);
             const d = await r.json();
             if (!r.ok) throw new Error(d.error || `failed (${r.status})`);
             const inactive = d.sessions.filter((s) => !s.alive); // active ones are shown above
@@ -3858,7 +3873,7 @@ async function fetchSessionEntries() {
   const path = state?.sessionFile
     ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
   if (!path) throw new Error("session not saved yet");
-  const res = await fetch(`/session-entries?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+  const res = await fetch(`/session-entries?path=${encodeURIComponent(path)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
   return data.entries ?? [];
@@ -3943,7 +3958,7 @@ async function focusEntryById(entryId) {
 
 async function showConversationTree() {
   // pick which session to visualise: default to the current one
-  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}`);
+  const res = await fetch(`/sessions`);
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
   if (!sessions.length) { toast("no saved sessions"); return; }
@@ -3953,7 +3968,7 @@ async function showConversationTree() {
 }
 
 async function renderTreeModal(session, sessions) {
-  const res = await fetch(`/session-tree?token=${encodeURIComponent(token)}&path=${encodeURIComponent(session.path)}`);
+  const res = await fetch(`/session-tree?path=${encodeURIComponent(session.path)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { toast(data.error || `failed to load tree (${res.status})`, "error"); return; }
 
@@ -4272,7 +4287,7 @@ function toast(text, kind, { onClick, sticky } = {}) {
 async function boot() {
   if (route.sessionId) {
     try {
-      const res = await fetch(`/session-by-id?token=${encodeURIComponent(token)}&id=${encodeURIComponent(route.sessionId)}`);
+      const res = await fetch(`/session-by-id?id=${encodeURIComponent(route.sessionId)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
       const r = await openSessionRunner({ sessionPath: data.session.path, dir: data.session.cwd || null });
