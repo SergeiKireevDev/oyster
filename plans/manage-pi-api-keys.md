@@ -113,7 +113,7 @@ inactive, and serialized responses/errors contain no submitted or stored key.
   mount-scoped `uiActionRegistry`, and register/unregister the handler in the
   owning feature assembly. Keep this separate from `SettingsModal` so secrets
   do not enter the browser-preference feature boundary.
-- [ ] Add a credentials feature/controller that owns API calls, loading/error
+- [x] Add a credentials feature/controller that owns API calls, loading/error
   state, add/replace/remove workflows, restart confirmations, toast policy, and
   teardown. Components must not perform credential fetches directly or retain
   submitted keys in a module-global store.

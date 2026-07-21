@@ -17,10 +17,18 @@ test("menu exposes a top-level API Keys action through the scoped registry", () 
 test("credentials assembly owns API-key action registration and teardown", () => {
   const uiActions = createUiActionRegistry();
   const opened = [];
-  const assembly = createCredentialsAssembly({ uiActions, openModal: (state) => opened.push(state) });
+  let loads = 0;
+  const assembly = createCredentialsAssembly({
+    uiActions,
+    openModal: (state) => opened.push(state),
+    createController: () => ({
+      load() { loads += 1; }, save() {}, remove() {}, teardown() {},
+    }),
+  });
 
   uiActions.invoke(API_KEYS_OPEN_ACTION);
   assert.deepEqual(opened, [{ title: "API Keys", wide: true, content: "apiKeys" }]);
+  assert.equal(loads, 1);
   assembly.teardown();
   uiActions.invoke(API_KEYS_OPEN_ACTION);
   assert.equal(opened.length, 1);
@@ -28,7 +36,7 @@ test("credentials assembly owns API-key action registration and teardown", () =>
 });
 
 test("application composition mounts credentials separately from settings and tears it down", () => {
-  assert.match(rootSource, /createCredentialsAssembly\(\{ uiActions, openModal: openModalState \}\)/);
+  assert.match(rootSource, /createCredentialsAssembly\(\{[\s\S]*?openModal: openModalState,[\s\S]*?fetchImpl: fetch,[\s\S]*?confirm: extensionUiAdapters\.confirm/);
   assert.match(rootSource, /credentialsAssembly\.teardown\(\)/);
   assert.match(rootSource, /features: \{ credentials: credentialsAssembly\.operations \}/);
 });

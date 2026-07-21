@@ -19,6 +19,7 @@ import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries,
 import { runnerSessionIdentity, sameSession, sessionOpenSelection } from "../lib/sessionIdentity.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { analytics, updateAnalytics } from "../stores/analytics.js";
+import { updateApiKeysState } from "../stores/apiKeys.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
@@ -396,8 +397,15 @@ const dialogAdapters = createDialogAdapters({
   findElement: $,
   setTitle: (title) => updateAppSession({ titleOverride: title }),
 });
-const credentialsAssembly = createCredentialsAssembly({ uiActions, openModal: openModalState });
 const extensionUiAdapters = dialogAdapters.extensionUi;
+const credentialsAssembly = createCredentialsAssembly({
+  uiActions,
+  openModal: openModalState,
+  fetchImpl: fetch,
+  confirm: extensionUiAdapters.confirm,
+  toast: addToast,
+  setState: updateApiKeysState,
+});
 const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;
 const updateModal = dialogAdapters.modal.update;
