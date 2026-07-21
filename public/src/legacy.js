@@ -2472,10 +2472,6 @@ async function loadSessionPickerFolder(folder) {
 }
 
 setSessionPickerHandlers({
-  setQuery: (query) => {
-    updateSessionPicker({ query });
-    if (query.trim().length < 2) updateSessionPicker({ searchStatus: "", searchResults: [], searching: false });
-  },
   setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
   setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
   setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },

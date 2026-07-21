@@ -4,10 +4,6 @@ export function setSessionPickerHandlers(handlers) {
   sessionPickerHandlers = handlers ?? {};
 }
 
-export function setSessionPickerQuery(value) {
-  return sessionPickerHandlers.setQuery?.(value);
-}
-
 export function setSessionPickerScope(value) {
   return sessionPickerHandlers.setScope?.(value);
 }

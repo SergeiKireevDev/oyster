@@ -7,11 +7,10 @@
     runSessionPickerSearch,
     setSessionPickerExcludeTools,
     setSessionPickerFolder,
-    setSessionPickerQuery,
     setSessionPickerScope,
     stopPickedSession,
   } from "../lib/legacyBridge.js";
-  import { sessionPicker } from "../stores/sessionPicker.js";
+  import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 
   function fmtSessionDate(ts) {
     const d = new Date(ts);
@@ -103,7 +102,10 @@
     }
   }
   function queryInput(value) {
-    setSessionPickerQuery(value);
+    updateSessionPicker({
+      query: value,
+      ...(value.trim().length < 2 ? { searchStatus: "", searchResults: [], searching: false } : {}),
+    });
     clearTimeout(debounce);
     debounce = setTimeout(() => runSessionPickerSearch(), 250);
   }
