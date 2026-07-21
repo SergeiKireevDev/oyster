@@ -56,7 +56,7 @@ event, and remounting cannot invoke a disposed runtime.
 
 ## 2. Make Dialog State and Operations Instance-Scoped
 
-- [ ] Add `createDialogService()` that owns text, editor, confirm, and
+- [x] Add `createDialogService()` that owns text, editor, confirm, and
   option-picker presentation state, but does not yet replace existing dialog
   exports. Test independent service instances have independent state.
 - [ ] Add a dialog-service Svelte context provider in `App.svelte`, and pass
