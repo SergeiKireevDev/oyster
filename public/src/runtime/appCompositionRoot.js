@@ -19,6 +19,7 @@ import { createFeatureAssembly } from "./featureAssembly.js";
 import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createDialogAdapters } from "../platform/createDialogAdapters.js";
+import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
@@ -195,7 +196,7 @@ const checkpointAssembly = createCheckpointAssembly({
     openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
     switchRunner: (id) => getSessionRuntime().switchRunner(id),
   },
-  layout: { isTreeOpen: () => $("treebar").classList.contains("open") },
+  layout: { isTreeOpen: () => layoutDom.isTreeOpen() },
   toast: addToast,
 });
 const checkpointOperations = checkpointAssembly.operations;
@@ -799,6 +800,7 @@ async function fetchSessionEntries() {
 
 // ------------------------------------------------------------ extension UI bridge
 
+const layoutDom = createLayoutDomAdapters({ documentTarget: document, windowTarget: window, findElement: $ });
 const settingsLayoutRuntime = createSettingsLayoutRuntime({
   rpc,
   extensionUiAdapters,
@@ -806,8 +808,8 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   toast: addToast,
   getState: getSessionState,
   reloadTranscript,
-  documentTarget: document,
-  windowTarget: window,
+  documentTarget: layoutDom.documentTarget,
+  windowTarget: layoutDom.windowTarget,
   storage: localStorage,
   setCarouselPage,
   loadScopedResources: () => { loadHublots(); loadRoutines(); },
@@ -816,9 +818,9 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   getCurrentRunner: () => getCurrentRunner(),
   getWorkdir: () => getWorkdir(),
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
-  hublotsEl: $("hublots"),
-  treebarEl: $("treebar"),
-  isDrawerToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
+  hublotsEl: layoutDom.hublots,
+  treebarEl: layoutDom.treebar,
+  isDrawerToggleTarget: layoutDom.isDrawerToggleTarget,
 });
 const handleExtensionUI = settingsLayoutRuntime.handleExtensionUI;
 const carouselController = settingsLayoutRuntime.carousel;
