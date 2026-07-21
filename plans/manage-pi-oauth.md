@@ -107,7 +107,7 @@ and unrelated credentials survive concurrent writes.
 
 ## 2. Add a Host-Owned OAuth Flow Coordinator
 
-- [ ] Add a server-side OAuth flow coordinator whose mutable registry is
+- [x] Add a server-side OAuth flow coordinator whose mutable registry is
   supplied by host-owned application state. It must generate random flow and
   request IDs, enforce one active flow per provider plus a small global limit,
   start `AuthStorage.login()` asynchronously, and publish only safe transient
