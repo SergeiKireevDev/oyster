@@ -6,5 +6,12 @@ export function createBrowserActions({ windowTarget }) {
     openExternal(url) {
       return windowTarget.open(url, "_blank", "noopener");
     },
+    fileDownload(token, path) {
+      const normalizedPath = String(path ?? "");
+      return Object.freeze({
+        href: `/file-download?token=${encodeURIComponent(token ?? "")}&path=${encodeURIComponent(normalizedPath)}`,
+        filename: normalizedPath.split("/").pop() || "download",
+      });
+    },
   });
 }

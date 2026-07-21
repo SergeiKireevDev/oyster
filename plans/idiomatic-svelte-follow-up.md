@@ -120,7 +120,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Add a browser-action adapter with an `openExternal(url)` operation and
   inject it into hublot components/features. Remove direct `window.open` calls
   from Svelte components and test the adapter invocation.
-- [ ] Add a file-download URL builder to the browser-action adapter and inject
+- [x] Add a file-download URL builder to the browser-action adapter and inject
   it into the file-explorer feature. Remove tokenized download URL construction
   from Svelte markup and test URL encoding and download filename behavior.
 - [ ] Inventory every component `document`, `window`, and element listener.

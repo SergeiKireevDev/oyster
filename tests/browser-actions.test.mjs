@@ -15,6 +15,19 @@ test("browser actions open external URLs in an isolated tab", () => {
   assert.equal(Object.isFrozen(actions), true);
 });
 
+test("browser actions build encoded file downloads with stable filenames", () => {
+  const actions = createBrowserActions({ windowTarget: { open() {} } });
+
+  assert.deepEqual(actions.fileDownload("token +/?", "/workspace/a file #1.txt"), {
+    href: "/file-download?token=token%20%2B%2F%3F&path=%2Fworkspace%2Fa%20file%20%231.txt",
+    filename: "a file #1.txt",
+  });
+  assert.deepEqual(actions.fileDownload("token", "/"), {
+    href: "/file-download?token=token&path=%2F",
+    filename: "download",
+  });
+});
+
 test("hublot components invoke injected browser actions without direct window access", () => {
   for (const name of ["HublotList.svelte", "HublotManagerModal.svelte"]) {
     const source = readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
@@ -26,4 +39,15 @@ test("hublot components invoke injected browser actions without direct window ac
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(root, /openUrl: browserActions\.openExternal/);
   assert.doesNotMatch(root, /window\.open/);
+});
+
+test("file explorer consumes injected download descriptors", () => {
+  const source = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
+  assert.match(source, /getBrowserActions\(\)/);
+  assert.match(source, /browserActions\.fileDownload\(/);
+  assert.match(source, /href=\{download\.href\}/);
+  assert.match(source, /download=\{download\.filename\}/);
+  assert.match(source, /href=\{editedFileDownload\.href\}/);
+  assert.match(source, /download=\{editedFileDownload\.filename\}/);
+  assert.doesNotMatch(source, /file-download|encodeURIComponent|downloadFileUrl|split\("\/"\)\.pop/);
 });

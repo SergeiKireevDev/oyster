@@ -2,7 +2,7 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { updateFileExplorer } from "../stores/fileExplorer.js";
   import { closeModalState } from "../stores/modal.js";
-  import { downloadFileUrl } from "../lib/fileBrowserActions.js";
+  import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import {
@@ -14,10 +14,12 @@
     uploadFileExplorer,
   } from "../features/files/fileExplorerActions.js";
 
+  const browserActions = getBrowserActions();
   const editExploredFile = editFileExplorer;
   const saveExploredFile = saveFileExplorer;
 
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
+  $: editedFileDownload = browserActions.fileDownload($fileExplorer.token, $fileExplorer.editPath);
 </script>
 
 {#if $fileExplorer.loading}
@@ -49,14 +51,15 @@
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}
+    {@const download = browserActions.fileDownload($fileExplorer.token, fullPath)}
     <div style="display:flex;align-items:center;gap:6px;">
       <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} style="flex:1;min-width:0;" title={fullPath} onclick={() => editExploredFile(fullPath)}>
         {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
       </button>
       <a
         class="chip"
-        href={downloadFileUrl($fileExplorer.token, fullPath)}
-        download={file.name}
+        href={download.href}
+        download={download.filename}
         title={`download ${file.name}`}
         style="text-decoration:none"
       >⬇</a>
@@ -71,7 +74,7 @@
 <div class="m-actions" id="mActions">
   {#if $fileExplorer.mode === "edit"}
     <button class="chip" onclick={saveFileExplorer}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
-    <a class="chip" href={downloadFileUrl($fileExplorer.token, $fileExplorer.editPath)} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
+    <a class="chip" href={editedFileDownload.href} download={editedFileDownload.filename} style="text-decoration:none">Download</a>
     <button class="chip" onclick={backFileExplorer}>← Back</button>
   {:else}
     <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</button>
