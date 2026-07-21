@@ -4,11 +4,12 @@ import { mount, unmount } from "svelte";
 import { writable } from "svelte/store";
 import UserMessage from "./components/transcript/UserMessage.svelte";
 import AssistantMessage from "./components/transcript/AssistantMessage.svelte";
-import CheckpointButton from "./components/transcript/CheckpointButton.svelte";
 import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
+import { setCheckpointBusy, setCheckpointTarget } from "./stores/checkpointMarker.js";
+import { setCheckpointRestoreBusy, setCheckpointRestores } from "./stores/checkpointRestores.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { updateFileExplorer } from "./stores/fileExplorer.js";
@@ -26,6 +27,20 @@ import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
+
+const lifecycleStartedAt = performance.now();
+function lifecycleLog(label, data = {}) {
+  const elapsed = Math.round(performance.now() - lifecycleStartedAt);
+  console.log(`[pi-ui lifecycle +${elapsed}ms] ${label}`, {
+    runner: currentRunner,
+    sessionId: state?.sessionId ?? null,
+    replaying,
+    transcriptGateRequired,
+    replayDoneSeen,
+    connected,
+    ...data,
+  });
+}
 
 // ------------------------------------------------------------ token
 
@@ -431,6 +446,8 @@ function mountSvelteAssistantMessage(message, role = "assistant") {
     assistantStore,
     role,
     onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+    onCheckpoint: handleCheckpointClick,
+    onRollback: rollbackToCheckpoint,
   });
   const el = messagesEl.lastElementChild;
   return { el, store: assistantStore, msg: message, svelte: true };
@@ -455,6 +472,8 @@ function addUserMessage(message) {
   mountTranscriptComponent(UserMessage, {
     text,
     onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+    onCheckpoint: handleCheckpointClick,
+    onRollback: rollbackToCheckpoint,
   });
   if (/^Opening interface: /.test(text)) {
     scrollToBottom(true);
@@ -489,12 +508,7 @@ const localEchoes = [];
 // runner's workdir (server-side `git add -A && git commit`), freezing the
 // state the conversation reached at that point.
 
-let checkpointBtn;
-function createCheckpointButton() {
-  const host = document.createElement("span");
-  mount(CheckpointButton, { target: host, props: { onCheckpoint: handleCheckpointClick } });
-  return host.firstElementChild;
-}
+let checkpointBusy = false;
 /** Modal with a single model selector for the diff-summary sub-agent; the
  *  choice is remembered (localStorage) and preselected next time.
  *  Resolves { model } (null model = no summary) or { cancelled: true }. */
@@ -503,8 +517,6 @@ function pickCheckpointModel({
   hint = "The model summarizes the diff into the commit message. Your choice is remembered.",
   okLabel = "Freeze \u{1F9CA}",
 } = {}) {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   const picker = openCheckpointModelPicker({ title, hint, okLabel, loading: true });
   rpc({ type: "get_available_models" }).then(({ models }) => {
     updateCheckpointModelOptions(models.map((m) => `${m.provider}/${m.id}`));
@@ -514,11 +526,12 @@ function pickCheckpointModel({
 
 async function handleCheckpointClick(e) {
   e.stopPropagation();
-  if (checkpointBtn.classList.contains("busy")) return;
+  if (checkpointBusy) return;
   const pick = await pickCheckpointModel();
   if (pick.cancelled) return; // no checkpoint
   const model = pick.model;
-  checkpointBtn.classList.add("busy");
+  checkpointBusy = true;
+  setCheckpointBusy(true);
   if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
     const res = await fetch(
@@ -544,23 +557,20 @@ async function handleCheckpointClick(e) {
   } catch (err) {
     toast(`checkpoint failed: ${err.message}`, "error");
   } finally {
-    checkpointBtn.classList.remove("busy");
+    checkpointBusy = false;
+    setCheckpointBusy(false);
   }
 }
-checkpointBtn = createCheckpointButton();
 
-/** keep the iceberg attached to the latest user/assistant message */
+/** keep the Svelte-owned iceberg on the latest user/assistant message */
 function placeCheckpointBtn() {
   const els = chatEls();
-  const last = els[els.length - 1];
-  if (last) last.appendChild(checkpointBtn);
-  else checkpointBtn.remove();
+  setCheckpointTarget(els[els.length - 1] ?? null);
 }
 
 /** put a return arrow on every message a checkpoint is anchored to */
 async function refreshCheckpointMarkers() {
-  document.querySelectorAll(".ckpt-restore").forEach((b) => b.remove());
-  document.querySelectorAll(".ckpt-frozen").forEach((el) => el.classList.remove("ckpt-frozen"));
+  setCheckpointRestores([]);
   const sid = state?.sessionId;
   if (!sid) return;
   const res = await fetch(`/checkpoints?id=${encodeURIComponent(sid)}`);
@@ -572,31 +582,22 @@ async function refreshCheckpointMarkers() {
   let entries;
   try { entries = await fetchSessionEntries(); } catch { return; }
   const els = chatEls();
+  const restores = [];
   for (let i = 0; i < entries.length; i++) {
     const cp = { ...byAnchor.get(entries[i].id), sessionId: sid };
     if (!cp.hash) continue;
-    // same zip-by-position logic as the permalinks (align from the end when
-    // the file and the rendered transcript briefly disagree)
+    // Same zip-by-position logic as the permalinks (align from the end when
+    // the file and rendered transcript briefly disagree).
     const pos = entries.length === els.length ? i : els.length - (entries.length - i);
-    const el = els[pos];
-    if (!el || el.querySelector(":scope > .ckpt-restore")) continue;
-    el.classList.add("ckpt-frozen"); // icy accent marks it as rollbackable
-    const b = document.createElement("span");
-    b.className = "ckpt-restore";
-    b.textContent = "\u21A9";
-    b.title = `roll the workdir back to checkpoint ${cp.hash} and fork the session here`;
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      rollbackToCheckpoint(cp, b);
-    });
-    el.appendChild(b);
+    const target = els[pos];
+    if (target) restores.push({ target, checkpoint: cp, busy: false });
   }
+  setCheckpointRestores(restores);
 }
 
 /** deterministic rollback: restore the checkpoint commit (pending changes are
  *  auto-committed first) and jump into a session forked at that point */
-async function rollbackToCheckpoint(cp, btn) {
-  if (btn?.classList.contains("busy")) return;
+async function rollbackToCheckpoint(cp, target = null) {
   // same modal as freeze: the model summarizes the pending changes that get
   // auto-committed before the reset (the modal doubles as confirmation)
   const pick = await pickCheckpointModel({
@@ -605,7 +606,7 @@ async function rollbackToCheckpoint(cp, btn) {
     okLabel: "Roll back \u23EA",
   });
   if (pick.cancelled) return;
-  btn?.classList.add("busy");
+  if (target) setCheckpointRestoreBusy(target, true);
   try {
     const res = await fetch(`/rollback`, {
       method: "POST",
@@ -619,7 +620,7 @@ async function rollbackToCheckpoint(cp, btn) {
   } catch (err) {
     toast(`rollback failed: ${err.message}`, "error");
   } finally {
-    btn?.classList.remove("busy");
+    if (target) setCheckpointRestoreBusy(target, false);
   }
 }
 
@@ -694,7 +695,8 @@ function renderFullMessage(message) {
 
 function clearMessages() {
   renderJob++; // cancel any in-flight transcript backfill
-  checkpointBtn.remove();
+  setCheckpointTarget(null);
+  setCheckpointRestores([]);
   unmountTranscriptComponents();
   messagesEl.innerHTML = "";
   toolCards.clear();
@@ -728,6 +730,7 @@ function renderChunk(chunk) {
 /** Render `messages`; resolves true when the FULL transcript is in the DOM
  *  (false if superseded by a newer render). */
 function renderTranscript(messages) {
+  lifecycleLog("renderTranscript:start", { messages: messages?.length ?? 0 });
   clearMessages(); // also bumps renderJob, cancelling any older backfill
   const myJob = ++renderJob;
   // ↑/↓ prompt recall must stay chronological even though rendering is
@@ -743,8 +746,16 @@ function renderTranscript(messages) {
   scrollToBottom(true);
   return new Promise((resolve) => {
     const backfill = () => {
-      if (myJob !== renderJob) { resolve(false); return; }
-      if (!turns.length) { resolve(true); return; }
+      if (myJob !== renderJob) {
+        lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
+        resolve(false);
+        return;
+      }
+      if (!turns.length) {
+        lifecycleLog("renderTranscript:complete", { job: myJob, domMessages: messagesEl.children.length });
+        resolve(true);
+        return;
+      }
       const chunk = takeTailChunk(turns, CHUNK_MSGS);
       const anchor = messagesEl.firstChild;
       const before = messagesEl.children.length;
@@ -774,6 +785,17 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
+  lifecycleLog("applyState", {
+    incomingSessionId: s?.sessionId ?? null,
+    previousSessionId: state?.sessionId ?? null,
+    sessionChanged,
+    messageCount: s?.messageCount ?? null,
+    pendingMessageCount: s?.pendingMessageCount ?? null,
+    isStreaming: !!s?.isStreaming,
+    isCompacting: !!s?.isCompacting,
+    model: s?.model?.id ?? null,
+    sessionFile: s?.sessionFile ?? null,
+  });
   state = s;
   updateAppSession({ state: s, ...(sessionChanged ? { titleOverride: null } : {}) });
   if (sessionChanged) {
@@ -823,6 +845,7 @@ function setRunnersNow(runners) {
 
 /** attach this client to another runner and rebuild the UI from its stream */
 function switchToRunner(id) {
+  lifecycleLog("switchToRunner:start", { targetRunner: id, sameRunner: id === currentRunner });
   if (id === currentRunner) { lastPreview = null; refreshState(); return; }
   setRunner(id);
   clearMessages();
@@ -848,26 +871,45 @@ function switchToRunner(id) {
 
 let lastPreview = null; // { sessionPath, messages|null }
 
+function sessionFileQuery(sessionPath) {
+  const raw = String(sessionPath ?? "");
+  const marker = "/.pi/agent/sessions/";
+  const i = raw.indexOf(marker);
+  const relative = i !== -1 ? raw.slice(i + marker.length) : raw.replace(/^\/+/, "");
+  return `path=${encodeURIComponent(relative)}`;
+}
+
 function renderPreviewNow() {
   if (!lastPreview?.messages?.length) return;
+  lifecycleLog("preview:render", { sessionPath: lastPreview.sessionPath, messages: lastPreview.messages.length });
   // no checkpoint markers here: `state` still describes the previous session
   // until get_state answers; the canonical reload adds them right after
   renderTranscript(lastPreview.messages);
 }
 
 async function fetchPreview(sessionPath) {
+  const started = performance.now();
+  lifecycleLog("preview:fetch:start", { sessionPath });
   try {
-    const res = await fetch(`/session-messages?path=${encodeURIComponent(sessionPath)}`);
-    if (!res.ok) return;
+    const res = await fetch(`/session-messages?${sessionFileQuery(sessionPath)}`);
+    if (!res.ok) {
+      lifecycleLog("preview:fetch:not-ok", { sessionPath, status: res.status, ms: Math.round(performance.now() - started) });
+      return;
+    }
     const data = await res.json();
+    lifecycleLog("preview:fetch:done", { sessionPath, messages: data.messages?.length ?? 0, ms: Math.round(performance.now() - started), superseded: lastPreview?.sessionPath !== sessionPath });
     if (lastPreview?.sessionPath !== sessionPath) return; // superseded meanwhile
     lastPreview.messages = data.messages;
     renderPreviewNow();
-  } catch {}
+  } catch (e) {
+    lifecycleLog("preview:fetch:error", { sessionPath, error: e?.message ?? String(e), ms: Math.round(performance.now() - started) });
+  }
 }
 
 /** get-or-spawn a runner for a session file / folder */
 async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
+  const started = performance.now();
+  lifecycleLog("openSessionRunner:start", { sessionPath, dir });
   // kick off the file-based transcript preview in parallel — unless the
   // target session is the one already on screen (don't clobber live state)
   const cur = runnersNow.find((r) => r.id === currentRunner);
@@ -883,6 +925,7 @@ async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
   if (!sessionPath && data.runner?.id) emptySessionRunners.add(data.runner.id);
+  lifecycleLog("openSessionRunner:done", { runner: data.runner?.id, sessionPath: data.runner?.sessionFile, sessionId: data.runner?.sessionId, ms: Math.round(performance.now() - started) });
   return data.runner;
 }
 
@@ -931,6 +974,7 @@ setInterval(() => {
 function connect({ replay = true } = {}) {
   if (!token) { requireToken(); return; }
   if (es) { try { es.close(); } catch {} }
+  const connectStarted = performance.now();
   lastEventAt = Date.now();
   const skipTranscriptGate = currentRunner && emptySessionRunners.has(currentRunner);
   setTranscriptGateRequired(!skipTranscriptGate);
@@ -941,9 +985,11 @@ function connect({ replay = true } = {}) {
   replayDoneSeen = false;
   replayBufferedEvents = [];
   const replayParam = replay ? "1" : "0";
+  lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}&replay=${replayParam}`);
   es.onopen = async () => {
     connected = true;
+    lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
     updateAppSession({ connected });
     updateHeaderState({ stateInfo: "connected" });
     if (skipTranscriptGate) {
@@ -952,11 +998,14 @@ function connect({ replay = true } = {}) {
     }
     if (replaying) setReplaying(true, "canonical");
     try {
+      lifecycleLog("connect:onopen:reloadTranscript:start");
       // Always rebuild from the canonical transcript: the SSE replay buffer
       // re-delivers recent events on reconnect, so rendering them onto the
       // existing DOM would duplicate messages.
       await reloadTranscript();
+      lifecycleLog("connect:onopen:reloadTranscript:done", { ms: Math.round(performance.now() - connectStarted) });
     } catch (e) {
+      lifecycleLog("connect:onopen:reloadTranscript:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - connectStarted) });
       // a failed reload must not wedge the stream in replay mode forever
       setReplaying(false);
       if (String(e.message).includes("unauthorized")) return;
@@ -964,6 +1013,7 @@ function connect({ replay = true } = {}) {
     }
   };
   es.onerror = () => {
+    lifecycleLog("connect:onerror", { ms: Math.round(performance.now() - connectStarted) });
     connected = false;
     updateAppSession({ connected });
     updateHeaderState({ stateInfo: "reconnecting…" });
@@ -1005,7 +1055,10 @@ function setTranscriptGateRequired(value) {
 function isDuplicateSseEvent(msg) {
   const id = msg?._sseId;
   if (!id) return false;
-  if (seenSseIds.has(id)) return true;
+  if (seenSseIds.has(id)) {
+    lifecycleLog("sse:duplicate", { type: msg?.type, sseId: id });
+    return true;
+  }
   seenSseIds.add(id);
   seenSseIdQueue.push(id);
   while (seenSseIdQueue.length > SEEN_SSE_ID_MAX) {
@@ -1017,7 +1070,9 @@ function composerReadyForSend() {
   return connected && (!replaying || !transcriptGateRequired);
 }
 function setReplaying(value, phase = null) {
-  replaying = !!value;
+  const next = !!value;
+  if (replaying !== next || phase) lifecycleLog("setReplaying", { from: replaying, to: next, phase });
+  replaying = next;
   updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
 }
 const REPLAY_GATED_EVENTS = [
@@ -1027,6 +1082,7 @@ const REPLAY_GATED_EVENTS = [
 ];
 
 function flushReplayBufferedEvents(events) {
+  lifecycleLog("replayBuffer:flush", { events: events.length, types: events.map((event) => event.type).slice(0, 20) });
   // If get_messages completed after the live assistant already finished, the
   // canonical render already contains that answer. In that case, dropping the
   // buffered assistant/tool sequence avoids painting a duplicate while still
@@ -1045,6 +1101,9 @@ function flushReplayBufferedEvents(events) {
 }
 
 function handleEvent(msg) {
+  if (["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"].includes(msg.type)) {
+    lifecycleLog("sse:event", { type: msg.type, command: msg.command, sseId: msg._sseId, role: msg.message?.role, runner: msg.runner });
+  }
   // While the SSE replay buffer is being re-delivered, ignore old transcript-
   // rendering events: reloadTranscript() rebuilds the canonical state, so
   // rendering replayed copies would duplicate messages/tool cards. Once the
@@ -1054,6 +1113,7 @@ function handleEvent(msg) {
   // this, a response that finishes during reconnect can be dropped until the
   // user refreshes the page.
   if (replaying && transcriptGateRequired && REPLAY_GATED_EVENTS.includes(msg.type)) {
+    lifecycleLog("sse:gated", { type: msg.type, role: msg.message?.role, replayDoneSeen, buffered: replayBufferedEvents.length });
     if (replayDoneSeen) replayBufferedEvents.push(msg);
     return;
   }
@@ -1295,6 +1355,8 @@ function handleEvent(msg) {
 }
 
 async function reloadTranscript() {
+  const started = performance.now();
+  lifecycleLog("reloadTranscript:start");
   // Kick off both requests in parallel, but apply get_state as soon as it is
   // available. Existing sessions can have a slow transcript replay/resume;
   // the header/composer/session-scoped sidebars should still converge without
@@ -1302,12 +1364,18 @@ async function reloadTranscript() {
   const statePromise = rpc({ type: "get_state" });
   const messagesPromise = rpc({ type: "get_messages" });
   const stateApplied = statePromise.then((s) => {
+    lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null });
     applyState(s);
     return s;
   });
-  const [{ messages }] = await Promise.all([messagesPromise, stateApplied]);
+  const messagesDone = messagesPromise.then((result) => {
+    lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 });
+    return result;
+  });
+  const [{ messages }] = await Promise.all([messagesDone, stateApplied]);
   lastPreview = null; // canonical content from pi supersedes the file preview
   const rendered = renderTranscript(messages); // tail is in the DOM after this call
+  lifecycleLog("reloadTranscript:tail-rendered", { ms: Math.round(performance.now() - started), messages: messages.length });
   // the transcript now shows the right last messages: let live events through
   // (they append below the tail; backfill continues above the viewport)
   setReplaying(false);
@@ -1315,6 +1383,7 @@ async function reloadTranscript() {
   replayBufferedEvents = [];
   flushReplayBufferedEvents(buffered);
   const complete = await rendered;
+  lifecycleLog("reloadTranscript:render-complete", { complete, ms: Math.round(performance.now() - started) });
   // markers and the permalink-focus callback need the FULL transcript in the
   // DOM (their targets may live in a backfilled chunk); skip both if this
   // render was superseded by a newer one meanwhile
@@ -1361,7 +1430,11 @@ function schedulePostSendFileTranscriptSync(expectedUserText) {
         }
       }
       if (sessionFile && runnerId === currentRunner) {
-        const res = await fetch(`/session-messages?path=${encodeURIComponent(sessionFile)}`);
+        const res = await fetch(`/session-messages?${sessionFileQuery(sessionFile)}`);
+        if (!res.ok && res.status >= 400 && res.status < 500) {
+          lifecycleLog("postSendFileSync:session-messages:stop", { status: res.status, sessionFile });
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -1384,8 +1457,16 @@ function schedulePostSendFileTranscriptSync(expectedUserText) {
 let stateRefreshTimer = null;
 function refreshState() {
   clearTimeout(stateRefreshTimer);
+  lifecycleLog("refreshState:scheduled");
   stateRefreshTimer = setTimeout(async () => {
-    try { applyState(await rpc({ type: "get_state" })); } catch {}
+    const started = performance.now();
+    lifecycleLog("refreshState:start");
+    try {
+      applyState(await rpc({ type: "get_state" }));
+      lifecycleLog("refreshState:done", { ms: Math.round(performance.now() - started) });
+    } catch (e) {
+      lifecycleLog("refreshState:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - started) });
+    }
   }, 150);
 }
 
@@ -1828,8 +1909,6 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
     onCancel,
     returnToHublot,
   };
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   updateFilePicker({
     path: "",
     home: "",
@@ -1917,8 +1996,6 @@ async function showFolderBrowser() {
     done: null,
   };
   const finished = new Promise((resolve) => { folderBrowserState.done = resolve; });
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   updateFolderBrowser({
     path: "",
     home: "",
@@ -2049,8 +2126,6 @@ async function showFileExplorer() {
     editPath: "",
     editContent: "",
   };
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   updateFileExplorer({
     mode: "list",
     path: "",
@@ -2248,8 +2323,6 @@ async function showHublots() {
   localStorage.setItem("pi_carousel", "0");
   setCarouselDots();
 
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true, content: "hublotManager" });
   await refreshHublotManager({ loading: true });
 }
@@ -2606,8 +2679,6 @@ async function showSessionPicker() {
 
   const chosen = await new Promise((resolve) => {
     sessionPickerResolve = resolve;
-    $("mBody").innerHTML = "";
-    $("mActions").innerHTML = "";
     updateSessionPicker({
       sessions,
       folders,
@@ -2764,7 +2835,7 @@ async function fetchSessionEntries() {
   const path = state?.sessionFile
     ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
   if (!path) throw new Error("session not saved yet");
-  const res = await fetch(`/session-entries?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`/session-entries?${sessionFileQuery(path)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
   return data.entries ?? [];
@@ -2870,40 +2941,28 @@ const overlay = $("overlay");
 
 function closeModal() {
   closeModalState();
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
 }
 
 setSettingsHandlers({ reload: () => reloadTranscript().catch(() => {}) });
 
 /** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   openModal({ title: "Settings", content: "settings" });
 }
 
 function pickOption(title, options, { searchable = false } = {}) {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   return openOptionPicker(title, options, { searchable });
 }
 
 function promptText(title, placeholder, prefill) {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   return openTextPrompt(title, placeholder, prefill);
 }
 
 function confirmDialog(title, message) {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   return openConfirmPrompt(title, message);
 }
 
 function promptEditor(title, placeholder, prefill) {
-  $("mBody").innerHTML = "";
-  $("mActions").innerHTML = "";
   return openEditorPrompt(title, placeholder, prefill);
 }
 
@@ -3162,21 +3221,28 @@ Object.assign(window, { rpc, refreshState, loadHublots, loadRoutines });
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
 async function boot() {
+  lifecycleLog("boot:start", { routeSessionId: route.sessionId, routeMessageId: route.messageId, storedRunner: currentRunner });
   if (route.sessionId) {
     try {
+      const lookupStarted = performance.now();
+      lifecycleLog("boot:session-lookup:start", { routeSessionId: route.sessionId });
       const res = await fetch(`/session-by-id?id=${encodeURIComponent(route.sessionId)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
+      lifecycleLog("boot:session-lookup:done", { status: res.status, sessionPath: data.session?.path, cwd: data.session?.cwd, ms: Math.round(performance.now() - lookupStarted) });
       const r = await openSessionRunner({ sessionPath: data.session.path, dir: data.session.cwd || null });
       setRunner(r.id);
+      lifecycleLog("boot:set-runner", { runner: r.id });
       if (route.messageId) {
         const mid = route.messageId;
         afterTranscript = () => focusEntryById(mid);
       }
     } catch (e) {
+      lifecycleLog("boot:error", { error: e?.message ?? String(e) });
       toast(`could not open linked session: ${e.message}`, "warning");
     }
   }
+  lifecycleLog("boot:connect");
   connect();
 }
 

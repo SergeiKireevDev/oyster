@@ -242,11 +242,35 @@ export function init(state) {
     json(res, 403, { error: `path outside the allowed roots: ${p}` });
   }
 
-  /** validate a ?path=/body path that must be a session .jsonl; null if not */
+  /** validate a session file reference. Accepts either:
+   *  - absolute legacy path under SESSIONS_ROOT
+   *  - root-relative path like "--workspace--/2026-...jsonl" (preferred)
+   *  null if invalid/missing. */
   function sessionFileParam(raw) {
-    const target = resolve(String(raw ?? ""));
-    if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) return null;
+    const value = String(raw ?? "").trim();
+    if (!value || !value.endsWith(".jsonl")) return null;
+    const target = value.startsWith("/") ? resolve(value) : resolve(SESSIONS_ROOT, value);
+    if (!target.startsWith(SESSIONS_ROOT + "/") || !existsSync(target)) return null;
     return target;
+  }
+
+  /** Back-compat: resolve a basename-only ?file=... by scanning session folders. */
+  function sessionFileNameParam(raw) {
+    const file = String(raw ?? "").trim();
+    if (!file || file !== basename(file) || !file.endsWith(".jsonl")) return null;
+    try {
+      for (const folder of readdirSync(SESSIONS_ROOT)) {
+        const dir = join(SESSIONS_ROOT, folder);
+        try { if (!statSync(dir).isDirectory()) continue; } catch { continue; }
+        const target = join(dir, file);
+        if (existsSync(target)) return target;
+      }
+    } catch {}
+    return null;
+  }
+
+  function sessionFileFromSearch(url) {
+    return sessionFileParam(url.searchParams.get("path")) || sessionFileNameParam(url.searchParams.get("file"));
   }
 
   // ---------------------------------------------------------------- http helpers
@@ -560,9 +584,9 @@ export function init(state) {
     },
 
     "GET /session-entries": (req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
+      const target = sessionFileFromSearch(url);
       if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
+        json(res, 404, { error: `session file not found` });
         return;
       }
       try {
@@ -573,9 +597,9 @@ export function init(state) {
     },
 
     "GET /session-messages": (req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
+      const target = sessionFileFromSearch(url);
       if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
+        json(res, 404, { error: `session file not found` });
         return;
       }
       try {

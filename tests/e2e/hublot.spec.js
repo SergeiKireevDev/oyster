@@ -15,6 +15,28 @@ import { ensureContainer, teardownContainer } from "./lib/reset.js";
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
+function workspaceMarkerName() {
+  return `e2e-file-explorer-${Date.now()}.txt`;
+}
+
+async function explorerFileNames(page) {
+  return page.locator("#mBody .m-option.file").evaluateAll((els) =>
+    els.map((el) => (el.getAttribute("title") || el.textContent || "").split(/[\\/]/).pop().trim()).filter(Boolean)
+  );
+}
+
+async function expectFileExplorerPopulated(page, markerName) {
+  await expect(page.locator("#overlay")).toHaveClass(/open/, { timeout: 10000 });
+  await expect(page.locator("#mTitle")).toHaveText("📁 File explorer", { timeout: 10000 });
+  await expect.poll(
+    async () => page.locator("#mBody").textContent().catch(() => ""),
+    { timeout: 15000, message: "file explorer body to list the workspace marker" }
+  ).toContain(markerName);
+  const names = await explorerFileNames(page);
+  expect(names).toContain(markerName);
+  return names;
+}
+
 function installFakeCloudflared() {
   // Make the tunnel layer deterministic: this spec tests pi-lot-ui's hublot UI,
   // session binding, background agent, and close flow. Relying on Cloudflare's
@@ -44,14 +66,38 @@ async function body(page, { mobile = false } = {}) {
     timeout: 30000, label: "a session id",
   });
 
-  // open the Hublots modal via the sidebar "+" and fill the New hublot form.
-  // On mobile the sidebar is a slide-over drawer toggled by the header chip.
+  const markerName = workspaceMarkerName();
+  const saved = await api("POST", "/file-save", {
+    path: `/workspace/${markerName}`,
+    content: "file explorer e2e marker\n",
+  });
+  expect(saved.status).toBe(200);
+
+  // On mobile the hublots sidebar is a slide-over drawer toggled by the header chip.
   if (mobile) {
     await page.click("#hublotChip");
     await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
   }
+
+  // The built-in file explorer should be available directly from the sidebar
+  // and should list the current workspace contents.
+  await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
+  const sidebarFiles = await expectFileExplorerPopulated(page, markerName);
+  await page.locator("#mActions .chip", { hasText: "Close" }).click();
+
+  // The same built-in file explorer is also exposed inside the Hublots manager modal.
+  // Verify it opens and is populated with the same workspace file list.
+  if (mobile) await page.evaluate(() => document.getElementById("hublots")?.classList.add("open"));
   await page.click("#hublotAdd");
   await expect(page.locator("#overlay")).toHaveClass(/open/);
+  await expect(page.locator("#mTitle")).toHaveText(/Hublots/);
+  await page.getByRole("button", { name: /File explorer/ }).click();
+  const modalFiles = await expectFileExplorerPopulated(page, markerName);
+  expect(new Set(modalFiles)).toEqual(new Set(sidebarFiles));
+  await page.locator("#mActions .chip", { hasText: "← Hublots" }).click();
+  await expect(page.locator("#mTitle")).toHaveText(/Hublots/);
+
+  // Fill the New hublot form from the same modal.
   const desc = page.locator('#mBody textarea');
   await desc.fill(brief);
   await page.getByRole("button", { name: "Open hublot" }).click();

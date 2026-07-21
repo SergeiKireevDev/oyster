@@ -1,8 +1,9 @@
 <script>
-  let { onCheckpoint = () => {} } = $props();
+  let { onCheckpoint = () => {}, busy = false } = $props();
 </script>
 
 <span
+  class:busy
   class="checkpoint"
   title="checkpoint — commit all workdir changes"
   role="button"

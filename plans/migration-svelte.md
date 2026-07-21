@@ -184,6 +184,9 @@ After several migrations:
 - ✅ Removed stale passive transcript store and simplified `Transcript.svelte` to the preserved `#messages` mount point.
 - ✅ Removed stale legacy header/composer state updates now owned by Svelte stores.
 - ✅ Re-ran stale reference searches for removed conversation tree and bridge symbols.
+- ✅ Removed remaining direct `#mBody`/`#mActions` clearing from Svelte-owned modal transitions (checkpoint picker, file/folder/session pickers, settings, prompts, confirmation). This prevents imperative cleanup from deleting Svelte modal content during a transition.
+- ✅ Moved the latest-message checkpoint iceberg’s placement and busy rendering into `checkpointMarker` store state and Svelte transcript components. Legacy retains only checkpoint API/model-picker orchestration.
+- ✅ Moved per-message checkpoint frozen styling, rollback arrows, and rollback busy rendering into `checkpointRestores` store state and Svelte transcript components. Legacy retains checkpoint lookup/alignment and rollback API orchestration.
 
 Keep doing this periodically after further migrations:
 
@@ -196,19 +199,16 @@ npm test
 
 ### 13. Validation Cadence
 
-After every extraction:
+After every migration extraction or behavior change, run the full validation suite:
 
 ```sh
 npm run build
 npm test
-```
-
-After behavior-affecting changes:
-
-```sh
 docker build -t pi-lot-ui .
 cd tests/e2e && npm test
 ```
+
+Targeted e2e runs are useful while iterating, but do not replace the full e2e suite before considering a step complete.
 
 For visual/interactive changes, optionally run:
 
@@ -218,8 +218,9 @@ cd tests/e2e && E2E_VIDEO=1 npm test
 
 ## Recommended Next Target
 
-Migrate the Session Picker, phase 1 only:
+Reduce the remaining imperative transcript mounting surface:
 
-- Extract plain session list rendering into Svelte.
-- Keep search, stop/delete, and switch logic in `legacy.js` initially.
-- Validate before moving on to active/inactive grouping or search results.
+- Replace direct `mount()`/`unmount()` message-component ownership with a transcript store and keyed `Transcript.svelte` rendering.
+- Keep SSE, RPC, chunk scheduling, and scroll correction in `legacy.js` initially.
+- Preserve `#messages`, transcript selectors, tail-first backfill, and existing e2e behavior.
+- Validate each small extraction before proceeding.
