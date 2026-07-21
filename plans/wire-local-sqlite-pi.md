@@ -168,14 +168,14 @@ SQLite-capable pi rather than accidentally falling back to version `0.80.3`.
   assumptions outside the JSONL adapter and compatibility boundaries, bare
   `sessions.sqlite` identity comparisons, direct SQLite workflow mutations,
   and pi spawns outside the centralized launcher.
-- [ ] Run the complete validation matrix below, perform a manual SQLite-to-JSONL
+- [x] Run the complete validation matrix below, perform a manual SQLite-to-JSONL
   toggle proving both stores remain intact, update README architecture and
   endpoint documentation, and check this item only after all results pass.
 
 ```sh
 npm run build
 npm test
-docker build --build-context pi-source=/home/ubuntu/pi-coding-agent -t pi-lot-ui .
+docker build -f Dockerfile.local-pi --build-context pi-source=/home/ubuntu/pi-coding-agent -t pi-lot-ui:sqlite .
 cd tests/e2e && npm test
 ```
 

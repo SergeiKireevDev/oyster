@@ -3,15 +3,31 @@
 A small web UI for driving the [pi coding agent](https://github.com/badlogic/pi-mono) remotely — from a phone or any browser — through a tunnel.
 
 ```
-browser ──HTTP/SSE──> server.mjs ──stdin/stdout JSONL──> pi --mode rpc (one per open session)
+browser ──HTTP/SSE──> server.mjs ──stdin/stdout RPC──> pi --mode rpc (one per open session)
+                              │
+                              └── session catalog ──> SQLite or JSONL
 ```
 
-The stable core (`server.mjs`) owns everything that must survive a hot
-reload (socket, SSE clients, child processes); `app.mjs` is the router and
-is re-imported on change, pulling in the domain modules with cache-busted
-imports: `runners.mjs` (pi processes), `sessions.mjs` (.jsonl parsing,
-mtime-cached), `checkpoints.mjs` (git checkpoints/rollback),
-`tunnels.mjs` (cloudflared + hublot agents), `routines.mjs` (scripts).
+### Runtime and session architecture
+
+The stable core (`server.mjs`) validates the configured pi executable and
+persistence store once, then owns everything that must survive a hot reload:
+the socket, SSE clients, catalog lifecycle, centralized pi process launcher,
+and child processes. `app.mjs` is the replaceable router and composes the HTTP
+routes with `runners.mjs`, `checkpoints.mjs`, `tunnels.mjs`, and `routines.mjs`.
+
+`sessions.mjs` selects a backend-neutral catalog. SQLite discovery and
+transcript reads use request-scoped, read-only `node:sqlite` handles in
+`sessions/sqliteCatalog.mjs`; JSONL parsing and its mtime/LRU cache live only in
+`sessions/jsonlCatalog.mjs`. Workflow mutations are never issued as SQL by this
+server: SQLite delete and exact-entry fork delegate to repository operations
+shipped with the configured pi CLI.
+
+A persisted session is represented internally by `{ backend, id, storagePath }`
+and serialized as an opaque `ps1_…` session key. For SQLite, `storagePath` is
+the shared database and `id` distinguishes sessions; the database path alone
+is never an identity. `sessionFile` and path query parameters exist only as
+JSONL compatibility fields for older links and clients.
 
 ### Hot reload scope
 
@@ -24,7 +40,7 @@ new ESM cache entries, so this mechanism is not intended as a production
 rollout strategy: production deployments should replace the Node process to
 bound module-cache growth and guarantee a clean application version.
 
-- **Zero dependencies** — plain Node ≥ 18, no `npm install`. Tests: `npm test` (node --test).
+- **Minimal runtime** — Node ≥ 22.19 is required for SQLite (`node:sqlite`); no npm SQLite driver is used. Tests: `npm test`.
 - **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
 - **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.
 
@@ -108,7 +124,16 @@ global `pi` binary silently.
 | `GET /health` | no | liveness plus active pi executable/backend/database diagnostics (never tokens or credentials) |
 | `GET /events` | yes | SSE stream of pi's stdout (events + responses), with replay of recent lines |
 | `POST /rpc` | yes | JSON body forwarded verbatim to pi's stdin |
-| `POST /restart` | yes | kill and respawn the pi process |
+| `POST /restart` | yes | kill and respawn one selected runner (`?runner=…`) |
+| `GET /runners` / `DELETE /runners?id=…` | yes | list runners or stop one runner |
+| `POST /open-session` | yes | create/resume a runner using `{ "sessionKey": "ps1_…", "dir": "…" }`; legacy `sessionPath` remains JSONL-only compatibility input |
+| `GET /sessions` | yes | list catalog summaries with canonical `sessionKey` and `sessionRef`; optional `dir` scopes the catalog |
+| `GET /session-by-id` | yes | resolve a saved session by `key=ps1_…` (legacy `id`/path lookup is accepted for JSONL) |
+| `GET /session-entries` / `GET /session-messages` | yes | read durable active-branch entries/messages selected by `key=ps1_…` |
+| `GET /session-folders` / `GET /search` | yes | discover workdirs and search durable sessions; search results carry opaque session keys |
+| `DELETE /session?key=ps1_…` | yes | delete through the selected backend capability; SQLite never unlinks the shared database |
+| `GET /checkpoints` / `GET /checkpoint-tree` | yes | read checkpoint state using an opaque session key |
+| `POST /checkpoint` / `POST /rollback` | yes | record or restore a checkpoint; rollback requires the backend's exact-entry fork capability |
 | `GET /tunnels` | yes | list live tunnels spawned by this server |
 | `POST /tunnels` | yes | open a tunnel for a local port: `{ "port": 3000, "label": "…" }` → replies with the public URL |
 | `DELETE /tunnels?id=…` | yes | close a tunnel |

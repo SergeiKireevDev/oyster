@@ -12,7 +12,7 @@ no network model calls, fully deterministic**.
 | `routine.spec.js` | Start a session → create a **dummy routine** in the store → ▶ run it from the sidebar to completion → 🧹 tear it down. |
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; use a **":" prompt command** (command palette) to open the file picker. |
-| `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container while retaining its isolated agent volume, then verify picker, search, transcript resume, and the absence of session JSONL files. |
+| `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container on its isolated agent volume, verify picker/search/transcript resume and no JSONL files, then toggle SQLite → JSONL → SQLite and prove both stores remain intact. |
 
 ## Prerequisites
 

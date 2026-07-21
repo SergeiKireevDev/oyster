@@ -5,7 +5,7 @@ import { ensureContainer, replaceContainer, teardownContainer } from "./lib/rese
 test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
 test.afterEach(() => { teardownContainer(); });
 
-test("SQLite conversation survives container replacement on the agent volume", async ({ page }) => {
+test("SQLite conversation survives replacement and an intact JSONL rollback toggle", async ({ page }) => {
   const token = `SQLITE-VOLUME-${Date.now()}`;
   await login(page);
   await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${token}.`);
@@ -21,6 +21,7 @@ test("SQLite conversation survives container replacement on the agent volume", a
   expect(persisted.sessionKey).toBeTruthy();
   expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
   expect(dexec("test -s /root/.pi/agent/sessions.sqlite && echo present")).toBe("present");
+  const sqliteHash = dexec("sha256sum /root/.pi/agent/sessions.sqlite | cut -d' ' -f1");
 
   await replaceContainer();
   await login(page);
@@ -47,4 +48,22 @@ test("SQLite conversation survives container replacement on the agent volume", a
     label: "resumed SQLite session after search hit",
   });
   expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
+
+  // Toggle the same volume to the explicit release/JSONL rollback image. A
+  // JSONL conversation must not rewrite the dormant SQLite database.
+  await replaceContainer({ sqlite: false });
+  await login(page);
+  const jsonlToken = `JSONL-ROLLBACK-${Date.now()}`;
+  await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${jsonlToken}.`);
+  expect(dexec("sha256sum /root/.pi/agent/sessions.sqlite | cut -d' ' -f1")).toBe(sqliteHash);
+  const jsonlManifest = dexec("find /root/.pi/agent -type f -name '*.jsonl' -exec sha256sum {} + | sort");
+  expect(jsonlManifest).toContain(".jsonl");
+
+  // Toggle back to SQLite: the original database session and the independent
+  // JSONL rollback data must both still be present and readable/intact.
+  await replaceContainer({ sqlite: true });
+  await login(page);
+  const restored = await api("GET", "/sessions?dir=/workspace");
+  expect(restored.json.sessions.some((session) => session.id === sessionId)).toBe(true);
+  expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -exec sha256sum {} + | sort")).toBe(jsonlManifest);
 });

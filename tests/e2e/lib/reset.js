@@ -136,9 +136,12 @@ export async function ensureContainer({ sqlite = false } = {}) {
   await waitUntilReachable();
 }
 
-/** Replace the current container while retaining its SQLite agent volume. */
-export async function replaceContainer() {
+/** Replace the current container while retaining its agent volume. */
+export async function replaceContainer({ sqlite = selectedStore === "sqlite" } = {}) {
   if (!container || !agentVolume) throw new Error("e2e container has not been allocated");
+  selectedImage = sqlite ? SQLITE_IMAGE : DEFAULT_IMAGE;
+  selectedStore = sqlite ? "sqlite" : "jsonl";
+  if (!imageExists(selectedImage)) throw new Error(`e2e image ${selectedImage} is missing`);
   try { sh(`docker rm -f ${container}`); } catch {}
   startContainer();
   await waitUntilReachable();
