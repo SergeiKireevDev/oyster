@@ -426,9 +426,68 @@ export function closeTunnel(state, id) {
   return closedInfo;
 }
 
-/** Kill every tunnel (server shutdown). */
+/** Legacy/manual bulk close: changes desired state to closed. */
 export function closeAllTunnels(state) {
   for (const row of hublotRepository(state).list()) if (row.status !== "closed") closeTunnel(state, row.id);
+}
+
+/** Graceful server shutdown: stop owned processes but retain desired-open rows for recovery. */
+export async function shutdownHublots(state, {
+  termTimeoutMs = 3_000,
+  killTimeoutMs = 1_000,
+  pollIntervalMs = 25,
+  verifyIdentity = verifyPersistedProcessIdentity,
+  signalProcess = (pid, signal) => process.kill(pid, signal),
+  clock = () => Date.now(),
+  sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+} = {}) {
+  const repository = hublotRepository(state);
+  const targets = [];
+  for (const row of repository.list().filter((entry) => entry.desired_state === "open")) {
+    const error = "server stopped; recovery will resume the desired-open hublot on restart";
+    if (row.status !== "interrupted" || row.public_url !== null || row.last_error !== error) {
+      recordHublotTransition(state, row.id, "interrupted", {
+        desiredState: "open", publicUrl: null, lastError: error,
+      });
+    }
+    for (const processRow of repository.listProcesses(row.id)) {
+      if (processRow.ended_at || !["running", "starting"].includes(processRow.status)) continue;
+      if (processRow.role === "service" && row.service_kind !== "agent_managed") continue;
+      if (!verifyIdentity(processRow)) continue;
+      targets.push(processRow);
+    }
+  }
+
+  const live = () => targets.filter((processRow) => verifyIdentity(processRow));
+  const signalAll = (signal) => {
+    for (const processRow of live()) {
+      try { signalProcess(processRow.pid, signal); } catch (error) { if (error?.code !== "ESRCH") throw error; }
+    }
+  };
+  const awaitExit = async (timeoutMs) => {
+    const deadline = clock() + timeoutMs;
+    while (live().length && clock() < deadline) await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - clock())));
+  };
+
+  signalAll("SIGTERM");
+  await awaitExit(termTimeoutMs);
+  const escalated = live().length;
+  if (escalated) {
+    signalAll("SIGKILL");
+    await awaitExit(killTimeoutMs);
+  }
+  const remaining = live();
+  const stoppedAt = new Date().toISOString();
+  for (const processRow of targets) {
+    if (remaining.some((entry) => entry.id === processRow.id)) continue;
+    if (repository.findProcess(processRow.id)?.ended_at) continue;
+    updateHublotProcessMetadata(state, processRow.id, {
+      status: "ended", observed_at: stoppedAt, ended_at: stoppedAt,
+      signal: "shutdown", exit_code: null,
+    });
+    hublotProcessHandles(state).delete(processRow.id);
+  }
+  return Object.freeze({ targeted: targets.length, escalated, remaining: remaining.length });
 }
 
 // ---------------------------------------------------------------- hublot agents

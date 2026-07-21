@@ -291,8 +291,10 @@ function shutdown() {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
     server.close();
+    // Hublot cleanup is internally bounded and must finish before the store closes;
+    // its exit callbacks persist final process metadata needed for restart recovery.
+    await Promise.resolve().then(() => app.stopTunnels?.());
     const cleanup = Promise.allSettled([
-      Promise.resolve().then(() => app.stopTunnels?.()),
       Promise.resolve().then(() => app.stopRoutines?.()),
       Promise.resolve().then(() => app.stopPi()),
     ]);

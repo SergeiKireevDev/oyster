@@ -12,6 +12,6 @@ test("app composes resource factories without tunnel or routine route bodies", (
 });
 
 test("composed lifecycle API retains stable-core resource shutdown hooks", () => {
-  assert.match(source, /stopTunnels: \(\) => \{ state\.hublotSupervisor\?\.stop\(\); return closeAllTunnels\(state\); \}/);
+  assert.match(source, /stopTunnels: \(\) => \{ state\.hublotSupervisor\?\.stop\(\); return shutdownHublots\(state\); \}/);
   assert.match(source, /stopRoutines: \(\) => stopAllRoutines\(state\)/);
 });

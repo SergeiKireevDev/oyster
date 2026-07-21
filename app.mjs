@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, shutdownHublots, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir } =
     await import(bust("routines.mjs"));
@@ -192,7 +192,7 @@ export async function init(state) {
 
   return {
     handleRequest, startPi, stopPi,
-    stopTunnels: () => { state.hublotSupervisor?.stop(); return closeAllTunnels(state); },
+    stopTunnels: () => { state.hublotSupervisor?.stop(); return shutdownHublots(state); },
     stopRoutines: () => stopAllRoutines(state),
   };
 }
