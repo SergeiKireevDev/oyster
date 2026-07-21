@@ -126,7 +126,7 @@ route factories with confinement tests.
 
 ## 7. Extract Tunnel and Routine Routes
 
-- [ ] Move all tunnel list/create/rebind/delete routes into
+- [x] Move all tunnel list/create/rebind/delete routes into
   `http/routes/tunnelRoutes.mjs`. Preserve session binding, state-owned process
   handles, hublot-agent spawning, and event broadcasts with lifecycle tests.
 - [ ] Move routine list and action routes into `http/routes/routineRoutes.mjs`.
