@@ -54,6 +54,7 @@ COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs ses
 COPY public ./public
 COPY http ./http
 COPY sessions ./sessions
+COPY persistence ./persistence
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build \

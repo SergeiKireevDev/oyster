@@ -7,6 +7,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
+async function copyStableServer(root) {
+  await mkdir(join(root, "persistence"), { recursive: true });
+  await Promise.all([
+    copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs")),
+    copyFile(new URL("../persistence/appStore.mjs", import.meta.url), join(root, "persistence", "appStore.mjs")),
+  ]);
+}
+
+function serverEnv(root) {
+  return { ...process.env, PI_UI_DB_PATH: join(root, "pi-lot-ui.sqlite") };
+}
+
 async function availablePort() {
   const server = createServer();
   server.listen(0, "127.0.0.1");
@@ -96,12 +108,13 @@ async function nextServerEvent(reader) {
 test("the stable server atomically replaces its active application handler", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-"));
   const port = await availablePort();
-  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await copyStableServer(root);
   await writeFile(join(root, "app.mjs"), fixture("before"));
 
   const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
+    env: serverEnv(root),
   });
   t.after(async () => {
     if (child.exitCode === null) {
@@ -125,12 +138,13 @@ test("the stable server atomically replaces its active application handler", asy
 test("an open SSE response survives an application reload and receives the state-owned broadcast", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-sse-"));
   const port = await availablePort();
-  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await copyStableServer(root);
   await writeFile(join(root, "app.mjs"), fixture("before"));
 
   const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
+    env: serverEnv(root),
   });
   const eventsAbort = new AbortController();
   t.after(async () => {
@@ -160,7 +174,7 @@ test("editing a route factory reloads its response without disconnecting SSE", a
   const root = await mkdtemp(join(tmpdir(), "pi-ui-route-reload-"));
   const port = await availablePort();
   await mkdir(join(root, "http", "routes"), { recursive: true });
-  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await copyStableServer(root);
   await writeFile(join(root, "http", "routes", "value.mjs"), 'export const value = "before";\n');
   await writeFile(join(root, "app.mjs"), `
 import { statSync } from "node:fs";
@@ -181,7 +195,7 @@ export async function init(state) {
     startPi() {}, stopPi() {}, stopTunnels() {}, stopRoutines() {},
   };
 }`);
-  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root) });
   const abort = new AbortController();
   t.after(async () => { abort.abort(); if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); } await rm(root, { recursive: true, force: true }); });
   await waitForOutput(child, "listening on");
@@ -201,12 +215,13 @@ export async function init(state) {
 test("an invalid application replacement keeps the active handler and emits a failure event", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-failure-"));
   const port = await availablePort();
-  await copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs"));
+  await copyStableServer(root);
   await writeFile(join(root, "app.mjs"), fixture("working"));
 
   const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
+    env: serverEnv(root),
   });
   const eventsAbort = new AbortController();
   t.after(async () => {

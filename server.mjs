@@ -23,6 +23,7 @@ import http from "node:http";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { openAppStore } from "./persistence/appStore.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -136,8 +137,13 @@ if (process.argv.includes("--check-config")) {
 // ---------------------------------------------------------------- shared state
 // Everything the hot-reloaded module needs to persist across reloads.
 
+// Open exactly once in the stable core. Hot-reloaded app modules receive this
+// same service through state rather than creating their own connections.
+const appStore = openAppStore({ databasePath: config.PI_UI_DB_PATH });
+
 const state = {
   config,
+  appStore,
   /** cwd for the pi process (changed via POST /workdir) */
   currentDir: config.PI_DIR,
   /** @type {Map<string, object>} live tunnels (id -> entry with proc handle) */
@@ -268,6 +274,7 @@ function shutdown() {
   app.stopTunnels?.();
   app.stopRoutines?.();
   app.stopPi();
+  state.appStore.close();
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
