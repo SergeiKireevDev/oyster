@@ -2146,5 +2146,6 @@ export function teardownLegacyRuntime() {
   eventStream.close();
   es = null;
   teardownReconnectWatchdog();
+  carouselEventRegistration.detach();
   connectionState.lost();
 }
