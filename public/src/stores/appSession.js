@@ -7,6 +7,8 @@ export const appSession = writable({
   workdir: null,
   busy: false,
   connected: false,
+  replayingTranscript: false,
+  transcriptLoadPhase: null,
   titleOverride: null,
 });
 

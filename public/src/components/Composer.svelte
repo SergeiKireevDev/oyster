@@ -18,11 +18,12 @@
     <textarea
       id="input"
       rows="1"
-      placeholder="message (type : for commands)"
+      placeholder={$composerUi.placeholder}
+      disabled={$composerUi.inputDisabled}
       oninput={handleInput}
       onkeydown={(event) => runComposerAction("keydown", event)}
     ></textarea>
-    <button class="btn" id="sendBtn" hidden={$composerUi.sendHidden} onclick={() => runComposerAction("send")}>{$composerUi.sendText}</button>
+    <button class="btn" id="sendBtn" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled} onclick={() => runComposerAction("send")}>{$composerUi.sendText}</button>
     <button class="btn stop" id="stopBtn" hidden={$composerUi.stopHidden} onclick={() => runComposerAction("abort")}>Stop</button>
   </div>
   <div id="statusbar">

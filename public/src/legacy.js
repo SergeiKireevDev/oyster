@@ -925,7 +925,7 @@ function connect() {
   if (!token) { requireToken(); return; }
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
-  replaying = true;
+  setReplaying(true, "replay");
   replayDoneSeen = false;
   replayBufferedEvents = [];
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
@@ -940,7 +940,7 @@ function connect() {
       await reloadTranscript();
     } catch (e) {
       // a failed reload must not wedge the stream in replay mode forever
-      replaying = false;
+      setReplaying(false);
       if (String(e.message).includes("unauthorized")) return;
       toast(`init failed: ${e.message}`, "error");
     }
@@ -973,6 +973,11 @@ function connect() {
 let replaying = true;
 let replayDoneSeen = false;
 let replayBufferedEvents = [];
+updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay" });
+function setReplaying(value, phase = null) {
+  replaying = !!value;
+  updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
+}
 const REPLAY_GATED_EVENTS = [
   "message_start", "message_update", "message_end",
   "tool_execution_start", "tool_execution_update", "tool_execution_end",
@@ -1023,6 +1028,7 @@ function handleEvent(msg) {
 
     case "replay_done":
       replayDoneSeen = true;
+      if (replaying) setReplaying(true, "canonical");
       // NOTE: `replaying` stays true here — only the canonical transcript
       // render (reloadTranscript) opens the live-event gate
       if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
@@ -1055,6 +1061,11 @@ function handleEvent(msg) {
       setBusy(false);
       liveAssistant = null;
       refreshState();
+      // Belt-and-suspenders consistency check: if any message delta/end was
+      // missed by EventSource or by the reconnect replay gate, the canonical
+      // transcript still has the final assistant turn. Sync shortly after the
+      // run finishes so the user does not need to refresh to see the answer.
+      schedulePostAgentTranscriptSync();
       return;
 
     case "message_start": {
@@ -1253,7 +1264,7 @@ async function reloadTranscript() {
   const rendered = renderTranscript(messages); // tail is in the DOM after this call
   // the transcript now shows the right last messages: let live events through
   // (they append below the tail; backfill continues above the viewport)
-  replaying = false;
+  setReplaying(false);
   const buffered = replayBufferedEvents;
   replayBufferedEvents = [];
   flushReplayBufferedEvents(buffered);
@@ -1268,6 +1279,40 @@ async function reloadTranscript() {
   const cb = afterTranscript;
   afterTranscript = null;
   cb?.();
+}
+
+let postAgentTranscriptSyncTimer = null;
+function syncTranscriptSoon(label, delay = 250) {
+  return setTimeout(() => {
+    if (replaying || !currentRunner) {
+      syncTranscriptSoon(label, 500);
+      return;
+    }
+    reloadTranscript().catch((e) => {
+      if (!String(e.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, e);
+    });
+  }, delay);
+}
+
+function schedulePostAgentTranscriptSync() {
+  clearTimeout(postAgentTranscriptSyncTimer);
+  postAgentTranscriptSyncTimer = syncTranscriptSoon("post-agent", 250);
+}
+
+let postSendSyncGeneration = 0;
+function schedulePostSendTranscriptSync() {
+  const generation = ++postSendSyncGeneration;
+  for (const delay of [900, 2500, 6000]) {
+    setTimeout(() => {
+      if (generation !== postSendSyncGeneration || liveAssistant) return;
+      // This covers the very-new-session race where the prompt is sent while
+      // the initial EventSource replay/reload gate is still active. In that
+      // window, a fast response ("hello") can start and end before replay_done,
+      // so no live events and no agent_end fallback are observed. A few cheap
+      // canonical syncs converge the transcript without waiting for a refresh.
+      syncTranscriptSoon("post-send", 0);
+    }, delay);
+  }
 }
 
 let stateRefreshTimer = null;
@@ -1369,7 +1414,7 @@ function promptRpcCommand(text) {
 
 async function send() {
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || replaying || !connected) return;
   // guard against typos like "/goal": an unknown slash command is not
   // expanded by pi — it goes to the model as plain text, which can kick off
   // a long unwanted agent run
@@ -1394,6 +1439,7 @@ async function send() {
   localEchoes.push(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
+    schedulePostSendTranscriptSync();
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
@@ -1879,6 +1925,7 @@ async function sendAgentMessage(text) {
   localEchoes.push(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
+    schedulePostSendTranscriptSync();
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
