@@ -31,6 +31,7 @@ import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { listHublots, removeHublot } from "./lib/hublotActions.js";
+import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2401,9 +2402,7 @@ async function loadRoutines() {
   routineScopeAll.set(tunnelScopeAll);
   routineCurrentSessionId.set(sessionAtStart);
   try {
-    const res = await fetch(`/routines`);
-    const data = await res.json();
-    if (res.ok) routinesNow = data.routines ?? [];
+    routinesNow = await listRoutines(fetch);
   } catch { /* sidebar is best-effort */ }
   // Session switches can issue overlapping sidebar refreshes; ignore stale
   // responses so the previous session's routines don't overwrite the current view.
@@ -2413,14 +2412,8 @@ async function loadRoutines() {
 
 async function routineAction(name, action) {
   try {
-    const res = await fetch(`/routines`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      // start binds the routine to the current session (and its workdir)
-      body: JSON.stringify({ name, action, sessionId: state?.sessionId ?? null }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) toast(data.error || `routine ${action} failed (${res.status})`, "error");
+    // start binds the routine to the current session (and its workdir)
+    await runRoutine(fetch, { name, action, sessionId: state?.sessionId ?? null });
   } catch (e) {
     toast(`routine ${action} failed: ${e.message}`, "error");
   }
