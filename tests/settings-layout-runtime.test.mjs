@@ -1,4 +1,34 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSettingsLayoutRuntime } from "../public/src/features/settings/createSettingsLayoutRuntime.js";
-test("settings/layout runtime tears down feature factories", () => { let n=0; const r=createSettingsLayoutRuntime({createSettings:()=>({teardown:()=>n++}),createLayout:()=>({teardown:()=>n++})}); r.teardown(); assert.equal(n,2); });
+
+test("settings/layout runtime wires settings, extension UI, carousel, and teardown", () => {
+  const listeners = [];
+  const storage = new Map();
+  const runtime = createSettingsLayoutRuntime({
+    rpc: async () => ({}),
+    extensionUiAdapters: { select: async () => null, input: async () => null, confirm: async () => false, showModal() {}, closeModal() {}, setTitle() {} },
+    refreshState: async () => {},
+    toast() {},
+    getState: () => ({}),
+    reloadTranscript: async () => {},
+    documentTarget: { addEventListener: (...args) => listeners.push(["add", ...args]), removeEventListener: (...args) => listeners.push(["remove", ...args]) },
+    windowTarget: { matchMedia: () => ({ matches: true }), addEventListener: (...args) => listeners.push(["add", ...args]), removeEventListener: (...args) => listeners.push(["remove", ...args]) },
+    storage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    setCarouselPage() {},
+    loadScopedResources() {},
+    loadCheckpointTree() {},
+    getRunners: () => [],
+    getCurrentRunner: () => null,
+    getWorkdir: () => "/tmp",
+    switchRunner() {},
+    hublotsEl: { classList: { contains: () => false, toggle() {} } },
+    treebarEl: { classList: { contains: () => false, toggle() {} } },
+  });
+
+  assert.equal(typeof runtime.settings.chooseModel, "function");
+  assert.equal(typeof runtime.handleExtensionUI, "function");
+  assert.equal(typeof runtime.carousel.apply, "function");
+  assert.equal(typeof runtime.events.detach, "function");
+  runtime.teardown();
+});

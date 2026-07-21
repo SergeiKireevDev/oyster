@@ -366,7 +366,7 @@ verified goal loop can match it exactly.
 - [x] Add focused managed-connection construction reconnect and teardown tests and verify the event-stream extraction.
 - [x] Extract the hublot manager and sidebar construction block into `features/hublots/` and replace it with one factory call.
 - [x] Extract the routine sidebar construction block into `features/routines/` and replace it with one factory call.
-- [ ] Extract settings extension UI and carousel construction blocks into feature factories and replace each with one factory call.
+- [x] Extract settings extension UI and carousel construction blocks into feature factories and replace each with one factory call.
 - [ ] Extract file picker folder browser and explorer construction blocks into `features/files/` and replace them with one factory call.
 - [ ] Extract session picker and search construction blocks into `features/sessions/` and replace them with one factory call.
 - [ ] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.

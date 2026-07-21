@@ -79,6 +79,7 @@ import { configureFilePickerActions } from "../features/files/filePickerActions.
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "../lib/routineController.js";
 import { configureRoutineActions } from "../features/routines/routineActions.js";
+import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
 import { createSettingsController } from "../lib/settingsController.js";
 import { configureSettingsActions } from "../features/settings/settingsActions.js";
 import { configureHeaderActions } from "../features/settings/headerActions.js";
@@ -1498,16 +1499,6 @@ async function showSessionPicker() {
   }
 }
 
-const settingsController = createSettingsController({
-  rpc,
-  pickOption: extensionUiAdapters.select,
-  refreshState: () => getSessionRuntime().refreshState(),
-  toast: addToast,
-  getState: () => state,
-});
-const chooseModel = settingsController.chooseModel;
-const cycleThinking = settingsController.cycleThinking;
-const openConfigPicker = settingsController.openConfig;
 
 // ------------------------------------------------------------ session search
 
@@ -1583,10 +1574,6 @@ function closeModal() {
   closeModalState();
 }
 
-const detachSettingsActions = configureSettingsActions({
-  changed: () => reloadTranscript().catch(() => {}),
-});
-
 /** Settings modal — rendered by Svelte; runtime only opens the modal shell. */
 async function showSettingsModal() {
   openModal({ title: "Settings", content: "settings" });
@@ -1600,74 +1587,33 @@ const transcriptFeature = createTranscriptFeature({
 
 // ------------------------------------------------------------ extension UI bridge
 
-const handleExtensionUI = createExtensionUiController({
-  respond: (id, payload) => rpc({ type: "extension_ui_response", id, ...payload }, { wait: false }).catch(() => {}),
+const settingsLayoutRuntime = createSettingsLayoutRuntime({
+  rpc,
+  extensionUiAdapters,
+  refreshState: () => getSessionRuntime().refreshState(),
   toast: addToast,
-  ...extensionUiAdapters,
-});
-
-// ------------------------------------------------------------ toasts
-
-// ------------------------------------------------------------ swipe carousel
-//
-// Mobile-only: horizontal swipes move through three views — chat, hublots,
-// checkpoints — like snapping pages. A two-finger swipe switches between
-// active sessions. A three-dot indicator at the bottom shows position.
-// Pages: 0 = chat (no sidebar); 1 = hublots drawer; 2 = checkpoints drawer.
-// Right swipe advances, left swipe goes back.
-
-const carouselController = createCarouselController({
+  getState: () => state,
+  reloadTranscript,
   documentTarget: document,
   windowTarget: window,
   storage: localStorage,
-  setPage: setCarouselPage,
-  loadHublots: () => { loadHublots(); loadRoutines(); },
+  setCarouselPage,
+  loadScopedResources: () => { loadHublots(); loadRoutines(); },
   loadCheckpointTree,
-});
-
-const swipeController = createCarouselSwipeController({
-  isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
-  step: (direction) => carouselController.step(direction),
-  switchRunner: (direction) => adjacentRunnerController(direction),
-});
-
-// Find sessions the user would consider "active": alive, has a real
-// session bound (sessionId + sessionName), and lives in the current
-// workdir. Runners with sessionName === null were spawned but never sent
-// a message to — they're background/orphan processes, skip them.
-let adjacentRunnerController;
-adjacentRunnerController = createAdjacentRunnerController({
   getRunners: () => runnersNow,
   getCurrentRunner: () => currentRunner,
   getWorkdir: () => sessionUi.workdir,
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
-  toast: addToast,
+  hublotsEl: $("hublots"),
+  treebarEl: $("treebar"),
 });
+const handleExtensionUI = settingsLayoutRuntime.handleExtensionUI;
+const carouselController = settingsLayoutRuntime.carousel;
+const carouselEventRegistration = settingsLayoutRuntime.events;
+const detachSettingsActions = settingsLayoutRuntime.detachSettingsActions;
+const detachHeaderActions = settingsLayoutRuntime.detachHeaderActions;
 
-const carouselEventRegistration = createCarouselEventRegistration(createCarouselEventDependencies({
-  documentTarget: document,
-  windowTarget: window,
-  onTouchStart: swipeController.onTouchStart,
-  onTouchMove: swipeController.onTouchMove,
-  onTouchEnd: swipeController.onTouchEnd,
-  onTouchCancel: swipeController.onTouchCancel,
-  onResize: () => carouselController.apply(),
-}));
-
-const carouselHeaderController = createCarouselHeaderController({
-  isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
-  hublots: $("hublots"),
-  treebar: $("treebar"),
-  loadHublots: () => { loadHublots(); loadRoutines(); },
-  loadCheckpointTree,
-  carousel: carouselController,
-});
-
-const detachHeaderActions = configureHeaderActions((action, sourceEvent) => ({
-  chooseModel, cycleThinking, openConfig: openConfigPicker,
-  toggleHublots: carouselHeaderController.toggleHublots,
-  toggleTree: carouselHeaderController.toggleTree,
-})[action]?.(sourceEvent));
+// ------------------------------------------------------------ toasts
 
 // Carousel event registration and initial layout are deferred until the
 // runtime starts, after Svelte has mounted.
