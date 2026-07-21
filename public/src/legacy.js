@@ -4,8 +4,8 @@ import { tick } from "svelte";
 import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
-import { createSseDeduper, watchdogExpired } from "./runtime/eventStreamUtils.js";
-import { createEventStreamRuntime } from "./runtime/eventStream.js";
+import { createSseDeduper } from "./runtime/eventStreamUtils.js";
+import { createEventStreamRuntime, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -842,13 +842,17 @@ const eventStream = createEventStreamRuntime();
 // reconnect.
 let lastEventAt = Date.now();
 setInterval(() => {
-  if (es && watchdogExpired(lastEventAt)) {
-    eventStream.close();
-    connected = false;
-    updateAppSession({ connected });
-    updateHeaderState({ stateInfo: "connection lost — reconnecting…" });
-    connect();
-  }
+  runReconnectWatchdog({
+    source: es,
+    lastEventAt,
+    onExpired: () => {
+      eventStream.close();
+      connected = false;
+      updateAppSession({ connected });
+      updateHeaderState({ stateInfo: "connection lost — reconnecting…" });
+      connect();
+    },
+  });
 }, 15000);
 
 function connect({ replay = true } = {}) {

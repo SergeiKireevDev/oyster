@@ -1,4 +1,10 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+export function runReconnectWatchdog({ source, lastEventAt, onExpired, now = Date.now() }) {
+  if (!source || now - lastEventAt <= 70000) return false;
+  onExpired();
+  return true;
+}
+
 export function createEventStreamRuntime({ EventSourceImpl = EventSource } = {}) {
   let source = null;
   return {
