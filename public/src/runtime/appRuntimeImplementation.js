@@ -68,6 +68,7 @@ import { configureComposerActions } from "../features/composer/composerActions.j
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController } from "../lib/hublotController.js";
 import { configureHublotActions } from "../features/hublots/hublotActions.js";
+import { createHublotFeature } from "../features/hublots/createHublotFeature.js";
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { createFolderBrowserController } from "../lib/folderBrowserController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
@@ -1273,7 +1274,7 @@ const hublotManagerController = createHublotManagerController({
 });
 const showHublots = hublotManagerController.show;
 
-const hublotController = createHublotController({
+const hublotController = createHublotFeature({ createController: createHublotController, dependencies: {
   createHublot: (options) => createHublot(fetch, options),
   getSessionId: () => state?.sessionId ?? null,
   setDescription: (desc) => { tunnelForm.desc = desc; updateHublotManager({ desc }); },
@@ -1289,7 +1290,7 @@ const hublotController = createHublotController({
   updateManager: updateHublotManager,
   getScopeAll: () => tunnelScopeAll,
   getDescription: () => tunnelForm.desc,
-});
+}});
 const createManagedHublot = hublotController.create;
 
 async function toggleManagedHublotScope() {
