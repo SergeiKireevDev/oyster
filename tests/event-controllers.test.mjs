@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerComposerEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { createComposerEventController } from "../public/src/lib/composerController.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -146,15 +147,22 @@ test("header event controller routes typed header actions", () => {
   assert.equal(removed, listener);
 });
 
-test("composer event adapter routes each composer action", () => {
+test("composer event controller routes each composer action", () => {
   let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  let removed;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
   const calls = [];
-  registerComposerEvents(target, { inputChanged: () => calls.push("input"), keydown: (event) => calls.push(["keydown", event]), send: () => calls.push("send"), abort: () => calls.push("abort") });
+  const controller = createComposerEventController({
+    documentTarget: target,
+    inputChanged: () => calls.push("input"), keydown: (event) => calls.push(["keydown", event]), send: () => calls.push("send"), abort: () => calls.push("abort"),
+  });
+  controller.attach();
   listener({ detail: { action: "inputChanged" } });
   listener({ detail: { action: "keydown", sourceEvent: "event" } });
   listener({ detail: { action: "send" } }); listener({ detail: { action: "abort" } });
+  controller.detach();
   assert.deepEqual(calls, ["input", ["keydown", "event"], "send", "abort"]);
+  assert.equal(removed, listener);
 });
 
 test("managed hublot event adapter routes management actions", () => {

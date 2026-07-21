@@ -13,18 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerComposerEvents(target, { inputChanged, keydown, send, abort }) {
-  const onComposer = (event) => {
-    const { action, sourceEvent } = event.detail ?? {};
-    if (action === "inputChanged") inputChanged();
-    else if (action === "keydown") keydown(sourceEvent);
-    else if (action === "send") send();
-    else if (action === "abort") abort();
-  };
-  target.addEventListener("pi:composer", onComposer);
-  return () => target.removeEventListener("pi:composer", onComposer);
-}
-
 export function registerManagedHublotEvents(target, { create, openCommandPalette, toggleScope }) {
   const listeners = [
     ["pi-managed-hublot-create", (event) => create(event.detail)],

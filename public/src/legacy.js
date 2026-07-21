@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerComposerEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -44,6 +44,7 @@ import { promptCommand } from "./lib/promptActions.js";
 import { createPostSendTranscriptSyncController } from "./lib/postSendTranscriptSyncController.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createComposerHistoryController } from "./lib/composerHistoryController.js";
+import { createComposerEventController } from "./lib/composerController.js";
 import { createCheckpointTreeController, createCheckpointTreeEventController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { createHublotController, createHublotSidebarController } from "./lib/hublotController.js";
@@ -1189,12 +1190,13 @@ async function abort() {
   catch (e) { addToast(`abort failed: ${e.message}`, "error"); }
 }
 
-registerComposerEvents(document, {
+createComposerEventController({
+  documentTarget: document,
   inputChanged: composerInputChanged,
   keydown: composerKeydown,
   send,
   abort,
-});
+}).attach();
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"
