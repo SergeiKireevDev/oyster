@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents, registerRoutineEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("settings event adapter invokes the change callback", () => {
+  let listener;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  let changed = 0;
+  registerSettingsEvents(target, { changed: () => { changed++; } });
+  listener();
+  assert.equal(changed, 1);
+});
 
 test("routine event adapter unpacks name and action", () => {
   let listener;
