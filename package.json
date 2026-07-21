@@ -23,7 +23,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
-    "katex": "^0.16.47"
+    "@huggingface/transformers": "^4.2.0",
+    "katex": "^0.18.1"
   }
 }
