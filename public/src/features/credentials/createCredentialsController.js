@@ -2,7 +2,7 @@ function providerName(provider) {
   return provider?.displayName || provider?.provider || "provider";
 }
 
-export function createApiKeysController({ fetchImpl, confirm, toast, setState } = {}) {
+export function createCredentialsController({ fetchImpl, confirm, toast, setState } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl is required");
   if (typeof confirm !== "function") throw new TypeError("confirm is required");
   if (typeof setState !== "function") throw new TypeError("setState is required");

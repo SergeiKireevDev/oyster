@@ -40,9 +40,9 @@ test("credential services and routes cannot cross into general settings or brows
   assert.doesNotMatch(serverCredentialSources, /repositories\.settings|appSettings|app_settings/);
 
   const browserCredentialSources = [
-    "../public/src/features/credentials/createApiKeysController.js",
+    "../public/src/features/credentials/createCredentialsController.js",
     "../public/src/features/credentials/createCredentialsAssembly.js",
-    "../public/src/stores/apiKeys.js",
+    "../public/src/stores/credentials.js",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(browserCredentialSources, /localStorage|sessionStorage|settingsPreference|SettingsModal/);
   assert.equal(BROWSER_PREFERENCE_SYNC_POLICY.keys.some((key) => /auth|token|secret|credential|api.?key/i.test(key)), false);

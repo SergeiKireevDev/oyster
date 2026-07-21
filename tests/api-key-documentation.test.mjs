@@ -25,16 +25,16 @@ test("API-key endpoint documentation captures auth, body, restart, and removal s
 test("API-key route composition and UI ownership remain explicit", () => {
   assert.match(app, /createCredentialRoutes/);
   assert.match(app, /credential: credentialRoutes/);
-  assert.match(menu, /data-action="apiKeys"/);
-  assert.match(overlays, /content === "apiKeys"[\s\S]*?<ApiKeysModal/);
+  assert.match(menu, /data-action="credentials"/);
+  assert.match(overlays, /content === "credentials"[\s\S]*?<CredentialsModal/);
   assert.match(root, /createCredentialsAssembly/);
   assert.match(root, /credentialsAssembly\.teardown/);
-  assert.doesNotMatch(root, /showSettingsModal[^\n]*apiKeys|apiKeys[^\n]*showSettingsModal/);
+  assert.doesNotMatch(root, /showSettingsModal[^\n]*credentials|credentials[^\n]*showSettingsModal/);
 });
 
 test("API-key modal participates in generic modal history without owning browser history", () => {
   assert.match(modalHistory, /pushState/);
   assert.match(modalHistory, /popstate/);
-  const apiModal = read("../public/src/components/ApiKeysModal.svelte");
-  assert.doesNotMatch(apiModal, /history\.|pushState|popstate|addEventListener/);
+  const credentialsModal = read("../public/src/components/CredentialsModal.svelte");
+  assert.doesNotMatch(credentialsModal, /history\.|pushState|popstate|addEventListener/);
 });

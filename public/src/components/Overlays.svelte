@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import AnalyticsModal from "./AnalyticsModal.svelte";
-  import ApiKeysModal from "./ApiKeysModal.svelte";
+  import CredentialsModal from "./CredentialsModal.svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
   import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
   import CommandPalette from "./CommandPalette.svelte";
@@ -115,8 +115,8 @@
     <div class="m-body" id="mBody">
       {#if $modalState.content === "analytics"}
         <AnalyticsModal />
-      {:else if $modalState.content === "apiKeys"}
-        <ApiKeysModal />
+      {:else if $modalState.content === "credentials"}
+        <CredentialsModal />
       {:else if $modalState.content === "settings"}
         <SettingsModal />
       {:else if $modalState.content === "optionPicker"}

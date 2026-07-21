@@ -19,7 +19,7 @@ import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries,
 import { runnerSessionIdentity, sameSession, sessionOpenSelection } from "../lib/sessionIdentity.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { analytics, updateAnalytics } from "../stores/analytics.js";
-import { updateApiKeysState } from "../stores/apiKeys.js";
+import { updateCredentialsState } from "../stores/credentials.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
@@ -404,7 +404,7 @@ const credentialsAssembly = createCredentialsAssembly({
   fetchImpl: fetch,
   confirm: extensionUiAdapters.confirm,
   toast: addToast,
-  setState: updateApiKeysState,
+  setState: updateCredentialsState,
 });
 const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;

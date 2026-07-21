@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createCredentialsAssembly } from "../public/src/features/credentials/createCredentialsAssembly.js";
-import { API_KEYS_OPEN_ACTION, API_KEYS_REMOVE_ACTION, API_KEYS_SAVE_ACTION } from "../public/src/runtime/uiActionNames.js";
+import { CREDENTIALS_OPEN_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../public/src/runtime/uiActionNames.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
 const rootSource = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
 
-test("menu exposes a top-level API Keys action through the scoped registry", () => {
-  assert.match(menuSource, /data-action="apiKeys"[^>]*>API Keys…<\/button>/);
-  assert.match(menuSource, /uiActions\.invoke\(API_KEYS_OPEN_ACTION\)/);
+test("menu exposes a top-level Credentials action through the scoped registry", () => {
+  assert.match(menuSource, /data-action="credentials"[^>]*>Credentials…<\/button>/);
+  assert.match(menuSource, /uiActions\.invoke\(CREDENTIALS_OPEN_ACTION\)/);
   assert.doesNotMatch(menuSource, /SettingsModal|localStorage|fetch\(/);
 });
 
@@ -28,17 +28,17 @@ test("credentials assembly owns API-key action registration and teardown", () =>
     }),
   });
 
-  uiActions.invoke(API_KEYS_OPEN_ACTION);
-  assert.deepEqual(opened, [{ title: "API Keys", wide: true, content: "apiKeys" }]);
+  uiActions.invoke(CREDENTIALS_OPEN_ACTION);
+  assert.deepEqual(opened, [{ title: "Credentials", wide: true, content: "credentials" }]);
   assert.equal(loads, 1);
-  uiActions.invoke(API_KEYS_SAVE_ACTION, { provider: "openai", key: "test-only" });
+  uiActions.invoke(CREDENTIALS_SAVE_API_KEY_ACTION, { provider: "openai", key: "test-only" });
   assert.equal(saves, 1);
-  uiActions.invoke(API_KEYS_REMOVE_ACTION, "openai");
+  uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, "openai");
   assert.equal(removals, 1);
   assembly.teardown();
-  uiActions.invoke(API_KEYS_OPEN_ACTION);
-  uiActions.invoke(API_KEYS_SAVE_ACTION, { provider: "openai", key: "ignored" });
-  uiActions.invoke(API_KEYS_REMOVE_ACTION, "openai");
+  uiActions.invoke(CREDENTIALS_OPEN_ACTION);
+  uiActions.invoke(CREDENTIALS_SAVE_API_KEY_ACTION, { provider: "openai", key: "ignored" });
+  uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, "openai");
   assert.equal(opened.length, 1);
   assert.equal(saves, 1);
   assert.equal(removals, 1);

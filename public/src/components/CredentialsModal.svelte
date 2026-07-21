@@ -1,9 +1,9 @@
 <script>
   import { onDestroy } from "svelte";
-  import { apiKeysState } from "../stores/apiKeys.js";
+  import { credentialsState } from "../stores/credentials.js";
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { API_KEYS_REMOVE_ACTION, API_KEYS_SAVE_ACTION } from "../runtime/uiActionNames.js";
+  import { CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   let selectedProvider = "";
@@ -22,7 +22,7 @@
     return sourceLabels[source] ?? "not configured";
   }
 
-  $: eligibleProviders = $apiKeysState.providers.filter((provider) =>
+  $: eligibleProviders = $credentialsState.providers.filter((provider) =>
     provider.credentialType !== "oauth" && (provider.registered || provider.credentialType === "api_key"));
   $: if (!eligibleProviders.some((provider) => provider.provider === selectedProvider)) {
     selectedProvider = eligibleProviders[0]?.provider ?? "";
@@ -39,7 +39,7 @@
     const key = keyInput?.value ?? "";
     if (!selectedProvider || !key.trim()) return;
     try {
-      await uiActions.invoke(API_KEYS_SAVE_ACTION, { provider: selectedProvider, key });
+      await uiActions.invoke(CREDENTIALS_SAVE_API_KEY_ACTION, { provider: selectedProvider, key });
     } finally {
       clearKey();
       keyInput?.focus();
@@ -47,7 +47,7 @@
   }
 
   async function removeProvider(provider) {
-    await uiActions.invoke(API_KEYS_REMOVE_ACTION, provider);
+    await uiActions.invoke(CREDENTIALS_REMOVE_API_KEY_ACTION, provider);
   }
 
   function close() {
@@ -58,18 +58,18 @@
   onDestroy(clearKey);
 </script>
 
-<section class="api-keys-modal" aria-label="Pi API keys">
+<section class="api-keys-modal" aria-label="Pi credentials">
   <p class="api-keys-intro">Credentials are stored by pi in its own auth file. Existing key values are never displayed.</p>
 
-  {#if $apiKeysState.loading && !$apiKeysState.providers.length}
+  {#if $credentialsState.loading && !$credentialsState.providers.length}
     <p class="api-keys-state" role="status">Loading provider credentials…</p>
-  {:else if $apiKeysState.error && !$apiKeysState.providers.length}
-    <p class="api-keys-state error" role="alert">{$apiKeysState.error}</p>
-  {:else if !$apiKeysState.providers.length}
+  {:else if $credentialsState.error && !$credentialsState.providers.length}
+    <p class="api-keys-state error" role="alert">{$credentialsState.error}</p>
+  {:else if !$credentialsState.providers.length}
     <p class="api-keys-state">No providers are available from the configured pi installation.</p>
   {:else}
     <div class="api-key-list" role="list" aria-label="Provider credential status">
-      {#each $apiKeysState.providers as provider (provider.provider)}
+      {#each $credentialsState.providers as provider (provider.provider)}
         <div class="api-key-row" role="listitem" data-provider={provider.provider}>
           <div class="api-key-provider">
             <strong>{provider.displayName}</strong>
@@ -80,7 +80,7 @@
             {#if provider.credentialType === "oauth"}
               <span class="api-key-readonly">Read-only</span>
             {:else if provider.credentialType === "api_key"}
-              <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$apiKeysState.loading}>
+              <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$credentialsState.loading}>
                 Remove from pi and restart
               </button>
             {/if}
@@ -88,14 +88,14 @@
         </div>
       {/each}
     </div>
-    {#if $apiKeysState.error}<p class="api-keys-state error" role="alert">{$apiKeysState.error}</p>{/if}
+    {#if $credentialsState.error}<p class="api-keys-state error" role="alert">{$credentialsState.error}</p>{/if}
   {/if}
 
-  {#if $apiKeysState.lastRestart}
+  {#if $credentialsState.lastRestart}
     <p class="api-keys-state" role="status">
-      Restart status: {$apiKeysState.lastRestart.status}
-      {#if $apiKeysState.lastRestart.runnerIds?.length}
-        ({$apiKeysState.lastRestart.runnerIds.length} pi process{$apiKeysState.lastRestart.runnerIds.length === 1 ? "" : "es"})
+      Restart status: {$credentialsState.lastRestart.status}
+      {#if $credentialsState.lastRestart.runnerIds?.length}
+        ({$credentialsState.lastRestart.runnerIds.length} pi process{$credentialsState.lastRestart.runnerIds.length === 1 ? "" : "es"})
       {/if}
     </p>
   {/if}
@@ -107,7 +107,7 @@
   <form class="api-key-form" onsubmit={saveKey}>
     <label>
       <span>Provider</span>
-      <select bind:value={selectedProvider} disabled={$apiKeysState.loading || !eligibleProviders.length}>
+      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !eligibleProviders.length}>
         {#each eligibleProviders as provider (provider.provider)}
           <option value={provider.provider}>{provider.displayName}</option>
         {/each}
@@ -123,11 +123,11 @@
         autocorrect="off"
         spellcheck="false"
         placeholder="Enter a new API key"
-        disabled={$apiKeysState.loading || !selectedProvider}
+        disabled={$credentialsState.loading || !selectedProvider}
         oninput={(event) => { hasKey = Boolean(event.currentTarget.value.trim()); }}
       />
     </label>
-    <button class="btn" type="submit" disabled={$apiKeysState.loading || !selectedProvider || !hasKey}>
+    <button class="btn" type="submit" disabled={$credentialsState.loading || !selectedProvider || !hasKey}>
       {selected?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi"}
     </button>
   </form>

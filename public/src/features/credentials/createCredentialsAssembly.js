@@ -1,5 +1,5 @@
-import { API_KEYS_OPEN_ACTION, API_KEYS_REMOVE_ACTION, API_KEYS_SAVE_ACTION } from "../../runtime/uiActionNames.js";
-import { createApiKeysController } from "./createApiKeysController.js";
+import { CREDENTIALS_OPEN_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../../runtime/uiActionNames.js";
+import { createCredentialsController } from "./createCredentialsController.js";
 
 /** Owns the mount-scoped API-key workflow independently of settings. */
 export function createCredentialsAssembly({
@@ -9,7 +9,7 @@ export function createCredentialsAssembly({
   confirm,
   toast,
   setState,
-  createController = createApiKeysController,
+  createController = createCredentialsController,
 } = {}) {
   if (!uiActions) throw new TypeError("uiActions is required");
   if (typeof openModal !== "function") throw new TypeError("openModal is required");
@@ -18,12 +18,12 @@ export function createCredentialsAssembly({
 
   const open = () => {
     if (tornDown) return;
-    openModal({ title: "API Keys", wide: true, content: "apiKeys" });
+    openModal({ title: "Credentials", wide: true, content: "credentials" });
     return controller.load();
   };
-  const detachOpenAction = uiActions.register(API_KEYS_OPEN_ACTION, open);
-  const detachSaveAction = uiActions.register(API_KEYS_SAVE_ACTION, controller.save);
-  const detachRemoveAction = uiActions.register(API_KEYS_REMOVE_ACTION, controller.remove);
+  const detachOpenAction = uiActions.register(CREDENTIALS_OPEN_ACTION, open);
+  const detachSaveAction = uiActions.register(CREDENTIALS_SAVE_API_KEY_ACTION, controller.save);
+  const detachRemoveAction = uiActions.register(CREDENTIALS_REMOVE_API_KEY_ACTION, controller.remove);
 
   return Object.freeze({
     operations: Object.freeze({ open, load: controller.load, save: controller.save, remove: controller.remove }),

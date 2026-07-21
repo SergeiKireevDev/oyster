@@ -168,7 +168,7 @@ responses other than the intentional transient callback snapshot, or events.
 
 ## 4. Build the Browser OAuth Workflow
 
-- [ ] Rename the menu/modal workflow from **API Keys…** to **Credentials…** and
+- [x] Rename the menu/modal workflow from **API Keys…** to **Credentials…** and
   evolve the mount-scoped credentials assembly, action names, stores, and
   controller without moving credential logic into settings or component-local
   fetches. Preserve clean registration/teardown and existing API-key actions.

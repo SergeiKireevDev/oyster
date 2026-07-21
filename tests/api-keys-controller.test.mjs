@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createApiKeysController } from "../public/src/features/credentials/createApiKeysController.js";
+import { createCredentialsController } from "../public/src/features/credentials/createCredentialsController.js";
 
 function response(status, body) {
   return { ok: status >= 200 && status < 300, status, async json() { return body; } };
@@ -11,7 +11,7 @@ function harness(responses, confirmations = []) {
   const states = [];
   const toasts = [];
   const confirms = [];
-  const controller = createApiKeysController({
+  const controller = createCredentialsController({
     async fetchImpl(path, options = {}) {
       calls.push({ path, options });
       const next = responses.shift();
@@ -101,7 +101,7 @@ test("API-key controller reports safe errors, cancellation, and partial restart 
 test("API-key controller teardown aborts requests and clears safe state", async () => {
   let observedSignal;
   const states = [];
-  const controller = createApiKeysController({
+  const controller = createCredentialsController({
     fetchImpl(_path, options) {
       observedSignal = options.signal;
       return new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));

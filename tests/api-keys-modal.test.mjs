@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const modal = readFileSync(new URL("../public/src/components/ApiKeysModal.svelte", import.meta.url), "utf8");
+const modal = readFileSync(new URL("../public/src/components/CredentialsModal.svelte", import.meta.url), "utf8");
 const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
-const store = readFileSync(new URL("../public/src/stores/apiKeys.js", import.meta.url), "utf8");
+const store = readFileSync(new URL("../public/src/stores/credentials.js", import.meta.url), "utf8");
 
-test("API Keys modal is owned by the overlay and covers safe provider states", () => {
-  assert.match(overlays, /import ApiKeysModal from "\.\/ApiKeysModal\.svelte"/);
-  assert.match(overlays, /\$modalState\.content === "apiKeys"[\s\S]*?<ApiKeysModal/);
+test("Credentials modal is owned by the overlay and covers safe provider states", () => {
+  assert.match(overlays, /import CredentialsModal from "\.\/CredentialsModal\.svelte"/);
+  assert.match(overlays, /\$modalState\.content === "credentials"[\s\S]*?<CredentialsModal/);
   for (const label of ["stored API key", "stored OAuth", "environment", "models.json", "not configured"]) {
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
@@ -17,7 +17,7 @@ test("API Keys modal is owned by the overlay and covers safe provider states", (
 
 test("API Keys modal exposes removal only for stored API keys with revocation and fallback warnings", () => {
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only[\s\S]*?provider\.credentialType === "api_key"[\s\S]*?Remove from pi and restart/);
-  assert.match(modal, /uiActions\.invoke\(API_KEYS_REMOVE_ACTION, provider\)/);
+  assert.match(modal, /uiActions\.invoke\(CREDENTIALS_REMOVE_API_KEY_ACTION, provider\)/);
   assert.match(modal, /does not revoke it at the upstream provider/);
   assert.match(modal, /environment or models\.json fallback remains/);
   assert.match(modal, /pi may continue to authenticate after removal/);
@@ -31,7 +31,7 @@ test("API Keys modal form keeps submitted keys local and clears them on every ex
   assert.match(modal, /spellcheck="false"/);
   assert.match(modal, /Save and restart pi/);
   assert.match(modal, /Replace and restart pi/);
-  assert.match(modal, /uiActions\.invoke\(API_KEYS_SAVE_ACTION, \{ provider: selectedProvider, key \}\)/);
+  assert.match(modal, /uiActions\.invoke\(CREDENTIALS_SAVE_API_KEY_ACTION, \{ provider: selectedProvider, key \}\)/);
   assert.match(modal, /finally \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /onDestroy\(clearKey\)/);
