@@ -1388,10 +1388,8 @@ fileExplorerEventController.attach();
 // toggle to see every session's.
 let tunnelScopeAll = false;
 
-function tunnelVisible(tunnel) {
-  // unbound tunnels (opened before session binding existed) stay visible
-  return hublotVisible(tunnel, tunnelScopeAll, state?.sessionId);
-}
+// Unbound tunnels (opened before session binding existed) stay visible.
+const tunnelVisible = (tunnel) => hublotVisible(tunnel, tunnelScopeAll, state?.sessionId);
 
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
 const tunnelForm = { desc: "" };
