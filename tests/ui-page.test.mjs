@@ -43,6 +43,12 @@ test("composer prompts delegate busy steering behavior to prompt actions", () =>
   assert.match(js, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });
 
+test("legacy runtime delegates integration debug hooks to a runtime adapter", () => {
+  assert.match(js, /import \{ installDebugHooks \} from "\.\/runtime\/debugHooks\.js";/);
+  assert.match(js, /installDebugHooks\(window, \{ rpc, refreshState, loadHublots, loadRoutines \}\);/);
+  assert.doesNotMatch(js, /Object\.assign\(window,/);
+});
+
 test("every DOM id referenced by the legacy module exists in Svelte markup", () => {
   const defined = new Set([...svelteMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
   const used = new Set([
