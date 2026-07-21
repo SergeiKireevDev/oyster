@@ -416,6 +416,17 @@
   .ckpt-restore.busy { opacity: .3; cursor: wait; }
   .msg.user > .ckpt-restore { left: -90px; }
   .msg.assistant > .ckpt-restore { right: 56px; top: -8px; }
+  /* checkpointed (rollbackable) messages carry an icy accent */
+  .msg.user.ckpt-frozen {
+    border: 1px solid rgba(127, 212, 255, .45);
+    box-shadow: 0 0 10px rgba(127, 212, 255, .13);
+  }
+  .msg.assistant.ckpt-frozen {
+    border-left: 3px solid rgba(127, 212, 255, .5);
+    border-radius: 3px;
+    padding-left: 12px;
+    background: linear-gradient(90deg, rgba(127, 212, 255, .06), transparent 45%);
+  }
   .msg.user {
     align-self: flex-end;
     max-width: 85%;
@@ -1498,9 +1509,13 @@ checkpointBtn.title = "checkpoint — commit all workdir changes";
 /** Modal with a single model selector for the diff-summary sub-agent; the
  *  choice is remembered (localStorage) and preselected next time.
  *  Resolves { model } (null model = no summary) or { cancelled: true }. */
-function pickCheckpointModel() {
+function pickCheckpointModel({
+  title = "Freeze checkpoint",
+  hint = "The model summarizes the diff into the commit message. Your choice is remembered.",
+  okLabel = "Freeze \u{1F9CA}",
+} = {}) {
   return new Promise((resolve) => {
-    $("mTitle").textContent = "Freeze checkpoint";
+    $("mTitle").textContent = title;
     const body = $("mBody");
     body.innerHTML = "";
     const row = document.createElement("div");
@@ -1532,10 +1547,10 @@ function pickCheckpointModel() {
       }
     }).catch(() => {});
     row.appendChild(sel);
-    const hint = document.createElement("div");
-    hint.className = "m-path";
-    hint.textContent = "The model summarizes the diff into the commit message. Your choice is remembered.";
-    body.append(row, hint);
+    const hintEl = document.createElement("div");
+    hintEl.className = "m-path";
+    hintEl.textContent = hint;
+    body.append(row, hintEl);
     const actions = $("mActions");
     const cancel = document.createElement("span");
     cancel.className = "chip";
@@ -1543,7 +1558,7 @@ function pickCheckpointModel() {
     cancel.addEventListener("click", () => { closeModal(); resolve({ cancelled: true }); });
     const ok = document.createElement("button");
     ok.className = "btn";
-    ok.textContent = "Freeze \u{1F9CA}";
+    ok.textContent = okLabel;
     ok.style.padding = "6px 16px";
     ok.addEventListener("click", () => {
       const model = sel.value || null;
@@ -1603,6 +1618,7 @@ function placeCheckpointBtn() {
 /** put a return arrow on every message a checkpoint is anchored to */
 async function refreshCheckpointMarkers() {
   document.querySelectorAll(".ckpt-restore").forEach((b) => b.remove());
+  document.querySelectorAll(".ckpt-frozen").forEach((el) => el.classList.remove("ckpt-frozen"));
   const sid = state?.sessionId;
   if (!sid) return;
   const res = await fetch(`/checkpoints?token=${encodeURIComponent(token)}&id=${encodeURIComponent(sid)}`);
@@ -1622,6 +1638,7 @@ async function refreshCheckpointMarkers() {
     const pos = entries.length === els.length ? i : els.length - (entries.length - i);
     const el = els[pos];
     if (!el || el.querySelector(":scope > .ckpt-restore")) continue;
+    el.classList.add("ckpt-frozen"); // icy accent marks it as rollbackable
     const b = document.createElement("span");
     b.className = "ckpt-restore";
     b.textContent = "\u21A9";
@@ -1638,13 +1655,20 @@ async function refreshCheckpointMarkers() {
  *  auto-committed first) and jump into a session forked at that point */
 async function rollbackToCheckpoint(cp, btn) {
   if (btn?.classList.contains("busy")) return;
-  if (!confirm(`Roll the workdir back to checkpoint ${cp.hash}?\n\nPending changes are committed first (nothing is lost), then a forked session opens at this message.`)) return;
+  // same modal as freeze: the model summarizes the pending changes that get
+  // auto-committed before the reset (the modal doubles as confirmation)
+  const pick = await pickCheckpointModel({
+    title: `Roll back to ${cp.hash}`,
+    hint: "Pending changes are committed first (nothing is lost) — the model summarizes them into that commit's message — then the workdir is reset and a forked session opens at this message.",
+    okLabel: "Roll back \u23EA",
+  });
+  if (pick.cancelled) return;
   btn?.classList.add("busy");
   try {
     const res = await fetch(`/rollback?token=${encodeURIComponent(token)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash }),
+      body: JSON.stringify({ sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash, model: pick.model }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);

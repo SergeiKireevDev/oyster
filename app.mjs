@@ -38,10 +38,11 @@
  *   GET  /checkpoints -> checkpoint records of one session (?id=<sessionId>)
  *   GET  /checkpoint-tree -> the session family (root ancestor + all forks) of
  *                        one session as a tree, checkpoints attached (?path=…)
- *   POST /rollback    -> { sessionId, hash } — deterministically restore the
- *                        workdir to that checkpoint (pending changes are
- *                        auto-committed first, then git reset --hard) and
- *                        open a forked session at the checkpointed entry
+ *   POST /rollback    -> { sessionId, hash, model? } — deterministically
+ *                        restore the workdir to that checkpoint (pending
+ *                        changes are auto-committed first — summarized by a
+ *                        sub-agent when `model` is given — then git reset
+ *                        --hard) and open a forked session at that entry
  *   GET  /tunnels     -> live tunnels spawned by this server
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
@@ -934,8 +935,10 @@ export function init(state) {
     });
   }
 
-  /** commit every pending change in `dir` as a checkpoint commit; with a
-   *  `model`, the staged diff is summarized into the commit message */
+  /** Commit every pending change in `dir` as a checkpoint commit. With a
+   *  `model`, the staged diff is summarized into the commit message; `label`
+   *  is the fallback message (before the timestamp) when there is no model
+   *  or the sub-agent fails. */
   async function checkpointWorkdir(dir, label, model = null) {
     const top = await git(dir, ["rev-parse", "--show-toplevel"]);
     if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
@@ -951,13 +954,14 @@ export function init(state) {
     }
     const add = await git(dir, ["add", "-A"]);
     if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
-    let message = label ? `checkpoint: ${label}` : null;
+    let message = null;
     let summarized = false;
-    if (!message && model) {
+    if (model) {
       const diff = (await git(dir, ["diff", "--cached"])).stdout.slice(0, 40_000);
       const summary = diff.trim() ? await summarizeDiff(dir, model, diff) : null;
       if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
     }
+    if (!message && label) message = `checkpoint: ${label}`;
     message ??= `checkpoint ${new Date().toISOString()}`;
     const ci = await git(dir, ["commit", "-m", message]);
     if (ci.code !== 0) {
@@ -1581,6 +1585,7 @@ export function init(state) {
       if (body === undefined) return;
       const sessionId = String(body?.sessionId ?? "").trim();
       const hash = String(body?.hash ?? "").trim();
+      const model = body?.model ? String(body.model).slice(0, 200) : null;
       const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
       if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
       if (!existsSync(cp.sessionPath)) { json(res, 410, { error: "session file of this checkpoint is gone" }); return; }
@@ -1590,7 +1595,7 @@ export function init(state) {
         let safety = null;
         const st = await git(cp.dir, ["status", "--porcelain"]);
         if (st.code === 0 && st.stdout.trim()) {
-          const saved = await checkpointWorkdir(cp.dir, `auto before rollback to ${hash}`);
+          const saved = await checkpointWorkdir(cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
             try { recordCheckpoint(cp.sessionPath, cp.dir, saved.body); } catch {}
