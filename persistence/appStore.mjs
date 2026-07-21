@@ -24,7 +24,14 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     PRAGMA synchronous = NORMAL;
   `);
   const migrationStatus = migrate(database);
-  const repositories = Object.freeze({});
+  const repositories = Object.freeze({
+    settings: Object.freeze({
+      list: () => database.prepare("SELECT key, value, updated_at FROM app_settings ORDER BY key").all().map((row) => ({ ...row })),
+    }),
+    operations: Object.freeze({
+      listIncomplete: () => database.prepare("SELECT id, kind, status, stage, payload, error, created_at, updated_at FROM operations WHERE status NOT IN ('completed', 'cancelled') ORDER BY created_at, id").all().map((row) => ({ ...row })),
+    }),
+  });
   let closed = false;
   let transactionOpen = false;
 
@@ -48,11 +55,20 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     }
   }
 
+  function hydrate() {
+    if (closed) throw new Error("application database is closed");
+    return Object.freeze({
+      settings: Object.freeze(repositories.settings.list()),
+      incompleteOperations: Object.freeze(repositories.operations.listIncomplete()),
+    });
+  }
+
   return Object.freeze({
     path,
     repositories,
     migrationStatus,
     transaction,
+    hydrate,
     get closed() { return closed; },
     close() {
       if (closed) return;

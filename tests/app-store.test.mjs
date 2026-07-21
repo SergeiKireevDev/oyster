@@ -16,7 +16,8 @@ test("app store creates its database directory and closes idempotently", (t) => 
 
   assert.equal(store.path, resolve(databasePath));
   assert.equal(existsSync(databasePath), true);
-  assert.deepEqual(store.repositories, {});
+  assert.deepEqual(Object.keys(store.repositories), ["settings", "operations"]);
+  assert.deepEqual(store.hydrate(), { settings: [], incompleteOperations: [] });
   assert.deepEqual(store.migrationStatus, { currentVersion: 1, appliedVersions: [1] });
   assert.equal(Object.isFrozen(store.repositories), true);
   assert.equal(store.closed, false);

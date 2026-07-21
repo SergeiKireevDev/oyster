@@ -41,6 +41,26 @@ test("foundation constraints and explicit rollback preserve consistent rows", (t
   assert.equal(database.prepare("SELECT count(*) AS count FROM operations").get().count, 0);
 });
 
+test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
+  const { path, databases, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+  const database = databases[0];
+  database.prepare("INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)")
+    .run("workdir", '"/workspace"', "2026-07-16T00:00:00.000Z");
+  const insertOperation = database.prepare("INSERT INTO operations(id, kind, status, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
+  insertOperation.run("pending", "delete_session", "running", "agent_delete", "2026-07-16T00:00:00.000Z", "2026-07-16T00:00:01.000Z");
+  insertOperation.run("done", "delete_session", "completed", "done", "2026-07-15T00:00:00.000Z", "2026-07-15T00:00:01.000Z");
+
+  assert.deepEqual(store.hydrate(), {
+    settings: [{ key: "workdir", value: '"/workspace"', updated_at: "2026-07-16T00:00:00.000Z" }],
+    incompleteOperations: [{
+      id: "pending", kind: "delete_session", status: "running", stage: "agent_delete",
+      payload: null, error: null, created_at: "2026-07-16T00:00:00.000Z", updated_at: "2026-07-16T00:00:01.000Z",
+    }],
+  });
+});
+
 test("closing and reopening the app store preserves data without rerunning migrations", (t) => {
   const { path, databases, Database } = fixture(t);
   const first = openAppStore({ databasePath: path, Database });
