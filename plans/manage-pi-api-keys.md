@@ -117,7 +117,7 @@ inactive, and serialized responses/errors contain no submitted or stored key.
   state, add/replace/remove workflows, restart confirmations, toast policy, and
   teardown. Components must not perform credential fetches directly or retain
   submitted keys in a module-global store.
-- [ ] Add `ApiKeysModal.svelte` and wire it through `Overlays.svelte`. Display
+- [x] Add `ApiKeysModal.svelte` and wire it through `Overlays.svelte`. Display
   each provider and safe source state (`stored API key`, `stored OAuth`,
   `environment`, `models.json`, or `not configured`) without displaying any
   credential-derived text. Keep OAuth rows read-only in this first version.
