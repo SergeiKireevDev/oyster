@@ -635,6 +635,7 @@ resourceAssembly.configureActions({
 // ------------------------------------------------------------ session picker
 
 const sessionPickerRuntime = sessionAssembly.configurePicker({
+  uiActions,
   storeSnapshot,
   sessionPickerStore: sessionPicker,
   updateSessionPicker,

@@ -34,3 +34,14 @@ export const COMPOSER_ABORT_ACTION = "composer.abort";
 
 export const CHECKPOINT_TREE_OPEN_ACTION = "checkpointTree.open";
 export const CHECKPOINT_TREE_ROLLBACK_ACTION = "checkpointTree.rollback";
+
+export const SESSION_PICKER_SET_SCOPE_ACTION = "sessionPicker.setScope";
+export const SESSION_PICKER_SET_FOLDER_ACTION = "sessionPicker.setFolder";
+export const SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION = "sessionPicker.setExcludeTools";
+export const SESSION_PICKER_SEARCH_ACTION = "sessionPicker.search";
+export const SESSION_PICKER_CHOOSE_ACTION = "sessionPicker.choose";
+export const SESSION_PICKER_STOP_ACTION = "sessionPicker.stop";
+export const SESSION_PICKER_DELETE_ACTION = "sessionPicker.delete";
+export const SESSION_PICKER_OPEN_SEARCH_HIT_ACTION = "sessionPicker.openSearchHit";
+export const SESSION_PICKER_LOAD_FOLDER_ACTION = "sessionPicker.loadFolder";
+export const SESSION_PICKER_CANCEL_ACTION = "sessionPicker.cancel";

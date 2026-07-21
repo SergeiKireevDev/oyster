@@ -1,11 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSessionPickerRuntime } from "../public/src/features/sessions/createSessionPickerRuntime.js";
+import * as actionNames from "../public/src/runtime/uiActionNames.js";
 
 test("session picker runtime owns picker actions and search-hit construction", async () => {
   const toasts = [];
   let runnersHandler = "unset";
+  const registered = new Map();
+  const detached = [];
   const runtime = createSessionPickerRuntime({
+    uiActions: {
+      register(name, handler) {
+        registered.set(name, handler);
+        return () => { registered.delete(name); detached.push(name); };
+      },
+    },
     storeSnapshot: () => ({ query: "", scope: "all", folderPath: "", excludeTools: true }),
     sessionPickerStore: {},
     updateSessionPicker() {},
@@ -39,8 +48,23 @@ test("session picker runtime owns picker actions and search-hit construction", a
   assert.equal(typeof runtime.show, "function");
   assert.equal(typeof runtime.searchHit, "function");
   assert.equal(typeof runtime.detachActions, "function");
+  assert.deepEqual([...registered.keys()].sort(), [
+    actionNames.SESSION_PICKER_SET_SCOPE_ACTION,
+    actionNames.SESSION_PICKER_SET_FOLDER_ACTION,
+    actionNames.SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION,
+    actionNames.SESSION_PICKER_SEARCH_ACTION,
+    actionNames.SESSION_PICKER_CHOOSE_ACTION,
+    actionNames.SESSION_PICKER_STOP_ACTION,
+    actionNames.SESSION_PICKER_DELETE_ACTION,
+    actionNames.SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
+    actionNames.SESSION_PICKER_LOAD_FOLDER_ACTION,
+    actionNames.SESSION_PICKER_CANCEL_ACTION,
+  ].sort());
   await runtime.show();
   assert.deepEqual(toasts, ["no saved sessions"]);
   assert.equal(runnersHandler, "unset");
   runtime.detachActions();
+  runtime.detachActions();
+  assert.equal(registered.size, 0);
+  assert.equal(detached.length, 10);
 });

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createSessionAssembly } from "../public/src/features/sessions/createSessionAssembly.js";
 import { sessionPickerAction } from "../public/src/features/sessions/sessionPickerActions.js";
 import { applySessionState } from "../public/src/runtime/sessionRuntime.js";
+import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 
 function dependencies(pathname = "/s/session-1", trackers = {}) {
   return {
@@ -80,6 +81,7 @@ test("session assembly constructs route runner UI preview open and refresh bound
 
 function pickerDependencies(closes) {
   return {
+    uiActions: createUiActionRegistry(),
     storeSnapshot: () => ({ query: "", scope: "all", folderPath: "", excludeTools: true }),
     sessionPickerStore: {}, updateSessionPicker() {},
     fetchSearch: async () => ({ ok: true, status: 200, data: { results: [] } }),
