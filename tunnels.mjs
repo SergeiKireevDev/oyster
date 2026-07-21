@@ -86,7 +86,7 @@ export function persistHublotProcessIdentity(state, {
     .find((process) => process.role === role && process.pid === pid && process.status === status && !process.ended_at);
   if (existing) return existing;
   const identity = readProcessIdentity(pid);
-  return hublotRepository(state).upsertProcess({
+  return state.appStore.transaction((repositories) => repositories.hublots.upsertProcess({
     id: `${hublotId}:${role}:${pid}:${randomBytes(4).toString("hex")}`,
     hublotId, role, pid,
     processGroupId: identity.processGroupId,
@@ -95,12 +95,20 @@ export function persistHublotProcessIdentity(state, {
     executable: identity.executable,
     commandSha256: identity.commandSha256,
     status, startedAt, observedAt: new Date().toISOString(),
+  }));
+}
+
+export function updateHublotProcessMetadata(state, id, changes) {
+  return state.appStore.transaction((repositories) => {
+    const updated = repositories.hublots.updateProcess(id, changes);
+    if (!updated) throw new Error(`no such hublot process: ${id}`);
+    return repositories.hublots.findProcess(id);
   });
 }
 
 function finishPersistedProcess(state, processRow, { status = "ended", exitCode = null, signal = null } = {}) {
-  if (!processRow) return;
-  hublotRepository(state).updateProcess(processRow.id, {
+  if (!processRow || !hublotRepository(state).findProcess(processRow.id)) return;
+  return updateHublotProcessMetadata(state, processRow.id, {
     status, observed_at: new Date().toISOString(), ended_at: new Date().toISOString(),
     exit_code: exitCode, signal,
   });
@@ -130,6 +138,14 @@ export function recordHublotTransition(state, id, status, {
       error: lastError === undefined ? current.last_error : lastError,
       createdAt: at,
     });
+    return repositories.hublots.find(id);
+  });
+}
+
+export function rebindHublot(state, id, ownerId = null) {
+  return state.appStore.transaction((repositories) => {
+    if (!repositories.hublots.find(id)) throw new Error(`no such hublot: ${id}`);
+    repositories.hublots.update(id, { owner_id: ownerId });
     return repositories.hublots.find(id);
   });
 }

@@ -1,4 +1,4 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, recordHublotTransition, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -69,8 +69,8 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       }
       const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
       const owner = sessionId ? ensureSessionOwner(sessionId) : null;
-      if (state.appStore?.repositories?.hublots) state.appStore.repositories.hublots.update(t.id, { owner_id: owner?.id ?? null });
-      t.sessionId = sessionId;
+      const rebound = rebindHublot(state, t.id, owner?.id ?? null);
+      t.sessionId = rebound.session_id ?? sessionId;
       state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
       json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
     },

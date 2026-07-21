@@ -322,7 +322,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Rematerialize a missing or mismatched startup script from SQLite before invoking it.
 - [x] Persist the PID and verifiable process identity of every service, cloudflared tunnel, and setup agent immediately after spawn or discovery.
 - [x] Record transitions through `opening`, `open`, `recovering`, `closing`, `closed`, `failed`, and `interrupted`.
-- [ ] Persist session rebinding and process metadata updates transactionally.
+- [x] Persist session rebinding and process metadata updates transactionally.
 - [ ] Keep only `ChildProcess` handles in an in-memory registry keyed by persistent process/hublot ID.
 - [ ] Replace `state.nextHublotPort` with transactional allocation plus a live port check.
 - [ ] Add a supervisor that periodically reconciles desired-open hublots and their persisted process identities.

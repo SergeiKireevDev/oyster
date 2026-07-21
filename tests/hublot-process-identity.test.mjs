@@ -8,7 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
 import { readProcessIdentity } from "../persistence/processIdentity.mjs";
-import { persistHublotProcessIdentity, reserveHublot } from "../tunnels.mjs";
+import {
+  persistHublotProcessIdentity, rebindHublot, reserveHublot, updateHublotProcessMetadata,
+} from "../tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-process-"));
@@ -63,6 +65,34 @@ test("discovered hublot processes are persisted immediately with verifiable iden
   assert.ok(persisted.command_sha256);
   assert.equal(store.repositories.hublots.listProcesses(hublot.id)[0].id, persisted.id);
 
+  const exited = once(child, "exit");
+  process.kill(-child.pid, "SIGTERM");
+  await exited;
+});
+
+test("session rebinding and process metadata updates commit transactionally", async (t) => {
+  const { store, state } = fixture(t);
+  const ownerA = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-a", storagePath: "/agent.sqlite", createdAt: "a" });
+  const ownerB = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-b", storagePath: "/agent.sqlite", createdAt: "b" });
+  const hublot = reserveHublot(state, { port: 4181, sessionId: "session-a", ownerId: ownerA.id });
+
+  const rebound = rebindHublot(state, hublot.id, ownerB.id);
+  assert.equal(rebound.owner_id, ownerB.id);
+  assert.equal(rebound.session_id, "session-b");
+  assert.throws(() => rebindHublot(state, hublot.id, 999999), /foreign key constraint/i);
+  assert.equal(store.repositories.hublots.find(hublot.id).owner_id, ownerB.id);
+
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+  t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
+  const processRow = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: child.pid });
+  const ended = updateHublotProcessMetadata(state, processRow.id, {
+    status: "ended", observed_at: "observed", ended_at: "ended", exit_code: 0, signal: null,
+  });
+  assert.equal(ended.status, "ended");
+  assert.equal(ended.ended_at, "ended");
+  assert.throws(() => updateHublotProcessMetadata(state, processRow.id, { pid: 1 }), /unsupported hublot process field/);
+  assert.equal(store.repositories.hublots.findProcess(processRow.id).pid, child.pid);
+  assert.equal(store.repositories.hublots.findProcess(processRow.id).status, "ended");
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
   await exited;

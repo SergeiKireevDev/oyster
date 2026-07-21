@@ -287,6 +287,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
           executable, commandSha256, status, startedAt, observedAt, endedAt, exitCode, signal);
         return { ...database.prepare("SELECT * FROM hublot_processes WHERE id = ?").get(id) };
       },
+      findProcess: (id) => {
+        const row = database.prepare("SELECT * FROM hublot_processes WHERE id = ?").get(id);
+        return row ? { ...row } : null;
+      },
       updateProcess: (id, changes) => {
         const allowed = new Set(["status", "observed_at", "ended_at", "exit_code", "signal"]);
         const entries = Object.entries(changes ?? {});
