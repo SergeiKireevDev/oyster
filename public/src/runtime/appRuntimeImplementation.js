@@ -74,6 +74,7 @@ import { createFileExplorerController } from "../lib/fileExplorerController.js";
 import { configureFilesActions } from "../features/files/filesActions.js";
 import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
 import { createFilePickerController } from "../lib/filePickerController.js";
+import { createFilesRuntime } from "../features/files/createFilesRuntime.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "../lib/routineController.js";
