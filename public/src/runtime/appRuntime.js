@@ -4,12 +4,13 @@ import { createAppRuntime } from "./createAppRuntime.js";
 export function createAppRuntimeStarter({ browser, stores, loadDependencies }) {
   let runtime;
 
-  return async function startAppRuntime() {
+  return async function startAppRuntime(services = {}) {
     if (!runtime) {
       const { createApplicationRuntimeDependencies } = await loadDependencies();
+      const scopedStores = { ...stores, ...services };
       runtime = createAppRuntime({
         browser,
-        stores,
+        stores: scopedStores,
         createRuntime: ({ browser, stores }) => createApplicationRuntimeDependencies(browser, stores),
       });
     }
@@ -25,11 +26,11 @@ export function createAppRuntimeStarter({ browser, stores, loadDependencies }) {
 let browserStarter;
 
 /** Starts the explicit application composition root without a compatibility adapter. */
-export function startAppRuntime() {
+export function startAppRuntime(services = {}) {
   browserStarter ??= createAppRuntimeStarter({
     browser: { window, document, location, history, find: (id) => document.getElementById(id) },
     stores: {},
     loadDependencies: () => import("./appComposition.js"),
   });
-  return browserStarter();
+  return browserStarter(services);
 }

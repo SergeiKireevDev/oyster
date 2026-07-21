@@ -31,7 +31,7 @@ cd tests/e2e && npm test
 - [x] Add `createUiActionRegistry()` with `register(name, handler)`,
   `invoke(name, ...args)`, and idempotent `teardown()` operations. Add unit
   tests for replacement registration, missing actions, and teardown.
-- [ ] Have `App.svelte` create one UI action registry, provide it through
+- [x] Have `App.svelte` create one UI action registry, provide it through
   Svelte context, and pass it to `startAppRuntime()`. Add a mount → unmount →
   mount test proving a disposed registry is not reused.
 - [ ] Register the existing menu-action implementation with the runtime's UI

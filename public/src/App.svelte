@@ -6,17 +6,22 @@
   import Overlays from "./components/Overlays.svelte";
   import AuthGate from "./components/AuthGate.svelte";
   import { startAppRuntime } from "./runtime/appRuntime.js";
+  import { createUiActionRegistry } from "./runtime/uiActionRegistry.js";
+  import { provideUiActionRegistry } from "./runtime/uiActionContext.js";
+
+  const uiActions = provideUiActionRegistry(createUiActionRegistry());
 
   onMount(() => {
     let teardown;
     let disposed = false;
-    startAppRuntime().then((dispose) => {
+    startAppRuntime({ uiActions }).then((dispose) => {
       if (disposed) dispose();
       else teardown = dispose;
     });
     return () => {
       disposed = true;
       teardown?.();
+      uiActions.teardown();
     };
   });
 </script>
