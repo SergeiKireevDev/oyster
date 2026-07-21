@@ -46,7 +46,7 @@ pass.
 
 ## 1. Characterize and Configure the Local pi Contract
 
-- [ ] Add configuration tests and documentation for `PI_BIN`,
+- [x] Add configuration tests and documentation for `PI_BIN`,
   `PERSISTENT_STORE=jsonl|sqlite`, and the SQLite database location. Default the
   development wiring to
   `/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js` plus

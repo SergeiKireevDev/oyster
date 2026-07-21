@@ -54,8 +54,25 @@ from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
 
 ## Quick start
 
+Build the SQLite-enabled development checkout once, then start the UI:
+
 ```sh
-node server.mjs                 # serves on 0.0.0.0:8080, prints the auth token
+cd /home/ubuntu/pi-coding-agent && npm run build
+cd /home/ubuntu/tree-pi-bak-sql && node server.mjs
+```
+
+Development defaults to
+`/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js` with
+`PERSISTENT_STORE=sqlite`. The server refuses to start if that executable is
+missing/stale, if SQLite is selected on Node older than 22.19, or if the store
+value is invalid. SQLite sessions are stored in
+`~/.pi/agent/sessions.sqlite` by default (or `sessions.sqlite` under
+`PI_CODING_AGENT_DIR`/`--session-dir`).
+
+To use the JSONL rollback mode without migrating or modifying either store:
+
+```sh
+PERSISTENT_STORE=jsonl PI_BIN=/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js node server.mjs
 ```
 
 Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the browser's localStorage and stripped from the URL. Without a token in the URL the UI shows a token prompt.
@@ -68,8 +85,10 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 | `--host` | `HOST` | `0.0.0.0` | bind address |
 | `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
-| `--pi` | `PI_BIN` | `pi` | pi executable |
-| `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` (e.g. `--provider anthropic -c`) |
+| `--pi` | `PI_BIN` | local checkout `dist/cli.js` | pi executable; bare names are resolved through `PATH` |
+| – | `PERSISTENT_STORE` | `sqlite` | session backend: `sqlite` or `jsonl` |
+| – | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi agent directory; SQLite database is `<dir>/sessions.sqlite` |
+| `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc`; `--session-dir <dir>` relocates `sessions.sqlite` |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary used to open tunnels (must support `tunnel --url http://127.0.0.1:<port>`) |
 
 A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.

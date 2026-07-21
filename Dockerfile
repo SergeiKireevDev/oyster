@@ -57,6 +57,12 @@ COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 
+# This release-image path intentionally uses the published JSONL pi until the
+# local-source BuildKit context is added. It also keeps build-time server
+# fixtures from resolving the host-only development default.
+ENV PI_BIN=/usr/local/bin/pi \
+    PERSISTENT_STORE=jsonl
+
 # Run the test suite at build time — the build fails if the repo is broken
 RUN npm test
 

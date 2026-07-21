@@ -18,9 +18,9 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { readFileSync, existsSync, watch, statSync } from "node:fs";
+import { accessSync, constants, readFileSync, readdirSync, existsSync, watch, statSync } from "node:fs";
 import http from "node:http";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -48,18 +48,88 @@ function defaultTunnelBin() {
   return existsSync(local) ? local : "cloudflared";
 }
 
+const DEFAULT_LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const MIN_SQLITE_NODE = [22, 19, 0];
+
+function resolveExecutable(value) {
+  if (value.includes("/") || value.includes("\\")) return resolve(value);
+  for (const directory of String(process.env.PATH ?? "").split(delimiter)) {
+    if (!directory) continue;
+    const candidate = join(directory, value);
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {}
+  }
+  return value;
+}
+
+function newestMtime(path) {
+  let newest = 0;
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const target = join(path, entry.name);
+    if (entry.isDirectory()) newest = Math.max(newest, newestMtime(target));
+    else newest = Math.max(newest, statSync(target).mtimeMs);
+  }
+  return newest;
+}
+
+function validateConfig(config) {
+  if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
+    throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
+  }
+  try {
+    accessSync(config.PI_BIN, constants.X_OK);
+  } catch {
+    throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Build /home/ubuntu/pi-coding-agent or set PI_BIN/--pi explicitly.`);
+  }
+  if (config.PERSISTENT_STORE === "sqlite") {
+    const current = process.versions.node.split(".").map(Number);
+    const supported = MIN_SQLITE_NODE.every((part, index) => current[index] === part || current[index] > part || current.slice(0, index).some((value, prior) => value > MIN_SQLITE_NODE[prior]));
+    if (!supported) throw new Error(`SQLite sessions require Node.js >= ${MIN_SQLITE_NODE.join(".")}; current runtime is ${process.versions.node}`);
+  }
+  if (config.PI_BIN === DEFAULT_LOCAL_PI) {
+    const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
+    if (!existsSync(sourceRoot)) throw new Error(`local pi source is missing: ${sourceRoot}`);
+    if (newestMtime(sourceRoot) > statSync(config.PI_BIN).mtimeMs) {
+      throw new Error(`local pi build is stale: ${config.PI_BIN}. Run npm run build in /home/ubuntu/pi-coding-agent.`);
+    }
+  }
+}
+
+const piExtraArgs = (argValue("--pi-args") ?? process.env.PI_ARGS ?? "").split(" ").filter(Boolean);
+const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
+const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
+const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
 const config = {
   PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
   HOST: argValue("--host") ?? process.env.HOST ?? "0.0.0.0",
-  PI_BIN: argValue("--pi") ?? process.env.PI_BIN ?? "pi",
+  PI_BIN: resolveExecutable(argValue("--pi") ?? process.env.PI_BIN ?? DEFAULT_LOCAL_PI),
   PI_DIR: resolve(argValue("--dir") ?? process.env.PI_DIR ?? process.cwd()),
-  PI_EXTRA_ARGS: (argValue("--pi-args") ?? process.env.PI_ARGS ?? "")
-    .split(" ")
-    .filter(Boolean),
+  PI_EXTRA_ARGS: piExtraArgs,
+  PERSISTENT_STORE: persistentStore,
+  PI_AGENT_DIR: agentDir,
+  SQLITE_PATH: persistentStore === "sqlite"
+    ? join(resolve(sessionDirIndex >= 0 && piExtraArgs[sessionDirIndex + 1] ? piExtraArgs[sessionDirIndex + 1] : agentDir), "sessions.sqlite")
+    : null,
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
   DIRNAME: __dirname,
 };
+validateConfig(config);
+// Child processes inherit the single validated selection, including when the
+// server supplied the SQLite default rather than receiving it from its parent.
+process.env.PERSISTENT_STORE = config.PERSISTENT_STORE;
+
+if (process.argv.includes("--check-config")) {
+  console.log(JSON.stringify({
+    piBin: config.PI_BIN,
+    persistentStore: config.PERSISTENT_STORE,
+    sqlitePath: config.SQLITE_PATH,
+    node: process.versions.node,
+  }));
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------- shared state
 // Everything the hot-reloaded module needs to persist across reloads.
