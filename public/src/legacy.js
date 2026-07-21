@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, filterReplayEvents, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -916,12 +916,6 @@ function setReplaying(value, phase = null) {
   replaying = next;
   updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null });
 }
-const REPLAY_GATED_EVENTS = [
-  "message_start", "message_update", "message_end",
-  "tool_execution_start", "tool_execution_update", "tool_execution_end",
-  "agent_start", "agent_end",
-];
-
 function flushReplayBufferedEvents(events) {
   lifecycleLog("replayBuffer:flush", { events: events.length, types: events.map((event) => event.type).slice(0, 20) });
   // If get_messages completed after the live assistant already finished, the
@@ -944,7 +938,7 @@ function handleEvent(msg) {
   // buffer those and flush them after the canonical tail is on screen. Without
   // this, a response that finishes during reconnect can be dropped until the
   // user refreshes the page.
-  if (replaying && transcriptGateRequired && REPLAY_GATED_EVENTS.includes(msg.type)) {
+  if (replaying && transcriptGateRequired && REPLAY_GATED_EVENT_TYPES.has(msg.type)) {
     lifecycleLog("sse:gated", { type: msg.type, role: msg.message?.role, replayDoneSeen, buffered: replayBufferedEvents.length });
     if (replayDoneSeen) replayBufferedEvents.push(msg);
     return;

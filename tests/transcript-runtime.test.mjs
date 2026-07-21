@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+
+test("replay gate identifies transcript event types", () => {
+  assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
+  assert.equal(REPLAY_GATED_EVENT_TYPES.has("response"), false);
+});
 
 test("replay filtering drops completed assistant and tool duplicates", () => {
   const events = [{ type: "message_start", message: { role: "assistant" } }, { type: "message_end", message: { role: "assistant" } }, { type: "tool_execution_end" }, { type: "response" }];
