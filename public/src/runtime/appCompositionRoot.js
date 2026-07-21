@@ -46,19 +46,7 @@ import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBro
 import { copyTextToClipboard } from "../lib/clipboardController.js";
 import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
-/*
- * Ownership boundary during the orchestration migration:
- * - This module owns RPC/SSE transport, runner/session bootstrap, and the
- *   remaining document-level scroll and keyboard timing.
- * - Svelte stores and components own visible state and rendering. Transcript
- *   item construction, streaming state updates, and backfill scheduling live
- *   in transcript action modules.
- * - Feature workflows (checkpoints, hublots, routines, and file browsers) are
- *   still orchestrated here, but are extraction candidates for focused action
- *   modules.
- * - Components dispatch narrow custom events only for actions that still
- *   require runtime-owned transport or session lifecycle coordination.
- */
+/** Application assembly graph: browser adapters, feature interfaces, and lifecycle wiring. */
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history } = browser;
