@@ -78,7 +78,7 @@ business logic or resolver state.
 
 ## [ ] 7. Extract Resource Assembly
 
-- [ ] Create `features/resources/createResourceAssembly.js` to compose files, hublots, and routines with injected session and platform interfaces.
+- [x] Create `features/resources/createResourceAssembly.js` to compose files, hublots, and routines with injected session and platform interfaces.
 - [ ] Move shared scope and cross-refresh coordination behind the resource assembly.
 - [ ] Expose only load/show/action operations required by layout, debug hooks, and session state application.
 - [ ] Add tests for scope changes, cross-refresh ordering, listener uniqueness, and remount teardown.

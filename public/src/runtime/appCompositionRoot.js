@@ -46,18 +46,15 @@ import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
-import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
+import { createHublot, hublotVisible, listHublots } from "../lib/hublotActions.js";
 import { createHublotController } from "../lib/hublotController.js";
 import { configureHublotActions } from "../features/hublots/hublotActions.js";
-import { createHublotFeature } from "../features/hublots/createHublotFeature.js";
-import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
 import { configureFilesActions } from "../features/files/filesActions.js";
 import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
-import { createFilesRuntime } from "../features/files/createFilesRuntime.js";
+import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
-import { createRoutineController, createRoutineSidebarController } from "../lib/routineController.js";
 import { configureRoutineActions } from "../features/routines/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
 import { createSettingsController } from "../lib/settingsController.js";
@@ -225,7 +222,7 @@ const sessionAssembly = createSessionAssembly({
     getEmptySessionRunners: () => emptySessionRunners,
     getRoutines: () => routineSidebarController.items,
     routineVisible,
-    getTunnelScopeAll: () => tunnelScopeAll,
+    getTunnelScopeAll: () => resourceAssembly.hublots.getScopeAll(),
     hooks: {
       log: (sessionChanged, sessionState) => lifecycleLog("applyState", { incomingSessionId: sessionState?.sessionId ?? null, previousSessionId: sessionState?.sessionId ?? null, sessionChanged, messageCount: sessionState?.messageCount ?? null, pendingMessageCount: sessionState?.pendingMessageCount ?? null, isStreaming: !!sessionState?.isStreaming, isCompacting: !!sessionState?.isCompacting, model: sessionState?.model?.id ?? null, sessionFile: sessionState?.sessionFile ?? null }),
       updateAppSession,
@@ -435,7 +432,8 @@ const detachComposerActions = () => composerAssembly.teardown();
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
-const filesRuntime = createFilesRuntime({
+const resourceAssembly = createResourceAssembly({
+  files: {
   pickerState: () => ({ curDir: "", showHidden: true, onPick: insertIntoComposer, onCancel: null, returnToHublot: false }),
   folderState: () => ({ browsePath: "", showHidden: true, done: null }),
   explorerState: () => ({ curPath: "", showHidden: true, editPath: "", editContent: "" }),
@@ -485,7 +483,40 @@ const filesRuntime = createFilesRuntime({
     resetState: (path) => Object.assign(state.explorer, { curPath: path, showHidden: true, editPath: "", editContent: "" }),
     toast: addToast,
   }),
+  },
+  hublots: {
+    isVisible: hublotVisible,
+    getSessionId: () => getSessionState()?.sessionId ?? null,
+    resetCarousel: () => carouselController.reset(),
+    openModal,
+    createController: createHublotController,
+    createHublot: (options) => createHublot(fetch, options),
+    setDescription: (desc) => updateHublotManager({ desc }),
+    setCreating: (creating) => updateHublotManager({ creating }),
+    close: closeModal,
+    toast: addToast,
+    listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
+    listSidebarHublots: (visible) => listHublots(fetch, visible),
+    isAuthenticated: () => Boolean(token),
+    setSidebarLoading: hublotsLoading.set,
+    setSidebarTunnels: hublots.set,
+    updateManager: updateHublotManager,
+    updateTitle: (scope) => updateModal({ title: scope ? "Hublots — all sessions" : "Hublots — this session" }),
+  },
+  routines: {
+    listRoutines: () => listRoutines(fetch),
+    isVisible: (routine, scopeAll) => isRoutineVisible(routine, scopeAll, getSessionState()?.sessionId),
+    getSessionId: () => getSessionState()?.sessionId ?? null,
+    setRoutines: routines.set,
+    setTotal: routinesTotal.set,
+    setScopeAll: routineScopeAll.set,
+    setCurrentSessionId: routineCurrentSessionId.set,
+    setLoading: routinesLoading.set,
+    runRoutine: (options) => runRoutine(fetch, options),
+    toast: addToast,
+  },
 });
+const filesRuntime = resourceAssembly.files;
 const filePickerController = filesRuntime.picker;
 const folderBrowserController = filesRuntime.folderBrowser;
 const fileExplorerController = filesRuntime.explorer;
@@ -609,56 +640,13 @@ const detachFileExplorerActions = configureFileExplorerActions({
 });
 
 
-// Tunnels are bound to the session they were opened in; the modal and the
-// hublot sidebar show the current session's tunnels by default, with a
-// toggle to see every session's.
-let tunnelScopeAll = false;
-
-// Unbound tunnels (opened before session binding existed) stay visible.
-const tunnelVisible = (tunnel) => hublotVisible(tunnel, tunnelScopeAll, getSessionState()?.sessionId);
-
-// new-tunnel form values survive modal re-renders (e.g. attach-file detour)
-const tunnelForm = { desc: "" };
-
-async function refreshHublotManager(options) { return hublotController.refresh(options); }
-
-const hublotManagerController = createHublotManagerController({
-  resetCarousel: () => carouselController.reset(),
-  openModal,
-  refresh: refreshHublotManager,
-  getScopeAll: () => tunnelScopeAll,
-});
-const showHublots = hublotManagerController.show;
-
-const hublotController = createHublotFeature({ createController: createHublotController, dependencies: {
-  createHublot: (options) => createHublot(fetch, options),
-  getSessionId: () => getSessionState()?.sessionId ?? null,
-  setDescription: (desc) => { tunnelForm.desc = desc; updateHublotManager({ desc }); },
-  setCreating: (creating) => updateHublotManager({ creating }),
-  close: closeModal,
-  toast: addToast,
-  listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
-  listSidebarHublots: () => listHublots(fetch, tunnelVisible),
-  isAuthenticated: () => Boolean(token),
-  setSidebarLoading: (loading) => hublotsLoading.set(loading),
-  setSidebarTunnels: (tunnels) => hublots.set(tunnels),
-  isVisible: tunnelVisible,
-  updateManager: updateHublotManager,
-  getScopeAll: () => tunnelScopeAll,
-  getDescription: () => tunnelForm.desc,
-}});
-const createManagedHublot = hublotController.create;
-
-async function toggleManagedHublotScope() {
-  await refreshHublotScope({
-    scopeAll: tunnelScopeAll,
-    setScope: (scope) => { tunnelScopeAll = scope; },
-    updateTitle: (scope) => updateModal({ title: scope ? "Hublots — all sessions" : "Hublots — this session" }),
-    refreshManager: () => refreshHublotManager({ loading: true }),
-    refreshSidebar: loadHublots,
-    refreshRoutines: syncRoutinesStore,
-  });
-}
+const hublotRuntime = resourceAssembly.hublots;
+const hublotController = hublotRuntime.controller;
+const showHublots = hublotRuntime.show;
+const createManagedHublot = hublotRuntime.create;
+const toggleManagedHublotScope = hublotRuntime.toggleScope;
+const refreshHublotManager = hublotRuntime.refresh;
+const tunnelVisible = hublotRuntime.isVisible;
 
 // ------------------------------------------------------------ hublot sidebar
 
@@ -699,35 +687,13 @@ const detachFilesActions = configureFilesActions({
 // progression by printing `::progress <0-100> <message>` lines on stdout.
 
 function routineVisible(routine) {
-  return isRoutineVisible(routine, tunnelScopeAll, getSessionState()?.sessionId);
+  return isRoutineVisible(routine, hublotRuntime.getScopeAll(), getSessionState()?.sessionId);
 }
-
-const routineSidebarController = createRoutineSidebarController({
-  listRoutines: () => listRoutines(fetch),
-  isVisible: routineVisible,
-  getSessionId: () => getSessionState()?.sessionId ?? null,
-  getScopeAll: () => tunnelScopeAll,
-  setRoutines: routines.set,
-  setTotal: routinesTotal.set,
-  setScopeAll: routineScopeAll.set,
-  setCurrentSessionId: routineCurrentSessionId.set,
-  setLoading: routinesLoading.set,
-});
-
-function syncRoutinesStore(options) {
-  routineSidebarController.sync(options);
-}
-
-function loadRoutines() {
-  if (token) return routineSidebarController.load();
-}
-
-const routineController = createRoutineController({
-  runRoutine: (options) => runRoutine(fetch, options),
-  getSessionId: () => getSessionState()?.sessionId ?? null,
-  refresh: loadRoutines,
-  toast: addToast,
-});
+const routineRuntime = resourceAssembly.routines;
+const routineSidebarController = routineRuntime.sidebar;
+const routineController = routineRuntime.controller;
+const syncRoutinesStore = routineRuntime.sync;
+function loadRoutines() { if (token) return routineRuntime.load(); }
 const detachRoutineActions = configureRoutineActions(routineController.run);
 
 // ------------------------------------------------------------ session picker
@@ -961,6 +927,7 @@ const detachRuntimeEventAdapters = () => {
   detachSessionPickerActions();
   detachFilesActions();
   transcriptAssembly.teardown();
+  resourceAssembly.teardown();
   dialogAdapters.teardown();
 };
 const runtimeTeardown = createRuntimeCleanup({

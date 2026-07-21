@@ -15,5 +15,15 @@ export function createHublotRuntime(deps) {
     getScopeAll: () => scopeAll, getDescription: () => form.desc,
   }});
   const toggleScope = () => refreshHublotScope({ scopeAll, setScope: (value) => { scopeAll = value; }, updateTitle: deps.updateTitle, refreshManager: () => refresh({ loading: true }), refreshSidebar: controller.refreshSidebar, refreshRoutines: deps.refreshRoutines });
-  return { controller, show: manager.show, create: controller.create, toggleScope };
+  return {
+    controller,
+    show: manager.show,
+    create: controller.create,
+    toggleScope,
+    refresh,
+    load: controller.refreshSidebar,
+    getScopeAll: () => scopeAll,
+    isVisible: visible,
+    teardown: () => controller.teardown?.(),
+  };
 }

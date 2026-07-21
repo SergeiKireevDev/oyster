@@ -13,5 +13,11 @@ export function createRoutineRuntime(deps) {
     setLoading: deps.setLoading,
   });
   const controller = createRoutineController({ runRoutine: deps.runRoutine, getSessionId: deps.getSessionId, refresh: () => sidebar.load(), toast: deps.toast });
-  return { sidebar, controller, load: () => sidebar.load(), sync: (options) => sidebar.sync(options) };
+  return {
+    sidebar,
+    controller,
+    load: () => sidebar.load(),
+    sync: (options) => sidebar.sync(options),
+    teardown() { sidebar.teardown?.(); controller.teardown?.(); },
+  };
 }
