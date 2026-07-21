@@ -55,6 +55,7 @@ import { createSessionPickerController, createSessionPickerDeleteController, cre
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
+import { copyTextToClipboard } from "./lib/clipboardController.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2013,22 +2014,7 @@ async function copyPermalink(el) {
   else promptText("Permalink", "", url); // clipboard unavailable: show it instead
 }
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch {}
-    ta.remove();
-    return ok;
-  }
-}
+const copyText = copyTextToClipboard;
 
 /** opening a /s/<sid>/m/<eid> permalink: scroll to / flash that message */
 async function focusEntryById(entryId) {
