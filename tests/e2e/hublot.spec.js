@@ -15,6 +15,18 @@ import { ensureContainer, teardownContainer } from "./lib/reset.js";
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
+function installFakeCloudflared() {
+  // Make the tunnel layer deterministic: this spec tests pi-lot-ui's hublot UI,
+  // session binding, background agent, and close flow. Relying on Cloudflare's
+  // public quick-tunnel service makes the suite flaky/rate-limit prone.
+  dexec(`bin=$(command -v cloudflared); cat > "$bin" <<'EOF'
+#!/usr/bin/env bash
+echo "https://e2e-\${RANDOM}-fake.trycloudflare.com" >&2
+while true; do sleep 3600; done
+EOF
+chmod +x "$bin"`);
+}
+
 async function body(page, { mobile = false } = {}) {
   const marker = `e2e-btn-${Date.now()}`;
   const brief =
@@ -23,6 +35,7 @@ async function body(page, { mobile = false } = {}) {
     `No frameworks — a plain HTML response is fine. Keep the server running detached.`;
 
   await login(page);
+  installFakeCloudflared();
 
   // the hublot binds to the session the UI currently shows; capture its id
   // (don't open a new session here — the id only settles after the new

@@ -11,7 +11,7 @@
 // stable, searchable handle.
 
 import { test, expect } from "@playwright/test";
-import { login, sendPrompt, waitFor, api, MOBILE_VIEWPORT } from "./lib/harness.js";
+import { login, sendPrompt, waitFor, api, dexec, currentSessionId, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 // Per-test container lifecycle — see checkpoint-rollback.spec.js
@@ -43,7 +43,87 @@ function rowFor(page, token) {
   return page.locator(".m-option", { hasText: token });
 }
 
-function defineSessionManagementTests() {
+async function installFakeCloudflared() {
+  dexec(`bin=$(command -v cloudflared); cat > "$bin" <<'EOF'
+#!/usr/bin/env bash
+echo "https://e2e-\${RANDOM}-fake.trycloudflare.com" >&2
+while true; do sleep 3600; done
+EOF
+chmod +x "$bin"`);
+}
+
+async function installSecondMockModel() {
+  dexec(`cat > /root/.pi/agent/models.json <<'EOF'
+{
+  "providers": {
+    "mock": {
+      "baseUrl": "http://127.0.0.1:4010/v1",
+      "api": "openai-completions",
+      "apiKey": "sk-e2e-mock",
+      "models": [
+        { "id": "e2e-mock", "name": "E2E Mock", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 4096 },
+        { "id": "e2e-alt", "name": "E2E Alt", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 4096 }
+      ]
+    }
+  }
+}
+EOF`);
+}
+
+const RESOURCE_SCRIPT = `#!/bin/bash
+set -u
+case "\${1:-run}" in
+  run) echo "::progress 100 complete" ;;
+  teardown) echo "teardown complete" ;;
+esac
+`;
+
+async function createBoundRoutine(name, sessionId) {
+  const { status, json } = await api("POST", "/routines", { name, action: "create", script: RESOURCE_SCRIPT, sessionId });
+  expect(status, json.error).toBe(201);
+}
+
+async function createBoundHublot(label, sessionId) {
+  const { status, json } = await api("POST", "/tunnels", { label, sessionId });
+  expect(status, json.error).toBe(201);
+  return json.tunnel;
+}
+
+async function openResourceSidebarIfMobile(page, mobile) {
+  if (!mobile) return;
+  const open = await page.evaluate(() => document.getElementById("hublots")?.classList.contains("open"));
+  if (!open) {
+    await page.click("#hublotChip");
+    await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+  }
+}
+
+async function closeResourceSidebarIfMobile(page, mobile) {
+  if (mobile) await page.evaluate(() => document.getElementById("hublots")?.classList.remove("open"));
+}
+
+function modelChip(page, mobile) {
+  return page.locator(mobile ? "#cfgChip" : "#modelChip");
+}
+
+async function expectSidebarResources(page, { hublots, routines, mobile = false }) {
+  await openResourceSidebarIfMobile(page, mobile);
+  for (const label of hublots) {
+    await expect(page.locator("#hublotList .hublot-block", { hasText: label })).toBeVisible({ timeout: 30000 });
+  }
+  for (const name of routines) {
+    await expect(page.locator("#routineList .routine-block", { hasText: name })).toBeVisible({ timeout: 30000 });
+  }
+}
+
+async function switchToSessionByToken(page, token, { mobile = false } = {}) {
+  await closeResourceSidebarIfMobile(page, mobile);
+  await openSessions(page);
+  await rowFor(page, token).click();
+  await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
+}
+
+function defineSessionManagementTests({ includeResourceSwitch = false, mobile = false } = {}) {
   test("start sessions and stop a session's background process", async ({ page }) => {
     await login(page);
 
@@ -179,13 +259,68 @@ function defineSessionManagementTests() {
     // the file picker lists the workspace contents
     await expect(page.locator("#modal", { hasText: "file" })).toBeVisible();
   });
+
+  if (includeResourceSwitch) test("switching sessions restores session-scoped hublots, routines, and model", async ({ page }) => {
+    await installSecondMockModel();
+    await installFakeCloudflared();
+    await login(page);
+
+    const A = tag("RESOURCES-A");
+    const B = tag("RESOURCES-B");
+    await newSession(page);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${A}.`);
+    const sessionA = await waitFor(() => currentSessionId(page), { timeout: 30000, label: "session A id" });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock");
+
+    const aHublots = [tag("hublot-a-1"), tag("hublot-a-2")];
+    const aRoutines = [tag("routine-a-1") + ".sh", tag("routine-a-2") + ".sh"];
+    for (const label of aHublots) await createBoundHublot(label, sessionA);
+    for (const name of aRoutines) await createBoundRoutine(name, sessionA);
+    await page.evaluate(() => { loadHublots(); loadRoutines(); });
+    await expectSidebarResources(page, { hublots: aHublots, routines: aRoutines, mobile });
+    await closeResourceSidebarIfMobile(page, mobile);
+
+    await newSession(page);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${B}.`);
+    const sessionB = await waitFor(() => currentSessionId(page), { timeout: 30000, label: "session B id" });
+    expect(sessionB).not.toEqual(sessionA);
+
+    await page.evaluate(async () => {
+      await rpc({ type: "set_model", provider: "mock", modelId: "e2e-alt" });
+      await refreshState();
+    });
+    await expect(modelChip(page, mobile)).toContainText("e2e-alt", { timeout: 15000 });
+
+    const bHublots = [tag("hublot-b-1")];
+    const bRoutines = [tag("routine-b-1") + ".sh"];
+    for (const label of bHublots) await createBoundHublot(label, sessionB);
+    for (const name of bRoutines) await createBoundRoutine(name, sessionB);
+    await page.evaluate(() => { loadHublots(); loadRoutines(); });
+    await expectSidebarResources(page, { hublots: bHublots, routines: bRoutines, mobile });
+    await expect(page.locator("#hublotList")).not.toContainText(aHublots[0]);
+    await expect(page.locator("#routineList")).not.toContainText(aRoutines[0]);
+    await closeResourceSidebarIfMobile(page, mobile);
+
+    await switchToSessionByToken(page, A, { mobile });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock", { timeout: 15000 });
+    await expectSidebarResources(page, { hublots: aHublots, routines: aRoutines, mobile });
+    await expect(page.locator("#hublotList")).not.toContainText(bHublots[0]);
+    await expect(page.locator("#routineList")).not.toContainText(bRoutines[0]);
+    await closeResourceSidebarIfMobile(page, mobile);
+
+    await switchToSessionByToken(page, B, { mobile });
+    await expect(modelChip(page, mobile)).toContainText("e2e-alt", { timeout: 15000 });
+    await expectSidebarResources(page, { hublots: bHublots, routines: bRoutines, mobile });
+    await expect(page.locator("#hublotList")).not.toContainText(aHublots[0]);
+    await expect(page.locator("#routineList")).not.toContainText(aRoutines[0]);
+  });
 }
 
 test.describe.serial("desktop session management", () => {
-  defineSessionManagementTests();
+  defineSessionManagementTests({ includeResourceSwitch: true });
 });
 
 test.describe.serial("mobile session management", () => {
   test.use({ viewport: MOBILE_VIEWPORT });
-  defineSessionManagementTests();
+  defineSessionManagementTests({ includeResourceSwitch: true, mobile: true });
 });
