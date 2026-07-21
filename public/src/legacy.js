@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -687,17 +687,15 @@ const connectionState = createConnectionStateTransitions({
 // forever on a half-dead socket) — if nothing arrives for 70s, force a
 // reconnect.
 let lastEventAt = Date.now();
-setInterval(() => {
-  runReconnectWatchdog({
-    source: es,
-    lastEventAt,
-    onExpired: () => {
-      eventStream.close();
-      connectionState.lost();
-      connect();
-    },
-  });
-}, 15000);
+const teardownReconnectWatchdog = registerReconnectWatchdog({
+  getSource: () => es,
+  getLastEventAt: () => lastEventAt,
+  onExpired: () => {
+    eventStream.close();
+    connectionState.lost();
+    connect();
+  },
+});
 
 function connect({ replay = true } = {}) {
   if (!token) { requireToken(); return; }

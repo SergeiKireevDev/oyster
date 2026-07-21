@@ -28,6 +28,12 @@ export function runReconnectWatchdog({ source, lastEventAt, onExpired, now = Dat
   return true;
 }
 
+/** Register the periodic SSE watchdog and return an explicit teardown hook. */
+export function registerReconnectWatchdog({ getSource, getLastEventAt, onExpired, interval = 15000, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval }) {
+  const timer = setIntervalImpl(() => runReconnectWatchdog({ source: getSource(), lastEventAt: getLastEventAt(), onExpired }), interval);
+  return () => clearIntervalImpl(timer);
+}
+
 export function createEventStreamRuntime({ EventSourceImpl = EventSource } = {}) {
   let source = null;
   return {
