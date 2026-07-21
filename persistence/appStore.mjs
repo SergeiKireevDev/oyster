@@ -292,7 +292,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         return row ? { ...row } : null;
       },
       updateProcess: (id, changes) => {
-        const allowed = new Set(["status", "observed_at", "ended_at", "exit_code", "signal"]);
+        const allowed = new Set([
+          "process_group_id", "boot_id", "proc_start_ticks", "executable", "command_sha256",
+          "status", "observed_at", "ended_at", "exit_code", "signal",
+        ]);
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported hublot process field: ${column}`);

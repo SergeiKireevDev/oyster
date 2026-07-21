@@ -331,7 +331,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
 - [x] Use bounded exponential backoff and crash-loop protection for automatic restarts.
 - [x] Mark a missing self-served service without a startup script interrupted.
-- [ ] Never publish a persisted URL until its current cloudflared process is confirmed healthy.
+- [x] Never publish a persisted URL until its current cloudflared process is confirmed healthy.
 - [ ] Make graceful shutdown await bounded process cleanup while retaining desired state for restart recovery.
 - [ ] Preserve current routes, SSE events, tool behavior, and stable hublot IDs across restarts.
 - [ ] Verify session deletion closes the service and tunnel before cascading its database and startup-script records.

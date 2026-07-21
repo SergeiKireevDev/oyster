@@ -4,4 +4,4 @@
 # until the test closes the tunnel.
 set -euo pipefail
 echo "https://e2e-${RANDOM}-fake.trycloudflare.com" >&2
-exec tail -f /dev/null
+while true; do sleep 3600; done

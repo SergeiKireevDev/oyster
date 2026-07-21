@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
 import { readProcessIdentity } from "../persistence/processIdentity.mjs";
 import {
-  persistHublotProcessIdentity, rebindHublot, reserveHublot, updateHublotProcessMetadata,
+  currentHublotTunnelProcessIsHealthy, listTunnels, persistHublotProcessIdentity,
+  rebindHublot, recordHublotTransition, reserveHublot, updateHublotProcessMetadata,
 } from "../tunnels.mjs";
 
 function fixture(t) {
@@ -64,6 +65,28 @@ test("discovered hublot processes are persisted immediately with verifiable iden
   assert.ok(persisted.executable);
   assert.ok(persisted.command_sha256);
   assert.equal(store.repositories.hublots.listProcesses(hublot.id)[0].id, persisted.id);
+
+  const exited = once(child, "exit");
+  process.kill(-child.pid, "SIGTERM");
+  await exited;
+});
+
+test("persisted URLs are published only while the current tunnel identity is healthy", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4182 });
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+  t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
+  const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: child.pid });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://confirmed.trycloudflare.com" });
+
+  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id), true);
+  assert.equal(listTunnels(state)[0].url, "https://confirmed.trycloudflare.com");
+  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id, { verifyIdentity: () => false }), false);
+
+  updateHublotProcessMetadata(state, tunnelProcess.id, { status: "lost", ended_at: "lost", observed_at: "lost" });
+  assert.equal(store.repositories.hublots.find(hublot.id).public_url, "https://confirmed.trycloudflare.com", "SQLite may retain the last observed URL for history");
+  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id), false);
+  assert.equal(listTunnels(state)[0].url, null, "an unconfirmed persisted URL must not be published");
 
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");

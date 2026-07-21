@@ -17,7 +17,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createConnection, createServer } from "node:net";
 import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
-import { readProcessIdentity } from "./persistence/processIdentity.mjs";
+import { readProcessIdentity, verifyPersistedProcessIdentity } from "./persistence/processIdentity.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
@@ -152,14 +152,40 @@ export function rebindHublot(state, id, ownerId = null) {
   });
 }
 
+function confirmSpawnedTunnelProcess(state, processRow, proc) {
+  if (proc.exitCode !== null || proc.killed) return false;
+  let identity;
+  try { identity = readProcessIdentity(processRow.pid); } catch { return false; }
+  if (!processRow.boot_id || !processRow.proc_start_ticks
+    || processRow.boot_id !== identity.bootId
+    || String(processRow.proc_start_ticks) !== String(identity.procStartTicks)) return false;
+  const refreshed = updateHublotProcessMetadata(state, processRow.id, {
+    process_group_id: identity.processGroupId,
+    boot_id: identity.bootId,
+    proc_start_ticks: identity.procStartTicks,
+    executable: identity.executable,
+    command_sha256: identity.commandSha256,
+    observed_at: new Date().toISOString(),
+  });
+  return verifyPersistedProcessIdentity(refreshed);
+}
+
+export function currentHublotTunnelProcessIsHealthy(state, id, { verifyIdentity = verifyPersistedProcessIdentity } = {}) {
+  const current = hublotRepository(state).listProcesses(id)
+    .filter((process) => process.role === "tunnel" && !process.ended_at && ["running", "starting"].includes(process.status))
+    .at(-1);
+  return !!current && verifyIdentity(current);
+}
+
 function persistedTunnelInfo(state, row) {
   const service = hublotRepository(state).listProcesses(row.id).find((process) => process.role === "service" && process.status === "running");
+  const publishUrl = row.status === "open" && currentHublotTunnelProcessIsHealthy(state, row.id);
   return {
     id: row.id,
     port: row.port,
     label: row.label,
     sessionId: row.session_id ?? null,
-    url: row.public_url,
+    url: publishUrl ? row.public_url : null,
     workdir: row.workdir,
     createdAt: row.created_at,
     ...(service ? { servicePid: service.pid } : {}),
@@ -228,7 +254,7 @@ export function reserveHublot(state, {
 
 function failOpeningHublot(state, id, error) {
   const row = hublotRepository(state).find(id);
-  if (!row || row.status !== "opening") return;
+  if (!row || !["opening", "recovering"].includes(row.status)) return;
   const message = error instanceof Error ? error.message : String(error);
   recordHublotTransition(state, id, "failed", { publicUrl: null, lastError: message });
 }
@@ -284,6 +310,15 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       errTail = (errTail + text).slice(-2000);
       const m = text.match(PUBLIC_URL_RE);
       if (m && !settled) {
+        if (!confirmSpawnedTunnelProcess(state, tunnelProcess, proc)) {
+          settled = true;
+          clearTimeout(timer);
+          if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+          const error = new Error("tunnel reported a URL before its persisted process identity could be confirmed healthy");
+          failOpeningHublot(state, id, error);
+          reject(error);
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         tunnel.url = m[0];
