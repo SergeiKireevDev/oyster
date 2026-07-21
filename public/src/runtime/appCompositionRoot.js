@@ -28,7 +28,7 @@ import { filePicker, updateFilePicker } from "../stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
 import { setComposerTextValue } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
-import { updateHublotManager } from "../stores/hublotManager.js";
+import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
@@ -36,7 +36,7 @@ import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
-import { createHublot, hublotVisible, listHublots } from "../lib/hublotActions.js";
+import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
@@ -461,6 +461,9 @@ const resourceAssembly = createResourceAssembly({
     isAuthenticated: () => Boolean(token),
     setSidebarLoading: hublotsLoading.set,
     setSidebarTunnels: hublots.set,
+    deleteHublot: (id) => removeHublot(fetch, id),
+    removeSidebarHublot: (id) => hublots.update((items) => items.filter((item) => item.id !== id)),
+    removeManagerHublot: (id) => hublotManager.update((state) => ({ ...state, tunnels: state.tunnels.filter((tunnel) => tunnel.id !== id) })),
     updateManager: updateHublotManager,
     updateTitle: (scope) => updateModal({ title: scope ? "Hublots — all sessions" : "Hublots — this session" }),
   },

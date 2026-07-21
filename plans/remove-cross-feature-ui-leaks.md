@@ -60,7 +60,7 @@ cd tests/e2e && npm test
   `HublotManagerModal.svelte` to invoke it. Delete
   `features/files/filesActions.js` and its configuration call; test both entry
   points open the current-workdir explorer.
-- [ ] Add `removeHublot(id)` to the hublot runtime's public operations. It must
+- [x] Add `removeHublot(id)` to the hublot runtime's public operations. It must
   perform the network request, update the relevant hublot store, and report
   failures through the injected toast policy; add success and failure tests.
 - [ ] Register hublot show/create/toggle-scope/remove/command-palette actions

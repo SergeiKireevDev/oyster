@@ -16,10 +16,20 @@ export function createHublotRuntime(deps) {
     getScopeAll: () => scopeAll, getDescription: () => form.desc,
   }});
   const toggleScope = () => refreshHublotScope({ scopeAll, setScope: (value) => { scopeAll = value; }, updateTitle: deps.updateTitle, refreshManager: () => refresh({ loading: true }), refreshSidebar: controller.refreshSidebar, refreshRoutines: deps.refreshRoutines });
+  async function removeHublot(id) {
+    try {
+      await deps.deleteHublot(id);
+      deps.removeSidebarHublot(id);
+      deps.removeManagerHublot(id);
+    } catch (error) {
+      deps.toast(`close hublot failed: ${error.message}`, "error");
+    }
+  }
   return {
     controller,
     show: manager.show,
     create: controller.create,
+    removeHublot,
     toggleScope,
     refresh,
     load: controller.refreshSidebar,
