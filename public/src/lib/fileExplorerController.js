@@ -1,3 +1,10 @@
+export function createOpenFileExplorerEventController({ windowTarget, open }) {
+  const onOpen = () => open();
+  function attach() { windowTarget.addEventListener("pi-open-file-explorer", onOpen); return detach; }
+  function detach() { windowTarget.removeEventListener("pi-open-file-explorer", onOpen); }
+  return { attach, detach };
+}
+
 export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });

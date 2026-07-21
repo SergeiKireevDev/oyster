@@ -48,12 +48,6 @@ export function registerComposerEvents(target, { inputChanged, keydown, send, ab
   return () => target.removeEventListener("pi:composer", onComposer);
 }
 
-export function registerOpenFileExplorerEvent(target, { open }) {
-  const onOpen = () => open();
-  target.addEventListener("pi-open-file-explorer", onOpen);
-  return () => target.removeEventListener("pi-open-file-explorer", onOpen);
-}
-
 export function registerManagedHublotEvents(target, { create, openCommandPalette, toggleScope }) {
   const listeners = [
     ["pi-managed-hublot-create", (event) => create(event.detail)],

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -168,15 +168,6 @@ test("composer event adapter routes each composer action", () => {
   listener({ detail: { action: "keydown", sourceEvent: "event" } });
   listener({ detail: { action: "send" } }); listener({ detail: { action: "abort" } });
   assert.deepEqual(calls, ["input", ["keydown", "event"], "send", "abort"]);
-});
-
-test("open file explorer event adapter invokes its callback", () => {
-  let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
-  let calls = 0;
-  registerOpenFileExplorerEvent(target, { open: () => { calls++; } });
-  listener();
-  assert.equal(calls, 1);
 });
 
 test("managed hublot event adapter routes management actions", () => {

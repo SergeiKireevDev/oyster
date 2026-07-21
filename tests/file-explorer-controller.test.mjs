@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFileExplorerController } from "../public/src/lib/fileExplorerController.js";
+import { createFileExplorerController, createOpenFileExplorerEventController } from "../public/src/lib/fileExplorerController.js";
 
 test("file explorer loads a directory into its list state", async () => {
   const calls = [];
@@ -185,3 +185,6 @@ test("file explorer retries its workdir after another folder cannot load", async
   ]);
   assert.equal(calls[5][1], "/work");
 });
+
+
+test("open file explorer event controller invokes callback", () => { let listener; const target = { addEventListener: (_, fn) => { listener = fn; }, removeEventListener() {} }; let opened = 0; createOpenFileExplorerEventController({ windowTarget: target, open: () => opened++ }).attach(); listener(); assert.equal(opened, 1); });
