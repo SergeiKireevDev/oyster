@@ -13,7 +13,11 @@ export function createPlatformAssembly(deps) {
     transport,
     configureEvents(config) {
       if (events) return events;
-      events = (deps.createEventDispatch ?? createPlatformEventDispatch)(config);
+      const { featureEvents, ...platformEvents } = config;
+      const eventDependencies = featureEvents
+        ? Object.assign(platformEvents, ...Object.values(featureEvents))
+        : config;
+      events = (deps.createEventDispatch ?? createPlatformEventDispatch)(eventDependencies);
       return events;
     },
     configureConnection(config) {
@@ -28,6 +32,9 @@ export function createPlatformAssembly(deps) {
     },
     get events() { return events; },
     get connection() { return connection; },
+    dispatchEvent: (...args) => events?.dispatch(...args),
+    setReplaying: (...args) => events?.setReplaying(...args),
+    snapshotEvents: () => events?.snapshot(),
     teardown() {
       attachments?.detach?.();
       connection?.coordinator?.disconnect?.();

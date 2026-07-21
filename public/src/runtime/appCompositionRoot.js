@@ -282,7 +282,7 @@ const managedConnection = platformAssembly.configureConnection({
   getToken: () => token,
   requireToken,
   setGate: setTranscriptGateRequired,
-  setReplaying,
+  setReplaying: (...args) => platformAssembly.setReplaying(...args),
   setReplayDoneSeen: (value) => platformEvents.markReplayDone(value),
   setReplayBuffer: (value) => platformEvents.setReplayBuffer(value),
   getSkipTranscriptGate: () => getCurrentRunner() && emptySessionRunners.has(getCurrentRunner()),
@@ -294,9 +294,9 @@ const managedConnection = platformAssembly.configureConnection({
       onError: (error) => { if (!String(error.message).includes("unauthorized")) addToast(`init failed: ${error.message}`, "error"); }, });
   },
   onError: () => { managedConnection.state.reconnecting(); probeTokenValidity(); },
-  onMessage: (event) => processEventMessage(event.data, { onReceived: () => {}, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
+  onMessage: (event) => processEventMessage(event.data, { onReceived: () => {}, dedupe: isDuplicateSseEvent, dispatch: platformAssembly.dispatchEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
   refreshState: (...args) => refreshState(...args),
-  dispatch: (...args) => handleEvent(...args),
+  dispatch: platformAssembly.dispatchEvent,
 });
 const { coordinator: connectionCoordinator, watchdog: teardownReconnectWatchdog } = managedConnection;
 const connect = connectionCoordinator.connect;
@@ -309,35 +309,42 @@ function setTranscriptGateRequired(value) {
   transcriptGateRequired = !!value;
   updateAppSession({ transcriptGateRequired });
 }
-function setReplaying(value, phase = null) { platformEvents.setReplaying(value, phase); }
-function handleEvent(msg) { return platformEvents.dispatch(msg); }
+const setReplaying = platformAssembly.setReplaying;
 const composerReadyForSend = transcriptOperations.composerReadyForSend;
 platformEvents = platformAssembly.configureEvents({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
-  assistantAlreadyRendered,
-  handleExtensionUI: (message) => handleExtensionUI(message),
-  setRunner,
-  setRunners: setRunnersNow,
-  setWorkdir,
-  refreshHublots: () => loadHublots(),
-  refreshRoutines: loadRoutines,
-  getRunners: () => getRunners(),
-  onRunnersChanged: sessionOperations.notifyRunnersChanged,
-  refreshTree: refreshTreeIfOpen,
-  updateRoutine: (...args) => resourceOperations.updateRoutine(...args),
   toast: addToast,
-  scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
   openUrl: (url) => window.open(url, "_blank"),
   handleResponse,
   refreshState,
   reloadPage: () => location.reload(),
-  reloadTranscript: () => reloadTranscript(),
-  setBusy,
-  isGateRequired: () => transcriptGateRequired,
-  agentStart: () => agentStart(),
-  agentCompletion: () => agentCompletion(),
-  transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
+  featureEvents: {
+    sessions: {
+      setRunner,
+      setRunners: setRunnersNow,
+      setWorkdir,
+      getRunners: () => getRunners(),
+      onRunnersChanged: sessionOperations.notifyRunnersChanged,
+    },
+    resources: {
+      refreshHublots: () => loadHublots(),
+      refreshRoutines: loadRoutines,
+      updateRoutine: (...args) => resourceOperations.updateRoutine(...args),
+      scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
+    },
+    checkpoints: { refreshTree: refreshTreeIfOpen },
+    extensionUi: { handleExtensionUI: (message) => handleExtensionUI(message) },
+    transcript: {
+      assistantAlreadyRendered,
+      reloadTranscript: () => reloadTranscript(),
+      setBusy,
+      isGateRequired: () => transcriptGateRequired,
+      agentStart: () => agentStart(),
+      agentCompletion: () => agentCompletion(),
+      transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
+    },
+  },
 });
 const flushReplayBufferedEvents = platformEvents.flushBufferedEvents;
 

@@ -7,14 +7,19 @@ test("platform assembly composes transport events connection timers and debug at
   const assembly = createPlatformAssembly({
     transport: { token: true },
     createTransport: (config) => ({ config, dispose: () => calls.push("transport") }),
-    createEventDispatch: (config) => ({ config, kind: "events" }),
+    createEventDispatch: (config) => ({ config, kind: "events", dispatch: (value) => `dispatch:${value}`, setReplaying: (value) => calls.push(`replay:${value}`), snapshot: () => ({ ready: true }) }),
     createConnection: (config) => ({ config, coordinator: { disconnect: () => calls.push("connection") }, watchdog: () => calls.push("watchdog") }),
     createAttachments: (config) => ({ config, detach: () => calls.push("debug") }),
   });
   assert.equal(assembly.transport.config.token, true);
-  assert.equal(assembly.configureEvents({ one: 1 }), assembly.configureEvents({ one: 2 }));
+  const events = assembly.configureEvents({ one: 1, featureEvents: { sessions: { sessionEvent: true }, transcript: { transcriptEvent: true } } });
+  assert.equal(events, assembly.configureEvents({ one: 2 }));
+  assert.deepEqual(events.config, { one: 1, sessionEvent: true, transcriptEvent: true });
+  assert.equal(assembly.dispatchEvent("message"), "dispatch:message");
+  assembly.setReplaying(true);
+  assert.deepEqual(assembly.snapshotEvents(), { ready: true });
   assert.equal(assembly.configureConnection({ two: 2 }), assembly.configureConnection({ two: 3 }));
   assert.equal(assembly.configureAttachments({ three: 3 }), assembly.configureAttachments({ three: 4 }));
   assembly.teardown();
-  assert.deepEqual(calls, ["debug", "connection", "watchdog", "transport"]);
+  assert.deepEqual(calls, ["replay:true", "debug", "connection", "watchdog", "transport"]);
 });
