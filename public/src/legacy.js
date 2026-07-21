@@ -1313,6 +1313,12 @@ async function reloadTranscript() {
     applyState,
     onState: (s) => lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null }),
     onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
+    getDurableMessages: async (s) => {
+      const res = await fetch(`/session-messages?${sessionFileQuery(s.sessionFile)}`);
+      if (!res.ok) throw new Error(`session-messages failed (${res.status})`);
+      return res.json();
+    },
+    onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
   lastPreview = null; // canonical content from pi supersedes the file preview
   const rendered = renderTranscript(messages); // tail is in the DOM after this call
