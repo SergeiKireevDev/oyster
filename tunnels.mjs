@@ -11,6 +11,8 @@
  *     id:        string  – handle used by the UI to close the tunnel
  *     port:      number  – local port being exposed
  *     label:     string? – what the tunnel is for ("vite dev server", …)
+ *     sessionId: string? – pi session the tunnel was opened in (binds it to
+ *                          that session in the UI; null = unbound/legacy)
  *     url:       string  – public URL, known once the tunnel is up
  *     workdir:   string  – project active when the tunnel was created
  *     createdAt: string  – ISO timestamp
@@ -38,7 +40,7 @@ export function listTunnels(state) {
  * Spawn a tunnel for a local port. Resolves with the tunnel entry once the
  * public URL is known; rejects if the process dies or times out first.
  */
-export function openTunnel(state, { port, label = null }) {
+export function openTunnel(state, { port, label = null, sessionId = null }) {
   return new Promise((resolvePromise, reject) => {
     port = Number(port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -54,7 +56,9 @@ export function openTunnel(state, { port, label = null }) {
     }
 
     const bin = state.config.TUNNEL_BIN;
-    const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate"];
+    // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
+    // makes cloudflared print a URL that never actually registers (error 1033)
+    const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
     console.log(`[pi-ui] spawning tunnel: ${bin} ${args.join(" ")}`);
     const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
 
@@ -62,6 +66,7 @@ export function openTunnel(state, { port, label = null }) {
       id: randomBytes(6).toString("hex"),
       port,
       label,
+      sessionId,
       url: null,
       workdir: state.currentDir,
       createdAt: new Date().toISOString(),

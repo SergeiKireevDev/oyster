@@ -15,18 +15,20 @@
  *   POST /rpc         -> JSON command forwarded to pi's stdin
  *   GET  /sessions    -> saved pi sessions for the active workdir
  *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
+ *   GET  /session-folders -> all folders under ~/.pi/agent/sessions
+ *   GET  /search      -> full-text search (?q=…&scope=session|folder|all[&path=…])
  *   GET  /browse      -> list subdirectories for the folder picker
  *   POST /workdir     -> switch folder (respawns pi there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn the pi process
  *   GET  /tunnels     -> live tunnels spawned by this server
- *   POST /tunnels     -> open a tunnel { port, label? } (cloudflared quick tunnel)
+ *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
  */
 
 import { spawn } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
-import { readFileSync, existsSync, readdirSync, statSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
@@ -197,6 +199,137 @@ export function init(state) {
     }
     sessions.sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));
     return sessions;
+  }
+
+  // ---------------------------------------------------------------- search
+
+  const SESSIONS_ROOT = join(homedir(), ".pi", "agent", "sessions");
+
+  /** best-effort human-readable name for a session folder like
+   *  "--home-ubuntu-tree-pi--" -> "/home/ubuntu/tree-pi" (lossy for dashes) */
+  function decodeFolderName(name) {
+    return "/" + name.replace(/^--/, "").replace(/--$/, "").replace(/-/g, "/");
+  }
+
+  function listSessionFolders() {
+    if (!existsSync(SESSIONS_ROOT)) return [];
+    return readdirSync(SESSIONS_ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => {
+        let count = 0;
+        try { count = readdirSync(join(SESSIONS_ROOT, e.name)).filter((f) => f.endsWith(".jsonl")).length; } catch {}
+        return { dir: join(SESSIONS_ROOT, e.name), name: e.name, label: decodeFolderName(e.name), count };
+      })
+      .filter((f) => f.count > 0)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Pull searchable text blocks out of one jsonl entry. */
+  function entryTexts(e) {
+    const out = [];
+    if (e.type === "message") {
+      const m = e.message ?? {};
+      const c = m.content;
+      if (typeof c === "string") out.push({ role: m.role, kind: "text", text: c });
+      else if (Array.isArray(c)) {
+        for (const b of c) {
+          if (b.type === "text" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
+          else if (b.type === "thinking" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
+          else if (b.type === "toolCall") out.push({ role: m.role, kind: "toolCall", text: `${b.name} ${JSON.stringify(b.arguments ?? {})}` });
+        }
+      }
+    } else if (e.type === "session_info" && e.name) {
+      out.push({ role: "meta", kind: "name", text: e.name });
+    }
+    return out;
+  }
+
+  function makeSnippet(text, idx, qLen, ctx = 70) {
+    const start = Math.max(0, idx - ctx);
+    const end = Math.min(text.length, idx + qLen + ctx);
+    return {
+      before: (start > 0 ? "…" : "") + text.slice(start, idx).replace(/\s+/g, " "),
+      match: text.slice(idx, idx + qLen),
+      after: text.slice(idx + qLen, end).replace(/\s+/g, " ") + (end < text.length ? "…" : ""),
+    };
+  }
+
+  function searchSessionFile(path, query, maxHitsPerFile = 25) {
+    const q = query.toLowerCase();
+    let text;
+    try { text = readFileSync(path, "utf8"); } catch { return []; }
+    const hits = [];
+    let meta = { id: null, name: null, preview: null, cwd: null };
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === "session") { meta.id = e.id; meta.cwd = e.cwd ?? null; continue; }
+      if (e.type === "session_info") meta.name = e.name ?? meta.name;
+      for (const t of entryTexts(e)) {
+        if (!meta.preview && t.role === "user" && t.kind === "text") meta.preview = t.text.slice(0, 120);
+        const idx = t.text.toLowerCase().indexOf(q);
+        if (idx === -1) continue;
+        hits.push({
+          entryId: e.id ?? null,
+          role: t.role ?? null,
+          kind: t.kind,
+          timestamp: e.timestamp ?? null,
+          snippet: makeSnippet(t.text, idx, q.length),
+        });
+        if (hits.length >= maxHitsPerFile) break;
+      }
+      if (hits.length >= maxHitsPerFile) break;
+    }
+    return hits.map((h) => ({ ...h, sessionMeta: meta }));
+  }
+
+  /**
+   * scope:
+   *   session -> path = a session .jsonl file
+   *   folder  -> path = a folder under SESSIONS_ROOT (default: current workdir's)
+   *   all     -> every folder under SESSIONS_ROOT
+   */
+  function searchSessions({ q, scope, path }, maxResults = 200) {
+    const files = [];
+    if (scope === "session") {
+      files.push(path);
+    } else {
+      const dirs = scope === "all"
+        ? listSessionFolders().map((f) => f.dir)
+        : [path || sessionDirFor(state.currentDir)];
+      for (const dir of dirs) {
+        if (!existsSync(dir)) continue;
+        for (const f of readdirSync(dir)) {
+          if (f.endsWith(".jsonl")) files.push(join(dir, f));
+        }
+      }
+    }
+    // newest first
+    files.sort().reverse();
+    const results = [];
+    let truncated = false;
+    for (const file of files) {
+      const hits = searchSessionFile(file, q);
+      if (!hits.length) continue;
+      const folderName = dirname(file).split("/").pop();
+      for (const h of hits) {
+        if (results.length >= maxResults) { truncated = true; break; }
+        const { sessionMeta, ...rest } = h;
+        results.push({
+          ...rest,
+          sessionPath: file,
+          sessionId: sessionMeta.id,
+          sessionName: sessionMeta.name,
+          sessionPreview: sessionMeta.preview,
+          sessionCwd: sessionMeta.cwd,
+          folder: folderName,
+          folderLabel: decodeFolderName(folderName),
+        });
+      }
+      if (truncated) break;
+    }
+    return { results, truncated, filesSearched: files.length };
   }
 
   /** Parse a session .jsonl into tree nodes. Every entry has id/parentId, so
@@ -377,6 +510,22 @@ export function init(state) {
       return;
     }
 
+    if (req.method === "DELETE" && url.pathname === "/session") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      const sessionsRoot = join(homedir(), ".pi", "agent", "sessions");
+      if (!target.startsWith(sessionsRoot + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+        json(res, 400, { error: `not a session file: ${target}` });
+        return;
+      }
+      try {
+        unlinkSync(target);
+        json(res, 200, { deleted: target });
+      } catch (e) {
+        json(res, 500, { error: `failed to delete session: ${e.message}` });
+      }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/session-tree") {
       const target = resolve(String(url.searchParams.get("path") ?? ""));
       const sessionsRoot = join(homedir(), ".pi", "agent", "sessions");
@@ -388,6 +537,39 @@ export function init(state) {
         json(res, 200, sessionTree(target));
       } catch (e) {
         json(res, 500, { error: `failed to parse session: ${e.message}` });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/session-folders") {
+      json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(state.currentDir) });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/search") {
+      const q = String(url.searchParams.get("q") ?? "").trim();
+      const scope = String(url.searchParams.get("scope") ?? "folder");
+      const path = url.searchParams.get("path") ? resolve(String(url.searchParams.get("path"))) : null;
+      if (q.length < 2) {
+        json(res, 400, { error: "query must be at least 2 characters" });
+        return;
+      }
+      if (!["session", "folder", "all"].includes(scope)) {
+        json(res, 400, { error: `invalid scope: ${scope}` });
+        return;
+      }
+      if (scope === "session" && (!path || !path.startsWith(SESSIONS_ROOT + "/") || !path.endsWith(".jsonl"))) {
+        json(res, 400, { error: "scope=session requires a session file path" });
+        return;
+      }
+      if (scope === "folder" && path && !path.startsWith(SESSIONS_ROOT)) {
+        json(res, 400, { error: "folder must be under the sessions root" });
+        return;
+      }
+      try {
+        json(res, 200, { q, scope, ...searchSessions({ q, scope, path }) });
+      } catch (e) {
+        json(res, 500, { error: `search failed: ${e.message}` });
       }
       return;
     }
@@ -405,10 +587,23 @@ export function init(state) {
         .filter((e) => e.isDirectory() && !e.name.startsWith("."))
         .map((e) => e.name)
         .sort((a, b) => a.localeCompare(b));
+      // files are only needed by the attach-file picker (?files=1)
+      let files;
+      if (url.searchParams.get("files") === "1") {
+        files = entries
+          .filter((e) => e.isFile() && !e.name.startsWith("."))
+          .map((e) => {
+            let size = null;
+            try { size = statSync(join(target, e.name)).size; } catch {}
+            return { name: e.name, size };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
       json(res, 200, {
         path: target,
         parent: dirname(target) === target ? null : dirname(target),
         dirs,
+        ...(files ? { files } : {}),
         home: homedir(),
         workdir: state.currentDir,
       });
@@ -473,10 +668,19 @@ export function init(state) {
       if (req.method === "POST") {
         const body = await readJsonBody(req, res);
         if (body === undefined) return;
+        // no port given: allocate the next free one, starting at 3000
+        let port = body?.port;
+        if (!port) {
+          if (!state.nextIfacePort) state.nextIfacePort = 3000;
+          const used = new Set([...(state.tunnels?.values() ?? [])].map((t) => t.port));
+          while (used.has(state.nextIfacePort)) state.nextIfacePort++;
+          port = state.nextIfacePort++;
+        }
         try {
           const tunnel = await openTunnel(state, {
-            port: body?.port,
+            port,
             label: body?.label ? String(body.label).slice(0, 200) : null,
+            sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
           });
           json(res, 201, { tunnel });
         } catch (e) {
