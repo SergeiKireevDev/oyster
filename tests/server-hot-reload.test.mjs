@@ -17,7 +17,7 @@ async function copyStableServer(root) {
 }
 
 function serverEnv(root) {
-  return { ...process.env, PI_UI_DB_PATH: join(root, "pi-lot-ui.sqlite") };
+  return { ...process.env, HOME: root, PI_UI_DB_PATH: join(root, "pi-lot-ui.sqlite") };
 }
 
 async function availablePort() {

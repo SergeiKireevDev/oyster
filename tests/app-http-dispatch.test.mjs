@@ -20,6 +20,7 @@ function stableState() {
     tunnels: new Map(),
     sseClients: new Set(),
     reloadCount: 1,
+    legacyCheckpointsImported: true,
     appStore: {
       path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 4, appliedVersions: [1, 2, 3, 4] },
       repositories: {

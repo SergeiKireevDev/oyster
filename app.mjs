@@ -23,6 +23,7 @@ export async function init(state) {
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
+  const { importLegacyCheckpoints } = await import(bust("persistence/checkpointImporter.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
@@ -44,9 +45,6 @@ export async function init(state) {
 
   // Patch state created by an older stable core; migrations are idempotent.
   if (state.eventBuffer) {
-    // pre-runner era: global server events were buffered but never replayed
-    // (per-runner replay lives in runner.buffer). Drop the dead buffer and
-    // swap in the non-buffering broadcast with dead-client guards.
     delete state.eventBuffer;
     state.broadcast = (line) => {
       for (const res of state.sseClients) {
@@ -69,6 +67,10 @@ export async function init(state) {
     jsonlRoot: SESSIONS_ROOT,
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
+  if (!state.legacyCheckpointsImported) {
+    state.checkpointImport = importLegacyCheckpoints({ repository: checkpointRepository, sessionReferences: state.sessionReferences });
+    state.legacyCheckpointsImported = true;
+  }
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
