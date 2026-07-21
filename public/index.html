@@ -255,6 +255,7 @@
       width: 100vw;
       z-index: 55;
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
+      touch-action: pan-x pan-y;
     }
   }
 
@@ -361,6 +362,7 @@
       z-index: 55;
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
       border-left: 1px solid var(--border);
+      touch-action: pan-x pan-y;
     }
     #hublotChip { display: inline-flex; }
 
@@ -3538,16 +3540,6 @@ async function showHublots() {
 $("hublotAdd").addEventListener("click", () => showHublots().catch((e) => toast(e.message, "error")));
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
-$("hublotChip").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const open = $("hublots").classList.toggle("open");
-  if (open) { loadHublots(); loadRoutines(); } // fresh content when opening
-});
-$("treeChip").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const open = $("treebar").classList.toggle("open");
-  if (open) loadCheckpointTree();
-});
 // tap outside the drawer closes it (mobile only — on desktop they're
 // docked, not overlays). Sync the carousel state so applyCarousel()
 // doesn't immediately re-open it.
@@ -4927,14 +4919,12 @@ function onTouchStart(e) {
 
 function onTouchMove(e) {
   if (!touchStart || swipeHandled) return;
-  // while two fingers are down, any horizontal drag preempts other gestures
-  if (touchStart.n >= 2 && e.touches.length >= 2) {
-    const dx = e.touches[0].clientX - touchStart.x;
-    const axis = swipeAxis(dx, e.touches[0].clientY - touchStart.y);
-    if (axis === "h" && Math.abs(dx) > 24) {
-      // consume: stop the page from scrolling/bouncing under the gesture
-      e.preventDefault();
-    }
+  const dx = e.touches[0].clientX - touchStart.x;
+  const dy = e.touches[0].clientY - touchStart.y;
+  // once the gesture is clearly horizontal, claim it — stops the drawer's
+  // overflow-y scroller from eating the swipe on iOS
+  if (swipeAxis(dx, dy) === "h" && Math.abs(dx) > 12) {
+    e.preventDefault();
   }
 }
 
@@ -4997,10 +4987,12 @@ function switchToAdjacentRunner(dir) {
 
 function attachSwipeListeners() {
   if (window._piSwipeAttached) return;
-  document.addEventListener("touchstart", onTouchStart, { passive: true });
-  document.addEventListener("touchmove", onTouchMove, { passive: false });
-  document.addEventListener("touchend", onTouchEnd, { passive: true });
-  document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  // capture phase: fires BEFORE the drawer's scroll container sees it, so
+  // horizontal swipes over an open drawer aren't swallowed by overflow-y
+  document.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
+  document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+  document.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
+  document.addEventListener("touchcancel", onTouchCancel, { passive: true, capture: true });
   window.addEventListener("resize", applyCarousel);
   window._piSwipeAttached = true;
 }
