@@ -312,6 +312,22 @@ lines. Complete the remaining migration in small verified commits:
 - [x] Add a regression guard that the composition root has no feature-local
   mutable state, feature custom-event registration, or feature DOM lookup.
 
+The wrapper/factory work above does **not** by itself satisfy this section:
+`appRuntimeImplementation.js` remains large. Continue with concrete code moves:
+
+- [x] Move the session construction block and its root-local mutable state into
+  `features/sessions/createSessionFeature.js`; the root must only call its
+  factory and consume its narrow operations.
+- [ ] Move transcript controller construction, stream dispatch, and reload
+  wiring into `features/transcript/createTranscriptFeature.js`; delete the
+  placeholder wrapper from the root.
+- [ ] Move EventSource/RPC/reconnect state and construction into
+  `platform/connectionCoordinator.js`, leaving only coordinator construction
+  in the root.
+- [ ] Split the root into feature assembly modules until `appComposition.js`
+  is the only runtime entry and is no more than 400 lines; remove
+  `appRuntimeImplementation.js` after no-reference checks.
+
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
 reviewable wiring module (a few hundred lines), and every moved feature has a
 fresh mount → teardown → mount lifecycle test.

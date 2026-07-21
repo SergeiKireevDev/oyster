@@ -19,7 +19,7 @@ import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
 import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
-import { createSessionFeature } from "../features/sessions/createSessionFeature.js";
+import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
 import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
@@ -395,7 +395,6 @@ let afterTranscript = null;
 
 function setRunner(id) {
   currentRunner = runnerState.setRunner(id);
-  sessionRuntime?.setCurrentSession?.(id);
 }
 
 function setRunnersNow(runners) {
@@ -403,11 +402,7 @@ function setRunnersNow(runners) {
 }
 
 /** attach this client to another runner and rebuild the UI from its stream */
-let sessionRuntime = null;
-function getSessionRuntime() {
-  // Create this only once all feature adapters have initialized; a switch can
-  // occur much later from the picker, tree, or adjacent-runner controls.
-  return sessionRuntime ??= createSessionFeature({ createRuntime: createSessionRuntime, dependencies: {
+const sessionFeature = createLazySessionFeature({ createRuntime: createSessionRuntime, getDependencies: () => ({
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
@@ -425,8 +420,8 @@ function getSessionRuntime() {
     renderPreview: () => previewController.renderNow(),
     resetCommands: () => commandGuard?.reset(),
     connect,
-  }});
-}
+  }) });
+function getSessionRuntime() { return sessionFeature.get(); }
 // ---- instant transcript preview -------------------------------------------
 // Opening a session waits on a pi process spawning AND resuming the session
 // before get_messages can answer (the server holds commands back during the

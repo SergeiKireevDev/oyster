@@ -1,4 +1,12 @@
 /** Owns construction of the session runtime behind a feature boundary. */
+export function createLazySessionFeature({ createRuntime, getDependencies }) {
+  let feature;
+  return {
+    get: () => feature ??= createSessionFeature({ createRuntime, dependencies: getDependencies() }),
+    teardown: () => { feature?.teardown(); feature = undefined; },
+  };
+}
+
 export function createSessionFeature({ createRuntime, dependencies }) {
   const runtime = createRuntime(dependencies);
   let currentSession = null;
