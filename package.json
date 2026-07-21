@@ -1,5 +1,5 @@
 {
-  "name": "pi-remote-ui",
+  "name": "pi-lot-ui",
   "version": "0.1.0",
   "description": "Web UI for interacting with the pi coding agent remotely through a tunnel",
   "type": "module",

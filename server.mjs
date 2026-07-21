@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * pi-remote-ui — stable core (hot-reload host)
+ * pi-lot-ui — stable core (hot-reload host)
  *
  * This file owns everything that must SURVIVE a code reload:
  *   - the listening HTTP socket

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>pi remote</title>
+<title>pi-lot</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -769,7 +769,7 @@
 
 <header>
   <span class="dot" id="connDot"></span>
-  <span class="title" id="sessionTitle">pi remote</span>
+  <span class="title" id="sessionTitle">pi-lot</span>
   <span class="spacer"></span>
   <span class="chip" id="hublotChip" title="Show hublots">❖</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
@@ -825,7 +825,7 @@
 <div id="toasts"></div>
 
 <div id="gate"><div class="card">
-  <div style="font-weight:600;font-size:17px">pi remote</div>
+  <div style="font-weight:600;font-size:17px">pi-lot</div>
   <div style="color:var(--muted);font-size:13.5px">Enter the auth token printed by the server on startup.</div>
   <input type="password" id="gateInput" placeholder="token">
   <button class="btn" id="gateBtn">Connect</button>
@@ -1394,7 +1394,7 @@ function applyState(s) {
   state = s;
   if (sessionChanged) { loadHublots(); loadRoutines(); } // sidebar tunnels are session-scoped; routines follow the workdir
   if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
-  $("sessionTitle").textContent = s.sessionName || "pi remote";
+  $("sessionTitle").textContent = s.sessionName || "pi-lot";
   $("modelChip").textContent = s.model ? s.model.id : "no model";
   $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
   $("cfgChip").textContent = `${s.model ? s.model.id : "no model"} · ${s.thinkingLevel}`;

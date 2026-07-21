@@ -1,5 +1,5 @@
 [Unit]
-Description=pi-remote-ui - web UI for the pi coding agent
+Description=pi-lot-ui - web UI for the pi coding agent
 
 [Service]
 WorkingDirectory=/home/ubuntu/tree-pi

@@ -1,5 +1,5 @@
 /**
- * pi-remote-ui — tunnel manager
+ * pi-lot-ui — tunnel manager
  *
  * Spawns and tracks tunnel processes (cloudflared quick tunnels by default)
  * on behalf of the UI, so a session can deterministically expose a local

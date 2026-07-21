@@ -1,4 +1,4 @@
-# pi-remote-ui
+# pi-lot-ui
 
 A small web UI for driving the [pi coding agent](https://github.com/badlogic/pi-mono) remotely — from a phone or any browser — through a tunnel.
 

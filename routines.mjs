@@ -1,5 +1,5 @@
 /**
- * pi-remote-ui — routine manager
+ * pi-lot-ui — routine manager
  *
  * A "routine" is a runnable script living in the GLOBAL store
  * `~/.pi/routines/` (any executable file). Routines are *bound to the

@@ -1,5 +1,5 @@
 /**
- * pi-remote-ui — hot-reloadable application logic
+ * pi-lot-ui — hot-reloadable application logic
  *
  * Loaded by server.mjs (the stable core) via dynamic import. Everything here
  * can be edited while the server runs; the core re-imports this module on
