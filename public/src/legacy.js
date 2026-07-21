@@ -2181,9 +2181,9 @@ async function saveExplorerFile() {
 window.addEventListener("pi-file-explorer-browse", (event) => loadFileExplorer(event.detail));
 window.addEventListener("pi-file-explorer-edit", (event) => editExplorerFile(event.detail));
 window.addEventListener("pi-file-explorer-save", () => saveExplorerFile());
+window.addEventListener("pi-file-explorer-upload", () => uploadExplorerFiles());
 
 setFileExplorerHandlers({
-  uploadFiles: uploadExplorerFiles,
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
 });
