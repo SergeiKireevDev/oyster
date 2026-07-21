@@ -19,8 +19,12 @@ const FAKE_HOME = mkdtempSync(join(tmpdir(), "pi-ui-test-home-"));
 process.env.HOME = FAKE_HOME;
 
 const { SESSIONS_ROOT } = await import("../sessions.mjs");
-const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
-  await import("../checkpoints.mjs");
+const {
+  loadLegacyCheckpoints: loadCheckpoints,
+  saveLegacyCheckpoints: saveCheckpoints,
+  deleteLegacySessionCheckpoints: deleteSessionCheckpoints,
+  recordCheckpoint, checkpointTree, git, checkpointWorkdir,
+} = await import("../checkpoints.mjs");
 
 const STORE = join(FAKE_HOME, ".pi", "agent", "checkpoints.json");
 mkdirSync(join(FAKE_HOME, ".pi", "agent"), { recursive: true });

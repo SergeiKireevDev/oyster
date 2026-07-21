@@ -27,13 +27,14 @@ test("numbered migrations apply once and report stable status", (t) => {
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
-  assert.deepEqual(first, { currentVersion: 3, appliedVersions: [1, 2, 3] });
+  assert.deepEqual(first, { currentVersion: 4, appliedVersions: [1, 2, 3, 4] });
   assert.deepEqual(second, first);
-  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "operations", "schema_migrations"]);
+  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "operations", "schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
     { version: 1, name: "foundation", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 2, name: "session_ownership", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 3, name: "session_deletion_state", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 4, name: "checkpoints", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 

@@ -7,7 +7,10 @@ import { createSessionReferenceCodec } from "../session-references.mjs";
 
 const home = mkdtempSync(join(tmpdir(), "pi-sqlite-checkpoints-"));
 process.env.HOME = home;
-const { checkpointTree, loadCheckpoints, recordCheckpoint, saveCheckpoints } = await import("../checkpoints.mjs");
+const checkpointModule = await import("../checkpoints.mjs");
+const { checkpointTree, recordCheckpoint } = checkpointModule;
+const loadCheckpoints = checkpointModule.loadLegacyCheckpoints;
+const saveCheckpoints = checkpointModule.saveLegacyCheckpoints;
 after(() => rmSync(home, { recursive: true, force: true }));
 
 const storagePath = join(home, ".pi", "agent", "sessions.sqlite");

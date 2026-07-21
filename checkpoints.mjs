@@ -27,7 +27,7 @@ const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
 // failure modes to defend against are a crash mid-write (→ write tmp +
 // atomic rename) and a corrupt file being silently read as {} and then
 // overwritten on the next save (→ set the corrupt file aside, loudly).
-export function loadCheckpoints() {
+export function loadLegacyCheckpoints() {
   if (!existsSync(CHECKPOINTS_PATH)) return {};
   try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); }
   catch (e) {
@@ -38,7 +38,7 @@ export function loadCheckpoints() {
   }
 }
 
-export function saveCheckpoints(db) {
+export function saveLegacyCheckpoints(db) {
   try {
     const tmp = `${CHECKPOINTS_PATH}.tmp`;
     writeFileSync(tmp, JSON.stringify(db, null, 2));
@@ -49,13 +49,13 @@ export function saveCheckpoints(db) {
 }
 
 /** Delete only records owned by one session; fork and ancestor keys are independent. */
-export function deleteSessionCheckpoints(sessionId) {
+export function deleteLegacySessionCheckpoints(sessionId) {
   if (!sessionId) return 0;
-  const db = loadCheckpoints();
+  const db = loadLegacyCheckpoints();
   const count = Array.isArray(db[sessionId]) ? db[sessionId].length : 0;
   if (!Object.hasOwn(db, sessionId)) return 0;
   delete db[sessionId];
-  saveCheckpoints(db);
+  saveLegacyCheckpoints(db);
   return count;
 }
 
@@ -75,7 +75,9 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
   const { sessionId, leafId, entries } = catalog.entries(identity);
   const anchorId = entries[entries.length - 1]?.id ?? null;
   if (!sessionId || !anchorId || !hash) return null;
-  const db = loadCheckpoints();
+  const load = options.loadCheckpoints ?? loadLegacyCheckpoints;
+  const save = options.saveCheckpoints ?? saveLegacyCheckpoints;
+  const db = load();
   const list = (db[sessionId] ??= []);
   let rec = list.find((checkpoint) => checkpoint.hash === hash && checkpoint.anchorId === anchorId);
   if (!rec) {
@@ -87,7 +89,7 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
       timestamp: new Date().toISOString(),
     };
     list.push(rec);
-    saveCheckpoints(db);
+    save(db);
   }
   return rec;
 }
@@ -127,7 +129,7 @@ export function checkpointTree(session, options = {}) {
     seen.add(root.id);
     root = byId.get(root.parentId);
   }
-  const db = loadCheckpoints();
+  const db = (options.loadCheckpoints ?? loadLegacyCheckpoints)();
   // forks inherit their ancestors' checkpoint records (so ↩ works inside
   // them), but the tree must not display those twice: each node only shows
   // checkpoints an ancestor hasn't already shown

@@ -15,7 +15,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       if (status === 200 && out.hash && runner.sessionRef) {
         try {
           ensureSessionOwner(runner.sessionRef);
-          const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog });
+          const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog, loadCheckpoints, saveCheckpoints });
           if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
         } catch (e) {
           logger.error(`[pi-ui] failed to record checkpoint: ${e.message}`);
@@ -38,7 +38,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       }
       try {
         json(res, 200, {
-          ...checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences }),
+          ...checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences, loadCheckpoints }),
           capabilities: {
             rollback: !!state.sessionOperations?.capabilities.exactFork[target.backend],
             reason: state.sessionOperations?.capabilities.exactFork[target.backend]
@@ -82,7 +82,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           const saved = await checkpointWorkdir(state.piProcesses, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
-            try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog }); } catch {}
+            try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog, loadCheckpoints, saveCheckpoints }); } catch {}
           }
         }
         // 2. fork before touching the worktree. Unsupported or failed backend

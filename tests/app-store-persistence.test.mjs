@@ -63,6 +63,25 @@ test("session owners are unique and durable operations retain their journal afte
   assert.equal(store.repositories.operations.find("delete-1").status, "completed");
 });
 
+test("checkpoint repository atomically replaces and reloads backend-neutral records", (t) => {
+  const { path, Database } = fixture(t);
+  const first = openAppStore({ databasePath: path, Database });
+  const checkpoint = {
+    hash: "abc123", anchorId: "entry-1", leafId: "entry-2", dir: "/work",
+    sessionRef: { backend: "sqlite", id: "session-1", storagePath: "/agent/sessions.sqlite" },
+    message: "saved", timestamp: "2026-07-16T00:00:00.000Z",
+  };
+  first.repositories.checkpoints.save({ "session-1": [checkpoint] });
+  assert.deepEqual(first.repositories.checkpoints.load(), { "session-1": [checkpoint] });
+  first.close();
+
+  const second = openAppStore({ databasePath: path, Database });
+  t.after(() => second.close());
+  assert.deepEqual(second.repositories.checkpoints.load(), { "session-1": [checkpoint] });
+  second.repositories.checkpoints.save({});
+  assert.deepEqual(second.repositories.checkpoints.load(), {});
+});
+
 test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
   const { path, databases, Database } = fixture(t);
   const store = openAppStore({ databasePath: path, Database });
@@ -107,9 +126,9 @@ test("closing and reopening the app store preserves data without rerunning migra
 
   const second = openAppStore({ databasePath: path, Database });
   t.after(() => second.close());
-  assert.deepEqual(second.migrationStatus, { currentVersion: 3, appliedVersions: [1, 2, 3] });
+  assert.deepEqual(second.migrationStatus, { currentVersion: 4, appliedVersions: [1, 2, 3, 4] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
-  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 3);
+  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 4);
 });
 
 test("WAL permits concurrent readers and committed cross-connection writes", (t) => {

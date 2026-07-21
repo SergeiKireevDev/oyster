@@ -16,13 +16,14 @@ export async function init(state) {
     SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
     sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
-  const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
+  const { recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
-  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
+  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointStore } = await import(bust("persistence/checkpointStore.mjs"));
+  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -38,6 +39,7 @@ export async function init(state) {
   ].map((name) => import(bust(name))));
   const { config, appStore } = state;
   if (!appStore) throw new Error("stable core did not provide state.appStore");
+  const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints } = createCheckpointStore(appStore.repositories.checkpoints);
 
   // ---- state migrations --------------------------------------------------
   // The core (server.mjs) only changes on a real restart; state it created

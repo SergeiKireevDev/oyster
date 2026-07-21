@@ -53,6 +53,22 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX app_sessions_status_idx ON app_sessions(status);
     `,
   }),
+  Object.freeze({
+    version: 4,
+    name: "checkpoints",
+    sql: `
+      CREATE TABLE checkpoints (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER NOT NULL REFERENCES app_sessions(id) ON DELETE CASCADE,
+        git_hash TEXT NOT NULL,
+        anchor_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(owner_id, git_hash, anchor_id)
+      );
+      CREATE INDEX checkpoints_owner_created_idx ON checkpoints(owner_id, created_at, id);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

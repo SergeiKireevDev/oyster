@@ -32,6 +32,44 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `).run(key, value, updatedAt),
     }),
+    checkpoints: Object.freeze({
+      load: () => {
+        const grouped = {};
+        for (const row of database.prepare(`
+          SELECT s.session_id, c.payload
+          FROM checkpoints c JOIN app_sessions s ON s.id = c.owner_id
+          ORDER BY c.created_at, c.id
+        `).all()) {
+          try { (grouped[row.session_id] ??= []).push(JSON.parse(row.payload)); } catch {}
+        }
+        return grouped;
+      },
+      save: (grouped) => {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+          database.exec("DELETE FROM checkpoints");
+          const findOwner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?");
+          const insertOwner = database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING");
+          const insertCheckpoint = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
+          for (const [sessionId, checkpoints] of Object.entries(grouped ?? {})) {
+            for (const checkpoint of checkpoints ?? []) {
+              const reference = checkpoint.sessionRef ?? (checkpoint.sessionPath
+                ? { backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath }
+                : null);
+              if (!reference?.backend || !reference.storagePath) throw new Error(`checkpoint ${checkpoint.hash ?? "unknown"} has no session identity`);
+              const createdAt = checkpoint.timestamp ?? new Date().toISOString();
+              insertOwner.run(reference.backend, reference.id ?? sessionId, reference.storagePath, createdAt);
+              const owner = findOwner.get(reference.backend, reference.id ?? sessionId, reference.storagePath);
+              insertCheckpoint.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), createdAt);
+            }
+          }
+          database.exec("COMMIT");
+        } catch (error) {
+          try { database.exec("ROLLBACK"); } catch {}
+          throw error;
+        }
+      },
+    }),
     sessions: Object.freeze({
       upsert: ({ backend, sessionId, storagePath = null, createdAt }) => {
         database.prepare(`

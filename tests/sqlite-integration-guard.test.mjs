@@ -119,7 +119,7 @@ test("opening and migrating pi-lot-ui.sqlite leaves the coding-agent schema unch
   const app = new DatabaseSync(appPath, { readOnly: true });
   t.after(() => app.close());
   const appTables = app.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
-  assert.deepEqual(appTables, ["app_sessions", "app_settings", "operations", "schema_migrations"]);
+  assert.deepEqual(appTables, ["app_sessions", "app_settings", "checkpoints", "operations", "schema_migrations"]);
   assert.equal(appTables.includes("sessions"), false);
 });
 
