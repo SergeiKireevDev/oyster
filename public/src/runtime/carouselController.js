@@ -148,6 +148,26 @@ export function createCarouselHeaderController({ isDesktop, hublots, treebar, lo
   return { toggleHublots, toggleTree };
 }
 
+/** Route typed header actions to header and carousel behavior. */
+export function createHeaderEventController({ documentTarget, chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
+  const onHeader = (event) => {
+    const { action, sourceEvent } = event.detail ?? {};
+    if (action === "chooseModel") chooseModel();
+    else if (action === "cycleThinking") cycleThinking();
+    else if (action === "openConfig") openConfig();
+    else if (action === "toggleHublots") toggleHublots(sourceEvent);
+    else if (action === "toggleTree") toggleTree(sourceEvent);
+  };
+  function attach() {
+    documentTarget.addEventListener("pi:header", onHeader);
+    return detach;
+  }
+  function detach() {
+    documentTarget.removeEventListener("pi:header", onHeader);
+  }
+  return { attach, detach };
+}
+
 export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {
   let touchStart = null;
   let handled = false;

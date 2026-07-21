@@ -13,19 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerHeaderEvents(target, { chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
-  const onHeader = (event) => {
-    const { action, sourceEvent } = event.detail ?? {};
-    if (action === "chooseModel") chooseModel();
-    else if (action === "cycleThinking") cycleThinking();
-    else if (action === "openConfig") openConfig();
-    else if (action === "toggleHublots") toggleHublots(sourceEvent);
-    else if (action === "toggleTree") toggleTree(sourceEvent);
-  };
-  target.addEventListener("pi:header", onHeader);
-  return () => target.removeEventListener("pi:header", onHeader);
-}
-
 export function registerComposerEvents(target, { inputChanged, keydown, send, abort }) {
   const onComposer = (event) => {
     const { action, sourceEvent } = event.detail ?? {};

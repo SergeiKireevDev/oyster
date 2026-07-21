@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerComposerEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { registerComposerEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -128,14 +128,22 @@ test("mobile drawer controller closes only an open drawer on outside mobile taps
   assert.equal(removed, listener);
 });
 
-test("header event adapter routes header actions", () => {
+test("header event controller routes typed header actions", () => {
   let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  let removed;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
   const calls = [];
-  registerHeaderEvents(target, { chooseModel: () => calls.push("model"), cycleThinking: () => calls.push("thinking"), openConfig: () => calls.push("config"), toggleHublots: (event) => calls.push(["hublots", event]), toggleTree: (event) => calls.push(["tree", event]) });
+  const controller = createHeaderEventController({
+    documentTarget: target,
+    chooseModel: () => calls.push("model"), cycleThinking: () => calls.push("thinking"), openConfig: () => calls.push("config"),
+    toggleHublots: (event) => calls.push(["hublots", event]), toggleTree: (event) => calls.push(["tree", event]),
+  });
+  controller.attach();
   listener({ detail: { action: "chooseModel" } });
   listener({ detail: { action: "toggleTree", sourceEvent: "event" } });
+  controller.detach();
   assert.deepEqual(calls, ["model", ["tree", "event"]]);
+  assert.equal(removed, listener);
 });
 
 test("composer event adapter routes each composer action", () => {
