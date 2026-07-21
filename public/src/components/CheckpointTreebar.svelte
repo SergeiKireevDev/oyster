@@ -17,6 +17,7 @@
         node={$checkpointTree.root}
         currentSessionId={$checkpointTree.currentSessionId}
         runners={$checkpointTree.runners}
+        capabilities={$checkpointTree.capabilities}
       />
     {/if}
   </div>

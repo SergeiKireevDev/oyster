@@ -52,7 +52,7 @@ export function createCheckpointTreeController({
         return;
       }
       if (!response.ok) throw new Error(data.error || `failed (${response.status})`);
-      setTreeState({ loading: false, root: data.root, empty: "", error: "" });
+      setTreeState({ loading: false, root: data.root, capabilities: data.capabilities ?? { rollback: true, reason: null }, empty: "", error: "" });
     } catch (error) {
       setTreeState({ loading: false, root: null, empty: "", error: `tree unavailable: ${error.message}` });
     }

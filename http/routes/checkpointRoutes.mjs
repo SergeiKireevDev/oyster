@@ -36,7 +36,15 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
         return;
       }
       try {
-        json(res, 200, checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences }));
+        json(res, 200, {
+          ...checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences }),
+          capabilities: {
+            rollback: !!state.sessionOperations?.capabilities.exactFork[target.backend],
+            reason: state.sessionOperations?.capabilities.exactFork[target.backend]
+              ? null
+              : `exact-entry ${target.backend} fork is unavailable`,
+          },
+        });
       } catch (e) {
         json(res, 500, { error: `tree failed: ${e.message}` });
       }
@@ -50,8 +58,20 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       const model = body?.model ? String(body.model).slice(0, 200) : null;
       const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
       if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
-      if (!cp.sessionPath) { json(res, 409, { error: "rollback is not supported for this session backend" }); return; }
-      if (!existsSync(cp.sessionPath)) { json(res, 410, { error: "session file of this checkpoint is gone" }); return; }
+      const sessionRef = cp.sessionRef ?? (cp.sessionPath
+        ? { backend: "jsonl", id: sessionId, storagePath: cp.sessionPath }
+        : null);
+      const backend = sessionRef?.backend;
+      if (!sessionRef || !state.sessionOperations?.capabilities.exactFork[backend]) {
+        json(res, 409, { error: `${backend ?? "unknown"} rollback requires exact-entry fork support from the configured pi` });
+        return;
+      }
+      if (backend === "jsonl" && !existsSync(sessionRef.storagePath)) {
+        json(res, 410, { error: "session file of this checkpoint is gone" }); return;
+      }
+      if (backend === "sqlite" && !state.sessionCatalog.findById(sessionRef.id)) {
+        json(res, 410, { error: "session of this checkpoint is gone" }); return;
+      }
       try {
         // 1. nothing may be lost: auto-commit pending changes and record them
         //    as a checkpoint at the session's current tip (→ roll forward later)
@@ -61,29 +81,55 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           const saved = await checkpointWorkdir(config.PI_BIN, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
-            try { recordCheckpoint(cp.sessionRef ?? cp.sessionPath, cp.dir, saved.body, { catalog: state.sessionCatalog }); } catch {}
+            try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog }); } catch {}
           }
         }
-        // 2. deterministic restore of the checkpointed state
+        // 2. fork before touching the worktree. Unsupported or failed backend
+        //    operations therefore cannot leave git reset to a different state.
+        const fork = backend === "sqlite"
+          ? await state.sessionOperations.forkSession(sessionRef, { entryId: cp.leafId ?? cp.anchorId, cwd: cp.dir })
+          : (() => {
+              const created = forkSessionAt(sessionRef.storagePath, cp.leafId ?? cp.anchorId, hash);
+              return {
+                ...created,
+                sessionRef: { backend: "jsonl", id: created.id, storagePath: created.path },
+              };
+            })();
+        const forkEntries = backend === "sqlite"
+          ? new Set(state.sessionCatalog.entries(fork.id).entries.map((entry) => entry.id))
+          : fork.entryIds;
+        // 3. deterministic restore of the checkpointed state
         const rs = await git(cp.dir, ["reset", "--hard", hash]);
         if (rs.code !== 0) {
           json(res, 500, { error: `git reset failed: ${(rs.stderr || rs.stdout).trim()}` });
           return;
         }
-        // 3. fork the session at the checkpointed entry — no LLM involved
-        const fork = forkSessionAt(cp.sessionPath, cp.leafId ?? cp.anchorId, hash);
-        // the fork keeps its ancestors' entry ids: inherit their checkpoints
+        // The fork keeps its ancestors' entry ids: inherit their checkpoints.
         const db = loadCheckpoints();
         db[fork.id] = (db[sessionId] ?? [])
-          .filter((c) => fork.entryIds.has(c.anchorId))
-          .map((c) => ({ ...c, sessionPath: fork.path }));
+          .filter((checkpoint) => forkEntries.has(checkpoint.anchorId))
+          .map((checkpoint) => ({
+            ...checkpoint,
+            sessionRef: fork.sessionRef,
+            ...(backend === "jsonl" ? { sessionPath: fork.path } : { sessionPath: undefined }),
+          }));
         saveCheckpoints(db);
         // 4. attach a runner to the fork and hand it to the client
-        const runner = openSessionRunner({ sessionPath: fork.path, sessionId: fork.id, dir: cp.dir });
+        const runner = openSessionRunner({ sessionRef: fork.sessionRef, dir: cp.dir });
         sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
         runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
         logger.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
-        json(res, 200, { rolledBack: hash, safety, fork: { id: fork.id, path: fork.path }, runner: runnerInfo(runner) });
+        json(res, 200, {
+          rolledBack: hash,
+          safety,
+          fork: {
+            id: fork.id,
+            path: fork.path ?? null,
+            sessionRef: fork.sessionRef,
+            sessionKey: state.sessionReferences.serialize(fork.sessionRef),
+          },
+          runner: runnerInfo(runner),
+        });
       } catch (e) {
         json(res, 500, { error: `rollback failed: ${e.message}` });
       }

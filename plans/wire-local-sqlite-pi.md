@@ -118,7 +118,7 @@ transcript hydration expose equivalent user-visible data for JSONL and SQLite.
   references and catalog entries. Preserve checkpoint anchors, parent/fork
   grouping, inherited markers, and routine/hublot bindings for SQLite session
   IDs.
-- [ ] Put rollback/fork behind an explicit backend capability. Keep the existing
+- [x] Put rollback/fork behind an explicit backend capability. Keep the existing
   JSONL implementation; for SQLite invoke a supported exact-entry fork and
   attach the resulting session by ID. If the local build lacks exact-entry
   SQLite fork support, disable the control with a precise explanation and

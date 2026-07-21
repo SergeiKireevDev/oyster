@@ -1,6 +1,7 @@
 <script>
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "../runtime/uiActionNames.js";
+  import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
 
   const uiActions = getUiActionRegistry();
   const openCheckpointTreeSession = (node) => uiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, node);
@@ -9,8 +10,9 @@
   export let node;
   export let currentSessionId = null;
   export let runners = [];
+  export let capabilities = { rollback: true, reason: null };
 
-  $: live = runners.find((runner) => runner.sessionFile === node.path && runner.alive);
+  $: live = runners.find((runner) => runnerSessionIdentity(runner) === sessionIdentity(node) && runner.alive);
 
   function checkpointMessage(checkpoint) {
     const text = (checkpoint.message ?? "").replace(/^checkpoint:?\s*/, "");
@@ -38,7 +40,7 @@
     type="button"
     class="t-session"
     class:current={node.id === currentSessionId}
-    title={node.path}
+    title={node.sessionKey ?? node.path ?? node.id}
     onclick={() => openCheckpointTreeSession(node)}
   >
     <span>{node.parentSession ? "🌿" : "🌱"}</span>
@@ -54,19 +56,22 @@
         <button
           type="button"
           class="t-ckpt"
-          title={`${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`}
-          onclick={(event) => rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, event.currentTarget)}
+          title={capabilities.rollback
+            ? `${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`
+            : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`}
+          disabled={!capabilities.rollback}
+          onclick={(event) => capabilities.rollback && rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, event.currentTarget)}
         >
           🧊<span class="t-hash">{checkpoint.hash}</span><span class="t-msg">{checkpointMessage(checkpoint)}</span><span class="t-time">{checkpointTime(checkpoint)}</span>
         </button>
         <div class="t-forks">
           {#each forkChildren(checkpoint.hash) as child (child.id)}
-            <svelte:self node={child} {currentSessionId} {runners} />
+            <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
           {/each}
         </div>
       {/each}
       {#each unslottedChildren as child (child.id)}
-        <svelte:self node={child} {currentSessionId} {runners} />
+        <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
       {/each}
     </div>
   {/if}

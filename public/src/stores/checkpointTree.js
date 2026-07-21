@@ -7,6 +7,7 @@ export const checkpointTree = writable({
   empty: "",
   currentSessionId: null,
   runners: [],
+  capabilities: { rollback: true, reason: null },
 });
 
 export function setCheckpointTreeState(patch) {

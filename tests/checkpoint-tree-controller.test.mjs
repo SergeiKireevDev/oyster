@@ -41,7 +41,10 @@ test("checkpoint tree controller loads the current session tree", async () => {
   } });
   await tree.load();
   assert.equal(requests[0], "/checkpoint-tree?path=sessions%2Fcurrent.jsonl");
-  assert.deepEqual(states.at(-1), { loading: false, root: { id: "root" }, empty: "", error: "" });
+  assert.deepEqual(states.at(-1), {
+    loading: false, root: { id: "root" },
+    capabilities: { rollback: true, reason: null }, empty: "", error: "",
+  });
 });
 
 test("checkpoint tree controller loads SQLite sessions by opaque runner key", async () => {

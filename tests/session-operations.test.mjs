@@ -29,6 +29,27 @@ test("SQLite deletion delegates to the configured pi repository operation", {
   assert.equal(createSqliteSessionCatalog({ databasePath }).findById("delete-me"), null);
 });
 
+test("SQLite exact-entry fork delegates to pi and preserves parent identity", {
+  skip: process.env.PI_SQLITE_CONTRACT_TEST === "skip" ? "PI_SQLITE_CONTRACT_TEST=skip" : false,
+}, async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-session-fork-operation-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const databasePath = join(root, "sessions.sqlite");
+  const module = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/core/sqlite-session-repository.js");
+  const repository = new module.CodingAgentSqliteSessionRepository(databasePath);
+  const source = await repository.create({ id: "source", cwd: root });
+  await source.appendMessage({ role: "user", content: "fork here", timestamp: Date.now() });
+  const entryId = await source.appendMessage({ role: "assistant", content: [{ type: "text", text: "done" }], timestamp: Date.now() });
+  await source.close();
+  const codec = createSessionReferenceCodec({ agentDir: root, sqlitePath: databasePath });
+  const operations = createSessionOperations({ config: { PI_BIN: LOCAL_PI }, sessionReferences: codec });
+  const fork = await operations.forkSession({ backend: "sqlite", id: "source", storagePath: databasePath }, {
+    entryId, cwd: root, id: "forked",
+  });
+  assert.deepEqual(fork.sessionRef, { backend: "sqlite", id: "forked", storagePath: databasePath });
+  assert.equal(createSqliteSessionCatalog({ databasePath }).findById("forked").parentSessionId, "source");
+});
+
 test("session operations expose capability failures without loading a repository", async () => {
   const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: "/agent/sessions.sqlite" });
   const operations = createSessionOperations({

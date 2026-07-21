@@ -45,8 +45,34 @@ export function createSessionOperations({
     return { backend: "sqlite", id: reference.id, deleted: sessionReferences.serialize(reference) };
   }
 
+  async function forkSession(input, { entryId, cwd, id } = {}) {
+    const reference = sessionReferences.validate(input);
+    if (reference.backend !== "sqlite") throw new Error("exact repository fork is only used for SQLite sessions");
+    if (!sqliteDeleteSupported) {
+      const error = new Error("configured pi does not support exact-entry SQLite forks");
+      error.code = "capability_unavailable";
+      throw error;
+    }
+    const Repository = await repositoryClass();
+    const repository = new Repository(reference.storagePath);
+    const fork = await repository.fork(reference.id, { cwd, id, entryId, position: "at" });
+    try {
+      const metadata = await fork.getMetadata();
+      return {
+        id: metadata.id,
+        sessionRef: sessionReferences.validate({ backend: "sqlite", id: metadata.id, storagePath: reference.storagePath }),
+      };
+    } finally {
+      await fork.close();
+    }
+  }
+
   return Object.freeze({
-    capabilities: Object.freeze({ delete: Object.freeze({ jsonl: true, sqlite: sqliteDeleteSupported }) }),
+    capabilities: Object.freeze({
+      delete: Object.freeze({ jsonl: true, sqlite: sqliteDeleteSupported }),
+      exactFork: Object.freeze({ jsonl: true, sqlite: sqliteDeleteSupported }),
+    }),
     deleteSession,
+    forkSession,
   });
 }
