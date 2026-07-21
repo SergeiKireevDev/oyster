@@ -149,7 +149,7 @@ services rather than global stores or component platform calls.
   (`let actions`, `let action`, or `let dispatch`) in feature action modules,
   direct `removeHublot(fetch, ...)` in components, and direct browser globals
   in `AuthGate.svelte` or `SettingsModal.svelte`.
-- [ ] Run the stale-reference checks and full validation matrix, then update
+- [x] Run the stale-reference checks and full validation matrix, then update
   this final checkbox only after all checks pass.
 
 ```sh
