@@ -22,7 +22,8 @@ function stableState() {
     reloadCount: 1,
     appStore: {
       path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 3, appliedVersions: [1, 2, 3] },
-      repositories: { sessions: { upsert: (owner) => owner }, operations: {} },
+      repositories: { sessions: { upsert: (owner) => owner }, operations: { listIncomplete: () => [] } },
+      hydrate: () => ({ incompleteOperations: [] }),
     },
     broadcast() {},
     serverEvent() {},

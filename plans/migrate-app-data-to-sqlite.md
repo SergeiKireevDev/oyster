@@ -289,7 +289,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Add `app_sessions`, ownership foreign keys, and durable operation journaling.
 - [x] Upsert an app-session owner whenever a session-owned resource is created.
 - [x] Implement the staged session deletion workflow described above.
-- [ ] Reconcile incomplete deletion operations at startup.
+- [x] Reconcile incomplete deletion operations at startup.
 - [ ] Ensure session deletion deletes owned routines rather than releasing them.
 - [ ] Preserve all resources when agent-session deletion fails.
 - [ ] Add cross-session, global/released-resource, rebinding, and fork-isolation tests for every resource type.

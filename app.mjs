@@ -22,7 +22,7 @@ export async function init(state) {
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
-  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
+  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -71,6 +71,11 @@ export async function init(state) {
   });
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
+  if (!state.sessionDeletionReconciled) {
+    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations });
+    state.incompleteOperations = new Map(appStore.hydrate().incompleteOperations.map((entry) => [entry.id, entry]));
+    state.sessionDeletionReconciled = true;
+  }
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
@@ -80,16 +85,10 @@ export async function init(state) {
     spawnRunner, startRunner, stopRunner, sendToRunner,
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
-
-  // ---------------------------------------------------------------- request context
-
   const requestContext = createRequestContext(state);
   const {
     json, clientIp, checkAuth,
   } = requestContext;
-
-  // ---------------------------------------------------------------- routes (no auth)
-
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
   const {
