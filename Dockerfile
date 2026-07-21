@@ -15,6 +15,11 @@
 
 FROM node:22-slim
 
+ARG PI_PACKAGE_SPEC=@earendil-works/pi-coding-agent@0.80.3
+ARG PI_PACKAGE_VERSION=0.80.3
+LABEL org.opencontainers.image.pi-source="published-package" \
+      org.opencontainers.image.pi-version="${PI_PACKAGE_VERSION}"
+
 # Tools the pi agent (and the UI's file explorer / routines) rely on
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates procps ripgrep \
@@ -27,13 +32,14 @@ RUN curl -fsSL -o /usr/local/bin/cloudflared \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
     && chmod +x /usr/local/bin/cloudflared
 
-# The pi coding agent binary (spawned by the server in --mode rpc)
-RUN npm install -g @earendil-works/pi-coding-agent@0.80.3
+# Intentional release fallback. SQLite/local-source images use
+# Dockerfile.local-pi and a named BuildKit context instead.
+RUN mkdir -p /opt/pi && npm install --prefix /opt/pi "${PI_PACKAGE_SPEC}"
 
 WORKDIR /app
 
 # Frontend build dependencies + app sources (see .dockerignore)
-COPY package.json package-lock.json vite.config.js README.md pi-ui.service ./
+COPY package.json package-lock.json vite.config.js README.md pi-ui.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
 COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
@@ -61,7 +67,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 # This release-image path intentionally uses the published JSONL pi until the
 # local-source BuildKit context is added. It also keeps build-time server
 # fixtures from resolving the host-only development default.
-ENV PI_BIN=/usr/local/bin/pi \
+ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     PERSISTENT_STORE=jsonl \
     PI_SQLITE_CONTRACT_TEST=skip
 

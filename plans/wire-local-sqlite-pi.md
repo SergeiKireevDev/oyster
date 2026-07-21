@@ -149,7 +149,7 @@ the intended persistence policy.
   service, verify health, and roll back to JSONL. Document that SQLite backups
   require stopping pi writers or using SQLite's online backup API and include
   WAL/SHM files in stopped filesystem backups.
-- [ ] Replace the Docker image's hard-coded published pi install with an
+- [x] Replace the Docker image's hard-coded published pi install with an
   explicit local-source build input (for example, a named BuildKit context),
   while retaining an intentional published-package fallback for release builds.
   Pin the selected source/version in image labels and verify the image uses

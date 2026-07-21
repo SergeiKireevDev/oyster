@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createPiProcessLauncher } from "../pi-processes.mjs";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
 test("pi process launcher pins executable and store environment", () => {
   const calls = [];

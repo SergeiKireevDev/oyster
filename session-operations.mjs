@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -9,7 +9,8 @@ export function createSessionOperations({
   unlinkFile = unlinkSync,
   loadSqliteRepository,
 } = {}) {
-  const repositoryModulePath = join(dirname(config.PI_BIN), "core", "sqlite-session-repository.js");
+  const resolvedPiBin = existsSync(config.PI_BIN) ? realpathSync(config.PI_BIN) : config.PI_BIN;
+  const repositoryModulePath = join(dirname(resolvedPiBin), "core", "sqlite-session-repository.js");
   const sqliteDeleteSupported = typeof loadSqliteRepository === "function" || existsSync(repositoryModulePath);
 
   async function repositoryClass() {

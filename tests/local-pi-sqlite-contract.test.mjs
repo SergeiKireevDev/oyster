@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 const SKIP = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
 
 async function startMockModel() {

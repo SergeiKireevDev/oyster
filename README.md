@@ -143,6 +143,35 @@ PI_UI_TOKEN=$(cat .ui-token) nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
 
 or use the SQLite-configured systemd unit below.
 
+## Container builds: local SQLite source and published fallback
+
+The SQLite image requires an explicit BuildKit context, so it cannot silently
+install a registry package when the local checkout is missing:
+
+```sh
+docker build -f Dockerfile.local-pi \
+  --build-context pi-source=/home/ubuntu/pi-coding-agent \
+  --build-arg PI_LOCAL_REV="$(git -C /home/ubuntu/pi-coding-agent rev-parse HEAD)" \
+  --build-arg PI_LOCAL_VERSION=0.80.6 \
+  -t pi-lot-ui:sqlite .
+```
+
+That image labels the pi source, revision, and version, runs Node 22, selects
+SQLite, and runs the process-level SQLite tests against the packed CLI at
+`/opt/pi/node_modules/.bin/pi`. `PI_SQLITE_TEST_BIN` is only the explicit test
+artifact override; production processes use `PI_BIN`.
+
+Release builds that intentionally use the published JSONL fallback remain
+available through the default Dockerfile. The package and matching label are
+explicit build arguments rather than an implicit global install:
+
+```sh
+docker build \
+  --build-arg PI_PACKAGE_SPEC=@earendil-works/pi-coding-agent@0.80.3 \
+  --build-arg PI_PACKAGE_VERSION=0.80.3 \
+  -t pi-lot-ui:published .
+```
+
 ## SQLite backup and rollback
 
 SQLite runs in WAL mode. For an online backup while pi processes are active,

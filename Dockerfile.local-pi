@@ -1,0 +1,80 @@
+# SQLite image built from an explicit local pi source context.
+#
+# docker build -f Dockerfile.local-pi \
+#   --build-context pi-source=/home/ubuntu/pi-coding-agent \
+#   --build-arg PI_LOCAL_REV="$(git -C /home/ubuntu/pi-coding-agent rev-parse HEAD)" \
+#   -t pi-lot-ui:sqlite .
+#
+# `pi-source` is required; there is no silent registry fallback in this file.
+# syntax=docker/dockerfile:1.7
+
+FROM scratch AS pi-source
+
+FROM node:22-slim AS pi-builder
+WORKDIR /src
+COPY --from=pi-source /package.json /package-lock.json /.npmrc /tsconfig.json /tsconfig.base.json /biome.json ./
+COPY --from=pi-source /scripts ./scripts
+COPY --from=pi-source /packages ./packages
+RUN npm ci --ignore-scripts \
+    && npm run build --workspace packages/tui \
+    && npm run build --workspace packages/ai \
+    && npm run build --workspace packages/agent \
+    && npm run build --workspace packages/coding-agent \
+    && mkdir -p /tarballs /opt/pi \
+    && npm pack --workspace packages/tui --pack-destination /tarballs \
+    && npm pack --workspace packages/ai --pack-destination /tarballs \
+    && npm pack --workspace packages/agent --pack-destination /tarballs \
+    && npm pack --workspace packages/coding-agent --pack-destination /tarballs \
+    && cd /opt/pi \
+    && npm init -y >/dev/null \
+    && npm install --omit=dev --ignore-scripts /tarballs/*.tgz
+
+FROM node:22-slim
+ARG PI_LOCAL_REV=working-tree
+ARG PI_LOCAL_VERSION=0.80.6
+LABEL org.opencontainers.image.pi-source="local-build-context" \
+      org.opencontainers.image.pi-revision="${PI_LOCAL_REV}" \
+      org.opencontainers.image.pi-version="${PI_LOCAL_VERSION}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git curl ca-certificates procps ripgrep \
+    && git config --system user.name "Jane Doe" \
+    && git config --system user.email "jane.doe@example.com" \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL -o /usr/local/bin/cloudflared \
+        https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+    && chmod +x /usr/local/bin/cloudflared
+COPY --from=pi-builder /opt/pi /opt/pi
+
+WORKDIR /app
+COPY package.json package-lock.json vite.config.js README.md pi-ui.service Dockerfile Dockerfile.local-pi ./
+RUN npm ci
+COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
+     routines.mjs checkpoints.mjs ./
+COPY public ./public
+COPY http ./http
+COPY sessions ./sessions
+COPY tests ./tests
+COPY extensions ./extensions
+RUN npm run build \
+    && mkdir -p /root/.pi/agent/extensions \
+    && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
+
+COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
+COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
+
+ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
+    PI_SQLITE_TEST_BIN=/opt/pi/node_modules/.bin/pi \
+    PERSISTENT_STORE=sqlite \
+    PORT=4000 \
+    HOST=0.0.0.0 \
+    PI_DIR=/workspace \
+    PI_UI_URL=http://127.0.0.1:4000
+RUN npm test
+RUN mkdir -p /workspace
+
+EXPOSE 4000
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD []

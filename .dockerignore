@@ -10,7 +10,6 @@ hello
 mario
 preview-gallery
 foobar.py
-Dockerfile
 .dockerignore
 
 # e2e: keep the build context small (mock-llm/ is copied explicitly in Dockerfile)

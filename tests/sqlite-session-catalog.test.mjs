@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { runSessionCatalogContract } from "./helpers/session-catalog-contract.mjs";
 import { createSqliteSessionCatalog } from "../sessions/sqliteCatalog.mjs";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 const SKIP_LOCAL = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
 const roots = [];
 after(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));

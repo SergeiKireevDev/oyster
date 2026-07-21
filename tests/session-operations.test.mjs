@@ -1,21 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createSessionOperations } from "../session-operations.mjs";
 import { createSessionReferenceCodec } from "../session-references.mjs";
 import { createSqliteSessionCatalog } from "../sessions/sqliteCatalog.mjs";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const SKIP_SQLITE_CONTRACT = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
+const SQLITE_REPOSITORY_MODULE = SKIP_SQLITE_CONTRACT
+  ? null
+  : pathToFileURL(join(dirname(realpathSync(LOCAL_PI)), "core", "sqlite-session-repository.js")).href;
 
 test("SQLite deletion delegates to the configured pi repository operation", {
-  skip: process.env.PI_SQLITE_CONTRACT_TEST === "skip" ? "PI_SQLITE_CONTRACT_TEST=skip" : false,
+  skip: SKIP_SQLITE_CONTRACT ? "PI_SQLITE_CONTRACT_TEST=skip" : false,
 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-session-operation-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const databasePath = join(root, "sessions.sqlite");
-  const module = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/core/sqlite-session-repository.js");
+  const module = await import(SQLITE_REPOSITORY_MODULE);
   const repository = new module.CodingAgentSqliteSessionRepository(databasePath);
   const created = await repository.create({ id: "delete-me", cwd: root });
   await created.close();
@@ -30,12 +35,12 @@ test("SQLite deletion delegates to the configured pi repository operation", {
 });
 
 test("SQLite exact-entry fork delegates to pi and preserves parent identity", {
-  skip: process.env.PI_SQLITE_CONTRACT_TEST === "skip" ? "PI_SQLITE_CONTRACT_TEST=skip" : false,
+  skip: SKIP_SQLITE_CONTRACT ? "PI_SQLITE_CONTRACT_TEST=skip" : false,
 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-session-fork-operation-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const databasePath = join(root, "sessions.sqlite");
-  const module = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/core/sqlite-session-repository.js");
+  const module = await import(SQLITE_REPOSITORY_MODULE);
   const repository = new module.CodingAgentSqliteSessionRepository(databasePath);
   const source = await repository.create({ id: "source", cwd: root });
   await source.appendMessage({ role: "user", content: "fork here", timestamp: Date.now() });
