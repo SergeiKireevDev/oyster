@@ -29,6 +29,13 @@ export function createSessionRunnerState({ storage, updateAppSession, key = "pi_
   return { get currentRunner() { return currentRunner; }, get runners() { return runners; }, setRunner, setRunners };
 }
 
+export function usageInfo(usage) {
+  if (!usage) return null;
+  const cost = usage.cost?.total ?? 0;
+  const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : cost > 0 ? `$${cost.toFixed(4)}` : "$0";
+  return `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}`;
+}
+
 /** Synchronize session-scoped workdir, busy state, and usage into UI adapters. */
 export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) {
   let workdir = null;
@@ -40,9 +47,7 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
     updateUsage(message) {
       const usage = message?.usage;
       if (!usage) return;
-      const cost = usage.cost?.total ?? 0;
-      const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : cost > 0 ? `$${cost.toFixed(4)}` : "$0";
-      updateHeaderState({ usageInfo: `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}` });
+      updateHeaderState({ usageInfo: usageInfo(usage) });
     },
   };
 }
