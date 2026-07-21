@@ -69,6 +69,48 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX checkpoints_owner_created_idx ON checkpoints(owner_id, created_at, id);
     `,
   }),
+  Object.freeze({
+    version: 5,
+    name: "routines",
+    sql: `
+      CREATE TABLE routines (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        name TEXT NOT NULL UNIQUE,
+        script TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        cwd TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) WITHOUT ROWID;
+
+      CREATE TABLE routine_runs (
+        id TEXT PRIMARY KEY,
+        routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL CHECK (mode IN ('run', 'teardown')),
+        status TEXT NOT NULL,
+        progress INTEGER CHECK (progress BETWEEN 0 AND 100),
+        message TEXT,
+        result TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        exit_code INTEGER,
+        error TEXT
+      ) WITHOUT ROWID;
+
+      CREATE TABLE routine_log_lines (
+        run_id TEXT NOT NULL REFERENCES routine_runs(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        stream TEXT NOT NULL CHECK (stream IN ('stdout', 'stderr')),
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (run_id, sequence)
+      ) WITHOUT ROWID;
+
+      CREATE INDEX routines_owner_idx ON routines(owner_id);
+      CREATE INDEX routine_runs_routine_started_idx ON routine_runs(routine_id, started_at);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

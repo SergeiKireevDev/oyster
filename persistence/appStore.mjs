@@ -140,6 +140,55 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       markDeleting: (id) => database.prepare("UPDATE app_sessions SET status = 'deleting' WHERE id = ?").run(id).changes,
       delete: (id) => database.prepare("DELETE FROM app_sessions WHERE id = ?").run(id).changes,
     }),
+    routines: Object.freeze({
+      list: () => database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines ORDER BY name").all().map((row) => ({ ...row })),
+      findByName: (name) => {
+        const row = database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines WHERE name = ?").get(name);
+        return row ? { ...row } : null;
+      },
+      upsert: ({ id, ownerId = null, name, script, cwd = null, now }) => {
+        database.prepare(`
+          INSERT INTO routines(id, owner_id, name, script, cwd, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(name) DO UPDATE SET
+            owner_id = excluded.owner_id, script = excluded.script, cwd = excluded.cwd,
+            revision = routines.revision + 1, updated_at = excluded.updated_at
+        `).run(id, ownerId, name, script, cwd, now, now);
+        return { ...database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines WHERE name = ?").get(name) };
+      },
+      bind: (id, ownerId, cwd, updatedAt) => database.prepare("UPDATE routines SET owner_id = ?, cwd = ?, updated_at = ? WHERE id = ?").run(ownerId, cwd, updatedAt, id).changes,
+      release: (id, updatedAt) => database.prepare("UPDATE routines SET owner_id = NULL, cwd = NULL, updated_at = ? WHERE id = ?").run(updatedAt, id).changes,
+      delete: (id) => database.prepare("DELETE FROM routines WHERE id = ?").run(id).changes,
+      createRun: ({ id, routineId, mode, status = "running", startedAt }) => {
+        database.prepare("INSERT INTO routine_runs(id, routine_id, mode, status, started_at) VALUES (?, ?, ?, ?, ?)")
+          .run(id, routineId, mode, status, startedAt);
+        return { ...database.prepare("SELECT * FROM routine_runs WHERE id = ?").get(id) };
+      },
+      updateProgress: (id, progress, message) => database.prepare("UPDATE routine_runs SET progress = ?, message = ? WHERE id = ?").run(progress, message, id).changes,
+      finishRun: (id, { status, result = null, finishedAt, exitCode = null, error = null }) => database.prepare(`
+        UPDATE routine_runs SET status = ?, result = ?, finished_at = ?, exit_code = ?, error = ? WHERE id = ?
+      `).run(status, result, finishedAt, exitCode, error, id).changes,
+      findRun: (id) => {
+        const row = database.prepare("SELECT * FROM routine_runs WHERE id = ?").get(id);
+        return row ? { ...row } : null;
+      },
+      listRuns: (routineId) => database.prepare("SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at, id").all(routineId).map((row) => ({ ...row })),
+      appendLog: (runId, stream, text, createdAt, limit = 80) => {
+        if (!Number.isInteger(limit) || limit < 1) throw new Error("routine log limit must be a positive integer");
+        database.exec("BEGIN IMMEDIATE");
+        try {
+          const next = database.prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM routine_log_lines WHERE run_id = ?").get(runId).sequence;
+          database.prepare("INSERT INTO routine_log_lines(run_id, sequence, stream, text, created_at) VALUES (?, ?, ?, ?, ?)").run(runId, next, stream, text, createdAt);
+          database.prepare("DELETE FROM routine_log_lines WHERE run_id = ? AND sequence <= ?").run(runId, next - limit);
+          database.exec("COMMIT");
+          return next;
+        } catch (error) {
+          try { database.exec("ROLLBACK"); } catch {}
+          throw error;
+        }
+      },
+      listLogs: (runId) => database.prepare("SELECT sequence, stream, text, created_at FROM routine_log_lines WHERE run_id = ? ORDER BY sequence").all(runId).map((row) => ({ ...row })),
+    }),
     operations: Object.freeze({
       create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
         INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)
