@@ -102,7 +102,11 @@ export async function init(state) {
   const runnerRoutes = createRunnerRoutes({
     state, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
-    sessionReferenceParam, srvId, runnersChanged,
+    sessionReferenceParam,
+    lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
+      ? state.sessionCatalog.findById(reference.id)
+      : null,
+    srvId, runnersChanged,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });
   const workdirRoutes = createWorkdirRoutes({ state, requestContext, spawnRunner, runnerInfo });

@@ -104,7 +104,7 @@ transcript hydration expose equivalent user-visible data for JSONL and SQLite.
 
 ## 4. Make Session Operations Safe in SQLite Mode
 
-- [ ] Route saved-session open/resume through backend-specific operations:
+- [x] Route saved-session open/resume through backend-specific operations:
   JSONL retains `switch_session`, while SQLite starts or reuses a runner with
   `--session <id>`. Add restart, concurrent-session, cwd-switch, and stale-ID
   tests.

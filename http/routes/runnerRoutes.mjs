@@ -13,6 +13,7 @@ export function createRunnerRoutes({
   runnerInfo,
   openSessionRunner,
   sessionReferenceParam,
+  lookupSessionReference = () => ({}),
   srvId,
   runnersChanged,
   setIntervalImpl = setInterval,
@@ -120,10 +121,22 @@ export function createRunnerRoutes({
         json(res, 400, { error: `not a session reference: ${requestedSession}` });
         return;
       }
-      const dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : null;
+      const persistedSession = sessionRef ? lookupSessionReference(sessionRef) : null;
+      if (sessionRef && !persistedSession) {
+        json(res, 404, { error: `session not found: ${sessionRef.id}` });
+        return;
+      }
+      let dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : null;
       if (body?.dir && !dir) {
         json(res, 403, { error: `path outside the allowed roots: ${body.dir}` });
         return;
+      }
+      if (sessionRef?.backend === "sqlite" && persistedSession?.cwd) {
+        dir = resolveSafePath(resolvePath(persistedSession.cwd));
+        if (!dir) {
+          json(res, 403, { error: `stored session path outside the allowed roots: ${persistedSession.cwd}` });
+          return;
+        }
       }
       if (dir) {
         let validDirectory = false;

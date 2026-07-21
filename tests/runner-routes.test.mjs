@@ -164,6 +164,24 @@ test("open-session validates session and directory inputs before opening a runne
   });
 });
 
+test("open-session rejects stale SQLite IDs and uses the persisted cwd", async () => {
+  const { dependencies } = setup();
+  dependencies.lookupSessionReference = (reference) => reference.id === "sqlite-id" ? { id: reference.id, cwd: "/allowed/stored" } : null;
+  const route = createRunnerRoutes(dependencies)["POST /open-session"];
+
+  const opened = response();
+  await route({ body: { sessionKey: "sqlite-key", dir: "/allowed/requested" } }, opened);
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.runner.dir, "/allowed/stored");
+
+  dependencies.sessionReferenceParam = () => ({ backend: "sqlite", id: "stale", storagePath: "/agent/sessions.sqlite" });
+  const staleRoute = createRunnerRoutes(dependencies)["POST /open-session"];
+  const stale = response();
+  await staleRoute({ body: { sessionKey: "stale-key" } }, stale);
+  assert.equal(stale.status, 404);
+  assert.match(stale.body.error, /session not found: stale/);
+});
+
 test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", () => {
   const { state, dependencies } = setup();
   const oldHandler = createRunnerRoutes(dependencies)["GET /events"];
