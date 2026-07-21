@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
 const factory = readFileSync(new URL("../http/routes/checkpointRoutes.mjs", import.meta.url), "utf8");
 
-test("checkpoint factory receives explicit git, session, and runner operations", () => {
-  assert.match(app, /createCheckpointRoutes\(\{[\s\S]*?git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,[\s\S]*?srvId, runnerInfo,/);
+test("checkpoint factory receives explicit repository, git, session, and runner operations", () => {
+  assert.match(app, /recordCheckpoint, checkpointRepository, checkpointTree/);
+  assert.match(app, /createCheckpointRoutes\(\{[\s\S]*?git, forkSessionAt, openSessionRunner, sendToRunner,[\s\S]*?srvId, runnerInfo,/);
   assert.equal(factory.includes('from "../../app.mjs"'), false);
 });
 

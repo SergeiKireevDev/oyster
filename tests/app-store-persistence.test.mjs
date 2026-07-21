@@ -82,6 +82,29 @@ test("checkpoint repository atomically replaces and reloads backend-neutral reco
   assert.deepEqual(second.repositories.checkpoints.load(), {});
 });
 
+test("checkpoint row operations isolate identities and replace fork inheritance", (t) => {
+  const { path, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+  const sqliteRef = { backend: "sqlite", id: "shared", storagePath: "/agent/sessions.sqlite" };
+  const jsonlRef = { backend: "jsonl", id: "shared", storagePath: "/agent/sessions/shared.jsonl" };
+  const sqliteCheckpoint = { hash: "same", anchorId: "sqlite-entry", sessionRef: sqliteRef, timestamp: "sqlite-time" };
+  const jsonlCheckpoint = { hash: "same", anchorId: "jsonl-entry", sessionRef: jsonlRef, sessionPath: jsonlRef.storagePath, timestamp: "jsonl-time" };
+
+  assert.deepEqual(store.repositories.checkpoints.record(sqliteRef, sqliteCheckpoint), sqliteCheckpoint);
+  assert.deepEqual(store.repositories.checkpoints.record(jsonlRef, jsonlCheckpoint), jsonlCheckpoint);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(sqliteRef), [sqliteCheckpoint]);
+  assert.deepEqual(store.repositories.checkpoints.listBySessionId("shared", "jsonl"), [jsonlCheckpoint]);
+  assert.deepEqual(store.repositories.checkpoints.findBySessionId("shared", "sqlite", "same"), sqliteCheckpoint);
+
+  const forkRef = { backend: "sqlite", id: "fork", storagePath: sqliteRef.storagePath };
+  const inherited = [{ ...sqliteCheckpoint, sessionRef: forkRef }];
+  store.repositories.checkpoints.replaceForSession(forkRef, inherited);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), inherited);
+  store.repositories.checkpoints.replaceForSession(forkRef, []);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), []);
+});
+
 test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
   const { path, databases, Database } = fixture(t);
   const store = openAppStore({ databasePath: path, Database });

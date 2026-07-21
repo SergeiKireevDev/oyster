@@ -7,10 +7,12 @@ import { createSessionReferenceCodec } from "../session-references.mjs";
 
 const home = mkdtempSync(join(tmpdir(), "pi-sqlite-checkpoints-"));
 process.env.HOME = home;
-const checkpointModule = await import("../checkpoints.mjs");
-const { checkpointTree, recordCheckpoint } = checkpointModule;
-const loadCheckpoints = checkpointModule.loadLegacyCheckpoints;
-const saveCheckpoints = checkpointModule.saveLegacyCheckpoints;
+const { checkpointTree, recordCheckpoint } = await import("../checkpoints.mjs");
+let repositoryRecords = {};
+const repository = {
+  record(reference, checkpoint) { (repositoryRecords[reference.id] ??= []).push(checkpoint); return checkpoint; },
+  listForSession(reference) { return repositoryRecords[reference.id] ?? []; },
+};
 after(() => rmSync(home, { recursive: true, force: true }));
 
 const storagePath = join(home, ".pi", "agent", "sessions.sqlite");
@@ -35,22 +37,22 @@ const catalog = {
 };
 
 test("SQLite checkpoint recording stores database-plus-ID identity and tip anchors", () => {
-  saveCheckpoints({});
-  const checkpoint = recordCheckpoint(rootRef, "/work", { hash: "abc", message: "checkpoint: sqlite" }, { catalog });
+  repositoryRecords = {};
+  const checkpoint = recordCheckpoint(rootRef, "/work", { hash: "abc", message: "checkpoint: sqlite" }, { catalog, repository });
   assert.equal(checkpoint.anchorId, "a1");
   assert.equal(checkpoint.leafId, "a1");
   assert.deepEqual(checkpoint.sessionRef, rootRef);
   assert.equal("sessionPath" in checkpoint, false);
-  assert.deepEqual(loadCheckpoints().root[0].sessionRef, rootRef);
+  assert.deepEqual(repositoryRecords.root[0].sessionRef, rootRef);
 });
 
 test("SQLite checkpoint trees group families by parent ID and expose opaque keys", () => {
   const inherited = { hash: "base", anchorId: "a1", timestamp: "2026-01-01" };
-  saveCheckpoints({
+  repositoryRecords = {
     root: [inherited],
     fork: [inherited, { hash: "fork-only", anchorId: "a2", timestamp: "2026-01-02" }],
-  });
-  const { root } = checkpointTree(forkRef, { catalog, sessionReferences: codec });
+  };
+  const { root } = checkpointTree(forkRef, { catalog, sessionReferences: codec, repository });
   assert.equal(root.id, "root");
   assert.equal(root.sessionKey, codec.serialize(rootRef));
   assert.equal(root.path, null);

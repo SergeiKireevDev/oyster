@@ -33,6 +33,61 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       `).run(key, value, updatedAt),
     }),
     checkpoints: Object.freeze({
+      listForSession: ({ backend, id, storagePath }) => database.prepare(`
+        SELECT c.payload FROM checkpoints c
+        JOIN app_sessions s ON s.id = c.owner_id
+        WHERE s.backend = ? AND s.session_id = ? AND s.storage_path IS ?
+        ORDER BY c.created_at, c.id
+      `).all(backend, id, storagePath).flatMap((row) => { try { return [JSON.parse(row.payload)]; } catch { return []; } }),
+      listBySessionId: (sessionId, backend) => database.prepare(`
+        SELECT c.payload FROM checkpoints c
+        JOIN app_sessions s ON s.id = c.owner_id
+        WHERE s.session_id = ? AND s.backend = ?
+        ORDER BY c.created_at, c.id
+      `).all(sessionId, backend).flatMap((row) => { try { return [JSON.parse(row.payload)]; } catch { return []; } }),
+      findBySessionId: (sessionId, backend, hash) => {
+        const row = database.prepare(`
+          SELECT c.payload FROM checkpoints c
+          JOIN app_sessions s ON s.id = c.owner_id
+          WHERE s.session_id = ? AND s.backend = ? AND c.git_hash = ?
+          ORDER BY c.id DESC LIMIT 1
+        `).get(sessionId, backend, hash);
+        try { return row ? JSON.parse(row.payload) : null; } catch { return null; }
+      },
+      record: (reference, checkpoint) => {
+        const createdAt = checkpoint.timestamp ?? new Date().toISOString();
+        database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+          .run(reference.backend, reference.id, reference.storagePath, createdAt);
+        const owner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?")
+          .get(reference.backend, reference.id, reference.storagePath);
+        database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner_id, git_hash, anchor_id) DO NOTHING")
+          .run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), createdAt);
+        const row = database.prepare("SELECT payload FROM checkpoints WHERE owner_id = ? AND git_hash = ? AND anchor_id = ?")
+          .get(owner.id, checkpoint.hash, checkpoint.anchorId);
+        return JSON.parse(row.payload);
+      },
+      replaceForSession: (reference, checkpoints) => {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+          const createdAt = checkpoints[0]?.timestamp ?? new Date().toISOString();
+          database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+            .run(reference.backend, reference.id, reference.storagePath, createdAt);
+          const owner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?")
+            .get(reference.backend, reference.id, reference.storagePath);
+          database.prepare("DELETE FROM checkpoints WHERE owner_id = ?").run(owner.id);
+          const insert = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
+          for (const checkpoint of checkpoints) insert.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), checkpoint.timestamp ?? createdAt);
+          database.exec("COMMIT");
+        } catch (error) {
+          try { database.exec("ROLLBACK"); } catch {}
+          throw error;
+        }
+      },
+      deleteBySessionId: (sessionId, backend) => database.prepare(`
+        DELETE FROM checkpoints WHERE owner_id IN (
+          SELECT id FROM app_sessions WHERE session_id = ? AND backend = ?
+        )
+      `).run(sessionId, backend).changes,
       load: () => {
         const grouped = {};
         for (const row of database.prepare(`

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 
-export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, ensureSessionOwner = () => null, logger = console }) {
+export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, checkpointRepository: repository, checkpointTree, sessionReferenceFromSearch, git, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, ensureSessionOwner = () => null, logger = console }) {
+  if (!repository) throw new Error("checkpoint repository is required");
   const { json, readJsonBody } = requestContext;
   return {
     "POST /checkpoint": async (req, res, url) => {
@@ -15,7 +16,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       if (status === 200 && out.hash && runner.sessionRef) {
         try {
           ensureSessionOwner(runner.sessionRef);
-          const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog, loadCheckpoints, saveCheckpoints });
+          const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog, repository });
           if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
         } catch (e) {
           logger.error(`[pi-ui] failed to record checkpoint: ${e.message}`);
@@ -27,7 +28,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
     "GET /checkpoints": (req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
       if (!id) { json(res, 400, { error: "id required" }); return; }
-      json(res, 200, { checkpoints: loadCheckpoints()[id] ?? [] });
+      json(res, 200, { checkpoints: repository.listBySessionId(id, state.sessionCatalog.backend) });
     },
 
     "GET /checkpoint-tree": (req, res, url) => {
@@ -38,7 +39,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       }
       try {
         json(res, 200, {
-          ...checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences, loadCheckpoints }),
+          ...checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences, repository }),
           capabilities: {
             rollback: !!state.sessionOperations?.capabilities.exactFork[target.backend],
             reason: state.sessionOperations?.capabilities.exactFork[target.backend]
@@ -57,7 +58,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       const sessionId = String(body?.sessionId ?? "").trim();
       const hash = String(body?.hash ?? "").trim();
       const model = body?.model ? String(body.model).slice(0, 200) : null;
-      const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
+      const cp = repository.findBySessionId(sessionId, state.sessionCatalog.backend, hash);
       if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
       const sessionRef = cp.sessionRef ?? (cp.sessionPath
         ? { backend: "jsonl", id: sessionId, storagePath: cp.sessionPath }
@@ -82,7 +83,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           const saved = await checkpointWorkdir(state.piProcesses, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
-            try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog, loadCheckpoints, saveCheckpoints }); } catch {}
+            try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog, repository }); } catch {}
           }
         }
         // 2. fork before touching the worktree. Unsupported or failed backend
@@ -107,15 +108,14 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           return;
         }
         // The fork keeps its ancestors' entry ids: inherit their checkpoints.
-        const db = loadCheckpoints();
-        db[fork.id] = (db[sessionId] ?? [])
+        const inheritedCheckpoints = repository.listForSession(sessionRef)
           .filter((checkpoint) => forkEntries.has(checkpoint.anchorId))
           .map((checkpoint) => ({
             ...checkpoint,
             sessionRef: fork.sessionRef,
             ...(backend === "jsonl" ? { sessionPath: fork.path } : { sessionPath: undefined }),
           }));
-        saveCheckpoints(db);
+        repository.replaceForSession(fork.sessionRef, inheritedCheckpoints);
         // 4. attach a runner to the fork and hand it to the client
         const runner = openSessionRunner({ sessionRef: fork.sessionRef, dir: cp.dir });
         sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });

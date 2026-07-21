@@ -22,7 +22,7 @@ export async function init(state) {
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
-  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointStore } = await import(bust("persistence/checkpointStore.mjs"));
+  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
@@ -39,7 +39,8 @@ export async function init(state) {
   ].map((name) => import(bust(name))));
   const { config, appStore } = state;
   if (!appStore) throw new Error("stable core did not provide state.appStore");
-  const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints } = createCheckpointStore(appStore.repositories.checkpoints);
+  const checkpointRepository = appStore.repositories.checkpoints;
+  const deleteSessionCheckpoints = (id) => checkpointRepository.deleteBySessionId(id, state.sessionCatalog.backend);
 
   // ---- state migrations --------------------------------------------------
   // The core (server.mjs) only changes on a real restart; state it created
@@ -121,8 +122,8 @@ export async function init(state) {
   });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
-    git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
+    recordCheckpoint, checkpointRepository, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
+    git, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });
   const routineRoutes = createRoutineRoutes({

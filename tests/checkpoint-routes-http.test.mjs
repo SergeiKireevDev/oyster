@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import { createCheckpointRoutes } from "../http/routes/checkpointRoutes.mjs";
 
 const response = () => ({});
+const repository = (records = {}) => ({
+  listBySessionId: (id) => records[id] ?? [],
+  findBySessionId: (id, _backend, hash) => (records[id] ?? []).find((checkpoint) => checkpoint.hash === hash) ?? null,
+  listForSession: (reference) => records[reference.id] ?? [],
+  replaceForSession: (reference, checkpoints) => { records[reference.id] = checkpoints; },
+  record: (_reference, checkpoint) => checkpoint,
+});
 test("checkpoint create/list/tree routes preserve validation, model options, persistence, and shapes", async () => {
   const calls = [], owners = [];
   const runner = { dir: "/work", sessionRef: { backend: "jsonl", id: "session", storagePath: new URL("../package.json", import.meta.url).pathname } };
@@ -18,7 +25,7 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
     ensureSessionOwner: (reference) => owners.push(reference),
     checkpointWorkdir: async (...args) => { calls.push(args); return { status: 200, body: { hash: "abc123", committed: true } }; },
     recordCheckpoint: () => ({ anchorId: "entry-1" }),
-    loadCheckpoints: () => ({ session: [{ hash: "abc123" }] }),
+    checkpointRepository: repository({ session: [{ hash: "abc123" }] }),
     checkpointTree: (reference) => ({ path: reference.storagePath, children: [] }),
     sessionReferenceFromSearch: (url) => url.searchParams.get("path") === "valid.jsonl" ? { backend: "jsonl", id: "session", storagePath: "/session.jsonl" } : null,
     logger: { error() {} },
@@ -48,7 +55,7 @@ test("SQLite rollback capability rejection occurs before git or safety-checkpoin
     },
     config: { PI_BIN: "pi" },
     requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
-    loadCheckpoints: () => ({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", sessionRef }] }),
+    checkpointRepository: repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", sessionRef }] }),
     git: async () => { calls.push("git"); return { code: 0, stdout: "" }; },
     checkpointWorkdir: async () => { calls.push("checkpoint"); return {}; },
   });
@@ -77,8 +84,10 @@ test("SQLite rollback forks the exact entry before resetting and opens the fork 
     },
     config: { PI_BIN: "pi" },
     requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
-    loadCheckpoints: () => ({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", leafId: "e1", sessionRef }] }),
-    saveCheckpoints: (value) => saved.push(value),
+    checkpointRepository: {
+      ...repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", leafId: "e1", sessionRef }] }),
+      replaceForSession: (reference, checkpoints) => saved.push({ reference, checkpoints }),
+    },
     git: async (_dir, args) => { order.push(["git", args[0]]); return { code: 0, stdout: "" }; },
     checkpointWorkdir: async () => ({ status: 200, body: {} }),
     openSessionRunner: ({ sessionRef: opened }) => ({ id: "r2", sessionRef: opened }),
@@ -90,7 +99,8 @@ test("SQLite rollback forks the exact entry before resetting and opens the fork 
   assert.equal(result.status, 200);
   assert.deepEqual(order, [["git", "status"], ["fork", "e1"], ["git", "reset"]]);
   assert.deepEqual(result.body.fork, { id: "fork", path: null, sessionRef: forkRef, sessionKey: "fork-key" });
-  assert.deepEqual(saved[0].fork[0].sessionRef, forkRef);
+  assert.deepEqual(saved[0].reference, forkRef);
+  assert.deepEqual(saved[0].checkpoints[0].sessionRef, forkRef);
 });
 
 test("rollback saves dirty work, resets, forks, opens a runner, and preserves response shape", async () => {
@@ -103,7 +113,10 @@ test("rollback saves dirty work, resets, forks, opens a runner, and preserves re
       sessionReferences: { serialize: () => "fork-key" },
       sessionOperations: { capabilities: { exactFork: { jsonl: true } } },
     }, config: { PI_BIN: "pi" }, requestContext: { json(r, status, body) { r.status = status; r.body = body; }, readJsonBody: async r => r.body },
-    loadCheckpoints: () => structuredClone(db), saveCheckpoints: value => saved.push(value),
+    checkpointRepository: {
+      ...repository(structuredClone(db)),
+      replaceForSession: (reference, checkpoints) => saved.push({ reference, checkpoints }),
+    },
     git: async (_dir, args) => args[0] === "status" ? { code: 0, stdout: " M file" } : { code: 0, stdout: "" },
     checkpointWorkdir: async () => ({ status: 200, body: { committed: true, hash: "safety" } }), recordCheckpoint: () => ({}),
     forkSessionAt: () => ({ id: "fork", path: "/fork.jsonl", entryIds: new Set(["e1"]) }),
@@ -122,6 +135,7 @@ test("rollback saves dirty work, resets, forks, opens a runner, and preserves re
     },
     runner: { id: "r2" },
   });
-  assert.equal(saved[0].fork.length, 1);
+  assert.equal(saved[0].reference.id, "fork");
+  assert.equal(saved[0].checkpoints.length, 1);
   assert.equal(commands[0].type, "set_session_name");
 });

@@ -75,23 +75,23 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
   const { sessionId, leafId, entries } = catalog.entries(identity);
   const anchorId = entries[entries.length - 1]?.id ?? null;
   if (!sessionId || !anchorId || !hash) return null;
+  const checkpoint = {
+    hash, anchorId, leafId, dir,
+    sessionRef: reference,
+    ...(reference.backend === "jsonl" ? { sessionPath: reference.storagePath } : {}),
+    message: message ?? null,
+    timestamp: new Date().toISOString(),
+  };
+  if (options.repository) return options.repository.record(reference, checkpoint);
   const load = options.loadCheckpoints ?? loadLegacyCheckpoints;
   const save = options.saveCheckpoints ?? saveLegacyCheckpoints;
   const db = load();
   const list = (db[sessionId] ??= []);
-  let rec = list.find((checkpoint) => checkpoint.hash === hash && checkpoint.anchorId === anchorId);
-  if (!rec) {
-    rec = {
-      hash, anchorId, leafId, dir,
-      sessionRef: reference,
-      ...(reference.backend === "jsonl" ? { sessionPath: reference.storagePath } : {}),
-      message: message ?? null,
-      timestamp: new Date().toISOString(),
-    };
-    list.push(rec);
-    save(db);
-  }
-  return rec;
+  const existing = list.find((item) => item.hash === hash && item.anchorId === anchorId);
+  if (existing) return existing;
+  list.push(checkpoint);
+  save(db);
+  return checkpoint;
 }
 
 /** Build a checkpoint family from catalog lineage rather than directory scans. */
@@ -129,7 +129,9 @@ export function checkpointTree(session, options = {}) {
     seen.add(root.id);
     root = byId.get(root.parentId);
   }
-  const db = (options.loadCheckpoints ?? loadLegacyCheckpoints)();
+  const db = options.repository
+    ? Object.fromEntries(infos.map((info) => [info.id, options.repository.listForSession(info.sessionRef)]))
+    : (options.loadCheckpoints ?? loadLegacyCheckpoints)();
   // forks inherit their ancestors' checkpoint records (so ↩ works inside
   // them), but the tree must not display those twice: each node only shows
   // checkpoints an ancestor hasn't already shown

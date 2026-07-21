@@ -297,7 +297,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 ### 4. Migrate checkpoints
 
 - [x] Replace `loadCheckpoints()` and `saveCheckpoints()` with a checkpoint repository.
-- [ ] Make recording, lookup, tree assembly, and fork inheritance repository-based.
+- [x] Make recording, lookup, tree assembly, and fork inheritance repository-based.
 - [ ] Journal rollback stages because Git and agent session operations cannot share the app transaction.
 - [ ] Add an idempotent importer for `~/.pi/agent/checkpoints.json`.
 - [ ] Preserve current checkpoint HTTP payloads and rollback behavior.
