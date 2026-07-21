@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+
+test("hublot sidebar adapter invokes show and tears down", () => {
+  let listener;
+  const calls = [];
+  const target = { addEventListener: (_, fn) => { listener = fn; }, removeEventListener: (...args) => calls.push(args) };
+  let shown = 0;
+  const remove = registerHublotSidebarEvents(target, { show: () => shown++ });
+  listener();
+  assert.equal(shown, 1);
+  remove();
+  assert.equal(calls.length, 1);
+});
 
 test("swipe adapter installs capture touch handlers and resize callback", () => {
   const calls = [];

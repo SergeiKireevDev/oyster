@@ -9,6 +9,12 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerHublotSidebarEvents(target, { show }) {
+  const onClick = () => show();
+  target.addEventListener("click", onClick);
+  return () => target.removeEventListener("click", onClick);
+}
+
 export function registerSwipeAndResizeEvents({ documentTarget, windowTarget, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onResize }) {
   const listeners = [
     [documentTarget, "touchstart", onTouchStart, { passive: true, capture: true }],
