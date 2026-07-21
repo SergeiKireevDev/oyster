@@ -36,6 +36,7 @@ test("sidebar refreshes retain known titles without retaining removed sessions",
 test("session picker runtime owns picker actions and search-hit construction", async () => {
   const toasts = [];
   const created = [];
+  const archived = [];
   let runnersHandler = "unset";
   const registered = new Map();
   const detached = [];
@@ -56,6 +57,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
     createSessionInCwd: async (cwd) => created.push(["cwd", cwd]),
     showFolderBrowser: async () => created.push(["folder"]),
     stopRunner: async () => {},
+    archiveSession: async (sessionKey, value) => { archived.push([sessionKey, value]); },
     removeSession: async () => ({}),
     refreshHublots() {},
     refreshRoutines() {},
@@ -88,6 +90,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
     actionNames.SESSION_PICKER_SEARCH_ACTION,
     actionNames.SESSION_PICKER_CHOOSE_ACTION,
     actionNames.SESSION_PICKER_STOP_ACTION,
+    actionNames.SESSION_PICKER_ARCHIVE_ACTION,
     actionNames.SESSION_PICKER_DELETE_ACTION,
     actionNames.SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
     actionNames.SESSION_PICKER_LOAD_FOLDER_ACTION,
@@ -99,15 +102,17 @@ test("session picker runtime owns picker actions and search-hit construction", a
   ].sort());
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_CWD_ACTION)("/workspace/project");
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)();
+  await registered.get(actionNames.SESSION_PICKER_ARCHIVE_ACTION)({ sessionKey: "ps1_archive" });
   assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder"]]);
-  assert.deepEqual(toasts, ["new session in: /workspace/project"]);
+  assert.deepEqual(archived, [["ps1_archive", true]]);
+  assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived"]);
   await runtime.show();
-  assert.deepEqual(toasts, ["new session in: /workspace/project", "no saved sessions"]);
+  assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived", "no saved sessions"]);
   assert.equal(runnersHandler, "unset");
   runtime.detachActions();
   runtime.detachActions();
   assert.equal(registered.size, 0);
-  assert.equal(detached.length, 14);
+  assert.equal(detached.length, 15);
 });
 
 test("session picker component routes every workflow through scoped actions", () => {
@@ -144,6 +149,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_SEARCH_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_STOP_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_PICKER_ARCHIVE_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_DELETE_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION/);

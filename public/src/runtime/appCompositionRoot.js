@@ -723,6 +723,16 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   createSessionInCwd: (cwd) => getSessionRuntime().openAndSwitchSession({ dir: cwd }),
   showFolderBrowser,
   stopRunner: (id) => getSessionRuntime().stopSession(id),
+  async archiveSession(sessionKey, archived) {
+    const response = await fetch("/session/archive", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionKey, archived }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `archive failed (${response.status})`);
+    return data;
+  },
   async removeSession(sessionQuery) {
     const response = await fetch(`/session?${sessionQuery}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));

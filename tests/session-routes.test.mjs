@@ -69,6 +69,7 @@ test("session listing preserves root scope and live runner annotations", () => {
     id: "session-a",
     path: "/sessions/folder/a.jsonl",
     dir: "/sessions/folder",
+    archived: false,
     runnerId: "r1",
     alive: true,
     busy: true,
@@ -84,7 +85,7 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
   const lookup = response();
   routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=session-a"));
   assert.deepEqual(lookup.body, { session: {
-    path: "/sessions/folder/a.jsonl", id: "session-a", name: "A",
+    path: "/sessions/folder/a.jsonl", id: "session-a", name: "A", archived: false,
     sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
     sessionKey: "key-session-a",
     parentSession: null,

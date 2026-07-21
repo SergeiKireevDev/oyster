@@ -3,6 +3,7 @@ import { createSessionPickerController, createSessionPickerDeleteController, cre
 import { createSessionPickerSearchController } from "../../lib/sessionPickerSearchController.js";
 import { runnerSessionIdentity, sameSession, sessionIdentity } from "../../lib/sessionIdentity.js";
 import {
+  SESSION_PICKER_ARCHIVE_ACTION,
   SESSION_PICKER_CANCEL_ACTION,
   SESSION_PICKER_CHOOSE_ACTION,
   SESSION_PICKER_DELETE_ACTION,
@@ -148,6 +149,16 @@ export function createSessionPickerRuntime(deps) {
       }
     },
     stopSession: picker.stopSession,
+    archiveSession: async (session) => {
+      if (!session?.sessionKey) return;
+      try {
+        await deps.archiveSession(session.sessionKey, true);
+        deps.toast("session archived");
+        await refreshSidebar();
+      } catch (error) {
+        deps.toast(`archive failed: ${error.message}`, "error");
+      }
+    },
     deleteSession: deletion.deleteSession,
     openSearchHit: (identity, hit) => {
       resolvePicker?.(null);
@@ -164,6 +175,7 @@ export function createSessionPickerRuntime(deps) {
     deps.uiActions.register(SESSION_PICKER_SEARCH_ACTION, actions.runSearch),
     deps.uiActions.register(SESSION_PICKER_CHOOSE_ACTION, actions.chooseSession),
     deps.uiActions.register(SESSION_PICKER_STOP_ACTION, actions.stopSession),
+    deps.uiActions.register(SESSION_PICKER_ARCHIVE_ACTION, actions.archiveSession),
     deps.uiActions.register(SESSION_PICKER_DELETE_ACTION, actions.deleteSession),
     deps.uiActions.register(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, actions.openSearchHit),
     deps.uiActions.register(SESSION_PICKER_LOAD_FOLDER_ACTION, actions.loadFolder),

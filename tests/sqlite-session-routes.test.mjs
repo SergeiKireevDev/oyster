@@ -27,15 +27,35 @@ function setup({ sessionOperations = null } = {}) {
   };
   const runnerRef = { backend: "sqlite", id: "root", storagePath };
   const lifecycle = [];
+  const owners = new Map();
+  let nextOwnerId = 1;
+  const sessionRepository = {
+    upsert({ backend, sessionId, storagePath: path = null, createdAt }) {
+      const key = `${backend}:${sessionId}:${path ?? ""}`;
+      if (!owners.has(key)) owners.set(key, { id: nextOwnerId++, backend, session_id: sessionId, storage_path: path, status: "active", archived: 0, created_at: createdAt });
+      return { ...owners.get(key) };
+    },
+    find({ backend, sessionId, storagePath: path = null }) { return owners.get(`${backend}:${sessionId}:${path ?? ""}`) ?? null; },
+    setArchived(id, archived) {
+      const owner = [...owners.values()].find((candidate) => candidate.id === id);
+      if (!owner) return 0;
+      owner.archived = archived ? 1 : 0;
+      return 1;
+    },
+  };
   const state = {
     currentDir: "/work",
     runners: new Map([["r1", { id: "r1", sessionRef: runnerRef, proc: {}, busy: true }]]),
     tunnels: new Map(),
     sessionReferences: codec,
+    appStore: { repositories: { sessions: sessionRepository } },
   };
   const routes = createSessionRoutes({
     state,
-    requestContext: { json(res, status, body) { res.status = status; res.body = body; } },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      async readJsonBody(req) { return req.body; },
+    },
     sessions: { catalog, readSessionHeaderInfo() {}, sessionReferenceFor() {}, sessionTargetFromSearch() {} },
     runners: { stopRunner: (runner) => lifecycle.push(["stop", runner.id]), runnersChanged: () => lifecycle.push(["changed"]) },
     resources: { closeTunnel() {}, releaseSessionRoutines: (_state, id) => { lifecycle.push(["release", id]); return ["routine"]; } },
@@ -43,7 +63,7 @@ function setup({ sessionOperations = null } = {}) {
     resolvePath: (path) => path,
     now: () => Date.parse("2026-01-08T00:00:00Z"),
   });
-  return { routes, codec, sessions, state, lifecycle };
+  return { routes, codec, sessions, state, lifecycle, owners };
 }
 
 test("SQLite usage analytics validates and forwards range aggregation", () => {
@@ -83,6 +103,22 @@ test("SQLite routes list distinct shared-database identities and parent keys", (
   assert.deepEqual(res.body.sessions[0].sessionRef, { backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
   assert.equal(res.body.sessions[0].alive, true);
   assert.equal(res.body.sessions[1].parentSessionKey, codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" }));
+});
+
+test("SQLite session archive route persists and returns the archived flag", async () => {
+  const { routes, codec } = setup();
+  const listed = response();
+  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?dir=/work"));
+  const key = codec.serialize({ backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" });
+  assert.equal(listed.body.sessions.find((session) => session.id === "fork").archived, false);
+
+  const archived = response();
+  await routes["POST /session/archive"]({ body: { sessionKey: key, archived: true } }, archived);
+  assert.deepEqual(archived.body, { sessionKey: key, archived: true });
+
+  const refreshed = response();
+  routes["GET /sessions"]({}, refreshed, new URL("http://localhost/sessions?dir=/work"));
+  assert.equal(refreshed.body.sessions.find((session) => session.id === "fork").archived, true);
 });
 
 test("SQLite routes resolve lookup, entries, messages, folders, and search by key", () => {

@@ -7,6 +7,7 @@
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
+    SESSION_PICKER_ARCHIVE_ACTION,
     SESSION_PICKER_CHOOSE_ACTION,
     SESSION_PICKER_DELETE_ACTION,
     SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
@@ -27,6 +28,7 @@
   const createSessionInFolder = () => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION);
   const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
   const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
+  const archiveSession = (session) => uiActions.invoke(SESSION_PICKER_ARCHIVE_ACTION, session);
   const deleteSession = (runner) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, savedSession(runner) ?? runner);
 
   let searchTimer = null;
@@ -234,8 +236,14 @@
                   <button type="button" class="session-sidebar-action stop" title="Stop this session's process" aria-label="Stop this session's process" onclick={() => stopSession(runner)}></button>
                 {:else if group.archived && !current}
                   <button type="button" class="session-sidebar-action delete" title="Delete archived session" aria-label="Delete archived session" onclick={() => deleteSession(session ?? runner)}>✕</button>
-                {:else if !group.archived}
-                  <span class="session-sidebar-lifecycle archive" title="Archives when its head is older than 2 days" aria-label="Waiting to archive"></span>
+                {:else if !group.archived && session}
+                  <button
+                    type="button"
+                    class="session-sidebar-lifecycle archive"
+                    title="Archive session"
+                    aria-label="Archive session"
+                    onclick={() => archiveSession(session)}
+                  ></button>
                 {/if}
               </div>
             {/each}

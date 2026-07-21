@@ -1703,9 +1703,14 @@ header .dot { width: 7px; height: 7px; margin-left: -5px; box-shadow: 0 0 0 4px 
   place-items: center;
   align-self: center;
   flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #727b8f;
   opacity: .72;
+  cursor: pointer;
 }
+.session-sidebar-lifecycle:hover { color: var(--accent); opacity: 1; }
 .session-sidebar-lifecycle.archive::before {
   content: "";
   width: 14px;

@@ -54,6 +54,7 @@ export const SESSION_PICKER_SEARCH_ACTION = "sessionPicker.search";
 export const SESSION_PICKER_CHOOSE_ACTION = "sessionPicker.choose";
 export const SESSION_PICKER_STOP_ACTION = "sessionPicker.stop";
 export const SESSION_PICKER_DELETE_ACTION = "sessionPicker.delete";
+export const SESSION_PICKER_ARCHIVE_ACTION = "sessionPicker.archive";
 export const SESSION_PICKER_OPEN_SEARCH_HIT_ACTION = "sessionPicker.openSearchHit";
 export const SESSION_PICKER_LOAD_FOLDER_ACTION = "sessionPicker.loadFolder";
 export const SESSION_PICKER_CANCEL_ACTION = "sessionPicker.cancel";

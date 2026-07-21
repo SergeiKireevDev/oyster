@@ -238,6 +238,15 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX legacy_migration_ledger_started_idx ON legacy_migration_ledger(started_at, id);
     `,
   }),
+  Object.freeze({
+    version: 11,
+    name: "session_archiving",
+    sql: `
+      ALTER TABLE app_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0
+        CHECK (archived IN (0, 1));
+      CREATE INDEX app_sessions_archived_idx ON app_sessions(archived);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

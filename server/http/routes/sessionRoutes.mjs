@@ -15,7 +15,7 @@ export function createSessionRoutes({
   now = () => Date.now(),
   logger = console,
 }) {
-  const { json } = requestContext;
+  const { json, readJsonBody } = requestContext;
   const { catalog, sessionReferenceFor, sessionTargetFromSearch, readSessionHeaderInfo } = sessions;
   const { stopRunner, runnersChanged } = runners;
   const {
@@ -41,8 +41,15 @@ export function createSessionRoutes({
     } else if (session.parentSession && byLegacyPath.has(session.parentSession)) {
       parentSessionKey = state.sessionReferences.serialize(referenceFor(byLegacyPath.get(session.parentSession)));
     }
+    const owner = state.appStore?.repositories?.sessions?.upsert({
+      backend: sessionRef.backend,
+      sessionId: sessionRef.id,
+      storagePath: sessionRef.storagePath ?? null,
+      createdAt: session.createdAt ?? new Date(now()).toISOString(),
+    });
     return {
       ...session,
+      archived: Boolean(owner?.archived),
       path: sqlite ? null : session.path,
       parentSession: sqlite ? null : (session.parentSession ?? null),
       parentSessionKey,
@@ -113,6 +120,38 @@ export function createSessionRoutes({
         return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
       });
       json(res, 200, { sessions: result });
+    },
+
+    "POST /session/archive": async (req, res) => {
+      if (!readJsonBody) {
+        json(res, 500, { error: "request body reader unavailable" });
+        return;
+      }
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      let reference;
+      try { reference = state.sessionReferences.parse(String(body.sessionKey ?? "")); }
+      catch {
+        json(res, 400, { error: "invalid session reference" });
+        return;
+      }
+      if (reference.backend !== catalog.backend) {
+        json(res, 400, { error: "session backend does not match the configured store" });
+        return;
+      }
+      const repository = state.appStore?.repositories?.sessions;
+      const owner = repository?.find({
+        backend: reference.backend,
+        sessionId: reference.id,
+        storagePath: reference.storagePath ?? null,
+      });
+      if (!owner) {
+        json(res, 404, { error: "session is not registered" });
+        return;
+      }
+      const archived = body.archived !== false;
+      repository.setArchived(owner.id, archived);
+      json(res, 200, { sessionKey: body.sessionKey, archived });
     },
 
     "DELETE /session": async (_req, res, url) => {

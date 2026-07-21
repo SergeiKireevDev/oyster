@@ -140,13 +140,14 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
           INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?)
           ON CONFLICT DO NOTHING
         `).run(backend, sessionId, storagePath, createdAt);
-        return { ...database.prepare("SELECT id, backend, session_id, storage_path, status, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath) };
+        return { ...database.prepare("SELECT id, backend, session_id, storage_path, status, archived, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath) };
       },
       find: ({ backend, sessionId, storagePath = null }) => {
-        const row = database.prepare("SELECT id, backend, session_id, storage_path, status, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath);
+        const row = database.prepare("SELECT id, backend, session_id, storage_path, status, archived, created_at FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?").get(backend, sessionId, storagePath);
         return row ? { ...row } : null;
       },
-      listBySessionId: (sessionId) => database.prepare("SELECT id, backend, session_id, storage_path, status, created_at FROM app_sessions WHERE session_id = ? ORDER BY id").all(sessionId).map((row) => ({ ...row })),
+      listBySessionId: (sessionId) => database.prepare("SELECT id, backend, session_id, storage_path, status, archived, created_at FROM app_sessions WHERE session_id = ? ORDER BY id").all(sessionId).map((row) => ({ ...row })),
+      setArchived: (id, archived) => database.prepare("UPDATE app_sessions SET archived = ? WHERE id = ?").run(archived ? 1 : 0, id).changes,
       markDeleting: (id) => database.prepare("UPDATE app_sessions SET status = 'deleting' WHERE id = ?").run(id).changes,
       delete: (id) => database.prepare("DELETE FROM app_sessions WHERE id = ?").run(id).changes,
     }),
