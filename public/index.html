@@ -301,6 +301,26 @@
   .msg.user > .permalink { left: -34px; }
   .msg.assistant > .permalink { right: 0; top: -8px; }
   @media (hover: none) { .msg > .permalink { opacity: .35; } }
+  /* checkpoint button — iceberg on the latest message; commits workdir changes */
+  .checkpoint {
+    position: absolute;
+    top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 5px;
+    cursor: pointer;
+    user-select: none;
+    opacity: .6;
+    transition: opacity .15s;
+    z-index: 2;
+  }
+  .checkpoint:hover { border-color: var(--accent-dim); opacity: 1; }
+  .checkpoint.busy { opacity: .3; cursor: wait; }
+  .msg.user > .checkpoint { left: -62px; }
+  .msg.assistant > .checkpoint { right: 28px; top: -8px; }
   .msg.user {
     align-self: flex-end;
     max-width: 85%;
@@ -1314,6 +1334,7 @@ function addUserMessage(message) {
   div.textContent = text;
   addPermalinkBtn(div);
   messagesEl.appendChild(div);
+  placeCheckpointBtn();
   scrollToBottom(true);
   rememberPrompt(text);
 }
@@ -1345,7 +1366,49 @@ function addAssistantContainer() {
   wrap.appendChild(body);
   addPermalinkBtn(wrap);
   messagesEl.appendChild(wrap);
+  placeCheckpointBtn();
   return body;
+}
+
+// ------------------------------------------------------------ checkpoints
+//
+// The iceberg on the LATEST message commits every pending change in the
+// runner's workdir (server-side `git add -A && git commit`), freezing the
+// state the conversation reached at that point.
+
+const checkpointBtn = document.createElement("span");
+checkpointBtn.className = "checkpoint";
+checkpointBtn.textContent = "\u{1F9CA}";
+checkpointBtn.title = "checkpoint — commit all workdir changes";
+checkpointBtn.addEventListener("click", async (e) => {
+  e.stopPropagation();
+  if (checkpointBtn.classList.contains("busy")) return;
+  checkpointBtn.classList.add("busy");
+  try {
+    const res = await fetch(
+      `/checkpoint?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    if (data.committed) {
+      toast(`\u{1F9CA} checkpoint ${data.hash} — ${data.files} file${data.files === 1 ? "" : "s"} committed`);
+    } else {
+      toast(`\u{1F9CA} nothing to commit — ${data.reason ?? "workdir is clean"}`);
+    }
+  } catch (err) {
+    toast(`checkpoint failed: ${err.message}`, "error");
+  } finally {
+    checkpointBtn.classList.remove("busy");
+  }
+});
+
+/** keep the iceberg attached to the latest user/assistant message */
+function placeCheckpointBtn() {
+  const els = chatEls();
+  const last = els[els.length - 1];
+  if (last) last.appendChild(checkpointBtn);
+  else checkpointBtn.remove();
 }
 
 function renderFullMessage(message) {
@@ -1375,6 +1438,7 @@ function renderFullMessage(message) {
 }
 
 function clearMessages() {
+  checkpointBtn.remove();
   messagesEl.innerHTML = "";
   toolCards.clear();
   liveAssistant = null;

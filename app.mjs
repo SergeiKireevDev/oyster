@@ -29,6 +29,8 @@
  *   POST /workdir     -> switch folder (spawns a new runner there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn one runner (?runner=id)
+ *   POST /checkpoint  -> commit all workdir changes of a runner (?runner=id)
+ *                        { label? } — git add -A && git commit in runner.dir
  *   GET  /tunnels     -> live tunnels spawned by this server
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
@@ -37,7 +39,7 @@
  *                          sessionId?, script? (create only) }
  */
 
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
 import { createConnection } from "node:net";
 import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
@@ -728,6 +730,37 @@ export function init(state) {
     return { sessionId, entries };
   }
 
+  // ---------------------------------------------------------------- checkpoints
+
+  /** run git in a workdir; resolves with { code, stdout, stderr } (never rejects) */
+  function git(dir, args) {
+    return new Promise((resolvePromise) => {
+      execFile("git", args, { cwd: dir, timeout: 30_000 }, (err, stdout, stderr) => {
+        resolvePromise({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
+      });
+    });
+  }
+
+  /** commit every pending change in `dir` as a checkpoint commit */
+  async function checkpointWorkdir(dir, label) {
+    const top = await git(dir, ["rev-parse", "--show-toplevel"]);
+    if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
+    const st = await git(dir, ["status", "--porcelain"]);
+    if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
+    const files = st.stdout.split("\n").filter(Boolean).length;
+    if (!files) return { status: 200, body: { committed: false, reason: "workdir is clean" } };
+    const add = await git(dir, ["add", "-A"]);
+    if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
+    const message = label ? `checkpoint: ${label}` : `checkpoint ${new Date().toISOString()}`;
+    const ci = await git(dir, ["commit", "-m", message]);
+    if (ci.code !== 0) {
+      return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };
+    }
+    const hash = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
+    console.log(`[pi-ui] checkpoint ${hash} in ${dir} (${files} files)`);
+    return { status: 200, body: { committed: true, hash, message, files, dir } };
+  }
+
   // ---------------------------------------------------------------- http helpers
 
   const INDEX_PATH = join(config.DIRNAME, "public", "index.html");
@@ -1290,6 +1323,16 @@ export function init(state) {
         return;
       }
       json(res, 405, { error: "method not allowed" });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/checkpoint") {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const runner = runnerFromReq(url);
+      const label = body?.label ? String(body.label).slice(0, 200) : null;
+      const { status, body: out } = await checkpointWorkdir(runner.dir, label);
+      json(res, status, out);
       return;
     }
 
