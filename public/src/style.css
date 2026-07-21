@@ -499,10 +499,11 @@
       border-right: 1px solid var(--border);
       touch-action: pan-x pan-y;
     }
-    #sessions .session-sidebar-action.stop {
+    #sessions .session-sidebar-action {
       width: 56px;
       height: 56px;
       font-size: 24px;
+      line-height: 1;
     }
     #hublots { display: none; }
     #hublots.open {
