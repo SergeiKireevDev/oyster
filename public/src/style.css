@@ -7,6 +7,7 @@
     --muted: #8b93a3;
     --accent: #7aa2f7;
     --accent-dim: #3d5285;
+    --stopped: #343943;
     --green: #9ece6a;
     --red: #f7768e;
     --yellow: #e0af68;
@@ -47,11 +48,11 @@
   }
   header .dot {
     width: 9px; height: 9px; border-radius: 50%;
-    background: var(--red);
+    background: var(--stopped);
     flex-shrink: 0;
   }
   header .dot.ok { background: var(--green); }
-  header .dot.busy { background: var(--yellow); animation: pulse 1s infinite; }
+  header .dot.busy { background: var(--accent); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   header .title {
     font-weight: 600;
@@ -542,10 +543,10 @@
     background: #4a5164; flex-shrink: 0;
   }
   .routine-block .r-dot.running { background: var(--accent); animation: rpulse 1.2s ease-in-out infinite; }
-  .routine-block .r-dot.teardown { background: var(--yellow); animation: rpulse 1.2s ease-in-out infinite; }
+  .routine-block .r-dot.teardown { background: var(--accent); animation: rpulse 1.2s ease-in-out infinite; }
   .routine-block .r-dot.done { background: var(--green); }
   .routine-block .r-dot.failed { background: var(--red); }
-  .routine-block .r-dot.stopped { background: var(--yellow); }
+  .routine-block .r-dot.stopped { background: var(--stopped); }
   @keyframes rpulse { 50% { opacity: .35; } }
   .routine-block .r-name {
     flex: 1; min-width: 0;
@@ -1149,13 +1150,13 @@
     width: 9px; height: 9px;
     border-radius: 50%;
     margin-right: 7px;
-    background: var(--red);           /* no process */
-    opacity: .55;
+    background: var(--stopped);       /* no process */
+    opacity: 1;
   }
-  #modal .s-dot:not(.on):not(.busy) { background: var(--muted); opacity: .5; }
+  #modal .s-dot:not(.on):not(.busy) { background: var(--stopped); opacity: 1; }
   .s-dot.on { background: var(--green); opacity: 1; }   /* runner idle */
   .s-dot.busy {                                          /* runner working */
-    background: var(--yellow); opacity: 1;
+    background: var(--accent); opacity: 1;
     animation: dotblink 1s ease-in-out infinite;
   }
   @keyframes dotblink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
