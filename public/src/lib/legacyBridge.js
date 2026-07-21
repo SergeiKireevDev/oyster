@@ -53,10 +53,6 @@ export function cancelSessionPicker() {
   return sessionPickerHandlers.cancel?.();
 }
 
-export function saveExploredFile() {
-  return fileExplorerHandlers.saveFile?.();
-}
-
 export function uploadExploredFiles() {
   return fileExplorerHandlers.uploadFiles?.();
 }

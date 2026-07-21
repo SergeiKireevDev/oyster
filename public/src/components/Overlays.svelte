@@ -16,7 +16,7 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelSessionPicker, saveExploredFile, uploadExploredFiles } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelSessionPicker, uploadExploredFiles } from "../lib/legacyBridge.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -95,7 +95,7 @@
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-cancel")); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
-        <span class="chip" role="button" tabindex="0" onclick={saveExploredFile} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveExploredFile(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
+        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-save"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-save")); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
         <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
         <span class="chip" role="button" tabindex="0" onclick={backToExploredList} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backToExploredList(); }}>← Back</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
