@@ -10,14 +10,14 @@
  */
 
 import { spawn, execFile } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // same cache-busted instance app.mjs uses (identical ?v= -> shared module)
 const SESSIONS_MOD_PATH = join(dirname(fileURLToPath(import.meta.url)), "sessions.mjs");
-const { sessionEntries, readSessionHeaderInfo } =
+const { readSessionHeaderInfo, sessionCatalog: defaultSessionCatalog } =
   await import(`./sessions.mjs?v=${statSync(SESSIONS_MOD_PATH).mtimeMs}`);
 
 const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
@@ -48,42 +48,73 @@ export function saveCheckpoints(db) {
   }
 }
 
-/** anchor a commit to the session's current tip; returns the record or null */
-export function recordCheckpoint(sessionPath, dir, { hash, message }) {
-  const { sessionId, leafId, entries } = sessionEntries(sessionPath);
-  const anchorId = entries[entries.length - 1]?.id ?? null; // last rendered message
+function checkpointContext(input, options = {}) {
+  const catalog = options.catalog ?? defaultSessionCatalog;
+  if (typeof input === "string") {
+    const header = readSessionHeaderInfo(input);
+    return { catalog, reference: { backend: "jsonl", id: header.id, storagePath: input }, identity: input };
+  }
+  const reference = input;
+  return { catalog, reference, identity: reference.backend === "sqlite" ? reference.id : reference.storagePath };
+}
+
+/** Anchor a commit to the current backend-neutral session tip. */
+export function recordCheckpoint(session, dir, { hash, message }, options = {}) {
+  const { catalog, reference, identity } = checkpointContext(session, options);
+  const { sessionId, leafId, entries } = catalog.entries(identity);
+  const anchorId = entries[entries.length - 1]?.id ?? null;
   if (!sessionId || !anchorId || !hash) return null;
   const db = loadCheckpoints();
   const list = (db[sessionId] ??= []);
-  let rec = list.find((c) => c.hash === hash && c.anchorId === anchorId);
+  let rec = list.find((checkpoint) => checkpoint.hash === hash && checkpoint.anchorId === anchorId);
   if (!rec) {
-    rec = { hash, anchorId, leafId, dir, sessionPath, message: message ?? null, timestamp: new Date().toISOString() };
+    rec = {
+      hash, anchorId, leafId, dir,
+      sessionRef: reference,
+      ...(reference.backend === "jsonl" ? { sessionPath: reference.storagePath } : {}),
+      message: message ?? null,
+      timestamp: new Date().toISOString(),
+    };
     list.push(rec);
     saveCheckpoints(db);
   }
   return rec;
 }
 
-/** The session family of `sessionPath` as a tree: walk parentSession links up
- *  to the root ancestor, then nest every descendant fork, with each session's
- *  checkpoint records attached. */
-export function checkpointTree(sessionPath) {
-  const dir = dirname(sessionPath);
-  const infos = [];
-  for (const f of readdirSync(dir)) {
-    if (!f.endsWith(".jsonl")) continue;
-    try {
-      const info = readSessionHeaderInfo(join(dir, f));
-      if (info) infos.push(info);
-    } catch {}
+/** Build a checkpoint family from catalog lineage rather than directory scans. */
+export function checkpointTree(session, options = {}) {
+  const { catalog, reference, identity } = checkpointContext(session, options);
+  const target = catalog.readHeader(identity);
+  if (!target) throw new Error("session not found");
+  const summaries = catalog.backend === "sqlite"
+    ? catalog.list({ cwd: target.cwd })
+    : catalog.list({ location: dirname(reference.storagePath) });
+  const infos = summaries.map((summary) => {
+    const header = catalog.backend === "jsonl" ? catalog.readHeader(summary.path) : summary;
+    const sessionRef = catalog.backend === "sqlite"
+      ? { backend: "sqlite", id: summary.id, storagePath: catalog.storagePath }
+      : { backend: "jsonl", id: summary.id, storagePath: summary.path };
+    return {
+      ...summary,
+      ...header,
+      id: summary.id,
+      sessionRef,
+      sessionKey: options.sessionReferences?.serialize(sessionRef) ?? null,
+      path: catalog.backend === "jsonl" ? summary.path : null,
+      parentId: catalog.backend === "sqlite" ? summary.parentSessionId : null,
+    };
+  });
+  if (catalog.backend === "jsonl") {
+    const idByPath = new Map(infos.map((info) => [info.path, info.id]));
+    for (const info of infos) info.parentId = idByPath.get(info.parentSession) ?? null;
   }
-  const byPath = new Map(infos.map((i) => [i.path, i]));
-  let root = byPath.get(sessionPath);
-  if (!root) throw new Error("session not found in its folder");
+  const byId = new Map(infos.map((info) => [info.id, info]));
+  let root = byId.get(reference.id);
+  if (!root) throw new Error("session not found in its family");
   const seen = new Set();
-  while (root.parentSession && byPath.has(root.parentSession) && !seen.has(root.path)) {
-    seen.add(root.path);
-    root = byPath.get(root.parentSession);
+  while (root.parentId && byId.has(root.parentId) && !seen.has(root.id)) {
+    seen.add(root.id);
+    root = byId.get(root.parentId);
   }
   const db = loadCheckpoints();
   // forks inherit their ancestors' checkpoint records (so ↩ works inside
@@ -107,7 +138,7 @@ export function checkpointTree(sessionPath) {
         .filter((c) => !shownAbove.has(key(c)))
         .map(({ hash, anchorId, message, timestamp }) => ({ hash, anchorId, message, timestamp })),
       children: depth > 25 ? [] : infos
-        .filter((i) => i.parentSession === info.path)
+        .filter((candidate) => candidate.parentId === info.id)
         .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
         .map((i) => build(i, depth + 1, shown)),
     };

@@ -94,6 +94,7 @@ export async function init(state) {
   const {
     referenceFor: sessionReferenceFor,
     targetFromSearch: sessionTargetFromSearch,
+    referenceFromSearch: sessionReferenceFromSearch,
     referenceParam: sessionReferenceParam,
   } = createSessionRequestResolver({
     codec: state.sessionReferences,
@@ -118,7 +119,7 @@ export async function init(state) {
   });
   const checkpointRoutes = createCheckpointRoutes({
     state, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, loadCheckpoints, checkpointTree, sessionFileParam: sessionTargetFromSearch,
+    recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch,
     git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });

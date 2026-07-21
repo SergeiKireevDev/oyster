@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, loadCheckpoints, checkpointTree, sessionFileParam, git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, logger = console }) {
+export function createCheckpointRoutes({ state, config, requestContext, runnerFromReq, checkpointWorkdir, recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch, git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner, srvId, runnerInfo, logger = console }) {
   const { json, readJsonBody } = requestContext;
   return {
     "POST /checkpoint": async (req, res, url) => {
@@ -12,9 +12,9 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       const { status, body: out } = await checkpointWorkdir(config.PI_BIN, runner.dir, label, model);
       // anchor the checkpoint to the session's latest message (also when the
       // tree was already clean: HEAD marks that state just as well)
-      if (status === 200 && out.hash && runner.sessionFile && existsSync(runner.sessionFile)) {
+      if (status === 200 && out.hash && runner.sessionRef) {
         try {
-          const rec = recordCheckpoint(runner.sessionFile, runner.dir, out);
+          const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog });
           if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
         } catch (e) {
           logger.error(`[pi-ui] failed to record checkpoint: ${e.message}`);
@@ -30,13 +30,13 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
     },
 
     "GET /checkpoint-tree": (req, res, url) => {
-      const target = sessionFileParam(url);
-      if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
+      const target = sessionReferenceFromSearch(url);
+      if (!target || target.backend !== state.sessionCatalog.backend) {
+        json(res, 400, { error: `not a session reference: ${url.searchParams.get("path") ?? url.searchParams.get("key")}` });
         return;
       }
       try {
-        json(res, 200, checkpointTree(target));
+        json(res, 200, checkpointTree(target, { catalog: state.sessionCatalog, sessionReferences: state.sessionReferences }));
       } catch (e) {
         json(res, 500, { error: `tree failed: ${e.message}` });
       }
@@ -50,6 +50,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       const model = body?.model ? String(body.model).slice(0, 200) : null;
       const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
       if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
+      if (!cp.sessionPath) { json(res, 409, { error: "rollback is not supported for this session backend" }); return; }
       if (!existsSync(cp.sessionPath)) { json(res, 410, { error: "session file of this checkpoint is gone" }); return; }
       try {
         // 1. nothing may be lost: auto-commit pending changes and record them
@@ -60,7 +61,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           const saved = await checkpointWorkdir(config.PI_BIN, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
-            try { recordCheckpoint(cp.sessionPath, cp.dir, saved.body); } catch {}
+            try { recordCheckpoint(cp.sessionRef ?? cp.sessionPath, cp.dir, saved.body, { catalog: state.sessionCatalog }); } catch {}
           }
         }
         // 2. deterministic restore of the checkpointed state

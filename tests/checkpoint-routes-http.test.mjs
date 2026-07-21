@@ -5,16 +5,16 @@ import { createCheckpointRoutes } from "../http/routes/checkpointRoutes.mjs";
 const response = () => ({});
 test("checkpoint create/list/tree routes preserve validation, model options, persistence, and shapes", async () => {
   const calls = [];
-  const runner = { dir: "/work", sessionFile: new URL("../package.json", import.meta.url).pathname };
+  const runner = { dir: "/work", sessionRef: { backend: "jsonl", id: "session", storagePath: new URL("../package.json", import.meta.url).pathname } };
   const routes = createCheckpointRoutes({
-    state: {}, config: { PI_BIN: "pi" },
+    state: { sessionCatalog: { backend: "jsonl" }, sessionReferences: {} }, config: { PI_BIN: "pi" },
     requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
     runnerFromReq: () => runner,
     checkpointWorkdir: async (...args) => { calls.push(args); return { status: 200, body: { hash: "abc123", committed: true } }; },
     recordCheckpoint: () => ({ anchorId: "entry-1" }),
     loadCheckpoints: () => ({ session: [{ hash: "abc123" }] }),
-    checkpointTree: (path) => ({ path, children: [] }),
-    sessionFileParam: (url) => url.searchParams.get("path") === "valid.jsonl" ? "/session.jsonl" : null,
+    checkpointTree: (reference) => ({ path: reference.storagePath, children: [] }),
+    sessionReferenceFromSearch: (url) => url.searchParams.get("path") === "valid.jsonl" ? { backend: "jsonl", id: "session", storagePath: "/session.jsonl" } : null,
     logger: { error() {} },
   });
   const created = response(); await routes["POST /checkpoint"]({ body: { label: "save", model: "model/id" } }, created, new URL("http://localhost/checkpoint"));
@@ -39,7 +39,7 @@ test("rollback saves dirty work, resets, forks, opens a runner, and preserves re
     checkpointWorkdir: async () => ({ status: 200, body: { committed: true, hash: "safety" } }), recordCheckpoint: () => ({}),
     forkSessionAt: () => ({ id: "fork", path: "/fork.jsonl", entryIds: new Set(["e1"]) }),
     openSessionRunner: options => ({ id: "r2", ...options }), sendToRunner: (_r, command) => commands.push(command),
-    srvId: () => "srv", runnerInfo: runner => ({ id: runner.id }), runnerFromReq() {}, checkpointTree() {}, sessionFileParam() {}, logger: { error() {}, log() {} },
+    srvId: () => "srv", runnerInfo: runner => ({ id: runner.id }), runnerFromReq() {}, checkpointTree() {}, sessionReferenceFromSearch() {}, logger: { error() {}, log() {} },
   });
   const response = {};
   await routes["POST /rollback"]({ body: { sessionId: "s1", hash: "abc", model: "m" } }, response);

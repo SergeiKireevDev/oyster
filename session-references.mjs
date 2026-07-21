@@ -102,6 +102,18 @@ export function createSessionRequestResolver({ codec, sessionFileParam, sessionF
       return null;
     }
   };
+  const referenceFromSearch = (url) => {
+    const key = url.searchParams.get("key");
+    if (key) {
+      try { return codec.parse(key); } catch { return null; }
+    }
+    const target = sessionFileFromSearch(url);
+    if (!target) return null;
+    try {
+      const info = readSessionHeaderInfo(target);
+      return info?.id ? referenceFor({ id: info.id, path: target }) : null;
+    } catch { return null; }
+  };
   const referenceParam = ({ sessionKey, sessionPath }) => {
     if (sessionKey) {
       try { return codec.parse(sessionKey); } catch { return null; }
@@ -115,5 +127,5 @@ export function createSessionRequestResolver({ codec, sessionFileParam, sessionF
       return null;
     }
   };
-  return Object.freeze({ referenceFor, targetFromSearch, referenceParam });
+  return Object.freeze({ referenceFor, targetFromSearch, referenceFromSearch, referenceParam });
 }

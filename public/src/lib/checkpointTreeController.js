@@ -47,7 +47,7 @@ export function createCheckpointTreeController({
     try {
       const response = await fetchImpl(`/checkpoint-tree?${sessionIdentityQuery(identity)}`);
       const data = await response.json().catch(() => ({}));
-      if (response.status === 400 && /not a session file|no such file/i.test(data.error || "")) {
+      if (response.status === 400 && /not a session (?:file|reference)|no such file/i.test(data.error || "")) {
         setTreeState({ loading: false, root: null, empty: "no session file yet — send a message first" });
         return;
       }

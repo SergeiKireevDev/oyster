@@ -114,7 +114,7 @@ transcript hydration expose equivalent user-visible data for JSONL and SQLite.
   update clients. If that operation is unavailable, return a capability error
   without partial cleanup. Add success, failure, and cross-session isolation
   tests.
-- [ ] Refactor checkpoint recording and family-tree reads to consume session
+- [x] Refactor checkpoint recording and family-tree reads to consume session
   references and catalog entries. Preserve checkpoint anchors, parent/fork
   grouping, inherited markers, and routine/hublot bindings for SQLite session
   IDs.
