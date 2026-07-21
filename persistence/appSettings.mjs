@@ -6,6 +6,15 @@ export const APP_SETTING_KEYS = Object.freeze({
 });
 
 /** Deliberate migration policy: device-specific, non-secret UI choices stay browser-local. */
+const SENSITIVE_SETTING_KEY = /(^|[_-])(token|secret|password|credential|bearer|api[_-]?key|private[_-]?key)s?($|[_-])/i;
+
+export function assertGeneralAppSettingKey(key) {
+  if (typeof key !== "string" || !key.trim()) throw new Error("app setting key is required");
+  const normalized = key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+  if (SENSITIVE_SETTING_KEY.test(normalized)) throw new Error(`sensitive value ${key} is forbidden in general app settings`);
+  return key;
+}
+
 export const BROWSER_PREFERENCE_SYNC_POLICY = Object.freeze({
   syncToSqlite: false,
   storage: "browser-localStorage",
