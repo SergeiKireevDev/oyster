@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -47,7 +47,7 @@ import { createComposerHistoryController } from "./lib/composerHistoryController
 import { createComposerEventController } from "./lib/composerController.js";
 import { createCheckpointTreeController, createCheckpointTreeEventController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
-import { createHublotController, createHublotSidebarController } from "./lib/hublotController.js";
+import { createHublotController, createHublotSidebarController, createManagedHublotEventController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController, createFolderBrowserEventController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController, createFileExplorerEventController, registerFileUploadInput, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
@@ -1629,11 +1629,12 @@ async function toggleManagedHublotScope() {
   });
 }
 
-registerManagedHublotEvents(window, {
+createManagedHublotEventController({
+  windowTarget: window,
   create: createManagedHublot,
   openCommandPalette: setupCommandPalette,
   toggleScope: toggleManagedHublotScope,
-});
+}).attach();
 
 // ------------------------------------------------------------ hublot sidebar
 

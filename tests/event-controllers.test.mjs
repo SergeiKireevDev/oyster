@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 import { createComposerEventController } from "../public/src/lib/composerController.js";
+import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -169,7 +170,7 @@ test("managed hublot event adapter routes management actions", () => {
   const listeners = new Map();
   const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
   const calls = [];
-  registerManagedHublotEvents(target, { create: (detail) => calls.push(["create", detail]), openCommandPalette: (detail) => calls.push(["palette", detail]), toggleScope: () => calls.push(["scope"]) });
+  createManagedHublotEventController({ windowTarget: target, create: (detail) => calls.push(["create", detail]), openCommandPalette: (detail) => calls.push(["palette", detail]), toggleScope: () => calls.push(["scope"]) }).attach();
   listeners.get("pi-managed-hublot-create")({ detail: { port: 3000 } });
   listeners.get("pi-managed-command-palette")({ detail: "hublot" });
   listeners.get("pi-managed-hublot-toggle-scope")();

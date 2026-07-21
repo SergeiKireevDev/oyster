@@ -10,6 +10,22 @@ export function createHublotSidebarController({ target, show }) {
   return { attach, detach };
 }
 
+export function createManagedHublotEventController({ windowTarget, create, openCommandPalette, toggleScope }) {
+  const listeners = [
+    ["pi-managed-hublot-create", (event) => create(event.detail)],
+    ["pi-managed-command-palette", (event) => openCommandPalette(event.detail)],
+    ["pi-managed-hublot-toggle-scope", () => toggleScope()],
+  ];
+  function attach() {
+    for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener);
+    return detach;
+  }
+  function detach() {
+    for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener);
+  }
+  return { attach, detach };
+}
+
 export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, isVisible, updateManager, getScopeAll, getDescription }) {
   async function create(description) {
     const text = (description ?? "").trim();

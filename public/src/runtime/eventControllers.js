@@ -13,16 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerManagedHublotEvents(target, { create, openCommandPalette, toggleScope }) {
-  const listeners = [
-    ["pi-managed-hublot-create", (event) => create(event.detail)],
-    ["pi-managed-command-palette", (event) => openCommandPalette(event.detail)],
-    ["pi-managed-hublot-toggle-scope", () => toggleScope()],
-  ];
-  for (const [name, listener] of listeners) target.addEventListener(name, listener);
-  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
-}
-
 export function registerSessionPickerEvents(target, { dispatch, cancel }) {
   const onAction = (event) => {
     const { type, args } = event.detail ?? {};
