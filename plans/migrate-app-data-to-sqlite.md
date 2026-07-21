@@ -364,7 +364,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 10. Complete validation
 
-- [ ] Verify checkpoint trees and rollback records survive server replacement.
+- [x] Verify checkpoint trees and rollback records survive server replacement.
 - [ ] Verify routine definitions, bindings, progress, logs, and interrupted-run reconciliation survive restart.
 - [ ] Verify hublot identity, ownership, desired state, and history survive `server.mjs` replacement.
 - [ ] Verify planned restart, crash recovery, PID-reuse protection, orphan cleanup, replacement URLs, and self-served interruption behavior.
