@@ -4,7 +4,7 @@ import { tick } from "svelte";
 import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
-import { createSseDeduper } from "./runtime/eventStreamUtils.js";
+import { createSseDeduper, watchdogExpired } from "./runtime/eventStreamUtils.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -840,7 +840,7 @@ let es = null;
 // reconnect.
 let lastEventAt = Date.now();
 setInterval(() => {
-  if (es && Date.now() - lastEventAt > 70000) {
+  if (es && watchdogExpired(lastEventAt)) {
     es.close();
     connected = false;
     updateAppSession({ connected });

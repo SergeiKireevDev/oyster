@@ -1,3 +1,7 @@
+export function watchdogExpired(lastEventAt, now = Date.now(), timeoutMs = 70000) {
+  return now - lastEventAt > timeoutMs;
+}
+
 export function createSseDeduper(maxIds = 2000) {
   const ids = new Set();
   const queue = [];
