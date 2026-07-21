@@ -91,7 +91,7 @@ controller construction or shared resource state.
 - [x] Move remaining settings, extension UI, header, carousel, swipe, drawer, and responsive listener wiring into dedicated settings/layout assemblies.
 - [x] Replace direct root DOM lookups with an explicit component-provided or browser adapter interface.
 - [x] Expose settings operations, layout apply/reset operations, and teardown only.
-- [ ] Add remount tests proving listeners attach once and detach completely.
+- [x] Add remount tests proving listeners attach once and detach completely.
 
 **Acceptance:** the root does not inspect feature layout elements or register
 feature-local browser listeners.

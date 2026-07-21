@@ -99,9 +99,21 @@ export function createSettingsLayoutRuntime(deps) {
     apply: (...args) => carousel.apply(...args),
     reset: (...args) => carousel.reset(...args),
   });
+  let attached = false;
+  let tornDown = false;
   const eventAdapter = Object.freeze({
-    attach() { events.attach(); mobileDrawer.attach(); },
-    detach() { events.detach(); mobileDrawer.detach(); },
+    attach() {
+      if (attached || tornDown) return;
+      attached = true;
+      events.attach();
+      mobileDrawer.attach();
+    },
+    detach() {
+      if (!attached) return;
+      attached = false;
+      events.detach();
+      mobileDrawer.detach();
+    },
   });
   return {
     settings: settingsOperations,
@@ -109,6 +121,8 @@ export function createSettingsLayoutRuntime(deps) {
     handleExtensionUI,
     attach: eventAdapter.attach,
     teardown() {
+      if (tornDown) return;
+      tornDown = true;
       eventAdapter.detach();
       detachHeaderActions();
       detachSettingsActions();
