@@ -180,13 +180,24 @@ export function createCarouselSwipeController({ isDesktop, now = Date.now, step,
   let handled = false;
   const ignoredSelector = "textarea, input, select, .toast, #modal, #cmdPalette, #menu";
 
+  function scrollableAncestor(target) {
+    for (let node = target; node; node = node.parentElement) {
+      if ((node.scrollWidth > node.clientWidth + 1) || (node.scrollHeight > node.clientHeight + 1)) return node;
+    }
+    return null;
+  }
+
   function onTouchStart(event) {
     if (isDesktop() || event.target.closest?.(ignoredSelector)) return;
+    const scrollable = scrollableAncestor(event.target);
     touchStart = {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY,
       t: now(),
       n: event.touches.length,
+      scrollable,
+      scrollLeft: scrollable?.scrollLeft ?? 0,
+      scrollTop: scrollable?.scrollTop ?? 0,
     };
     handled = false;
   }
@@ -195,6 +206,16 @@ export function createCarouselSwipeController({ isDesktop, now = Date.now, step,
     if (!touchStart || handled) return;
     const dx = event.touches[0].clientX - touchStart.x;
     const dy = event.touches[0].clientY - touchStart.y;
+    const item = touchStart.scrollable;
+    if (item) {
+      const hasScrolled = item.scrollLeft !== touchStart.scrollLeft || item.scrollTop !== touchStart.scrollTop;
+      const scrollingX = item.scrollWidth > item.clientWidth + 1 && Math.abs(dx) > 12;
+      const scrollingY = item.scrollHeight > item.clientHeight + 1 && Math.abs(dy) > 12;
+      if (hasScrolled || scrollingX || scrollingY) {
+        touchStart = null;
+        return;
+      }
+    }
     if (swipeAxis(dx, dy) === "h" && Math.abs(dx) > 12) event.preventDefault();
   }
 
