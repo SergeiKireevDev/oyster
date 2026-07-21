@@ -258,7 +258,7 @@ impossible.
 **Acceptance:** feature components have no global custom-event dispatches;
 remaining global listeners are documented browser integrations.
 
-## [ ] 7. Reduce and Rename the Composition Root
+## [x] 7. Reduce and Rename the Composition Root
 
 Once the features own their state and actions:
 
