@@ -13,6 +13,15 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
   });
 }
 
+export async function reconcileTranscriptReload({ messages, render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+  const rendered = render(messages);
+  setReplaying(false);
+  flushBufferedEvents(takeBufferedEvents());
+  const complete = await rendered;
+  if (complete) await afterRender();
+  return complete;
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);

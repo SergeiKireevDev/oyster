@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, loadDurableCanonicalTranscript } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1215,26 +1215,26 @@ async function reloadTranscript() {
     onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
   lastPreview = null; // canonical content from pi supersedes the file preview
-  const rendered = renderTranscript(messages); // tail is in the DOM after this call
-  lifecycleLog("reloadTranscript:tail-rendered", { ms: Math.round(performance.now() - started), messages: messages.length });
-  // the transcript now shows the right last messages: let live events through
-  // (they append below the tail; backfill continues above the viewport)
-  setReplaying(false);
-  const buffered = replayBufferedEvents;
-  replayBufferedEvents = [];
-  flushReplayBufferedEvents(buffered);
-  const complete = await rendered;
+  const complete = await reconcileTranscriptReload({
+    messages,
+    render: renderTranscript,
+    setReplaying,
+    takeBufferedEvents: () => {
+      const buffered = replayBufferedEvents;
+      replayBufferedEvents = [];
+      return buffered;
+    },
+    flushBufferedEvents: flushReplayBufferedEvents,
+    afterRender: async () => {
+      annotateTranscriptEntries().catch(() => {});
+      refreshCheckpointMarkers().catch(() => {});
+      refreshTreeIfOpen();
+      const cb = afterTranscript;
+      afterTranscript = null;
+      cb?.();
+    },
+  });
   lifecycleLog("reloadTranscript:render-complete", { complete, ms: Math.round(performance.now() - started) });
-  // markers and the permalink-focus callback need the FULL transcript in the
-  // DOM (their targets may live in a backfilled chunk); skip both if this
-  // render was superseded by a newer one meanwhile
-  if (!complete) return;
-  annotateTranscriptEntries().catch(() => {});
-  refreshCheckpointMarkers().catch(() => {});
-  refreshTreeIfOpen();
-  const cb = afterTranscript;
-  afterTranscript = null;
-  cb?.();
 }
 
 let postAgentTranscriptSyncTimer = null;

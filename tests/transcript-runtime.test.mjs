@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, fetchDurableTranscript, loadDurableCanonicalTranscript } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, fetchDurableTranscript, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+
+test("reload reconciliation releases buffered events only after rendering begins", async () => {
+  const calls = [];
+  const complete = await reconcileTranscriptReload({
+    messages: [1], render: (messages) => { calls.push(["render", messages]); return Promise.resolve(true); },
+    setReplaying: (value) => calls.push(["replay", value]), takeBufferedEvents: () => ["event"],
+    flushBufferedEvents: (events) => calls.push(["flush", events]), afterRender: () => calls.push(["after"]),
+  });
+  assert.equal(complete, true);
+  assert.deepEqual(calls, [["render", [1]], ["replay", false], ["flush", ["event"]], ["after"]]);
+});
 
 test("canonical reload delegates state and durable transcript dependencies", async () => {
   const applied = [];
