@@ -25,3 +25,22 @@ export function readProcessIdentity(pid, { readFile = readFileSync, readlink = r
   const bootId = optionalRead("/proc/sys/kernel/random/boot_id")?.trim() || null;
   return Object.freeze({ pid, processGroupId, bootId, procStartTicks, executable, commandSha256 });
 }
+
+/** A PID is live-owned only when strong identity and every persisted fingerprint agree. */
+export function processIdentityMatches(record, identity) {
+  if (!record || !identity || Number(record.pid) !== Number(identity.pid)) return false;
+  if (!record.boot_id || !record.proc_start_ticks || !identity.bootId || !identity.procStartTicks) return false;
+  const comparisons = [
+    [record.boot_id, identity.bootId],
+    [String(record.proc_start_ticks), String(identity.procStartTicks)],
+    [record.process_group_id, identity.processGroupId],
+    [record.executable, identity.executable],
+    [record.command_sha256, identity.commandSha256],
+  ];
+  return comparisons.every(([persisted, observed]) => persisted == null || String(persisted) === String(observed));
+}
+
+export function verifyPersistedProcessIdentity(record, options) {
+  try { return processIdentityMatches(record, readProcessIdentity(Number(record.pid), options)); }
+  catch { return false; }
+}

@@ -24,7 +24,7 @@ export async function init(state) {
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { importLegacyCheckpoints } = await import(bust("persistence/checkpointImporter.mjs")); const { importLegacyRoutines } = await import(bust("persistence/routineImporter.mjs"));
-  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
+  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor } = await import(bust("persistence/hublotSupervisor.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -70,7 +70,7 @@ export async function init(state) {
     state.checkpointImport = importLegacyCheckpoints({ repository: checkpointRepository, sessionReferences: state.sessionReferences });
     state.legacyCheckpointsImported = true;
   }
-  state.piProcesses = createPiProcessLauncher({ config });
+  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) { state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options) }); state.hublotSupervisor.start(); }
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
@@ -192,7 +192,7 @@ export async function init(state) {
 
   return {
     handleRequest, startPi, stopPi,
-    stopTunnels: () => closeAllTunnels(state),
+    stopTunnels: () => { state.hublotSupervisor?.stop(); return closeAllTunnels(state); },
     stopRoutines: () => stopAllRoutines(state),
   };
 }

@@ -22,6 +22,7 @@ function stableState() {
     reloadCount: 1,
     legacyCheckpointsImported: true,
     legacyRoutinesImported: true,
+    hublotSupervisor: { start() {}, stop() {} },
     appStore: {
       path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
