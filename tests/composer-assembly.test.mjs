@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createComposerAssembly } from "../public/src/features/composer/createComposerAssembly.js";
+import { runComposerAction } from "../public/src/features/composer/composerActions.js";
 
 function createHarness({ rpc = async () => ({}) } = {}) {
   const calls = [];
@@ -11,8 +12,8 @@ function createHarness({ rpc = async () => ({}) } = {}) {
     selectionEnd: 5,
     scrollHeight: 40,
     style: {},
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener: (type) => calls.push(["input:add", type]),
+    removeEventListener: (type) => calls.push(["input:remove", type]),
     dispatchEvent() {},
     focus() {},
     getBoundingClientRect: () => ({ left: 0, top: 0, bottom: 20, width: 100 }),
@@ -83,6 +84,50 @@ test("composer assembly owns command guard palette menu and listener constructio
   assert.ok(calls.some((call) => call[0] === "render"));
   assert.equal(assembly.configureCommands({}), commands);
   assembly.teardown();
+});
+
+test("composer assembly remounts actions and command listeners without stale ownership", async () => {
+  const listenerCalls = [];
+  const commandDependencies = () => {
+    const target = {
+      addEventListener: (type) => listenerCalls.push(["add", type]),
+      removeEventListener: (type) => listenerCalls.push(["remove", type]),
+    };
+    return {
+      findElement: () => ({ classList: { contains: () => false } }),
+      confirm: async () => true,
+      windowTarget: target,
+      documentTarget: target,
+      setPaletteState() {}, closePaletteState() {}, showFilePicker() {}, isOverlayOpen: () => false, schedule() {},
+      session: { openNew: async () => {}, getCurrentRunner: () => null },
+      transcript: { clear() {}, renderMessage() {} },
+      platform: { rpc: async () => ({ messages: [] }), restart: async () => {}, logout() {} },
+      dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {} },
+    };
+  };
+
+  const first = createHarness();
+  const firstCommands = first.assembly.configureCommands(commandDependencies());
+  firstCommands.runController.attach();
+  firstCommands.keyboardController.attach();
+  firstCommands.menuController.attach();
+  await runComposerAction("send");
+  assert.ok(first.calls.some((call) => call[0] === "user"));
+  first.assembly.teardown();
+  const firstSendCount = first.calls.filter((call) => call[0] === "user").length;
+  await runComposerAction("send");
+  assert.equal(first.calls.filter((call) => call[0] === "user").length, firstSendCount);
+
+  const second = createHarness();
+  const secondCommands = second.assembly.configureCommands(commandDependencies());
+  secondCommands.runController.attach();
+  secondCommands.keyboardController.attach();
+  secondCommands.menuController.attach();
+  await runComposerAction("abort");
+  assert.ok(second.calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));
+  second.assembly.teardown();
+  assert.ok(listenerCalls.some(([kind]) => kind === "add"));
+  assert.ok(listenerCalls.some(([kind]) => kind === "remove"));
 });
 
 test("composition root delegates command controller construction to composer assembly", () => {

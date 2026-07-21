@@ -51,7 +51,7 @@ hydration state.
 - [x] Create `features/composer/createComposerAssembly.js` and move composer history, prompt sending, abort, local echo coordination, and post-send behavior into it.
 - [x] Move command guard, command palette, menu, input, keyboard, and action registration construction into the composer assembly.
 - [x] Inject session, transcript, platform, modal, and toast interfaces instead of reading root state.
-- [ ] Add lifecycle tests for send/abort, command routing, prompt history, listener attachment, and teardown.
+- [x] Add lifecycle tests for send/abort, command routing, prompt history, listener attachment, and teardown.
 
 **Acceptance:** the root does not construct composer or command controllers and
 does not own composer-local mutable state.
