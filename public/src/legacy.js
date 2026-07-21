@@ -2046,7 +2046,6 @@ const carouselController = createCarouselController({
   loadCheckpointTree,
 });
 
-const applyCarousel = () => carouselController.apply();
 const swipeController = createCarouselSwipeController({
   isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
   step: (direction) => carouselController.step(direction),
@@ -2073,7 +2072,7 @@ const carouselEventRegistration = createCarouselEventRegistration({
   onTouchMove: swipeController.onTouchMove,
   onTouchEnd: swipeController.onTouchEnd,
   onTouchCancel: swipeController.onTouchCancel,
-  onResize: applyCarousel,
+  onResize: () => carouselController.apply(),
 });
 
 const carouselHeaderController = createCarouselHeaderController({
@@ -2096,7 +2095,7 @@ createHeaderEventController({
 
 // apply initial page on load + whenever the page becomes mobile/desktop
 carouselEventRegistration.attach();
-applyCarousel();
+carouselController.apply();
 
 // Test/debug scripts use these hooks to seed and inspect session state.
 installDebugHooks(window, { rpc, refreshState, loadHublots, loadRoutines });
