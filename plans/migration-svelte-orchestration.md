@@ -22,7 +22,7 @@ existing DOM IDs/selectors and run the full validation suite before commit.
 
 ## 1. Document the Existing Ownership Boundary
 
-1.1. Add a concise ownership map near the relevant `legacy.js` sections:
+1.1. ✅ Added a concise ownership map near the `legacy.js` imports:
 
 - transport: RPC request/response correlation, SSE connect/reconnect;
 - session lifecycle: runner selection, state hydration, transcript reload;
@@ -30,11 +30,9 @@ existing DOM IDs/selectors and run the full validation suite before commit.
 - Svelte stores: visible UI state and component rendering;
 - API actions: checkpoints, hublots, routines, file/browser operations.
 
-1.2. Identify every exported bridge function and classify it as either:
-
-- a temporary DOM-event adapter;
-- a transport/API action that belongs in an action module;
-- a store operation that can be called directly by Svelte.
+1.2. ✅ Classified bridge export groups: menu/session/browser/hublot/routine/
+command-palette/settings handlers are temporary DOM-event adapters; checkpoint
+rollback is a temporary API adapter; none are direct store operations yet.
 
 **Acceptance:** no behavior change; the ownership map accurately matches imports
 and event listeners.

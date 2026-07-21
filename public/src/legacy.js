@@ -29,6 +29,21 @@ import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
+/*
+ * Ownership boundary during the orchestration migration:
+ * - This module owns RPC/SSE transport, runner/session bootstrap, and the
+ *   remaining document-level scroll and keyboard timing.
+ * - Svelte stores and components own visible state and rendering. Transcript
+ *   item construction, streaming state updates, and backfill scheduling live
+ *   in transcript action modules.
+ * - Feature workflows (checkpoints, hublots, routines, and file browsers) are
+ *   still orchestrated here, but are extraction candidates for focused action
+ *   modules.
+ * - legacyBridge exports are temporary component-to-legacy DOM-event adapters:
+ *   menu/session/browser/hublot/routine/command-palette/settings groups will
+ *   move to direct actions; checkpoint rollback is a temporary API adapter.
+ */
+
 const lifecycleStartedAt = performance.now();
 function lifecycleLog(label, data = {}) {
   const elapsed = Math.round(performance.now() - lifecycleStartedAt);
