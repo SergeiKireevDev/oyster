@@ -13,6 +13,10 @@ export async function readFile(fetchImpl, path) {
   return data;
 }
 
+export function downloadFileUrl(token, path) {
+  return `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
+}
+
 export async function saveFile(fetchImpl, { path, content }) {
   const res = await fetchImpl("/file-save", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, content }) });
   const data = await res.json().catch(() => ({}));

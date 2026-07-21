@@ -6,6 +6,7 @@
     saveExploredFile,
     setExploredFileContent,
   } from "../lib/legacyBridge.js";
+  import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
 
@@ -47,7 +48,7 @@
       </button>
       <a
         class="chip"
-        href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent(fullPath)}`}
+        href={downloadFileUrl($fileExplorer.token, fullPath)}
         download={file.name}
         title={`download ${file.name}`}
         style="text-decoration:none"
