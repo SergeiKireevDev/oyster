@@ -14,6 +14,7 @@ import { createSessionAssembly } from "../features/sessions/createSessionAssembl
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
+import { createBrowserDomAdapters } from "../platform/createBrowserDomAdapters.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
@@ -49,7 +50,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
 /** Application assembly graph: browser adapters, feature interfaces, and lifecycle wiring. */
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
-  const { window, document, location, history } = browser;
+  const { window, document, location, history, find } = browser;
   void stores;
 
 const lifecycleLog = createLifecycleLogger({
@@ -76,8 +77,9 @@ const lifecycleLog = createLifecycleLogger({
 // The URL is kept in sync with the active session (history.replaceState),
 // so a reload or a shared link always lands on the same session.
 
-const $ = (id) => document.getElementById(id);
-const gate = $("gate");
+const dom = createBrowserDomAdapters({ documentTarget: document, findElement: find });
+const $ = dom.findElement;
+const gate = dom.gate;
 const platformAssembly = createPlatformAssembly({
   transport: {
     browser: { document, storage: localStorage },
@@ -443,7 +445,7 @@ const resourceAssembly = createResourceAssembly({
     readFile: (path) => readFile(fetch, path),
     saveFile: (options) => saveFile(fetch, options),
     uploadChunk: (options) => uploadFileChunk(fetch, options),
-    createUploadInput: () => document.createElement("input"),
+    createUploadInput: dom.createFileInput,
     update: updateFileExplorer,
     updateTitle: (title) => updateModal({ title }),
     openModal,
@@ -676,13 +678,16 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     const res = await fetch(`/sessions${dirQ}`);
     if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], folders: [], currentFolder: null }; }
     const { sessions } = await res.json();
-    let folders = [], currentFolder = null;
-    try {
-      const r = await fetch(`/session-folders${dirQ}`);
-      const d = await r.json();
-      if (r.ok) { folders = d.folders; currentFolder = d.current; }
-    } catch {}
-    return { sessions, folders, currentFolder };
+    const folderData = await (async () => {
+      try {
+        const response = await fetch(`/session-folders${dirQ}`);
+        const data = await response.json();
+        return response.ok ? { folders: data.folders, currentFolder: data.current } : { folders: [], currentFolder: null };
+      } catch {
+        return { folders: [], currentFolder: null };
+      }
+    })();
+    return { sessions, ...folderData };
   },
   getCurrentSessionId: (sessions) => {
     const currentSessionFile = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;

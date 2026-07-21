@@ -110,7 +110,7 @@ only wires their public interfaces.
 
 - [x] Rewrite `appCompositionRoot.js` to contain only adapter creation, assembly construction order, cross-feature interface wiring, and lifecycle return values.
 - [x] Remove obsolete imports, compatibility exports, stale migration comments, and dead tests after no-reference checks.
-- [ ] Add an import-boundary regression test that forbids feature controller constructors, feature-local mutable state, custom-event registration, and direct feature DOM access in the composition root.
+- [x] Add an import-boundary regression test that forbids feature controller constructors, feature-local mutable state, custom-event registration, and direct feature DOM access in the composition root.
 - [ ] Run the full build, unit tests, Docker validation, and browser/e2e suite.
 
 ## Completion Criteria
