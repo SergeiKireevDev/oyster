@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -2377,11 +2377,10 @@ const sessionPickerActions = {
   },
   loadFolder: loadSessionPickerFolder,
 };
-window.addEventListener("pi-session-picker-action", (event) => {
-  const { type, args } = event.detail ?? {};
-  return sessionPickerActions[type]?.(...(args ?? []));
+registerSessionPickerEvents(window, {
+  dispatch: (type, ...args) => sessionPickerActions[type]?.(...args),
+  cancel: () => { closeModal(); sessionPickerResolve?.(null); },
 });
-window.addEventListener("pi-session-picker-cancel", () => { closeModal(); sessionPickerResolve?.(null); });
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's

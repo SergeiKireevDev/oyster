@@ -9,6 +9,19 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerSessionPickerEvents(target, { dispatch, cancel }) {
+  const onAction = (event) => {
+    const { type, args } = event.detail ?? {};
+    return dispatch(type, ...(args ?? []));
+  };
+  target.addEventListener("pi-session-picker-action", onAction);
+  target.addEventListener("pi-session-picker-cancel", cancel);
+  return () => {
+    target.removeEventListener("pi-session-picker-action", onAction);
+    target.removeEventListener("pi-session-picker-cancel", cancel);
+  };
+}
+
 export function registerFileExplorerEvents(target, { browse, edit, save, upload, backToList, backToHublots }) {
   const listeners = [
     ["pi-file-explorer-browse", (event) => browse(event.detail)],

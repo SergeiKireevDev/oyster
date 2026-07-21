@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("session picker event adapter dispatches actions and cancellation", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const calls = [];
+  registerSessionPickerEvents(target, { dispatch: (type, ...args) => calls.push([type, args]), cancel: () => calls.push(["cancel"]) });
+  listeners.get("pi-session-picker-action")({ detail: { type: "open", args: ["/a"] } });
+  listeners.get("pi-session-picker-cancel")();
+  assert.deepEqual(calls, [["open", ["/a"]], ["cancel"]]);
+});
 
 test("file explorer event adapter routes each explorer action", () => {
   const listeners = new Map();
