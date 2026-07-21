@@ -15,6 +15,7 @@ import { createLegacyRuntimeCleanup } from "./runtime/legacyRuntimeCleanup.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
 import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependencies.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
+import { createSessionBootDependencies } from "./runtime/sessionBootDependencies.js";
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
 import { createExtensionUiAdapters } from "./runtime/extensionUiAdapters.js";
 import { createLegacyRuntimeEventAdapters } from "./runtime/legacyRuntimeEventAdapters.js";
@@ -1755,7 +1756,7 @@ const runtimeAttachments = createRuntimeAttachments({
 /** URL-driven boot: /s/<sessionId> attaches to that session's runner before
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
-const boot = createSessionBootController({
+const boot = createSessionBootController(createSessionBootDependencies({
   route,
   lookupSession: async (sessionId) => {
     const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
@@ -1769,7 +1770,7 @@ const boot = createSessionBootController({
   connect,
   log: lifecycleLog,
   toast: addToast,
-});
+}));
 
 const detachRuntimeEventAdapters = () => {
   carouselEventRegistration.detach();

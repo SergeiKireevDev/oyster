@@ -137,10 +137,24 @@ no feature-specific listener is left in the app composition root.
 
 ## 7. Reduce the Composition Root and Delete `legacy.js` ⏳
 
-After all domains are extracted:
+**Assessment (2026-07-13): in progress.** Steps 1–6 have left the feature
+controllers/runtimes importable and removed direct `document`/`window` listener
+registration from `legacy.js`. The recent lifecycle commits also extracted
+runtime attachments, adapter registration, and teardown composition.
 
-1. Remove `legacy.js` imports and all direct references.
-2. Move the minimal startup/teardown assembly to `appRuntime.js`.
+The deletion boundary has not yet been crossed: `appRuntime.js` still loads
+`legacyRuntimeAdapter.js`, which dynamically imports `../legacy.js` for
+`createLegacyRuntimeLifecycleDependencies()`. `legacy.js` is still 1,828 lines
+and remains the place where the remaining dependency graph and lifecycle
+objects are assembled. Its parse/DOM-ID guard still intentionally targets that
+file. Therefore this step must remain incomplete.
+
+Remaining work:
+
+1. Move `createLegacyRuntimeLifecycleDependencies()` and the dependency
+   assembly it closes over out of `legacy.js`, so `appRuntime.js` can compose
+   the lifecycle without a legacy adapter or dynamic legacy import.
+2. Remove `legacy.js` imports and all direct references.
 3. Delete `public/src/legacy.js`.
 4. Update UI parse/DOM-reference tests to target replacement runtime modules.
 5. Run stale-reference checks:
@@ -152,12 +166,16 @@ rg "legacy\.js|legacy" public/src tests
 ## Progress Snapshot
 
 - [x] Svelte owns visible rendering and local UI state.
-- [x] Transport, session, transcript, feature, lifecycle, and several stream
-  event domains have importable runtime/controller boundaries.
-- [ ] Remaining global/event dispatch and final composition still live in
-  `public/src/legacy.js` (currently about 1,816 lines).
-- [ ] Delete `legacy.js` only after Step 6 is complete and its remaining
-  startup/teardown composition has moved to `appRuntime.js`.
+- [x] Transport, session, transcript, feature, lifecycle, and stream-event
+  domains have importable runtime/controller boundaries.
+- [x] `legacy.js` no longer directly registers `document`/`window` listeners;
+  focused event adapters own registration and teardown.
+- [x] Lifecycle attachments, adapter registration, and teardown have narrow
+  runtime modules with focused tests.
+- [ ] Final dependency assembly remains in `public/src/legacy.js` (1,828
+  lines), reached through `legacyRuntimeAdapter.js`.
+- [ ] Move that assembly to `appRuntime.js`, remove the adapter/import chain,
+  then delete `legacy.js` and retarget its guard tests.
 
 ## Completion Criteria
 
