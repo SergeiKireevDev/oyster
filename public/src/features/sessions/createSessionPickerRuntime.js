@@ -14,9 +14,18 @@ import {
   SESSION_PICKER_STOP_ACTION,
 } from "../../runtime/uiActionNames.js";
 
+const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
+
+function mergeSessions(existing, additions) {
+  const byPath = new Map(existing.map((session) => [session.path, session]));
+  for (const session of additions) byPath.set(session.path, session);
+  return [...byPath.values()];
+}
+
 export function createSessionPickerRuntime(deps) {
   let resolvePicker = null;
   let sessions = [];
+  let pickerRevision = 0;
 
   const snapshot = () => deps.storeSnapshot(deps.sessionPickerStore);
   const search = createSessionPickerSearchController({
@@ -32,11 +41,7 @@ export function createSessionPickerRuntime(deps) {
     update: deps.updateSessionPicker,
     getRunners: deps.getRunners,
     setSessions: (next) => { sessions = next; },
-    rememberSessions: (next) => {
-      const byPath = new Map(sessions.map((session) => [session.path, session]));
-      for (const session of next) byPath.set(session.path, session);
-      sessions = [...byPath.values()];
-    },
+    rememberSessions: (next) => { sessions = mergeSessions(sessions, next); },
     toast: deps.toast,
   });
 
@@ -51,7 +56,24 @@ export function createSessionPickerRuntime(deps) {
   const deletion = createSessionPickerDeleteController({
     removeSession: deps.removeSession,
     getSessions: () => sessions,
-    setSessions: (next) => { sessions = next; deps.updateSessionPicker({ sessions: next }); },
+    setSessions: (next, deletedSession) => {
+      pickerRevision++;
+      const removed = deletedSession ?? sessions.find((session) => !next.some((item) => item.path === session.path));
+      sessions = next;
+      const state = snapshot();
+      const removedFolder = folderOfSessionPath(removed?.path);
+      const otherFolderSessions = Object.fromEntries(Object.entries(state.otherFolderSessions)
+        .map(([dir, items]) => [dir, items.filter((item) => item.path !== removed?.path)]));
+      const folders = state.folders
+        .map((item) => item.dir === removedFolder ? { ...item, count: Math.max(0, item.count - 1) } : item)
+        .filter((item) => item.count > 0);
+      if (removedFolder && !otherFolderSessions[removedFolder]?.length) delete otherFolderSessions[removedFolder];
+      deps.updateSessionPicker({
+        sessions: state.sessions.filter((item) => item.path !== removed?.path),
+        otherFolderSessions,
+        folders,
+      });
+    },
     toast: deps.toast,
     refreshHublots: deps.refreshHublots,
     refreshRoutines: deps.refreshRoutines,
@@ -109,31 +131,75 @@ export function createSessionPickerRuntime(deps) {
     detachUiActions.splice(0).reverse().forEach((detach) => detach());
   };
 
+  async function loadActiveFolders(loadedSessions, folders, currentFolder, runners) {
+    let allSessions = [...loadedSessions];
+    let knownFolders = [...folders];
+    const otherFolderSessions = {};
+    const activeFolders = [...new Set(runners
+      .filter((runner) => runner.alive && runner.sessionFile)
+      .map((runner) => folderOfSessionPath(runner.sessionFile))
+      .filter((dir) => dir && dir !== currentFolder))];
+    for (const dir of activeFolders) {
+      try {
+        const loaded = await deps.fetchSessions(dir);
+        otherFolderSessions[dir] = loaded;
+        allSessions = mergeSessions(allSessions, loaded);
+        const known = knownFolders.find((folder) => folder.dir === dir);
+        if (known) knownFolders = knownFolders.map((folder) => folder.dir === dir ? { ...folder, count: loaded.length } : folder);
+        else knownFolders.push({ dir, name: dir.slice(dir.lastIndexOf("/") + 1), label: loaded[0]?.cwd ?? dir, count: loaded.length });
+      } catch (error) {
+        const label = folders.find((folder) => folder.dir === dir)?.label ?? dir;
+        deps.toast(`failed to list ${label}: ${error.message}`, "error");
+      }
+    }
+    return { allSessions, otherFolderSessions, folders: knownFolders.filter((folder) => folder.count > 0) };
+  }
+
   async function show() {
     const { sessions: loadedSessions, folders, currentFolder } = await deps.loadInitialPickerData();
-    if (!loadedSessions?.length) { deps.toast("no saved sessions"); return; }
-    sessions = loadedSessions;
-    const currentId = deps.getCurrentSessionId(loadedSessions);
-    deps.setRunnersUpdateHandler((runners) => deps.updateSessionPicker({ runners }));
+    const initialRunners = deps.getRunners();
+    const { allSessions, otherFolderSessions, folders: activeFolders } = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, initialRunners);
+    if (!allSessions.length) { deps.toast("no saved sessions"); return; }
+    sessions = allSessions;
+    const currentId = deps.getCurrentSessionId(allSessions);
+    let syncing = false;
+    deps.setRunnersUpdateHandler(async (runners) => {
+      deps.updateSessionPicker({ runners });
+      if (syncing || !runners.some((runner) => runner.sessionFile && !sessions.some((session) => session.path === runner.sessionFile))) return;
+      syncing = true;
+      const revision = pickerRevision;
+      try {
+        const state = snapshot();
+        const refreshed = await loadActiveFolders(state.sessions, state.folders, state.currentFolder, runners);
+        if (revision !== pickerRevision) return;
+        sessions = refreshed.allSessions;
+        deps.updateSessionPicker({
+          folders: refreshed.folders,
+          otherFolderSessions: { ...state.otherFolderSessions, ...refreshed.otherFolderSessions },
+        });
+      } finally {
+        syncing = false;
+      }
+    });
     const chosen = await new Promise((resolve) => {
       resolvePicker = resolve;
       deps.updateSessionPicker({
         sessions: loadedSessions,
-        folders,
+        folders: activeFolders,
         currentFolder,
         currentId,
         currentWorkdir: deps.getWorkdir(),
-        runners: deps.getRunners(),
+        runners: initialRunners,
         query: "",
         scope: "all",
-        folderPath: currentFolder ?? folders[0]?.dir ?? "",
+        folderPath: currentFolder ?? activeFolders[0]?.dir ?? "",
         excludeTools: true,
         searchStatus: "",
         searchResults: [],
         searchFilesSearched: 0,
         searchTruncated: false,
         searching: false,
-        otherFolderSessions: {},
+        otherFolderSessions,
         loadingFolders: {},
       });
       deps.open();

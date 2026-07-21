@@ -146,7 +146,7 @@ async function switchToSessionByToken(page, token, { mobile = false } = {}) {
   await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
 }
 
-function defineSessionManagementTests({ includeResourceSwitch = false, includeCrossDirectorySwitch = false, mobile = false } = {}) {
+function defineSessionManagementTests({ includeResourceSwitch = false, includeCrossDirectorySwitch = false, includeModalLifecycle = false, mobile = false } = {}) {
   test("start sessions and stop a session's background process", async ({ page }) => {
     await login(page);
 
@@ -230,6 +230,69 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await rowFor(page, D).click();
     await expect(page.locator(".msg.assistant", { hasText: D }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: G })).toHaveCount(0);
+  });
+
+  if (includeModalLifecycle) test("sessions modal stays current while adding, stopping, and deleting sessions across directories", async ({ page }) => {
+    await login(page);
+
+    const A = tag("MODAL-A");
+    const B = tag("MODAL-B");
+    const C = tag("MODAL-C");
+    const folderB = `modal-b-${RUN}`;
+    const folderC = `modal-c-${RUN}`;
+    dexec(`mkdir -p /workspace/${folderB} /workspace/${folderC}`);
+
+    await newSession(page);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${A}.`);
+    await newSessionInFolder(page, folderB);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${B}.`);
+    await loadOtherFolderAndSwitch(page, "/workspace", A);
+
+    await openSessions(page);
+    await expect(rowFor(page, A)).toBeVisible();
+    await expect(rowFor(page, B)).toBeVisible();
+
+    // Add a third session out-of-band while the modal remains open. The live
+    // runner update must make it appear without closing or refreshing.
+    const opened = await api("POST", "/open-session", { dir: `/workspace/${folderC}` });
+    expect(opened.status, opened.json.error).toBe(200);
+    const prompted = await api("POST", `/rpc?runner=${encodeURIComponent(opened.json.runner.id)}`, {
+      type: "prompt",
+      message: `Do not use any tools. Reply with exactly the word ${C}.`,
+    });
+    expect(prompted.status, prompted.json.error).toBe(202);
+    await expect(rowFor(page, C)).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".s-session-main:visible")).toHaveCount(3);
+
+    // Stopping B immediately moves it out of the active section, while A and C
+    // remain visible and active.
+    await rowFor(page, B).locator(".s-stop").click();
+    await expect(page.locator(".toast", { hasText: /process stopped/ })).toBeVisible();
+    await expect(rowFor(page, B)).toBeHidden();
+    await expect(rowFor(page, A)).toBeVisible();
+    await expect(rowFor(page, C)).toBeVisible();
+    await expect(page.locator(".s-session-main:visible")).toHaveCount(2);
+
+    // The stopped session remains available under its folder and can be
+    // deleted. Its now-empty folder must disappear immediately.
+    await page.locator(".s-folders > summary").click();
+    const bFolder = page.locator(".s-folder").filter({ has: page.locator(":scope > summary", { hasText: `/workspace/modal/b/${RUN}` }) });
+    await bFolder.locator(":scope > summary").click();
+    await expect(rowFor(page, B)).toBeVisible();
+    page.once("dialog", (dialog) => dialog.accept());
+    await rowFor(page, B).locator(".s-del:not(.s-stop)").click();
+    await expect(page.locator(".toast", { hasText: /session deleted/ })).toBeVisible();
+    await expect(rowFor(page, B)).toHaveCount(0);
+    await expect(page.locator(".s-folder > summary", { hasText: `/workspace/modal/b/${RUN}` })).toHaveCount(0);
+
+    // Deleting the newly-added active session also updates the open modal and
+    // leaves the unrelated active session untouched.
+    page.once("dialog", (dialog) => dialog.accept());
+    await rowFor(page, C).locator(".s-del:not(.s-stop)").click();
+    await expect(rowFor(page, C)).toHaveCount(0);
+    await expect(page.locator(".s-folder > summary", { hasText: `/workspace/${folderC}` })).toHaveCount(0);
+    await expect(rowFor(page, A)).toBeVisible();
+    await expect(page.locator(".s-session-main:visible")).toHaveCount(1);
   });
 
   if (includeCrossDirectorySwitch) test("switch sessions across working directories in both directions", async ({ page }) => {
@@ -396,7 +459,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 }
 
 test.describe.serial("desktop session management", () => {
-  defineSessionManagementTests({ includeResourceSwitch: true, includeCrossDirectorySwitch: true });
+  defineSessionManagementTests({ includeResourceSwitch: true, includeCrossDirectorySwitch: true, includeModalLifecycle: true });
 });
 
 test.describe.serial("mobile session management", () => {

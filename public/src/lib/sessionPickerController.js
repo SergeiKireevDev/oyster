@@ -40,7 +40,7 @@ export function createSessionPickerDeleteController({ removeSession, getSessions
     if (!confirm(`Delete session "${label}"?`)) return;
     try {
       const data = await removeSession(session.path);
-      setSessions(getSessions().filter((item) => item.path !== session.path));
+      setSessions(getSessions().filter((item) => item.path !== session.path), session);
       const bits = [];
       if (data.closedHublots?.length) bits.push(`closed hublot${data.closedHublots.length > 1 ? "s" : ""} :${data.closedHublots.join(", :")}`);
       if (data.releasedRoutines?.length) bits.push(`released routine${data.releasedRoutines.length > 1 ? "s" : ""} ${data.releasedRoutines.join(", ")}`);
