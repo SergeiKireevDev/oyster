@@ -12,6 +12,7 @@ async function copyStableServer(root) {
   await Promise.all([
     copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs")),
     copyFile(new URL("../persistence/appStore.mjs", import.meta.url), join(root, "persistence", "appStore.mjs")),
+    copyFile(new URL("../persistence/migrations.mjs", import.meta.url), join(root, "persistence", "migrations.mjs")),
   ]);
 }
 

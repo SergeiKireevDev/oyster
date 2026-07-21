@@ -17,6 +17,7 @@ test("app store creates its database directory and closes idempotently", (t) => 
   assert.equal(store.path, resolve(databasePath));
   assert.equal(existsSync(databasePath), true);
   assert.deepEqual(store.repositories, {});
+  assert.deepEqual(store.migrationStatus, { currentVersion: 1, appliedVersions: [1] });
   assert.equal(Object.isFrozen(store.repositories), true);
   assert.equal(store.closed, false);
 
@@ -32,7 +33,7 @@ test("app store configures durability, integrity, and contention pragmas", () =>
     close() {}
   }
 
-  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-pragma-store.sqlite"), Database: FakeDatabase });
+  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-pragma-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
   store.close();
 
   assert.equal(statements.length, 1);
@@ -52,7 +53,7 @@ test("app store closes its owned database exactly once", () => {
   }
 
   const databasePath = join(tmpdir(), "pi-ui-fake-store.sqlite");
-  const store = openAppStore({ databasePath, Database: FakeDatabase });
+  const store = openAppStore({ databasePath, Database: FakeDatabase, migrate: () => ({}) });
   store.close();
   store.close();
 

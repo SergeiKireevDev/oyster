@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { applyMigrations } from "./migrations.mjs";
 
 /**
  * Open the single pi-lot-ui application database owned by the stable server.
@@ -10,7 +11,7 @@ import { DatabaseSync } from "node:sqlite";
  * Domain repositories are added to this registry as their migrations land;
  * callers must never open their own application-database connections.
  */
-export function openAppStore({ databasePath, Database = DatabaseSync } = {}) {
+export function openAppStore({ databasePath, Database = DatabaseSync, migrate = applyMigrations } = {}) {
   if (!databasePath) throw new Error("application database path is required");
   const path = resolve(databasePath);
   mkdirSync(dirname(path), { recursive: true });
@@ -22,12 +23,14 @@ export function openAppStore({ databasePath, Database = DatabaseSync } = {}) {
     PRAGMA busy_timeout = 5000;
     PRAGMA synchronous = NORMAL;
   `);
+  const migrationStatus = migrate(database);
   const repositories = Object.freeze({});
   let closed = false;
 
   return Object.freeze({
     path,
     repositories,
+    migrationStatus,
     get closed() { return closed; },
     close() {
       if (closed) return;

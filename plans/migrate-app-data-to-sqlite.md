@@ -268,7 +268,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-ui.sqlite`.
 - [x] Create one stable-core-owned database service and expose repositories through `state.appStore`; define deterministic startup, hot-reload reuse, graceful close, and test teardown behavior.
 - [x] Enable WAL, foreign keys, a busy timeout, and `synchronous=NORMAL`.
-- [ ] Add numbered, transactional, idempotent schema migrations.
+- [x] Add numbered, transactional, idempotent schema migrations.
 - [ ] Set and document the universal Node version required by `node:sqlite`.
 - [ ] Add tests for migrations, constraints, transactions, restart behavior, and concurrent WAL access.
 - [ ] Add a static/integration guard proving app migrations and writes target only `pi-lot-ui.sqlite` and leave the coding-agent schema unchanged.
