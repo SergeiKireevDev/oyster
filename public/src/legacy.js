@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { applySessionState, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -2212,6 +2212,7 @@ function toast(text, kind, { onClick, sticky } = {}) {
 // Mobile-only: horizontal swipes move through three views — chat, hublots,
 // checkpoints — like snapping pages. A two-finger swipe switches between
 // active sessions. A three-dot indicator at the bottom shows position.
+function switchToAdjacentRunner(direction) { return adjacentRunnerController(direction); }
 //
 // Pages: 0 = chat (no sidebar); 1 = hublots drawer; 2 = checkpoints drawer.
 // Right swipe advances, left swipe goes back.
@@ -2236,15 +2237,14 @@ const swipeController = createCarouselSwipeController({
 // session bound (sessionId + sessionName), and lives in the current
 // workdir. Runners with sessionName === null were spawned but never sent
 // a message to — they're background/orphan processes, skip them.
-function switchToAdjacentRunner(dir) {
-  const { candidates, target } = adjacentActiveRunner(runnersNow, currentRunner, sessionUi.workdir, dir);
-  if (candidates.length <= 1) {
-    toast(candidates.length === 0 ? "no other active session" : "only one active session");
-    return;
-  }
-  if (!target || target.id === currentRunner) return;
-  switchToRunner(target.id);
-}
+let adjacentRunnerController;
+adjacentRunnerController = createAdjacentRunnerController({
+  getRunners: () => runnersNow,
+  getCurrentRunner: () => currentRunner,
+  getWorkdir: () => sessionUi.workdir,
+  switchRunner: switchToRunner,
+  toast,
+});
 
 function attachSwipeListeners() {
   registerCarouselEvents({

@@ -188,6 +188,21 @@ export function adjacentActiveRunner(runners, currentRunner, workdir, direction)
   return { candidates, target: candidates[(base + direction + candidates.length) % candidates.length] };
 }
 
+/** Select an adjacent active runner, reporting empty and singleton workdirs. */
+export function createAdjacentRunnerController({ getRunners, getCurrentRunner, getWorkdir, switchRunner, toast }) {
+  return (direction) => {
+    const currentRunner = getCurrentRunner();
+    const { candidates, target } = adjacentActiveRunner(getRunners(), currentRunner, getWorkdir(), direction);
+    if (candidates.length <= 1) {
+      toast(candidates.length === 0 ? "no other active session" : "only one active session");
+      return false;
+    }
+    if (!target || target.id === currentRunner) return false;
+    switchRunner(target.id);
+    return true;
+  };
+}
+
 export function usageInfo(usage) {
   if (!usage) return null;
   const cost = usage.cost?.total ?? 0;

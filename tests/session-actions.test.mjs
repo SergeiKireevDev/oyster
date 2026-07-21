@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -62,6 +62,16 @@ test("session actions select adjacent active runners in the current workdir", ()
   assert.equal(result.target.id, "two");
   assert.equal(adjacentActiveRunner(runners, "one", "/other", 1).target, null);
 });
+test("adjacent runner controller switches only when another active runner exists", () => {
+  const calls = [];
+  const controller = createAdjacentRunnerController({
+    getRunners: () => [{ id: "a", alive: true, sessionId: "s1", sessionName: "one", dir: "/work" }, { id: "b", alive: true, sessionId: "s2", sessionName: "two", dir: "/work" }],
+    getCurrentRunner: () => "a", getWorkdir: () => "/work", switchRunner: (id) => calls.push(id), toast: (message) => calls.push(message),
+  });
+  assert.equal(controller(1), true);
+  assert.deepEqual(calls, ["b"]);
+});
+
 test("session actions fetch durable transcript previews", async () => {
   const requests = [];
   const fetchImpl = async (url) => {
