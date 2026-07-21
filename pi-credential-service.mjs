@@ -150,7 +150,19 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return "not_configured";
   }
 
-  const activeOAuthProviders = new Set();
+  const activeCredentialProviders = new Set();
+
+  async function withProviderReservation(providerId, operation) {
+    if (activeCredentialProviders.has(providerId)) {
+      throw credentialError("credential_busy", `provider ${providerId} already has an active credential operation`);
+    }
+    activeCredentialProviders.add(providerId);
+    try {
+      return await operation();
+    } finally {
+      activeCredentialProviders.delete(providerId);
+    }
+  }
 
   function normalizedOAuthCallbacks(callbacks) {
     if (!callbacks || typeof callbacks !== "object" || Array.isArray(callbacks)) {
@@ -243,84 +255,80 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
   async function setApiKey(provider, key) {
     const providerId = normalizedProvider(provider);
     if (typeof key !== "string" || !key) throw credentialError("invalid_key", "API key is required");
-    const { authStorage, modelRegistry } = await load();
-    reloadOrFail(authStorage);
-    const current = authStorage.get(providerId);
-    if (current?.type === "oauth") {
-      throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
-    }
-    if (current && current.type !== "api_key") {
-      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
-    }
-    if (!current && !refreshRegistry(modelRegistry).has(providerId)) {
-      throw credentialError("unknown_provider", `provider ${providerId} is not registered by the configured pi installation`);
-    }
-    const env = current?.env ? { ...current.env } : undefined;
-    authStorage.set(providerId, { type: "api_key", key, ...(env ? { env } : {}) });
-    return Object.freeze({ provider: providerId, credentialType: "api_key" });
+    return withProviderReservation(providerId, async () => {
+      const { authStorage, modelRegistry } = await load();
+      reloadOrFail(authStorage);
+      const current = authStorage.get(providerId);
+      if (current?.type === "oauth") {
+        throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
+      }
+      if (current && current.type !== "api_key") {
+        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+      }
+      if (!current && !refreshRegistry(modelRegistry).has(providerId)) {
+        throw credentialError("unknown_provider", `provider ${providerId} is not registered by the configured pi installation`);
+      }
+      const env = current?.env ? { ...current.env } : undefined;
+      authStorage.set(providerId, { type: "api_key", key, ...(env ? { env } : {}) });
+      return Object.freeze({ provider: providerId, credentialType: "api_key" });
+    });
   }
 
   async function removeApiKey(provider) {
     const providerId = normalizedProvider(provider);
-    const { authStorage } = await load();
-    reloadOrFail(authStorage);
-    const current = authStorage.get(providerId);
-    if (current?.type === "oauth") {
-      throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
-    }
-    if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored API key`);
-    if (current.type !== "api_key") {
-      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
-    }
-    authStorage.remove(providerId);
-    return Object.freeze({ provider: providerId, removed: true });
+    return withProviderReservation(providerId, async () => {
+      const { authStorage } = await load();
+      reloadOrFail(authStorage);
+      const current = authStorage.get(providerId);
+      if (current?.type === "oauth") {
+        throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
+      }
+      if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored API key`);
+      if (current.type !== "api_key") {
+        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+      }
+      authStorage.remove(providerId);
+      return Object.freeze({ provider: providerId, removed: true });
+    });
   }
 
   async function loginOAuth(provider, callbacks) {
     const providerId = normalizedProvider(provider);
     const safeCallbacks = normalizedOAuthCallbacks(callbacks);
-    if (activeOAuthProviders.has(providerId)) {
-      throw credentialError("credential_busy", `provider ${providerId} already has an active OAuth operation`);
-    }
-    const { authStorage } = await load();
-    reloadOrFail(authStorage);
-    if (!safeOAuthProviders(authStorage).has(providerId)) {
-      throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth in the configured pi installation`);
-    }
-    const current = authStorage.get(providerId);
-    if (current && current.type !== "oauth") {
-      if (current.type === "api_key") {
-        throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+    return withProviderReservation(providerId, async () => {
+      const { authStorage } = await load();
+      reloadOrFail(authStorage);
+      if (!safeOAuthProviders(authStorage).has(providerId)) {
+        throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth in the configured pi installation`);
       }
-      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
-    }
-
-    activeOAuthProviders.add(providerId);
-    try {
+      const current = authStorage.get(providerId);
+      if (current && current.type !== "oauth") {
+        if (current.type === "api_key") {
+          throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+        }
+        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+      }
       await authStorage.login(providerId, safeCallbacks);
       return Object.freeze({ provider: providerId, credentialType: "oauth" });
-    } finally {
-      activeOAuthProviders.delete(providerId);
-    }
+    });
   }
 
   async function logoutOAuth(provider) {
     const providerId = normalizedProvider(provider);
-    if (activeOAuthProviders.has(providerId)) {
-      throw credentialError("credential_busy", `provider ${providerId} already has an active OAuth operation`);
-    }
-    const { authStorage } = await load();
-    reloadOrFail(authStorage);
-    const current = authStorage.get(providerId);
-    if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored OAuth credential`);
-    if (current.type !== "oauth") {
-      if (current.type === "api_key") {
-        throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+    return withProviderReservation(providerId, async () => {
+      const { authStorage } = await load();
+      reloadOrFail(authStorage);
+      const current = authStorage.get(providerId);
+      if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored OAuth credential`);
+      if (current.type !== "oauth") {
+        if (current.type === "api_key") {
+          throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
+        }
+        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
-      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
-    }
-    authStorage.logout(providerId);
-    return Object.freeze({ provider: providerId, removed: true });
+      authStorage.logout(providerId);
+      return Object.freeze({ provider: providerId, removed: true });
+    });
   }
 
   return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth });

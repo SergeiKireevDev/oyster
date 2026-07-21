@@ -274,13 +274,18 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     await assert.rejects(service.loginOAuth("mock-oauth", {
       onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
     }), { code: "credential_busy" });
+    await assert.rejects(service.setApiKey("mock-oauth", "must-not-write"), { code: "credential_busy" });
+    await assert.rejects(service.removeApiKey("mock-oauth"), { code: "credential_busy" });
+    await assert.rejects(service.logoutOAuth("mock-oauth"), { code: "credential_busy" });
+    await service.setApiKey("api-only", "unrelated-replacement-canary");
     releasePrompt("done");
     await pending;
+    assert.deepEqual(await service.logoutOAuth("mock-oauth"), { provider: "mock-oauth", removed: true });
 
     assert.deepEqual(await service.logoutOAuth("orphan-oauth"), { provider: "orphan-oauth", removed: true });
     stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(stored["orphan-oauth"], undefined);
-    assert.equal(stored["api-only"].key, "api-key-canary");
+    assert.equal(stored["api-only"].key, "unrelated-replacement-canary");
   } finally {
     item.cleanup();
   }

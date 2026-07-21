@@ -9,8 +9,10 @@ credential persistence to the SDK owned by the configured `PI_BIN`; pi-lot-ui
 must only adapt Pi's interactive OAuth callbacks to a transient web workflow.
 
 Rename the top-level **API Keys…** workflow to **Credentials…** so API keys and
-OAuth accounts share one accurate status surface. Existing API-key behavior and
-security guarantees must remain intact.
+OAuth accounts share one accurate status surface. When an authenticated user
+opens the app and Pi's `auth.json` has no credential entries, automatically open
+the credentials authentication workflow in setup mode. Existing API-key
+behavior and security guarantees must remain intact.
 
 ## Scope
 
@@ -65,9 +67,11 @@ of assuming the browser can reach a loopback listener on the server host.
   logout, using the existing all-active-runner restart service. Do not restart
   runners for failed or cancelled flows. Report durable-success/restart-failure
   states honestly without trying to roll credentials back.
-- Never automatically navigate the main pi-lot-ui window to a provider. Offer a
-  clear user-initiated link/button that can open a new tab and remains usable
-  when popup blocking is enabled.
+- Never automatically navigate the main pi-lot-ui window to a provider. The
+  empty-auth startup behavior may open the credentials modal and provider
+  chooser, but upstream authorization still requires a clear user-initiated
+  link/button that can open a new tab and remains usable when popup blocking is
+  enabled.
 - Preserve unrelated work already present in the worktree.
 - After each implementation checklist item, run:
 
@@ -89,7 +93,7 @@ Run build and full end-to-end validation only in the final checklist item.
   Pi callback contract (`onAuth`, `onDeviceCode`, `onPrompt`, `onSelect`,
   `onProgress`, `onManualCodeInput`, and `signal`), and reject unknown,
   wrong-credential-type, or busy providers without changing unrelated entries.
-- [ ] Add a shared provider-operation reservation boundary used by API-key and
+- [x] Add a shared provider-operation reservation boundary used by API-key and
   OAuth mutations so two browser operations cannot overwrite the same provider.
   Release reservations on every success, failure, cancellation, and timeout;
   preserve Pi's own file locking for cross-process writes and unrelated-provider
@@ -173,6 +177,12 @@ responses other than the intentional transient callback snapshot, or events.
   active; use abortable requests, bounded backoff, one outstanding poll, and
   teardown cancellation. Never place flow data in browser storage or
   application history.
+- [ ] On initial authenticated app mount, load safe credential status once and
+  automatically open **Credentials…** in setup mode when `auth.json` contains
+  no stored credential entries. Open it at most once per page mount, do not
+  treat environment or `models.json` fallback as an `auth.json` entry, do not
+  automatically navigate to an upstream provider, and do not reopen over a
+  higher-priority modal or during teardown.
 - [ ] Extend the credentials modal to present OAuth-capable providers with
   **Sign in**, **Re-authenticate**, and **Sign out from pi** actions as
   applicable. Require provider-specific replacement/re-authentication and
@@ -255,7 +265,9 @@ npm test
 
 - An authenticated user can sign in, re-authenticate, cancel, and sign out for
   every OAuth provider exposed by the configured Pi SDK, including device-code,
-  browser/manual callback, prompt, and selection interactions.
+  browser/manual callback, prompt, and selection interactions. On app startup,
+  an empty Pi `auth.json` automatically opens the credentials setup workflow
+  once without automatically navigating to an upstream provider.
 - Pi—not pi-lot-ui—owns provider OAuth logic, PKCE/state validation, token
   exchange, refresh, and persistence in validated `PI_AGENT_DIR/auth.json`.
 - OAuth credentials and transient authorization material never enter pi-lot-ui
