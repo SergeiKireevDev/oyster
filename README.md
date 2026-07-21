@@ -17,6 +17,30 @@ mtime-cached), `checkpoints.mjs` (git checkpoints/rollback),
 - **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
 - **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.
 
+## Bundled pi extensions
+
+This repo ships the pi extensions that power its features in `extensions/`:
+
+| File | Tool / command | What it does |
+|---|---|---|
+| `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
+| `extensions/hublot.ts` | `hublot` tool | Open/close/list public web interfaces (cloudflared tunnels) for a session. |
+| `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
+
+pi loads extensions from `~/.pi/agent/extensions/`. To make these bundled files
+available (and keep them in sync with the repo), symlink or copy them:
+
+```sh
+mkdir -p ~/.pi/agent/extensions
+ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits here apply immediately
+# or:
+# cp extensions/*.ts ~/.pi/agent/extensions/              # copy — stable snapshot
+```
+
+Restart pi afterwards. The `hublot` and `routine` tools discover the UI server
+from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
+`PI_UI_TOKEN` or the `.ui-token` file next to `server.mjs`.
+
 ## Quick start
 
 ```sh

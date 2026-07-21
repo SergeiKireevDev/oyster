@@ -1,5 +1,81 @@
 # Agent guidelines for pi-lot-ui
 
+## Bundled pi extensions
+
+This repo ships the pi extensions that power its features in `extensions/`:
+
+| File | Tool / command | What it does |
+|---|---|---|
+| `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
+| `extensions/hublot.ts` | `hublot` tool | Open/close/list public web interfaces (cloudflared tunnels) for a session. |
+| `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
+
+pi loads extensions from `~/.pi/agent/extensions/`. To make these bundled files
+available (and keep them in sync with the repo), symlink or copy them:
+
+```sh
+mkdir -p ~/.pi/agent/extensions
+ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits here apply immediately
+# or:
+# cp extensions/*.ts ~/.pi/agent/extensions/              # copy — stable snapshot
+```
+
+Restart pi afterwards. The `hublot` and `routine` tools discover the UI server
+from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
+`PI_UI_TOKEN` or the `.ui-token` file next to `server.mjs`.
+
+## Installation
+
+This is a zero-dependency Node.js project — there is no install script, no build step, and no `npm install`.
+
+### Prerequisites
+
+- **Node.js ≥ 18** — check with `node --version`. LTS (20.x or 22.x) is recommended.
+- **`pi` binary** — the [`pi` coding agent](https://github.com/badlogic/pi-mono) must be installed and on `PATH`. Install via npm: `npm install -g @earendil-works/pi-coding-agent` (or whatever package provides `pi`), then verify with `which pi`.
+- **`cloudflared`** (optional) — only needed for the tunnels feature. Install from [pkg.cloudflare.com](https://pkg.cloudflare.com) if you plan to use tunnel functionality.
+
+### Quick start
+
+```bash
+git clone <repo-url> pi-lot-ui && cd pi-lot-ui
+node server.mjs
+```
+
+The server starts on `0.0.0.0:8080` and prints a random auth token to the console. On first run it also writes that token to `.ui-token` (git-ignored) so subsequent restarts keep the same token.
+
+Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also gets passed as your bearer token for API calls.
+
+### Configuration
+
+| Flag | Env | Default | Meaning |
+|---|---|---|---|
+| `--port` | `PORT` | `8080` | listen port |
+| `--host` | `HOST` | `0.0.0.0` | bind address |
+| `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
+| `--dir` | `PI_DIR` | cwd | working directory pi runs in |
+| `--pi` | `PI_BIN` | `pi` | pi executable path |
+| `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
+| `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |
+
+### Running as a service
+
+A systemd user unit is provided as `pi-ui.service`: it auto-restarts on crash and starts on login. Before using it, update the hardcoded `WorkingDirectory=` and `ExecStart=` paths to match your clone location:
+
+```bash
+sed "s|/home/ubuntu/tree-pi|$(pwd)|" pi-ui.service > ~/.config/systemd/user/pi-ui.service
+systemctl --user daemon-reload
+systemctl --user enable --now pi-ui.service
+sudo loginctl enable-linger $USER   # keep running without an active login session
+```
+
+Logs: `journalctl --user -u pi-ui -f`.
+
+For a backgrounded foreground process instead:
+
+```bash
+nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
+```
+
 ## Run the tests after every feature or fix
 
 After implementing a feature or fixing a bug, run:
