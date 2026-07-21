@@ -178,7 +178,7 @@ a sessions feature context.
 picker cancellation pass focused and browser tests. The root no longer holds
 `currentRunner`, `runnersNow`, `state`, picker resolver state, or route state.
 
-## [ ] 4. Extract the Transcript Feature Runtime
+## [x] 4. Extract the Transcript Feature Runtime
 
 Create `features/transcript/createTranscriptFeature.js` around existing
 transcript stores, actions, and runtime helpers.

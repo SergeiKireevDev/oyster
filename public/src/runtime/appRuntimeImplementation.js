@@ -20,6 +20,7 @@ import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
 import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
 import { createSessionFeature } from "../features/sessions/createSessionFeature.js";
+import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
@@ -1613,6 +1614,11 @@ const detachSettingsActions = configureSettingsActions({
 async function showSettingsModal() {
   openModal({ title: "Settings", content: "settings" });
 }
+
+const transcriptFeature = createTranscriptFeature({
+  createRuntime: () => ({ reloadForSession: reloadTranscript, handleStreamEvent: handleTranscriptStreamEvent }),
+  dependencies: {},
+});
 
 // ------------------------------------------------------------ extension UI bridge
 
