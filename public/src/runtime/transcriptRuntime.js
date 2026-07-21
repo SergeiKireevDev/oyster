@@ -55,6 +55,16 @@ export function createDebouncedTranscriptSyncController({ schedule, clearTimeout
   };
 }
 
+/** Match a rendered transcript element to its persisted entry for permalinks. */
+export function findTranscriptEntryForElement({ entries, elements, element, matches, normalize }) {
+  const index = elements.indexOf(element);
+  if (index === -1 || !entries.length) return null;
+  const position = entries.length === elements.length ? index : Math.max(0, entries.length - elements.length + index);
+  if (entries[position] && matches(entries[position], element)) return entries[position];
+  return entries.find((entry) => entry.role === element.dataset.role && entry.text && !entry.text.startsWith("[")
+    && normalize(element.textContent).includes(normalize(entry.text).slice(0, 60))) ?? entries[position] ?? null;
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);

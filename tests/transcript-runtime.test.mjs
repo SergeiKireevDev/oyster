@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -21,6 +21,12 @@ test("transcript sync scheduler retries during replay before reloading", async (
   timers.shift()[0]();
   await Promise.resolve();
   assert.equal(reloads, 1);
+});
+
+test("transcript entry matcher aligns persisted entries from the tail", () => {
+  const element = { dataset: { role: "assistant" }, textContent: "saved response" };
+  const result = findTranscriptEntryForElement({ entries: [{ role: "user", text: "old" }, { role: "assistant", text: "saved response" }], elements: [element], element, matches: (entry, el) => entry.text === el.textContent, normalize: (text) => text });
+  assert.equal(result.text, "saved response");
 });
 
 test("replay gate identifies transcript event types", () => {

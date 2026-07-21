@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -2041,17 +2041,9 @@ function entryMatchesEl(entry, el) {
   return messageEntryMatchesElement(entry, el);
 }
 
-function entryForElement(entries, els, el) {
-  const idx = els.indexOf(el);
-  if (idx === -1 || !entries.length) return null;
-  // same length -> zip by index; otherwise align from the end (the file can
-  // briefly run ahead of / behind the rendered transcript while streaming)
-  const pos = alignedTranscriptIndex(entries.length, els.length, idx);
-  if (pos >= 0 && pos < entries.length && entryMatchesEl(entries[pos], el)) return entries[pos];
-  const found = entries.find((e) => e.role === el.dataset.role && e.text && !e.text.startsWith("[")
-    && normText(el.textContent).includes(normText(e.text).slice(0, 60)));
-  return found ?? (pos >= 0 && pos < entries.length ? entries[pos] : null);
-}
+const entryForElement = (entries, els, el) => findTranscriptEntryForElement({
+  entries, elements: els, element: el, matches: entryMatchesEl, normalize: normText,
+});
 
 async function annotateTranscriptEntries() {
   const entries = await fetchSessionEntries();
