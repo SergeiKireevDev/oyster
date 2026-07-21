@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
 const stableSource = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
+const appStoreSource = readFileSync(new URL("../persistence/appStore.mjs", import.meta.url), "utf8");
 
 test("app is a small disposable composition root", () => {
   assert.ok(source.split("\n").length < 200);
@@ -23,4 +24,15 @@ test("stable core owns one app-store service across application reloads", () => 
   assert.match(stableSource, /state\.appStore\.close\(\);/);
   assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("await loadApp();"));
   assert.doesNotMatch(source, /openAppStore|node:sqlite/);
+});
+
+test("composition injects the narrow app store into persistent domains", () => {
+  assert.match(appStoreSource, /repositories,[\s\S]*migrationStatus,[\s\S]*transaction,[\s\S]*get closed\(\)[\s\S]*close\(\)/);
+  assert.equal(appStoreSource.includes("database,"), false, "raw database handle must remain private");
+  assert.match(source, /createRunnerManager\(state, \{ appStore \}\)/);
+  assert.match(source, /createCheckpointRoutes\(\{[\s\S]*?state, appStore,/);
+  assert.match(source, /createRoutineRoutes\(\{[\s\S]*?state, appStore,/);
+  assert.match(source, /createTunnelRoutes\(\{[\s\S]*?state, appStore,/);
+  assert.match(source, /createSessionRoutes\(\{[\s\S]*?state,[\s\S]*?appStore,/);
+  assert.match(source, /createWorkdirRoutes\(\{ state, appStore,/);
 });

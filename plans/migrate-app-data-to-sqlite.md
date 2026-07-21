@@ -277,7 +277,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 - [x] Resolve and validate `PI_UI_DB_PATH` in `server.mjs`, include the non-secret resolved path and migration status in startup logging and `/health`, and fail startup before listening when the store cannot be opened or migrated.
 - [x] Open exactly one app-store instance during stable-core startup, assign it to `state.appStore` before the first `app.mjs` load, and reuse that same instance across every hot reload.
-- [ ] Define a narrow app-store interface containing repositories and transaction/close operations; inject it from `state` into runner, checkpoint, routine, hublot, session, and settings composition instead of opening SQLite connections inside route modules or domain modules.
+- [x] Define a narrow app-store interface containing repositories and transaction/close operations; inject it from `state` into runner, checkpoint, routine, hublot, session, and settings composition instead of opening SQLite connections inside route modules or domain modules.
 - [ ] Add startup hydration that reconstructs rebuildable in-memory indexes and runtime registries from the store without spawning runners, routines, services, or tunnels prematurely.
 - [ ] Add startup reconciliation ordering: migrations first, then interrupted operation recovery, then domain hydration, and only then accept HTTP requests and broadcast reconciled state.
 - [ ] Make graceful shutdown stop accepting new work, await bounded runner/routine/hublot cleanup, flush pending repository writes, checkpoint/close the app store once, and remain idempotent across signals and test teardown.

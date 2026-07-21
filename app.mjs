@@ -41,7 +41,8 @@ export async function init(state) {
       "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
-  const { config } = state;
+  const { config, appStore } = state;
+  if (!appStore) throw new Error("stable core did not provide state.appStore");
 
   // ---- state migrations --------------------------------------------------
   // The core (server.mjs) only changes on a real restart; state it created
@@ -74,8 +75,8 @@ export async function init(state) {
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
   state.piProcesses = createPiProcessLauncher({ config });
-  state.sessionOperations = createSessionOperations({ config, sessionReferences: state.sessionReferences });
-  const runners = createRunnerManager(state);
+  state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
+  const runners = createRunnerManager(state, { appStore });
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner,
@@ -105,7 +106,7 @@ export async function init(state) {
     readSessionHeaderInfo,
   });
   const runnerRoutes = createRunnerRoutes({
-    state, requestContext, runnerFromReq, startRunner, listRunnerInfo,
+    state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
     sessionReferenceParam,
     lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
@@ -114,19 +115,19 @@ export async function init(state) {
     srvId, runnersChanged,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });
-  const workdirRoutes = createWorkdirRoutes({ state, requestContext, spawnRunner, runnerInfo });
+  const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
-    state, config, requestContext, listTunnels, openTunnel, closeTunnel,
+    state, appStore, config, requestContext, listTunnels, openTunnel, closeTunnel,
     spawnHublotAgent,
   });
   const checkpointRoutes = createCheckpointRoutes({
-    state, config, requestContext, runnerFromReq, checkpointWorkdir,
+    state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, loadCheckpoints, checkpointTree, sessionReferenceFromSearch,
     git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
     srvId, runnerInfo,
   });
   const routineRoutes = createRoutineRoutes({
-    state, requestContext,
+    state, appStore, requestContext,
     routines: {
       listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
       teardownRoutine, releaseRoutine, deleteRoutine,
@@ -134,6 +135,7 @@ export async function init(state) {
   });
   const sessionRoutes = createSessionRoutes({
     state,
+    appStore,
     requestContext,
     sessions: {
       catalog: state.sessionCatalog,

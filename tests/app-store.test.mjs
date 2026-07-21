@@ -43,6 +43,29 @@ test("app store configures durability, integrity, and contention pragmas", () =>
   assert.match(statements[0], /PRAGMA synchronous = NORMAL;/);
 });
 
+test("app store exposes synchronous commit and rollback without exposing its database", () => {
+  const statements = [];
+  class FakeDatabase {
+    exec(sql) { statements.push(sql.trim()); }
+    close() {}
+  }
+  const store = openAppStore({
+    databasePath: join(tmpdir(), "pi-ui-transaction-store.sqlite"),
+    Database: FakeDatabase,
+    migrate: () => ({ currentVersion: 0, appliedVersions: [] }),
+  });
+
+  assert.equal(store.transaction((repositories) => {
+    assert.equal(repositories, store.repositories);
+    return "committed";
+  }), "committed");
+  assert.throws(() => store.transaction(() => { throw new Error("rollback me"); }), /rollback me/);
+  assert.throws(() => store.transaction(async () => {}), /must be synchronous/);
+  assert.deepEqual(statements.slice(-6), ["BEGIN IMMEDIATE", "COMMIT", "BEGIN IMMEDIATE", "ROLLBACK", "BEGIN IMMEDIATE", "ROLLBACK"]);
+  assert.equal("database" in store, false);
+  store.close();
+});
+
 test("app store closes its owned database exactly once", () => {
   let openedPath = null;
   let closes = 0;
