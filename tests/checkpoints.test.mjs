@@ -11,7 +11,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,14 +20,24 @@ process.env.HOME = FAKE_HOME;
 
 const { SESSIONS_ROOT } = await import("../sessions.mjs");
 const {
-  loadLegacyCheckpoints: loadCheckpoints,
-  saveLegacyCheckpoints: saveCheckpoints,
-  deleteLegacySessionCheckpoints: deleteSessionCheckpoints,
-  recordCheckpoint, checkpointTree, git, checkpointWorkdir,
+  recordCheckpoint: recordCheckpointCore, checkpointTree: checkpointTreeCore, git, checkpointWorkdir,
 } = await import("../checkpoints.mjs");
 
-const STORE = join(FAKE_HOME, ".pi", "agent", "checkpoints.json");
-mkdirSync(join(FAKE_HOME, ".pi", "agent"), { recursive: true });
+let checkpointRows = {};
+const repository = {
+  listForSession: (reference) => checkpointRows[reference.id] ?? [],
+  record(reference, checkpoint) {
+    const list = (checkpointRows[reference.id] ??= []);
+    const existing = list.find((item) => item.hash === checkpoint.hash && item.anchorId === checkpoint.anchorId);
+    if (existing) return existing;
+    list.push(checkpoint);
+    return checkpoint;
+  },
+};
+const clearCheckpoints = () => { checkpointRows = {}; };
+const saveCheckpoints = (rows) => { checkpointRows = structuredClone(rows); };
+const recordCheckpoint = (session, dir, result, options = {}) => recordCheckpointCore(session, dir, result, { ...options, repository });
+const checkpointTree = (session, options = {}) => checkpointTreeCore(session, { ...options, repository });
 
 after(() => rmSync(FAKE_HOME, { recursive: true, force: true }));
 
@@ -53,47 +63,16 @@ const MAIN = writeSession("2026-01-01T00-00-00-000Z_root.jsonl",
 
 // ---------------------------------------------------------------- store
 
-test("store: load returns {} when missing, round-trips a save", () => {
-  rmSync(STORE, { force: true });
-  assert.deepEqual(loadCheckpoints(), {});
-  saveCheckpoints({ root: [{ hash: "h1" }] });
-  assert.deepEqual(loadCheckpoints(), { root: [{ hash: "h1" }] });
-  assert.ok(!existsSync(STORE + ".tmp"), "atomic tmp file must not linger");
-});
-
-test("store: deleting one owner preserves cross-session and fork-owned checkpoints", () => {
-  saveCheckpoints({
-    root: [{ hash: "root-only" }],
-    fork: [{ hash: "fork-only" }],
-    other: [{ hash: "other-only" }],
-  });
-  assert.equal(deleteSessionCheckpoints("root"), 1);
-  assert.deepEqual(loadCheckpoints(), {
-    fork: [{ hash: "fork-only" }],
-    other: [{ hash: "other-only" }],
-  });
-  assert.equal(deleteSessionCheckpoints("missing"), 0);
-});
-
-test("store: corrupt file is quarantined, not wiped by the next save", () => {
-  writeFileSync(STORE, "{ definitely not json");
-  assert.deepEqual(loadCheckpoints(), {});
-  const corpses = readdirSync(join(FAKE_HOME, ".pi", "agent")).filter((f) => f.startsWith("checkpoints.json.corrupt-"));
-  assert.equal(corpses.length, 1, "corrupt store set aside");
-  assert.match(readFileSync(join(FAKE_HOME, ".pi", "agent", corpses[0]), "utf8"), /definitely not json/);
-  rmSync(join(FAKE_HOME, ".pi", "agent", corpses[0]));
-});
-
 // ---------------------------------------------------------------- anchoring
 
 test("recordCheckpoint anchors to the session tip and dedupes", () => {
-  rmSync(STORE, { force: true });
+  clearCheckpoints();
   const rec = recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
   assert.equal(rec.anchorId, "u2"); // last user/assistant message
   assert.equal(rec.leafId, "u2");
   assert.equal(rec.sessionPath, MAIN);
   const again = recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
-  assert.equal(loadCheckpoints().root.length, 1, "same hash@anchor recorded once");
+  assert.equal(checkpointRows.root.length, 1, "same hash@anchor recorded once");
   assert.equal(again.timestamp, rec.timestamp);
 });
 
@@ -107,7 +86,7 @@ test("recordCheckpoint refuses sessions without messages", () => {
 // ---------------------------------------------------------------- tree inheritance
 
 test("checkpointTree: forks nest under the root, inherited checkpoints shown once", () => {
-  rmSync(STORE, { force: true });
+  clearCheckpoints();
   // root has two checkpoints; fork was created from cp1 and adds its own cp2
   const FORK = writeSession("2026-01-03T00-00-00-000Z_fork.jsonl",
     { type: "session", id: "fork", timestamp: "2026-01-03T00:00:00Z", cwd: "/home/user/proj",
@@ -139,7 +118,7 @@ test("checkpointTree: forks nest under the root, inherited checkpoints shown onc
 });
 
 test("checkpointTree: legacy forks infer forkedAtHash from newest inherited record", () => {
-  rmSync(STORE, { force: true });
+  clearCheckpoints();
   const LEGACY = writeSession("2026-01-04T00-00-00-000Z_legacy.jsonl",
     { type: "session", id: "legacy", timestamp: "2026-01-04T00:00:00Z", cwd: "/home/user/proj",
       parentSession: MAIN }, // no forkedAtHash header field

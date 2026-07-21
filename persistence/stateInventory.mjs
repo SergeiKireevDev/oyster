@@ -15,14 +15,10 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
 
   incompleteOperations: entry("rebuildable", "repository projection", "operations"),
   recoveredOperationCount: entry("ephemeral", "startup diagnostic counter"),
-  checkpointImport: entry("rebuildable", "legacy import report", "checkpoints"),
-  routineImport: entry("rebuildable", "legacy import report", "routines"),
   hublotStartupReconciliation: entry("rebuildable", "startup reconciliation report", "hublots"),
   sessionDeletionReconciliation: entry("rebuildable", "startup reconciliation report", "operations"),
   hublotStartupReconciled: entry("ephemeral", "one-process reconciliation guard"),
   sessionDeletionReconciled: entry("ephemeral", "one-process reconciliation guard"),
-  legacyCheckpointsImported: entry("ephemeral", "one-process import guard"),
-  legacyRoutinesImported: entry("ephemeral", "one-process import guard"),
 
   hublotProcessHandles: entry("ephemeral", "live ChildProcess handles"),
   routineRuntime: entry("ephemeral", "live routine process and stream handles"),

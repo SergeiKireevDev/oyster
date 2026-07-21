@@ -2,16 +2,14 @@
  * pi-lot-ui — checkpoints, rollback forks and git plumbing
  *
  * A checkpoint = one commit of every pending workdir change, anchored to the
- * session message it was taken at. Records live in ~/.pi/agent/checkpoints.json
- * ({ sessionId: [{ hash, anchorId, leafId, dir, sessionPath, … }] }) so they
- * survive restarts. Rolling back restores the workdir to the commit
+ * session message it was taken at. Records live in the injected SQLite
+ * checkpoint repository so they survive restarts. Rolling back restores the workdir to the commit
  * (deterministically — no LLM involved) and opens a forked session whose
  * history ends at the checkpointed entry.
  */
 
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,44 +18,6 @@ const SESSIONS_MOD_PATH = join(dirname(fileURLToPath(import.meta.url)), "session
 const { readSessionHeaderInfo, sessionCatalog: defaultSessionCatalog } =
   await import(`./sessions.mjs?v=${statSync(SESSIONS_MOD_PATH).mtimeMs}`);
 
-const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
-
-// NOTE: every load→modify→save of this store is synchronous (no await in
-// between), so Node's single thread already serializes mutations. The
-// failure modes to defend against are a crash mid-write (→ write tmp +
-// atomic rename) and a corrupt file being silently read as {} and then
-// overwritten on the next save (→ set the corrupt file aside, loudly).
-export function loadLegacyCheckpoints() {
-  if (!existsSync(CHECKPOINTS_PATH)) return {};
-  try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); }
-  catch (e) {
-    const backup = `${CHECKPOINTS_PATH}.corrupt-${Date.now()}`;
-    try { renameSync(CHECKPOINTS_PATH, backup); } catch {}
-    console.error(`[pi-ui] checkpoints.json is corrupt (${e.message}) — set aside as ${backup}`);
-    return {};
-  }
-}
-
-export function saveLegacyCheckpoints(db) {
-  try {
-    const tmp = `${CHECKPOINTS_PATH}.tmp`;
-    writeFileSync(tmp, JSON.stringify(db, null, 2));
-    renameSync(tmp, CHECKPOINTS_PATH);
-  } catch (e) {
-    console.error(`[pi-ui] failed to save checkpoints: ${e.message}`);
-  }
-}
-
-/** Delete only records owned by one session; fork and ancestor keys are independent. */
-export function deleteLegacySessionCheckpoints(sessionId) {
-  if (!sessionId) return 0;
-  const db = loadLegacyCheckpoints();
-  const count = Array.isArray(db[sessionId]) ? db[sessionId].length : 0;
-  if (!Object.hasOwn(db, sessionId)) return 0;
-  delete db[sessionId];
-  saveLegacyCheckpoints(db);
-  return count;
-}
 
 function checkpointContext(input, options = {}) {
   const catalog = options.catalog ?? defaultSessionCatalog;
@@ -82,16 +42,8 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
     message: message ?? null,
     timestamp: new Date().toISOString(),
   };
-  if (options.repository) return options.repository.record(reference, checkpoint);
-  const load = options.loadCheckpoints ?? loadLegacyCheckpoints;
-  const save = options.saveCheckpoints ?? saveLegacyCheckpoints;
-  const db = load();
-  const list = (db[sessionId] ??= []);
-  const existing = list.find((item) => item.hash === hash && item.anchorId === anchorId);
-  if (existing) return existing;
-  list.push(checkpoint);
-  save(db);
-  return checkpoint;
+  if (!options.repository) throw new Error("SQLite checkpoint repository is required");
+  return options.repository.record(reference, checkpoint);
 }
 
 /** Build a checkpoint family from catalog lineage rather than directory scans. */
@@ -129,9 +81,8 @@ export function checkpointTree(session, options = {}) {
     seen.add(root.id);
     root = byId.get(root.parentId);
   }
-  const db = options.repository
-    ? Object.fromEntries(infos.map((info) => [info.id, options.repository.listForSession(info.sessionRef)]))
-    : (options.loadCheckpoints ?? loadLegacyCheckpoints)();
+  if (!options.repository) throw new Error("SQLite checkpoint repository is required");
+  const db = Object.fromEntries(infos.map((info) => [info.id, options.repository.listForSession(info.sessionRef)]));
   // forks inherit their ancestors' checkpoint records (so ↩ works inside
   // them), but the tree must not display those twice: each node only shows
   // checkpoints an ancestor hasn't already shown

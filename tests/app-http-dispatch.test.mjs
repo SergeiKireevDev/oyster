@@ -20,8 +20,6 @@ function stableState() {
     tunnels: new Map(),
     sseClients: new Set(),
     reloadCount: 1,
-    legacyCheckpointsImported: true,
-    legacyRoutinesImported: true,
     hublotSupervisor: { async reconcile() { return { checked: 0 }; }, start() {}, stop() {} },
     appStore: {
       path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
