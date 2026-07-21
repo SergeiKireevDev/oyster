@@ -12,6 +12,7 @@ import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createRuntimeTeardown } from "./runtime/teardownController.js";
+import { createRuntimeStarter } from "./runtime/startController.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1911,14 +1912,11 @@ const runtimeTeardown = createRuntimeTeardown([
   () => debugHookRegistration.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration.detach(), () => connectionState.lost(),
 ]);
 
-let started = false;
+const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
 
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
 export function startLegacyRuntime() {
-  if (started) return;
-  started = true;
-  if (!token) requireToken();
-  else boot();
+  return runtimeStarter();
 }
 
 /** Release runtime-owned long-lived transport resources on app unmount. */
