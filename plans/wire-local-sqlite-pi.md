@@ -66,7 +66,7 @@ JSONL is explicit.
 
 ## 2. Introduce Backend-Neutral Session References
 
-- [ ] Add a session-reference module that validates, compares, serializes, and
+- [x] Add a session-reference module that validates, compares, serializes, and
   parses JSONL and SQLite references. Use an opaque URL-safe session key for
   HTTP parameters and runner matching; reject malformed keys and database paths
   outside the configured agent/session location.
