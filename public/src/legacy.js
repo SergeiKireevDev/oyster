@@ -1924,7 +1924,7 @@ async function loadFolderBrowser(path) {
     home: data.home,
     parent: data.parent,
     dirs: data.dirs ?? [],
-    showHidden: folderBrowserState.showHidden,
+    showHidden: get(folderBrowser).showHidden,
     loading: false,
   });
 }
@@ -1965,10 +1965,6 @@ async function showFolderBrowser() {
 
 setFolderBrowserHandlers({
   browse: loadFolderBrowser,
-  toggleHidden: async () => {
-    folderBrowserState.showHidden = !folderBrowserState.showHidden;
-    updateFolderBrowser({ showHidden: folderBrowserState.showHidden });
-  },
   createFolder: async () => {
     let snapshot;
     const unsubscribe = folderBrowser.subscribe((s) => { snapshot = s; });

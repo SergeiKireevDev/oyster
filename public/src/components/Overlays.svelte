@@ -16,7 +16,7 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, cancelSessionPicker, saveExploredFile, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, toggleFolderHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, cancelSessionPicker, saveExploredFile, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { filePicker } from "../stores/filePicker.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -87,7 +87,7 @@
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "folderBrowser"}
         <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
-        <span class="chip toggle-hidden" role="button" tabindex="0" onclick={toggleFolderHidden} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleFolderHidden(); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
+        <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ showHidden: !$folderBrowser.showHidden }); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={cancelFolderBrowser} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFolderBrowser(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
       {:else if $modalState.content === "filePicker"}

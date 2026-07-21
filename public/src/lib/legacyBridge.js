@@ -115,10 +115,6 @@ export function browseFolder(path) {
   return folderBrowserHandlers.browse?.(path);
 }
 
-export function toggleFolderHidden() {
-  return folderBrowserHandlers.toggleHidden?.();
-}
-
 export function createFolder() {
   return folderBrowserHandlers.createFolder?.();
 }
