@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, fetchDurableTranscript } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1212,11 +1212,7 @@ async function reloadTranscript() {
     applyState,
     onState: (s) => lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null }),
     onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
-    getDurableMessages: async (s) => {
-      const res = await fetch(`/session-messages?${sessionFileQuery(s.sessionFile)}`);
-      if (!res.ok) throw new Error(`session-messages failed (${res.status})`);
-      return res.json();
-    },
+    getDurableMessages: (s) => fetchDurableTranscript(fetch, s.sessionFile, sessionFileQuery),
     onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
   lastPreview = null; // canonical content from pi supersedes the file preview
