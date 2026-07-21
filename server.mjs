@@ -160,8 +160,8 @@ const state = {
   recoveredOperationCount,
   /** cwd for the pi process (changed via POST /workdir) */
   currentDir: config.PI_DIR,
-  /** @type {Map<string, object>} live tunnels (id -> entry with proc handle) */
-  tunnels: new Map(),
+  /** @type {Map<string, import('node:child_process').ChildProcess>} ephemeral hublot process handles keyed by persistent process id */
+  hublotProcessHandles: new Map(),
   /** @type {Set<http.ServerResponse>} open SSE responses */
   sseClients: new Set(),
   /** how many times app.mjs has been (re)loaded */

@@ -144,7 +144,7 @@ export async function init(state) {
       sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
-    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines },
+    resources: { closeTunnel, listTunnels, stopSessionRoutines, deleteSessionRoutines },
     sessionOperations: state.sessionOperations,
     deleteOwnedSession,
   });

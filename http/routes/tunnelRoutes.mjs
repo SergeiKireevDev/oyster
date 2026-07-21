@@ -12,7 +12,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       let port = body?.port;
       if (!port) {
         if (!state.nextHublotPort) state.nextHublotPort = 3000;
-        const used = new Set([...(state.tunnels?.values() ?? [])].map((t) => t.port));
+        const used = new Set(listTunnels(state).map((t) => t.port));
         while (used.has(state.nextHublotPort)) state.nextHublotPort++;
         port = state.nextHublotPort++;
       }
@@ -37,14 +37,6 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         };
         if (brief) prepared = await spawnHublotAgent(state, reservedOptions, brief);
         const tunnel = await openTunnel(state, reservedOptions);
-        if (prepared) {
-          const live = state.tunnels.get(tunnel.id);
-          if (live) {
-            live.agentProc = prepared.agentProc;
-            live.servicePid = prepared.servicePid;
-            live.createdAt = prepared.createdAt;
-          }
-        }
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });
       } catch (e) {
@@ -62,7 +54,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       // agent on behalf of a UI session)
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const t = state.tunnels.get(String(body?.id ?? ""));
+      const t = listTunnels(state).find((item) => item.id === String(body?.id ?? ""));
       if (!t) {
         json(res, 404, { error: "no such hublot" });
         return;
@@ -70,7 +62,6 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
       const owner = sessionId ? ensureSessionOwner(sessionId) : null;
       const rebound = rebindHublot(state, t.id, owner?.id ?? null);
-      t.sessionId = rebound.session_id ?? sessionId;
       state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
       json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
     },

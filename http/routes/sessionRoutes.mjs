@@ -19,6 +19,7 @@ export function createSessionRoutes({
   const { stopRunner, runnersChanged } = runners;
   const {
     closeTunnel,
+    listTunnels = () => [],
     stopSessionRoutines = () => [],
     deleteSessionRoutines = resources.releaseSessionRoutines ?? (() => []),
   } = resources;
@@ -139,7 +140,7 @@ export function createSessionRoutes({
           stopRunners: () => { for (const runner of matchingRunners) stopRunner(runner); return matchingRunners; },
           closeHublots: () => {
             const closed = [];
-            for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
+            for (const tunnel of listTunnels(state)) {
               if (tunnel.sessionId !== reference.id) continue;
               closeTunnel(state, tunnel.id);
               closed.push(tunnel.port);

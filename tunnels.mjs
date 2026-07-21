@@ -5,21 +5,9 @@
  * on behalf of the UI, so a session can deterministically expose a local
  * port to the internet.
  *
- * Live tunnels are kept in `state.tunnels` (a Map owned by the stable core's
- * state object), so they survive hot reloads of app.mjs. Each value:
- *   {
- *     id:        string  – handle used by the UI to close the tunnel
- *     port:      number  – local port being exposed
- *     label:     string? – what the tunnel is for ("vite dev server", …)
- *     sessionId: string? – pi session the tunnel was opened in (binds it to
- *                          that session in the UI; null = unbound/legacy)
- *     url:       string  – public URL, known once the tunnel is up
- *     workdir:   string  – project active when the tunnel was created
- *     createdAt: string  – ISO timestamp
- *     proc:      ChildProcess (never serialized to clients)
- *     agentProc: ChildProcess? – background pi agent setting the port up
- *     servicePid: number? – pid listening on the port (killed on close)
- *   }
+ * Durable hublot and process metadata lives in SQLite. The stable core keeps
+ * only live ChildProcess handles in `state.hublotProcessHandles`, keyed by
+ * persistent hublot_processes.id, so hot reloads retain runtime control.
  */
 
 import { spawn, execFileSync } from "node:child_process";
@@ -70,6 +58,20 @@ function pidStartedAt(pid) {
   } catch {
     return null;
   }
+}
+
+function hublotProcessHandles(state) {
+  if (!state.hublotProcessHandles) state.hublotProcessHandles = new Map();
+  return state.hublotProcessHandles;
+}
+
+function registerHublotProcessHandle(state, processRow, proc) {
+  if (processRow && proc) hublotProcessHandles(state).set(processRow.id, proc);
+  return proc;
+}
+
+function removeHublotProcessHandle(state, processRow, proc) {
+  if (processRow && hublotProcessHandles(state).get(processRow.id) === proc) hublotProcessHandles(state).delete(processRow.id);
 }
 
 function hublotRepository(state) {
@@ -216,7 +218,6 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       reject(new Error(`invalid port: ${port}`));
       return;
     }
-    if (!state.tunnels) state.tunnels = new Map();
     const reservation = id ? hublotRepository(state).find(id) : null;
     if (!reservation || reservation.status !== "opening" || reservation.port !== port) {
       reject(new Error("hublot must be durably reserved before opening its tunnel"));
@@ -233,6 +234,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     console.log(`[pi-ui] spawning tunnel: ${bin} ${args.join(" ")}`);
     const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
+    registerHublotProcessHandle(state, tunnelProcess, proc);
 
     const tunnel = {
       id, port, label, sessionId, url: null,
@@ -263,7 +265,6 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
         const row = recordHublotTransition(state, id, "open", {
           desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
         });
-        state.tunnels.set(tunnel.id, tunnel);
         console.log(`[pi-ui] tunnel up: ${tunnel.url} -> localhost:${port}`);
         state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
         resolvePromise(persistedTunnelInfo(state, row));
@@ -273,6 +274,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     proc.stdout.on("data", onOutput);
 
     proc.on("error", (err) => {
+      removeHublotProcessHandle(state, tunnelProcess, proc);
       finishPersistedProcess(state, tunnelProcess, { status: "failed" });
       if (settled) return;
       settled = true;
@@ -287,6 +289,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     });
 
     proc.on("exit", (code, signal) => {
+      removeHublotProcessHandle(state, tunnelProcess, proc);
       finishPersistedProcess(state, tunnelProcess, { exitCode: code, signal });
       if (!settled) {
         settled = true;
@@ -296,12 +299,12 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
         reject(error);
         return;
       }
-      if (state.tunnels.delete(tunnel.id)) {
-        const current = hublotRepository(state).find(tunnel.id);
-        const manuallyClosed = current?.desired_state === "closed";
+      const current = hublotRepository(state).find(tunnel.id);
+      if (current && current.status !== "failed" && current.status !== "closed") {
+        const manuallyClosed = current.desired_state === "closed";
         const closedAt = new Date().toISOString();
         recordHublotTransition(state, tunnel.id, manuallyClosed ? "closed" : "interrupted", {
-          desiredState: current?.desired_state ?? "open", publicUrl: null, closedAt,
+          desiredState: current.desired_state, publicUrl: null, closedAt,
           lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
         });
         console.log(`[pi-ui] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
@@ -319,45 +322,47 @@ export function closeTunnel(state, id) {
   if (!row || row.status === "closed") return null;
   const closedInfo = persistedTunnelInfo(state, row);
   recordHublotTransition(state, id, "closing", { desiredState: "closed", publicUrl: null, lastError: null });
-  const t = state.tunnels?.get(id);
-  if (!t) {
-    const closedAt = new Date().toISOString();
-    recordHublotTransition(state, id, "closed", { desiredState: "closed", publicUrl: null, closedAt, at: closedAt });
-    return closedInfo;
-  }
+  const processes = hublotRepository(state).listProcesses(id);
+  const handles = hublotProcessHandles(state);
 
-  // 1. the service on the port: the tracked pid is killed unconditionally;
-  //    the live port scan (service may have forked/respawned under another
-  //    pid) only kills processes that STARTED AFTER the tunnel was created —
-  //    an unrelated pre-existing listener must not die with the hublot
-  const createdAt = new Date(t.createdAt).getTime() - 5000; // clock slack
-  for (const pid of new Set([t.servicePid, ...pidsOnPort(t.port)])) {
-    if (!pid) continue;
-    if (pid !== t.servicePid) {
+  // 1. the service on the port: a discovered replacement is killed only when
+  // it started after this hublot, preserving the legacy unrelated-listener guard.
+  const trackedServicePids = processes.filter((process) => process.role === "service" && !process.ended_at).map((process) => process.pid);
+  const createdAt = new Date(row.created_at).getTime() - 5000;
+  for (const pid of new Set([...trackedServicePids, ...pidsOnPort(row.port)])) {
+    if (!trackedServicePids.includes(pid)) {
       const started = pidStartedAt(pid);
       if (!started || started.getTime() < createdAt) {
-        console.log(`[pi-ui] NOT killing pid ${pid} on port ${t.port} (predates the hublot)`);
+        console.log(`[pi-ui] NOT killing pid ${pid} on port ${row.port} (predates the hublot)`);
         continue;
       }
     }
-    if (killPid(pid)) console.log(`[pi-ui] killed hublot service pid ${pid} (port ${t.port})`);
+    if (killPid(pid)) console.log(`[pi-ui] killed hublot service pid ${pid} (port ${row.port})`);
     setTimeout(() => killPid(pid, "SIGKILL"), 3000).unref();
   }
 
-  // 2. the background agent, if it is still working
-  if (t.agentProc && t.agentProc.exitCode === null && !t.agentProc.killed) {
-    console.log(`[pi-ui] killing hublot agent pid ${t.agentProc.pid} (port ${t.port})`);
-    t.agentProc.kill("SIGTERM");
-    const ap = t.agentProc;
-    setTimeout(() => { if (ap.exitCode === null && !ap.killed) ap.kill("SIGKILL"); }, 3000).unref();
+  // 2. stop setup agents by their persistent process ids.
+  for (const processRow of processes.filter((process) => process.role === "setup_agent")) {
+    const agent = handles.get(processRow.id);
+    if (!agent || agent.exitCode !== null || agent.killed) continue;
+    agent.kill("SIGTERM");
+    setTimeout(() => { if (agent.exitCode === null && !agent.killed) agent.kill("SIGKILL"); }, 3000).unref();
   }
 
-  // 3. the cloudflared tunnel itself
-  t.proc.kill("SIGTERM");
-  setTimeout(() => {
-    if (t.proc.exitCode === null && !t.proc.killed) t.proc.kill("SIGKILL");
-  }, 3000).unref();
-  return closedInfo; // runtime removal and the final durable transition happen in the exit handler
+  // 3. stop cloudflared handles; their exit callbacks finalize the row.
+  let hasTunnelHandle = false;
+  for (const processRow of processes.filter((process) => process.role === "tunnel")) {
+    const tunnel = handles.get(processRow.id);
+    if (!tunnel || tunnel.exitCode !== null) continue;
+    hasTunnelHandle = true;
+    tunnel.kill("SIGTERM");
+    setTimeout(() => { if (tunnel.exitCode === null && !tunnel.killed) tunnel.kill("SIGKILL"); }, 3000).unref();
+  }
+  if (!hasTunnelHandle) {
+    const closedAt = new Date().toISOString();
+    recordHublotTransition(state, id, "closed", { desiredState: "closed", publicUrl: null, closedAt, at: closedAt });
+  }
+  return closedInfo;
 }
 
 /** Kill every tunnel (server shutdown). */
@@ -393,8 +398,9 @@ export function invokeHublotStartupScript(state, id, { spawnProcess = spawn } = 
     throw error;
   }
   const processRow = persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: proc.pid, status: "starting" });
-  proc.once?.("error", () => finishPersistedProcess(state, processRow, { status: "failed" }));
-  proc.once?.("exit", (exitCode, signal) => finishPersistedProcess(state, processRow, { exitCode, signal }));
+  registerHublotProcessHandle(state, processRow, proc);
+  proc.once?.("error", () => { removeHublotProcessHandle(state, processRow, proc); finishPersistedProcess(state, processRow, { status: "failed" }); });
+  proc.once?.("exit", (exitCode, signal) => { removeHublotProcessHandle(state, processRow, proc); finishPersistedProcess(state, processRow, { exitCode, signal }); });
   return { proc, process: processRow, ...materialized };
 }
 
@@ -455,6 +461,7 @@ export function spawnHublotAgent(state, hublot, brief) {
       detached: true,
     });
     const agentProcess = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "setup_agent", pid: proc.pid });
+    registerHublotProcessHandle(state, agentProcess, proc);
     let tail = "";
     const onOut = (chunk) => { tail = (tail + String(chunk)).slice(-1500); };
     proc.stdout.on("data", onOut);
@@ -515,12 +522,14 @@ export function spawnHublotAgent(state, hublot, brief) {
     }, 2000);
 
     proc.on("exit", (code, signal) => {
+      removeHublotProcessHandle(state, agentProcess, proc);
       finishPersistedProcess(state, agentProcess, { exitCode: code, signal });
       agentExited = true;
       agentExitAt = Date.now();
       console.log(`[pi-ui] hublot service agent for :${hublot.port} exited (code=${code})`);
     });
     proc.on("error", (error) => {
+      removeHublotProcessHandle(state, agentProcess, proc);
       finishPersistedProcess(state, agentProcess, { status: "failed" });
       finish(`failed to spawn background agent: ${error.message}`);
     });

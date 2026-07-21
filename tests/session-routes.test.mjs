@@ -44,6 +44,7 @@ function setup() {
     },
     resources: {
       closeTunnel: (_state, id) => closed.push(id),
+      listTunnels: (_state) => [...state.tunnels.values()],
       releaseSessionRoutines: (_state, id) => { deletedRoutineOwners.push(id); return ["routine-a"]; },
     },
     resolvePath: (path) => path,
