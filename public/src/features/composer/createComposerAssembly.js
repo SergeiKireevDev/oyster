@@ -3,7 +3,6 @@ import { commandPalettePosition, commandPaletteView, createCommandPaletteInputCo
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
-import { configureComposerActions } from "./composerActions.js";
 import {
   COMMAND_PALETTE_RUN_ACTION,
   COMPOSER_ABORT_ACTION,
@@ -97,7 +96,6 @@ export function createComposerAssembly(deps) {
     }
   }
 
-  const detachActions = configureComposerActions({ inputChanged, keydown, send, abort });
   const detachUiActions = [
     deps.uiActions.register(COMPOSER_INPUT_ACTION, inputChanged),
     deps.uiActions.register(COMPOSER_KEYDOWN_ACTION, keydown),
@@ -247,7 +245,6 @@ export function createComposerAssembly(deps) {
     configureCommands,
     teardown() {
       commandRuntime?.teardown();
-      detachActions();
       detachUiActions.splice(0).reverse().forEach((detach) => detach());
       history.clear();
     },

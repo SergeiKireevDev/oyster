@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createComposerAssembly } from "../public/src/features/composer/createComposerAssembly.js";
-import { runComposerAction } from "../public/src/features/composer/composerActions.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 import {
   COMMAND_PALETTE_RUN_ACTION,
@@ -175,17 +174,17 @@ test("composer assembly remounts actions and command listeners without stale own
   const first = createHarness();
   const firstCommands = first.assembly.configureCommands(commandDependencies());
   firstCommands.keyboardController.attach();
-  await runComposerAction("send");
+  await first.uiActions.invoke(COMPOSER_SEND_ACTION);
   assert.ok(first.calls.some((call) => call[0] === "user"));
   first.assembly.teardown();
   const firstSendCount = first.calls.filter((call) => call[0] === "user").length;
-  await runComposerAction("send");
+  assert.equal(first.uiActions.invoke(COMPOSER_SEND_ACTION), undefined);
   assert.equal(first.calls.filter((call) => call[0] === "user").length, firstSendCount);
 
   const second = createHarness();
   const secondCommands = second.assembly.configureCommands(commandDependencies());
   secondCommands.keyboardController.attach();
-  await runComposerAction("abort");
+  await second.uiActions.invoke(COMPOSER_ABORT_ACTION);
   assert.ok(second.calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));
   second.assembly.teardown();
   assert.ok(listenerCalls.some(([kind]) => kind === "add"));

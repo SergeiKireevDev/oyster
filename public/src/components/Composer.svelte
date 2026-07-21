@@ -1,13 +1,20 @@
 <script>
   import { appHeader } from "../stores/appSession.js";
-  import { composerUi, setComposerTextValue } from "../stores/composer.js";
+  import { composerUi } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
-  import { runComposerAction } from "../features/composer/composerActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import {
+    COMPOSER_ABORT_ACTION,
+    COMPOSER_INPUT_ACTION,
+    COMPOSER_KEYDOWN_ACTION,
+    COMPOSER_SEND_ACTION,
+  } from "../runtime/uiActionNames.js";
 
-  function handleInput(event) {
-    setComposerTextValue(event.currentTarget.value);
-    runComposerAction("inputChanged", event);
-  }
+  const uiActions = getUiActionRegistry();
+  const handleInput = () => uiActions.invoke(COMPOSER_INPUT_ACTION);
+  const handleKeydown = (event) => uiActions.invoke(COMPOSER_KEYDOWN_ACTION, event);
+  const send = () => uiActions.invoke(COMPOSER_SEND_ACTION);
+  const abort = () => uiActions.invoke(COMPOSER_ABORT_ACTION);
 </script>
 
 <div id="composer">
@@ -18,10 +25,10 @@
       placeholder={$composerUi.placeholder}
       disabled={$composerUi.inputDisabled}
       oninput={handleInput}
-      onkeydown={(event) => runComposerAction("keydown", event)}
+      onkeydown={handleKeydown}
     ></textarea>
-    <button class="btn" id="sendBtn" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled} onclick={() => runComposerAction("send")}>{$composerUi.sendText}</button>
-    <button class="btn stop" id="stopBtn" hidden={$composerUi.stopHidden} onclick={() => runComposerAction("abort")}>Stop</button>
+    <button class="btn" id="sendBtn" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled} onclick={send}>{$composerUi.sendText}</button>
+    <button class="btn stop" id="stopBtn" hidden={$composerUi.stopHidden} onclick={abort}>Stop</button>
   </div>
   <div id="statusbar">
     <span id="stateInfo">{$headerState.stateInfo}</span>

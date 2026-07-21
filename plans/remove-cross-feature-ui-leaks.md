@@ -80,7 +80,7 @@ workflow and import no mutable `*Actions.js` bridge.
 - [x] Add scoped action names for composer input, keydown, send, abort, and
   checkpoint-tree open/rollback. Register the composer actions from
   `createComposerAssembly()` with teardown-safe unregister functions.
-- [ ] Change `Composer.svelte` to invoke scoped composer actions, then delete
+- [x] Change `Composer.svelte` to invoke scoped composer actions, then delete
   `features/composer/composerActions.js` and its configuration call. Test text
   input, Enter, send, and abort routing after remount.
 - [ ] Register checkpoint-tree open and rollback operations from
