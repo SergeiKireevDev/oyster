@@ -108,6 +108,48 @@
   /* ---------- main row: chat column + hublots sidebar ---------- */
   #main { flex: 1; display: flex; min-height: 0; }
   #chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #sessions {
+    width: 240px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .session-sidebar-list { display: flex; flex-direction: column; gap: 4px; }
+  .session-sidebar-row {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .session-sidebar-row:hover { background: var(--panel-2); border-color: var(--border); }
+  .session-sidebar-row.current { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .session-sidebar-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .session-sidebar-name, .session-sidebar-folder { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-name { font-size: 13px; font-weight: 600; }
+  .session-sidebar-folder { color: var(--muted); font-size: 11px; }
+  .session-sidebar-all {
+    margin-top: auto;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .session-sidebar-all:hover { color: var(--accent); border-color: var(--accent-dim); }
   #hublots {
     width: 230px;
     flex-shrink: 0;
@@ -374,6 +416,17 @@
     /* model + thinking collapse into one combined chip */
     #modelChip, #thinkChip { display: none; }
     #cfgChip { display: inline-block; }
+    #sessions, #hublots { display: none; }
+    #sessions.open {
+      display: flex;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 100vw;
+      z-index: 55;
+      box-shadow: 8px 0 30px rgba(0,0,0,.5);
+      border-right: 1px solid var(--border);
+      touch-action: pan-x pan-y;
+    }
     #hublots { display: none; }
     #hublots.open {
       display: flex;

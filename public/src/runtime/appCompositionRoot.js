@@ -774,6 +774,7 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   getCurrentRunner: () => getCurrentRunner(),
   getWorkdir: () => getWorkdir(),
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
+  sessionsEl: layoutDom.sessions,
   hublotsEl: layoutDom.hublots,
   treebarEl: layoutDom.treebar,
   isDrawerToggleTarget: layoutDom.isDrawerToggleTarget,

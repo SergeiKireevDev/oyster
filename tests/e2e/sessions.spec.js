@@ -11,7 +11,7 @@
 // stable, searchable handle.
 
 import { test, expect } from "@playwright/test";
-import { login, sendPrompt, waitFor, api, dexec, currentSessionId, MOBILE_VIEWPORT } from "./lib/harness.js";
+import { login, sendPrompt, waitFor, api, dexec, currentSessionId, MOBILE_VIEWPORT, swipe } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 // Per-test container lifecycle — see checkpoint-rollback.spec.js
@@ -147,6 +147,26 @@ async function switchToSessionByToken(page, token, { mobile = false } = {}) {
 }
 
 function defineSessionManagementTests({ includeResourceSwitch = false, includeCrossDirectorySwitch = false, includeModalLifecycle = false, mobile = false } = {}) {
+  test("shows active sessions in the desktop sidebar and right-swipe mobile drawer", async ({ page }) => {
+    await login(page);
+    const A = tag(`SIDEBAR-A-${mobile ? "M" : "D"}`);
+    const B = tag(`SIDEBAR-B-${mobile ? "M" : "D"}`);
+    await sendPrompt(page, `Reply with exactly the word ${A}`);
+    await newSession(page);
+    await sendPrompt(page, `Reply with exactly the word ${B}`);
+
+    if (mobile) {
+      await expect(page.locator("#sessions")).not.toBeVisible();
+      await swipe(page, "right");
+    }
+    await expect(page.locator("#sessions")).toBeVisible();
+    await expect(page.locator("#sessions .session-sidebar-row", { hasText: A })).toBeVisible({ timeout: 15000 });
+    const first = page.locator("#sessions .session-sidebar-row", { hasText: A });
+    await first.click();
+    await expect(page.locator("#messages")).toContainText(A, { timeout: 15000 });
+    await expect(first).toHaveClass(/current/);
+  });
+
   test("start sessions and stop a session's background process", async ({ page }) => {
     await login(page);
 

@@ -9,10 +9,13 @@ import {
   SESSION_PICKER_LOAD_FOLDER_ACTION,
   SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
   SESSION_PICKER_SEARCH_ACTION,
+  SESSION_PICKER_SHOW_ACTION,
   SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION,
   SESSION_PICKER_SET_FOLDER_ACTION,
   SESSION_PICKER_SET_SCOPE_ACTION,
   SESSION_PICKER_STOP_ACTION,
+  SESSION_SWITCH_RUNNER_ACTION,
+  SESSION_SIDEBAR_REFRESH_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
@@ -124,6 +127,16 @@ export function createSessionPickerRuntime(deps) {
     deps.uiActions.register(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, actions.openSearchHit),
     deps.uiActions.register(SESSION_PICKER_LOAD_FOLDER_ACTION, actions.loadFolder),
     deps.uiActions.register(SESSION_PICKER_CANCEL_ACTION, cancel),
+    deps.uiActions.register(SESSION_PICKER_SHOW_ACTION, show),
+    deps.uiActions.register(SESSION_SWITCH_RUNNER_ACTION, async (runnerId) => {
+      if (!runnerId || runnerId === deps.getCurrentRunner()) return;
+      try {
+        await deps.switchRunner(runnerId);
+      } catch (error) {
+        deps.toast(`switch failed: ${error.message}`, "error");
+      }
+    }),
+    deps.uiActions.register(SESSION_SIDEBAR_REFRESH_ACTION, refreshSidebar),
   ];
   let actionsDetached = false;
   const detachActions = () => {
@@ -154,6 +167,24 @@ export function createSessionPickerRuntime(deps) {
       }
     }
     return { allSessions, otherFolderSessions, folders: knownFolders.filter((folder) => folder.count > 0) };
+  }
+
+  async function refreshSidebar() {
+    try {
+      const { sessions: loadedSessions, folders, currentFolder } = await deps.loadInitialPickerData();
+      const runners = deps.getRunners();
+      const loaded = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, runners);
+      sessions = mergeSessions(sessions, loaded.allSessions);
+      deps.updateSessionPicker({
+        sessions: loadedSessions ?? [],
+        folders: loaded.folders,
+        currentFolder,
+        currentId: deps.getCurrentSessionId(loaded.allSessions),
+        currentWorkdir: deps.getWorkdir(),
+        runners,
+        otherFolderSessions: loaded.otherFolderSessions,
+      });
+    } catch { /* the persistent sidebar is best-effort */ }
   }
 
   async function show() {

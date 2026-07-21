@@ -125,12 +125,13 @@ test("carousel controller persists and applies mobile drawer pages", () => {
     const values = new Set();
     return { values, add: (name) => values.add(name), remove: (name) => values.delete(name), toggle: (name, force) => force ? values.add(name) : values.delete(name) };
   };
+  const sessions = { classList: classes() };
   const hublots = { classList: classes() };
   const treebar = { classList: classes() };
   const writes = [];
   const pages = [];
   const controller = createCarouselController({
-    documentTarget: { getElementById: (id) => id === "hublots" ? hublots : treebar },
+    documentTarget: { getElementById: (id) => ({ sessions, hublots, treebar })[id] },
     windowTarget: { matchMedia: () => ({ matches: true }) },
     storage: { getItem: () => "0", setItem: (...args) => writes.push(args) },
     setPage: (page) => pages.push(page),
@@ -144,7 +145,12 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.deepEqual(writes, [["pi_carousel", "2"]]);
   assert.deepEqual(pages, ["tree", 2]);
   controller.reset();
+  controller.step(-1);
+  assert.equal(controller.get(), -1);
+  assert.deepEqual([...sessions.classList.values], ["open"]);
+  controller.reset();
   assert.equal(controller.get(), 0);
+  assert.deepEqual([...sessions.classList.values], []);
   assert.deepEqual([...hublots.classList.values], []);
   assert.deepEqual([...treebar.classList.values], []);
 });
@@ -156,12 +162,14 @@ test("mobile drawer controller closes only an open drawer on outside mobile taps
     addEventListener(_name, fn) { listener = fn; },
     removeEventListener(_name, fn) { removed = fn; },
   };
+  const sessions = { contains: () => false, classList: { contains: () => false } };
   const hublots = { contains: () => false, classList: { contains: (name) => name === "open" } };
   const treebar = { contains: () => false, classList: { contains: () => false } };
   let resets = 0;
   const controller = createMobileDrawerDismissController({
     documentTarget,
     windowTarget: { matchMedia: () => ({ matches: true }) },
+    sessions,
     hublots,
     treebar,
     getCarousel: () => ({ reset: () => { resets++; } }),

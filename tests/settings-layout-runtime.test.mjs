@@ -24,6 +24,7 @@ function mount(listeners, uiActions = createUiActionRegistry()) {
     storage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     setCarouselPage() {}, loadScopedResources() {}, loadCheckpointTree() {}, getRunners: () => [],
     getCurrentRunner: () => null, getWorkdir: () => "/tmp", switchRunner() {},
+    sessionsEl: { contains: () => false, classList: { contains: () => false, toggle() {} } },
     hublotsEl: { classList: { contains: () => false, toggle() {} } },
     treebarEl: { classList: { contains: () => false, toggle() {} } },
     isDrawerToggleTarget: () => false,

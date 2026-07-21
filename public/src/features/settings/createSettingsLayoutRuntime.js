@@ -80,6 +80,7 @@ export function createSettingsLayoutRuntime(deps) {
   const mobileDrawer = createMobileDrawerDismissController({
     documentTarget: deps.documentTarget,
     windowTarget: deps.windowTarget,
+    sessions: deps.sessionsEl,
     hublots: deps.hublotsEl,
     treebar: deps.treebarEl,
     getCarousel: () => carousel,

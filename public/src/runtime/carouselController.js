@@ -17,18 +17,22 @@ export function createCarouselController({
   loadHublots,
   loadCheckpointTree,
 }) {
-  const pages = [null, loadHublots, loadCheckpointTree];
+  const pages = new Map([[1, loadHublots], [2, loadCheckpointTree]]);
   let current = Number.parseInt(storage.getItem("pi_carousel") || "0", 10);
   if (!Number.isFinite(current)) current = 0;
 
-  const clamp = (page) => Math.max(0, Math.min(pages.length - 1, Number(page) || 0));
+  // -1 is the sessions drawer to the left of chat; 1 and 2 are the existing
+  // hublot and checkpoint drawers to its right.
+  const clamp = (page) => Math.max(-1, Math.min(2, Number(page) || 0));
   const isMobile = () => windowTarget.matchMedia("(max-width: 760px)").matches;
   const sync = () => setPage(current);
 
   function apply() {
+    const sessions = documentTarget.getElementById("sessions");
     const hublots = documentTarget.getElementById("hublots");
     const treebar = documentTarget.getElementById("treebar");
     if (!isMobile()) {
+      sessions.classList.remove("open");
       hublots.classList.remove("open");
       treebar.classList.remove("open");
       current = 0;
@@ -36,9 +40,10 @@ export function createCarouselController({
       return;
     }
     current = clamp(current);
+    sessions.classList.toggle("open", current === -1);
     hublots.classList.toggle("open", current >= 1);
     treebar.classList.toggle("open", current >= 2);
-    pages[current]?.();
+    pages.get(current)?.();
     sync();
   }
 
@@ -55,6 +60,7 @@ export function createCarouselController({
   }
 
   function reset() {
+    documentTarget.getElementById("sessions").classList.remove("open");
     documentTarget.getElementById("hublots").classList.remove("open");
     documentTarget.getElementById("treebar").classList.remove("open");
     set(0, { apply: false });
@@ -71,13 +77,14 @@ export function createCarouselController({
  * The DOM targets remain injected so this can be installed and torn down by
  * the composition root without coupling the carousel to Svelte components.
  */
-export function createMobileDrawerDismissController({ documentTarget, windowTarget, hublots, treebar, getCarousel, isToggleTarget }) {
+export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, treebar, getCarousel, isToggleTarget }) {
   const onClick = (event) => {
     if (!windowTarget.matchMedia("(max-width: 760px)").matches
+      || sessions.contains(event.target)
       || hublots.contains(event.target)
       || treebar.contains(event.target)
       || isToggleTarget(event.target)) return;
-    if (hublots.classList.contains("open") || treebar.classList.contains("open")) getCarousel().reset();
+    if (sessions.classList.contains("open") || hublots.classList.contains("open") || treebar.classList.contains("open")) getCarousel().reset();
   };
 
   function attach() {

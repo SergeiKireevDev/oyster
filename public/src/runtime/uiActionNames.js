@@ -45,6 +45,9 @@ export const SESSION_PICKER_DELETE_ACTION = "sessionPicker.delete";
 export const SESSION_PICKER_OPEN_SEARCH_HIT_ACTION = "sessionPicker.openSearchHit";
 export const SESSION_PICKER_LOAD_FOLDER_ACTION = "sessionPicker.loadFolder";
 export const SESSION_PICKER_CANCEL_ACTION = "sessionPicker.cancel";
+export const SESSION_PICKER_SHOW_ACTION = "sessionPicker.show";
+export const SESSION_SWITCH_RUNNER_ACTION = "session.switchRunner";
+export const SESSION_SIDEBAR_REFRESH_ACTION = "sessionSidebar.refresh";
 
 export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
 export const HEADER_CYCLE_THINKING_ACTION = "header.cycleThinking";

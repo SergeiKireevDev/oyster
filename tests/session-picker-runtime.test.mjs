@@ -60,6 +60,9 @@ test("session picker runtime owns picker actions and search-hit construction", a
     actionNames.SESSION_PICKER_OPEN_SEARCH_HIT_ACTION,
     actionNames.SESSION_PICKER_LOAD_FOLDER_ACTION,
     actionNames.SESSION_PICKER_CANCEL_ACTION,
+    actionNames.SESSION_PICKER_SHOW_ACTION,
+    actionNames.SESSION_SWITCH_RUNNER_ACTION,
+    actionNames.SESSION_SIDEBAR_REFRESH_ACTION,
   ].sort());
   await runtime.show();
   assert.deepEqual(toasts, ["no saved sessions"]);
@@ -67,7 +70,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
   runtime.detachActions();
   runtime.detachActions();
   assert.equal(registered.size, 0);
-  assert.equal(detached.length, 10);
+  assert.equal(detached.length, 13);
 });
 
 test("session picker component routes every workflow through scoped actions", () => {
@@ -88,4 +91,11 @@ test("session picker component routes every workflow through scoped actions", ()
     assert.match(source, new RegExp(`uiActions\\.invoke\\(${name}`), `${name} is not routed`);
   }
   assert.doesNotMatch(source, /features\/sessions\/sessionPickerActions\.js/);
+});
+
+test("session sidebar routes switching and the full picker through scoped actions", () => {
+  const source = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
+  assert.match(source, /uiActions\.invoke\(SESSION_SWITCH_RUNNER_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_PICKER_SHOW_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_REFRESH_ACTION/);
 });
