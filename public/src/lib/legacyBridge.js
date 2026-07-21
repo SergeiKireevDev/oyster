@@ -53,10 +53,6 @@ export function cancelSessionPicker() {
   return sessionPickerHandlers.cancel?.();
 }
 
-export function browseExploredFolder(path) {
-  return fileExplorerHandlers.browse?.(path);
-}
-
 export function editExploredFile(path) {
   return fileExplorerHandlers.editFile?.(path);
 }

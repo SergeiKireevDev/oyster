@@ -2178,8 +2178,9 @@ async function saveExplorerFile() {
   }
 }
 
+window.addEventListener("pi-file-explorer-browse", (event) => loadFileExplorer(event.detail));
+
 setFileExplorerHandlers({
-  browse: loadFileExplorer,
   editFile: editExplorerFile,
   saveFile: saveExplorerFile,
   uploadFiles: uploadExplorerFiles,

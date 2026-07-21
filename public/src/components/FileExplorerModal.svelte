@@ -1,7 +1,6 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
-    browseExploredFolder,
     editExploredFile,
     saveExploredFile,
   } from "../lib/legacyBridge.js";
@@ -38,7 +37,7 @@
     dirs={$fileExplorer.dirs}
     showHidden={$fileExplorer.showHidden}
     showWorkdir={true}
-    onBrowse={browseExploredFolder}
+    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-file-explorer-browse", { detail: path }))}
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}
