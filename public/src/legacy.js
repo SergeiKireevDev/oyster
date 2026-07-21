@@ -1297,8 +1297,10 @@ function renderCmdPalette() {
 }
 
 /** Wire a textarea/input to the shared command palette. */
+let commandPaletteInputController = null;
 function setupCommandPalette(el) {
-  createCommandPaletteInputController({
+  commandPaletteInputController?.detach();
+  const controller = createCommandPaletteInputController({
     target: el,
     onInput: () => {
       const trigger = getCommandTrigger(el);
@@ -1319,7 +1321,10 @@ function setupCommandPalette(el) {
     onBlur: () => setTimeout(() => {
       if (cmdState?.target === el) closeCmdPalette();
     }, 150),
-  }).attach();
+  });
+  controller.attach();
+  commandPaletteInputController = controller;
+  return controller;
 }
 
 const commandPaletteRunController = createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex });
@@ -2182,5 +2187,6 @@ export function teardownLegacyRuntime() {
   routineEventController.detach();
   sessionPickerEventController.detach();
   openFileExplorerEventController.detach();
+  commandPaletteInputController?.detach();
   connectionState.lost();
 }
