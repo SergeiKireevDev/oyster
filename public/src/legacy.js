@@ -30,7 +30,7 @@ import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, ro
 import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
-import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
+import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
@@ -2411,7 +2411,7 @@ function entryForElement(entries, els, el) {
   if (idx === -1 || !entries.length) return null;
   // same length -> zip by index; otherwise align from the end (the file can
   // briefly run ahead of / behind the rendered transcript while streaming)
-  const pos = entries.length === els.length ? idx : entries.length - (els.length - idx);
+  const pos = alignedTranscriptIndex(entries.length, els.length, idx);
   if (pos >= 0 && pos < entries.length && entryMatchesEl(entries[pos], el)) return entries[pos];
   const found = entries.find((e) => e.role === el.dataset.role && e.text && !e.text.startsWith("[")
     && normText(el.textContent).includes(normText(e.text).slice(0, 60)));
@@ -2477,7 +2477,7 @@ async function focusEntryById(entryId) {
     const entry = entries[pos];
     let el = entries.length === els.length
       ? els[pos]
-      : els[els.length - (entries.length - pos)] ?? null;
+      : els[alignedTranscriptIndex(entries.length, els.length, pos)] ?? null;
     if (!el || !entryMatchesEl(entry, el)) {
       const t = normText(entry.text ?? "");
       el = (t && !t.startsWith("[")

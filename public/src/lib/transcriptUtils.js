@@ -1,3 +1,7 @@
+export function alignedTranscriptIndex(entryCount, elementCount, entryIndex) {
+  return entryCount === elementCount ? entryIndex : elementCount - (entryCount - entryIndex);
+}
+
 export function splitTurns(messages = []) {
   const turns = [];
   let current = [];

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitTurns, takeTailChunk } from "../public/src/lib/transcriptUtils.js";
+import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "../public/src/lib/transcriptUtils.js";
+
+test("transcript utils: align transcript positions from the tail", () => {
+  assert.equal(alignedTranscriptIndex(3, 2, 2), 1);
+  assert.equal(alignedTranscriptIndex(2, 2, 1), 1);
+});
 
 test("transcript utils: splitTurns starts a new turn at each user message", () => {
   const messages = [
