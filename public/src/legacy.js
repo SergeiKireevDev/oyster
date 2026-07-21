@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2835,7 +2835,7 @@ function closeModal() {
   closeModalState();
 }
 
-setSettingsHandlers({ reload: () => reloadTranscript().catch(() => {}) });
+window.addEventListener("pi-settings-changed", () => reloadTranscript().catch(() => {}));
 
 /** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {

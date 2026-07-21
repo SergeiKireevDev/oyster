@@ -1,6 +1,4 @@
 <script>
-  import { reloadAfterSettingsChange } from "../lib/legacyBridge.js";
-
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
   ];
@@ -11,7 +9,7 @@
 
   function changed(key, event) {
     localStorage.setItem(key, event.currentTarget.checked ? "1" : "0");
-    if (key === "pi_show_thinking") reloadAfterSettingsChange();
+    if (key === "pi_show_thinking") window.dispatchEvent(new Event("pi-settings-changed"));
   }
 </script>
 
