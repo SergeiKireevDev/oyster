@@ -60,6 +60,14 @@ export async function fetchSessionPreview(fetchImpl, sessionPath) {
   return data.messages ?? [];
 }
 
+/** Read persisted session entries used for permalink resolution. */
+export async function fetchSessionEntries(fetchImpl, sessionPath) {
+  const res = await fetchImpl(`/session-entries?${sessionFileQuery(sessionPath)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `session-entries failed (${res.status})`);
+  return data.entries ?? [];
+}
+
 /** Own optimistic durable-transcript previews while a session runner resumes. */
 export function createSessionPreviewController({ fetchPreview, render, log = () => {}, now = () => performance.now() }) {
   let preview = null;

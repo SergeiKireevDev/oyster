@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { applySessionState, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -2030,10 +2030,7 @@ async function fetchSessionEntries() {
   const path = state?.sessionFile
     ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
   if (!path) throw new Error("session not saved yet");
-  const res = await fetch(`/session-entries?${sessionFileQuery(path)}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
-  return data.entries ?? [];
+  return fetchPersistedSessionEntries(fetch, path);
 }
 
 const normText = (s) => s.replace(/\s+/g, " ").trim();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createAdjacentRunnerController, createCurrentRunnerController, createRunnerListController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -81,6 +81,12 @@ test("session actions fetch durable transcript previews", async () => {
   assert.deepEqual(await fetchSessionPreview(fetchImpl, "/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), [{ role: "user", content: "saved" }]);
   assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl");
   assert.equal(await fetchSessionPreview(async () => ({ ok: false }), "/other.jsonl"), null);
+});
+
+test("session actions fetch persisted session entries", async () => {
+  const entries = await fetchSessionEntries(async (url) => ({ ok: true, json: async () => ({ entries: [{ id: "entry" }] }) }), "/home/me/.pi/agent/sessions/--workspace--/a.jsonl");
+  assert.deepEqual(entries, [{ id: "entry" }]);
+  await assert.rejects(() => fetchSessionEntries(async () => ({ ok: false, status: 404, json: async () => ({ error: "missing" }) }), "/a"), /missing/);
 });
 
 test("session preview controller renders only the current non-empty preview", async () => {
