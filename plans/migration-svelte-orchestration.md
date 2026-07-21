@@ -104,6 +104,9 @@ For each remaining top-level `addEventListener` in `legacy.js`:
 Prioritize events owned by already-migrated components before touching global
 keyboard handling or transcript scroll listeners.
 
+✅ Hublot sidebar and manager close controls now call `hublotActions.js`
+directly; their legacy bridge exports and handlers were removed.
+
 **Acceptance:** every removed bridge symbol has no references under
 `public/src`, and `tests/ui-page.test.mjs` continues to validate all legacy DOM
 references.
