@@ -108,8 +108,9 @@ Create checkpoint-tree actions for opening a selected runner and rollback.
 - Inject model-selection and runner-switch callbacks.
 - Keep checkpoint component busy/frozen state in existing stores.
 
-**Acceptance:** remove `setCheckpointTreeHandlers`,
-`openCheckpointTreeSession`, and `rollbackCheckpoint` bridge exports.
+✅ Removed `setCheckpointTreeHandlers`, `openCheckpointTreeSession`, and
+`rollbackCheckpoint` bridge exports. The tree emits direct session-open and
+rollback events consumed by legacy session/checkpoint orchestration.
 
 ## 6. Remove Menu and Command Palette Bridges (in progress)
 
