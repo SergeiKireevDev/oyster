@@ -205,10 +205,6 @@ export function setCheckpointTreeHandlers(handlers) {
   checkpointTreeHandlers = handlers ?? {};
 }
 
-export function openCheckpointTreeSession(node) {
-  return checkpointTreeHandlers.openSession?.(node);
-}
-
 export function rollbackCheckpoint(checkpoint, element) {
   return checkpointTreeHandlers.rollback?.(checkpoint, element);
 }

@@ -642,7 +642,8 @@ async function openTreeSession(node) {
   }
 }
 
-setCheckpointTreeHandlers({ openSession: openTreeSession, rollback: rollbackToCheckpoint });
+setCheckpointTreeHandlers({ rollback: rollbackToCheckpoint });
+window.addEventListener("pi-checkpoint-tree-open-session", (event) => openTreeSession(event.detail));
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;
