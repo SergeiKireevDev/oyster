@@ -105,6 +105,68 @@
 
   /* ---------- messages ---------- */
   #scroller { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+
+  /* ---------- main row: chat column + interfaces sidebar ---------- */
+  #main { flex: 1; display: flex; min-height: 0; }
+  #chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #ifaces {
+    width: 230px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .iface-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel-2);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .iface-block .preview {
+    position: relative;
+    height: 130px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .iface-block .preview iframe {
+    width: 400%; height: 400%;
+    transform: scale(0.25);
+    transform-origin: 0 0;
+    border: 0;
+    pointer-events: none; /* the block itself handles clicks */
+  }
+  .iface-block .preview .hit { position: absolute; inset: 0; }
+  .iface-block .cap {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .iface-block .cap .lbl {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--muted);
+  }
+  .iface-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; }
+  .iface-block .cap .x:hover { color: var(--red); }
+  #ifaceAdd {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    height: 90px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  #ifaceAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
+  @media (max-width: 760px) { #ifaces { display: none; } }
   #messages {
     max-width: 860px;
     margin: 0 auto;
@@ -472,23 +534,33 @@
   <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
   <button data-action="tree">Conversation tree…</button>
+  <button data-action="tunnels">Tunnels…</button>
   <button data-action="compact">Compact context</button>
   <button data-action="restart">Restart pi process</button>
   <button data-action="logout">Forget token</button>
 </div>
 
-<div id="scroller"><div id="messages"></div></div>
+<div id="main">
+  <div id="chatcol">
+    <div id="scroller"><div id="messages"></div></div>
 
-<div id="composer">
-  <div class="inner">
-    <textarea id="input" rows="1" placeholder="Message pi… (Enter to send)"></textarea>
-    <button class="btn" id="sendBtn">Send</button>
+    <div id="composer">
+      <div class="inner">
+        <textarea id="input" rows="1" placeholder="Message pi… (Enter to send)"></textarea>
+        <button class="btn" id="sendBtn">Send</button>
+      </div>
+      <div id="statusbar">
+        <span id="stateInfo">connecting…</span>
+        <span id="workdirInfo" title="pi working directory"></span>
+        <span id="usageInfo"></span>
+      </div>
+    </div>
   </div>
-  <div id="statusbar">
-    <span id="stateInfo">connecting…</span>
-    <span id="workdirInfo" title="pi working directory"></span>
-    <span id="usageInfo"></span>
-  </div>
+
+  <aside id="ifaces">
+    <div id="ifaceList" style="display:contents"></div>
+    <div id="ifaceAdd" title="Open a new tunnel">+</div>
+  </aside>
 </div>
 
 <div id="overlay"><div id="modal">
@@ -517,10 +589,10 @@ let token = null;
   const query = new URLSearchParams(location.search);
   const fromUrl = hash.get("token") || query.get("token");
   if (fromUrl) {
-    localStorage.setItem("pi_ui_token", fromUrl);
+    localStorage.setItem("pi_ui_token", fromUrl.trim());
     history.replaceState(null, "", location.pathname);
   }
-  token = localStorage.getItem("pi_ui_token");
+  token = (localStorage.getItem("pi_ui_token") || "").trim() || null;
   // also carry the token as a cookie: cookies survive proxies that strip
   // Authorization/custom headers, and EventSource can't send headers at all
   if (token) {
@@ -534,6 +606,28 @@ const gate = $("gate");
 function requireToken() {
   gate.classList.add("open");
   $("gateInput").focus();
+}
+
+// SSE failures: distinguish "server unreachable" from "token rejected".
+// Only the server itself saying the token is invalid clears it.
+let lastProbeAt = 0;
+async function probeTokenValidity() {
+  const now = Date.now();
+  if (now - lastProbeAt < 10000 || !token) return;
+  lastProbeAt = now;
+  try {
+    const res = await fetch(`/authcheck?token=${encodeURIComponent(token)}`);
+    if (!res.ok) return; // server not healthy — treat as network issue
+    const data = await res.json();
+    if (data.authorized === false) {
+      localStorage.removeItem("pi_ui_token");
+      document.cookie = "pi_ui_token=; path=/; max-age=0";
+      $("stateInfo").textContent = "invalid token";
+      requireToken();
+    }
+  } catch {
+    // network error — keep retrying silently
+  }
 }
 
 // Only drop the stored token if the server itself rejects it via the query-param
@@ -1037,7 +1131,10 @@ function connect() {
     connected = false;
     $("connDot").className = "dot";
     $("stateInfo").textContent = "reconnecting…";
-    // EventSource auto-reconnects; if the token is bad the fetch guard handles it
+    // EventSource can't see HTTP status codes, so a 401 (bad stored token)
+    // looks identical to a network blip and would retry forever. Probe
+    // /authcheck to tell them apart, at most once per 10s.
+    probeTokenValidity();
   };
   es.onmessage = (ev) => {
     lastEventAt = Date.now();
@@ -1059,6 +1156,7 @@ function handleEvent(msg) {
     case "replay_done":
       replaying = false;
       if (msg.workdir) setWorkdir(msg.workdir);
+      loadInterfaces();
       return;
 
     case "response":
@@ -1187,6 +1285,22 @@ function handleEvent(msg) {
     case "code_reload_failed":
       if (!replaying) toast(`server reload failed: ${msg.error}`, "error");
       return;
+
+    case "tunnel_opened":
+      if (!replaying) {
+        toast(`tunnel up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
+          onClick: () => window.open(msg.tunnel?.url, "_blank"),
+        });
+        loadInterfaces();
+      }
+      return;
+
+    case "tunnel_closed":
+      if (!replaying) {
+        toast(`tunnel closed: :${msg.tunnel?.port}`, "warning");
+        loadInterfaces();
+      }
+      return;
   }
 }
 
@@ -1303,6 +1417,8 @@ menu.addEventListener("click", async (e) => {
       await showSessionPicker();
     } else if (action === "tree") {
       await showConversationTree();
+    } else if (action === "tunnels") {
+      await showTunnels();
     } else if (action === "compact") {
       toast("compacting…");
       await rpc({ type: "compact" });
@@ -1436,6 +1552,190 @@ async function showFolderBrowser() {
     toast(data.error || `failed (${res.status})`, "error");
   }
   // on success the workdir_changed + pi_started events clear and reload the UI
+}
+
+// ------------------------------------------------------------ tunnels
+
+/** Send a message to the agent as if typed in the composer. */
+async function sendAgentMessage(text) {
+  addUserMessage({ role: "user", content: text });
+  localEchoes.push(text);
+  try {
+    await rpc({ type: "prompt", message: text }, { wait: false });
+  } catch (e) {
+    const idx = localEchoes.indexOf(text);
+    if (idx !== -1) localEchoes.splice(idx, 1);
+    toast(`send failed: ${e.message}`, "error");
+  }
+}
+
+async function showTunnels() {
+  const body = $("mBody"), actions = $("mActions");
+
+  async function load() {
+    const res = await fetch(`/tunnels?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || "failed to load tunnels", "error"); return; }
+    $("mTitle").textContent = "Tunnels";
+    body.innerHTML = "";
+
+    // ---- active tunnels
+    if (!data.tunnels.length) {
+      const empty = document.createElement("div");
+      empty.className = "m-path";
+      empty.textContent = "(no active tunnels)";
+      body.appendChild(empty);
+    }
+    for (const t of data.tunnels) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 0;";
+      const link = document.createElement("a");
+      link.href = t.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = `${t.url} → :${t.port}`;
+      link.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      const meta = document.createElement("span");
+      meta.className = "m-path";
+      meta.style.cssText = "font-size:11px;white-space:nowrap;max-width:35%;overflow:hidden;text-overflow:ellipsis;";
+      meta.textContent = t.label ?? "";
+      const close = document.createElement("span");
+      close.className = "chip";
+      close.textContent = "✕";
+      close.title = "close this tunnel";
+      close.addEventListener("click", async () => {
+        await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+        await load();
+      });
+      row.append(link, meta, close);
+      body.appendChild(row);
+    }
+
+    // ---- new tunnel form
+    const form = document.createElement("div");
+    form.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--border,#333);padding-top:12px;";
+    const heading = document.createElement("div");
+    heading.style.cssText = "font-weight:600;font-size:13.5px;";
+    heading.textContent = "New tunnel";
+    const portInp = document.createElement("input");
+    portInp.type = "number";
+    portInp.min = "1";
+    portInp.max = "65535";
+    portInp.placeholder = "local port to expose (e.g. 3000)";
+    const descInp = document.createElement("textarea");
+    descInp.rows = 3;
+    descInp.placeholder = "What should the agent expose through this tunnel? (e.g. “the vite dev server for the dashboard, with hot reload”)";
+    descInp.style.cssText = "resize:vertical;";
+    const notifyRow = document.createElement("label");
+    notifyRow.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;";
+    const notify = document.createElement("input");
+    notify.type = "checkbox";
+    notify.checked = true;
+    notifyRow.append(notify, document.createTextNode("brief the agent (sends a message to the session)"));
+    const create = document.createElement("button");
+    create.className = "btn";
+    create.textContent = "Open tunnel";
+    create.addEventListener("click", async () => {
+      const port = Number(portInp.value);
+      const desc = descInp.value.trim();
+      if (!port) { portInp.focus(); return; }
+      if (notify.checked && !desc) { descInp.focus(); toast("describe what to expose, or untick the briefing", "warning"); return; }
+      create.disabled = true;
+      create.textContent = "Opening…";
+      try {
+        const res2 = await fetch(`/tunnels?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ port, label: desc || null }),
+        });
+        const d2 = await res2.json().catch(() => ({}));
+        if (!res2.ok) { toast(d2.error || `failed (${res2.status})`, "error"); return; }
+        if (notify.checked) {
+          closeModal();
+          await sendAgentMessage(
+            `I opened a public tunnel for this session: ${d2.tunnel.url} → http://localhost:${port}\n\n` +
+            `Please make the following available on local port ${port} so it is reachable through the tunnel:\n${desc}\n\n` +
+            `Keep whatever serves it running in the background. Tell me when ${d2.tunnel.url} is ready to open.`
+          );
+        } else {
+          toast(`tunnel up: ${d2.tunnel.url}`);
+          await load();
+        }
+      } catch (e) {
+        toast(`tunnel failed: ${e.message}`, "error");
+      } finally {
+        create.disabled = false;
+        create.textContent = "Open tunnel";
+      }
+    });
+    form.append(heading, portInp, descInp, notifyRow, create);
+    body.appendChild(form);
+
+    actions.innerHTML = "";
+    const closeBtn = document.createElement("span");
+    closeBtn.className = "chip";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeModal);
+    actions.append(closeBtn);
+  }
+
+  overlay.classList.add("open");
+  await load();
+}
+
+// ------------------------------------------------------------ interface sidebar
+
+$("ifaceAdd").addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
+
+async function loadInterfaces() {
+  if (!token) return;
+  let tunnels = [];
+  try {
+    const res = await fetch(`/tunnels?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (res.ok) tunnels = data.tunnels;
+  } catch { /* sidebar is best-effort */ }
+  renderInterfaces(tunnels);
+}
+
+function renderInterfaces(tunnels) {
+  const list = $("ifaceList");
+  list.innerHTML = "";
+  for (const t of tunnels) {
+    const block = document.createElement("div");
+    block.className = "iface-block";
+
+    const preview = document.createElement("div");
+    preview.className = "preview";
+    const frame = document.createElement("iframe");
+    frame.src = t.url;
+    frame.loading = "lazy";
+    frame.sandbox = "allow-scripts allow-same-origin";
+    const hit = document.createElement("div");
+    hit.className = "hit";
+    hit.title = `open ${t.url}`;
+    hit.addEventListener("click", () => window.open(t.url, "_blank", "noopener"));
+    preview.append(frame, hit);
+
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = t.label ? `:${t.port} · ${t.label}` : `:${t.port}`;
+    lbl.title = `${t.url}\n${t.label ?? ""}`;
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "✕";
+    x.title = "close this tunnel";
+    x.addEventListener("click", async () => {
+      await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+      loadInterfaces();
+    });
+    cap.append(lbl, x);
+
+    block.append(preview, cap);
+    list.appendChild(block);
+  }
 }
 
 // ------------------------------------------------------------ session picker

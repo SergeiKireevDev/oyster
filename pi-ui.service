@@ -4,8 +4,10 @@ Description=pi-remote-ui - web UI for the pi coding agent
 [Service]
 WorkingDirectory=/home/ubuntu/tree-pi
 ExecStart=/usr/bin/node /home/ubuntu/tree-pi/server.mjs
-Restart=on-failure
-RestartSec=3
+# always: a stray SIGTERM/clean exit (e.g. an agent running pkill) must not
+# leave the UI down
+Restart=always
+RestartSec=2
 
 [Install]
 WantedBy=default.target

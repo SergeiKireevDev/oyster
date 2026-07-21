@@ -19,6 +19,9 @@
  *   POST /workdir     -> switch folder (respawns pi there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn the pi process
+ *   GET  /tunnels     -> live tunnels spawned by this server
+ *   POST /tunnels     -> open a tunnel { port, label? } (cloudflared quick tunnel)
+ *   DELETE /tunnels   -> close a tunnel (?id=…)
  */
 
 import { spawn } from "node:child_process";
@@ -27,6 +30,13 @@ import { readFileSync, existsSync, readdirSync, statSync, mkdirSync } from "node
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// import tunnels.mjs with a cache-busting query so hot reloads of app.mjs
+// pick up the current version instead of a stale cached module
+const TUNNELS_PATH = join(dirname(fileURLToPath(import.meta.url)), "tunnels.mjs");
+const { listTunnels, openTunnel, closeTunnel, closeAllTunnels } =
+  await import(`./tunnels.mjs?v=${statSync(TUNNELS_PATH).mtimeMs}`);
 
 export function init(state) {
   const { config, broadcast, serverEvent } = state;
@@ -455,6 +465,38 @@ export function init(state) {
       return;
     }
 
+    if (url.pathname === "/tunnels") {
+      if (req.method === "GET") {
+        json(res, 200, { tunnels: listTunnels(state), bin: config.TUNNEL_BIN });
+        return;
+      }
+      if (req.method === "POST") {
+        const body = await readJsonBody(req, res);
+        if (body === undefined) return;
+        try {
+          const tunnel = await openTunnel(state, {
+            port: body?.port,
+            label: body?.label ? String(body.label).slice(0, 200) : null,
+          });
+          json(res, 201, { tunnel });
+        } catch (e) {
+          json(res, 502, { error: e.message });
+        }
+        return;
+      }
+      if (req.method === "DELETE") {
+        const closed = closeTunnel(state, String(url.searchParams.get("id") ?? ""));
+        if (!closed) {
+          json(res, 404, { error: "no such tunnel" });
+          return;
+        }
+        json(res, 200, { closed });
+        return;
+      }
+      json(res, 405, { error: "method not allowed" });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/restart") {
       stopPi();
       setTimeout(startPi, 300);
@@ -465,5 +507,5 @@ export function init(state) {
     json(res, 404, { error: "not found" });
   }
 
-  return { handleRequest, startPi, stopPi };
+  return { handleRequest, startPi, stopPi, stopTunnels: () => closeAllTunnels(state) };
 }

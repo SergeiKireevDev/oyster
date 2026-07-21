@@ -21,6 +21,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync, watch, statSync } from "node:fs";
 import http from "node:http";
 import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,12 @@ function defaultToken() {
   return randomBytes(16).toString("hex");
 }
 
+function defaultTunnelBin() {
+  // prefer a user-local install when cloudflared is not on the server's PATH
+  const local = join(homedir(), ".local", "bin", "cloudflared");
+  return existsSync(local) ? local : "cloudflared";
+}
+
 const config = {
   PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
   HOST: argValue("--host") ?? process.env.HOST ?? "0.0.0.0",
@@ -50,6 +57,7 @@ const config = {
     .split(" ")
     .filter(Boolean),
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
+  TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
   DIRNAME: __dirname,
 };
 
@@ -64,6 +72,8 @@ const state = {
   currentDir: config.PI_DIR,
   /** @type {import("node:child_process").ChildProcess | null} */
   pi: null,
+  /** @type {Map<string, object>} live tunnels (id -> entry with proc handle) */
+  tunnels: new Map(),
   piStartCount: 0,
   lastSpawnAt: 0,
   /** recent stdout lines replayed to newly connected clients */
@@ -165,6 +175,7 @@ server.listen(config.PORT, config.HOST, () => {
 });
 
 function shutdown() {
+  app.stopTunnels?.();
   app.stopPi();
   process.exit(0);
 }

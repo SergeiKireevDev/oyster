@@ -28,6 +28,7 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
 | `--pi` | `PI_BIN` | `pi` | pi executable |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` (e.g. `--provider anthropic -c`) |
+| `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary used to open tunnels (must support `tunnel --url http://127.0.0.1:<port>`) |
 
 A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.
 
@@ -40,6 +41,9 @@ A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token st
 | `GET /events` | yes | SSE stream of pi's stdout (events + responses), with replay of recent lines |
 | `POST /rpc` | yes | JSON body forwarded verbatim to pi's stdin |
 | `POST /restart` | yes | kill and respawn the pi process |
+| `GET /tunnels` | yes | list live tunnels spawned by this server |
+| `POST /tunnels` | yes | open a tunnel for a local port: `{ "port": 3000, "label": "…" }` → replies with the public URL |
+| `DELETE /tunnels?id=…` | yes | close a tunnel |
 
 Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
 
@@ -48,6 +52,7 @@ Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
 - Streaming assistant output with markdown rendering, collapsible **thinking** blocks, and per-tool-call cards (args, live partial output, result, error state).
 - Send prompts (Enter), steer mid-stream (send while streaming), **Stop** to abort.
 - Model picker, thinking-level cycling, new session, context compaction, pi process restart — from the header chips / ☰ menu.
+- **Tunnels** — ☰ → *Tunnels…* opens a modal listing live tunnels and lets you spawn a new one deterministically for the current session: pick a local port, describe *what the agent should expose through it*, and (by default) the UI briefs the agent with the public URL and that description so it starts the right server on that port. Tunnels are cloudflared quick tunnels by default (`--tunnel-bin` to change), survive server code hot-reloads, and are killed on shutdown. Requires [`cloudflared`](https://pkg.cloudflare.com) (or an equivalent tool) to be installed.
 - Extension UI bridge: pi extensions that ask for confirm/select/input get a modal in the browser; notifications become toasts.
 - Reconnects automatically (EventSource); recent events are replayed on reconnect so a page refresh mid-run doesn't lose context.
 - Mobile-friendly layout.
