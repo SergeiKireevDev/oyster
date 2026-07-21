@@ -48,6 +48,7 @@ import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
 import { createSessionPickerController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
+import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2068,12 +2069,7 @@ let sessionPickerFolders = [];
 let sessionPickerCurrentFolder = null;
 let sessionPickerSessions = [];
 
-function sessionPickerSnapshot() {
-  let snapshot;
-  const unsubscribe = sessionPicker.subscribe((state) => { snapshot = state; });
-  unsubscribe();
-  return snapshot;
-}
+const sessionPickerSnapshot = () => storeSnapshot(sessionPicker);
 
 const groupSearchResults = groupSessionSearchResults;
 
