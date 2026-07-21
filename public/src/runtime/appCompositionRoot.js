@@ -47,9 +47,6 @@ import { addToast } from "../stores/toasts.js";
 import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
 import { createCheckpointFeature } from "../features/checkpoints/checkpointFeature.js";
 import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
-import { commandTrigger, createCommandGuard, filterCommands } from "../lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "../lib/commandController.js";
-import { insertionAtCaret, insertionReplacing } from "../lib/textInsertion.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController } from "../lib/hublotController.js";
@@ -138,14 +135,12 @@ const composerAssembly = createComposerAssembly({
   setBusy: (value) => setBusy(value),
   getBusy: () => getBusy(),
   composerReadyForSend: () => composerReadyForSend(),
-  confirmKnownCommand: (text) => commandGuard.confirmKnownCommand(text),
   addUserMessage: (message) => transcriptOperations.addUserMessage(message),
   addLocalEcho: (text) => transcriptOperations.addLocalEcho(text),
   removeLocalEcho: (text) => transcriptOperations.removeLocalEcho(text),
   rpc: (...args) => rpc(...args),
   schedulePostSendSync: (text) => schedulePostSendFileTranscriptSync(text),
   toast: addToast,
-  isCommandPaletteOpen: () => cmdPalette.classList.contains("open"),
 });
 const composerOperations = composerAssembly.operations;
 const rememberPrompt = composerOperations.rememberPrompt;
@@ -265,7 +260,7 @@ const sessionAssembly = createSessionAssembly({
     clearTranscript: clearMessages,
     resetSessionUi: () => carouselController.reset(),
     renderPreview: () => previewController.renderNow(),
-    resetCommands: () => commandGuard?.reset(),
+    resetCommands: composerOperations.resetCommands,
     connect,
   }),
 });
@@ -410,155 +405,9 @@ const extensionUiAdapters = createExtensionUiAdapters({
   setTitle: (title) => updateAppSession({ titleOverride: title }),
 });
 
-// pi's slash commands (extensions, prompt templates, skills), cached until
-// the pi process or folder changes
-let commandGuard = createCommandGuard({ rpc, confirm: extensionUiAdapters.confirm });
-
 const promptRpcCommand = composerOperations.promptRpcCommand;
+const setupCommandPalette = composerOperations.setupCommandPalette;
 const detachComposerActions = () => composerAssembly.teardown();
-
-// ------------------------------------------------------------ command palette
-// Slack-style ":" command picker — works on any textarea/input. Type ":"
-// to see available commands, filter by typing more, pick with Enter/Tap.
-
-const cmdPalette = $("cmdPalette");
-
-const commands = [
-  {
-    name: "file",
-    desc: "Open file explorer and insert a path",
-    icon: "\u{1F4C2}",
-    run: () => {
-      const trigger = getCommandTrigger(cmdState.target);
-      const placeholder = trigger ? trigger.text : null;
-      const target = cmdState.target;
-      closeCmdPalette();
-      // if the hublot modal was open when we launched, return to it afterwards
-      const returnToHublot = overlay.classList.contains("open");
-      showFilePicker(
-        (path) => { insertAtTextarea(target, placeholder, path); },
-        null,
-        returnToHublot,
-      );
-    },
-  },
-];
-
-let cmdState = null; // { target, match, active, trigger } | null
-
-const getCommandTrigger = commandTrigger;
-const getFilteredCommands = (match) => filterCommands(commands, match);
-
-function positionCmdPalette(el) {
-  setCommandPaletteState(commandPalettePosition(el.getBoundingClientRect(), window));
-}
-
-function openCmdPalette(el, match, trigger) {
-  cmdState = { target: el, match: match || "", active: 0, trigger };
-  positionCmdPalette(el);
-  renderCmdPalette();
-}
-
-function closeCmdPalette() {
-  cmdState = null;
-  closeCommandPaletteState();
-}
-
-function moveCmd(dir) {
-  if (!cmdState) return;
-  const items = getFilteredCommands(cmdState.match);
-  if (!items.length) return;
-  cmdState.active = moveCommandPaletteActive(cmdState.active, items.length, dir);
-  renderCmdPalette();
-}
-
-function runActiveCmd() {
-  if (!cmdState) return false;
-  const items = getFilteredCommands(cmdState.match);
-  if (!items.length) { closeCmdPalette(); return false; }
-  items[cmdState.active].run();
-  return true;
-}
-
-function setActiveCmd(index) {
-  if (!cmdState || cmdState.active === index) return;
-  const items = getFilteredCommands(cmdState.match);
-  if (index < 0 || index >= items.length) return;
-  cmdState.active = index;
-  renderCmdPalette();
-}
-
-function runCmdIndex(index) {
-  if (!cmdState) return false;
-  setActiveCmd(index);
-  return runActiveCmd();
-}
-
-/** Insert text into a textarea, optionally replacing a placeholder token. */
-function applyTextInsertion(element, insertion) {
-  element.value = insertion.value;
-  element.setSelectionRange(insertion.position, insertion.position);
-  element.dispatchEvent(new Event("input"));
-  element.focus();
-}
-
-function insertAtTextarea(element, placeholder, text) {
-  applyTextInsertion(element, insertionReplacing(element.value, placeholder, text)
-    ?? insertionAtCaret(element.value, element.selectionStart, element.selectionEnd, text));
-}
-
-function appendAtCaret(element, text) {
-  applyTextInsertion(element, insertionAtCaret(element.value, element.selectionStart, element.selectionEnd, text));
-}
-
-function renderCmdPalette() {
-  if (!cmdState) return;
-  setCommandPaletteState(commandPaletteView(getFilteredCommands(cmdState.match), cmdState.match, cmdState.active));
-}
-
-/** Wire a textarea/input to the shared command palette. */
-let commandPaletteInputController = null;
-function setupCommandPalette(el) {
-  commandPaletteInputController?.detach();
-  const controller = createCommandPaletteInputController({
-    target: el,
-    onInput: () => {
-      const trigger = getCommandTrigger(el);
-      if (trigger && trigger.text.length >= 1) {
-        const match = trigger.text.slice(1);
-        if (!cmdState || cmdState.target !== el || cmdState.trigger?.text !== trigger.text) {
-          openCmdPalette(el, match, trigger);
-        } else {
-          cmdState.match = match;
-          cmdState.active = 0;
-          positionCmdPalette(el);
-          renderCmdPalette();
-        }
-      } else if (cmdState && cmdState.target === el) {
-        closeCmdPalette();
-      }
-    },
-    onBlur: () => delayedTasks.schedule(() => {
-      if (cmdState?.target === el) closeCmdPalette();
-    }, 150),
-  });
-  controller.attach();
-  commandPaletteInputController = controller;
-  return controller;
-}
-
-const commandPaletteRunController = createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex });
-
-setupCommandPalette(input);
-
-// global keydown: palette navigation while it's open (capture = fires first)
-const commandPaletteKeyboardController = createCommandPaletteKeyboardController({
-  documentTarget: document,
-  isOpen: () => cmdPalette.classList.contains("open"),
-  move: moveCmd,
-  run: runActiveCmd,
-  close: closeCmdPalette,
-});
 
 // ------------------------------------------------------------ menu & actions
 
@@ -595,8 +444,6 @@ async function runMenuAction(action) {
     addToast(err.message, "error");
   }
 }
-const menuEventController = createMenuEventController({ windowTarget: window, run: runMenuAction });
-
 // ------------------------------------------------------------ attach file
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
@@ -1052,6 +899,22 @@ const carouselEventRegistration = settingsLayoutRuntime.events;
 const detachSettingsActions = settingsLayoutRuntime.detachSettingsActions;
 const detachHeaderActions = settingsLayoutRuntime.detachHeaderActions;
 
+const commandRuntime = composerAssembly.configureCommands({
+  findElement: $,
+  confirm: extensionUiAdapters.confirm,
+  windowTarget: window,
+  documentTarget: document,
+  setPaletteState: setCommandPaletteState,
+  closePaletteState: closeCommandPaletteState,
+  showFilePicker,
+  isOverlayOpen: () => overlay.classList.contains("open"),
+  schedule: (...args) => delayedTasks.schedule(...args),
+  runMenuAction,
+});
+const commandPaletteRunController = commandRuntime.runController;
+const commandPaletteKeyboardController = commandRuntime.keyboardController;
+const menuEventController = commandRuntime.menuController;
+
 // ------------------------------------------------------------ toasts
 
 // Carousel event registration and initial layout are deferred until the
@@ -1094,10 +957,7 @@ const detachRuntimeEventAdapters = () => {
   mobileDrawerDismissController.detach();
   detachHeaderActions();
   detachSettingsActions();
-  menuEventController.detach();
   detachComposerActions();
-  commandPaletteKeyboardController.detach();
-  commandPaletteRunController.detach();
   detachCheckpointTreeActions();
   detachFilePickerActions();
   detachFolderBrowserActions();
@@ -1106,7 +966,6 @@ const detachRuntimeEventAdapters = () => {
   detachRoutineActions();
   detachSessionPickerActions();
   detachFilesActions();
-  commandPaletteInputController?.detach();
   transcriptAssembly.teardown();
 };
 const runtimeTeardown = createRuntimeCleanup({

@@ -49,7 +49,7 @@ hydration state.
 ## [ ] 4. Extract Composer and Command Assembly
 
 - [x] Create `features/composer/createComposerAssembly.js` and move composer history, prompt sending, abort, local echo coordination, and post-send behavior into it.
-- [ ] Move command guard, command palette, menu, input, keyboard, and action registration construction into the composer assembly.
+- [x] Move command guard, command palette, menu, input, keyboard, and action registration construction into the composer assembly.
 - [ ] Inject session, transcript, platform, modal, and toast interfaces instead of reading root state.
 - [ ] Add lifecycle tests for send/abort, command routing, prompt history, listener attachment, and teardown.
 

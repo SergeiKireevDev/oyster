@@ -42,7 +42,7 @@ test("application runtime composition root does not grow browser DOM coupling", 
   const occurrences = (needle) => runtimeImplementation.split(needle).length - 1;
   assert.equal(occurrences("document.getElementById"), 1);
   assert.equal(occurrences(".querySelector"), 0);
-  assert.equal(occurrences(".classList"), 4);
+  assert.equal(occurrences(".classList"), 2);
   assert.equal(occurrences(".addEventListener"), 0);
 });
 
