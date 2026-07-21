@@ -1163,7 +1163,7 @@
   .oauth-device-code input, .oauth-request input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
   .oauth-request { min-width: 0; margin: 0; padding: 0; border: 0; }
   .oauth-request legend { width: 100%; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
-  .oauth-cancel { width: fit-content; }
+  .btn.oauth-cancel { width: fit-content; background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
   .api-key-form { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1.3fr) auto; align-items: end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .api-key-form label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
   .api-key-form select, .api-key-form input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
