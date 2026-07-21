@@ -11,7 +11,7 @@
 // stable, searchable handle.
 
 import { test, expect } from "@playwright/test";
-import { login, sendPrompt, waitFor, api } from "./lib/harness.js";
+import { login, sendPrompt, waitFor, api, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 // Per-test container lifecycle — see checkpoint-rollback.spec.js
@@ -43,7 +43,7 @@ function rowFor(page, token) {
   return page.locator(".m-option", { hasText: token });
 }
 
-test.describe.serial("session management", () => {
+function defineSessionManagementTests() {
   test("start sessions and stop a session's background process", async ({ page }) => {
     await login(page);
 
@@ -179,4 +179,13 @@ test.describe.serial("session management", () => {
     // the file picker lists the workspace contents
     await expect(page.locator("#modal", { hasText: "file" })).toBeVisible();
   });
+}
+
+test.describe.serial("desktop session management", () => {
+  defineSessionManagementTests();
+});
+
+test.describe.serial("mobile session management", () => {
+  test.use({ viewport: MOBILE_VIEWPORT });
+  defineSessionManagementTests();
 });

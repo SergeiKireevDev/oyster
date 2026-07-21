@@ -23,7 +23,7 @@ function headlessShellPath() {
 }
 
 const SYSLIBS = join(homedir(), ".pw-syslibs");
-if (existsSync(SYSLIBS)) {
+if (existsSync(SYSLIBS) && !process.env.E2E_VIDEO) {
   const dirs = [
     join(SYSLIBS, "usr/lib/x86_64-linux-gnu"),
     join(SYSLIBS, "usr/lib/x86_64-linux-gnu/gbm"),
@@ -42,11 +42,17 @@ const launchOptions = SHELL ? { executablePath: SHELL } : {};
 // Video is opt-in: recording every normal e2e run leaves large artifacts in
 // preview-videos/. Also, chrome-headless-shell cannot record video, so when
 // E2E_VIDEO is set we let Playwright use its bundled full Chromium instead.
+// In video mode, do not force the rootless ~/.pw-syslibs fontconfig file: it
+// only points at DejaVu fonts, so emoji/icon controls render as tofu boxes in
+// recordings. Full Chromium can use the host fontconfig, including Noto Emoji.
+// slowMo adds a one-second pause between browser actions so recordings are
+// readable instead of instantly jumping from state to state.
 const projectUse = process.env.E2E_VIDEO
   ? {
       ...devices["Desktop Chrome"],
-      recordVideo: { dir: join(HERE, "..", "..", "preview-videos", "raw"), size: { width: 1400, height: 900 } },
-      launchOptions: { headless: true },
+      video: { mode: "on", size: { width: 1400, height: 900 } },
+      outputDir: join(HERE, "..", "..", "preview-videos", "raw"),
+      launchOptions: { headless: true, slowMo: 1000 },
     }
   : { ...devices["Desktop Chrome"], launchOptions };
 

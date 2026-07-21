@@ -6,7 +6,7 @@
 // done, then 🧹 teardown and watch the byproduct disappear.
 
 import { test, expect } from "@playwright/test";
-import { login, dexec, waitFor } from "./lib/harness.js";
+import { login, dexec, waitFor, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const NAME = "e2e-dummy.sh";
@@ -49,8 +49,14 @@ test.beforeEach(async () => {
 });
 test.afterEach(() => { teardownContainer(); });
 
-test("start a session, then run and tear down a dummy routine from the sidebar", async ({ page }) => {
+async function body(page, { mobile = false } = {}) {
   await login(page); // initial load fetches the routine list -> our routine shows
+
+  // On mobile the routines live in the hublots/routines slide-over drawer.
+  if (mobile) {
+    await page.click("#hublotChip");
+    await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+  }
 
   const block = page.locator(".routine-block", { hasText: NAME });
   await expect(block).toBeVisible({ timeout: 30000 });
@@ -71,11 +77,27 @@ test("start a session, then run and tear down a dummy routine from the sidebar",
 
   // 🧹 teardown
   await block.getByRole("button", { name: /teardown/ }).click();
-  await expect(block.locator(".r-dot")).toHaveClass(/done|stopped/, { timeout: 60000 });
+  // Teardown is short-lived; by the time the UI refreshes the dot may already
+  // be back to idle, which is the expected terminal state for a completed
+  // teardown.
+  await expect(block.locator(".r-dot")).toHaveAttribute("title", /idle|done|stopped/, { timeout: 60000 });
 
   // byproduct is gone
   await waitFor(
     () => dexec(`test -f ${ARTIFACT} && echo y || echo n`) === "n",
     { timeout: 10000, label: "byproduct removed after teardown" },
   );
+}
+
+test.describe("desktop", () => {
+  test("start a session, then run and tear down a dummy routine from the sidebar", async ({ page }) => {
+    await body(page);
+  });
+});
+
+test.describe("mobile", () => {
+  test.use({ viewport: MOBILE_VIEWPORT });
+  test("start a session, then run and tear down a dummy routine from the sidebar", async ({ page }) => {
+    await body(page, { mobile: true });
+  });
 });

@@ -8,14 +8,14 @@
 // the button.
 
 import { test, expect } from "@playwright/test";
-import { login, api, dexec, waitFor, currentSessionId } from "./lib/harness.js";
+import { login, api, dexec, waitFor, currentSessionId, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 // Per-test container lifecycle — see checkpoint-rollback.spec.js
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
-test("start a session and open a hublot serving a button interface", async ({ page }) => {
+async function body(page, { mobile = false } = {}) {
   const marker = `e2e-btn-${Date.now()}`;
   const brief =
     `Serve a minimal static web page on the local port. Its HTML body must contain ` +
@@ -31,7 +31,12 @@ test("start a session and open a hublot serving a button interface", async ({ pa
     timeout: 30000, label: "a session id",
   });
 
-  // open the Hublots modal via the sidebar "+" and fill the New hublot form
+  // open the Hublots modal via the sidebar "+" and fill the New hublot form.
+  // On mobile the sidebar is a slide-over drawer toggled by the header chip.
+  if (mobile) {
+    await page.click("#hublotChip");
+    await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+  }
   await page.click("#hublotAdd");
   await expect(page.locator("#overlay")).toHaveClass(/open/);
   const desc = page.locator('#mBody textarea');
@@ -70,8 +75,11 @@ test("start a session and open a hublot serving a button interface", async ({ pa
   expect(served).toMatch(/<button/i);
   expect(served).toMatch(/click me/i);
 
-  // close the hublot from the UI (✕ on the block) and confirm it goes away
-  await page.locator("#hublotList .hublot-block .cap .x").first().click();
+  // close the hublot from the UI (✕ on the non-builtin tunnel block) and confirm it goes away
+  if (mobile) {
+    await page.evaluate(() => document.getElementById("hublots")?.classList.add("open"));
+  }
+  await page.locator("#hublotList .hublot-block:not(.builtin) .cap .x").first().click();
   await waitFor(
     async () => {
       const { json } = await api("GET", "/tunnels");
@@ -79,4 +87,17 @@ test("start a session and open a hublot serving a button interface", async ({ pa
     },
     { timeout: 30000, interval: 1000, label: "hublot to close" }
   );
+}
+
+test.describe("desktop", () => {
+  test("start a session and open a hublot serving a button interface", async ({ page }) => {
+    await body(page);
+  });
+});
+
+test.describe("mobile", () => {
+  test.use({ viewport: MOBILE_VIEWPORT });
+  test("start a session and open a hublot serving a button interface", async ({ page }) => {
+    await body(page, { mobile: true });
+  });
 });
