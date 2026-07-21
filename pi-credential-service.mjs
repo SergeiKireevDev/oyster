@@ -119,6 +119,19 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     throw capabilityError("configured pi auth storage contains an unsupported credential entry");
   }
 
+  function refreshRegistry(modelRegistry) {
+    modelRegistry.refresh();
+    return new Set(modelRegistry.getAll().map((model) => model.provider).filter(Boolean));
+  }
+
+  function safeSource(status, credentialType) {
+    if (credentialType === "api_key") return "stored_api_key";
+    if (credentialType === "oauth") return "stored_oauth";
+    if (status?.source === "environment") return "environment";
+    if (status?.source === "models_json_key" || status?.source === "models_json_command") return "models_json";
+    return "not_configured";
+  }
+
   let adapterPromise;
   async function load() {
     if (!adapterPromise) {
@@ -156,10 +169,32 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       .map((provider) => safeCredential(provider, authStorage.get(provider)));
   }
 
+  async function listProviders() {
+    const { authStorage, modelRegistry } = await load();
+    reloadOrFail(authStorage);
+    const registered = refreshRegistry(modelRegistry);
+    const providers = new Set([...registered, ...authStorage.list()]);
+    return [...providers]
+      .sort((left, right) => left.localeCompare(right))
+      .map((provider) => {
+        const credential = authStorage.get(provider);
+        const credentialType = credential ? safeCredential(provider, credential).credentialType : null;
+        const status = modelRegistry.getProviderAuthStatus(provider);
+        return Object.freeze({
+          provider,
+          displayName: modelRegistry.getProviderDisplayName(provider),
+          registered: registered.has(provider),
+          credentialType,
+          source: safeSource(status, credentialType),
+          configured: credentialType !== null || status?.configured === true,
+        });
+      });
+  }
+
   async function setApiKey(provider, key) {
     const providerId = normalizedProvider(provider);
     if (typeof key !== "string" || !key) throw credentialError("invalid_key", "API key is required");
-    const { authStorage } = await load();
+    const { authStorage, modelRegistry } = await load();
     reloadOrFail(authStorage);
     const current = authStorage.get(providerId);
     if (current?.type === "oauth") {
@@ -167,6 +202,9 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     }
     if (current && current.type !== "api_key") {
       throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    }
+    if (!current && !refreshRegistry(modelRegistry).has(providerId)) {
+      throw credentialError("unknown_provider", `provider ${providerId} is not registered by the configured pi installation`);
     }
     const env = current?.env ? { ...current.env } : undefined;
     authStorage.set(providerId, { type: "api_key", key, ...(env ? { env } : {}) });
@@ -189,5 +227,5 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return Object.freeze({ provider: providerId, removed: true });
   }
 
-  return Object.freeze({ load, listStoredCredentials, setApiKey, removeApiKey });
+  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey });
 }

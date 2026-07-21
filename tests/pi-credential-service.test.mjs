@@ -102,6 +102,17 @@ test("credential operations preserve unrelated credentials, provider env, concur
     oauth,
     untouched: { type: "api_key", key: "untouched-canary" },
   }), { mode: 0o600 });
+  writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: {
+    "custom-safe": {
+      baseUrl: "http://127.0.0.1:9/v1",
+      api: "openai-completions",
+      apiKey: "models-json-canary",
+      models: [{
+        id: "custom-model", name: "Custom Model", reasoning: false, input: ["text"],
+        contextWindow: 1000, maxTokens: 100, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      }],
+    },
+  } }));
 
   try {
     const service = createPiCredentialService({ config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: agentDir } });
@@ -112,18 +123,35 @@ test("credential operations preserve unrelated credentials, provider env, concur
     ]);
     assert.doesNotMatch(JSON.stringify(await service.listStoredCredentials()), /canary|private/);
 
+    const providers = await service.listProviders();
+    assert.deepEqual(providers.find((item) => item.provider === "alpha"), {
+      provider: "alpha", displayName: "alpha", registered: false,
+      credentialType: "api_key", source: "stored_api_key", configured: true,
+    });
+    assert.deepEqual(providers.find((item) => item.provider === "custom-safe"), {
+      provider: "custom-safe", displayName: "custom-safe", registered: true,
+      credentialType: null, source: "models_json", configured: true,
+    });
+    assert.equal(providers.find((item) => item.provider === "openai").displayName, "OpenAI");
+    assert.doesNotMatch(JSON.stringify(providers), /canary|private|REGION/);
+    await assert.rejects(service.setApiKey("not-registered", "must-not-write"), { code: "unknown_provider" });
+    await service.setApiKey("custom-safe", "custom-stored-canary");
+    await service.removeApiKey("custom-safe");
+
+    // Existing orphaned providers remain replaceable even though new unknown
+    // provider IDs are rejected.
     await service.setApiKey("alpha", "alpha-new-canary");
 
     const sdk = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/index.js");
     const concurrentStorage = sdk.AuthStorage.create(authPath);
     concurrentStorage.set("refreshed-oauth", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
-    await service.setApiKey("added", "added-canary");
+    await service.setApiKey("openai", "added-canary");
 
     let stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.deepEqual(stored.alpha, { type: "api_key", key: "alpha-new-canary", env: { REGION: "private" } });
     assert.deepEqual(stored.oauth, oauth);
     assert.equal(stored.untouched.key, "untouched-canary");
-    assert.equal(stored.added.key, "added-canary");
+    assert.equal(stored.openai.key, "added-canary");
     assert.equal(stored["refreshed-oauth"].refresh, "fresh-refresh");
     assert.equal(statSync(authPath).mode & 0o777, 0o600);
 
@@ -145,18 +173,18 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
   mkdirSync(agentDir);
   try {
     const service = createPiCredentialService({ config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: agentDir } });
-    await service.setApiKey("alpha", "create-canary");
+    await service.setApiKey("openai", "create-canary");
     const authPath = join(agentDir, "auth.json");
     assert.equal(statSync(authPath).mode & 0o777, 0o600);
-    writeFileSync(authPath, '{"alpha":');
+    writeFileSync(authPath, '{"openai":');
     await assert.rejects(
       service.listStoredCredentials(),
       (error) => error.code === "credential_service_unavailable"
         && error.message === "configured pi auth storage could not be loaded"
         && !error.message.includes("create-canary"),
     );
-    await assert.rejects(service.setApiKey("beta", "other-canary"), { code: "credential_service_unavailable" });
-    assert.equal(readFileSync(authPath, "utf8"), '{"alpha":');
+    await assert.rejects(service.setApiKey("openai", "other-canary"), { code: "credential_service_unavailable" });
+    assert.equal(readFileSync(authPath, "utf8"), '{"openai":');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

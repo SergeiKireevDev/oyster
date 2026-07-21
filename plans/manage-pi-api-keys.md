@@ -67,7 +67,7 @@ Run the build and broader checks in the final step.
   rely on `AuthStorage` for locked writes and `0600` permissions, preserve
   concurrent OAuth refreshes, and reject an API-key mutation that would
   overwrite or remove an OAuth entry.
-- [ ] Build provider choices from `ModelRegistry.getAll()` and display names
+- [x] Build provider choices from `ModelRegistry.getAll()` and display names
   from the same registry. Include stored-but-no-longer-registered providers in
   the read model, but reject adding a new unregistered provider.
 
