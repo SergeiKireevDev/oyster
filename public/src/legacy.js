@@ -1634,12 +1634,13 @@ async function toggleManagedHublotScope() {
   });
 }
 
-createManagedHublotEventController({
+const managedHublotEventController = createManagedHublotEventController({
   windowTarget: window,
   create: createManagedHublot,
   openCommandPalette: setupCommandPalette,
   toggleScope: toggleManagedHublotScope,
-}).attach();
+});
+managedHublotEventController.attach();
 
 // ------------------------------------------------------------ hublot sidebar
 
@@ -2169,5 +2170,6 @@ export function teardownLegacyRuntime() {
   filePickerEventController.detach();
   folderBrowserEventController.detach();
   fileExplorerEventController.detach();
+  managedHublotEventController.detach();
   connectionState.lost();
 }
