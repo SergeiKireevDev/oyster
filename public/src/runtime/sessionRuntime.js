@@ -29,6 +29,41 @@ export function createSessionRunnerState({ storage, updateAppSession, key = "pi_
   return { get currentRunner() { return currentRunner; }, get runners() { return runners; }, setRunner, setRunners };
 }
 
+/** Compatibility-shaped runner selection controller backed by session runtime state. */
+export function createCurrentRunnerController(options) {
+  const state = createSessionRunnerState(options);
+  return { get currentRunner() { return state.currentRunner; }, set: state.setRunner };
+}
+
+/** Compatibility-shaped runner list controller backed by session runtime state. */
+export function createRunnerListController({ updateAppSession }) {
+  let runners = [];
+  return {
+    get runners() { return runners; },
+    set(next) { runners = next ?? []; updateAppSession({ runners }); return runners; },
+  };
+}
+
+/** Group search results by durable session file for the session picker. */
+export function groupSessionSearchResults(results) {
+  const groups = new Map();
+  for (const hit of results) {
+    if (!groups.has(hit.sessionPath)) groups.set(hit.sessionPath, []);
+    groups.get(hit.sessionPath).push(hit);
+  }
+  return [...groups.entries()].map(([sessionPath, hits]) => ({ sessionPath, hits, first: hits[0] }));
+}
+
+/** Format a session timestamp for compact picker display. */
+export function formatSessionDate(iso, now = new Date()) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export function usageInfo(usage) {
   if (!usage) return null;
   const cost = usage.cost?.total ?? 0;
@@ -51,6 +86,9 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
     },
   };
 }
+
+/** Transitional name retained while consumers migrate to createSessionUiRuntime. */
+export const createSessionUiController = createSessionUiRuntime;
 
 export function parseSessionRoute(pathname) {
   const match = pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);

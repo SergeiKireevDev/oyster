@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionRunnerState, createSessionRuntime, createSessionUiRuntime } from "../public/src/runtime/sessionRuntime.js";
+import { createCurrentRunnerController, createRunnerListController, createSessionRunnerState, createSessionRuntime, createSessionUiController, createSessionUiRuntime, formatSessionDate, groupSessionSearchResults } from "../public/src/runtime/sessionRuntime.js";
 
 test("session UI runtime publishes workdir, busy state, and usage", () => {
   const app = []; const header = [];
@@ -9,6 +9,20 @@ test("session UI runtime publishes workdir, busy state, and usage", () => {
   assert.equal(runtime.workdir, "/work"); assert.equal(runtime.busy, true);
   assert.deepEqual(app, [{ workdir: "/work" }, { busy: true }]);
   assert.deepEqual(header, [{ usageInfo: "↑12 ↓3 tok · $0.02" }]);
+});
+
+test("session runtime owns compatibility session UI and picker helpers", () => {
+  const updates = [];
+  const values = new Map([["pi_runner", "saved"]]);
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+  const runner = createCurrentRunnerController({ storage, updateAppSession: (patch) => updates.push(patch) });
+  const runners = createRunnerListController({ updateAppSession: (patch) => updates.push(patch) });
+  assert.equal(runner.currentRunner, "saved");
+  runner.set("next"); runners.set(null);
+  assert.deepEqual(updates, [{ currentRunner: "next" }, { runners: [] }]);
+  assert.deepEqual(groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }])[0].hits.map((hit) => hit.id), [1, 2]);
+  assert.ok(formatSessionDate("2025-01-02T10:30:00Z", new Date("2025-01-02T12:00:00Z")));
+  assert.equal(createSessionUiController, createSessionUiRuntime);
 });
 
 test("session runner state persists selection and publishes runner lists", () => {
