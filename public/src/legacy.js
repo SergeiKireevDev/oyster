@@ -32,6 +32,7 @@ import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { listHublots, removeHublot } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
+import { browseFiles } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2030,12 +2031,12 @@ let fileExplorerState = {
 
 async function loadFileExplorer(path) {
   updateFileExplorer({ loading: true, mode: "list" });
-  const q = path ? `&path=${encodeURIComponent(path)}` : "";
-  const res = await fetch(`/browse?files=1${q}`);
-  const data = await res.json();
-  if (!res.ok) {
+  let data;
+  try {
+    data = await browseFiles(fetch, path);
+  } catch (error) {
     updateFileExplorer({ loading: false });
-    toast(data.error || "cannot open folder", "error");
+    toast(error.message, "error");
     if (path !== workdir) return loadFileExplorer(workdir);
     return;
   }
