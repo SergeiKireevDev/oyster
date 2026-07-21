@@ -112,6 +112,25 @@ export function createSessionStateRefresher({ rpc, applyState, onError = () => {
   };
 }
 
+export function applySessionState({ incoming, previousState, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks }) {
+  const sessionChanged = incoming?.sessionId !== previousState?.sessionId;
+  hooks.log(sessionChanged);
+  hooks.setState(incoming);
+  hooks.updateAppSession({ state: incoming, ...(sessionChanged ? { titleOverride: null } : {}) });
+  if (sessionChanged) {
+    if ((incoming?.messageCount ?? 0) > 0) emptySessionRunners.delete(currentRunner);
+    hooks.setTranscriptGateRequired(!emptySessionRunners.has(currentRunner) && (incoming?.messageCount ?? 0) > 0);
+    hooks.setRoutines(routinesNow.filter(routineVisible));
+    hooks.setRoutineScopeAll(tunnelScopeAll);
+    hooks.setRoutineCurrentSessionId(incoming?.sessionId ?? null);
+    hooks.loadHublots(); hooks.loadRoutines();
+    hooks.syncUrlToSession(incoming?.sessionId);
+  }
+  hooks.updateHeaderState({ stateInfo: `${incoming.model ? incoming.model.provider : "?"} · ${incoming.messageCount} msgs` + (incoming.pendingMessageCount ? ` · ${incoming.pendingMessageCount} queued` : "") });
+  hooks.setBusy(incoming.isStreaming || incoming.isCompacting);
+  return { state: incoming, sessionChanged };
+}
+
 /** Apply authoritative get_state responses through injectable session/store adapters. */
 export function createSessionStateApplier({ applySessionState, getState, setState, getCurrentRunner, getEmptySessionRunners, getRoutines, routineVisible, getTunnelScopeAll, hooks }) {
   return (incoming) => {

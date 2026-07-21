@@ -11,7 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, processEven
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
-import { createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, sessionFileQuery } from "./runtime/sessionRuntime.js";
+import { applySessionState, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, sessionFileQuery } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -38,7 +38,7 @@ import { renderMarkdown } from "./lib/markdownRenderer.js";
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
