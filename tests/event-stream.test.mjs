@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createReplayEventGate, createRunnerExitController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createPiErrorController, createReplayEventGate, createRunnerExitController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,12 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("Pi error controller reports only live failures", () => {
+  const calls = []; const error = createPiErrorController({ isReplaying: () => false, toast: (...args) => calls.push(args) });
+  assert.equal(error({ error: "spawn failed" }), true);
+  assert.deepEqual(calls, [["pi spawn error: spawn failed", "error"]]);
 });
 
 test("runner exit controller ignores replayed exits", () => {
