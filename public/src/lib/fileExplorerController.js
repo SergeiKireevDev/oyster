@@ -1,4 +1,4 @@
-export function createFileExplorerController({ browse, readFile, saveFile, update, updateTitle, getShowHidden, getWorkdir, getToken, setPath, setEditFile, toast }) {
+export function createFileExplorerController({ browse, readFile, saveFile, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });
     let data;
@@ -28,6 +28,13 @@ export function createFileExplorerController({ browse, readFile, saveFile, updat
     });
   }
 
+  async function show(path) {
+    resetState(path);
+    update({ mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: getToken(), editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…" });
+    openModal({ title: "📁 File explorer", content: "fileExplorer" });
+    await load(path);
+  }
+
   async function openEditor(path) {
     let data;
     try {
@@ -53,5 +60,5 @@ export function createFileExplorerController({ browse, readFile, saveFile, updat
     }
   }
 
-  return { load, openEditor, saveEditor };
+  return { load, show, openEditor, saveEditor };
 }

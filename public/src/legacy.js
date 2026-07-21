@@ -1708,43 +1708,19 @@ const fileExplorerController = createFileExplorerController({
   saveFile: (options) => saveFile(fetch, options),
   update: updateFileExplorer,
   updateTitle: (title) => updateModal({ title }),
+  openModal,
   getShowHidden: () => get(fileExplorer).showHidden,
   getWorkdir: () => workdir,
   getToken: () => token,
   setPath: (path) => { fileExplorerState.curPath = path; },
   setEditFile: (path, content) => { fileExplorerState.editPath = path; fileExplorerState.editContent = content; },
+  resetState: (path) => { fileExplorerState = { curPath: path, showHidden: true, editPath: "", editContent: "" }; },
   toast,
 });
 const loadFileExplorer = fileExplorerController.load;
 
-async function showFileExplorer() {
-  // always open in the current session's working directory
-  fileExplorerState = {
-    curPath: workdir,
-    showHidden: true,
-    editPath: "",
-    editContent: "",
-  };
-  updateFileExplorer({
-    mode: "list",
-    path: "",
-    home: "",
-    workdir: "",
-    parent: null,
-    dirs: [],
-    files: [],
-    showHidden: true,
-    loading: true,
-    token,
-    editPath: "",
-    editContent: "",
-    saving: false,
-    uploading: false,
-    uploadText: "⬆ Upload…",
-  });
-  openModal({ title: "📁 File explorer", content: "fileExplorer" });
-  await loadFileExplorer(fileExplorerState.curPath);
-}
+// Always open in the current session's working directory.
+const showFileExplorer = () => fileExplorerController.show(workdir);
 
 async function uploadExplorerFiles() {
   const dir = fileExplorerState.curPath;
