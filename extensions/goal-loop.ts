@@ -23,6 +23,8 @@ interface GoalState {
   maxRetries: number;
   currentStep: string;
   lastResult: string;
+  lastVerifyAt: number;
+  continuationsAfterVerify: number;
   lastCommit?: string;
 }
 
@@ -30,8 +32,6 @@ const DEFAULT_PLAN = "plans/migration-svelte.md";
 const VALIDATION_TIMEOUT = 30 * 60 * 1000;
 const OUTPUT_LIMIT = 8_000;
 const PLAN_CONTEXT_LIMIT = 12_000;
-const QUICK_AGENT_RESPONSE_MS = 2 * 60 * 1000;
-
 function blankState(): GoalState {
   return {
     active: false,
@@ -41,6 +41,8 @@ function blankState(): GoalState {
     maxRetries: 3,
     currentStep: "",
     lastResult: "",
+    lastVerifyAt: 0,
+    continuationsAfterVerify: 0,
   };
 }
 
@@ -111,8 +113,8 @@ function checkCompletedStep(ctx: ExtensionContext, planPath: string, step: strin
   writeFileSync(path, lines.join("\n"), "utf8");
 }
 
-function simpleContinuationPrompt(goal: GoalState) {
-  return `Goal loop remains active. Continue with the current unimplemented step${goal.currentStep ? `: ${goal.currentStep}` : ""}. If requirements are ambiguous, make the smallest reasonable assumption, implement exactly one step, then call goal_loop verify.`;
+function simpleContinuationPrompt() {
+  return "proceed";
 }
 
 function continuationPrompt(ctx: ExtensionContext, goal: GoalState) {
@@ -146,7 +148,6 @@ ${clipText(plan, PLAN_CONTEXT_LIMIT)}
 export default function goalLoop(pi: ExtensionAPI) {
   let state = blankState();
   let continuationQueued = false;
-  let lastContinuationAt = 0;
 
   function persist() {
     pi.appendEntry("goal-loop-state", state);
@@ -237,6 +238,8 @@ export default function goalLoop(pi: ExtensionAPI) {
         maxRetries: 3,
         currentStep: "inspect plan and choose one incomplete step",
         lastResult: "Started",
+        lastVerifyAt: 0,
+        continuationsAfterVerify: 0,
       };
       persist();
       updateStatus(ctx);
@@ -286,7 +289,13 @@ export default function goalLoop(pi: ExtensionAPI) {
       if (!step || !commitMessage) throw new Error("verify requires both step and commitMessage.");
       if (commitMessage.length > 200) throw new Error("commitMessage must be 200 characters or fewer.");
 
-      state = { ...state, currentStep: step, lastResult: "Validation running" };
+      state = {
+        ...state,
+        currentStep: step,
+        lastResult: "Validation running",
+        lastVerifyAt: Date.now(),
+        continuationsAfterVerify: 0,
+      };
       persist();
       updateStatus(ctx);
       const checked = await validation(ctx, onUpdate);
@@ -367,13 +376,16 @@ Implement exactly one plan step at a time. You MUST call goal_loop verify after 
     if (!state.active || continuationQueued) return;
     continuationQueued = true;
     try {
-      const now = Date.now();
-      const quickFollowup = lastContinuationAt > 0 && now - lastContinuationAt < QUICK_AGENT_RESPONSE_MS;
+      const firstContinuationAfterVerify = state.continuationsAfterVerify === 0;
+      state = {
+        ...state,
+        continuationsAfterVerify: state.continuationsAfterVerify + 1,
+      };
+      persist();
       await pi.sendUserMessage(
-        quickFollowup ? simpleContinuationPrompt(state) : continuationPrompt(ctx, state),
+        firstContinuationAfterVerify ? continuationPrompt(ctx, state) : simpleContinuationPrompt(),
         { deliverAs: "followUp" },
       );
-      lastContinuationAt = now;
     } finally {
       continuationQueued = false;
     }
