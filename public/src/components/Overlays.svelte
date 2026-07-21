@@ -16,7 +16,7 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelSessionPicker, saveExploredFile, toggleFileExplorerHidden, toggleFilePickerHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelSessionPicker, saveExploredFile, toggleFileExplorerHidden, toggleFilePickerHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { filePicker } from "../stores/filePicker.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -93,7 +93,7 @@
       {:else if $modalState.content === "filePicker"}
         <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={usePickedFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") usePickedFolder(); }}>📁 Use this folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={toggleFilePickerHidden} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleFilePickerHidden(); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
+        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-cancel")); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
         <span class="chip" role="button" tabindex="0" onclick={saveExploredFile} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveExploredFile(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
         <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>

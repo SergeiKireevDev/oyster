@@ -102,7 +102,3 @@ export function toggleFilePickerHidden() {
   return filePickerHandlers.toggleHidden?.();
 }
 
-export function cancelFilePicker() {
-  return filePickerHandlers.cancel?.();
-}
-

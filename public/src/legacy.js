@@ -1877,10 +1877,10 @@ setFilePickerHandlers({
     filePickerState.showHidden = !filePickerState.showHidden;
     updateFilePicker({ showHidden: filePickerState.showHidden });
   },
-  cancel: () => {
-    filePickerState.onCancel?.();
-    finishFilePicker();
-  },
+});
+window.addEventListener("pi-file-picker-cancel", () => {
+  filePickerState.onCancel?.();
+  finishFilePicker();
 });
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
