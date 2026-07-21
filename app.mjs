@@ -101,6 +101,23 @@ const { createRunnerManager } = await import(bust("runners.mjs"));
 export function init(state) {
   const { config } = state;
 
+  // ---- state migrations --------------------------------------------------
+  // The core (server.mjs) only changes on a real restart; state it created
+  // under an OLDER core version is patched here so fixes apply on hot reload
+  // too. Each migration must be idempotent.
+  if (state.eventBuffer) {
+    // pre-runner era: global server events were buffered but never replayed
+    // (per-runner replay lives in runner.buffer). Drop the dead buffer and
+    // swap in the non-buffering broadcast with dead-client guards.
+    delete state.eventBuffer;
+    state.broadcast = (line) => {
+      for (const res of state.sseClients) {
+        if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
+      }
+    };
+    console.log("[pi-ui] migrated state: removed dead eventBuffer, patched broadcast");
+  }
+
   const runners = createRunnerManager(state);
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,

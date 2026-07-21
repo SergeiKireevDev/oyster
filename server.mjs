@@ -64,30 +64,26 @@ const config = {
 // ---------------------------------------------------------------- shared state
 // Everything the hot-reloaded module needs to persist across reloads.
 
-const EVENT_BUFFER_MAX = 500;
-
 const state = {
   config,
   /** cwd for the pi process (changed via POST /workdir) */
   currentDir: config.PI_DIR,
-  /** @type {import("node:child_process").ChildProcess | null} */
-  pi: null,
   /** @type {Map<string, object>} live tunnels (id -> entry with proc handle) */
   tunnels: new Map(),
-  piStartCount: 0,
-  lastSpawnAt: 0,
-  /** recent stdout lines replayed to newly connected clients */
-  eventBuffer: [],
   /** @type {Set<http.ServerResponse>} open SSE responses */
   sseClients: new Set(),
   /** how many times app.mjs has been (re)loaded */
   reloadCount: 0,
   /** broadcast lives in the core so closures created by OLD versions of
-   *  app.mjs (e.g. pi stdout listeners) keep working after a reload. */
+   *  app.mjs (e.g. pi stdout listeners) keep working after a reload.
+   *  Global server events are NOT buffered/replayed: reconnecting clients
+   *  rebuild state from replay_done + the GET endpoints, and replaying
+   *  stale one-shot events (toasts etc.) would be wrong. Per-runner output
+   *  replay lives in runners.mjs (runner.buffer). */
   broadcast(line) {
-    state.eventBuffer.push(line);
-    if (state.eventBuffer.length > EVENT_BUFFER_MAX) state.eventBuffer.shift();
-    for (const res of state.sseClients) res.write(`data: ${line}\n\n`);
+    for (const res of state.sseClients) {
+      if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
+    }
   },
   serverEvent(obj) {
     state.broadcast(JSON.stringify({ ...obj, _server: true }));
