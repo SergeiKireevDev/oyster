@@ -425,6 +425,25 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     }
   });
 
+  if (mobile) {
+    test("mobile Return dismisses settings and the built-in file explorer", async ({ page }) => {
+      await login(page);
+
+      await page.click("#menuBtn");
+      await page.click('#menu button[data-action="settings"]');
+      await expect(page.locator("#mTitle")).toHaveText("Settings");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+
+      await page.click("#hublotChip");
+      await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+      await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
+      await expect(page.locator("#mTitle")).toHaveText("📁 File explorer");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+    });
+  }
+
   test("switching sessions restores each session's model", async ({ page }) => {
     await installSecondMockModel();
     await login(page);
