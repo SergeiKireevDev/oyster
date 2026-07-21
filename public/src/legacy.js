@@ -1496,12 +1496,13 @@ const createFolderBrowser = () => {
   return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
-createFolderBrowserEventController({ windowTarget: window,
+const folderBrowserEventController = createFolderBrowserEventController({ windowTarget: window,
   browse: loadFolderBrowser,
   create: createFolderBrowser,
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
   submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
-}).attach();
+});
+folderBrowserEventController.attach();
 
 // ------------------------------------------------------------ tunnels
 
@@ -2165,5 +2166,6 @@ export function teardownLegacyRuntime() {
   commandPaletteRunController.detach();
   checkpointTreeEventController.detach();
   filePickerEventController.detach();
+  folderBrowserEventController.detach();
   connectionState.lost();
 }
