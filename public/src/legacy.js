@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -561,8 +561,10 @@ async function openTreeSession(node) {
   }
 }
 
-window.addEventListener("pi-checkpoint-tree-open-session", (event) => openTreeSession(event.detail));
-window.addEventListener("pi-checkpoint-tree-rollback", (event) => rollbackToCheckpoint(event.detail.checkpoint, event.detail.target));
+registerCheckpointTreeEvents(window, {
+  openSession: openTreeSession,
+  rollback: rollbackToCheckpoint,
+});
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;

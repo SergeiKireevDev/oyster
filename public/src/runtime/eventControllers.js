@@ -8,6 +8,18 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   refreshRoutines();
 }
 
+/** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerCheckpointTreeEvents(target, { openSession, rollback }) {
+  const onOpen = (event) => openSession(event.detail);
+  const onRollback = (event) => rollback(event.detail.checkpoint, event.detail.target);
+  target.addEventListener("pi-checkpoint-tree-open-session", onOpen);
+  target.addEventListener("pi-checkpoint-tree-rollback", onRollback);
+  return () => {
+    target.removeEventListener("pi-checkpoint-tree-open-session", onOpen);
+    target.removeEventListener("pi-checkpoint-tree-rollback", onRollback);
+  };
+}
+
 export function handleRunnerPing(message, { currentRunners, setRunners, onRunnersChanged, refreshTree }) {
   if (!message.runners || JSON.stringify(message.runners) === JSON.stringify(currentRunners())) return false;
   setRunners(message.runners);
