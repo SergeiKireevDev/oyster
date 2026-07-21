@@ -97,9 +97,7 @@ Before the first extraction:
   baseline for measuring extraction; do not use line count alone as completion
   evidence.
 - [x] Add a runtime lifecycle regression test covering two complete cycles: `start → teardown → start → teardown`. Verify attachment ordering and that a fresh transport/event-stream runtime is used after restart.
-- [ ] Add a test or static guard that the composition root does not grow new
-   `document.getElementById`, `querySelector`, `classList`, or feature-specific
-   custom-event registrations.
+- [x] Add a test or static guard that the composition root does not grow new `document.getElementById`, `querySelector`, `classList`, or feature-specific custom-event registrations.
 - [ ] Inventory every `pi-*`/`pi:*` custom event with its sender, receiver, and
    replacement feature API. Keep this inventory in this plan while migration
    is active.
