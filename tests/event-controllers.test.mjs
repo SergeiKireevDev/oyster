@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents } from "../public/src/runtime/eventControllers.js";
+
+test("menu event adapter routes its action detail", () => {
+  let listener;
+  const target = {
+    addEventListener(_name, fn) { listener = fn; },
+    removeEventListener(_name, fn) { if (listener === fn) listener = null; },
+  };
+  const calls = [];
+  registerMenuEvents(target, { run: (detail) => calls.push(detail) });
+  listener({ detail: { action: "settings" } });
+  assert.deepEqual(calls, [{ action: "settings" }]);
+});
 
 test("command palette event adapter routes its selected index", () => {
   let listener;
