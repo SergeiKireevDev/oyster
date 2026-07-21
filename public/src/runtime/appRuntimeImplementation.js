@@ -395,6 +395,7 @@ let afterTranscript = null;
 
 function setRunner(id) {
   currentRunner = runnerState.setRunner(id);
+  sessionRuntime?.setCurrentSession?.(id);
 }
 
 function setRunnersNow(runners) {

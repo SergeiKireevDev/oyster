@@ -7,4 +7,6 @@ test("session feature exposes its runtime operations", () => {
   const feature = createSessionFeature({ createRuntime: () => runtime, dependencies: {} });
   assert.equal(feature.openSession(), "open");
   assert.equal(feature.getCurrentSession(), "current");
+  feature.setCurrentSession("fallback");
+  assert.equal(feature.getCurrentSession(), "current");
 });

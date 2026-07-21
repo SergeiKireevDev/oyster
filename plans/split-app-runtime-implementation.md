@@ -294,7 +294,7 @@ lines. Complete the remaining migration in small verified commits:
   to layout; hublot/routine/settings controller blocks belong to their named
   feature directories. The remaining direct browser references are platform or
   layout adapters and must not grow.
-- [ ] Move session-owned runner, route, picker, and hydration wiring out of the
+- [x] Move session-owned runner, route, picker, and hydration wiring out of the
   root into `features/sessions/`, leaving only injected interfaces at the
   composition boundary.
 - [ ] Move transcript controller assembly and transcript DOM adapters behind
