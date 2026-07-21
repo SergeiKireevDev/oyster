@@ -41,7 +41,7 @@ import { createCommandGuard } from "./lib/commandActions.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
-import { listRoutines, runRoutine } from "./lib/routineActions.js";
+import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2059,8 +2059,8 @@ function syncRoutinesStore({ loading = false } = {}) {
   routinesLoading.set(loading);
 }
 
-function routineVisible(r) {
-  return tunnelScopeAll || !r.sessionId || r.sessionId === state?.sessionId;
+function routineVisible(routine) {
+  return isRoutineVisible(routine, tunnelScopeAll, state?.sessionId);
 }
 
 async function loadRoutines() {

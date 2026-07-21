@@ -1,3 +1,7 @@
+export function routineVisible(routine, scopeAll, sessionId) {
+  return scopeAll || !routine.sessionId || routine.sessionId === sessionId;
+}
+
 export async function listRoutines(fetchImpl) {
   const res = await fetchImpl("/routines");
   const data = await res.json();
