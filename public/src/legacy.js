@@ -32,7 +32,7 @@ import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { listHublots } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
-import { browseFiles, readFile, saveFile } from "./lib/fileBrowserActions.js";
+import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2118,12 +2118,9 @@ async function uploadExplorerFiles() {
           const isLast = end >= f.size;
           let r, d;
           try {
-            r = await fetch(
-              `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
-                `&offset=${offset}&last=${isLast ? 1 : 0}`,
-              { method: "POST", body: f.slice(offset, end) }
-            );
-            d = await r.json().catch(() => ({}));
+            ({ res: r, data: d } = await uploadFileChunk(fetch, {
+              dir, name: f.name, offset, last: isLast, body: f.slice(offset, end),
+            }));
           } catch {
             // network drop / tunnel hiccup — retry same chunk with backoff
             if (++attempts > MAX_RETRIES) throw new Error(`connection lost (gave up after ${MAX_RETRIES} retries)`);

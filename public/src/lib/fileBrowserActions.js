@@ -13,6 +13,13 @@ export async function readFile(fetchImpl, path) {
   return data;
 }
 
+export async function uploadFileChunk(fetchImpl, { dir, name, offset, last, body }) {
+  const url = `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(name)}` +
+    `&offset=${offset}&last=${last ? 1 : 0}`;
+  const res = await fetchImpl(url, { method: "POST", body });
+  return { res, data: await res.json().catch(() => ({})) };
+}
+
 export function downloadFileUrl(token, path) {
   return `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
 }
