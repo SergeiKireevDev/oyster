@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createCurrentRunnerController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -31,6 +31,17 @@ test("session actions persist the current runner", () => {
 
 test("session actions use session-root-relative file queries", () => {
   assert.equal(sessionFileQuery("/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), "path=--workspace--%2Fa.jsonl");
+});
+
+test("current runner controller persists and publishes selection", () => {
+  const values = new Map([["pi_runner", "saved"]]);
+  const patches = [];
+  const controller = createCurrentRunnerController({ storage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }, updateAppSession: (patch) => patches.push(patch) });
+  assert.equal(controller.currentRunner, "saved");
+  controller.set("next");
+  controller.set(null);
+  assert.deepEqual(patches, [{ currentRunner: "next" }, { currentRunner: null }]);
+  assert.equal(values.has("pi_runner"), false);
 });
 
 test("session actions select adjacent active runners in the current workdir", () => {

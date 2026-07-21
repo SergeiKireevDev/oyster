@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createCurrentRunnerController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -599,16 +599,15 @@ function applyState(s) {
 // is attached to exactly one at a time. Other runners keep working in the
 // background.
 
-let currentRunner = readPersistedRunner(localStorage);
+const currentRunnerController = createCurrentRunnerController({ storage: localStorage, updateAppSession });
+let currentRunner = currentRunnerController.currentRunner;
 let runnersNow = []; // latest known runner list (for session indicators)
 updateAppSession({ currentRunner, runners: runnersNow });
 /** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
 let afterTranscript = null;
 
 function setRunner(id) {
-  currentRunner = id || null;
-  updateAppSession({ currentRunner });
-  persistRunner(localStorage, id);
+  currentRunner = currentRunnerController.set(id);
 }
 
 function setRunnersNow(runners) {

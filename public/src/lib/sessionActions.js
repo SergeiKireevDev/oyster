@@ -17,6 +17,20 @@ export function persistRunner(storage, id, key = "pi_runner") {
   else storage.removeItem(key);
 }
 
+/** Keep the selected runner persisted and mirrored into the UI session store. */
+export function createCurrentRunnerController({ storage, updateAppSession, key = "pi_runner" }) {
+  let currentRunner = readPersistedRunner(storage, key);
+  return {
+    get currentRunner() { return currentRunner; },
+    set(id) {
+      currentRunner = id || null;
+      persistRunner(storage, currentRunner, key);
+      updateAppSession({ currentRunner });
+      return currentRunner;
+    },
+  };
+}
+
 export function sessionFileQuery(sessionPath) {
   const raw = String(sessionPath ?? "");
   const marker = "/.pi/agent/sessions/";
