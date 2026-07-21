@@ -83,6 +83,7 @@ import { createRouteTable } from "./http/createRouteTable.mjs";
 import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
 import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
 import { createRunnerRoutes } from "./http/routes/runnerRoutes.mjs";
+import { createSessionRoutes } from "./http/routes/sessionRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -204,118 +205,22 @@ export function init(state) {
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
     sessionFileParam, autoTitleFork,
   });
+  const sessionRoutes = createSessionRoutes({
+    state,
+    requestContext,
+    sessions: {
+      root: SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions,
+      listSessionFolders, sessionEntries, sessionMessages, findSessionById,
+      readSessionHeaderInfo, sessionFileParam, sessionFileFromSearch,
+    },
+    runners: { stopRunner, runnersChanged },
+    resources: { closeTunnel, releaseSessionRoutines },
+  });
 
   // ---------------------------------------------------------------- routes (auth required)
 
   const routes = {
     // -------------------------------------------------- sessions
-
-    "GET /sessions": (req, res, url) => {
-      // ?path= lists another sessions folder (must live under the sessions root);
-      // ?dir= lists the sessions of a working directory (e.g. the current session's)
-      let dir;
-      if (url.searchParams.get("path")) {
-        dir = resolve(String(url.searchParams.get("path")));
-        if (!dir.startsWith(SESSIONS_ROOT)) {
-          json(res, 400, { error: "folder must be under the sessions root" });
-          return;
-        }
-      } else if (url.searchParams.get("dir")) {
-        dir = sessionDirFor(resolve(String(url.searchParams.get("dir"))));
-      }
-      // annotate each session with its live runner (if any) so the picker
-      // can show running/busy indicators
-      const live = [...state.runners.values()];
-      const sessions = listSessions(dir ?? sessionDirFor(state.currentDir)).map((s) => {
-        const r = live.find((x) => x.sessionFile === s.path);
-        return { ...s, runnerId: r?.id ?? null, alive: !!r?.proc, busy: !!r?.busy };
-      });
-      json(res, 200, { sessions });
-    },
-
-    "DELETE /session": (req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
-      if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
-        return;
-      }
-      try {
-        // also retire any runner still attached to this session
-        for (const r of [...state.runners.values()]) {
-          if (r.sessionFile === target) {
-            stopRunner(r);
-            state.runners.delete(r.id);
-            if (state.defaultRunnerId === r.id) state.defaultRunnerId = null;
-          }
-        }
-        runnersChanged();
-        // close any hublots bound to this session (kills service,
-        // background agent and cloudflared — see closeTunnel)
-        let sessionId = null;
-        try { sessionId = readSessionHeaderInfo(target)?.id ?? null; } catch {}
-        const closedHublots = [];
-        if (sessionId) {
-          for (const t of [...(state.tunnels?.values() ?? [])]) {
-            if (t.sessionId === sessionId) {
-              closeTunnel(state, t.id);
-              closedHublots.push(t.port);
-              console.log(`[pi-ui] closed hublot :${t.port} (session ${sessionId} deleted)`);
-            }
-          }
-        }
-        // release (and stop) any routines bound to this session
-        const releasedRoutines = sessionId ? releaseSessionRoutines(state, sessionId) : [];
-        unlinkSync(target);
-        json(res, 200, { deleted: target, closedHublots, releasedRoutines });
-      } catch (e) {
-        json(res, 500, { error: `failed to delete session: ${e.message}` });
-      }
-    },
-
-
-    "GET /session-by-id": (req, res, url) => {
-      const id = String(url.searchParams.get("id") ?? "").trim();
-      if (!id) { json(res, 400, { error: "id required" }); return; }
-      const path = findSessionById(id);
-      if (!path) { json(res, 404, { error: `no session with id ${id}` }); return; }
-      try {
-        json(res, 200, { session: { path, ...summarizeSessionFile(path) } });
-      } catch (e) {
-        json(res, 500, { error: `failed to read session: ${e.message}` });
-      }
-    },
-
-    "GET /session-entries": (req, res, url) => {
-      const target = sessionFileFromSearch(url);
-      if (!target) {
-        json(res, 404, { error: `session file not found` });
-        return;
-      }
-      try {
-        json(res, 200, sessionEntries(target));
-      } catch (e) {
-        json(res, 500, { error: `failed to parse session: ${e.message}` });
-      }
-    },
-
-    "GET /session-messages": (req, res, url) => {
-      const target = sessionFileFromSearch(url);
-      if (!target) {
-        json(res, 404, { error: `session file not found` });
-        return;
-      }
-      try {
-        json(res, 200, sessionMessages(target));
-      } catch (e) {
-        json(res, 500, { error: `failed to parse session: ${e.message}` });
-      }
-    },
-
-    "GET /session-folders": (req, res, url) => {
-      // ?dir= reports "current" relative to that working directory
-      const forDir = url.searchParams.get("dir") ? resolve(String(url.searchParams.get("dir"))) : state.currentDir;
-      json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(forDir) });
-    },
 
     "GET /search": (req, res, url) => {
       const q = String(url.searchParams.get("q") ?? "").trim();
@@ -735,7 +640,7 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch

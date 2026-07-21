@@ -93,7 +93,7 @@ SSE state remains state-owned.
 
 ## 5. Extract Session Routes
 
-- [ ] Move session listing, deletion, lookup-by-ID, entries, messages, and
+- [x] Move session listing, deletion, lookup-by-ID, entries, messages, and
   folder-list routes into `http/routes/sessionRoutes.mjs`. Preserve workdir
   scoping, session-root traversal rules, and response shapes with existing or
   new API tests.
