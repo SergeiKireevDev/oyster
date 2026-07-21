@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCheckpoint } from "../public/src/lib/checkpointActions.js";
-import { runRoutine } from "../public/src/lib/routineActions.js";
+import { listRoutines, runRoutine } from "../public/src/lib/routineActions.js";
 import { removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
 
@@ -15,6 +15,11 @@ test("API actions normalize successful checkpoint and routine responses", async 
   await runRoutine(fetchImpl, { name: "job", action: "start", sessionId: "session" });
   assert.match(calls[0][0], /runner=runner%20one/);
   assert.deepEqual(JSON.parse(calls[1][1].body), { name: "job", action: "start", sessionId: "session" });
+});
+
+test("routine actions normalize list responses", async () => {
+  const routines = await listRoutines(async () => ({ ok: true, status: 200, json: async () => ({ routines: [{ name: "job" }] }) }));
+  assert.deepEqual(routines, [{ name: "job" }]);
 });
 
 test("file browser actions preserve save request contracts", async () => {
