@@ -34,7 +34,7 @@ test("API Keys modal form keeps submitted keys local and clears them on every ex
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_SAVE_API_KEY_ACTION, \{ provider: selectedProvider, key \}\)/);
   assert.match(modal, /finally \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearKey\(\)/);
-  assert.match(modal, /onDestroy\(clearKey\)/);
+  assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearKey\(\)[\s\S]*?CREDENTIALS_CLOSE_ACTION/);
   assert.doesNotMatch(modal, /bind:value=\{key/);
 });
 

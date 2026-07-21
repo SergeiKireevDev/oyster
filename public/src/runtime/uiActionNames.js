@@ -2,8 +2,13 @@ export const MENU_ACTION = "menu.run";
 export const COMMAND_PALETTE_RUN_ACTION = "commandPalette.run";
 export const ANALYTICS_LOAD_ACTION = "analytics.load";
 export const CREDENTIALS_OPEN_ACTION = "credentials.open";
+export const CREDENTIALS_CLOSE_ACTION = "credentials.close";
 export const CREDENTIALS_SAVE_API_KEY_ACTION = "credentials.saveApiKey";
 export const CREDENTIALS_REMOVE_API_KEY_ACTION = "credentials.removeApiKey";
+export const CREDENTIALS_START_OAUTH_ACTION = "credentials.startOAuth";
+export const CREDENTIALS_RESPOND_OAUTH_ACTION = "credentials.respondOAuth";
+export const CREDENTIALS_CANCEL_OAUTH_ACTION = "credentials.cancelOAuth";
+export const CREDENTIALS_LOGOUT_OAUTH_ACTION = "credentials.logoutOAuth";
 
 export const FILE_PICKER_BROWSE_ACTION = "filePicker.browse";
 export const FILE_PICKER_CHOOSE_ACTION = "filePicker.choose";

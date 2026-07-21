@@ -1,4 +1,8 @@
-import { CREDENTIALS_OPEN_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../../runtime/uiActionNames.js";
+import {
+  CREDENTIALS_CANCEL_OAUTH_ACTION, CREDENTIALS_CLOSE_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION,
+  CREDENTIALS_OPEN_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_RESPOND_OAUTH_ACTION,
+  CREDENTIALS_SAVE_API_KEY_ACTION, CREDENTIALS_START_OAUTH_ACTION,
+} from "../../runtime/uiActionNames.js";
 import { createCredentialsController } from "./createCredentialsController.js";
 
 /** Owns the mount-scoped API-key workflow independently of settings. */
@@ -18,21 +22,31 @@ export function createCredentialsAssembly({
 
   const open = () => {
     if (tornDown) return;
+    controller.activate();
     openModal({ title: "Credentials", wide: true, content: "credentials" });
     return controller.load();
   };
-  const detachOpenAction = uiActions.register(CREDENTIALS_OPEN_ACTION, open);
-  const detachSaveAction = uiActions.register(CREDENTIALS_SAVE_API_KEY_ACTION, controller.save);
-  const detachRemoveAction = uiActions.register(CREDENTIALS_REMOVE_API_KEY_ACTION, controller.remove);
+  const registrations = [
+    [CREDENTIALS_OPEN_ACTION, open],
+    [CREDENTIALS_CLOSE_ACTION, controller.deactivate],
+    [CREDENTIALS_SAVE_API_KEY_ACTION, controller.save],
+    [CREDENTIALS_REMOVE_API_KEY_ACTION, controller.remove],
+    [CREDENTIALS_START_OAUTH_ACTION, controller.startOAuth],
+    [CREDENTIALS_RESPOND_OAUTH_ACTION, controller.respondOAuth],
+    [CREDENTIALS_CANCEL_OAUTH_ACTION, controller.cancelOAuth],
+    [CREDENTIALS_LOGOUT_OAUTH_ACTION, controller.logoutOAuth],
+  ].map(([name, handler]) => uiActions.register(name, handler));
 
   return Object.freeze({
-    operations: Object.freeze({ open, load: controller.load, save: controller.save, remove: controller.remove }),
+    operations: Object.freeze({
+      open, load: controller.load, save: controller.save, remove: controller.remove,
+      startOAuth: controller.startOAuth, respondOAuth: controller.respondOAuth,
+      cancelOAuth: controller.cancelOAuth, logoutOAuth: controller.logoutOAuth,
+    }),
     teardown() {
       if (tornDown) return;
       tornDown = true;
-      detachRemoveAction();
-      detachSaveAction();
-      detachOpenAction();
+      for (const detach of registrations.reverse()) detach();
       controller.teardown();
     },
   });

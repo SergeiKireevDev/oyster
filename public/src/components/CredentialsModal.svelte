@@ -3,7 +3,7 @@
   import { credentialsState } from "../stores/credentials.js";
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../runtime/uiActionNames.js";
+  import { CREDENTIALS_CLOSE_ACTION, CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_SAVE_API_KEY_ACTION } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   let selectedProvider = "";
@@ -52,10 +52,14 @@
 
   function close() {
     clearKey();
+    uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
     closeModalState();
   }
 
-  onDestroy(clearKey);
+  onDestroy(() => {
+    clearKey();
+    uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
+  });
 </script>
 
 <section class="api-keys-modal" aria-label="Pi credentials">

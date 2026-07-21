@@ -24,7 +24,8 @@ test("credentials assembly owns API-key action registration and teardown", () =>
     uiActions,
     openModal: (state) => opened.push(state),
     createController: () => ({
-      load() { loads += 1; }, save() { saves += 1; }, remove() { removals += 1; }, teardown() {},
+      activate() {}, deactivate() {}, load() { loads += 1; }, save() { saves += 1; }, remove() { removals += 1; },
+      startOAuth() {}, respondOAuth() {}, cancelOAuth() {}, logoutOAuth() {}, teardown() {},
     }),
   });
 

@@ -98,6 +98,66 @@ test("API-key controller reports safe errors, cancellation, and partial restart 
   assert.doesNotMatch(JSON.stringify(partial.states), /partial-canary-secret/);
 });
 
+test("credentials controller starts, polls, responds to, cancels, and re-authenticates OAuth flows", async () => {
+  const flowId = "a".repeat(64);
+  const requestId = "b".repeat(64);
+  const providers = [{ provider: "mock", displayName: "Mock", credentialType: "oauth", oauthCapable: true }];
+  const calls = [];
+  const states = [];
+  const confirmations = [];
+  const timers = [];
+  const responses = [
+    response(200, { providers }),
+    response(202, { flow: { flowId, provider: "mock", status: "pending", requests: [] } }),
+    response(200, { flow: { flowId, provider: "mock", status: "pending", requests: [{ requestId, kind: "prompt", message: "Domain" }] } }),
+    response(202, { flow: { flowId, provider: "mock", status: "pending", requests: [] } }),
+    response(200, { flow: { flowId, provider: "mock", status: "cancelled" } }),
+  ];
+  const controller = createCredentialsController({
+    async fetchImpl(path, options = {}) { calls.push({ path, options }); return responses.shift(); },
+    async confirm(title, message) { confirmations.push({ title, message }); return true; },
+    setState: (patch) => states.push(patch),
+    setTimer: (callback, delay) => { const timer = { callback, delay }; timers.push(timer); return timer; },
+    clearTimer: () => {},
+  });
+  controller.activate();
+  await controller.load();
+  assert.equal((await controller.startOAuth("mock")).ok, true);
+  assert.match(confirmations[0].title, /Re-authenticate Mock/);
+  assert.deepEqual(JSON.parse(calls[1].options.body), { provider: "mock", replace: true });
+  assert.ok(timers.every((timer) => timer.delay >= 500 && timer.delay <= 3000));
+
+  await controller.poll();
+  assert.equal(states.at(-1).flow.requests[0].requestId, requestId);
+  assert.equal((await controller.respondOAuth({ requestId, value: "response-canary" })).ok, true);
+  assert.deepEqual(JSON.parse(calls[3].options.body), { flowId, requestId, value: "response-canary" });
+  assert.doesNotMatch(JSON.stringify(states), /response-canary/);
+  assert.equal((await controller.cancelOAuth()).ok, true);
+  assert.deepEqual(JSON.parse(calls[4].options.body), { flowId });
+  controller.teardown();
+});
+
+test("credentials controller logs out locally with fallback and partial restart feedback", async () => {
+  const providers = [{ provider: "mock", displayName: "Mock", credentialType: "oauth", source: "stored_oauth" }];
+  const item = harness([
+    response(200, { providers }),
+    response(503, {
+      error: "OAuth credential removed but restart incomplete",
+      credential: { provider: "mock", removed: true }, upstreamRevoked: false, source: "environment",
+      restart: { status: "partial", runnerIds: ["r1"], failedRunnerIds: ["r1"] },
+    }),
+    response(200, { providers: [{ ...providers[0], credentialType: null, source: "environment" }] }),
+  ], [true]);
+  await item.controller.load();
+  const result = await item.controller.logoutOAuth("mock");
+  assert.equal(result.removed, true);
+  assert.equal(result.source, "environment");
+  assert.match(item.confirms[0].title, /Sign out Mock from pi/);
+  assert.match(item.confirms[0].message, /does not revoke access at the provider/);
+  assert.match(item.toasts.at(-1).message, /restart was incomplete/);
+  assert.deepEqual(JSON.parse(item.calls[1].options.body), { provider: "mock", restart: true });
+});
+
 test("API-key controller teardown aborts requests and clears safe state", async () => {
   let observedSignal;
   const states = [];
@@ -113,5 +173,5 @@ test("API-key controller teardown aborts requests and clears safe state", async 
   controller.teardown();
   await loading;
   assert.equal(observedSignal.aborted, true);
-  assert.deepEqual(states.at(-1), { providers: [], loading: false, error: "", lastRestart: null });
+  assert.deepEqual(states.at(-1), { providers: [], flow: null, loading: false, error: "", lastRestart: null });
 });

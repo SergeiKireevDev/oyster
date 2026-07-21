@@ -2,13 +2,24 @@ function providerName(provider) {
   return provider?.displayName || provider?.provider || "provider";
 }
 
-export function createCredentialsController({ fetchImpl, confirm, toast, setState } = {}) {
+export function createCredentialsController({
+  fetchImpl,
+  confirm,
+  toast,
+  setState,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+} = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl is required");
   if (typeof confirm !== "function") throw new TypeError("confirm is required");
   if (typeof setState !== "function") throw new TypeError("setState is required");
   const notify = typeof toast === "function" ? toast : () => {};
   let providers = [];
+  let flow = null;
   let activeRequest = null;
+  let pollTimer = null;
+  let pollDelay = 500;
+  let visible = false;
   let tornDown = false;
 
   function beginRequest() {
@@ -31,8 +42,42 @@ export function createCredentialsController({ fetchImpl, confirm, toast, setStat
     return data;
   }
 
+  const jsonPost = (path, body) => jsonRequest(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
   function publish(patch) {
     if (!tornDown) setState(patch);
+  }
+
+  function stopPolling() {
+    if (pollTimer !== null) clearTimer(pollTimer);
+    pollTimer = null;
+  }
+
+  function schedulePoll() {
+    stopPolling();
+    if (!visible || tornDown || flow?.status !== "pending") return;
+    const delay = pollDelay;
+    pollDelay = Math.min(Math.round(pollDelay * 1.5), 3000);
+    pollTimer = setTimer(() => {
+      pollTimer = null;
+      void poll();
+    }, delay);
+    pollTimer?.unref?.();
+  }
+
+  function applyFlow(next) {
+    flow = next ?? null;
+    publish({ flow, error: "" });
+    if (flow?.status === "pending") {
+      schedulePoll();
+      return;
+    }
+    stopPolling();
+    if (flow?.restart) publish({ lastRestart: flow.restart });
   }
 
   async function load({ quiet = false } = {}) {
@@ -46,7 +91,7 @@ export function createCredentialsController({ fetchImpl, confirm, toast, setStat
     } catch (error) {
       if (error.name === "AbortError" || tornDown) return providers;
       publish({ loading: false, error: error.message });
-      if (!quiet) notify("Could not load API key status", "error");
+      if (!quiet) notify("Could not load credential status", "error");
       return providers;
     }
   }
@@ -116,14 +161,154 @@ export function createCredentialsController({ fetchImpl, confirm, toast, setStat
     }
   }
 
-  function teardown() {
-    if (tornDown) return;
-    tornDown = true;
-    activeRequest?.abort();
-    activeRequest = null;
-    providers = [];
-    setState({ providers: [], loading: false, error: "", lastRestart: null });
+  async function startOAuth(provider) {
+    if (tornDown) return { ok: false };
+    const row = providers.find((item) => item.provider === provider);
+    const name = providerName(row ?? { provider });
+    const replacing = Boolean(row?.credentialType);
+    const accepted = await confirm(
+      row?.credentialType === "oauth" ? `Re-authenticate ${name}?` : `Sign in to ${name}?`,
+      row?.credentialType === "api_key"
+        ? "A successful sign-in replaces the stored API key and restarts every active pi process."
+        : `${replacing ? "Replace the stored OAuth credential" : "Store OAuth credentials in pi"} and restart every active pi process after sign-in?`,
+    );
+    if (!accepted || tornDown) return { ok: false, cancelled: true };
+    publish({ loading: true, error: "" });
+    try {
+      const data = await jsonPost("/oauth/start", { provider, replace: replacing });
+      pollDelay = 500;
+      applyFlow(data.flow);
+      publish({ loading: false });
+      return { ok: true, flow: data.flow };
+    } catch (error) {
+      if (error.name === "AbortError" || tornDown) return { ok: false };
+      publish({ loading: false, error: error.message });
+      notify("OAuth sign-in could not start", "error");
+      return { ok: false };
+    }
   }
 
-  return Object.freeze({ load, save, remove, teardown });
+  async function poll() {
+    if (!visible || tornDown || flow?.status !== "pending") return flow;
+    try {
+      const data = await jsonPost("/oauth/status", { flowId: flow.flowId });
+      applyFlow(data.flow);
+      if (data.flow?.status === "succeeded") {
+        notify(data.flow.restart?.status === "restarted" ? "Signed in; pi restarted" : "Signed in; check pi restart status");
+        await load({ quiet: true });
+      } else if (data.flow?.status === "failed") {
+        notify("OAuth sign-in failed", "error");
+      }
+      return data.flow;
+    } catch (error) {
+      if (error.name === "AbortError" || tornDown || !visible) return flow;
+      publish({ error: error.message });
+      schedulePoll();
+      return flow;
+    }
+  }
+
+  async function respondOAuth({ requestId, value } = {}) {
+    if (!flow?.flowId || tornDown) return { ok: false };
+    try {
+      const data = await jsonPost("/oauth/respond", { flowId: flow.flowId, requestId, value });
+      pollDelay = 500;
+      applyFlow(data.flow);
+      return { ok: true, flow: data.flow };
+    } catch (error) {
+      if (error.name === "AbortError" || tornDown) return { ok: false };
+      publish({ error: error.message });
+      return { ok: false };
+    }
+  }
+
+  async function cancelOAuth() {
+    if (!flow?.flowId || tornDown) return { ok: false };
+    stopPolling();
+    try {
+      const data = await jsonPost("/oauth/cancel", { flowId: flow.flowId });
+      applyFlow(data.flow);
+      return { ok: true, flow: data.flow };
+    } catch (error) {
+      if (error.name === "AbortError" || tornDown) return { ok: false };
+      publish({ error: error.message });
+      return { ok: false };
+    }
+  }
+
+  async function logoutOAuth(provider) {
+    if (tornDown) return { ok: false };
+    const row = providers.find((item) => item.provider === provider);
+    const name = providerName(row ?? { provider });
+    const accepted = await confirm(
+      `Sign out ${name} from pi?`,
+      "Remove the OAuth credential from pi and restart every active pi process? This does not revoke access at the provider.",
+    );
+    if (!accepted || tornDown) return { ok: false, cancelled: true };
+    publish({ loading: true, error: "" });
+    try {
+      const data = await jsonRequest("/oauth", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider, restart: true }),
+      });
+      publish({ loading: false, lastRestart: data.restart ?? null });
+      notify("Signed out from pi; upstream access was not revoked");
+      if (data.source && data.source !== "not_configured") notify(`pi may still authenticate ${name} using ${data.source === "models_json" ? "models.json" : data.source}`);
+      await load({ quiet: true });
+      return { ok: true, restart: data.restart ?? null, source: data.source };
+    } catch (error) {
+      if (error.name === "AbortError" || tornDown) return { ok: false };
+      const removed = Boolean(error.details?.credential);
+      publish({ loading: false, error: error.message, lastRestart: error.details?.restart ?? null });
+      notify(removed ? "Signed out from pi, but restart was incomplete" : "OAuth credential was not removed", "error");
+      if (removed) await load({ quiet: true });
+      return { ok: false, removed, restart: error.details?.restart ?? null, source: error.details?.source };
+    }
+  }
+
+  function cancelAbandonedFlow() {
+    if (flow?.status !== "pending") return;
+    const abandoned = flow.flowId;
+    flow = null;
+    void fetchImpl("/oauth/cancel", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ flowId: abandoned }),
+    }).catch(() => {});
+  }
+
+  function activate() {
+    if (tornDown) return;
+    visible = true;
+    if (flow?.status === "pending") schedulePoll();
+  }
+
+  function deactivate() {
+    if (tornDown) return;
+    visible = false;
+    stopPolling();
+    activeRequest?.abort();
+    activeRequest = null;
+    cancelAbandonedFlow();
+    publish({ flow: null });
+  }
+
+  function teardown() {
+    if (tornDown) return;
+    visible = false;
+    stopPolling();
+    activeRequest?.abort();
+    activeRequest = null;
+    cancelAbandonedFlow();
+    tornDown = true;
+    providers = [];
+    setState({ providers: [], flow: null, loading: false, error: "", lastRestart: null });
+  }
+
+  return Object.freeze({
+    load, save, remove,
+    startOAuth, poll, respondOAuth, cancelOAuth, logoutOAuth,
+    activate, deactivate, teardown,
+  });
 }

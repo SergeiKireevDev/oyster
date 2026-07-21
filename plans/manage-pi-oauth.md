@@ -172,7 +172,7 @@ responses other than the intentional transient callback snapshot, or events.
   evolve the mount-scoped credentials assembly, action names, stores, and
   controller without moving credential logic into settings or component-local
   fetches. Preserve clean registration/teardown and existing API-key actions.
-- [ ] Extend the controller with start, poll, respond, cancel, re-authenticate,
+- [x] Extend the controller with start, poll, respond, cancel, re-authenticate,
   and logout operations. Poll only while the modal is mounted and the flow is
   active; use abortable requests, bounded backoff, one outstanding poll, and
   teardown cancellation. Never place flow data in browser storage or

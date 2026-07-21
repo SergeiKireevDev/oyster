@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 
 export const emptyCredentialsState = Object.freeze({
   providers: [],
+  flow: null,
   loading: false,
   error: "",
   lastRestart: null,
