@@ -30,7 +30,7 @@ async function createFixture() {
     { type: "session", id: "catalog-fork", cwd, timestamp: "2026-01-02T00:00:00Z", parentSession: rootPath },
     { type: "message", id: "fu1", parentId: null, timestamp: "2026-01-02T00:00:01Z", message: { role: "user", content: "fork prompt" } },
   ]);
-  return { catalog, cwd, rootId: "catalog-root", rootPath, forkPath };
+  return { catalog, cwd, rootId: "catalog-root", rootIdentity: rootPath, rootPath, forkPath };
 }
 
 runSessionCatalogContract("JSONL", createFixture);

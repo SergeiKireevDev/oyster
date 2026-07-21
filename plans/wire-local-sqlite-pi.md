@@ -89,7 +89,7 @@ UI and runner manager, while existing JSONL session links still open.
   the current parser into a JSONL catalog without changing its behavior or LRU
   guarantees. Add shared contract fixtures for summaries, headers, entries,
   active-branch messages, lookup, folders/workdirs, and search.
-- [ ] Implement the SQLite catalog with `node:sqlite` against a temporary copy
+- [x] Implement the SQLite catalog with `node:sqlite` against a temporary copy
   created by the local pi process contract. Read session discovery metadata and
   decode ordered entry payloads into the same domain shape as JSONL; derive the
   active branch from `active_leaf_id`, preserve parent session IDs, and close
