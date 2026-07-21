@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { createHublotEventController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createPiErrorController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -579,6 +579,7 @@ const hublotEvent = createHublotEventController({
   scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
   openUrl: (url) => window.open(url, "_blank"),
 });
+const piStarted = createPiStartedController({ isReplaying: () => replaying, toast: addToast, reloadTranscript: () => reloadTranscript() });
 const runnerUnhealthy = createRunnerUnhealthyController({ isReplaying: () => replaying, toast: addToast, setBusy });
 const piError = createPiErrorController({ isReplaying: () => replaying, toast: addToast });
 const runnerExit = createRunnerExitController({
@@ -675,15 +676,7 @@ function handleEvent(msg) {
       return;
 
     case "pi_started":
-      if (replaying) return;
-      if (msg.startCount > 1) {
-        addToast("pi process restarted");
-        // the runner auto-resumes its session on respawn; rebuild the
-        // transcript from canonical state (get_state/get_messages queue
-        // behind the in-flight resume server-side, so this settles right
-        // after the session is back)
-        reloadTranscript().catch((e) => addToast(`session reload failed: ${e.message}`, "error"));
-      }
+      piStarted(msg);
       return;
 
     case "pi_error":
