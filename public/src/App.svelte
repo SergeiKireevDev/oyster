@@ -18,8 +18,11 @@
   import { createCheckpointModelPickerService } from "./runtime/checkpointModelPickerService.js";
   import { provideCheckpointModelPicker } from "./runtime/checkpointModelPickerContext.js";
   import { closeModalState, openModal } from "./stores/modal.js";
+  import { createAuthBrowserService } from "./runtime/authBrowserService.js";
+  import { provideAuthBrowser } from "./runtime/authBrowserContext.js";
 
   const uiActions = provideUiActionRegistry(createUiActionRegistry());
+  provideAuthBrowser(createAuthBrowserService({ storage: localStorage, reload: () => location.reload() }));
   const settingsPreferences = provideSettingsPreferences(createSettingsPreferenceService({
     storage: localStorage,
     onThinkingVisibilityChanged: () => uiActions.invoke(SETTINGS_CHANGED_ACTION),

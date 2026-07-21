@@ -38,6 +38,7 @@ test("App provides scoped dialog and browser action services", () => {
   assert.match(appSource, /provideSettingsPreferences\(createSettingsPreferenceService\(/);
   assert.match(appSource, /onThinkingVisibilityChanged: \(\) => uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
   assert.match(appSource, /provideCheckpointModelPicker\(createCheckpointModelPickerService\(/);
+  assert.match(appSource, /provideAuthBrowser\(createAuthBrowserService\(\{ storage: localStorage, reload: \(\) => location\.reload\(\) \}\)\)/);
   assert.match(appSource, /checkpointModelPicker\.teardown\(\)/);
   assert.match(appSource, /dialogs\.teardown\(\)/);
 });

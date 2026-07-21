@@ -129,7 +129,7 @@ bridge or direct persistence policy.
   extension UI, and modal-title contracts.
 - [x] Delete `stores/checkpointModelPicker.js` after a no-reference check and
   add a teardown test that settles an open picker promise.
-- [ ] Add an auth browser service with token persistence and reload operations,
+- [x] Add an auth browser service with token persistence and reload operations,
   provide it through context, and change `AuthGate.svelte` to use it. Test that
   token save/reload behavior is preserved without direct browser globals in the
   component.

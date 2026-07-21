@@ -1,11 +1,14 @@
 <script>
+  import { getAuthBrowser } from "../runtime/authBrowserContext.js";
+
+  const authBrowser = getAuthBrowser();
   let tokenInput = "";
 
   function connect() {
     const token = tokenInput.trim();
     if (!token) return;
-    localStorage.setItem("pi_ui_token", token);
-    location.reload();
+    authBrowser.saveToken(token);
+    authBrowser.reload();
   }
 
   function onKeydown(event) {
