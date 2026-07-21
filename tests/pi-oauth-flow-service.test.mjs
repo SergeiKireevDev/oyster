@@ -53,6 +53,65 @@ test("OAuth flow coordinator uses host registry, random IDs, and safe snapshots"
   assert.doesNotMatch(JSON.stringify(completed), /access|refresh|token-canary/);
 });
 
+test("OAuth flow coordinator adapts interactive callbacks with one-time bounded responses", async () => {
+  const registry = new Map();
+  const login = deferred();
+  let callbacks;
+  const service = createPiOAuthFlowService({
+    registry,
+    credentialService: {
+      loginOAuth(_provider, value) { callbacks = value; return login.promise; },
+    },
+    randomBytes: deterministicBytes(),
+    now: (() => { let value = 200; return () => ++value; })(),
+  });
+  const started = service.start("interactive");
+  await settle();
+
+  callbacks.onAuth({ url: "https://auth.invalid/start?state=transient", instructions: "Sign in" });
+  callbacks.onDeviceCode({
+    userCode: "USER-1234", verificationUri: "https://auth.invalid/device",
+    intervalSeconds: 5, expiresInSeconds: 900,
+  });
+  callbacks.onProgress("Waiting for input");
+  const promptPromise = callbacks.onPrompt({ message: "Enterprise domain", placeholder: "example.com" });
+  const manualPromise = callbacks.onManualCodeInput();
+  const selectPromise = callbacks.onSelect({
+    message: "Choose method",
+    options: [{ id: "browser", label: "Browser" }, { id: "device", label: "Device" }],
+  });
+
+  let status = service.getStatus(started.flowId);
+  assert.equal(status.authorization.url, "https://auth.invalid/start?state=transient");
+  assert.equal(status.deviceCode.userCode, "USER-1234");
+  assert.equal(status.progress, "Waiting for input");
+  assert.equal(status.requests.length, 3);
+  assert.equal(new Set(status.requests.map((request) => request.requestId)).size, 3);
+  assert.ok(status.requests.every((request) => /^[0-9a-f]{64}$/.test(request.requestId)));
+
+  const prompt = status.requests.find((request) => request.kind === "prompt");
+  const manual = status.requests.find((request) => request.kind === "manual_code");
+  const select = status.requests.find((request) => request.kind === "select");
+  status = service.respond(started.flowId, prompt.requestId, "corp.example");
+  assert.doesNotMatch(JSON.stringify(status), /corp\.example/);
+  assert.equal(await promptPromise, "corp.example");
+  assert.throws(() => service.respond(started.flowId, prompt.requestId, "replay-canary"), { code: "oauth_response_stale" });
+  assert.throws(() => service.respond(started.flowId, select.requestId, "unknown"), { code: "oauth_invalid_response" });
+  service.respond(started.flowId, select.requestId, "device");
+  service.respond(started.flowId, manual.requestId, "redirect-code-canary");
+  assert.equal(await selectPromise, "device");
+  assert.equal(await manualPromise, "redirect-code-canary");
+
+  login.resolve({ access: "access-canary", refresh: "refresh-canary" });
+  await settle();
+  status = service.getStatus(started.flowId);
+  assert.equal(status.status, "succeeded");
+  assert.equal(status.authorization, undefined);
+  assert.equal(status.deviceCode, undefined);
+  assert.equal(status.requests, undefined);
+  assert.doesNotMatch(JSON.stringify(status), /canary|USER-1234|transient/);
+});
+
 test("OAuth flow coordinator enforces provider and global active limits", async () => {
   const registry = new Map();
   const pending = [];

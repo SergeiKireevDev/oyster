@@ -2,6 +2,10 @@ import { randomBytes as nodeRandomBytes } from "node:crypto";
 
 const ACTIVE_STATUS = "pending";
 const MAX_PROVIDER_LENGTH = 256;
+const MAX_URL_LENGTH = 16 * 1024;
+const MAX_TEXT_LENGTH = 4 * 1024;
+const MAX_RESPONSE_LENGTH = 32 * 1024;
+const MAX_OPTIONS = 32;
 
 function flowError(code, message) {
   const error = new Error(message);
@@ -46,6 +50,34 @@ export function createPiOAuthFlowService({
     throw new TypeError("maxActiveFlows must be an integer from 1 to 32");
   }
 
+  function boundedText(value, label, limit = MAX_TEXT_LENGTH, { optional = false } = {}) {
+    if (value === undefined && optional) return undefined;
+    if (typeof value !== "string" || value.length > limit) {
+      throw flowError("oauth_invalid_callback", `OAuth ${label} is invalid`);
+    }
+    return value;
+  }
+
+  function safeUrl(value, label) {
+    const text = boundedText(value, label, MAX_URL_LENGTH);
+    let parsed;
+    try { parsed = new URL(text); } catch { throw flowError("oauth_invalid_callback", `OAuth ${label} is invalid`); }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw flowError("oauth_invalid_callback", `OAuth ${label} is invalid`);
+    }
+    return text;
+  }
+
+  function requestSnapshot(request) {
+    return Object.freeze({
+      requestId: request.requestId,
+      kind: request.kind,
+      message: request.message,
+      ...(request.placeholder !== undefined ? { placeholder: request.placeholder } : {}),
+      ...(request.options ? { options: request.options.map((option) => Object.freeze({ ...option })) } : {}),
+    });
+  }
+
   function snapshot(flow) {
     if (!flow) return null;
     return Object.freeze({
@@ -55,6 +87,10 @@ export function createPiOAuthFlowService({
       phase: flow.phase,
       createdAt: flow.createdAt,
       updatedAt: flow.updatedAt,
+      ...(flow.authorization ? { authorization: Object.freeze({ ...flow.authorization }) } : {}),
+      ...(flow.deviceCode ? { deviceCode: Object.freeze({ ...flow.deviceCode }) } : {}),
+      ...(flow.progress ? { progress: flow.progress } : {}),
+      ...(flow.requests?.size ? { requests: [...flow.requests.values()].map(requestSnapshot) } : {}),
       ...(flow.failureCode ? { failureCode: flow.failureCode } : {}),
     });
   }
@@ -63,29 +99,100 @@ export function createPiOAuthFlowService({
     return [...registry.values()].filter((flow) => flow?.status === ACTIVE_STATUS);
   }
 
-  function createFlowId() {
+  function createRandomId(isUsed) {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const bytes = randomBytes(32);
       if (!Buffer.isBuffer(bytes) && !(bytes instanceof Uint8Array)) {
         throw flowError("credential_service_unavailable", "secure OAuth flow IDs are unavailable");
       }
-      const flowId = Buffer.from(bytes).toString("hex");
-      if (flowId.length === 64 && !registry.has(flowId)) return flowId;
+      const id = Buffer.from(bytes).toString("hex");
+      if (id.length === 64 && !isUsed(id)) return id;
     }
     throw flowError("credential_service_unavailable", "could not allocate an OAuth flow ID");
   }
 
-  function inertCallbacks() {
-    // Interactive callback state is added by the next implementation step. The
-    // complete shape is supplied now so provider promises can start safely.
-    return Object.freeze({
-      onAuth() {},
-      onDeviceCode() {},
-      async onPrompt() { throw flowError("oauth_interaction_required", "OAuth input is not available"); },
-      async onSelect() { return undefined; },
-      onProgress() {},
-      async onManualCodeInput() { throw flowError("oauth_interaction_required", "OAuth input is not available"); },
+  function update(flow, phase) {
+    if (flow.status !== ACTIVE_STATUS) throw flowError("oauth_flow_inactive", "OAuth flow is no longer active");
+    flow.phase = phase;
+    flow.updatedAt = now();
+  }
+
+  function pendingRequest(flow, { kind, message, placeholder, options }) {
+    update(flow, kind);
+    const requestId = createRandomId((id) => flow.requests.has(id));
+    return new Promise((resolve, reject) => {
+      flow.requests.set(requestId, {
+        requestId,
+        kind,
+        message: boundedText(message ?? (kind === "manual_code" ? "Paste the authorization code or redirect URL" : ""), "prompt"),
+        ...(placeholder !== undefined ? { placeholder: boundedText(placeholder, "placeholder", MAX_TEXT_LENGTH, { optional: true }) } : {}),
+        ...(options ? { options } : {}),
+        resolve,
+        reject,
+      });
     });
+  }
+
+  function callbacksFor(flow) {
+    return Object.freeze({
+      onAuth(info) {
+        update(flow, "authorization");
+        flow.authorization = {
+          url: safeUrl(info?.url, "authorization URL"),
+          ...(info?.instructions !== undefined
+            ? { instructions: boundedText(info.instructions, "authorization instructions") }
+            : {}),
+        };
+      },
+      onDeviceCode(info) {
+        update(flow, "device_code");
+        flow.deviceCode = {
+          userCode: boundedText(info?.userCode, "device code", 1024),
+          verificationUri: safeUrl(info?.verificationUri, "device verification URL"),
+          ...(Number.isFinite(info?.intervalSeconds) ? { intervalSeconds: info.intervalSeconds } : {}),
+          ...(Number.isFinite(info?.expiresInSeconds) ? { expiresInSeconds: info.expiresInSeconds } : {}),
+        };
+      },
+      onPrompt(prompt) {
+        return pendingRequest(flow, {
+          kind: "prompt",
+          message: boundedText(prompt?.message, "prompt"),
+          placeholder: prompt?.placeholder,
+        });
+      },
+      onSelect(prompt) {
+        if (!Array.isArray(prompt?.options) || prompt.options.length < 1 || prompt.options.length > MAX_OPTIONS) {
+          throw flowError("oauth_invalid_callback", "OAuth selection options are invalid");
+        }
+        const options = prompt.options.map((option) => Object.freeze({
+          id: boundedText(option?.id, "selection option ID", 1024),
+          label: boundedText(option?.label, "selection option label", 1024),
+        }));
+        return pendingRequest(flow, {
+          kind: "select",
+          message: boundedText(prompt.message, "selection prompt"),
+          options,
+        });
+      },
+      onProgress(message) {
+        update(flow, "progress");
+        flow.progress = boundedText(message, "progress", MAX_TEXT_LENGTH);
+      },
+      onManualCodeInput() {
+        return pendingRequest(flow, { kind: "manual_code" });
+      },
+    });
+  }
+
+  function rejectPending(flow) {
+    if (flow.requests?.size) {
+      const error = flowError("oauth_flow_inactive", "OAuth flow is no longer active");
+      for (const request of flow.requests.values()) request.reject(error);
+      flow.requests.clear();
+    }
+    delete flow.authorization;
+    delete flow.deviceCode;
+    delete flow.progress;
   }
 
   function start(provider) {
@@ -98,25 +205,28 @@ export function createPiOAuthFlowService({
 
     const timestamp = now();
     const flow = {
-      flowId: createFlowId(),
+      flowId: createRandomId((candidate) => registry.has(candidate)),
       provider: id,
       status: ACTIVE_STATUS,
       phase: "starting",
       createdAt: timestamp,
       updatedAt: timestamp,
+      requests: new Map(),
     };
     registry.set(flow.flowId, flow);
 
     flow.promise = Promise.resolve()
-      .then(() => credentialService.loginOAuth(id, inertCallbacks()))
+      .then(() => credentialService.loginOAuth(id, callbacksFor(flow)))
       .then(() => {
         if (flow.status !== ACTIVE_STATUS) return;
+        rejectPending(flow);
         flow.status = "succeeded";
         flow.phase = "complete";
         flow.updatedAt = now();
       })
       .catch((error) => {
         if (flow.status !== ACTIVE_STATUS) return;
+        rejectPending(flow);
         flow.status = "failed";
         flow.phase = "complete";
         flow.failureCode = safeFailureCode(error);
@@ -131,7 +241,22 @@ export function createPiOAuthFlowService({
     return snapshot(registry.get(flowId));
   }
 
-  return Object.freeze({ start, getStatus });
+  function respond(flowId, requestId, value) {
+    const flow = registry.get(flowId);
+    if (!flow || flow.status !== ACTIVE_STATUS) throw flowError("oauth_flow_not_found", "OAuth flow not found");
+    const request = flow.requests.get(requestId);
+    if (!request) throw flowError("oauth_response_stale", "OAuth response is stale or was already used");
+    const response = boundedText(value, "response", MAX_RESPONSE_LENGTH);
+    if (request.kind === "select" && !request.options.some((option) => option.id === response)) {
+      throw flowError("oauth_invalid_response", "OAuth selection response is invalid");
+    }
+    flow.requests.delete(requestId);
+    update(flow, flow.requests.size ? "input" : "waiting");
+    request.resolve(response);
+    return snapshot(flow);
+  }
+
+  return Object.freeze({ start, getStatus, respond });
 }
 
 export const OAUTH_FLOW_DEFAULT_LIMIT = 4;

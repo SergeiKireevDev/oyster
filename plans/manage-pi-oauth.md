@@ -112,7 +112,7 @@ and unrelated credentials survive concurrent writes.
   request IDs, enforce one active flow per provider plus a small global limit,
   start `AuthStorage.login()` asynchronously, and publish only safe transient
   snapshots for authenticated polling.
-- [ ] Adapt authorization URL, device-code, progress, prompt, selection, and
+- [x] Adapt authorization URL, device-code, progress, prompt, selection, and
   manual-code callbacks into explicit flow states. Support multiple/racing
   pending input callbacks, accept each response exactly once, cap all strings
   and option counts, and return terminal `succeeded`, `failed`, or `cancelled`
