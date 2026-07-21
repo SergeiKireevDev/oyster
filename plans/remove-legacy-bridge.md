@@ -82,8 +82,9 @@ creation into store-backed action modules.
 - Let `RoutineList.svelte` call lifecycle actions directly, then invoke that
   refresh action.
 
-**Acceptance:** remove `setHublotHandlers`, `setHublotManagerHandlers`, and
-`setRoutineHandlers`; preserve sidebar and manager e2e behavior.
+✅ Removed `setRoutineHandlers`; `RoutineList.svelte` emits direct lifecycle
+action events consumed by the scoped legacy refresh action. Hublot registries
+remain until manager/file-explorer opening flows are similarly extracted.
 
 ## 4. Remove Session Picker Bridge
 
