@@ -141,7 +141,7 @@ modal behavior remain keyboard- and mobile-accessible.
 - [x] Extend static and persistence guards to prove credential routes/services
   never call the general settings repository, API-key fields remain forbidden
   in `app_settings`, and browser preference policy still excludes auth data.
-- [ ] Add tests that seed recognizable canary keys and assert they are absent
+- [x] Add tests that seed recognizable canary keys and assert they are absent
   from route responses, server events, runner state, application SQLite rows,
   logs captured through injected loggers, and built client assets.
 - [ ] Ensure request handling does not place keys in URLs and applies a small,
