@@ -45,6 +45,7 @@ import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./
 import { createHublotController } from "./lib/hublotController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
+import { createSettingsController } from "./lib/settingsController.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2263,28 +2264,9 @@ async function showSessionPicker() {
   }
 }
 
-async function chooseModel() {
-  try {
-    const { models } = await rpc({ type: "get_available_models" });
-    const choice = await pickOption(
-      "Select model",
-      models.map((m) => `${m.provider}/${m.id}`),
-      { searchable: true }
-    );
-    if (choice == null) return;
-    const m = models[choice];
-    await rpc({ type: "set_model", provider: m.provider, modelId: m.id });
-    toast(`model: ${m.id}`);
-  } catch (e) { toast(e.message, "error"); }
-}
-
-async function cycleThinking() {
-  try {
-    const data = await rpc({ type: "cycle_thinking_level" });
-    if (data) toast(`thinking: ${data.level}`);
-    refreshState();
-  } catch (e) { toast(e.message, "error"); }
-}
+const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast });
+const chooseModel = settingsController.chooseModel;
+const cycleThinking = settingsController.cycleThinking;
 
 async function openConfigPicker() {
   const which = await pickOption("Settings", [
