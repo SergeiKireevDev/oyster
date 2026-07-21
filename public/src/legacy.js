@@ -1369,8 +1369,7 @@ async function runMenuAction(action) {
       clearMessages();
       addToast("restarting pi…");
     } else if (action === "logout") {
-      localStorage.removeItem("pi_ui_token");
-      document.cookie = "pi_ui_token=; path=/; max-age=0";
+      clearAuthToken({ storage: localStorage, documentTarget: document });
       location.reload();
     } else if (action === "settings") {
       await showSettingsModal();
