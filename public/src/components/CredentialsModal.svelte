@@ -64,6 +64,9 @@
 
 <section class="api-keys-modal" aria-label="Pi credentials">
   <p class="api-keys-intro">Credentials are stored by pi in its own auth file. Existing key values are never displayed.</p>
+  {#if $credentialsState.setupMode}
+    <p class="api-keys-state" role="status">Choose a provider below to authenticate pi.</p>
+  {/if}
 
   {#if $credentialsState.loading && !$credentialsState.providers.length}
     <p class="api-keys-state" role="status">Loading provider credentials…</p>

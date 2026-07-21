@@ -303,7 +303,7 @@ export function createCredentialsController({
     cancelAbandonedFlow();
     tornDown = true;
     providers = [];
-    setState({ providers: [], flow: null, loading: false, error: "", lastRestart: null });
+    setState({ providers: [], flow: null, setupMode: false, loading: false, error: "", lastRestart: null });
   }
 
   return Object.freeze({

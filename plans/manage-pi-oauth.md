@@ -177,7 +177,7 @@ responses other than the intentional transient callback snapshot, or events.
   active; use abortable requests, bounded backoff, one outstanding poll, and
   teardown cancellation. Never place flow data in browser storage or
   application history.
-- [ ] On initial authenticated app mount, load safe credential status once and
+- [x] On initial authenticated app mount, load safe credential status once and
   automatically open **Credentials…** in setup mode when `auth.json` contains
   no stored credential entries. Open it at most once per page mount, do not
   treat environment or `models.json` fallback as an `auth.json` entry, do not

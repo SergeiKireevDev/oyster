@@ -23,6 +23,7 @@ test("credentials assembly owns API-key action registration and teardown", () =>
   const assembly = createCredentialsAssembly({
     uiActions,
     openModal: (state) => opened.push(state),
+    setState() {},
     createController: () => ({
       activate() {}, deactivate() {}, load() { loads += 1; }, save() { saves += 1; }, remove() { removals += 1; },
       startOAuth() {}, respondOAuth() {}, cancelOAuth() {}, logoutOAuth() {}, teardown() {},
@@ -44,6 +45,45 @@ test("credentials assembly owns API-key action registration and teardown", () =>
   assert.equal(saves, 1);
   assert.equal(removals, 1);
   assembly.teardown();
+});
+
+test("credentials assembly auto-opens setup once only when auth.json has no entries", async () => {
+  const make = ({ providers, modalOpen = false }) => {
+    const opened = [];
+    const states = [];
+    let loads = 0;
+    const controller = {
+      activate() {}, deactivate() {},
+      async load() { loads += 1; return providers; },
+      save() {}, remove() {}, startOAuth() {}, respondOAuth() {}, cancelOAuth() {}, logoutOAuth() {}, teardown() {},
+    };
+    const assembly = createCredentialsAssembly({
+      uiActions: createUiActionRegistry(),
+      openModal: (state) => opened.push(state),
+      setState: (patch) => states.push(patch),
+      isModalOpen: () => modalOpen,
+      createController: () => controller,
+    });
+    return { assembly, opened, states, get loads() { return loads; } };
+  };
+
+  const empty = make({ providers: [{ provider: "mock", credentialType: null, source: "environment" }] });
+  assert.equal(await empty.assembly.operations.initialize(), true);
+  assert.equal(await empty.assembly.operations.initialize(), false);
+  assert.equal(empty.loads, 1);
+  assert.deepEqual(empty.opened, [{ title: "Set up credentials", wide: true, content: "credentials" }]);
+  assert.deepEqual(empty.states, [{ setupMode: true }]);
+  empty.assembly.teardown();
+
+  const stored = make({ providers: [{ provider: "mock", credentialType: "api_key" }] });
+  assert.equal(await stored.assembly.operations.initialize(), false);
+  assert.deepEqual(stored.opened, []);
+  stored.assembly.teardown();
+
+  const blocked = make({ providers: [], modalOpen: true });
+  assert.equal(await blocked.assembly.operations.initialize(), false);
+  assert.deepEqual(blocked.opened, []);
+  blocked.assembly.teardown();
 });
 
 test("application composition mounts credentials separately from settings and tears it down", () => {

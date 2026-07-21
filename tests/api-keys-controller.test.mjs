@@ -173,5 +173,5 @@ test("API-key controller teardown aborts requests and clears safe state", async 
   controller.teardown();
   await loading;
   assert.equal(observedSignal.aborted, true);
-  assert.deepEqual(states.at(-1), { providers: [], flow: null, loading: false, error: "", lastRestart: null });
+  assert.deepEqual(states.at(-1), { providers: [], flow: null, setupMode: false, loading: false, error: "", lastRestart: null });
 });

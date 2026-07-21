@@ -1,3 +1,3 @@
-export function createRuntimeStarterDependencies({ hasToken, requireToken, boot }) {
-  return { hasToken, requireToken, boot };
+export function createRuntimeStarterDependencies({ hasToken, requireToken, boot, onAuthenticatedStart }) {
+  return { hasToken, requireToken, boot, ...(onAuthenticatedStart ? { onAuthenticatedStart } : {}) };
 }

@@ -405,6 +405,7 @@ const credentialsAssembly = createCredentialsAssembly({
   confirm: extensionUiAdapters.confirm,
   toast: addToast,
   setState: updateCredentialsState,
+  isModalOpen: dialogAdapters.modal.isOverlayOpen,
 });
 const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;
@@ -947,7 +948,10 @@ return createLifecycleAssembly({
   attachments: runtimeAttachments,
   eventAttachers: [commandPaletteKeyboardController, settingsLayoutEvents],
   applyLayout: () => layoutOperations.apply(),
-  start: { hasToken: () => Boolean(token), requireToken, boot },
+  start: {
+    hasToken: () => Boolean(token), requireToken, boot,
+    onAuthenticatedStart: () => { void credentialsAssembly.operations.initialize(); },
+  },
   cancelDelayedTasks: () => delayedTasks.cancelAll(),
   cleanup: {
     closeEventStream: () => connectionCoordinator.disconnect(),

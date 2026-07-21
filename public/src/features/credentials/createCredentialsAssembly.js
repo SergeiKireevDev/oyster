@@ -13,18 +13,31 @@ export function createCredentialsAssembly({
   confirm,
   toast,
   setState,
+  isModalOpen = () => false,
   createController = createCredentialsController,
 } = {}) {
   if (!uiActions) throw new TypeError("uiActions is required");
   if (typeof openModal !== "function") throw new TypeError("openModal is required");
   let tornDown = false;
+  let startupChecked = false;
   const controller = createController({ fetchImpl, confirm, toast, setState });
 
   const open = () => {
     if (tornDown) return;
+    setState({ setupMode: false });
     controller.activate();
     openModal({ title: "Credentials", wide: true, content: "credentials" });
     return controller.load();
+  };
+  const initialize = async () => {
+    if (tornDown || startupChecked) return false;
+    startupChecked = true;
+    const providers = await controller.load({ quiet: true });
+    if (tornDown || providers.some((provider) => provider.credentialType) || isModalOpen()) return false;
+    setState({ setupMode: true });
+    controller.activate();
+    openModal({ title: "Set up credentials", wide: true, content: "credentials" });
+    return true;
   };
   const registrations = [
     [CREDENTIALS_OPEN_ACTION, open],
@@ -39,7 +52,7 @@ export function createCredentialsAssembly({
 
   return Object.freeze({
     operations: Object.freeze({
-      open, load: controller.load, save: controller.save, remove: controller.remove,
+      open, initialize, load: controller.load, save: controller.save, remove: controller.remove,
       startOAuth: controller.startOAuth, respondOAuth: controller.respondOAuth,
       cancelOAuth: controller.cancelOAuth, logoutOAuth: controller.logoutOAuth,
     }),

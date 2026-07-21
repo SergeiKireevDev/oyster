@@ -10,7 +10,12 @@ test("runtime dependency adapter preserves lifecycle callbacks", () => {
 
 test("runtime starter runs the selected startup path once", () => {
   const calls = [];
-  const start = createRuntimeStarter({ hasToken: () => true, requireToken: () => calls.push("auth"), boot: () => calls.push("boot") });
+  const start = createRuntimeStarter({
+    hasToken: () => true,
+    requireToken: () => calls.push("auth"),
+    boot: () => calls.push("boot"),
+    onAuthenticatedStart: () => calls.push("credentials"),
+  });
   assert.equal(start(), true); assert.equal(start(), false);
-  assert.deepEqual(calls, ["boot"]);
+  assert.deepEqual(calls, ["boot", "credentials"]);
 });
