@@ -16,6 +16,7 @@ import { createRuntimeStarter } from "./runtime/startController.js";
 import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependencies.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
+import { createExtensionUiAdapters } from "./runtime/extensionUiAdapters.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -870,9 +871,17 @@ function composerKeydown(e) {
   }
 }
 
+const extensionUiAdapters = createExtensionUiAdapters({
+  openOptionPicker,
+  openTextPrompt,
+  openConfirmPrompt,
+  openEditorPrompt,
+  setTitle: (title) => updateAppSession({ titleOverride: title }),
+});
+
 // pi's slash commands (extensions, prompt templates, skills), cached until
 // the pi process or folder changes
-let commandGuard = createCommandGuard({ rpc, confirm: confirmDialog });
+let commandGuard = createCommandGuard({ rpc, confirm: extensionUiAdapters.confirm });
 
 const promptRpcCommand = (text) => promptCommand(text, sessionUi.busy);
 
@@ -1562,7 +1571,7 @@ async function showSessionPicker() {
 
 const settingsController = createSettingsController({
   rpc,
-  pickOption,
+  pickOption: extensionUiAdapters.select,
   refreshState: () => getSessionRuntime().refreshState(),
   toast: addToast,
   getState: () => state,
@@ -1621,7 +1630,7 @@ const transcriptPermalinkRuntime = createTranscriptPermalinkRuntime({
   getSessionId: () => state?.sessionId,
   getOrigin: () => location.origin,
   copy: copyTextToClipboard,
-  prompt: promptText,
+  prompt: extensionUiAdapters.input,
 });
 const { annotate: annotateTranscriptEntries, copyPermalink, focusEntryById } = transcriptPermalinkRuntime;
 
@@ -1655,32 +1664,12 @@ async function showSettingsModal() {
   openModal({ title: "Settings", content: "settings" });
 }
 
-function pickOption(title, options, { searchable = false } = {}) {
-  return openOptionPicker(title, options, { searchable });
-}
-
-function promptText(title, placeholder, prefill) {
-  return openTextPrompt(title, placeholder, prefill);
-}
-
-function confirmDialog(title, message) {
-  return openConfirmPrompt(title, message);
-}
-
-function promptEditor(title, placeholder, prefill) {
-  return openEditorPrompt(title, placeholder, prefill);
-}
-
 // ------------------------------------------------------------ extension UI bridge
 
 const handleExtensionUI = createExtensionUiController({
   respond: (id, payload) => rpc({ type: "extension_ui_response", id, ...payload }, { wait: false }).catch(() => {}),
   toast: addToast,
-  confirm: confirmDialog,
-  select: pickOption,
-  input: promptText,
-  editor: promptEditor,
-  setTitle: (title) => updateAppSession({ titleOverride: title }),
+  ...extensionUiAdapters,
 });
 
 // ------------------------------------------------------------ toasts
