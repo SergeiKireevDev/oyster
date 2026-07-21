@@ -92,21 +92,34 @@ export function createMobileDrawerDismissController({ documentTarget, windowTarg
   return { attach, detach };
 }
 
-export function createCarouselEventRegistration({ register, handlers }) {
+export function createCarouselEventRegistration({
+  documentTarget,
+  windowTarget,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onTouchCancel,
+  onResize,
+}) {
+  const listeners = [
+    [documentTarget, "touchstart", onTouchStart, { passive: true, capture: true }],
+    [documentTarget, "touchmove", onTouchMove, { passive: false, capture: true }],
+    [documentTarget, "touchend", onTouchEnd, { passive: true, capture: true }],
+    [documentTarget, "touchcancel", onTouchCancel, { passive: true, capture: true }],
+    [windowTarget, "resize", onResize],
+  ];
   let attached = false;
-  let removeListeners = null;
 
   function attach() {
-    if (attached) return () => {};
-    removeListeners = register(handlers);
+    if (attached) return detach;
+    for (const [target, type, listener, options] of listeners) target.addEventListener(type, listener, options);
     attached = true;
     return detach;
   }
 
   function detach() {
     if (!attached) return;
-    removeListeners?.();
-    removeListeners = null;
+    for (const [target, type, listener, options] of listeners) target.removeEventListener(type, listener, options);
     attached = false;
   }
 

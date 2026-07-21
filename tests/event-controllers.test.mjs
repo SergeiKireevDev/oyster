@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -10,19 +10,23 @@ test("carousel gesture classifier distinguishes taps and axes", () => {
 });
 
 test("carousel listener registration is idempotent and teardown-capable", () => {
-  let registrations = 0;
-  let removals = 0;
-  const register = () => { registrations++; return () => removals++; };
-  const listeners = createCarouselEventRegistration({ register, handlers: {} });
+  const calls = [];
+  const target = { addEventListener: (...args) => calls.push(["add", ...args]), removeEventListener: (...args) => calls.push(["remove", ...args]) };
+  const listeners = createCarouselEventRegistration({
+    documentTarget: target,
+    windowTarget: target,
+    onTouchStart() {}, onTouchMove() {}, onTouchEnd() {}, onTouchCancel() {}, onResize() {},
+  });
   const remove = listeners.attach();
   listeners.attach();
-  assert.equal(registrations, 1);
+  assert.equal(calls.filter(([kind]) => kind === "add").length, 5);
+  assert.equal(calls[0][3].capture, true);
   remove();
-  assert.equal(removals, 1);
+  assert.equal(calls.filter(([kind]) => kind === "remove").length, 5);
   listeners.attach();
-  assert.equal(registrations, 2);
+  assert.equal(calls.filter(([kind]) => kind === "add").length, 10);
   listeners.detach();
-  assert.equal(removals, 2);
+  assert.equal(calls.filter(([kind]) => kind === "remove").length, 10);
 });
 
 test("carousel header controller toggles desktop drawers and mobile pages", () => {
@@ -130,17 +134,6 @@ test("hublot sidebar adapter invokes show and tears down", () => {
   assert.equal(shown, 1);
   remove();
   assert.equal(calls.length, 1);
-});
-
-test("swipe adapter installs capture touch handlers and resize callback", () => {
-  const calls = [];
-  const documentTarget = { addEventListener: (...args) => calls.push(["add", ...args]), removeEventListener: (...args) => calls.push(["remove", ...args]) };
-  const windowTarget = { addEventListener: (...args) => calls.push(["add", ...args]), removeEventListener: (...args) => calls.push(["remove", ...args]) };
-  const remove = registerSwipeAndResizeEvents({ documentTarget, windowTarget, onTouchStart() {}, onTouchMove() {}, onTouchEnd() {}, onTouchCancel() {}, onResize() {} });
-  assert.equal(calls.filter(([kind]) => kind === "add").length, 5);
-  assert.equal(calls[0][3].capture, true);
-  remove();
-  assert.equal(calls.filter(([kind]) => kind === "remove").length, 5);
 });
 
 test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {

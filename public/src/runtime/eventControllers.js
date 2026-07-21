@@ -29,18 +29,6 @@ export function registerHublotSidebarEvents(target, { show }) {
   return () => target.removeEventListener("click", onClick);
 }
 
-export function registerSwipeAndResizeEvents({ documentTarget, windowTarget, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onResize }) {
-  const listeners = [
-    [documentTarget, "touchstart", onTouchStart, { passive: true, capture: true }],
-    [documentTarget, "touchmove", onTouchMove, { passive: false, capture: true }],
-    [documentTarget, "touchend", onTouchEnd, { passive: true, capture: true }],
-    [documentTarget, "touchcancel", onTouchCancel, { passive: true, capture: true }],
-    [windowTarget, "resize", onResize],
-  ];
-  for (const [target, type, listener, options] of listeners) target.addEventListener(type, listener, options);
-  return () => listeners.forEach(([target, type, listener, options]) => target.removeEventListener(type, listener, options));
-}
-
 export function registerHeaderEvents(target, { chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
   const onHeader = (event) => {
     const { action, sourceEvent } = event.detail ?? {};
