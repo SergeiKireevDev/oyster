@@ -90,17 +90,26 @@ export function createSettingsLayoutRuntime(deps) {
     toggleTree: header.toggleTree,
   })[action]?.(sourceEvent));
 
+  const settingsOperations = Object.freeze({
+    chooseModel: (...args) => settings.chooseModel(...args),
+    cycleThinking: (...args) => settings.cycleThinking(...args),
+    openConfig: (...args) => settings.openConfig(...args),
+  });
+  const layoutOperations = Object.freeze({
+    apply: (...args) => carousel.apply(...args),
+    reset: (...args) => carousel.reset(...args),
+  });
+  const eventAdapter = Object.freeze({
+    attach() { events.attach(); mobileDrawer.attach(); },
+    detach() { events.detach(); mobileDrawer.detach(); },
+  });
   return {
-    settings,
+    settings: settingsOperations,
+    layout: layoutOperations,
     handleExtensionUI,
-    carousel,
-    events,
-    detachSettingsActions,
-    detachHeaderActions,
-    mobileDrawer,
+    attach: eventAdapter.attach,
     teardown() {
-      events.detach();
-      mobileDrawer.detach();
+      eventAdapter.detach();
       detachHeaderActions();
       detachSettingsActions();
       settings.teardown?.();

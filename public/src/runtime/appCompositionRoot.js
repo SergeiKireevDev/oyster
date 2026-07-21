@@ -259,7 +259,7 @@ const sessionAssembly = createSessionAssembly({
     refreshState,
     setRunner,
     clearTranscript: clearMessages,
-    resetSessionUi: () => carouselController.reset(),
+    resetSessionUi: () => layoutOperations.reset(),
     renderPreview: () => previewController.renderNow(),
     resetCommands: composerOperations.resetCommands,
     connect,
@@ -486,7 +486,7 @@ const resourceAssembly = createResourceAssembly({
   hublots: {
     isVisible: hublotVisible,
     getSessionId: () => getSessionState()?.sessionId ?? null,
-    resetCarousel: () => carouselController.reset(),
+    resetCarousel: () => layoutOperations.reset(),
     openModal,
     createController: createHublotController,
     createHublot: (options) => createHublot(fetch, options),
@@ -823,10 +823,8 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   isDrawerToggleTarget: layoutDom.isDrawerToggleTarget,
 });
 const handleExtensionUI = settingsLayoutRuntime.handleExtensionUI;
-const carouselController = settingsLayoutRuntime.carousel;
-const carouselEventRegistration = settingsLayoutRuntime.events;
-const detachSettingsActions = settingsLayoutRuntime.detachSettingsActions;
-const detachHeaderActions = settingsLayoutRuntime.detachHeaderActions;
+const layoutOperations = settingsLayoutRuntime.layout;
+const settingsLayoutEvents = { attach: settingsLayoutRuntime.attach };
 
 const commandRuntime = composerAssembly.configureCommands({
   findElement: $,
@@ -944,10 +942,9 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
-    settingsLayoutRuntime.mobileDrawer,
-    carouselEventRegistration,
+    settingsLayoutEvents,
   ],
-  applyCarousel: () => carouselController.apply(),
+  applyCarousel: () => layoutOperations.apply(),
 });
 
   return assembleRuntimeLifecycleDependencies({

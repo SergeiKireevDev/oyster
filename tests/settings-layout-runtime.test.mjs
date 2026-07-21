@@ -28,7 +28,9 @@ test("settings/layout runtime wires settings, extension UI, carousel, and teardo
 
   assert.equal(typeof runtime.settings.chooseModel, "function");
   assert.equal(typeof runtime.handleExtensionUI, "function");
-  assert.equal(typeof runtime.carousel.apply, "function");
-  assert.equal(typeof runtime.events.detach, "function");
+  assert.deepEqual(Object.keys(runtime.settings).sort(), ["chooseModel", "cycleThinking", "openConfig"]);
+  assert.deepEqual(Object.keys(runtime.layout).sort(), ["apply", "reset"]);
+  assert.equal(typeof runtime.attach, "function");
+  assert.equal(typeof runtime.teardown, "function");
   runtime.teardown();
 });
