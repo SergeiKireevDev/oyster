@@ -120,7 +120,7 @@ Before the first extraction:
 **Acceptance:** baseline behavior is characterized; no production behavior is
 changed.
 
-## [ ] 1. Make Runtime Construction Instance-Scoped
+## [x] 1. Make Runtime Construction Instance-Scoped
 
 Move module-level mutable construction in
 `appRuntimeImplementation.js` behind a factory, initially without moving
