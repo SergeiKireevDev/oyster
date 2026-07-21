@@ -112,7 +112,7 @@ factory, not the composition root.
 - [x] Move directory browse and mkdir routes into `http/routes/fileRoutes.mjs`.
   Preserve configured-root confinement, hidden-file behavior, and status codes
   with traversal and mkdir tests.
-- [ ] Move file download, content, save, and chunked upload routes into the
+- [x] Move file download, content, save, and chunked upload routes into the
   file route factory. Preserve token checks, atomic writes, upload offset
   idempotency, size limits, and path-confinement tests.
 - [ ] Move `POST /workdir` into `http/routes/workdirRoutes.mjs`, injecting only
