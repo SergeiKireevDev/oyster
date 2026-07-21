@@ -68,6 +68,10 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(persisted.start_count, 1);
   assert.equal(persisted.created_at, "time");
   assert.equal(persisted.last_started_at, "time");
+  const reloadedManager = createRunnerManager(state, { appStore: store, ensureSessionOwner: () => owner, now: () => "reload" });
+  assert.equal(state.runners.get(runner.id).proc, processes[0], "hot reload retains the live process handle");
+  assert.equal(store.repositories.runners.find(runner.id).last_status, "running", "hot reload must not interrupt a retained process");
+  assert.equal(reloadedManager.runnerFromReq(new URL(`http://localhost/?runner=${runner.id}`)), runner);
   assert.equal("buffer" in runner, false, "durable replay must not retain a second in-memory copy");
   assert.deepEqual(manager.replayRunnerEvents(runner), store.repositories.runnerEvents.list(runner.id).map((event) => event.payload));
 
@@ -101,6 +105,9 @@ test("startup restores runner descriptors and replay without spawning until sele
     startCount: 4, createdAt: "created", lastStartedAt: "previous-start",
   });
   store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event", payload: '{"type":"persisted"}', createdAt: "event" });
+  store.repositories.runners.create({
+    id: "r-stopped0000", dir: "/stopped", desiredState: "stopped", lastStatus: "stopped", createdAt: "stopped-created", lastStoppedAt: "already-stopped",
+  });
   store.close();
   store = openAppStore({ databasePath });
   const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });
@@ -130,6 +137,11 @@ test("startup restores runner descriptors and replay without spawning until sele
   assert.equal(restored.startCount, 4);
   assert.equal(restored.proc, null);
   assert.equal(state.defaultRunnerId, runnerId);
+  assert.equal(store.repositories.runners.find(runnerId).last_status, "interrupted");
+  assert.equal(store.repositories.runners.find(runnerId).desired_state, "stopped");
+  assert.equal(store.repositories.runners.find(runnerId).last_stopped_at, "now");
+  assert.equal(store.repositories.runners.find("r-stopped0000").last_status, "stopped");
+  assert.equal(store.repositories.runners.find("r-stopped0000").last_stopped_at, "already-stopped");
   assert.deepEqual(manager.replayRunnerEvents(restored), ['{"type":"persisted"}']);
   manager.startPi();
   assert.equal(spawnCount, 0, "server startup must not eagerly spawn restored runners");

@@ -60,7 +60,19 @@ export function createRunnerManager(state, {
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // stable id -> runner
-  const persistedRunners = runnerRepository?.list() ?? [];
+  let persistedRunners = runnerRepository?.list() ?? [];
+  const previouslyLive = persistedRunners.filter((runner) =>
+    !state.runners.has(runner.id) && ["starting", "running"].includes(runner.last_status));
+  if (previouslyLive.length) {
+    const markInterrupted = (repositories) => {
+      for (const runner of previouslyLive) repositories.runners.update(runner.id, {
+        desired_state: "stopped", last_status: "interrupted", last_stopped_at: now(),
+      });
+    };
+    if (appStore?.transaction) appStore.transaction(markInterrupted);
+    else markInterrupted({ runners: runnerRepository });
+    persistedRunners = runnerRepository.list();
+  }
   for (const persisted of persistedRunners) {
     if (state.runners.has(persisted.id)) continue;
     const reference = persisted.session_backend
