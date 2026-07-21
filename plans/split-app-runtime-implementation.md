@@ -309,7 +309,7 @@ lines. Complete the remaining migration in small verified commits:
 - [x] Rename or replace `appRuntimeImplementation.js` with a thin composition
   module. Its responsibilities are limited to adapter creation, feature
   construction order, cross-feature interfaces, `start`, and `teardown`.
-- [ ] Add a regression guard that the composition root has no feature-local
+- [x] Add a regression guard that the composition root has no feature-local
   mutable state, feature custom-event registration, or feature DOM lookup.
 
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
