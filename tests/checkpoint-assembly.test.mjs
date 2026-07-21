@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createCheckpointAssembly } from "../public/src/features/checkpoints/createCheckpointAssembly.js";
 
 function dependencies() {
@@ -26,4 +27,16 @@ test("checkpoint assembly owns model marker tree freeze rollback and action cons
   assert.equal(typeof assembly.operations.freeze, "function");
   assert.equal(typeof assembly.operations.rollback, "function");
   assembly.teardown();
+});
+
+test("checkpoint assembly receives session transcript fetch modal and toast interfaces", () => {
+  const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../public/src/features/checkpoints/createCheckpointAssembly.js", import.meta.url), "utf8");
+  assert.match(root, /createCheckpointAssembly\(\{[\s\S]*transcript: \{[\s\S]*session: \{[\s\S]*layout: \{/);
+  assert.doesNotMatch(root, /createCheckpointFeature|configureCheckpointTreeActions|openModelPicker\(/);
+  assert.match(source, /fetchImpl: deps\.fetchImpl/);
+  assert.match(source, /getSessionId: deps\.session\.getSessionId/);
+  assert.match(source, /chatElements: deps\.transcript\.chatElements/);
+  assert.match(source, /openPicker: deps\.openModelPicker/);
+  assert.match(source, /toast: deps\.toast/);
 });
