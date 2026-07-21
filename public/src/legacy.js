@@ -2295,10 +2295,6 @@ async function toggleManagedHublotScope() {
 setHublotManagerHandlers({
   openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
   createHublot: createManagedHublot,
-  setDesc: (desc) => {
-    tunnelForm.desc = desc;
-    updateHublotManager({ desc });
-  },
   toggleScope: toggleManagedHublotScope,
   setupCommandPalette,
 });
