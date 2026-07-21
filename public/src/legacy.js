@@ -1988,10 +1988,11 @@ function closeModal() {
   closeModalState();
 }
 
-createSettingsChangeController({
+const settingsChangeController = createSettingsChangeController({
   windowTarget: window,
   changed: () => reloadTranscript().catch(() => {}),
-}).attach();
+});
+settingsChangeController.attach();
 
 /** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {
@@ -2151,5 +2152,6 @@ export function teardownLegacyRuntime() {
   carouselEventRegistration.detach();
   mobileDrawerDismissController.detach();
   headerEventController.detach();
+  settingsChangeController.detach();
   connectionState.lost();
 }
