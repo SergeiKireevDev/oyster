@@ -451,6 +451,7 @@ function getSessionRuntime() {
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
+    openSearchHit: (...args) => searchHitSessionController(...args),
     log: (details) => lifecycleLog("switchToRunner:start", details),
     resetPreview: () => previewController.clear(),
     refreshState,
@@ -1708,7 +1709,7 @@ const searchHitSessionController = createSearchHitSessionController({
   switchRunner: switchToRunner,
   toast: addToast,
 });
-const openSearchHit = searchHitSessionController;
+const openSearchHit = (...args) => getSessionRuntime().openSessionAtSearchHit(...args);
 
 async function focusSearchHit(hit) {
   if (hit.entryId) {

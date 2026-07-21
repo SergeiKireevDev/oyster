@@ -22,12 +22,13 @@ export function createSessionStateApplier({ applySessionState, getState, setStat
 }
 
 export function createSessionRuntime({
-  getCurrentRunner, switchSessionRunner, openSession, log, resetPreview, refreshState,
+  getCurrentRunner, switchSessionRunner, openSession, openSearchHit, log, resetPreview, refreshState,
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
   connect,
 }) {
   return {
     openSession(options) { return openSession(options); },
+    openSessionAtSearchHit(...args) { return openSearchHit(...args); },
     refreshState() { return refreshState(); },
     switchRunner(id) {
       return switchSessionRunner({
