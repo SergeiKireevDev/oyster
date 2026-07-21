@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
@@ -55,6 +55,16 @@ test("assistant stream mounts, updates, and finishes a streamed assistant", () =
   stream.end({ id: "b", text: "replayed" });
   assert.equal(stream.live, null);
   assert.deepEqual(calls.map(([name]) => name), ["mount", "update", "update", "finish"]);
+});
+
+test("transcript load scroll keeps a pinned transcript at the bottom", () => {
+  let listener;
+  const target = { addEventListener: (_, fn, capture) => { listener = fn; assert.equal(capture, true); }, removeEventListener: (...args) => assert.deepEqual(args.slice(1), [listener, true]) };
+  const calls = [];
+  const remove = registerTranscriptLoadScroll(target, (force) => calls.push(force));
+  listener();
+  assert.deepEqual(calls, [false]);
+  remove();
 });
 
 test("scroll adapter preserves reading position unless pinned or forced", () => {
