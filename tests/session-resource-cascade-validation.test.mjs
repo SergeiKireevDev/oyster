@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
 import { createSessionDeletionWorkflow } from "../persistence/sessionDeletion.mjs";
+import { reconcileSessionDeletions } from "../persistence/sessionDeletionReconciler.mjs";
 
 test("deleting one session removes all and only its checkpoints, routines, runs, logs, hublots, lifecycle, and runners", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-complete-session-cascade-"));
@@ -143,4 +144,61 @@ test("failed agent deletion preserves every owned durable resource and skips des
   const operation = store.repositories.operations.find("failed-agent-delete");
   assert.equal(operation.status, "failed");
   assert.equal(operation.owner_id, owner.id);
+});
+
+test("restart completes the owned-resource cascade after a crash following agent deletion", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-post-agent-delete-crash-"));
+  const databasePath = join(root, "app.sqlite");
+  let store = openAppStore({ databasePath });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const reference = { backend: "sqlite", id: "deleted-agent-session", storagePath: "/sessions/agent.sqlite" };
+  const survivorReference = { backend: "sqlite", id: "survivor", storagePath: reference.storagePath };
+  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "owner" });
+  store.repositories.sessions.upsert({ backend: survivorReference.backend, sessionId: survivorReference.id, storagePath: survivorReference.storagePath, createdAt: "survivor" });
+  store.repositories.checkpoints.record(reference, { hash: "deleted-hash", anchorId: "deleted-anchor", sessionRef: reference, timestamp: "checkpoint" });
+  store.repositories.checkpoints.record(survivorReference, { hash: "survivor-hash", anchorId: "survivor-anchor", sessionRef: survivorReference, timestamp: "survivor-checkpoint" });
+  store.repositories.routines.upsert({ id: "crashed-routine", ownerId: owner.id, name: "crashed.sh", script: "echo crashed", now: "routine" });
+  store.repositories.routines.createRun({ id: "crashed-run", routineId: "crashed-routine", mode: "run", startedAt: "run" });
+  store.repositories.routines.appendLog("crashed-run", "stdout", "crashed log", "log");
+  store.repositories.hublots.create({ id: "crashed-hublot", ownerId: owner.id, port: 4320, workdir: "/work", serviceKind: "self_served", status: "open", desiredState: "open", createdAt: "hublot" });
+  store.repositories.hublots.appendLifecycleEvent({ hublotId: "crashed-hublot", status: "open", desiredState: "open", createdAt: "event" });
+  store.repositories.sessions.markDeleting(owner.id);
+  store.repositories.operations.create({
+    id: "post-agent-delete", ownerId: owner.id, kind: "delete_session", status: "running", stage: "agent_deleted",
+    payload: JSON.stringify({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), createdAt: "before-crash",
+  });
+  store.close();
+
+  store = openAppStore({ databasePath });
+  assert.equal(store.reconcileInterruptedOperations("restart"), 1);
+  let agentDeleteCalls = 0;
+  const cleanupOrder = [];
+  const results = await reconcileSessionDeletions({
+    appStore: store,
+    sessionReferences: { validate: (value) => value },
+    sessionCatalog: { backend: "sqlite", findById: () => null },
+    sessionOperations: {
+      capabilities: { delete: { sqlite: true } },
+      deleteSession: async () => { agentDeleteCalls++; },
+    },
+    closeSessionHublots: async (sessionId) => { cleanupOrder.push(`hublots:${sessionId}`); },
+    deleteSessionRoutines: async (sessionId) => { cleanupOrder.push(`routines:${sessionId}`); },
+    now: () => "reconciled",
+  });
+
+  assert.deepEqual(results, [{ id: "post-agent-delete", status: "completed" }]);
+  assert.equal(agentDeleteCalls, 0, "already-deleted agent session is not deleted a second time");
+  assert.deepEqual(cleanupOrder, ["hublots:deleted-agent-session", "routines:deleted-agent-session"]);
+  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(reference), []);
+  assert.equal(store.repositories.routines.findByName("crashed.sh"), null);
+  assert.equal(store.repositories.routines.findRun("crashed-run"), null);
+  assert.deepEqual(store.repositories.routines.listLogs("crashed-run"), []);
+  assert.equal(store.repositories.hublots.find("crashed-hublot"), null);
+  assert.deepEqual(store.repositories.hublots.listLifecycleEvents("crashed-hublot"), []);
+  assert.equal(store.repositories.checkpoints.listForSession(survivorReference).length, 1);
+  const operation = store.repositories.operations.find("post-agent-delete");
+  assert.equal(operation.status, "completed");
+  assert.equal(operation.stage, "completed");
+  assert.equal(operation.owner_id, null);
 });
