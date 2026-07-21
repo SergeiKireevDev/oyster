@@ -66,7 +66,7 @@ does not own composer-local mutable state.
 **Acceptance:** the root only consumes the checkpoint assembly’s narrow public
 operations.
 
-## [ ] 6. Extract Dialog and Modal Adapters
+## [x] 6. Extract Dialog and Modal Adapters
 
 - [x] Create `platform/createDialogAdapters.js` for modal shell, confirm, text, editor, option-picker, and extension UI adapters.
 - [x] Move dialog resolver state and response handling behind instance-scoped adapter factories.
