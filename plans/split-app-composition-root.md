@@ -36,7 +36,7 @@ coupling cannot grow unnoticed.
 **Acceptance:** the composition root does not construct transcript controllers,
 inspect transcript elements, or own transcript-local mutable state.
 
-## [ ] 3. Extract Session Assembly
+## [x] 3. Extract Session Assembly
 
 - [x] Create `features/sessions/createSessionAssembly.js` and move route parsing, runner state, session UI state, preview, open/switch, and refresh construction into it.
 - [x] Move session boot and session picker integration behind the session assembly boundary.

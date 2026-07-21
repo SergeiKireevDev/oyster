@@ -98,6 +98,9 @@ test("session assembly remounts runner route picker and switching state cleanly"
   const routes = [], switches = [], firstCloses = [];
   const first = createSessionAssembly(dependencies("/s/first", { routes, switches, useRealState: true }));
   first.operations.setRunner("runner-1");
+  let runnerNotifications = 0;
+  first.operations.setRunnersUpdateHandler(() => runnerNotifications++);
+  first.operations.notifyRunnersChanged([]);
   await first.operations.switchRunner("runner-2");
   first.operations.applyState({ sessionId: "session-2", model: { provider: "test" }, messageCount: 0, isStreaming: false, isCompacting: false });
   first.configurePicker(pickerDependencies(firstCloses));
@@ -106,6 +109,8 @@ test("session assembly remounts runner route picker and switching state cleanly"
   assert.equal(firstCloses.length, 1);
   assert.equal(routes.length, 1);
   first.teardown();
+  first.operations.notifyRunnersChanged([]);
+  assert.equal(runnerNotifications, 1);
 
   const secondCloses = [];
   const second = createSessionAssembly(dependencies("/", {}));

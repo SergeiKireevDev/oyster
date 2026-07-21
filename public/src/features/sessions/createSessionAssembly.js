@@ -43,6 +43,7 @@ export function createSessionAssembly(deps) {
   let refresher = null;
   let pickerRuntime = null;
   let bootController = null;
+  let runnersUpdateHandler = null;
 
   const operations = {
     boot: (...args) => bootController(...args),
@@ -63,6 +64,8 @@ export function createSessionAssembly(deps) {
     setWorkdir: (dir) => sessionUi.setWorkdir(dir),
     setBusy: (value) => sessionUi.setBusy(value),
     updateUsage: (message) => sessionUi.updateUsage(message),
+    setRunnersUpdateHandler: (handler) => { runnersUpdateHandler = handler; },
+    notifyRunnersChanged: (next) => runnersUpdateHandler?.(next),
   };
 
   return {
@@ -82,6 +85,7 @@ export function createSessionAssembly(deps) {
       refresher = null;
       pickerRuntime = null;
       bootController = null;
+      runnersUpdateHandler = null;
     },
   };
 }

@@ -266,8 +266,6 @@ const setRunner = sessionOperations.setRunner;
 const setRunnersNow = sessionOperations.setRunners;
 updateAppSession({ currentRunner: getCurrentRunner(), runners: getRunners() });
 function getSessionRuntime() { return sessionOperations.getRuntime(); }
-/** hook: session picker (when open) re-renders its indicators */
-let onRunnersUpdate = null;
 const getWorkdir = sessionOperations.getWorkdir;
 const getBusy = sessionOperations.getBusy;
 const setWorkdir = sessionOperations.setWorkdir;
@@ -324,7 +322,7 @@ platformEvents = createPlatformEventDispatch({
   refreshHublots: () => loadHublots(),
   refreshRoutines: loadRoutines,
   getRunners: () => getRunners(),
-  onRunnersChanged: (runners) => onRunnersUpdate?.(runners),
+  onRunnersChanged: sessionOperations.notifyRunnersChanged,
   refreshTree: refreshTreeIfOpen,
   updateRoutine: (...args) => routineSidebarController.update(...args),
   toast: addToast,
@@ -1018,7 +1016,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     const currentSessionFile = getSessionState()?.sessionFile ?? getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionFile;
     return sessions.find((session) => session.path === currentSessionFile)?.id ?? getSessionState()?.sessionId;
   },
-  setRunnersUpdateHandler: (handler) => { onRunnersUpdate = handler; },
+  setRunnersUpdateHandler: sessionOperations.setRunnersUpdateHandler,
   getWorkdir: () => getWorkdir(),
   open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
   async openChosenSession(fullChoice) {
