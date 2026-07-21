@@ -144,7 +144,7 @@ moving their durable process state out of `state`.
 - [x] Move checkpoint create/list/tree routes into
   `http/routes/checkpointRoutes.mjs`. Preserve runner/session validation, model
   summary options, checkpoint persistence, and response contracts with tests.
-- [ ] Move rollback route handling into the checkpoint factory. Preserve dirty
+- [x] Move rollback route handling into the checkpoint factory. Preserve dirty
   worktree checkpointing, fork/session creation, runner opening, and broadcast
   behavior with rollback API tests.
 - [ ] Remove checkpoint route bodies from `app.mjs` and verify the factory

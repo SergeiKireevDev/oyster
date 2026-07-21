@@ -212,6 +212,8 @@ export function init(state) {
   const checkpointRoutes = createCheckpointRoutes({
     state, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, loadCheckpoints, checkpointTree, sessionFileParam,
+    git, saveCheckpoints, forkSessionAt, openSessionRunner, sendToRunner,
+    srvId, runnerInfo,
   });
   const routineRoutes = createRoutineRoutes({
     state, requestContext,
@@ -237,51 +239,7 @@ export function init(state) {
   const routes = {
     // -------------------------------------------------- tunnels / hublots
 
-    "POST /rollback": async (req, res) => {
-      const body = await readJsonBody(req, res);
-      if (body === undefined) return;
-      const sessionId = String(body?.sessionId ?? "").trim();
-      const hash = String(body?.hash ?? "").trim();
-      const model = body?.model ? String(body.model).slice(0, 200) : null;
-      const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
-      if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
-      if (!existsSync(cp.sessionPath)) { json(res, 410, { error: "session file of this checkpoint is gone" }); return; }
-      try {
-        // 1. nothing may be lost: auto-commit pending changes and record them
-        //    as a checkpoint at the session's current tip (→ roll forward later)
-        let safety = null;
-        const st = await git(cp.dir, ["status", "--porcelain"]);
-        if (st.code === 0 && st.stdout.trim()) {
-          const saved = await checkpointWorkdir(config.PI_BIN, cp.dir, `auto before rollback to ${hash}`, model);
-          if (saved.body.committed) {
-            safety = saved.body.hash;
-            try { recordCheckpoint(cp.sessionPath, cp.dir, saved.body); } catch {}
-          }
-        }
-        // 2. deterministic restore of the checkpointed state
-        const rs = await git(cp.dir, ["reset", "--hard", hash]);
-        if (rs.code !== 0) {
-          json(res, 500, { error: `git reset failed: ${(rs.stderr || rs.stdout).trim()}` });
-          return;
-        }
-        // 3. fork the session at the checkpointed entry — no LLM involved
-        const fork = forkSessionAt(cp.sessionPath, cp.leafId ?? cp.anchorId, hash);
-        // the fork keeps its ancestors' entry ids: inherit their checkpoints
-        const db = loadCheckpoints();
-        db[fork.id] = (db[sessionId] ?? [])
-          .filter((c) => fork.entryIds.has(c.anchorId))
-          .map((c) => ({ ...c, sessionPath: fork.path }));
-        saveCheckpoints(db);
-        // 4. attach a runner to the fork and hand it to the client
-        const runner = openSessionRunner({ sessionPath: fork.path, dir: cp.dir });
-        sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
-        runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
-        console.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
-        json(res, 200, { rolledBack: hash, safety, fork: { id: fork.id, path: fork.path }, runner: runnerInfo(runner) });
-      } catch (e) {
-        json(res, 500, { error: `rollback failed: ${e.message}` });
-      }
-    },
+
   };
 
   const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, authenticated: routes });

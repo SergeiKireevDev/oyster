@@ -27,3 +27,24 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
   const tree = response(); routes["GET /checkpoint-tree"]({}, tree, new URL("http://localhost/checkpoint-tree?path=valid.jsonl"));
   assert.deepEqual(tree.body, { path: "/session.jsonl", children: [] });
 });
+
+test("rollback saves dirty work, resets, forks, opens a runner, and preserves response shape", async () => {
+  const sessionPath = new URL("../package.json", import.meta.url).pathname;
+  const saved = [], commands = [];
+  const db = { s1: [{ hash: "abc", dir: "/work", sessionPath, anchorId: "e1", leafId: "e2" }] };
+  const routes = createCheckpointRoutes({
+    state: {}, config: { PI_BIN: "pi" }, requestContext: { json(r, status, body) { r.status = status; r.body = body; }, readJsonBody: async r => r.body },
+    loadCheckpoints: () => structuredClone(db), saveCheckpoints: value => saved.push(value),
+    git: async (_dir, args) => args[0] === "status" ? { code: 0, stdout: " M file" } : { code: 0, stdout: "" },
+    checkpointWorkdir: async () => ({ status: 200, body: { committed: true, hash: "safety" } }), recordCheckpoint: () => ({}),
+    forkSessionAt: () => ({ id: "fork", path: "/fork.jsonl", entryIds: new Set(["e1"]) }),
+    openSessionRunner: options => ({ id: "r2", ...options }), sendToRunner: (_r, command) => commands.push(command),
+    srvId: () => "srv", runnerInfo: runner => ({ id: runner.id }), runnerFromReq() {}, checkpointTree() {}, sessionFileParam() {}, logger: { error() {}, log() {} },
+  });
+  const response = {};
+  await routes["POST /rollback"]({ body: { sessionId: "s1", hash: "abc", model: "m" } }, response);
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { rolledBack: "abc", safety: "safety", fork: { id: "fork", path: "/fork.jsonl" }, runner: { id: "r2" } });
+  assert.equal(saved[0].fork.length, 1);
+  assert.equal(commands[0].type, "set_session_name");
+});
