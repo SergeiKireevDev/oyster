@@ -585,6 +585,7 @@
     display: flex;
     gap: 8px;
     align-items: flex-end;
+    position: relative;
   }
   #input {
     flex: 1;
@@ -636,6 +637,44 @@
     gap: 14px;
     flex-wrap: wrap;
   }
+
+  /* ---------- command palette ---------- */
+  #cmdPalette {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.5);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 40;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  #cmdPalette.open { display: flex; }
+  .cmd-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+  }
+  .cmd-row:last-child { border-bottom: none; }
+  .cmd-row:hover, .cmd-row.active { background: var(--accent-dim); }
+  .cmd-ico { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+  .cmd-body { flex: 1; min-width: 0; }
+  .cmd-name { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+  .cmd-name mark { background: none; color: var(--accent); font-weight: 700; padding: 0; }
+  .cmd-desc { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmd-hint { color: var(--muted); font-size: 11px; flex-shrink: 0; opacity: 0; transition: opacity .1s; }
+  .cmd-row.active .cmd-hint { opacity: 1; }
+  .cmd-empty { padding: 14px; color: var(--muted); font-size: 13px; text-align: center; }
 
   /* ---------- modal ---------- */
   #overlay {
@@ -951,6 +990,7 @@
 
     <div id="composer">
       <div class="inner">
+        <div id="cmdPalette"></div>
         <button id="attachBtn" title="Attach a server file path">📎</button>
         <textarea id="input" rows="1" placeholder="message pi"></textarea>
         <button class="btn" id="sendBtn">Send</button>
@@ -2417,6 +2457,21 @@ input.addEventListener("input", () => {
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setBusy(busy); // refresh busy state UI
   histIdx = null; // typing exits history navigation
+
+  // command palette: detect ":" trigger at the caret
+  const trigger = getCommandTrigger();
+  if (trigger && trigger.text.length >= 1) {
+    const match = trigger.text.slice(1); // strip leading ":"
+    if (!cmdState || cmdState.trigger?.text !== trigger.text) {
+      openCmdPalette(match, trigger);
+    } else {
+      cmdState.match = match;
+      cmdState.active = 0;
+      renderCmdPalette();
+    }
+  } else {
+    closeCmdPalette()
+  }
 });
 
 function setComposerText(text) {
@@ -2461,6 +2516,19 @@ function navigateHistory(dir) {
 
 input.addEventListener("keydown", (e) => {
   if (e.isComposing) return;
+
+  // command palette navigation takes priority while open
+  if (cmdPalette.classList.contains("open")) {
+    if (e.key === "ArrowDown") { e.preventDefault(); moveCmd(1); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); moveCmd(-1); return; }
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      if (runActiveCmd()) return;
+      // no matching command: fall through to send
+    }
+    if (e.key === "Escape") { e.preventDefault(); closeCmdPalette(); return; }
+  }
+
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     send();
@@ -2526,6 +2594,137 @@ async function abort() {
   try { await rpc({ type: "abort" }, { wait: false }); toast("aborted"); }
   catch (e) { toast(`abort failed: ${e.message}`, "error"); }
 }
+
+// ------------------------------------------------------------ command palette
+// Slack-style ":" command picker — type ":" in the composer to see available
+// commands, filter by typing more, pick with Enter/Tap to run.
+
+const cmdPalette = $("cmdPalette");
+
+const commands = [
+  {
+    name: "file",
+    desc: "Open file explorer and insert a path",
+    icon: "\u{1F4C2}",
+    run: () => {
+      // replace the :file trigger with the chosen path
+      const trigger = getCommandTrigger();
+      const placeholder = trigger ? trigger.text : null;
+      closeCmdPalette();
+      showFilePicker(
+        (path) => insertCommandResult(placeholder, path),
+        null,
+      );
+    },
+  },
+];
+
+let cmdState = null; // { match: "...", active: 0, trigger: {text, start} } | null
+
+/** Extract the bare-word after ":" that precedes the caret, or null if the
+ *  caret isn't in a command trigger. */
+function getCommandTrigger() {
+  const val = input.value;
+  const caret = input.selectionStart;
+  const before = val.slice(0, caret);
+  const m = before.match(/(^|\s):([a-zA-Z0-9_]*)$/);
+  if (!m) return null;
+  return { text: ":" + m[2], start: caret - m[2].length };
+}
+
+function getFilteredCommands(match) {
+  const q = (match || "").toLowerCase();
+  if (!q) return commands;
+  return commands.filter((c) => c.name.startsWith(q));
+}
+
+function openCmdPalette(match, trigger) {
+  cmdState = { match: match || "", active: 0, trigger };
+  renderCmdPalette();
+  cmdPalette.classList.add("open");
+}
+
+function closeCmdPalette() {
+  cmdState = null;
+  cmdPalette.classList.remove("open");
+}
+
+function moveCmd(dir) {
+  if (!cmdState) return;
+  const items = getFilteredCommands(cmdState.match);
+  if (!items.length) return;
+  cmdState.active = (cmdState.active + dir + items.length) % items.length;
+  renderCmdPalette();
+}
+
+function runActiveCmd() {
+  if (!cmdState) return false;
+  const items = getFilteredCommands(cmdState.match);
+  if (!items.length) { closeCmdPalette(); return false; }
+  const cmd = items[cmdState.active];
+  cmd.run();
+  return true;
+}
+
+/** Replace the trigger text in the input with the result of the command. */
+function insertCommandResult(placeholder, result) {
+  if (!placeholder) { insertIntoComposer(result); return; }
+  const val = input.value;
+  const idx = val.lastIndexOf(placeholder);
+  if (idx === -1) { insertIntoComposer(result); return; }
+  const before = val.slice(0, idx);
+  const after = val.slice(idx + placeholder.length);
+  const pad = before && !/\s$/.test(before) ? " " : "";
+  const padAfter = after && !/^\s/.test(after) ? " " : "";
+  input.value = before + pad + result + padAfter + after;
+  const pos = (before + pad + result).length;
+  input.setSelectionRange(pos, pos);
+  input.dispatchEvent(new Event("input"));
+  input.focus();
+}
+
+function renderCmdPalette() {
+  if (!cmdState) return;
+  const { match, active } = cmdState;
+  const items = getFilteredCommands(match);
+  cmdPalette.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "cmd-empty";
+    empty.textContent = `no command matches ":${match}"`;
+    cmdPalette.appendChild(empty);
+    return;
+  }
+  items.forEach((cmd, i) => {
+    const row = document.createElement("div");
+    row.className = "cmd-row" + (i === active ? " active" : "");
+    const hl = cmd.name.slice(0, match.length);
+    const rest = cmd.name.slice(match.length);
+    row.innerHTML =
+      `<span class="cmd-ico">${cmd.icon}</span>` +
+      `<div class="cmd-body">` +
+        `<div class="cmd-name">:<mark>${escapeHtml(hl)}</mark>${escapeHtml(rest)}</div>` +
+        `<div class="cmd-desc">${escapeHtml(cmd.desc)}</div>` +
+      `</div>` +
+      `<span class="cmd-hint">${i === active ? "enter \u21B5" : ""}</span>`;
+    row.addEventListener("mousedown", (e) => {
+      // mousedown (not click) so it fires before the textarea blurs
+      e.preventDefault();
+      cmdState.active = i;
+      runActiveCmd();
+    });
+    row.addEventListener("mousemove", () => {
+      if (cmdState && cmdState.active !== i) {
+        cmdState.active = i;
+        renderCmdPalette();
+      }
+    });
+    cmdPalette.appendChild(row);
+  });
+}
+
+// close the palette when focus leaves the composer
+input.addEventListener("blur", () => setTimeout(closeCmdPalette, 150));
 
 // ------------------------------------------------------------ menu & actions
 
