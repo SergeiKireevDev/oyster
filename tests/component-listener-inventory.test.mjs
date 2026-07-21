@@ -23,7 +23,7 @@ function locations(pattern) {
 
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
-    "App.svelte:25:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
+    "App.svelte:35:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
     "components/Menu.svelte:18:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
     "components/Transcript.svelte:18:messages.addEventListener(\"load\", onLoad, true);",

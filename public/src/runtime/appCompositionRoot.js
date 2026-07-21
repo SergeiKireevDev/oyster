@@ -49,7 +49,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, find } = browser;
-  const { uiActions, dialogs: dialogService, browserActions } = stores;
+  const { uiActions, dialogs: dialogService, browserActions, checkpointModelPicker } = stores;
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -146,6 +146,7 @@ const renderTranscript = transcriptOperations.renderTranscript;
 
 const checkpointAssembly = createCheckpointAssembly({
   uiActions,
+  checkpointModelPicker,
   fetchImpl: fetch,
   tick,
   rpc,

@@ -121,7 +121,7 @@ bridge or direct persistence policy.
 - [x] Add `createCheckpointModelPickerService()` with instance-scoped picker
   state, pending resolver, model preference adapter, and modal-shell interface.
   Add independent-instance and replacement-settlement tests.
-- [ ] Provide the checkpoint picker service from `App.svelte` and pass it into
+- [x] Provide the checkpoint picker service from `App.svelte` and pass it into
   the checkpoint assembly/runtime. Do not migrate the modal component in this
   step; prove fresh mount services are distinct.
 - [ ] Change `CheckpointModelPickerModal.svelte` and checkpoint feature calls
