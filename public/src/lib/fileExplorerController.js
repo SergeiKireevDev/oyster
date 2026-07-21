@@ -5,6 +5,13 @@ export function createOpenFileExplorerEventController({ windowTarget, open }) {
   return { attach, detach };
 }
 
+export function createFileExplorerEventController({ windowTarget, browse, edit, save, upload, backToList, backToHublots }) {
+  const listeners = [["pi-file-explorer-browse", (event) => browse(event.detail)], ["pi-file-explorer-edit", (event) => edit(event.detail)], ["pi-file-explorer-save", save], ["pi-file-explorer-upload", upload], ["pi-file-explorer-back-list", backToList], ["pi-file-explorer-back-hublots", backToHublots]];
+  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
+  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
+  return { attach, detach };
+}
+
 export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });

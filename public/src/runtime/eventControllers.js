@@ -71,19 +71,6 @@ export function registerSessionPickerEvents(target, { dispatch, cancel }) {
   };
 }
 
-export function registerFileExplorerEvents(target, { browse, edit, save, upload, backToList, backToHublots }) {
-  const listeners = [
-    ["pi-file-explorer-browse", (event) => browse(event.detail)],
-    ["pi-file-explorer-edit", (event) => edit(event.detail)],
-    ["pi-file-explorer-save", () => save()],
-    ["pi-file-explorer-upload", () => upload()],
-    ["pi-file-explorer-back-list", () => backToList()],
-    ["pi-file-explorer-back-hublots", () => backToHublots()],
-  ];
-  for (const [name, listener] of listeners) target.addEventListener(name, listener);
-  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
-}
-
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);

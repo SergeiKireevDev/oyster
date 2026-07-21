@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFileUploadInput, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCommandPaletteInput, registerComposerEvents, registerFileUploadInput, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -189,20 +189,6 @@ test("session picker event adapter dispatches actions and cancellation", () => {
   listeners.get("pi-session-picker-action")({ detail: { type: "open", args: ["/a"] } });
   listeners.get("pi-session-picker-cancel")();
   assert.deepEqual(calls, [["open", ["/a"]], ["cancel"]]);
-});
-
-test("file explorer event adapter routes each explorer action", () => {
-  const listeners = new Map();
-  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
-  const calls = [];
-  registerFileExplorerEvents(target, {
-    browse: (path) => calls.push(["browse", path]), edit: (path) => calls.push(["edit", path]),
-    save: () => calls.push("save"), upload: () => calls.push("upload"), backToList: () => calls.push("list"), backToHublots: () => calls.push("hublots"),
-  });
-  listeners.get("pi-file-explorer-browse")({ detail: "/a" });
-  listeners.get("pi-file-explorer-edit")({ detail: "/a/f" });
-  for (const name of ["pi-file-explorer-save", "pi-file-explorer-upload", "pi-file-explorer-back-list", "pi-file-explorer-back-hublots"]) listeners.get(name)();
-  assert.deepEqual(calls, [["browse", "/a"], ["edit", "/a/f"], "save", "upload", "list", "hublots"]);
 });
 
 test("menu event adapter routes its action detail", () => {
