@@ -271,7 +271,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Add numbered, transactional, idempotent schema migrations.
 - [x] Set and document the universal Node version required by `node:sqlite`.
 - [x] Add tests for migrations, constraints, transactions, restart behavior, and concurrent WAL access.
-- [ ] Add a static/integration guard proving app migrations and writes target only `pi-lot-ui.sqlite` and leave the coding-agent schema unchanged.
+- [x] Add a static/integration guard proving app migrations and writes target only `pi-lot-ui.sqlite` and leave the coding-agent schema unchanged.
 
 ### 2. Wire the app store into the stable server core
 

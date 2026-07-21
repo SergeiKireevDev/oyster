@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { openAppStore } from "../persistence/appStore.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".svelte"]);
@@ -61,12 +64,45 @@ test("SQLite identity is never reduced to a bare database-path comparison", () =
   assert.deepEqual(offenders, [], `compare full session references through session-references.mjs: ${offenders.join(", ")}`);
 });
 
-test("application SQLite access remains read-only and workflow mutations stay delegated to pi", () => {
-  const mutation = /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/i;
+test("SQLite mutations are isolated to the pi-lot-ui persistence boundary", () => {
+  const mutation = /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/;
   const offenders = sources
-    .filter(({ text }) => /node:sqlite|DatabaseSync/.test(text) && mutation.test(text))
-    .map(({ name }) => name);
-  assert.deepEqual(offenders, [], `delegate SQLite workflow mutations to the configured pi repository: ${offenders.join(", ")}`);
+    .filter(({ text }) => mutation.test(text))
+    .map(({ name }) => name)
+    .filter((name) => !name.startsWith("persistence/"));
+  assert.deepEqual(offenders, [], `move application SQLite writes into persistence/: ${offenders.join(", ")}`);
+
+  const sqliteConstructors = sources
+    .filter(({ text }) => /from\s+["']node:sqlite["']|new\s+DatabaseSync/.test(text))
+    .map(({ name }) => name)
+    .sort();
+  assert.deepEqual(sqliteConstructors, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
+});
+
+test("opening and migrating pi-lot-ui.sqlite leaves the coding-agent schema unchanged", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-schema-boundary-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const agentPath = join(root, "sessions.sqlite");
+  const appPath = join(root, "pi-lot-ui.sqlite");
+  const agent = new DatabaseSync(agentPath);
+  agent.exec("CREATE TABLE sessions(id TEXT PRIMARY KEY, payload TEXT); INSERT INTO sessions VALUES ('agent-session', 'untouched');");
+  const schemaBefore = agent.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all().map((row) => ({ ...row }));
+  const dataBefore = agent.prepare("SELECT * FROM sessions").all().map((row) => ({ ...row }));
+  agent.close();
+
+  const appStore = openAppStore({ databasePath: appPath });
+  appStore.close();
+
+  const reopenedAgent = new DatabaseSync(agentPath, { readOnly: true });
+  t.after(() => reopenedAgent.close());
+  assert.deepEqual(reopenedAgent.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all().map((row) => ({ ...row })), schemaBefore);
+  assert.deepEqual(reopenedAgent.prepare("SELECT * FROM sessions").all().map((row) => ({ ...row })), dataBefore);
+
+  const app = new DatabaseSync(appPath, { readOnly: true });
+  t.after(() => app.close());
+  const appTables = app.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
+  assert.deepEqual(appTables, ["app_settings", "operations", "schema_migrations"]);
+  assert.equal(appTables.includes("sessions"), false);
 });
 
 test("coding-agent processes can only be spawned by the centralized launcher", () => {
