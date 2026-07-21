@@ -344,6 +344,36 @@ The wrapper/factory work above does **not** by itself satisfy this section:
     module under 400 lines, and add a line-count/import-boundary regression
     test that prevents regression.
 
+  **Second status correction (2026-07-14):** the entrypoint is small but still
+  re-exports the large implementation. Do not check section 7 until these
+  physical moves are complete:
+
+  - [ ] Move the first contiguous controller block (including its imports and
+    tests) out of `appRuntimeImplementation.js`; prove the root line count
+    decreases by at least 100 lines.
+  - [ ] Repeat controller-block extraction commits until the implementation
+    file is below 400 lines or removed.
+  - [ ] Make `appComposition.js` define the runtime factory directly rather
+    than re-exporting from `appRuntimeImplementation.js`; delete the legacy
+    implementation file and update no-reference tests.
+
+## [ ] 9. Physical Root Extraction Sequence
+
+Complete these in order. Every checkbox is intentionally on one line so the
+verified goal loop can match it exactly.
+
+- [ ] Integrate `createManagedEventConnection` into the root and delete the in-root EventSource watchdog and connection construction block.
+- [ ] Add focused managed-connection construction reconnect and teardown tests and verify the event-stream extraction.
+- [ ] Extract the hublot manager and sidebar construction block into `features/hublots/` and replace it with one factory call.
+- [ ] Extract the routine sidebar construction block into `features/routines/` and replace it with one factory call.
+- [ ] Extract settings extension UI and carousel construction blocks into feature factories and replace each with one factory call.
+- [ ] Extract file picker folder browser and explorer construction blocks into `features/files/` and replace them with one factory call.
+- [ ] Extract session picker and search construction blocks into `features/sessions/` and replace them with one factory call.
+- [ ] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.
+- [ ] Move remaining RPC and event-dispatch state into `platform/` and replace root event handling with injected coordinator callbacks.
+- [ ] Delete `appRuntimeImplementation.js` make `appComposition.js` the direct composition factory and update runtime entrypoint imports.
+- [ ] Add a composition-root size and import-boundary test that enforces fewer than 400 lines and forbids feature-local mutable state.
+
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
 reviewable wiring module (a few hundred lines), and every moved feature has a
 fresh mount → teardown → mount lifecycle test.
