@@ -72,13 +72,14 @@
  *                          sessionId?, script? (create only) }
  */
 
-import { timingSafeEqual } from "node:crypto";
-import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync, realpathSync } from "node:fs";
+import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync } from "node:fs";
 
 const isHidden = (name) => name.startsWith(".");
 import { homedir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequestContext } from "./http/createRequestContext.mjs";
+import { createRouteTable } from "./http/createRouteTable.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -129,114 +130,15 @@ export function init(state) {
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
 
-  // ---------------------------------------------------------------- auth
+  // ---------------------------------------------------------------- request context
 
-  const tokenBuf = Buffer.from(config.TOKEN);
-
-  function tokenMatches(provided) {
-    if (!provided) return false;
-    const buf = Buffer.from(String(provided).trim());
-    return buf.length === tokenBuf.length && timingSafeEqual(buf, tokenBuf);
-  }
-
-  function parseCookies(req) {
-    const out = {};
-    for (const part of (req.headers.cookie ?? "").split(";")) {
-      const eq = part.indexOf("=");
-      if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
-    }
-    return out;
-  }
-
-  /** Collect every place a token might arrive. Proxies and tunnels differ in
-   *  what they strip (Authorization is the usual casualty), so accept the token
-   *  from the query string, several headers, or a cookie. */
-  function authCandidates(req, url) {
-    const bearer = req.headers["authorization"];
-    return {
-      query: url.searchParams.get("token"),
-      bearer: bearer?.startsWith("Bearer ") ? bearer.slice(7) : bearer,
-      xAuthToken: req.headers["x-auth-token"],
-      xApiKey: req.headers["x-api-key"],
-      cookie: parseCookies(req).pi_ui_token,
-    };
-  }
-
-  /** best-effort client identity for rate limiting: the tunnel edge puts the
-   *  real address in a header (everything arrives from localhost otherwise) */
-  function clientIp(req) {
-    return req.headers["cf-connecting-ip"]
-      || String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim()
-      || req.socket.remoteAddress || "?";
-  }
-
-  // brute-force guard: after too many bad tokens from one address, reject
-  // outright for a while (state-owned so it survives hot reloads)
-  const AUTH_FAIL_WINDOW_MS = 10 * 60 * 1000;
+  const requestContext = createRequestContext(state);
+  const {
+    json, readRawBody, readJsonBody, mimeType,
+    tokenMatches, authCandidates, clientIp, recentAuthFailures,
+    recordAuthFailure, checkAuth, resolveSafePath: confinePath,
+  } = requestContext;
   const AUTH_FAIL_MAX = 20;
-
-  function recentAuthFailures(ip) {
-    const fails = (state.authFails ??= new Map());
-    const now = Date.now();
-    const recent = (fails.get(ip) ?? []).filter((t) => now - t < AUTH_FAIL_WINDOW_MS);
-    if (recent.length) fails.set(ip, recent); else fails.delete(ip);
-    return recent;
-  }
-
-  function recordAuthFailure(ip) {
-    recentAuthFailures(ip).push(Date.now());
-  }
-
-  /** @returns {"ok" | "fail" | "throttled"} */
-  function checkAuth(req, url) {
-    const ip = clientIp(req);
-    if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) return "throttled";
-    const candidates = authCandidates(req, url);
-    // tokens in query strings leak into proxy logs, browser history and
-    // Referer headers: only GETs may use one (EventSource can't send headers,
-    // download links can't either) — mutating requests need a header or cookie
-    if (req.method !== "GET") candidates.query = null;
-    if (Object.values(candidates).some(tokenMatches)) {
-      state.authFails?.delete(ip);
-      return "ok";
-    }
-    recordAuthFailure(ip);
-    // diagnostic: show which credentials arrived (masked) so stripped headers are visible
-    const seen = Object.entries(candidates)
-      .map(([k, v]) => `${k}=${v ? `${String(v).slice(0, 4)}…(${String(v).length})` : "-"}`)
-      .join(" ");
-    console.log(`[auth-fail] ${req.method} ${url.pathname} from ${ip} | ${seen} | ua=${req.headers["user-agent"] ?? "-"}`);
-    return "fail";
-  }
-
-  // ---------------------------------------------------------------- path confinement
-  //
-  // The file explorer endpoints operate on arbitrary paths behind a single
-  // bearer token. Confine them to a small set of roots and deny credential
-  // stores, so a leaked token doesn't expose the whole account.
-
-  const FS_ROOTS = [...new Set([homedir(), "/tmp", config.PI_DIR].map((p) => resolve(p)))];
-  const FS_DENIED = [
-    ...[".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".config/gh"].map((n) => join(homedir(), n)),
-    join(config.DIRNAME, ".ui-token"),
-  ];
-
-  const within = (p, root) => p === root || p.startsWith(root + "/");
-
-  /** Resolve symlinks and enforce the allowlist/denylist. Returns the real
-   *  path, or null if it is out of bounds. */
-  function confinePath(p) {
-    let real = p;
-    try {
-      real = realpathSync(p);
-    } catch {
-      // target may not exist yet (file-save, upload): resolve its parent
-      try { real = join(realpathSync(dirname(p)), basename(p)); } catch {}
-    }
-    if (!FS_ROOTS.some((r) => within(real, r))) return null;
-    if (FS_DENIED.some((d) => within(real, d))) return null;
-    return real;
-  }
 
   function forbidden(res, p) {
     json(res, 403, { error: `path outside the allowed roots: ${p}` });
@@ -279,73 +181,6 @@ export function init(state) {
   const DIST_DIR = join(config.DIRNAME, "dist");
   const SERVE_DIR = existsSync(join(DIST_DIR, "index.html")) ? DIST_DIR : PUBLIC_DIR;
   const INDEX_PATH = join(SERVE_DIR, "index.html");
-  const STATIC_TYPES = new Map([
-    [".js", "text/javascript; charset=utf-8"],
-    [".css", "text/css; charset=utf-8"],
-    [".html", "text/html; charset=utf-8"],
-    [".svg", "image/svg+xml"],
-    [".png", "image/png"],
-    [".jpg", "image/jpeg"],
-    [".jpeg", "image/jpeg"],
-    [".gif", "image/gif"],
-    [".webp", "image/webp"],
-    [".ico", "image/x-icon"],
-  ]);
-
-  function readBody(req, limit = 5 * 1024 * 1024) {
-    return new Promise((resolvePromise, reject) => {
-      const chunks = [];
-      let size = 0;
-      req.on("data", (c) => {
-        size += c.length;
-        if (size > limit) {
-          reject(new Error("body too large"));
-          req.destroy();
-          return;
-        }
-        chunks.push(c);
-      });
-      req.on("end", () => resolvePromise(Buffer.concat(chunks).toString("utf8")));
-      req.on("error", reject);
-    });
-  }
-
-  // binary-safe variant for file uploads
-  function readRawBody(req, limit = 100 * 1024 * 1024) {
-    return new Promise((resolvePromise, reject) => {
-      const chunks = [];
-      let size = 0;
-      req.on("data", (c) => {
-        size += c.length;
-        if (size > limit) {
-          reject(new Error("body too large"));
-          req.destroy();
-          return;
-        }
-        chunks.push(c);
-      });
-      req.on("end", () => resolvePromise(Buffer.concat(chunks)));
-      req.on("error", reject);
-    });
-  }
-
-  function json(res, status, obj) {
-    const body = JSON.stringify(obj);
-    res.writeHead(status, {
-      "content-type": "application/json",
-      "content-length": Buffer.byteLength(body),
-    });
-    res.end(body);
-  }
-
-  async function readJsonBody(req, res) {
-    try {
-      return JSON.parse(await readBody(req));
-    } catch (e) {
-      json(res, 400, { error: `invalid JSON: ${e.message}` });
-      return undefined;
-    }
-  }
 
   // ---------------------------------------------------------------- misc app logic
 
@@ -1033,6 +868,9 @@ export function init(state) {
     },
   };
 
+  const routeTable = createRouteTable({ open: openRoutes, authenticated: routes });
+  const openRouteKeys = new Set(Object.keys(openRoutes));
+
   // ---------------------------------------------------------------- dispatch
 
   // permalink routes are client-side: /s/<sessionId> and /s/<sessionId>/m/<entryId>
@@ -1060,9 +898,9 @@ export function init(state) {
     try { decoded = decodeURIComponent(pathname); } catch { return false; }
     const rel = decoded.replace(/^\/+/, "");
     const target = resolve(SERVE_DIR, rel);
-    if (!within(target, SERVE_DIR) || !existsSync(target) || statSync(target).isDirectory()) return false;
+    if (!(target === SERVE_DIR || target.startsWith(SERVE_DIR + "/")) || !existsSync(target) || statSync(target).isDirectory()) return false;
     res.writeHead(200, {
-      "content-type": STATIC_TYPES.get(extname(target).toLowerCase()) ?? "application/octet-stream",
+      "content-type": mimeType(target),
       "cache-control": "no-cache",
     });
     createReadStream(target).pipe(res);
@@ -1076,7 +914,7 @@ export function init(state) {
     if (req.method === "GET" && isAppRoute(url.pathname)) return serveApp(res);
     if (req.method === "GET" && servePublicAsset(url.pathname, res)) return;
 
-    const open = openRoutes[key];
+    const open = openRouteKeys.has(key) ? routeTable.get(key) : undefined;
     if (open) return open(req, res, url);
 
     // everything below requires auth
@@ -1097,12 +935,11 @@ export function init(state) {
       return;
     }
 
-    const route = routes[key];
+    const route = routeTable.get(key);
     if (route) return route(req, res, url);
 
     // same path exists under another method -> 405, otherwise 404
-    const pathKnown = [...Object.keys(routes), ...Object.keys(openRoutes)]
-      .some((k) => k.endsWith(` ${url.pathname}`));
+    const pathKnown = [...routeTable.keys()].some((k) => k.endsWith(` ${url.pathname}`));
     json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 

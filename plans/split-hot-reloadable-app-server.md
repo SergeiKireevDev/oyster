@@ -55,7 +55,7 @@ before route code moves.
   currently in `app.mjs`: JSON/text responses, JSON body parsing, MIME lookup,
   auth/token comparison, rate-limit checks, and safe path resolution. Preserve
   current status codes and add focused contract tests for each helper.
-- [ ] Change `app.mjs` to construct the request context and route table through
+- [x] Change `app.mjs` to construct the request context and route table through
   these factories without moving any route handler. Keep the existing handler
   behavior and add a regression test for open-route versus authenticated-route
   dispatch.
