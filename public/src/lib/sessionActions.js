@@ -59,6 +59,15 @@ export function markRunnerStopped(runners, id) {
 }
 
 /** Select the next live, session-backed runner in the current workdir. */
+export function formatSessionDate(iso, now = new Date()) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export function adjacentActiveRunner(runners, currentRunner, workdir, direction) {
   const candidates = runners.filter((runner) =>
     runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir

@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createStateRefresher, formatSessionDate, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+
+test("session actions format session dates", () => {
+  const now = new Date("2025-01-02T12:00:00Z");
+  assert.equal(formatSessionDate(null, now), "");
+  assert.ok(formatSessionDate("2025-01-02T10:30:00Z", now).length > 0);
+});
 
 test("session actions parse and synchronize session routes", () => {
   assert.deepEqual(parseSessionRoute("/s/session-1/m/message-2"), { sessionId: "session-1", messageId: "message-2" });
