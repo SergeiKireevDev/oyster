@@ -4,10 +4,14 @@ import { pathToFileURL } from "node:url";
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
 
-function capabilityError(message, cause) {
+function credentialError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
-  error.code = CAPABILITY_ERROR;
+  error.code = code;
   return error;
+}
+
+function capabilityError(message, cause) {
+  return credentialError(CAPABILITY_ERROR, message, cause);
 }
 
 function exportedEntryTarget(value) {
@@ -90,6 +94,31 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     throw capabilityError("validated absolute PI_AGENT_DIR is required for credential support");
   }
 
+  function normalizedProvider(provider) {
+    if (typeof provider !== "string" || !provider.trim()) {
+      throw credentialError("invalid_provider", "provider is required");
+    }
+    return provider.trim();
+  }
+
+  function reloadOrFail(authStorage) {
+    // Initialization errors are intentionally drained only immediately before a
+    // fresh reload: malformed storage must fail closed instead of serving the
+    // last in-memory snapshot retained by AuthStorage.
+    authStorage.drainErrors?.();
+    authStorage.reload();
+    const errors = authStorage.drainErrors?.() ?? [];
+    if (errors.length) {
+      throw capabilityError("configured pi auth storage could not be loaded");
+    }
+  }
+
+  function safeCredential(provider, credential) {
+    if (credential?.type === "api_key") return Object.freeze({ provider, credentialType: "api_key" });
+    if (credential?.type === "oauth") return Object.freeze({ provider, credentialType: "oauth" });
+    throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+  }
+
   let adapterPromise;
   async function load() {
     if (!adapterPromise) {
@@ -119,5 +148,46 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return adapterPromise;
   }
 
-  return Object.freeze({ load });
+  async function listStoredCredentials() {
+    const { authStorage } = await load();
+    reloadOrFail(authStorage);
+    return authStorage.list()
+      .sort((left, right) => left.localeCompare(right))
+      .map((provider) => safeCredential(provider, authStorage.get(provider)));
+  }
+
+  async function setApiKey(provider, key) {
+    const providerId = normalizedProvider(provider);
+    if (typeof key !== "string" || !key) throw credentialError("invalid_key", "API key is required");
+    const { authStorage } = await load();
+    reloadOrFail(authStorage);
+    const current = authStorage.get(providerId);
+    if (current?.type === "oauth") {
+      throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
+    }
+    if (current && current.type !== "api_key") {
+      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    }
+    const env = current?.env ? { ...current.env } : undefined;
+    authStorage.set(providerId, { type: "api_key", key, ...(env ? { env } : {}) });
+    return Object.freeze({ provider: providerId, credentialType: "api_key" });
+  }
+
+  async function removeApiKey(provider) {
+    const providerId = normalizedProvider(provider);
+    const { authStorage } = await load();
+    reloadOrFail(authStorage);
+    const current = authStorage.get(providerId);
+    if (current?.type === "oauth") {
+      throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
+    }
+    if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored API key`);
+    if (current.type !== "api_key") {
+      throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    }
+    authStorage.remove(providerId);
+    return Object.freeze({ provider: providerId, removed: true });
+  }
+
+  return Object.freeze({ load, listStoredCredentials, setApiKey, removeApiKey });
 }

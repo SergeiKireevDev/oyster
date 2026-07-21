@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createPiCredentialService, resolveConfiguredPiSdk } from "../pi-credential-service.mjs";
+
+const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
 function fixture({ sdkSource, manifest = {} } = {}) {
   const root = mkdtempSync(join(tmpdir(), "pi-credential-service-"));
@@ -84,6 +86,77 @@ test("credential service does not fall back when PI_BIN has no owning SDK packag
         && error.message.includes("not owned by a package exposing its SDK")
         && error.message.includes(cli),
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("credential operations preserve unrelated credentials, provider env, concurrent updates, and file mode", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-credential-operations-"));
+  const agentDir = join(root, "agent");
+  mkdirSync(agentDir);
+  const authPath = join(agentDir, "auth.json");
+  const oauth = { type: "oauth", access: "oauth-access-canary", refresh: "oauth-refresh-canary", expires: 42 };
+  writeFileSync(authPath, JSON.stringify({
+    alpha: { type: "api_key", key: "alpha-old-canary", env: { REGION: "private" } },
+    oauth,
+    untouched: { type: "api_key", key: "untouched-canary" },
+  }), { mode: 0o600 });
+
+  try {
+    const service = createPiCredentialService({ config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: agentDir } });
+    assert.deepEqual(await service.listStoredCredentials(), [
+      { provider: "alpha", credentialType: "api_key" },
+      { provider: "oauth", credentialType: "oauth" },
+      { provider: "untouched", credentialType: "api_key" },
+    ]);
+    assert.doesNotMatch(JSON.stringify(await service.listStoredCredentials()), /canary|private/);
+
+    await service.setApiKey("alpha", "alpha-new-canary");
+
+    const sdk = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/index.js");
+    const concurrentStorage = sdk.AuthStorage.create(authPath);
+    concurrentStorage.set("refreshed-oauth", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
+    await service.setApiKey("added", "added-canary");
+
+    let stored = JSON.parse(readFileSync(authPath, "utf8"));
+    assert.deepEqual(stored.alpha, { type: "api_key", key: "alpha-new-canary", env: { REGION: "private" } });
+    assert.deepEqual(stored.oauth, oauth);
+    assert.equal(stored.untouched.key, "untouched-canary");
+    assert.equal(stored.added.key, "added-canary");
+    assert.equal(stored["refreshed-oauth"].refresh, "fresh-refresh");
+    assert.equal(statSync(authPath).mode & 0o777, 0o600);
+
+    await assert.rejects(service.setApiKey("oauth", "must-not-write"), { code: "oauth_conflict" });
+    await assert.rejects(service.removeApiKey("oauth"), { code: "oauth_conflict" });
+    await service.removeApiKey("alpha");
+    stored = JSON.parse(readFileSync(authPath, "utf8"));
+    assert.equal(stored.alpha, undefined);
+    assert.deepEqual(stored.oauth, oauth);
+    assert.equal(stored.untouched.key, "untouched-canary");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("credential operations create auth.json as 0600 and fail closed on malformed storage", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-credential-malformed-"));
+  const agentDir = join(root, "agent");
+  mkdirSync(agentDir);
+  try {
+    const service = createPiCredentialService({ config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: agentDir } });
+    await service.setApiKey("alpha", "create-canary");
+    const authPath = join(agentDir, "auth.json");
+    assert.equal(statSync(authPath).mode & 0o777, 0o600);
+    writeFileSync(authPath, '{"alpha":');
+    await assert.rejects(
+      service.listStoredCredentials(),
+      (error) => error.code === "credential_service_unavailable"
+        && error.message === "configured pi auth storage could not be loaded"
+        && !error.message.includes("create-canary"),
+    );
+    await assert.rejects(service.setApiKey("beta", "other-canary"), { code: "credential_service_unavailable" });
+    assert.equal(readFileSync(authPath, "utf8"), '{"alpha":');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

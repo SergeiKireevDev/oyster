@@ -62,7 +62,7 @@ Run the build and broader checks in the final step.
   `PI_AGENT_DIR/auth.json` and `PI_AGENT_DIR/models.json`. Fail with an
   actionable diagnostic when the configured executable does not expose the
   required SDK rather than falling back to another globally installed version.
-- [ ] Expose narrow operations to list safe provider metadata, set an API-key
+- [x] Expose narrow operations to list safe provider metadata, set an API-key
   credential, and remove an API-key credential. Reload storage before reads,
   rely on `AuthStorage` for locked writes and `0600` permissions, preserve
   concurrent OAuth refreshes, and reject an API-key mutation that would
