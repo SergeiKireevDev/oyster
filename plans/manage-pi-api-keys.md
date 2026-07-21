@@ -109,7 +109,7 @@ inactive, and serialized responses/errors contain no submitted or stored key.
 
 ## 3. Add the API Keys Menu Workflow
 
-- [ ] Add a top-level **API Keys…** action to `Menu.svelte`, route it through the
+- [x] Add a top-level **API Keys…** action to `Menu.svelte`, route it through the
   mount-scoped `uiActionRegistry`, and register/unregister the handler in the
   owning feature assembly. Keep this separate from `SettingsModal` so secrets
   do not enter the browser-preference feature boundary.

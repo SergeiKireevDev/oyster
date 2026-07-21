@@ -38,6 +38,7 @@ import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
+import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
 import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
 import { generateRoutine, listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
@@ -395,6 +396,7 @@ const dialogAdapters = createDialogAdapters({
   findElement: $,
   setTitle: (title) => updateAppSession({ titleOverride: title }),
 });
+const credentialsAssembly = createCredentialsAssembly({ uiActions, openModal: openModalState });
 const extensionUiAdapters = dialogAdapters.extensionUi;
 const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;
@@ -922,13 +924,14 @@ const detachRuntimeEventAdapters = () => {
   detachSessionPickerActions();
   transcriptAssembly.teardown();
   resourceAssembly.teardown();
+  credentialsAssembly.teardown();
   dialogAdapters.teardown();
 };
 const featureAssembly = createFeatureAssembly({
   platform: connectionCoordinator,
   sessions: sessionAssembly,
   transcript: transcriptFeature,
-  features: {},
+  features: { credentials: credentialsAssembly.operations },
 });
 
 void featureAssembly;

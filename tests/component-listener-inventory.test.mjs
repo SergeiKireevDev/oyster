@@ -24,7 +24,7 @@ function locations(pattern) {
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
     "App.svelte:38:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
-    "components/Menu.svelte:18:<svelte:document onclick={close} />",
+    "components/Menu.svelte:23:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
     "components/Transcript.svelte:18:messages.addEventListener(\"load\", onLoad, true);",
     "components/Transcript.svelte:19:return () => messages.removeEventListener(\"load\", onLoad, true);",
@@ -40,7 +40,7 @@ test("Svelte-managed document and element integrations stay on the approved list
   assert.deepEqual(locations(/<svelte:(?:document|window)\b|\buse:[\w]+/), [
     "components/FolderBrowserModal.svelte:50:use:focusOnMount",
     "components/HublotManagerModal.svelte:77:use:commandPalette",
-    "components/Menu.svelte:18:<svelte:document onclick={close} />",
+    "components/Menu.svelte:23:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
     "components/SessionPickerModal.svelte:96:use:focusOnMount",
   ]);

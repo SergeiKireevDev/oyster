@@ -22,7 +22,7 @@ test("Menu routes every action through the scoped registry", () => {
   assert.doesNotMatch(menuSource, /window\.dispatchEvent|CustomEvent/);
   assert.deepEqual(
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
-    ["compact", "analytics", "settings", "restart", "logout"],
+    ["compact", "analytics", "apiKeys", "settings", "restart", "logout"],
   );
 });
 
