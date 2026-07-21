@@ -46,6 +46,7 @@ import { createHublotController } from "./lib/hublotController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
+import { createSessionPickerController } from "./lib/sessionPickerController.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2149,6 +2150,14 @@ async function loadSessionPickerFolder(folder) {
   }
 }
 
+const sessionPickerController = createSessionPickerController({
+  stopRunner: (id) => stopSessionRunner(fetch, id),
+  getRunners: () => runnersNow,
+  markStopped: markRunnerStopped,
+  setRunners: updateSessionPickerRunners,
+  toast,
+});
+
 const sessionPickerActions = {
   setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
   setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
@@ -2159,17 +2168,7 @@ const sessionPickerActions = {
     closeModal();
     sessionPickerResolve?.(session);
   },
-  stopSession: async (session) => {
-    const runner = runnersNow.find((x) => x.sessionFile === session.path) ?? { id: session.runnerId };
-    if (!runner.id) return;
-    try {
-      await stopSessionRunner(fetch, runner.id);
-      toast("process stopped");
-      updateSessionPickerRunners(markRunnerStopped(runnersNow, runner.id));
-    } catch (err) {
-      toast(`stop failed: ${err.message}`, "error");
-    }
-  },
+  stopSession: sessionPickerController.stopSession,
   deleteSession: async (session) => {
     if (!confirm(`Delete session "${session.name || session.preview || session.id?.slice(0, 8) || "?"}"?`)) return;
     try {
