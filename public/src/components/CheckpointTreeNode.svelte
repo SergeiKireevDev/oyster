@@ -1,5 +1,7 @@
 <script>
-  import { rollbackCheckpoint } from "../lib/legacyBridge.js";
+  function rollbackCheckpoint(checkpoint, target) {
+    window.dispatchEvent(new CustomEvent("pi-checkpoint-tree-rollback", { detail: { checkpoint, target } }));
+  }
 
   function openCheckpointTreeSession(node) {
     window.dispatchEvent(new CustomEvent("pi-checkpoint-tree-open-session", { detail: node }));

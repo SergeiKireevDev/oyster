@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -642,8 +642,8 @@ async function openTreeSession(node) {
   }
 }
 
-setCheckpointTreeHandlers({ rollback: rollbackToCheckpoint });
 window.addEventListener("pi-checkpoint-tree-open-session", (event) => openTreeSession(event.detail));
+window.addEventListener("pi-checkpoint-tree-rollback", (event) => rollbackToCheckpoint(event.detail.checkpoint, event.detail.target));
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;

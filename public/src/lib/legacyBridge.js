@@ -7,7 +7,6 @@ let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
 let routineHandlers = {};
 let commandPaletteHandlers = {};
-let checkpointTreeHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -199,13 +198,5 @@ export function setCommandPaletteHandlers(handlers) {
 
 export function runCommandPaletteIndex(index) {
   return commandPaletteHandlers.runIndex?.(index);
-}
-
-export function setCheckpointTreeHandlers(handlers) {
-  checkpointTreeHandlers = handlers ?? {};
-}
-
-export function rollbackCheckpoint(checkpoint, element) {
-  return checkpointTreeHandlers.rollback?.(checkpoint, element);
 }
 
