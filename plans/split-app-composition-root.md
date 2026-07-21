@@ -56,7 +56,7 @@ hydration state.
 **Acceptance:** the root does not construct composer or command controllers and
 does not own composer-local mutable state.
 
-## [ ] 5. Extract Checkpoint Assembly
+## [x] 5. Extract Checkpoint Assembly
 
 - [x] Create `features/checkpoints/createCheckpointAssembly.js` and move checkpoint model picker, marker, tree, freeze, rollback, and action construction into it.
 - [x] Inject session identity, transcript element access, fetch, modal, and toast interfaces.
