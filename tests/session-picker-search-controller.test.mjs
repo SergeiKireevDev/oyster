@@ -9,3 +9,17 @@ test("session picker search ignores stale results", async () => {
   assert.equal(updates.length, 1);
   assert.equal(updates[0].searching, true);
 });
+
+test("session picker search controller applies filter actions before searching", async () => {
+  let snapshot = { query: "", scope: "all", sessions: [], excludeTools: true };
+  const controller = createSessionPickerSearchController({
+    getSnapshot: () => snapshot,
+    update: (value) => { snapshot = { ...snapshot, ...value }; },
+    groupResults: (items) => items,
+    fetchSearch: async () => { throw new Error("should not search short query"); },
+  });
+  await controller.setScope("folder");
+  await controller.setFolder("/workspace");
+  await controller.setExcludeTools(false);
+  assert.deepEqual(snapshot, { query: "", scope: "folder", folderPath: "/workspace", sessions: [], excludeTools: false, searchStatus: "", searchResults: [], searching: false });
+});

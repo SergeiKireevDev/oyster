@@ -19,5 +19,8 @@ export function createSessionPickerSearchController({ getSnapshot, update, fetch
       update({ searchStatus: `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : ""), searchResults: groupResults(data.results), searchFilesSearched: data.filesSearched, searchTruncated: !!data.truncated, searching: false });
     } catch (error) { update({ searchStatus: `search failed: ${error.message}`, searchResults: [], searching: false }); }
   }
-  return { search };
+  function setScope(scope) { update({ scope }); return search(); }
+  function setFolder(folderPath) { update({ folderPath }); return search(); }
+  function setExcludeTools(excludeTools) { update({ excludeTools }); return search(); }
+  return { search, setScope, setFolder, setExcludeTools };
 }

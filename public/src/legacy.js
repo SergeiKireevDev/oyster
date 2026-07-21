@@ -1914,9 +1914,9 @@ const sessionPickerDeleteController = createSessionPickerDeleteController({
 });
 
 const sessionPickerActions = {
-  setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
-  setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
-  setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },
+  setScope: sessionPickerSearchController.setScope,
+  setFolder: sessionPickerSearchController.setFolder,
+  setExcludeTools: sessionPickerSearchController.setExcludeTools,
   runSearch: runSessionPickerSearch,
   chooseSession: (sessionPath) => {
     closeModal();
