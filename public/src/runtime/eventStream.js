@@ -16,6 +16,13 @@ export function stateRefreshRequired(command) {
 
 /** Handle live runner exit without surfacing replayed historical exits. */
 /** Surface a live Pi spawn failure while ignoring replayed history. */
+export function createResponseEventController({ handleResponse, refreshRequired, refreshState }) {
+  return (message) => {
+    handleResponse(message);
+    if (refreshRequired(message.command)) refreshState();
+  };
+}
+
 export function createCodeReloadController({ isReplaying, toast, reloadPage }) {
   return (message) => {
     if (isReplaying()) return false;
