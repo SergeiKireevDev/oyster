@@ -14,9 +14,6 @@
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
   import { modalState } from "../stores/modal.js";
-  import { getDialogService } from "../runtime/dialogServiceContext.js";
-
-  const dialogs = getDialogService();
 </script>
 
 <CarouselDots />
@@ -51,27 +48,6 @@
         <FileExplorerModal />
       {:else if $modalState.content === "sessionPicker"}
         <SessionPickerModal />
-      {/if}
-    </div>
-
-    <div class="m-actions" id="mActions">
-      {#if $modalState.content === "optionPicker"}
-        <span
-          class="chip"
-          role="button"
-          tabindex="0"
-          onclick={dialogs.cancelOption}
-          onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelOption(); }}
-        >Cancel</span>
-      {:else if $modalState.content === "textPrompt"}
-        <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelText} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelText(); }}>Cancel</span>
-        <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitText}>OK</button>
-      {:else if $modalState.content === "editorPrompt"}
-        <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelEditor} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelEditor(); }}>Cancel</span>
-        <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitEditor}>OK</button>
-      {:else if $modalState.content === "confirmPrompt"}
-        <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
-        <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
       {/if}
     </div>
   {/if}

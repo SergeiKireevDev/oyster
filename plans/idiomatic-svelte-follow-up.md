@@ -101,7 +101,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Move settings and session-picker footer controls from `Overlays.svelte`
   to `SettingsModal.svelte` and `SessionPickerModal.svelte`, preserving close
   and cancellation behavior with focused tests.
-- [ ] Reduce `Overlays.svelte` to overlay-shell state, modal selection, carousel
+- [x] Reduce `Overlays.svelte` to overlay-shell state, modal selection, carousel
   dots, toasts, and modal component rendering. Add a static test that it imports
   no feature action module and contains no feature-specific footer branch.
 

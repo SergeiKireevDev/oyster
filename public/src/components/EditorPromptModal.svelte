@@ -24,3 +24,8 @@
     else if (event.key === "Escape") dialogs.cancelEditor();
   }}
 ></textarea>
+
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelEditor} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelEditor(); }}>Cancel</span>
+  <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitEditor}>OK</button>
+</div>

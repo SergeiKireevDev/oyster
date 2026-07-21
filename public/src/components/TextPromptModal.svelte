@@ -23,3 +23,8 @@
     else if (event.key === "Escape") dialogs.cancelText();
   }}
 />
+
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelText} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelText(); }}>Cancel</span>
+  <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitText}>OK</button>
+</div>

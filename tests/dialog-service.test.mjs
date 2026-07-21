@@ -19,24 +19,25 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.match(modal, /getDialogService\(\)/);
   assert.match(modal, /dialogs\.(?:submitText|cancelText|setTextValue)/);
   assert.doesNotMatch(modal, /stores\/dialogs\.js/);
-  assert.match(overlays, /onclick=\{dialogs\.cancelText\}/);
-  assert.match(overlays, /onclick=\{dialogs\.submitText\}/);
+  assert.match(modal, /onclick=\{dialogs\.cancelText\}/);
+  assert.match(modal, /onclick=\{dialogs\.submitText\}/);
   assert.match(editor, /getDialogService\(\)/);
   assert.match(editor, /dialogs\.(?:submitEditor|cancelEditor|setEditorValue)/);
   assert.doesNotMatch(editor, /stores\/dialogs\.js/);
-  assert.match(overlays, /onclick=\{dialogs\.cancelEditor\}/);
-  assert.match(overlays, /onclick=\{dialogs\.submitEditor\}/);
+  assert.match(editor, /onclick=\{dialogs\.cancelEditor\}/);
+  assert.match(editor, /onclick=\{dialogs\.submitEditor\}/);
   assert.match(confirm, /getDialogService\(\)/);
   assert.doesNotMatch(confirm, /stores\/dialogs\.js/);
-  assert.match(overlays, /dialogs\.answerConfirm\(false\)/);
-  assert.match(overlays, /dialogs\.answerConfirm\(true\)/);
+  assert.match(confirm, /dialogs\.answerConfirm\(false\)/);
+  assert.match(confirm, /dialogs\.answerConfirm\(true\)/);
   assert.match(option, /getDialogService\(\)/);
   assert.doesNotMatch(option, /stores\/optionPicker\.js/);
   assert.match(option, /event\.key === "ArrowDown"/);
   assert.match(option, /event\.key === "ArrowUp"/);
   assert.match(option, /event\.key === "Enter"/);
   assert.match(option, /event\.key === "Escape"/);
-  assert.match(overlays, /onclick=\{dialogs\.cancelOption\}/);
+  assert.match(option, /onclick=\{dialogs\.cancelOption\}/);
+  assert.doesNotMatch(overlays, /dialogs\.|dialogServiceContext/);
 });
 
 test("dialog adapters use the scoped service without module-level controller bridges", () => {

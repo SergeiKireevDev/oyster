@@ -59,3 +59,13 @@
     onmousemove={() => dialogs.setOptionActive(item.index)}
   >{item.text}</button>
 {/each}
+
+<div class="m-actions" id="mActions">
+  <span
+    class="chip"
+    role="button"
+    tabindex="0"
+    onclick={dialogs.cancelOption}
+    onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelOption(); }}
+  >Cancel</span>
+</div>

@@ -59,3 +59,13 @@ test("settings and session picker own their footer actions", () => {
   assert.doesNotMatch(overlays, /closeModalState|cancelSessionPicker/);
   assert.doesNotMatch(overlays, /content === "settings"[^]*Done/);
 });
+
+test("overlay is a declarative shell without feature footer routing", () => {
+  const overlays = read("Overlays.svelte");
+  const prompts = ["OptionPickerModal.svelte", "TextPromptModal.svelte", "EditorPromptModal.svelte", "ConfirmPromptModal.svelte"];
+
+  for (const prompt of prompts) assert.match(read(prompt), /class="m-actions" id="mActions"/);
+  assert.doesNotMatch(overlays, /features\/|dialogServiceContext|dialogs\./);
+  assert.doesNotMatch(overlays, /onclick=|onkeydown=/);
+  assert.equal(overlays.match(/class="m-actions"/g)?.length, 1, "only the extension UI shell keeps an empty action mount");
+});
