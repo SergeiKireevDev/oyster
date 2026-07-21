@@ -36,6 +36,7 @@ function safeFailureCode(error) {
 export function createPiOAuthFlowService({
   registry,
   credentialService,
+  restartActiveRunners,
   randomBytes = nodeRandomBytes,
   now = Date.now,
   maxActiveFlows = 4,
@@ -48,6 +49,7 @@ export function createPiOAuthFlowService({
   if (!credentialService || typeof credentialService.loginOAuth !== "function") {
     throw new TypeError("credentialService.loginOAuth is required");
   }
+  if (typeof restartActiveRunners !== "function") throw new TypeError("restartActiveRunners is required");
   if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
   if (typeof now !== "function") throw new TypeError("now is required");
   if (!Number.isSafeInteger(maxActiveFlows) || maxActiveFlows < 1 || maxActiveFlows > 32) {
@@ -79,6 +81,21 @@ export function createPiOAuthFlowService({
     return text;
   }
 
+  function safeRestart(value) {
+    const runnerIds = Array.isArray(value?.runnerIds)
+      ? value.runnerIds.filter((id) => typeof id === "string" && id.length <= 256).slice(0, 1000)
+      : [];
+    const failedRunnerIds = Array.isArray(value?.failedRunnerIds)
+      ? value.failedRunnerIds.filter((id) => runnerIds.includes(id)).slice(0, 1000)
+      : [];
+    const status = value?.status === "restarted" || value?.status === "partial" ? value.status : "failed";
+    return Object.freeze({
+      status,
+      runnerIds: Object.freeze(runnerIds),
+      ...(failedRunnerIds.length ? { failedRunnerIds: Object.freeze(failedRunnerIds) } : {}),
+    });
+  }
+
   function requestSnapshot(request) {
     return Object.freeze({
       requestId: request.requestId,
@@ -102,6 +119,7 @@ export function createPiOAuthFlowService({
       ...(flow.deviceCode ? { deviceCode: Object.freeze({ ...flow.deviceCode }) } : {}),
       ...(flow.progress ? { progress: flow.progress } : {}),
       ...(flow.requests?.size ? { requests: [...flow.requests.values()].map(requestSnapshot) } : {}),
+      ...(flow.restart ? { restart: flow.restart } : {}),
       ...(flow.failureCode ? { failureCode: flow.failureCode } : {}),
     });
   }
@@ -259,7 +277,23 @@ export function createPiOAuthFlowService({
 
     flow.promise = Promise.resolve()
       .then(() => credentialService.loginOAuth(id, callbacksFor(flow)))
-      .then(() => finish(flow, "succeeded"))
+      .then(async () => {
+        if (flow.status !== ACTIVE_STATUS) return;
+        flow.credentialPersisted = true;
+        if (flow.activeTimer) clearTimer(flow.activeTimer);
+        delete flow.activeTimer;
+        flow.phase = "restarting";
+        flow.updatedAt = now();
+        try {
+          const restart = await restartActiveRunners();
+          if (flow.status !== ACTIVE_STATUS) return;
+          flow.restart = safeRestart(restart);
+        } catch {
+          if (flow.status !== ACTIVE_STATUS) return;
+          flow.restart = Object.freeze({ status: "failed", runnerIds: Object.freeze([]) });
+        }
+        finish(flow, "succeeded");
+      })
       .catch((error) => finish(flow, "failed", safeFailureCode(error)));
 
     return snapshot(flow);
@@ -288,6 +322,9 @@ export function createPiOAuthFlowService({
   function cancel(flowId) {
     const flow = registry.get(flowId);
     if (!flow) throw flowError("oauth_flow_not_found", "OAuth flow not found");
+    if (flow.credentialPersisted) {
+      throw flowError("oauth_flow_inactive", "OAuth credential is already saved and runners are restarting");
+    }
     if (!finish(flow, "cancelled", "oauth_cancelled", { abort: true })) return snapshot(flow);
     return snapshot(flow);
   }

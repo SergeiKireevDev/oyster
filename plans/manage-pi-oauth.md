@@ -122,7 +122,7 @@ and unrelated credentials survive concurrent writes.
   settle, provider reservations are released, callback-server/device polling is
   aborted, and expired transient URLs, codes, instructions, and submitted
   values are erased from memory.
-- [ ] On successful credential persistence, invoke the existing
+- [x] On successful credential persistence, invoke the existing
   restart-active-runners operation and attach only safe restart metadata to the
   terminal flow. Represent partial/failed restart distinctly from OAuth failure,
   because the credential is already durable; never restart on login failure or

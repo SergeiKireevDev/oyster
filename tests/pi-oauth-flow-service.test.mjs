@@ -18,6 +18,8 @@ async function settle() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+const restartNoRunners = async () => ({ status: "restarted", runnerIds: [] });
+
 test("OAuth flow coordinator uses host registry, random IDs, and safe snapshots", async () => {
   const registry = new Map();
   const login = deferred();
@@ -25,6 +27,7 @@ test("OAuth flow coordinator uses host registry, random IDs, and safe snapshots"
   const service = createPiOAuthFlowService({
     registry,
     credentialService: { loginOAuth: () => login.promise },
+    restartActiveRunners: restartNoRunners,
     randomBytes: deterministicBytes(),
     now: (() => { let value = 100; return () => ++value; })(),
   });
@@ -49,7 +52,8 @@ test("OAuth flow coordinator uses host registry, random IDs, and safe snapshots"
   const completed = service.getStatus(started.flowId);
   assert.equal(completed.status, "succeeded");
   assert.equal(completed.phase, "complete");
-  assert.equal(completed.updatedAt, 102);
+  assert.equal(completed.updatedAt, 103);
+  assert.deepEqual(completed.restart, { status: "restarted", runnerIds: [] });
   assert.doesNotMatch(JSON.stringify(completed), /access|refresh|token-canary/);
 });
 
@@ -62,6 +66,7 @@ test("OAuth flow coordinator adapts interactive callbacks with one-time bounded 
     credentialService: {
       loginOAuth(_provider, value) { callbacks = value; return login.promise; },
     },
+    restartActiveRunners: restartNoRunners,
     randomBytes: deterministicBytes(),
     now: (() => { let value = 200; return () => ++value; })(),
   });
@@ -124,6 +129,7 @@ test("OAuth flow coordinator enforces provider and global active limits", async 
         return item.promise;
       },
     },
+    restartActiveRunners: restartNoRunners,
     randomBytes: deterministicBytes(),
     maxActiveFlows: 2,
   });
@@ -137,6 +143,47 @@ test("OAuth flow coordinator enforces provider and global active limits", async 
   await settle();
   assert.equal(service.start("gamma").provider, "gamma");
   pending[1].resolve({ credentialType: "oauth" });
+});
+
+test("OAuth flow coordinator restarts runners after durable login and reports restart failures separately", async () => {
+  for (const scenario of [
+    {
+      result: { status: "partial", runnerIds: ["runner-a", "runner-b"], failedRunnerIds: ["runner-b"], secret: "restart-canary" },
+      expected: { status: "partial", runnerIds: ["runner-a", "runner-b"], failedRunnerIds: ["runner-b"] },
+    },
+    { throws: true, expected: { status: "failed", runnerIds: [] } },
+  ]) {
+    let restarts = 0;
+    const service = createPiOAuthFlowService({
+      registry: new Map(),
+      credentialService: { async loginOAuth() { return { access: "token-canary" }; } },
+      restartActiveRunners: async () => {
+        restarts += 1;
+        if (scenario.throws) throw new Error("restart-secret-canary");
+        return scenario.result;
+      },
+      randomBytes: deterministicBytes(),
+    });
+    const started = service.start("restart-provider");
+    await settle();
+    const status = service.getStatus(started.flowId);
+    assert.equal(status.status, "succeeded");
+    assert.deepEqual(status.restart, scenario.expected);
+    assert.equal(restarts, 1);
+    assert.doesNotMatch(JSON.stringify(status), /canary|secret/);
+  }
+
+  let restarts = 0;
+  const failed = createPiOAuthFlowService({
+    registry: new Map(),
+    credentialService: { async loginOAuth() { throw new Error("login failed"); } },
+    restartActiveRunners: async () => { restarts += 1; },
+    randomBytes: deterministicBytes(),
+  });
+  const started = failed.start("failed-provider");
+  await settle();
+  assert.equal(failed.getStatus(started.flowId).status, "failed");
+  assert.equal(restarts, 0);
 });
 
 test("OAuth flow coordinator cancels, expires, and shuts down flows with cleanup", async () => {
@@ -163,7 +210,7 @@ test("OAuth flow coordinator cancels, expires, and shuts down flows with cleanup
     },
   };
   const service = createPiOAuthFlowService({
-    registry, credentialService, randomBytes: deterministicBytes(),
+    registry, credentialService, restartActiveRunners: restartNoRunners, randomBytes: deterministicBytes(),
     inactivityMs: 1000, terminalRetentionMs: 2000, setTimer, clearTimer,
   });
 
@@ -203,6 +250,7 @@ test("OAuth flow coordinator redacts provider failures and reuses supplied state
     credentialService: {
       async loginOAuth() { throw Object.assign(new Error("authorization-code-canary"), { code: "upstream_secret_error" }); },
     },
+    restartActiveRunners: restartNoRunners,
     randomBytes: deterministicBytes(),
   });
   const started = first.start("broken");
@@ -211,6 +259,7 @@ test("OAuth flow coordinator redacts provider failures and reuses supplied state
   const replacement = createPiOAuthFlowService({
     registry,
     credentialService: { async loginOAuth() {} },
+    restartActiveRunners: restartNoRunners,
     randomBytes: deterministicBytes(),
   });
   const status = replacement.getStatus(started.flowId);
