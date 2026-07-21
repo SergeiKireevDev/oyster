@@ -44,12 +44,6 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
             live.servicePid = prepared.servicePid;
             live.createdAt = prepared.createdAt;
           }
-          if (prepared.servicePid && state.appStore?.repositories?.hublots) {
-            state.appStore.repositories.hublots.upsertProcess({
-              id: `${tunnel.id}:service:${prepared.servicePid}`, hublotId: tunnel.id,
-              role: "service", pid: prepared.servicePid, status: "running", startedAt: prepared.createdAt,
-            });
-          }
         }
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });

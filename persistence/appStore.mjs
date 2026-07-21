@@ -287,6 +287,14 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
           executable, commandSha256, status, startedAt, observedAt, endedAt, exitCode, signal);
         return { ...database.prepare("SELECT * FROM hublot_processes WHERE id = ?").get(id) };
       },
+      updateProcess: (id, changes) => {
+        const allowed = new Set(["status", "observed_at", "ended_at", "exit_code", "signal"]);
+        const entries = Object.entries(changes ?? {});
+        if (!entries.length) return 0;
+        for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported hublot process field: ${column}`);
+        return database.prepare(`UPDATE hublot_processes SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`)
+          .run(...entries.map(([, value]) => value), id).changes;
+      },
       listProcesses: (hublotId) => database.prepare("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id").all(hublotId).map((row) => ({ ...row })),
     }),
     operations: Object.freeze({

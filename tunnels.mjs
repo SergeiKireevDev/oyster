@@ -29,6 +29,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
 import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
+import { readProcessIdentity } from "./persistence/processIdentity.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
@@ -75,6 +76,34 @@ function hublotRepository(state) {
   const repository = state.appStore?.repositories?.hublots;
   if (!repository) throw new Error("hublot repository is required");
   return repository;
+}
+
+export function persistHublotProcessIdentity(state, {
+  hublotId, role, pid, status = "running", startedAt = new Date().toISOString(),
+} = {}) {
+  if (!Number.isInteger(pid) || pid < 2) return null;
+  const existing = hublotRepository(state).listProcesses(hublotId)
+    .find((process) => process.role === role && process.pid === pid && process.status === status && !process.ended_at);
+  if (existing) return existing;
+  const identity = readProcessIdentity(pid);
+  return hublotRepository(state).upsertProcess({
+    id: `${hublotId}:${role}:${pid}:${randomBytes(4).toString("hex")}`,
+    hublotId, role, pid,
+    processGroupId: identity.processGroupId,
+    bootId: identity.bootId,
+    procStartTicks: identity.procStartTicks,
+    executable: identity.executable,
+    commandSha256: identity.commandSha256,
+    status, startedAt, observedAt: new Date().toISOString(),
+  });
+}
+
+function finishPersistedProcess(state, processRow, { status = "ended", exitCode = null, signal = null } = {}) {
+  if (!processRow) return;
+  hublotRepository(state).updateProcess(processRow.id, {
+    status, observed_at: new Date().toISOString(), ended_at: new Date().toISOString(),
+    exit_code: exitCode, signal,
+  });
 }
 
 function persistedTunnelInfo(state, row) {
@@ -152,12 +181,16 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       return;
     }
 
+    const servicePid = pidsOnPort(port)[0] ?? null;
+    if (servicePid) persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: servicePid });
+
     const bin = state.config.TUNNEL_BIN;
     // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
     // makes cloudflared print a URL that never actually registers (error 1033)
     const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
     console.log(`[pi-ui] spawning tunnel: ${bin} ${args.join(" ")}`);
     const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
 
     const tunnel = {
       id, port, label, sessionId, url: null,
@@ -202,6 +235,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     proc.stdout.on("data", onOutput);
 
     proc.on("error", (err) => {
+      finishPersistedProcess(state, tunnelProcess, { status: "failed" });
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -215,6 +249,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     });
 
     proc.on("exit", (code, signal) => {
+      finishPersistedProcess(state, tunnelProcess, { exitCode: code, signal });
       if (!settled) {
         settled = true;
         clearTimeout(timer);
@@ -318,7 +353,10 @@ export function invokeHublotStartupScript(state, id, { spawnProcess = spawn } = 
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
-  return { proc, ...materialized };
+  const processRow = persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: proc.pid, status: "starting" });
+  proc.once?.("error", () => finishPersistedProcess(state, processRow, { status: "failed" }));
+  proc.once?.("exit", (exitCode, signal) => finishPersistedProcess(state, processRow, { exitCode, signal }));
+  return { proc, process: processRow, ...materialized };
 }
 
 const START_SCRIPT_MAX_BYTES = 256 * 1024;
@@ -377,6 +415,7 @@ export function spawnHublotAgent(state, hublot, brief) {
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
+    const agentProcess = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "setup_agent", pid: proc.pid });
     let tail = "";
     const onOut = (chunk) => { tail = (tail + String(chunk)).slice(-1500); };
     proc.stdout.on("data", onOut);
@@ -410,8 +449,11 @@ export function spawnHublotAgent(state, hublot, brief) {
         return;
       }
       const servicePid = pidsOnPort(hublot.port)[0] ?? null;
+      const serviceProcess = servicePid
+        ? persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: servicePid, startedAt: createdAt })
+        : null;
       if (servicePid) console.log(`[pi-ui] hublot :${hublot.port} served by pid ${servicePid}`);
-      resolvePromise({ agentProc: proc, servicePid, createdAt });
+      resolvePromise({ agentProc: proc, agentProcess, servicePid, serviceProcess, createdAt });
     };
 
     let checking = false;
@@ -433,12 +475,16 @@ export function spawnHublotAgent(state, hublot, brief) {
       }
     }, 2000);
 
-    proc.on("exit", (code) => {
+    proc.on("exit", (code, signal) => {
+      finishPersistedProcess(state, agentProcess, { exitCode: code, signal });
       agentExited = true;
       agentExitAt = Date.now();
       console.log(`[pi-ui] hublot service agent for :${hublot.port} exited (code=${code})`);
     });
-    proc.on("error", (error) => finish(`failed to spawn background agent: ${error.message}`));
+    proc.on("error", (error) => {
+      finishPersistedProcess(state, agentProcess, { status: "failed" });
+      finish(`failed to spawn background agent: ${error.message}`);
+    });
     proc.unref();
   });
 }
