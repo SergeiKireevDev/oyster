@@ -2,7 +2,7 @@ import { createExtensionUiAdapters } from "../runtime/extensionUiAdapters.js";
 
 /** Creates the instance-scoped dialog, modal-shell, resolver, and extension UI boundary. */
 export function createDialogAdapters(deps) {
-  const pending = { editor: null, confirm: null, option: null };
+  const pending = { confirm: null, option: null };
   let tornDown = false;
   const settle = (kind, value, empty, setState) => {
     const resolve = pending[kind];
@@ -13,11 +13,7 @@ export function createDialogAdapters(deps) {
   };
   const detachModalShell = deps.dialogService.configureModalShell({ open: deps.openModal, close: deps.closeModal });
   const openText = (...args) => deps.dialogService.openText(...args);
-  const openEditor = (title, placeholder = "", prefill = "") => new Promise((resolve) => {
-    pending.editor?.(null); pending.editor = resolve;
-    deps.setEditorPrompt({ title, placeholder: placeholder || "", value: prefill || "" });
-    deps.openModal({ title, content: "editorPrompt" });
-  });
+  const openEditor = (...args) => deps.dialogService.openEditor(...args);
   const openConfirm = (title, message) => new Promise((resolve) => {
     pending.confirm?.(false); pending.confirm = resolve;
     deps.setConfirmPrompt({ title, message });
@@ -29,9 +25,7 @@ export function createDialogAdapters(deps) {
     deps.openModal({ title, content: "optionPicker" });
   });
   const detachDialogController = deps.configureDialogController({
-    openEditor, openConfirm,
-    cancelEditor: () => settle("editor", null, deps.emptyEditor, deps.setEditorPrompt),
-    submitEditor: () => settle("editor", deps.getEditorPrompt().value, deps.emptyEditor, deps.setEditorPrompt),
+    openConfirm,
     answerConfirm: (answer) => settle("confirm", answer, deps.emptyConfirm, deps.setConfirmPrompt),
   });
   const detachOptionController = deps.configureOptionPickerController({

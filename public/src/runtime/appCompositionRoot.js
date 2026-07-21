@@ -30,7 +30,7 @@ import { setComposerTextValue } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
-import { configureDialogController, confirmPrompt, editorPrompt, emptyDialogStates } from "../stores/dialogs.js";
+import { configureDialogController, confirmPrompt, emptyDialogStates } from "../stores/dialogs.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { configureOptionPickerController, emptyOptionPicker, optionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
@@ -378,11 +378,8 @@ const dialogAdapters = createDialogAdapters({
   dialogService,
   configureDialogController,
   configureOptionPickerController,
-  setEditorPrompt: editorPrompt.set,
-  getEditorPrompt: () => get(editorPrompt),
   setConfirmPrompt: confirmPrompt.set,
   setOptionPicker: optionPicker.set,
-  emptyEditor: emptyDialogStates.emptyEditor,
   emptyConfirm: emptyDialogStates.emptyConfirm,
   emptyOptionPicker,
   openModal: openModalState,

@@ -6,16 +6,14 @@ import { createDialogService } from "../public/src/runtime/dialogService.js";
 function harness() {
   const calls = [];
   let dialogController, optionController;
-  let editor = {};
   const dialogs = createDialogService();
   const adapters = createDialogAdapters({
     dialogService: dialogs,
     configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
     configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
-    setEditorPrompt: (next) => { editor = next; }, getEditorPrompt: () => editor,
     setConfirmPrompt: (next) => calls.push(["confirmState", next]),
     setOptionPicker: (next) => calls.push(["optionState", next]),
-    emptyEditor: {}, emptyConfirm: {}, emptyOptionPicker: {},
+    emptyConfirm: {}, emptyOptionPicker: {},
     openModal: (options) => calls.push(["open", options]), closeModal: () => calls.push(["close"]),
     updateModal: (options) => calls.push(["update", options]),
     findElement: () => ({ classList: { contains: (name) => name === "open" } }),
@@ -52,7 +50,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   second.dialogs.cancelText();
   assert.equal(await input, null);
   const editor = second.adapters.editor("Editor", "", "draft");
-  second.dialogController.cancelEditor();
+  second.dialogs.cancelEditor();
   assert.equal(await editor, null);
   const option = second.adapters.select("Select", ["one"]);
   second.optionController.cancel();
@@ -65,7 +63,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
 
   const third = harness();
   const remountedEditor = third.adapters.editor("Editor", "", "new instance");
-  third.dialogController.submitEditor();
+  third.dialogs.submitEditor();
   assert.equal(await remountedEditor, "new instance");
   third.adapters.teardown();
   third.dialogs.teardown();

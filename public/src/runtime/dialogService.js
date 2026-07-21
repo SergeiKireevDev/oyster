@@ -20,13 +20,22 @@ export function createDialogService({ createStore = writable } = {}) {
   let disposed = false;
   let modalShell = { open() {}, close() {} };
   let pendingText = null;
+  let pendingEditor = null;
 
   const settleText = (value) => {
     const resolve = pendingText;
     pendingText = null;
     resolve?.(value);
     textPrompt.set({ ...emptyTextPrompt });
-    modalShell.close();
+    if (resolve) modalShell.close();
+  };
+
+  const settleEditor = (value) => {
+    const resolve = pendingEditor;
+    pendingEditor = null;
+    resolve?.(value);
+    editorPrompt.set({ ...emptyEditorPrompt });
+    if (resolve) modalShell.close();
   };
 
   return Object.freeze({
@@ -52,12 +61,25 @@ export function createDialogService({ createStore = writable } = {}) {
     cancelText: () => settleText(null),
     submitText: () => settleText(get(textPrompt).value),
     setTextPrompt: (state) => !disposed && textPrompt.set(state),
+    openEditor(title, placeholder = "", prefill = "") {
+      if (disposed) return Promise.resolve(null);
+      pendingEditor?.(null);
+      return new Promise((resolve) => {
+        pendingEditor = resolve;
+        editorPrompt.set({ title, placeholder: placeholder || "", value: prefill || "" });
+        modalShell.open({ title, content: "editorPrompt" });
+      });
+    },
+    setEditorValue: (value) => !disposed && editorPrompt.update((state) => ({ ...state, value })),
+    cancelEditor: () => settleEditor(null),
+    submitEditor: () => settleEditor(get(editorPrompt).value),
     setEditorPrompt: (state) => !disposed && editorPrompt.set(state),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
     setOptionPicker: (state) => !disposed && optionPicker.set(state),
     teardown() {
       if (disposed) return;
       settleText(null);
+      settleEditor(null);
       disposed = true;
       modalShell = { open() {}, close() {} };
       textPrompt.set({ ...emptyTextPrompt });
