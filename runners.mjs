@@ -36,6 +36,15 @@ const RUNNER_BUFFER_MAX = 400;
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 
+// Pi processes that the user never sent a real message to (sessionName is
+// still null) are leaked workers spawned for a session-resume or an
+// open-session that never followed through. They sit idle, burning RAM and
+// cluttering the runner list. Reap them after MAX_ORPHAN_AGE_MS of nameless
+// life — long enough to never kill an active-but-silent runner, short
+// enough to fade abandoned ones out.
+const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
+const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+
 export function createRunnerManager(state) {
   const { config, serverEvent } = state;
 
@@ -324,6 +333,31 @@ export function createRunnerManager(state) {
   clearInterval(state.runnerWatchdogTimer);
   state.runnerWatchdogTimer = setInterval(watchdogTick, WATCHDOG_INTERVAL_MS);
   state.runnerWatchdogTimer.unref?.();
+
+  // ------------------------------------------------------------ orphan reaper
+  // A runner the user never sent a prompt to has sessionName === null. If it
+  // has been alive that long without ever earning a name, it's a leaked
+  // worker — stop its process so it stops burning RAM and disappears from
+  // the swipe carousel. Dead shells stay in the map for instant restart on
+  // next open-session (no proc → openSessionRunner respawns).
+  function reaperTick() {
+    const now = Date.now();
+    for (const runner of state.runners.values()) {
+      if (!runner.proc) continue; // already stopped
+      if (runner.sessionName) continue; // user actually talked to it
+      // lastLineAt is set at spawn and bumped on every stdout line — use
+      // it as "when this runner became alive"
+      if (now - runner.lastLineAt <= MAX_ORPHAN_AGE_MS) continue;
+      console.log(
+        `[pi-ui] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastLineAt) / 60000)}min, no session name) in ${runner.dir}`
+      );
+      stopRunner(runner);
+    }
+  }
+
+  clearInterval(state.runnerReaperTimer);
+  state.runnerReaperTimer = setInterval(reaperTick, ORAPHA_REAP_INTERVAL_MS);
+  state.runnerReaperTimer.unref?.();
 
   // legacy entry points used by server.mjs
   function startPi() { defaultRunner(); }

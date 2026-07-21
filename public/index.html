@@ -252,7 +252,7 @@
     #treebar.open {
       position: fixed;
       top: 0; right: 0; bottom: 0;
-      width: min(78vw, 320px);
+      width: 100vw;
       z-index: 55;
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
     }
@@ -357,12 +357,40 @@
       display: flex;
       position: fixed;
       top: 0; right: 0; bottom: 0;
-      width: min(78vw, 320px);
+      width: 100vw;
       z-index: 55;
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
       border-left: 1px solid var(--border);
     }
     #hublotChip { display: inline-flex; }
+
+    /* ---------- carousel dots (mobile swipe indicator) ---------- */
+    #carouselDots {
+      position: fixed;
+      bottom: 18px;
+      left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      z-index: 56;
+      pointer-events: none;
+      transition: opacity .25s;
+    }
+    #carouselDots .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      opacity: .45;
+      transition: transform .25s, opacity .25s, background .25s;
+    }
+    #carouselDots .dot.active {
+      background: var(--accent);
+      opacity: 1;
+      transform: scale(1.35);
+    }
+    /* hide when a modal/command palette is open */
+    #overlay.open ~ #carouselDots,
+    #cmdPalette.open ~ #carouselDots { opacity: 0; }
   }
   #messages {
     max-width: 860px;
@@ -731,7 +759,13 @@
   }
   #modal .m-option:hover { border-color: var(--accent); }
   #modal .m-option.active { border-color: var(--accent); background: var(--user-bubble); }
-  #modal .m-option.current { border-color: var(--accent-dim); background: var(--user-bubble); }
+  #modal .m-option.current {
+    border-color: var(--accent);
+    background: var(--user-bubble);
+    box-shadow: 3px 0 0 var(--accent) inset, 0 0 12px rgba(122,162,247,.18);
+    cursor: default;
+  }
+  #modal .m-option.current .s-name { color: var(--accent); }
   #modal .m-option .s-title {
     display: flex; gap: 8px; align-items: baseline;
     white-space: nowrap; overflow: hidden;
@@ -1024,6 +1058,8 @@
     <div id="treeView"></div>
   </aside>
 </div>
+
+<div id="carouselDots" aria-hidden="true"><span class="dot"></span><span class="dot active"></span><span class="dot"></span></div>
 
 <div id="overlay"><div id="modal">
   <div class="m-title" id="mTitle"></div>
@@ -3512,17 +3548,22 @@ $("treeChip").addEventListener("click", (e) => {
   const open = $("treebar").classList.toggle("open");
   if (open) loadCheckpointTree();
 });
-// tap outside the drawer closes it
+// tap outside the drawer closes it (mobile only — on desktop they're
+// docked, not overlays). Sync the carousel state so applyCarousel()
+// doesn't immediately re-open it.
 document.addEventListener("click", (e) => {
+  if (!window.matchMedia("(max-width: 760px)").matches) return;
   const hublots = $("hublots");
-  if (hublots.classList.contains("open") && !hublots.contains(e.target)) {
-    hublots.classList.remove("open");
-  }
-  // the tree sidebar is a drawer only on small screens; leave it docked on desktop
   const treebar = $("treebar");
-  if (window.matchMedia("(max-width: 760px)").matches &&
-      treebar.classList.contains("open") && !treebar.contains(e.target)) {
-    treebar.classList.remove("open");
+  if (!hublots.contains(e.target) && !treebar.contains(e.target) &&
+      !e.target.closest("#hublotChip") && !e.target.closest("#treeChip")) {
+    if (hublots.classList.contains("open") || treebar.classList.contains("open")) {
+      hublots.classList.remove("open");
+      treebar.classList.remove("open");
+      carousel = 0;
+      localStorage.setItem("pi_carousel", "0");
+      setCarouselDots();
+    }
   }
 });
 
@@ -4804,6 +4845,201 @@ function toast(text, kind, { onClick, sticky } = {}) {
   $("toasts").appendChild(t);
   if (!sticky) setTimeout(() => t.remove(), 4000);
 }
+
+// ------------------------------------------------------------ swipe carousel
+//
+// Mobile-only: horizontal swipes move through three views — chat, hublots,
+// checkpoints — like snapping pages. A two-finger swipe switches between
+// active sessions. A three-dot indicator at the bottom shows position.
+//
+// Pages: 0 = chat (no sidebar); 1 = hublots drawer; 2 = checkpoints drawer.
+// Right swipe advances, left swipe goes back.
+
+const CAROUSEL_PAGES = [
+  { /* 0 — chat */ },
+  { /* 1 — hublots */ sidebar: "hublots", load: () => { loadHublots(); loadRoutines(); } },
+  { /* 2 — checkpoints */ sidebar: "treebar", load: () => loadCheckpointTree() },
+];
+
+let carousel = parseInt(localStorage.getItem("pi_carousel") || "0", 10);
+
+function applyCarousel() {
+  const onMobile = window.matchMedia("(max-width: 760px)").matches;
+  const hublots = $("hublots");
+  const treebar = $("treebar");
+  if (!onMobile) {
+    // desktop: reset to chat, let the docked sidebars show on their own
+    hublots.classList.remove("open");
+    treebar.classList.remove("open");
+    carousel = 0;
+    setCarouselDots();
+    return;
+  }
+  const page = Math.max(0, Math.min(CAROUSEL_PAGES.length - 1, carousel));
+  const wantHublots = page >= 1;
+  const wantTree = page >= 2;
+  if (wantHublots) hublots.classList.add("open"); else hublots.classList.remove("open");
+  if (wantTree) treebar.classList.add("open"); else treebar.classList.remove("open");
+  CAROUSEL_PAGES[page]?.load?.();
+  setCarouselDots();
+}
+
+function setCarouselDots() {
+  const dots = [...document.querySelectorAll("#carouselDots .dot")];
+  const active = Math.max(0, Math.min(dots.length - 1, carousel));
+  dots.forEach((d, i) => d.classList.toggle("active", i === active));
+}
+
+// turn page via swipe; dir = +1 (right) or -1 (left)
+function carouselStep(dir) {
+  if (!window.matchMedia("(max-width: 760px)").matches) return;
+  const next = Math.max(0, Math.min(CAROUSEL_PAGES.length - 1, carousel + dir));
+  if (next === carousel) return;
+  carousel = next;
+  localStorage.setItem("pi_carousel", String(carousel));
+  applyCarousel();
+}
+
+// ---- touch tracking ----
+// We listen for horizontal one-finger swipes and two-finger swipes.
+// Vertical scrolling, pinch-zoom and the composer textarea are left alone.
+let touchStart = null; // { x, y, t, n }
+let swipeHandled = false;
+
+function swipeAxis(dx, dy) {
+  if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return null;
+  return Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+}
+
+function onTouchStart(e) {
+  if (window.matchMedia("(min-width: 761px)").matches) return; // desktop only
+  // let inputs/textareas behave normally — but still capture finger count
+  if (e.target.closest && e.target.closest("textarea, input, select")) return;
+  if (e.target.closest && e.target.closest(".toast, #modal, #cmdPalette, #menu")) return;
+  touchStart = {
+    x: e.touches[0].clientX,
+    y: e.touches[0].clientY,
+    t: Date.now(),
+    n: e.touches.length,
+  };
+  swipeHandled = false;
+}
+
+function onTouchMove(e) {
+  if (!touchStart || swipeHandled) return;
+  // while two fingers are down, any horizontal drag preempts other gestures
+  if (touchStart.n >= 2 && e.touches.length >= 2) {
+    const dx = e.touches[0].clientX - touchStart.x;
+    const axis = swipeAxis(dx, e.touches[0].clientY - touchStart.y);
+    if (axis === "h" && Math.abs(dx) > 24) {
+      // consume: stop the page from scrolling/bouncing under the gesture
+      e.preventDefault();
+    }
+  }
+}
+
+function onTouchEnd(e) {
+  if (!touchStart || swipeHandled) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStart.x;
+  const dy = t.clientY - touchStart.y;
+  const dt = Date.now() - touchStart.t;
+  const speed = Math.abs(dx) / Math.max(1, dt); // px/ms
+  const axis = swipeAxis(dx, dy);
+
+  if (axis !== "h") { touchStart = null; return; }
+
+  // Need enough distance OR high speed on a quick flick
+  const isSwipe = Math.abs(dx) > 60 || (speed > 0.4 && Math.abs(dx) > 30);
+  if (!isSwipe) { touchStart = null; return; }
+
+  swipeHandled = true;
+
+  if (touchStart.n >= 2) {
+    // two-finger horizontal swipe → switch active session
+    switchToAdjacentRunner(dx < 0 ? 1 : -1);
+    touchStart = null;
+    return;
+  }
+
+  // one-finger swipe
+  // swiping LEFT from page 0 opens hublots; left again opens checkpoints.
+  // swiping RIGHT reverses: checkpoints → hublots → chat.
+  carouselStep(dx < 0 ? 1 : -1);
+  touchStart = null;
+}
+
+function onTouchCancel() {
+  touchStart = null;
+  swipeHandled = false;
+}
+
+// Find sessions the user would consider "active": alive, has a real
+// session bound (sessionId + sessionName), and lives in the current
+// workdir. Runners with sessionName === null were spawned but never sent
+// a message to — they're background/orphan processes, skip them.
+function switchToAdjacentRunner(dir) {
+  const candidates = runnersNow.filter(
+    (r) => r.alive && r.sessionId && r.sessionName && r.dir === workdir
+  );
+  if (candidates.length <= 1) {
+    toast(candidates.length === 0 ? "no other active session" : "only one active session");
+    return;
+  }
+  // stable ordering by server id (matches the /runners list order)
+  const idx = alive.findIndex((r) => r.id === currentRunner);
+  const base = idx === -1 ? 0 : idx;
+  const next = (base + dir + alive.length) % alive.length;
+  const target = alive[next];
+  if (!target || target.id === currentRunner) return;
+  switchToRunner(target.id);
+}
+
+function attachSwipeListeners() {
+  if (window._piSwipeAttached) return;
+  document.addEventListener("touchstart", onTouchStart, { passive: true });
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
+  document.addEventListener("touchend", onTouchEnd, { passive: true });
+  document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  window.addEventListener("resize", applyCarousel);
+  window._piSwipeAttached = true;
+}
+
+// ---- unify the header chip taps with the carousel ----
+$("hublotChip").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const hublots = $("hublots");
+  if (window.matchMedia("(min-width: 761px)").matches) {
+    // desktop: default toggle behaviour
+    hublots.classList.toggle("open");
+    if (hublots.classList.contains("open")) { loadHublots(); loadRoutines(); }
+    return;
+  }
+  // mobile: carousel
+  const opening = !hublots.classList.contains("open");
+  carousel = opening ? 1 : 0;
+  localStorage.setItem("pi_carousel", String(carousel));
+  applyCarousel();
+});
+
+const _origTreeChipClick = $("treeChip").onclick;
+$("treeChip").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const treebar = $("treebar");
+  if (window.matchMedia("(min-width: 761px)").matches) {
+    treebar.classList.toggle("open");
+    if (treebar.classList.contains("open")) loadCheckpointTree();
+    return;
+  }
+  const opening = !treebar.classList.contains("open");
+  carousel = opening ? 2 : 0;
+  localStorage.setItem("pi_carousel", String(carousel));
+  applyCarousel();
+});
+
+// apply initial page on load + whenever the page becomes mobile/desktop
+attachSwipeListeners();
+applyCarousel();
 
 // ------------------------------------------------------------ go
 
