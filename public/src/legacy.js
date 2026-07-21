@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptEntryFocusController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -1759,32 +1759,17 @@ const copyPermalink = createPermalinkController({
 const copyText = copyTextToClipboard;
 
 /** opening a /s/<sid>/m/<eid> permalink: scroll to / flash that message */
-async function focusEntryById(entryId) {
-  try {
-    await annotateTranscriptEntries();
-    const direct = messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`);
-    if (direct) { flashEl(direct); return; }
-    const entries = await fetchSessionEntries();
-    const els = chatEls();
-    const pos = entries.findIndex((e) => e.id === entryId);
-    if (pos === -1) { addToast("linked message not found in this session", "warning"); return; }
-    const entry = entries[pos];
-    let el = entries.length === els.length
-      ? els[pos]
-      : els[alignedTranscriptIndex(entries.length, els.length, pos)] ?? null;
-    if (!el || !entryMatchesEl(entry, el)) {
-      const t = normText(entry.text ?? "");
-      el = (t && !t.startsWith("[")
-        ? els.find((x) => x.dataset.role === entry.role && normText(x.textContent).includes(t.slice(0, 60)))
-        : null) ?? el;
-    }
-    if (!el) { addToast("linked message not visible in transcript", "warning"); return; }
-    if (entry.id) el.dataset.entryId = entry.id;
-    flashEl(el);
-  } catch (e) {
-    addToast(`permalink: ${e.message}`, "warning");
-  }
-}
+const focusEntryById = createTranscriptEntryFocusController({
+  annotate: annotateTranscriptEntries,
+  findDirect: (entryId) => messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`),
+  fetchEntries: fetchSessionEntries,
+  elements: chatEls,
+  matches: entryMatchesEl,
+  normalize: normText,
+  alignedIndex: alignedTranscriptIndex,
+  flash: flashEl,
+  toast: addToast,
+});
 
 // ------------------------------------------------------------ modal helpers
 

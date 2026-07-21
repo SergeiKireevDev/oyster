@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -35,6 +35,17 @@ test("transcript snippet focus reveals matching nested details", () => {
   assert.equal(focusTranscriptSnippet([element], { before: "", match: "needle", after: "" }, { flash: (target) => { flashed = target; } }), true);
   assert.equal(details.open, true);
   assert.equal(flashed, element);
+});
+
+test("transcript entry focus uses direct annotations before fetching durable entries", async () => {
+  const calls = []; const direct = { dataset: {} };
+  const focus = createTranscriptEntryFocusController({
+    annotate: async () => calls.push("annotate"), findDirect: () => direct,
+    fetchEntries: async () => { throw new Error("should not fetch"); }, elements: () => [], matches: () => false,
+    normalize: (text) => text, alignedIndex: () => 0, flash: (element) => calls.push(element), toast: (...args) => calls.push(args),
+  });
+  await focus("entry");
+  assert.deepEqual(calls, ["annotate", direct]);
 });
 
 test("permalink controller copies an entry URL", async () => {

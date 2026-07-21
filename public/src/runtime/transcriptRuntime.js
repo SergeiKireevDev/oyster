@@ -123,6 +123,34 @@ export function focusTranscriptSnippet(elements, snippet, { normalize = (value) 
   return false;
 }
 
+/** Locate a durable transcript entry in the rendered tail and reveal it. */
+export function createTranscriptEntryFocusController({ annotate, findDirect, fetchEntries, elements, matches, normalize, alignedIndex, flash, toast }) {
+  return async (entryId) => {
+    try {
+      await annotate();
+      const direct = findDirect(entryId);
+      if (direct) return flash(direct);
+      const entries = await fetchEntries();
+      const rendered = elements();
+      const position = entries.findIndex((entry) => entry.id === entryId);
+      if (position === -1) return toast("linked message not found in this session", "warning");
+      const entry = entries[position];
+      let element = entries.length === rendered.length ? rendered[position] : rendered[alignedIndex(entries.length, rendered.length, position)] ?? null;
+      if (!element || !matches(entry, element)) {
+        const text = normalize(entry.text ?? "");
+        element = (text && !text.startsWith("[")
+          ? rendered.find((candidate) => candidate.dataset.role === entry.role && normalize(candidate.textContent).includes(text.slice(0, 60)))
+          : null) ?? element;
+      }
+      if (!element) return toast("linked message not visible in transcript", "warning");
+      if (entry.id) element.dataset.entryId = entry.id;
+      flash(element);
+    } catch (error) {
+      toast(`permalink: ${error.message}`, "warning");
+    }
+  };
+}
+
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {
