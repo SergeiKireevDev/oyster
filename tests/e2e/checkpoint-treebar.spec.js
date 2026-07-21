@@ -160,10 +160,12 @@ async function body(page, { mobile }) {
 // open the checkpoints sidebar — on desktop click the chip; on mobile the chip
 // opens the slide-over drawer (carousel page 2)
 async function openTreebar(page, mobile) {
-  await page.click("#treeChip");
   if (mobile) {
-    // the chip sets carousel=2 which applyCarousel() renders as #treebar.open
+    await swipe(page, "left");
+    await swipe(page, "left");
     await expect(page.locator("#treebar")).toHaveClass(/open/);
+  } else {
+    await page.click("#treeChip");
   }
 }
 

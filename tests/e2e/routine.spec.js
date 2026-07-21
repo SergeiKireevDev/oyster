@@ -7,7 +7,7 @@
 // done, then 🧹 teardown and watch the byproduct disappear.
 
 import { test, expect } from "@playwright/test";
-import { login, dexec, api, waitFor, MOBILE_VIEWPORT } from "./lib/harness.js";
+import { login, dexec, api, waitFor, MOBILE_VIEWPORT, swipe } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const NAME = "e2e-dummy.sh";
@@ -54,7 +54,7 @@ async function body(page, { mobile = false } = {}) {
 
   // On mobile the routines live in the hublots/routines slide-over drawer.
   if (mobile) {
-    await page.click("#hublotChip");
+    await swipe(page, "left");
     await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
   }
 

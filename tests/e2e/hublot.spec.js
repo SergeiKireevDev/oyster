@@ -8,7 +8,7 @@
 // the button.
 
 import { test, expect } from "@playwright/test";
-import { login, api, dexec, waitFor, currentSessionId, MOBILE_VIEWPORT } from "./lib/harness.js";
+import { login, api, dexec, waitFor, currentSessionId, MOBILE_VIEWPORT, swipe } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 // Per-test container lifecycle — see checkpoint-rollback.spec.js
@@ -65,7 +65,7 @@ async function body(page, { mobile = false } = {}) {
 
   // On mobile the hublots sidebar is a slide-over drawer toggled by the header chip.
   if (mobile) {
-    await page.click("#hublotChip");
+    await swipe(page, "left");
     await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
   }
 

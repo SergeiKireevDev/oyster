@@ -164,7 +164,7 @@ removes it from that file while preserving unrelated credentials.
   provider that adds a key, observes newly available models after restart,
   replaces it without exposing either value, removes it, and verifies the
   provider becomes unavailable when no fallback exists.
-- [ ] Run the complete validation matrix and check this item only after all
+- [x] Run the complete validation matrix and check this item only after all
   results pass:
 
 ```text

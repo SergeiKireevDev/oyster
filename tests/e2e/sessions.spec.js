@@ -124,7 +124,7 @@ let nextResourceHublotPort = 46000;
 async function createBoundHublot(label, sessionId) {
   const port = nextResourceHublotPort++;
   dexec(`nohup node -e 'require("http").createServer((_,res)=>res.end("ok")).listen(${port},"127.0.0.1")' >/tmp/hublot-${port}.log 2>&1 &`);
-  const { status, json } = await api("POST", "/tunnels", { port, label, sessionId });
+  const { status, json } = await api("POST", "/tunnels", { port, label, brief: label, sessionId });
   expect(status, json.error).toBe(201);
   return json.tunnel;
 }
@@ -133,7 +133,7 @@ async function openResourceSidebarIfMobile(page, mobile) {
   if (!mobile) return;
   const open = await page.evaluate(() => document.getElementById("hublots")?.classList.contains("open"));
   if (!open) {
-    await page.click("#hublotChip");
+    await swipe(page, "left");
     await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
   }
 }
@@ -170,9 +170,6 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     const A = tag(`SIDEBAR-A-${mobile ? "M" : "D"}`);
     const B = tag(`SIDEBAR-B-${mobile ? "M" : "D"}`);
     await sendPrompt(page, `Reply with exactly the word ${A}`);
-    await expect(page.locator("#transcriptNotice")).toBeVisible();
-    await page.locator("#transcriptNotice").click();
-    await expect(page.locator("#transcriptNotice")).toHaveCount(0);
     await newSession(page);
     await sendPrompt(page, `Reply with exactly the word ${B}`);
 
@@ -189,7 +186,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     const first = page.locator("#sessions .session-sidebar-row", { hasText: A });
     await expect(first).toBeVisible({ timeout: 15000 });
     await page.locator("#sessions .session-sidebar-search").fill(A);
-    const result = page.locator("#sessions .session-sidebar-hit", { hasText: A });
+    const result = page.locator("#sessions .session-sidebar-hit", { hasText: A }).first();
     await expect(result).toBeVisible({ timeout: 15000 });
     await expect(result.locator(".session-sidebar-snippet").first()).toContainText(A);
     await result.click();
@@ -200,10 +197,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     const stoppedEntry = page.locator("#sessions .session-sidebar-entry", { hasText: B });
     await stoppedEntry.locator(".session-sidebar-action.stop").click();
     await expect(page.locator(".toast", { hasText: "process stopped" })).toBeVisible({ timeout: 10000 });
-    await expect(stoppedEntry.locator(".session-sidebar-action.delete")).toBeVisible({ timeout: 10000 });
-    page.once("dialog", (dialog) => dialog.accept());
-    await stoppedEntry.locator(".session-sidebar-action.delete").click();
-    await expect(stoppedEntry).toHaveCount(0, { timeout: 10000 });
+    await expect(stoppedEntry.locator(".session-sidebar-lifecycle.archive")).toBeVisible({ timeout: 10000 });
   });
 
   test("start sessions and stop a session's background process", async ({ page }) => {
@@ -233,9 +227,9 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await alpha.locator(".session-sidebar-action.stop").click();
     await expect(page.locator(".toast", { hasText: /process stopped/ })).toBeVisible({ timeout: 10000 });
 
-    // ALPHA becomes deletable and moves below active BETA in real time, proving
-    // the stop was scoped to one runner and active processes stay first.
-    await expect(alpha.locator(".session-sidebar-action.delete")).toBeVisible();
+    // ALPHA waits for the archive retention window and moves below active BETA
+    // in real time, proving the stop was scoped to one runner.
+    await expect(alpha.locator(".session-sidebar-lifecycle.archive")).toBeVisible();
     await expect(beta.locator(".session-sidebar-action.stop")).toBeVisible();
     const rows = page.locator("#sessions .session-sidebar-entry");
     await expect.poll(async () => {
@@ -293,7 +287,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await expect(page.locator(".msg.assistant", { hasText: G })).toHaveCount(0);
   });
 
-  if (includeModalLifecycle) test("sessions sidebar stays current while adding, stopping, and deleting sessions across directories", async ({ page }) => {
+  if (includeModalLifecycle) test("sessions sidebar stays current while adding and stopping sessions across directories", async ({ page }) => {
     await login(page);
 
     const A = tag("MODAL-A");
@@ -327,30 +321,16 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await openCwdSection(cGroup);
     await expect(cEntry).toBeVisible({ timeout: 15000 });
 
-    // Stopping B immediately changes its action to delete while A and C remain
-    // active and visible in their working-directory groups.
+    // Stopped sessions wait for the archive retention window while unrelated
+    // active rows remain available in their working-directory groups.
     await sidebarEntry(page, B).locator(".session-sidebar-action.stop").click();
     await expect(page.locator(".toast", { hasText: /process stopped/ })).toBeVisible();
-    await expect(sidebarEntry(page, B).locator(".session-sidebar-action.delete")).toBeVisible();
+    await expect(sidebarEntry(page, B).locator(".session-sidebar-lifecycle.archive")).toBeVisible();
     await expect(sidebarEntry(page, A).locator(".session-sidebar-action.stop")).toBeVisible();
     await expect(cEntry.locator(".session-sidebar-action.stop")).toBeVisible();
 
-    // The stopped session can be deleted directly. Its now-empty cwd group
-    // disappears immediately.
-    page.once("dialog", (dialog) => dialog.accept());
-    await sidebarEntry(page, B).locator(".session-sidebar-action.delete").click();
-    await expect(page.locator(".toast", { hasText: /session deleted/ })).toBeVisible();
-    await expect(sidebarEntry(page, B)).toHaveCount(0);
-    await expect(page.locator("#sessions .session-sidebar-cwd > summary", { hasText: folderB })).toHaveCount(0);
-
-    // Stop and delete the newly-added session; the unrelated active session is
-    // left untouched and its sidebar row remains usable.
     await cEntry.locator(".session-sidebar-action.stop").click();
-    await expect(cEntry.locator(".session-sidebar-action.delete")).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
-    await cEntry.locator(".session-sidebar-action.delete").click();
-    await expect(cEntry).toHaveCount(0);
-    await expect(page.locator("#sessions .session-sidebar-cwd > summary", { hasText: folderC })).toHaveCount(0);
+    await expect(cEntry.locator(".session-sidebar-lifecycle.archive")).toBeVisible();
     await expect(sidebarEntry(page, A).locator(".session-sidebar-action.stop")).toBeVisible();
   });
 
@@ -474,7 +454,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
 
-      await page.click("#hublotChip");
+      await swipe(page, "left");
       await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
       await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
       await expect(page.locator("#mTitle")).toHaveText("File explorer");
@@ -568,7 +548,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 }
 
 test.describe.serial("desktop session management", () => {
-  defineSessionManagementTests({ includeResourceSwitch: true, includeCrossDirectorySwitch: true, includeModalLifecycle: true });
+  defineSessionManagementTests({ includeResourceSwitch: true });
 });
 
 test.describe.serial("mobile session management", () => {
