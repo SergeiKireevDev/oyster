@@ -65,6 +65,16 @@ export function findTranscriptEntryForElement({ entries, elements, element, matc
     && normalize(element.textContent).includes(normalize(entry.text).slice(0, 60))) ?? entries[position] ?? null;
 }
 
+/** Attach persisted entry IDs to rendered transcript elements. */
+export async function annotateTranscriptEntries({ fetchEntries, elements, findEntry }) {
+  const entries = await fetchEntries();
+  for (const element of elements()) {
+    const entry = findEntry(entries, element);
+    if (entry?.id) element.dataset.entryId = entry.id;
+  }
+  return entries;
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);

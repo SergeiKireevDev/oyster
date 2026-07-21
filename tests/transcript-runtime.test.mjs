@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -21,6 +21,13 @@ test("transcript sync scheduler retries during replay before reloading", async (
   timers.shift()[0]();
   await Promise.resolve();
   assert.equal(reloads, 1);
+});
+
+test("transcript annotation attaches persisted entry IDs", async () => {
+  const element = { dataset: {} };
+  const entries = await annotateTranscriptEntries({ fetchEntries: async () => [{ id: "saved" }], elements: () => [element], findEntry: (items) => items[0] });
+  assert.equal(element.dataset.entryId, "saved");
+  assert.deepEqual(entries, [{ id: "saved" }]);
 });
 
 test("transcript entry matcher aligns persisted entries from the tail", () => {

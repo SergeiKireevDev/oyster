@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -2045,14 +2045,11 @@ const entryForElement = (entries, els, el) => findTranscriptEntryForElement({
   entries, elements: els, element: el, matches: entryMatchesEl, normalize: normText,
 });
 
-async function annotateTranscriptEntries() {
-  const entries = await fetchSessionEntries();
-  const els = chatEls();
-  for (const el of els) {
-    const entry = entryForElement(entries, els, el);
-    if (entry?.id) el.dataset.entryId = entry.id;
-  }
-}
+const annotateTranscriptEntries = () => annotateTranscriptEntryIds({
+  fetchEntries: fetchSessionEntries,
+  elements: chatEls,
+  findEntry: (entries, element) => entryForElement(entries, chatEls(), element),
+});
 
 async function entryIdForElement(el) {
   if (el?.dataset?.entryId) return el.dataset.entryId;
