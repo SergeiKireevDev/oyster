@@ -148,7 +148,8 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION/);
   assert.match(source, /session-sidebar-snippet/);
-  assert.match(source, /<details class="session-sidebar-cwd" open=\{group\.cwd === currentCwd\}>/);
+  assert.match(source, /open=\{group\.cwd === currentCwd \|\| expandedCwds\.has\(group\.cwd\)\}/);
+  assert.match(source, /ontoggle=\{\(event\) => setCwdExpanded\(group\.cwd, event\.currentTarget\.open\)\}/);
   assert.match(source, /class="session-sidebar-create"/);
   assert.match(source, /class="session-sidebar-cwd-add"/);
   assert.match(source, /groupRunnersByCwd\(sidebarRunners\)/);

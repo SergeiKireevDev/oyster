@@ -25,11 +25,29 @@ test("app store creates its database directory and closes idempotently", (t) => 
   assert.equal(store.closed, true);
 });
 
+test("app store configures durability, integrity, and contention pragmas", () => {
+  const statements = [];
+  class FakeDatabase {
+    exec(sql) { statements.push(sql); }
+    close() {}
+  }
+
+  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-pragma-store.sqlite"), Database: FakeDatabase });
+  store.close();
+
+  assert.equal(statements.length, 1);
+  assert.match(statements[0], /PRAGMA journal_mode = WAL;/);
+  assert.match(statements[0], /PRAGMA foreign_keys = ON;/);
+  assert.match(statements[0], /PRAGMA busy_timeout = 5000;/);
+  assert.match(statements[0], /PRAGMA synchronous = NORMAL;/);
+});
+
 test("app store closes its owned database exactly once", () => {
   let openedPath = null;
   let closes = 0;
   class FakeDatabase {
     constructor(path) { openedPath = path; }
+    exec() {}
     close() { closes++; }
   }
 

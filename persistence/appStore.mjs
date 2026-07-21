@@ -16,6 +16,12 @@ export function openAppStore({ databasePath, Database = DatabaseSync } = {}) {
   mkdirSync(dirname(path), { recursive: true });
 
   const database = new Database(path);
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
+    PRAGMA synchronous = NORMAL;
+  `);
   const repositories = Object.freeze({});
   let closed = false;
 

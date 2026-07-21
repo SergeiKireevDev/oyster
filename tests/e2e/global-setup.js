@@ -19,7 +19,7 @@ const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? "/home/ubuntu/pi-coding-agent
 const sh = (args, opts = {}) =>
   execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
 
-const imageExists = () => { try { return !!sh(["images", "-q", IMAGE]).trim(); } catch { return false; } };
+const imageExists = (image = IMAGE) => { try { return !!sh(["images", "-q", image]).trim(); } catch { return false; } };
 
 export default async function globalSetup() {
   // Clean stale parallel-test containers and lock files from previous aborted runs.
@@ -37,6 +37,13 @@ export default async function globalSetup() {
   } catch {}
   try { rmSync(LOCK_DIR, { recursive: true, force: true }); } catch {}
   mkdirSync(LOCK_DIR, { recursive: true });
+
+  // The verified loop builds the current worktree as `pi-lot-ui` immediately
+  // before E2E. Point the default published-package test tag at that fresh
+  // image so an older cached tag cannot run stale UI code.
+  if (!process.env.PI_UI_IMAGE && imageExists("pi-lot-ui")) {
+    sh(["tag", "pi-lot-ui", IMAGE]);
+  }
 
   if (!imageExists()) {
     console.log(`[e2e] building published JSONL image ${IMAGE} …`);

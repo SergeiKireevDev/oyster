@@ -46,6 +46,19 @@ function sidebarEntry(page, token) {
   return page.locator("#sessions .session-sidebar-entry", { hasText: token });
 }
 
+async function openCwdSection(section) {
+  await expect(section).toHaveCount(1, { timeout: 10000 });
+  if ((await section.getAttribute("open")) === null) await section.locator(":scope > summary").click();
+}
+
+async function revealSidebarEntry(page, token) {
+  const row = sidebarEntry(page, token);
+  await expect(row).toHaveCount(1, { timeout: 10000 });
+  await openCwdSection(row.locator("xpath=ancestor::details[1]"));
+  await expect(row).toBeVisible({ timeout: 10000 });
+  return row;
+}
+
 async function newSessionInFolder(page, folderName) {
   await page.click("#menuBtn");
   await page.click('#menu button[data-action="newSessionIn"]');
@@ -58,8 +71,7 @@ async function newSessionInFolder(page, folderName) {
 
 async function loadOtherFolderAndSwitch(page, token, { mobile = false } = {}) {
   await openSessionSidebar(page, mobile);
-  const row = sidebarEntry(page, token);
-  await expect(row).toBeVisible({ timeout: 10000 });
+  const row = await revealSidebarEntry(page, token);
   await row.locator(".session-sidebar-row").click();
   await expect(row).toHaveClass(/current/, { timeout: 10000 });
 }
@@ -140,7 +152,7 @@ async function expectSidebarResources(page, { hublots, routines, mobile = false 
 async function switchToSessionByToken(page, token, { mobile = false } = {}) {
   await closeResourceSidebarIfMobile(page, mobile);
   await openSessionSidebar(page, mobile);
-  const row = sidebarEntry(page, token);
+  const row = await revealSidebarEntry(page, token);
   await row.locator(".session-sidebar-row").click();
   await expect(row).toHaveClass(/current/, { timeout: 10000 });
 }
@@ -288,8 +300,8 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await loadOtherFolderAndSwitch(page, A);
 
     await openSessionSidebar(page);
-    await expect(sidebarEntry(page, A)).toBeVisible();
-    await expect(sidebarEntry(page, B)).toBeVisible();
+    await revealSidebarEntry(page, A);
+    await revealSidebarEntry(page, B);
 
     // Add a third session out-of-band while the sidebar remains open. The live
     // runner update must make it appear without closing or refreshing.
@@ -302,6 +314,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     expect(prompted.status, prompted.json.error).toBe(202);
     const cGroup = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: folderC }) });
     const cEntry = cGroup.locator(".session-sidebar-entry");
+    await openCwdSection(cGroup);
     await expect(cEntry).toBeVisible({ timeout: 15000 });
 
     // Stopping B immediately changes its action to delete while A and C remain

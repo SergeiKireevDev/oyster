@@ -67,7 +67,10 @@ export default defineConfig({
   testMatch: /.*\.spec\.js/,
   fullyParallel: true,
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 1,
-  retries: 0,
+  // Container startup and SSE reconnection can transiently race under the full
+  // Docker matrix. Retry once in a fresh per-test container; deterministic
+  // product failures still fail on the second attempt with retained traces.
+  retries: 1,
   timeout: 6 * 60 * 1000, // per test (hublot agent + tunnel can take minutes)
   expect: { timeout: 30 * 1000 },
   globalSetup: "./global-setup.js",

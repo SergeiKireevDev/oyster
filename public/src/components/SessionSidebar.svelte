@@ -45,6 +45,18 @@
   $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
   $: currentCwd = $appSession.runners.find((runner) => runner.id === $appSession.currentRunner)?.dir ?? null;
   $: runnerGroups = groupRunnersByCwd(sidebarRunners);
+  let expandedCwds = new Set();
+  let expandedForCurrentCwd;
+  $: if (currentCwd !== expandedForCurrentCwd) {
+    expandedForCurrentCwd = currentCwd;
+    expandedCwds = new Set(currentCwd ? [currentCwd] : []);
+  }
+  function setCwdExpanded(cwd, open) {
+    const next = new Set(expandedCwds);
+    if (open) next.add(cwd);
+    else next.delete(cwd);
+    expandedCwds = next;
+  }
   let runnerSignature = "";
   $: {
     const nextSignature = sidebarRunners.map((runner) => [
@@ -120,7 +132,11 @@
       {/each}
     {:else if sidebarRunners.length}
       {#each runnerGroups as group (group.cwd)}
-        <details class="session-sidebar-cwd" open={group.cwd === currentCwd}>
+        <details
+          class="session-sidebar-cwd"
+          open={group.cwd === currentCwd || expandedCwds.has(group.cwd)}
+          ontoggle={(event) => setCwdExpanded(group.cwd, event.currentTarget.open)}
+        >
           <summary title={group.cwd}>
             <span>{cwdLabel(group.cwd)}</span>
             <span class="session-sidebar-count">{group.runners.length}</span>

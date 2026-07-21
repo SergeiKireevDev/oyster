@@ -4,7 +4,7 @@
 // each worker/test grabs one host port from 4000..4018 using a lock file.
 
 import { execSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -33,6 +33,17 @@ function sh(args) {
 function running(name) {
   try { return sh(`docker ps --filter "name=^${name}$" --format "{{.Names}}"`).trim() === name; }
   catch { return false; }
+}
+
+function lockOwnerAlive(file) {
+  try {
+    const pid = Number(readFileSync(file, "utf8").trim());
+    if (!Number.isInteger(pid) || pid < 1) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function reachable() {
@@ -70,7 +81,7 @@ function allocatePort() {
       // If a previous crashed run left a lock behind but no matching container
       // exists, reclaim it. Otherwise leave it for the active parallel test.
       const staleContainer = `pi-lot-e2e-${port}`;
-      if (!running(staleContainer)) {
+      if (!lockOwnerAlive(file) && !running(staleContainer)) {
         try { rmSync(file, { force: true }); } catch {}
         try {
           const fd = openSync(file, "wx");
