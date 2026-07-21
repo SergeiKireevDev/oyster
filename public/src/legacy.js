@@ -430,12 +430,13 @@ function setRunnersNow(runners) {
 
 /** attach this client to another runner and rebuild the UI from its stream */
 let sessionRuntime = null;
-function switchToRunner(id) {
+function getSessionRuntime() {
   // Create this only once all feature adapters have initialized; a switch can
   // occur much later from the picker, tree, or adjacent-runner controls.
-  sessionRuntime ??= createSessionRuntime({
+  return sessionRuntime ??= createSessionRuntime({
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
+    openSession: (options) => sessionOpenController(options),
     log: (details) => lifecycleLog("switchToRunner:start", details),
     resetPreview: () => previewController.clear(),
     refreshState,
@@ -449,8 +450,8 @@ function switchToRunner(id) {
     resetCommands: () => commandGuard?.reset(),
     connect,
   });
-  return sessionRuntime.switchRunner(id);
 }
+function switchToRunner(id) { return getSessionRuntime().switchRunner(id); }
 
 // ---- instant transcript preview -------------------------------------------
 // Opening a session waits on a pi process spawning AND resuming the session
@@ -480,7 +481,7 @@ sessionOpenController = createSessionOpenController({
 
 /** get-or-spawn a runner for a session file / folder */
 async function openSessionRunner(options) {
-  return sessionOpenController(options);
+  return getSessionRuntime().openSession(options);
 }
 
 /** hook: session picker (when open) re-renders its indicators */
