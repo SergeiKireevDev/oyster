@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { createHublotEventController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
+import { createHublotEventController, createRoutineStreamEventController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, createCodeReloadController, createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
@@ -572,6 +572,7 @@ const flushReplayBufferedEvents = createReplayBufferFlusher({
   dispatch: handleEvent,
 });
 
+const routineEvent = createRoutineStreamEventController({ isReplaying: () => replaying, update: (...args) => routineSidebarController.update(...args), toast: addToast });
 const hublotEvent = createHublotEventController({
   isReplaying: () => replaying,
   toast: addToast,
@@ -701,35 +702,9 @@ function handleEvent(msg) {
       hublotEvent(msg);
       return;
 
-    case "routine_update": {
-      if (replaying) return;
-      const r = msg.routine;
-      if (!r) return;
-      routineSidebarController.update(r, msg.reason);
-      if (msg.reason === "created") { addToast(`routine “${r.name}” created`); return; }
-      if (msg.reason === "updated") { addToast(`routine “${r.name}” updated`); return; }
-      if (msg.reason === "deleted") { addToast(`routine “${r.name}” deleted`, "warning"); return; }
-      // progression notifications surface as toasts only for terminal states;
-      // live progress is shown on the block's bar/message
-      if (msg.reason === "finished") {
-        addToast(
-          r.exitCode === 0 ? `routine “${r.name}” finished` : `routine “${r.name}” failed (exit ${r.exitCode})`,
-          r.exitCode === 0 ? "info" : "error"
-        );
-      } else if (msg.reason === "stopped") {
-        addToast(`routine “${r.name}” stopped`, "warning");
-      } else if (msg.reason === "teardown_finished") {
-        addToast(
-          r.status === "idle" ? `routine “${r.name}” torn down — byproducts removed` : `routine “${r.name}” teardown failed`,
-          r.status === "idle" ? "info" : "error"
-        );
-      } else if (msg.reason === "error") {
-        addToast(`routine “${r.name}”: ${r.message ?? "spawn failed"}`, "error");
-      } else if (msg.reason === "released") {
-        addToast(`routine “${r.name}” released`);
-      }
+    case "routine_update":
+      routineEvent(msg);
       return;
-    }
   }
 }
 

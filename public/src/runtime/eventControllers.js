@@ -8,6 +8,23 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   refreshRoutines();
 }
 
+export function createRoutineStreamEventController({ isReplaying, update, toast }) {
+  return (message) => {
+    if (isReplaying() || !message.routine) return false;
+    const routine = message.routine, reason = message.reason;
+    update(routine, reason);
+    const notices = {
+      created: [`routine “${routine.name}” created`], updated: [`routine “${routine.name}” updated`],
+      deleted: [`routine “${routine.name}” deleted`, "warning"], stopped: [`routine “${routine.name}” stopped`, "warning"],
+      released: [`routine “${routine.name}” released`], error: [`routine “${routine.name}”: ${routine.message ?? "spawn failed"}`, "error"],
+    };
+    if (reason === "finished") toast(routine.exitCode === 0 ? `routine “${routine.name}” finished` : `routine “${routine.name}” failed (exit ${routine.exitCode})`, routine.exitCode === 0 ? "info" : "error");
+    else if (reason === "teardown_finished") toast(routine.status === "idle" ? `routine “${routine.name}” torn down — byproducts removed` : `routine “${routine.name}” teardown failed`, routine.status === "idle" ? "info" : "error");
+    else if (notices[reason]) toast(...notices[reason]);
+    return true;
+  };
+}
+
 export function createHublotEventController({ isReplaying, toast, refreshHublots, scheduleRefresh, openUrl }) {
   return (message) => {
     if (isReplaying()) return false;
