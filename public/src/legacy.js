@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -1737,7 +1737,7 @@ function setupCommandPalette(el) {
   }, 150));
 }
 
-setCommandPaletteHandlers({ runIndex: runCmdIndex });
+window.addEventListener("pi-command-palette-run", (event) => runCmdIndex(event.detail));
 
 setupCommandPalette(input);
 

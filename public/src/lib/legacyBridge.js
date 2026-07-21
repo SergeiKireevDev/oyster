@@ -6,7 +6,6 @@ let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
 let routineHandlers = {};
-let commandPaletteHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -190,13 +189,5 @@ export function setRoutineHandlers(handlers) {
 
 export function runRoutineAction(name, action) {
   return routineHandlers.runAction?.(name, action);
-}
-
-export function setCommandPaletteHandlers(handlers) {
-  commandPaletteHandlers = handlers ?? {};
-}
-
-export function runCommandPaletteIndex(index) {
-  return commandPaletteHandlers.runIndex?.(index);
 }
 
