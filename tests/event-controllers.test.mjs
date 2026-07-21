@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("file explorer event adapter routes each explorer action", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const calls = [];
+  registerFileExplorerEvents(target, {
+    browse: (path) => calls.push(["browse", path]), edit: (path) => calls.push(["edit", path]),
+    save: () => calls.push("save"), upload: () => calls.push("upload"), backToList: () => calls.push("list"), backToHublots: () => calls.push("hublots"),
+  });
+  listeners.get("pi-file-explorer-browse")({ detail: "/a" });
+  listeners.get("pi-file-explorer-edit")({ detail: "/a/f" });
+  for (const name of ["pi-file-explorer-save", "pi-file-explorer-upload", "pi-file-explorer-back-list", "pi-file-explorer-back-hublots"]) listeners.get(name)();
+  assert.deepEqual(calls, [["browse", "/a"], ["edit", "/a/f"], "save", "upload", "list", "hublots"]);
+});
 
 test("folder browser event adapter routes each browser action", () => {
   const listeners = new Map();

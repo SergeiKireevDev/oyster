@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -2037,12 +2037,14 @@ async function saveExplorerFile() {
   }
 }
 
-window.addEventListener("pi-file-explorer-browse", (event) => loadFileExplorer(event.detail));
-window.addEventListener("pi-file-explorer-edit", (event) => editExplorerFile(event.detail));
-window.addEventListener("pi-file-explorer-save", () => saveExplorerFile());
-window.addEventListener("pi-file-explorer-upload", () => uploadExplorerFiles());
-window.addEventListener("pi-file-explorer-back-list", () => loadFileExplorer(fileExplorerState.curPath));
-window.addEventListener("pi-file-explorer-back-hublots", () => showHublots().catch((e) => toast(e.message, "error")));
+registerFileExplorerEvents(window, {
+  browse: loadFileExplorer,
+  edit: editExplorerFile,
+  save: saveExplorerFile,
+  upload: uploadExplorerFiles,
+  backToList: () => loadFileExplorer(fileExplorerState.curPath),
+  backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
+});
 
 
 // Tunnels are bound to the session they were opened in; the modal and the
