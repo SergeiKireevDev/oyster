@@ -54,7 +54,7 @@ export function createSessionPickerDeleteController({ removeSession, getSessions
   return { deleteSession };
 }
 
-export function createSessionPickerFolderController({ fetchSessions, getSnapshot, update, getRunners, setSessions, toast }) {
+export function createSessionPickerFolderController({ fetchSessions, getSnapshot, update, getRunners, setSessions, rememberSessions = () => {}, toast }) {
   async function refreshCurrent() {
     const sessions = await fetchSessions();
     setSessions(sessions);
@@ -68,6 +68,7 @@ export function createSessionPickerFolderController({ fetchSessions, getSnapshot
     update({ loadingFolders: { ...snapshot.loadingFolders, [folder.dir]: true } });
     try {
       const sessions = await fetchSessions(folder.dir);
+      rememberSessions(sessions);
       const latest = getSnapshot();
       update({
         otherFolderSessions: { ...latest.otherFolderSessions, [folder.dir]: sessions },

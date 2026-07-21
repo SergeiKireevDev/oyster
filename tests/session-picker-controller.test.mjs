@@ -25,18 +25,20 @@ test("session picker delete controller updates sessions and refreshes released r
 
 test("session picker folder controller loads a folder once and clears loading on errors", async () => {
   let snapshot = { otherFolderSessions: {}, loadingFolders: {} };
-  const updates = []; const errors = [];
+  const updates = []; const errors = []; const remembered = [];
   const controller = createSessionPickerFolderController({
     fetchSessions: async (folder) => folder === "bad" ? Promise.reject(new Error("nope")) : [{ path: folder }],
     getSnapshot: () => snapshot,
     update: (next) => { snapshot = { ...snapshot, ...next }; updates.push(next); },
     getRunners: () => [{ id: "runner" }],
     setSessions: () => {},
+    rememberSessions: (sessions) => remembered.push(sessions),
     toast: (...args) => errors.push(args),
   });
   await controller.loadFolder({ dir: "good", label: "Good" });
   await controller.loadFolder({ dir: "good", label: "Good" });
   assert.deepEqual(snapshot.otherFolderSessions.good, [{ path: "good" }]);
+  assert.deepEqual(remembered, [[{ path: "good" }]]);
   assert.equal(updates.length, 2);
   await controller.loadFolder({ dir: "bad", label: "Bad" });
   assert.equal(snapshot.loadingFolders.bad, false);

@@ -32,6 +32,11 @@ export function createSessionPickerRuntime(deps) {
     update: deps.updateSessionPicker,
     getRunners: deps.getRunners,
     setSessions: (next) => { sessions = next; },
+    rememberSessions: (next) => {
+      const byPath = new Map(sessions.map((session) => [session.path, session]));
+      for (const session of next) byPath.set(session.path, session);
+      sessions = [...byPath.values()];
+    },
     toast: deps.toast,
   });
 

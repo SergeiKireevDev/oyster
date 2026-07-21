@@ -38,6 +38,29 @@ async function openSessions(page) {
   await expect(page.locator("#mTitle")).toHaveText("Sessions");
 }
 
+async function newSessionInFolder(page, folderName) {
+  await page.click("#menuBtn");
+  await page.click('#menu button[data-action="newSessionIn"]');
+  await expect(page.locator("#mTitle")).toHaveText("New session in folder");
+  await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
+  await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);
+  await page.getByRole("button", { name: "Start session here" }).click();
+  await expect(page.locator(".toast", { hasText: `folder: /workspace/${folderName}` })).toBeVisible({ timeout: 10000 });
+}
+
+async function loadOtherFolderAndSwitch(page, folderLabel, token) {
+  await openSessions(page);
+  await page.locator(".s-folders > summary").click();
+  const folder = page.locator(".s-folder").filter({
+    has: page.locator(":scope > summary", { hasText: folderLabel }),
+  });
+  await folder.locator(":scope > summary").click();
+  const row = rowFor(page, token);
+  await expect(row).toBeVisible({ timeout: 10000 });
+  await row.click();
+  await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
+}
+
 // A session row in the picker that is titled/named after `token`.
 function rowFor(page, token) {
   return page.locator(".m-option", { hasText: token });
@@ -123,7 +146,7 @@ async function switchToSessionByToken(page, token, { mobile = false } = {}) {
   await expect(page.locator(".toast", { hasText: /switched to/ })).toBeVisible({ timeout: 10000 });
 }
 
-function defineSessionManagementTests({ includeResourceSwitch = false, mobile = false } = {}) {
+function defineSessionManagementTests({ includeResourceSwitch = false, includeCrossDirectorySwitch = false, mobile = false } = {}) {
   test("start sessions and stop a session's background process", async ({ page }) => {
     await login(page);
 
@@ -207,6 +230,34 @@ function defineSessionManagementTests({ includeResourceSwitch = false, mobile = 
     await rowFor(page, D).click();
     await expect(page.locator(".msg.assistant", { hasText: D }).last()).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".msg.assistant", { hasText: G })).toHaveCount(0);
+  });
+
+  if (includeCrossDirectorySwitch) test("switch sessions across working directories in both directions", async ({ page }) => {
+    await login(page);
+
+    const A = tag("WORKDIR-A");
+    const B = tag("WORKDIR-B");
+    const otherFolder = `other-${RUN}`;
+    dexec(`mkdir -p /workspace/${otherFolder}`);
+
+    await newSession(page);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${A}.`);
+
+    await newSessionInFolder(page, otherFolder);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${B}.`);
+    await expect(page.locator("#workdirInfo")).toContainText(`/workspace/${otherFolder}`);
+    await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible();
+
+    await loadOtherFolderAndSwitch(page, "/workspace", A);
+    await expect(page.locator("#workdirInfo")).toContainText("/workspace");
+    await expect(page.locator(".msg.assistant", { hasText: A }).last()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".msg.assistant", { hasText: B })).toHaveCount(0);
+
+    // Session-folder labels decode hyphens as separators.
+    await loadOtherFolderAndSwitch(page, `/workspace/other/${RUN}`, B);
+    await expect(page.locator("#workdirInfo")).toContainText(`/workspace/${otherFolder}`);
+    await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".msg.assistant", { hasText: A })).toHaveCount(0);
   });
 
   test("search across sessions and jump to a hit", async ({ page }) => {
@@ -345,7 +396,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, mobile = 
 }
 
 test.describe.serial("desktop session management", () => {
-  defineSessionManagementTests({ includeResourceSwitch: true });
+  defineSessionManagementTests({ includeResourceSwitch: true, includeCrossDirectorySwitch: true });
 });
 
 test.describe.serial("mobile session management", () => {
