@@ -241,6 +241,16 @@ npm test
 cd tests/e2e && npm test
 ```
 
+## Validation for Every Verified Item
+
+The goal loop must run this fenced validation command after each implementation
+checklist item. The final checklist item additionally runs the complete matrix
+listed above before verification.
+
+```sh
+npm test
+```
+
 ## Completion Criteria
 
 - An authenticated user can sign in, re-authenticate, cancel, and sign out for
