@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createCheckpoint } from "../public/src/lib/checkpointActions.js";
 import { runRoutine } from "../public/src/lib/routineActions.js";
 import { removeHublot } from "../public/src/lib/hublotActions.js";
+import { saveFile } from "../public/src/lib/fileBrowserActions.js";
 
 test("API actions normalize successful checkpoint and routine responses", async () => {
   const calls = [];
@@ -14,6 +15,13 @@ test("API actions normalize successful checkpoint and routine responses", async 
   await runRoutine(fetchImpl, { name: "job", action: "start", sessionId: "session" });
   assert.match(calls[0][0], /runner=runner%20one/);
   assert.deepEqual(JSON.parse(calls[1][1].body), { name: "job", action: "start", sessionId: "session" });
+});
+
+test("file browser actions preserve save request contracts", async () => {
+  let call;
+  await saveFile(async (url, options) => { call = [url, options]; return { ok: true, status: 200, json: async () => ({ bytes: 4 }) }; }, { path: "/workspace/a.txt", content: "test" });
+  assert.equal(call[0], "/file-save");
+  assert.deepEqual(JSON.parse(call[1].body), { path: "/workspace/a.txt", content: "test" });
 });
 
 test("API actions normalize server errors", async () => {
