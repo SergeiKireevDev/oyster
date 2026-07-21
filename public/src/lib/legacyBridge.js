@@ -77,7 +77,3 @@ export function backToHublotsFromExplorer() {
   return fileExplorerHandlers.backToHublots?.();
 }
 
-export function toggleFileExplorerHidden() {
-  return fileExplorerHandlers.toggleHidden?.();
-}
-

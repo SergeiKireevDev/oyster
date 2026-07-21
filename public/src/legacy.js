@@ -2037,7 +2037,7 @@ async function loadFileExplorer(path) {
     parent: data.parent,
     dirs: data.dirs ?? [],
     files: data.files ?? [],
-    showHidden: fileExplorerState.showHidden,
+    showHidden: get(fileExplorer).showHidden,
     loading: false,
     token,
     uploadText: "⬆ Upload…",
@@ -2185,10 +2185,6 @@ setFileExplorerHandlers({
   uploadFiles: uploadExplorerFiles,
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
-  toggleHidden: () => {
-    fileExplorerState.showHidden = !fileExplorerState.showHidden;
-    updateFileExplorer({ showHidden: fileExplorerState.showHidden });
-  },
 });
 
 // Tunnels are bound to the session they were opened in; the modal and the
