@@ -36,6 +36,7 @@ test("overlay provides shared keyboard navigation and cancellation", () => {
   assert.match(overlays, /event\.key (?:===|!==) "ArrowDown"/);
   assert.match(overlays, /event\.key (?:===|!==) "ArrowUp"/);
   assert.match(overlays, /event\.key === "Enter"/);
+  assert.match(overlays, /event\.key === "Enter" && overlay\.clientWidth <= 760/);
   assert.match(overlays, /scrollIntoView\(\{ block: "nearest" \}\)/);
   for (const name of [
     "TextPromptModal.svelte", "EditorPromptModal.svelte", "ConfirmPromptModal.svelte",

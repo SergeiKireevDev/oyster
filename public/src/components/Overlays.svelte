@@ -44,8 +44,15 @@
   }
 
   function modalKeydown(event) {
-    if (!$modalState.open || $modalState.content === "optionPicker") return;
+    if (!$modalState.open) return;
     const overlay = event.currentTarget;
+    if (event.key === "Enter" && overlay.clientWidth <= 760) {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelModal(overlay);
+      return;
+    }
+    if ($modalState.content === "optionPicker") return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
