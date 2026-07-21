@@ -343,6 +343,18 @@
     cursor: pointer;
   }
   #modal .m-option:hover { border-color: var(--accent); }
+  #modal .m-option.current { border-color: var(--accent-dim); background: var(--user-bubble); }
+  #modal .m-option .s-title {
+    display: flex; gap: 8px; align-items: baseline;
+    white-space: nowrap; overflow: hidden;
+  }
+  #modal .m-option .s-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  #modal .m-option .s-date { color: var(--muted); font-size: 11.5px; flex-shrink: 0; margin-left: auto; }
+  #modal .m-option .s-preview {
+    color: var(--muted); font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-top: 2px;
+  }
   #modal .m-actions {
     display: flex; gap: 8px; justify-content: flex-end;
     padding: 10px 16px 14px;
@@ -412,6 +424,7 @@
 
 <div id="menu">
   <button data-action="newSession">New session</button>
+  <button data-action="sessions">Sessions…</button>
   <button data-action="compact">Compact context</button>
   <button data-action="restart">Restart pi process</button>
   <button data-action="logout">Forget token</button>
@@ -935,15 +948,10 @@ function connect() {
     $("connDot").className = "dot ok";
     $("stateInfo").textContent = "connected";
     try {
-      const s = await rpc({ type: "get_state" });
-      applyState(s);
       // Always rebuild from the canonical transcript: the SSE replay buffer
       // re-delivers recent events on reconnect, so rendering them onto the
       // existing DOM would duplicate messages.
-      const { messages } = await rpc({ type: "get_messages" });
-      clearMessages();
-      for (const m of messages) renderFullMessage(m);
-      scrollToBottom(true);
+      await reloadTranscript();
     } catch (e) {
       if (String(e.message).includes("unauthorized")) return;
       toast(`init failed: ${e.message}`, "error");
@@ -1065,6 +1073,15 @@ function handleEvent(msg) {
   }
 }
 
+async function reloadTranscript() {
+  const s = await rpc({ type: "get_state" });
+  applyState(s);
+  const { messages } = await rpc({ type: "get_messages" });
+  clearMessages();
+  for (const m of messages) renderFullMessage(m);
+  scrollToBottom(true);
+}
+
 let stateRefreshTimer = null;
 function refreshState() {
   clearTimeout(stateRefreshTimer);
@@ -1132,6 +1149,8 @@ menu.addEventListener("click", async (e) => {
       await rpc({ type: "new_session" });
       clearMessages();
       toast("new session");
+    } else if (action === "sessions") {
+      await showSessionPicker();
     } else if (action === "compact") {
       toast("compacting…");
       await rpc({ type: "compact" });
@@ -1151,6 +1170,69 @@ menu.addEventListener("click", async (e) => {
     toast(err.message, "error");
   }
 });
+
+// ------------------------------------------------------------ session picker
+
+function fmtSessionDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString([], { month: "short", day: "numeric" }) +
+      " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+async function showSessionPicker() {
+  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}`);
+  if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
+  const { sessions } = await res.json();
+  if (!sessions.length) { toast("no saved sessions"); return; }
+  const currentId = state?.sessionId;
+
+  const chosen = await new Promise((resolve) => {
+    $("mTitle").textContent = "Sessions";
+    const body = $("mBody");
+    body.innerHTML = "";
+    for (const s of sessions) {
+      const isCurrent = s.id === currentId;
+      const b = document.createElement("button");
+      b.className = "m-option" + (isCurrent ? " current" : "");
+      const title = document.createElement("div");
+      title.className = "s-title";
+      const nameEl = document.createElement("span");
+      nameEl.className = "s-name";
+      nameEl.textContent = (s.name || s.preview || "(empty session)") + (isCurrent ? " · current" : "");
+      const dateEl = document.createElement("span");
+      dateEl.className = "s-date";
+      dateEl.textContent = `${fmtSessionDate(s.modifiedAt)} · ${s.messageCount} msgs`;
+      title.append(nameEl, dateEl);
+      b.appendChild(title);
+      if (s.name && s.preview) {
+        const prev = document.createElement("div");
+        prev.className = "s-preview";
+        prev.textContent = s.preview;
+        b.appendChild(prev);
+      }
+      b.addEventListener("click", () => { closeModal(); resolve(s); });
+      body.appendChild(b);
+    }
+    const actions = $("mActions");
+    const cancel = document.createElement("span");
+    cancel.className = "chip";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => { closeModal(); resolve(null); });
+    actions.appendChild(cancel);
+    overlay.classList.add("open");
+  });
+
+  if (!chosen || chosen.id === currentId) return;
+  const data = await rpc({ type: "switch_session", sessionPath: chosen.path });
+  if (data?.cancelled) { toast("switch cancelled"); return; }
+  await reloadTranscript();
+  toast(`switched to: ${chosen.name || chosen.preview || chosen.id.slice(0, 8)}`);
+}
 
 $("modelChip").addEventListener("click", async () => {
   try {

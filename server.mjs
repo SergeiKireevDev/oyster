@@ -23,8 +23,9 @@
 
 import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
+import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -189,6 +190,57 @@ function checkAuth(req, url) {
   return false;
 }
 
+// ---------------------------------------------------------------- session listing
+
+/** pi stores sessions per working directory: ~/.pi/agent/sessions/--<cwd with
+ *  separators mapped to "-">--/<timestamp>_<id>.jsonl */
+function sessionDirFor(cwd) {
+  const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  return join(homedir(), ".pi", "agent", "sessions", safePath);
+}
+
+function summarizeSessionFile(path) {
+  const text = readFileSync(path, "utf8");
+  const lines = text.split("\n");
+  let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+    if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; }
+    else if (entry.type === "session_info") { name = entry.name ?? name; }
+    else if (entry.type === "message") {
+      const m = entry.message;
+      if (m?.role === "user" || m?.role === "assistant") messageCount++;
+      if (!firstUserText && m?.role === "user") {
+        const c = m.content;
+        firstUserText = typeof c === "string"
+          ? c
+          : c?.find?.((b) => b.type === "text")?.text ?? null;
+      }
+    }
+  }
+  return { id, createdAt, name, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
+}
+
+function listSessions() {
+  const dir = sessionDirFor(PI_DIR);
+  if (!existsSync(dir)) return [];
+  const sessions = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    const path = join(dir, file);
+    try {
+      const summary = summarizeSessionFile(path);
+      sessions.push({ path, modifiedAt: statSync(path).mtime.toISOString(), ...summary });
+    } catch (e) {
+      console.error(`[pi-ui] failed to read session ${file}: ${e.message}`);
+    }
+  }
+  sessions.sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));
+  return sessions;
+}
+
 // ---------------------------------------------------------------- http
 
 const INDEX_PATH = join(__dirname, "public", "index.html");
@@ -298,6 +350,11 @@ const server = http.createServer(async (req, res) => {
     }
     const ok = sendToPi(cmd);
     json(res, ok ? 202 : 503, ok ? { queued: true } : { error: "pi process unavailable" });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/sessions") {
+    json(res, 200, { sessions: listSessions() });
     return;
   }
 
