@@ -220,7 +220,7 @@ const sessionAssembly = createSessionAssembly({
   stateApplier: {
     applySessionState,
     getEmptySessionRunners: () => emptySessionRunners,
-    getRoutines: () => routineSidebarController.items,
+    getRoutines: () => resourceOperations.getRoutineItems(),
     routineVisible,
     getTunnelScopeAll: () => resourceAssembly.hublots.getScopeAll(),
     hooks: {
@@ -333,7 +333,7 @@ platformEvents = createPlatformEventDispatch({
   getRunners: () => getRunners(),
   onRunnersChanged: sessionOperations.notifyRunnersChanged,
   refreshTree: refreshTreeIfOpen,
-  updateRoutine: (...args) => routineSidebarController.update(...args),
+  updateRoutine: (...args) => resourceOperations.updateRoutine(...args),
   toast: addToast,
   scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
   openUrl: (url) => window.open(url, "_blank"),
@@ -516,6 +516,7 @@ const resourceAssembly = createResourceAssembly({
     toast: addToast,
   },
 });
+const resourceOperations = resourceAssembly.operations;
 const filesRuntime = resourceAssembly.files;
 const filePickerController = filesRuntime.picker;
 const folderBrowserController = filesRuntime.folderBrowser;
@@ -619,7 +620,7 @@ async function sendAgentMessage(text) {
 
 
 // Always open in the current session's working directory.
-const showFileExplorer = () => fileExplorerController.show(getWorkdir());
+const showFileExplorer = () => resourceOperations.showFileExplorer(getWorkdir());
 
 const uploadExplorerFiles = () => fileExplorerController.chooseFiles(fileExplorerState.curPath);
 
@@ -642,9 +643,9 @@ const detachFileExplorerActions = configureFileExplorerActions({
 
 const hublotRuntime = resourceAssembly.hublots;
 const hublotController = hublotRuntime.controller;
-const showHublots = hublotRuntime.show;
-const createManagedHublot = hublotRuntime.create;
-const toggleManagedHublotScope = hublotRuntime.toggleScope;
+const showHublots = resourceOperations.showHublots;
+const createManagedHublot = resourceOperations.createHublot;
+const toggleManagedHublotScope = resourceOperations.toggleScope;
 const refreshHublotManager = hublotRuntime.refresh;
 const tunnelVisible = hublotRuntime.isVisible;
 
@@ -670,7 +671,7 @@ const mobileDrawerDismissController = createMobileDrawerDismissController({
   isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
 });
 
-const loadHublots = hublotController.refreshSidebar;
+const loadHublots = resourceOperations.loadHublots;
 
 const detachFilesActions = configureFilesActions({
   openExplorer: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
@@ -692,8 +693,8 @@ function routineVisible(routine) {
 const routineRuntime = resourceAssembly.routines;
 const routineSidebarController = routineRuntime.sidebar;
 const routineController = routineRuntime.controller;
-const syncRoutinesStore = routineRuntime.sync;
-function loadRoutines() { if (token) return routineRuntime.load(); }
+const syncRoutinesStore = resourceOperations.syncRoutines;
+function loadRoutines() { if (token) return resourceOperations.loadRoutines(); }
 const detachRoutineActions = configureRoutineActions(routineController.run);
 
 // ------------------------------------------------------------ session picker

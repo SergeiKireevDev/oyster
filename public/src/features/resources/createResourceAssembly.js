@@ -21,9 +21,15 @@ export function createResourceAssembly(deps) {
   const operations = Object.freeze({
     getScopeAll: hublots.getScopeAll,
     toggleScope: (...args) => hublots.toggleScope(...args),
-    refreshHublots: (...args) => hublots.load(...args),
-    refreshRoutines: (...args) => routines.load(...args),
+    loadHublots: (...args) => hublots.load(...args),
+    loadRoutines: (...args) => routines.load(...args),
     syncRoutines: (...args) => routines.sync(...args),
+    showHublots: (...args) => hublots.show(...args),
+    showFileExplorer: (workdir) => files.explorer.show(workdir),
+    createHublot: (...args) => hublots.create(...args),
+    runRoutine: (...args) => routines.controller.run(...args),
+    updateRoutine: (...args) => routines.sidebar.update(...args),
+    getRoutineItems: () => routines.sidebar.items,
   });
   return {
     files,

@@ -7,12 +7,12 @@ test("resource assembly composes files hublots and routines with one teardown bo
   let hublotDependencies;
   const assembly = createResourceAssembly({
     files: { name: "files" }, hublots: { name: "hublots" }, routines: { name: "routines", isVisible: () => true },
-    createFilesRuntime: (deps) => ({ deps, teardown: () => calls.push("files") }),
+    createFilesRuntime: (deps) => ({ deps, explorer: { show: (dir) => calls.push(`files:${dir}`) }, teardown: () => calls.push("files") }),
     createHublotRuntime: (deps) => {
       hublotDependencies = deps;
-      return { deps, getScopeAll: () => false, toggleScope: () => calls.push("toggle"), load: () => calls.push("loadHublots"), teardown: () => calls.push("hublots") };
+      return { deps, getScopeAll: () => false, toggleScope: () => calls.push("toggle"), load: () => calls.push("loadHublots"), show: () => calls.push("showHublots"), create: () => calls.push("createHublot"), teardown: () => calls.push("hublots") };
     },
-    createRoutineRuntime: (deps) => ({ deps, load: () => calls.push("loadRoutines"), sync: (value) => calls.push(`sync:${value}`), teardown: () => calls.push("routines") }),
+    createRoutineRuntime: (deps) => ({ deps, load: () => calls.push("loadRoutines"), sync: (value) => calls.push(`sync:${value}`), controller: { run: () => calls.push("runRoutine") }, sidebar: { items: [], update: () => calls.push("updateRoutine") }, teardown: () => calls.push("routines") }),
   });
   assert.equal(assembly.files.deps.name, "files");
   assert.equal(assembly.hublots.deps.name, "hublots");
@@ -20,9 +20,13 @@ test("resource assembly composes files hublots and routines with one teardown bo
   assert.equal(assembly.routines.deps.getScopeAll(), false);
   hublotDependencies.refreshRoutines("scope");
   assembly.operations.toggleScope();
-  assembly.operations.refreshHublots();
-  assembly.operations.refreshRoutines();
-  assert.deepEqual(calls, ["sync:scope", "toggle", "loadHublots", "loadRoutines"]);
+  assembly.operations.loadHublots();
+  assembly.operations.loadRoutines();
+  assembly.operations.showHublots();
+  assembly.operations.showFileExplorer("/tmp");
+  assembly.operations.createHublot();
+  assembly.operations.runRoutine();
+  assert.deepEqual(calls, ["sync:scope", "toggle", "loadHublots", "loadRoutines", "showHublots", "files:/tmp", "createHublot", "runRoutine"]);
   assembly.teardown();
   assert.deepEqual(calls.slice(-3), ["files", "routines", "hublots"]);
 });
