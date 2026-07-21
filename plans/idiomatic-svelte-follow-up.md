@@ -68,7 +68,7 @@ event, and remounting cannot invoke a disposed runtime.
 - [x] Move editor-prompt open, cancel, and submit promise handling into the
   dialog service. Update `EditorPromptModal.svelte` and its footer to consume
   context; test replacement and teardown settlement.
-- [ ] Move confirm-prompt open and answer handling into the dialog service.
+- [x] Move confirm-prompt open and answer handling into the dialog service.
   Update `ConfirmPromptModal.svelte` and its footer to consume context; test
   false settlement on replacement and teardown.
 - [ ] Move option-picker open, cancel, and choose handling into the dialog

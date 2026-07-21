@@ -15,7 +15,6 @@
   import Toasts from "./Toasts.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
-  import { answerConfirmPrompt } from "../stores/dialogs.js";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
@@ -84,8 +83,8 @@
         <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelEditor} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelEditor(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitEditor}>OK</button>
       {:else if $modalState.content === "confirmPrompt"}
-        <span class="chip" role="button" tabindex="0" onclick={() => answerConfirmPrompt(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") answerConfirmPrompt(false); }}>No</span>
-        <button class="btn" style="padding:6px 16px;" onclick={() => answerConfirmPrompt(true)}>Yes</button>
+        <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
+        <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
       {:else if $modalState.content === "checkpointModelPicker"}
         <span class="chip" role="button" tabindex="0" onclick={cancelCheckpointModelPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelCheckpointModelPicker(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>

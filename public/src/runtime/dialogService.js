@@ -21,6 +21,7 @@ export function createDialogService({ createStore = writable } = {}) {
   let modalShell = { open() {}, close() {} };
   let pendingText = null;
   let pendingEditor = null;
+  let pendingConfirm = null;
 
   const settleText = (value) => {
     const resolve = pendingText;
@@ -35,6 +36,14 @@ export function createDialogService({ createStore = writable } = {}) {
     pendingEditor = null;
     resolve?.(value);
     editorPrompt.set({ ...emptyEditorPrompt });
+    if (resolve) modalShell.close();
+  };
+
+  const settleConfirm = (value) => {
+    const resolve = pendingConfirm;
+    pendingConfirm = null;
+    resolve?.(value);
+    confirmPrompt.set({ ...emptyConfirmPrompt });
     if (resolve) modalShell.close();
   };
 
@@ -74,12 +83,23 @@ export function createDialogService({ createStore = writable } = {}) {
     cancelEditor: () => settleEditor(null),
     submitEditor: () => settleEditor(get(editorPrompt).value),
     setEditorPrompt: (state) => !disposed && editorPrompt.set(state),
+    openConfirm(title, message) {
+      if (disposed) return Promise.resolve(false);
+      pendingConfirm?.(false);
+      return new Promise((resolve) => {
+        pendingConfirm = resolve;
+        confirmPrompt.set({ title, message });
+        modalShell.open({ title, content: "confirmPrompt" });
+      });
+    },
+    answerConfirm: (answer) => settleConfirm(Boolean(answer)),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
     setOptionPicker: (state) => !disposed && optionPicker.set(state),
     teardown() {
       if (disposed) return;
       settleText(null);
       settleEditor(null);
+      settleConfirm(false);
       disposed = true;
       modalShell = { open() {}, close() {} };
       textPrompt.set({ ...emptyTextPrompt });

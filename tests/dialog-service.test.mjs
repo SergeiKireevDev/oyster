@@ -14,6 +14,7 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   const modal = readFileSync(new URL("../public/src/components/TextPromptModal.svelte", import.meta.url), "utf8");
   const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
   const editor = readFileSync(new URL("../public/src/components/EditorPromptModal.svelte", import.meta.url), "utf8");
+  const confirm = readFileSync(new URL("../public/src/components/ConfirmPromptModal.svelte", import.meta.url), "utf8");
   assert.match(modal, /getDialogService\(\)/);
   assert.match(modal, /dialogs\.(?:submitText|cancelText|setTextValue)/);
   assert.doesNotMatch(modal, /stores\/dialogs\.js/);
@@ -24,6 +25,10 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.doesNotMatch(editor, /stores\/dialogs\.js/);
   assert.match(overlays, /onclick=\{dialogs\.cancelEditor\}/);
   assert.match(overlays, /onclick=\{dialogs\.submitEditor\}/);
+  assert.match(confirm, /getDialogService\(\)/);
+  assert.doesNotMatch(confirm, /stores\/dialogs\.js/);
+  assert.match(overlays, /dialogs\.answerConfirm\(false\)/);
+  assert.match(overlays, /dialogs\.answerConfirm\(true\)/);
 });
 
 test("dialog service instances own independent prompt presentation state", () => {
@@ -80,6 +85,19 @@ test("editor prompt replacement and teardown settle pending promises", async () 
   const cancelledByTeardown = dialogs.openEditor("Third");
   dialogs.teardown();
   assert.equal(await cancelledByTeardown, null);
+});
+
+test("confirm prompt replacement and teardown settle false", async () => {
+  const dialogs = createDialogService();
+  dialogs.configureModalShell({ open() {}, close() {} });
+  const replaced = dialogs.openConfirm("First", "Old?");
+  const answered = dialogs.openConfirm("Second", "New?");
+  assert.equal(await replaced, false);
+  dialogs.answerConfirm(true);
+  assert.equal(await answered, true);
+  const cancelledByTeardown = dialogs.openConfirm("Third", "Pending?");
+  dialogs.teardown();
+  assert.equal(await cancelledByTeardown, false);
 });
 
 test("dialog service teardown resets only its own state", () => {

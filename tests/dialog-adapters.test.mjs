@@ -11,9 +11,8 @@ function harness() {
     dialogService: dialogs,
     configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
     configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
-    setConfirmPrompt: (next) => calls.push(["confirmState", next]),
     setOptionPicker: (next) => calls.push(["optionState", next]),
-    emptyConfirm: {}, emptyOptionPicker: {},
+    emptyOptionPicker: {},
     openModal: (options) => calls.push(["open", options]), closeModal: () => calls.push(["close"]),
     updateModal: (options) => calls.push(["update", options]),
     findElement: () => ({ classList: { contains: (name) => name === "open" } }),
@@ -41,6 +40,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   const pending = first.adapters.confirm("Confirm", "Continue?");
   first.adapters.teardown();
   first.adapters.teardown();
+  first.dialogs.teardown();
   assert.equal(await pending, false);
   assert.equal(first.calls.filter(([name]) => name.startsWith("detach")).length, 2);
   assert.equal(first.dialogController.openText, undefined);
@@ -56,7 +56,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   second.optionController.cancel();
   assert.equal(await option, null);
   const confirmation = second.adapters.confirm("Confirm", "Proceed?");
-  second.dialogController.answerConfirm(true);
+  second.dialogs.answerConfirm(true);
   assert.equal(await confirmation, true);
   second.adapters.teardown();
   second.dialogs.teardown();
