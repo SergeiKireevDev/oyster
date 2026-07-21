@@ -174,6 +174,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         return { ...database.prepare("SELECT * FROM routine_runs WHERE id = ?").get(id) };
       },
       updateProgress: (id, progress, message) => database.prepare("UPDATE routine_runs SET progress = ?, message = ? WHERE id = ?").run(progress, message, id).changes,
+      updateRunStatus: (id, status) => database.prepare("UPDATE routine_runs SET status = ? WHERE id = ?").run(status, id).changes,
       finishRun: (id, { status, result = null, finishedAt, exitCode = null, error = null }) => database.prepare(`
         UPDATE routine_runs SET status = ?, result = ?, finished_at = ?, exit_code = ?, error = ? WHERE id = ?
       `).run(status, result, finishedAt, exitCode, error, id).changes,
@@ -182,6 +183,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         return row ? { ...row } : null;
       },
       listRuns: (routineId) => database.prepare("SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at, id").all(routineId).map((row) => ({ ...row })),
+      findLatestRun: (routineId) => {
+        const row = database.prepare("SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC, id DESC LIMIT 1").get(routineId);
+        return row ? { ...row } : null;
+      },
       appendLog: (runId, stream, text, createdAt, limit = 80) => {
         if (!Number.isInteger(limit) || limit < 1) throw new Error("routine log limit must be a positive integer");
         database.exec("BEGIN IMMEDIATE");
