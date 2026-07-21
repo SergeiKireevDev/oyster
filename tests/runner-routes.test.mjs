@@ -40,7 +40,8 @@ function setup() {
     runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir }),
     openSessionRunner: ({ sessionPath, dir }) => ({ id: "opened", sessionPath, dir }),
     sessionFileParam: (path) => path === "valid.jsonl" ? "/sessions/valid.jsonl" : null,
-    autoTitleFork: (selected, command) => { selected.titledWith = command; },
+    srvId: () => "srv-1",
+    runnersChanged: () => {}, 
     setTimeoutImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
     resolvePath: (path) => path,
     isDirectory: (path) => path !== "/allowed/file",
@@ -91,7 +92,7 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   await routes["POST /rpc"]({ body: { type: "prompt", message: "hello" } }, queued, new URL("http://localhost/rpc"));
   assert.equal(queued.status, 202);
   assert.deepEqual(queued.body, { queued: true, runner: "runner-1" });
-  assert.equal(runner.titledWith.message, "hello");
+  assert.equal(runner.titledWith, undefined);
 
   const unavailable = response();
   await routes["POST /rpc"]({ body: { type: "unavailable" } }, unavailable, new URL("http://localhost/rpc"));

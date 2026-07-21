@@ -19,13 +19,38 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export const SESSIONS_ROOT = join(homedir(), ".pi", "agent", "sessions");
 
 export function sessionDirFor(cwd) {
   const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
   return join(SESSIONS_ROOT, safePath);
+}
+
+export function sessionFileParam(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value || !value.endsWith(".jsonl")) return null;
+  const target = value.startsWith("/") ? resolve(value) : resolve(SESSIONS_ROOT, value);
+  return target.startsWith(`${SESSIONS_ROOT}/`) && existsSync(target) ? target : null;
+}
+
+export function sessionFileNameParam(raw) {
+  const file = String(raw ?? "").trim();
+  if (!file || file !== basename(file) || !file.endsWith(".jsonl")) return null;
+  try {
+    for (const folder of readdirSync(SESSIONS_ROOT)) {
+      const directory = join(SESSIONS_ROOT, folder);
+      try { if (!statSync(directory).isDirectory()) continue; } catch { continue; }
+      const target = join(directory, file);
+      if (existsSync(target)) return target;
+    }
+  } catch {}
+  return null;
+}
+
+export function sessionFileFromSearch(url) {
+  return sessionFileParam(url.searchParams.get("path")) || sessionFileNameParam(url.searchParams.get("file"));
 }
 
 /** best-effort human-readable name for a session folder like

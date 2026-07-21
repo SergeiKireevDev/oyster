@@ -174,7 +174,7 @@ swap without a manual `app.mjs` touch.
 
 ## 10. Finish the Composition Root and Prove Behavior
 
-- [ ] Reduce `app.mjs` to dynamic domain imports, request-context construction,
+- [x] Reduce `app.mjs` to dynamic domain imports, request-context construction,
   route-factory composition, auth dispatch, and the stable-core lifecycle API.
   Remove stale inline helpers, route comments, and imports after no-reference
   checks.

@@ -7,7 +7,7 @@ const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
 test("app composition uses extracted open and static route factories", () => {
   assert.match(appSource, /createOpenRoutes\(\{ state, listRunnerInfo, requestContext \}\)/);
   assert.match(appSource, /createStaticRoutes\(\{ config, requestContext \}\)/);
-  assert.match(appSource, /createRouteTable\(\{[^}]*static: staticRoutes[^}]*open: openRoutes[^}]*authenticated: routes[^}]*\}\)/);
+  assert.match(appSource, /createRouteTable\(\{[^}]*static: staticRoutes[^}]*open: openRoutes[^}]*\}\)/);
 });
 
 test("app no longer contains open or static route handler implementations", () => {

@@ -13,7 +13,8 @@ export function createRunnerRoutes({
   runnerInfo,
   openSessionRunner,
   sessionFileParam,
-  autoTitleFork,
+  srvId,
+  runnersChanged,
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
@@ -23,6 +24,17 @@ export function createRunnerRoutes({
   const json = requestContext?.json;
   const readJsonBody = requestContext?.readJsonBody;
   const resolveSafePath = requestContext?.resolveSafePath;
+
+  function autoTitleFork(runner, command) {
+    if (command.type !== "prompt" || typeof command.message !== "string") return;
+    if (!/^\u23EA [0-9a-f]{4,12}$/.test(runner.sessionName ?? "")) return;
+    const title = command.message.replace(/\s+/g, " ").trim();
+    if (!title) return;
+    const short = title.length > 42 ? `${title.slice(0, 41).trimEnd()}…` : title;
+    sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `⏪ ${short}` }, { autostart: false });
+    runner.sessionName = `⏪ ${short}`;
+    runnersChanged();
+  }
 
   return {
     "GET /events": (req, res, url) => {

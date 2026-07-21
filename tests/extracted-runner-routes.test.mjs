@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
 
 test("app composes the extracted runner factory with explicit operations", () => {
-  assert.match(appSource, /createRunnerRoutes\(\{[\s\S]*?state, requestContext, runnerFromReq, startRunner, listRunnerInfo,[\s\S]*?sessionFileParam, autoTitleFork,[\s\S]*?\}\)/);
+  assert.match(appSource, /createRunnerRoutes\(\{[\s\S]*?state, requestContext, runnerFromReq, startRunner, listRunnerInfo,[\s\S]*?sessionFileParam, srvId, runnersChanged,[\s\S]*?\}\)/);
   assert.match(appSource, /createRouteTable\(\{[^}]*runner: runnerRoutes/);
 });
 
