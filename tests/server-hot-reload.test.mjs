@@ -13,6 +13,7 @@ async function copyStableServer(root) {
     copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs")),
     copyFile(new URL("../persistence/appStore.mjs", import.meta.url), join(root, "persistence", "appStore.mjs")),
     copyFile(new URL("../persistence/appSettings.mjs", import.meta.url), join(root, "persistence", "appSettings.mjs")),
+    copyFile(new URL("../persistence/stateInventory.mjs", import.meta.url), join(root, "persistence", "stateInventory.mjs")),
     copyFile(new URL("../persistence/migrations.mjs", import.meta.url), join(root, "persistence", "migrations.mjs")),
   ]);
 }

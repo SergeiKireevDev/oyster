@@ -348,7 +348,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 ### 8. Persist server-level settings
 
 - [x] Move the current workdir and default runner ID into `app_settings` with validated typed codecs and documented precedence between startup configuration and persisted mutable values.
-- [ ] Add a state-inventory architecture test that fails when a new durable field is added to stable server state without a repository or an explicit ephemeral classification.
+- [x] Add a state-inventory architecture test that fails when a new durable field is added to stable server state without a repository or an explicit ephemeral classification.
 - [ ] Keep reload counts, SSE connections, auth-failure throttles, and timers ephemeral.
 - [ ] Decide separately whether non-secret browser preferences should sync to SQLite.
 - [ ] Keep authentication tokens out of general preference storage.

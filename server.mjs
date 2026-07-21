@@ -25,6 +25,7 @@ import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openAppStore } from "./persistence/appStore.mjs";
 import { createAppSettings } from "./persistence/appSettings.mjs";
+import { assertStableStateInventory } from "./persistence/stateInventory.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -186,6 +187,7 @@ const state = {
     state.broadcast(JSON.stringify({ ...obj, _server: true }));
   },
 };
+assertStableStateInventory(state);
 
 // ---------------------------------------------------------------- hot reload
 
