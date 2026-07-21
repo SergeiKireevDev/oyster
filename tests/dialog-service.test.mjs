@@ -15,6 +15,7 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
   const editor = readFileSync(new URL("../public/src/components/EditorPromptModal.svelte", import.meta.url), "utf8");
   const confirm = readFileSync(new URL("../public/src/components/ConfirmPromptModal.svelte", import.meta.url), "utf8");
+  const option = readFileSync(new URL("../public/src/components/OptionPickerModal.svelte", import.meta.url), "utf8");
   assert.match(modal, /getDialogService\(\)/);
   assert.match(modal, /dialogs\.(?:submitText|cancelText|setTextValue)/);
   assert.doesNotMatch(modal, /stores\/dialogs\.js/);
@@ -29,6 +30,13 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.doesNotMatch(confirm, /stores\/dialogs\.js/);
   assert.match(overlays, /dialogs\.answerConfirm\(false\)/);
   assert.match(overlays, /dialogs\.answerConfirm\(true\)/);
+  assert.match(option, /getDialogService\(\)/);
+  assert.doesNotMatch(option, /stores\/optionPicker\.js/);
+  assert.match(option, /event\.key === "ArrowDown"/);
+  assert.match(option, /event\.key === "ArrowUp"/);
+  assert.match(option, /event\.key === "Enter"/);
+  assert.match(option, /event\.key === "Escape"/);
+  assert.match(overlays, /onclick=\{dialogs\.cancelOption\}/);
 });
 
 test("dialog service instances own independent prompt presentation state", () => {
@@ -98,6 +106,27 @@ test("confirm prompt replacement and teardown settle false", async () => {
   const cancelledByTeardown = dialogs.openConfirm("Third", "Pending?");
   dialogs.teardown();
   assert.equal(await cancelledByTeardown, false);
+});
+
+test("option picker preserves searchable state selection cancellation and teardown", async () => {
+  const dialogs = createDialogService();
+  dialogs.configureModalShell({ open() {}, close() {} });
+  const replaced = dialogs.openOption("First", ["one"]);
+  const selected = dialogs.openOption("Second", ["alpha", "beta"], { searchable: true });
+  assert.equal(await replaced, null);
+  assert.equal(get(dialogs.optionPicker).searchable, true);
+  dialogs.setOptionQuery("be");
+  dialogs.setOptionActive(1);
+  assert.deepEqual(get(dialogs.optionPicker), { title: "Second", options: ["alpha", "beta"], searchable: true, query: "be", active: 1 });
+  dialogs.chooseOption(1);
+  assert.equal(await selected, 1);
+
+  const cancelled = dialogs.openOption("Cancel", []);
+  dialogs.cancelOption();
+  assert.equal(await cancelled, null);
+  const cancelledByTeardown = dialogs.openOption("Teardown", []);
+  dialogs.teardown();
+  assert.equal(await cancelledByTeardown, null);
 });
 
 test("dialog service teardown resets only its own state", () => {

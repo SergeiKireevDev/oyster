@@ -71,7 +71,7 @@ event, and remounting cannot invoke a disposed runtime.
 - [x] Move confirm-prompt open and answer handling into the dialog service.
   Update `ConfirmPromptModal.svelte` and its footer to consume context; test
   false settlement on replacement and teardown.
-- [ ] Move option-picker open, cancel, and choose handling into the dialog
+- [x] Move option-picker open, cancel, and choose handling into the dialog
   service. Update `OptionPickerModal.svelte` and its footer to consume context;
   preserve searchable, keyboard, cancel, and selected-index behavior in tests.
 - [ ] Rewire `createDialogAdapters.js` to use the instance dialog service and

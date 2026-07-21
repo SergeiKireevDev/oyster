@@ -11,8 +11,6 @@ function harness() {
     dialogService: dialogs,
     configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
     configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
-    setOptionPicker: (next) => calls.push(["optionState", next]),
-    emptyOptionPicker: {},
     openModal: (options) => calls.push(["open", options]), closeModal: () => calls.push(["close"]),
     updateModal: (options) => calls.push(["update", options]),
     findElement: () => ({ classList: { contains: (name) => name === "open" } }),
@@ -27,7 +25,7 @@ test("dialog adapters compose modal shell prompts option picker and extension UI
   h.dialogs.submitText();
   assert.equal(await input, "prefill");
   const selected = h.adapters.select("Pick", ["one"]);
-  h.optionController.choose(0);
+  h.dialogs.chooseOption(0);
   assert.equal(await selected, 0);
   h.adapters.modal.showSettings(); h.adapters.modal.update({ title: "Changed" }); h.adapters.modal.close();
   assert.equal(h.adapters.modal.isOverlayOpen(), true);
@@ -53,7 +51,7 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   second.dialogs.cancelEditor();
   assert.equal(await editor, null);
   const option = second.adapters.select("Select", ["one"]);
-  second.optionController.cancel();
+  second.dialogs.cancelOption();
   assert.equal(await option, null);
   const confirmation = second.adapters.confirm("Confirm", "Proceed?");
   second.dialogs.answerConfirm(true);

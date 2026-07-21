@@ -1,12 +1,9 @@
 <script>
   import { onMount, tick } from "svelte";
-  import {
-    cancelOptionPicker,
-    chooseOption,
-    optionPicker,
-    setOptionActive,
-    setOptionQuery,
-  } from "../stores/optionPicker.js";
+  import { getDialogService } from "../runtime/dialogServiceContext.js";
+
+  const dialogs = getDialogService();
+  const optionPicker = dialogs.optionPicker;
 
   let searchEl;
 
@@ -19,7 +16,7 @@
     if (!visible.length) return;
     const cur = visible.findIndex((item) => item.index === $optionPicker.active);
     const next = cur < 0 ? (dir > 0 ? 0 : visible.length - 1) : (cur + dir + visible.length) % visible.length;
-    setOptionActive(visible[next].index);
+    dialogs.setOptionActive(visible[next].index);
   }
 
   function onKey(event) {
@@ -30,10 +27,10 @@
       const target = $optionPicker.active >= 0 && visible.some((item) => item.index === $optionPicker.active)
         ? $optionPicker.active
         : ($optionPicker.searchable ? visible[0]?.index : null);
-      if (target != null) chooseOption(target);
+      if (target != null) dialogs.chooseOption(target);
     } else if (event.key === "Escape") {
       event.preventDefault();
-      cancelOptionPicker();
+      dialogs.cancelOption();
     }
   }
 
@@ -50,7 +47,7 @@
     type="text"
     placeholder="Filter…"
     value={$optionPicker.query}
-    oninput={(event) => setOptionQuery(event.currentTarget.value)}
+    oninput={(event) => dialogs.setOptionQuery(event.currentTarget.value)}
   />
 {/if}
 
@@ -58,7 +55,7 @@
   <button
     class="m-option"
     class:active={item.index === $optionPicker.active}
-    onclick={() => chooseOption(item.index)}
-    onmousemove={() => setOptionActive(item.index)}
+    onclick={() => dialogs.chooseOption(item.index)}
+    onmousemove={() => dialogs.setOptionActive(item.index)}
   >{item.text}</button>
 {/each}

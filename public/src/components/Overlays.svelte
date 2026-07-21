@@ -24,7 +24,6 @@
   import { cancelFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
   import { hublotManager } from "../stores/hublotManager.js";
   import { toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
-  import { cancelOptionPicker } from "../stores/optionPicker.js";
   import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
 
   const dialogs = getDialogService();
@@ -73,8 +72,8 @@
           class="chip"
           role="button"
           tabindex="0"
-          onclick={cancelOptionPicker}
-          onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelOptionPicker(); }}
+          onclick={dialogs.cancelOption}
+          onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelOption(); }}
         >Cancel</span>
       {:else if $modalState.content === "textPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={dialogs.cancelText} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.cancelText(); }}>Cancel</span>

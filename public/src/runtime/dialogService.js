@@ -22,6 +22,7 @@ export function createDialogService({ createStore = writable } = {}) {
   let pendingText = null;
   let pendingEditor = null;
   let pendingConfirm = null;
+  let pendingOption = null;
 
   const settleText = (value) => {
     const resolve = pendingText;
@@ -44,6 +45,14 @@ export function createDialogService({ createStore = writable } = {}) {
     pendingConfirm = null;
     resolve?.(value);
     confirmPrompt.set({ ...emptyConfirmPrompt });
+    if (resolve) modalShell.close();
+  };
+
+  const settleOption = (value) => {
+    const resolve = pendingOption;
+    pendingOption = null;
+    resolve?.(value);
+    optionPicker.set({ ...emptyDialogOptionPicker });
     if (resolve) modalShell.close();
   };
 
@@ -94,12 +103,26 @@ export function createDialogService({ createStore = writable } = {}) {
     },
     answerConfirm: (answer) => settleConfirm(Boolean(answer)),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
+    openOption(title, options, { searchable = false } = {}) {
+      if (disposed) return Promise.resolve(null);
+      pendingOption?.(null);
+      return new Promise((resolve) => {
+        pendingOption = resolve;
+        optionPicker.set({ title, options, searchable, query: "", active: -1 });
+        modalShell.open({ title, content: "optionPicker" });
+      });
+    },
+    setOptionQuery: (query) => !disposed && optionPicker.update((state) => ({ ...state, query, active: -1 })),
+    setOptionActive: (active) => !disposed && optionPicker.update((state) => ({ ...state, active })),
+    cancelOption: () => settleOption(null),
+    chooseOption: (index) => settleOption(index),
     setOptionPicker: (state) => !disposed && optionPicker.set(state),
     teardown() {
       if (disposed) return;
       settleText(null);
       settleEditor(null);
       settleConfirm(false);
+      settleOption(null);
       disposed = true;
       modalShell = { open() {}, close() {} };
       textPrompt.set({ ...emptyTextPrompt });
