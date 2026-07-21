@@ -18,6 +18,7 @@ import { createSessionBootController } from "./runtime/sessionBootController.js"
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
 import { createExtensionUiAdapters } from "./runtime/extensionUiAdapters.js";
 import { createLegacyRuntimeEventAdapters } from "./runtime/legacyRuntimeEventAdapters.js";
+import { createRuntimeAttachments } from "./runtime/runtimeAttachments.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -103,10 +104,6 @@ const lifecycleLog = createLifecycleLogger({
 // Auth/token initialization is runtime-owned; legacy receives its current
 // token for transport and EventSource construction.
 const token = initializeAuth();
-let authenticatedFetchRegistration = null;
-function attachAuthenticatedFetch() {
-  if (!authenticatedFetchRegistration) authenticatedFetchRegistration = installAuthenticatedFetch(token);
-}
 
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
@@ -1743,16 +1740,15 @@ const headerEventController = createHeaderEventController({
 // runtime starts, after Svelte has mounted.
 
 // Test/debug scripts use these hooks to seed and inspect session state.
-let debugHookRegistration = null;
-function attachDebugHooks() {
-  if (debugHookRegistration) return;
-  debugHookRegistration = installDebugHooks(window, {
+const runtimeAttachments = createRuntimeAttachments({
+  installAuthenticatedFetch: () => installAuthenticatedFetch(token),
+  installDebugHooks: () => installDebugHooks(window, {
     rpc,
     refreshState: () => getSessionRuntime().refreshState(),
     loadHublots,
     loadRoutines,
-  });
-}
+  }),
+});
 
 // ------------------------------------------------------------ go
 
@@ -1783,7 +1779,7 @@ const runtimeTeardown = createRuntimeTeardown([
   () => filePickerEventController.detach(), () => folderBrowserEventController.detach(), () => fileExplorerEventController.detach(),
   () => managedHublotEventController.detach(), () => hublotSidebarEventController.detach(), () => routineEventController.detach(),
   () => sessionPickerEventController.detach(), () => openFileExplorerEventController.detach(), () => commandPaletteInputController?.detach(),
-  () => debugHookRegistration?.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration?.detach(), () => connectionState.lost(),
+  () => runtimeAttachments.detach(), () => delayedTasks.cancelAll(), () => connectionState.lost(),
 ]);
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
@@ -1802,9 +1798,9 @@ const runtimeEventAdapters = createLegacyRuntimeEventAdapters({
 
 export function createLegacyRuntimeLifecycleDependencies() {
   return createLegacyRuntimeDependencies({
-    attachAuthenticatedFetch,
+    attachAuthenticatedFetch: runtimeAttachments.attachAuthenticatedFetch,
     attachEventAdapters: runtimeEventAdapters.attach,
-    attachDebugHooks,
+    attachDebugHooks: runtimeAttachments.attachDebugHooks,
     start: runtimeStarter,
     teardown: runtimeTeardown,
   });
