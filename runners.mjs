@@ -32,6 +32,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
+import { createPiProcessLauncher } from "./pi-processes.mjs";
 
 const RUNNER_BUFFER_MAX = 400;
 const WATCHDOG_INTERVAL_MS = 30000;
@@ -49,7 +50,7 @@ const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 export function createRunnerManager(state, { spawnImpl = null } = {}) {
   const { config, serverEvent, sessionReferences } = state;
   const piProcesses = spawnImpl
-    ? { launch: (args, options) => spawnImpl(config.PI_BIN, args, options) }
+    ? createPiProcessLauncher({ config, spawnImpl })
     : state.piProcesses;
   if (!piProcesses) throw new Error("pi process launcher is required");
   if (!sessionReferences) throw new Error("session reference codec is required");

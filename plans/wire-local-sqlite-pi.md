@@ -164,7 +164,7 @@ SQLite-capable pi rather than accidentally falling back to version `0.80.3`.
 
 ## 7. Complete Migration Validation and Documentation
 
-- [ ] Add static guards forbidding new `.jsonl`/`sessionFile` identity
+- [x] Add static guards forbidding new `.jsonl`/`sessionFile` identity
   assumptions outside the JSONL adapter and compatibility boundaries, bare
   `sessions.sqlite` identity comparisons, direct SQLite workflow mutations,
   and pi spawns outside the centralized launcher.
