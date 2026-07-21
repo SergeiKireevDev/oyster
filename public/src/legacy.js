@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -2926,13 +2926,12 @@ function toggleTreeFromHeader() {
   applyCarousel();
 }
 
-document.addEventListener("pi:header", (event) => {
-  const { action, sourceEvent } = event.detail ?? {};
-  if (action === "chooseModel") chooseModel();
-  else if (action === "cycleThinking") cycleThinking();
-  else if (action === "openConfig") openConfigPicker();
-  else if (action === "toggleHublots") toggleHublotsFromHeader(sourceEvent);
-  else if (action === "toggleTree") toggleTreeFromHeader(sourceEvent);
+registerHeaderEvents(document, {
+  chooseModel,
+  cycleThinking,
+  openConfig: openConfigPicker,
+  toggleHublots: toggleHublotsFromHeader,
+  toggleTree: toggleTreeFromHeader,
 });
 
 // apply initial page on load + whenever the page becomes mobile/desktop

@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("header event adapter routes header actions", () => {
+  let listener;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  const calls = [];
+  registerHeaderEvents(target, { chooseModel: () => calls.push("model"), cycleThinking: () => calls.push("thinking"), openConfig: () => calls.push("config"), toggleHublots: (event) => calls.push(["hublots", event]), toggleTree: (event) => calls.push(["tree", event]) });
+  listener({ detail: { action: "chooseModel" } });
+  listener({ detail: { action: "toggleTree", sourceEvent: "event" } });
+  assert.deepEqual(calls, ["model", ["tree", "event"]]);
+});
 
 test("composer event adapter routes each composer action", () => {
   let listener;
