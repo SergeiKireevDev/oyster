@@ -24,7 +24,9 @@
  *   GET  /session-entries -> ordered user/assistant entries of the active
  *                          branch of one session (?path=…) — permalink anchors
  *   GET  /session-folders -> all folders under ~/.pi/agent/sessions
- *   GET  /search      -> full-text search (?q=…&scope=session|folder|all[&path=…])
+ *   GET  /search      -> full-text search (?q=…&scope=session|folder|all[&path=…][&tools=1])
+ *                        — only user/assistant text by default; tools=1 also
+ *                        searches tool calls and thinking blocks
  *   GET  /browse      -> list subdirectories for the folder picker
  *   POST /workdir     -> switch folder (spawns a new runner there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
@@ -542,7 +544,7 @@ export function init(state) {
     };
   }
 
-  function searchSessionFile(path, query, maxHitsPerFile = 25) {
+  function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
     const q = query.toLowerCase();
     let text;
     try { text = readFileSync(path, "utf8"); } catch { return []; }
@@ -556,6 +558,12 @@ export function init(state) {
       if (e.type === "session_info") meta.name = e.name ?? meta.name;
       for (const t of entryTexts(e)) {
         if (!meta.preview && t.role === "user" && t.kind === "text") meta.preview = t.text.slice(0, 120);
+        // default: only real text responses (user/assistant) and session
+        // names; tool calls, tool RESULTS (role toolResult, kind text) and
+        // thinking blocks are opt-in
+        const isTextResponse = t.kind === "name" ||
+          (t.kind === "text" && (t.role === "user" || t.role === "assistant"));
+        if (!includeTools && !isTextResponse) continue;
         const idx = t.text.toLowerCase().indexOf(q);
         if (idx === -1) continue;
         hits.push({
@@ -578,7 +586,7 @@ export function init(state) {
    *   folder  -> path = a folder under SESSIONS_ROOT (default: current workdir's)
    *   all     -> every folder under SESSIONS_ROOT
    */
-  function searchSessions({ q, scope, path }, maxResults = 200) {
+  function searchSessions({ q, scope, path, includeTools = false }, maxResults = 200) {
     const files = [];
     if (scope === "session") {
       files.push(path);
@@ -598,7 +606,7 @@ export function init(state) {
     const results = [];
     let truncated = false;
     for (const file of files) {
-      const hits = searchSessionFile(file, q);
+      const hits = searchSessionFile(file, q, 25, includeTools);
       if (!hits.length) continue;
       const folderName = dirname(file).split("/").pop();
       for (const h of hits) {
@@ -1310,8 +1318,9 @@ export function init(state) {
         json(res, 400, { error: "folder must be under the sessions root" });
         return;
       }
+      const includeTools = url.searchParams.get("tools") === "1";
       try {
-        json(res, 200, { q, scope, ...searchSessions({ q, scope, path }) });
+        json(res, 200, { q, scope, ...searchSessions({ q, scope, path, includeTools }) });
       } catch (e) {
         json(res, 500, { error: `search failed: ${e.message}` });
       }

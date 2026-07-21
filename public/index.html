@@ -819,6 +819,15 @@
 
   /* ---------- session search ---------- */
   .search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .search-opts {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 8px;
+    user-select: none;
+    cursor: pointer;
+  }
+  .search-opts input { accent-color: var(--accent); }
   .search-row input[type=text] { flex: 1; min-width: 0; }
   .search-row select {
     background: var(--panel);
@@ -3293,6 +3302,15 @@ async function showSessionPicker() {
     }
     folderRow.appendChild(folderSel);
 
+    // search only real text responses by default; tool output is opt-in
+    const optsRow = document.createElement("label");
+    optsRow.className = "search-opts";
+    const toolsCb = document.createElement("input");
+    toolsCb.type = "checkbox";
+    toolsCb.checked = true;
+    optsRow.append(toolsCb, "exclude tool output (search only user/ai text)");
+    toolsCb.addEventListener("change", () => { if (searching()) run(); });
+
     const status = document.createElement("div");
     status.className = "m-path";
     const resultsEl = document.createElement("div");
@@ -3304,6 +3322,7 @@ async function showSessionPicker() {
       status.style.display = searching() ? "" : "none";
       resultsEl.style.display = searching() ? "" : "none";
       folderRow.style.display = searching() && scopeSel.value === "folder" ? "" : "none";
+      optsRow.style.display = searching() ? "" : "none";
       if (!searching()) resultsEl.innerHTML = "";
     }
 
@@ -3325,6 +3344,7 @@ async function showSessionPicker() {
       resultsEl.innerHTML = "";
       const params = new URLSearchParams({ token, q, scope });
       if (path) params.set("path", path);
+      if (!toolsCb.checked) params.set("tools", "1"); // toggle off → include tool output
       let data;
       try {
         const r = await fetch(`/search?${params}`);
@@ -3366,7 +3386,8 @@ async function showSessionPicker() {
           sn._hitIndex = hi;
           const role = document.createElement("span");
           role.className = "s-role";
-          role.textContent = h.role === "user" ? "you" : h.role === "assistant" ? "ai" : h.kind;
+          role.textContent = h.role === "user" ? "you" : h.role === "assistant" ? "ai"
+            : h.role === "toolResult" ? "tool" : h.kind;
           const mark = document.createElement("mark");
           mark.textContent = h.snippet.match;
           sn.append(role, " ", document.createTextNode(h.snippet.before), mark, document.createTextNode(h.snippet.after));
@@ -3402,7 +3423,7 @@ async function showSessionPicker() {
     scopeSel.addEventListener("change", () => { updateView(); if (searching()) run(); });
     folderSel.addEventListener("change", () => { if (searching()) run(); });
 
-    body.append(row, folderRow, status, resultsEl, listEl);
+    body.append(row, folderRow, optsRow, status, resultsEl, listEl);
     updateView();
     setTimeout(() => inp.focus(), 0);
 
