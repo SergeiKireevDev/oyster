@@ -48,6 +48,7 @@ COPY http ./http
 COPY sessions ./sessions
 COPY persistence ./persistence
 COPY scripts ./scripts
+COPY docs ./docs
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build

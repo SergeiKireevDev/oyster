@@ -133,6 +133,8 @@ npm run migrate-app-data -- --apply --service-stopped
 
 The command writes an auditable ledger entry to `pi-lot-ui.sqlite` in both modes. Override legacy locations with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`.
 
+Before cutover, follow the full [application-data migration runbook](docs/app-data-migration.md) for backup, restore, downgrade, retention, and failure recovery.
+
 ## Endpoints
 
 | Route | Auth | Purpose |
