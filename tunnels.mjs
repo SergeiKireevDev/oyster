@@ -195,7 +195,8 @@ function persistedTunnelInfo(state, row) {
 export function listTunnels(state) {
   return hublotRepository(state).list()
     .filter((row) => row.status !== "closed" && row.status !== "opening")
-    .map((row) => persistedTunnelInfo(state, row));
+    .map((row) => persistedTunnelInfo(state, row))
+    .filter((tunnel) => tunnel.url);
 }
 
 export function isLocalPortAvailable(port, host = "127.0.0.1") {

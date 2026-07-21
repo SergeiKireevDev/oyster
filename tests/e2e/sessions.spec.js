@@ -116,8 +116,11 @@ async function createBoundRoutine(name, sessionId) {
   expect(status, json.error).toBe(201);
 }
 
+let nextResourceHublotPort = 46000;
 async function createBoundHublot(label, sessionId) {
-  const { status, json } = await api("POST", "/tunnels", { label, sessionId });
+  const port = nextResourceHublotPort++;
+  dexec(`nohup node -e 'require("http").createServer((_,res)=>res.end("ok")).listen(${port},"127.0.0.1")' >/tmp/hublot-${port}.log 2>&1 &`);
+  const { status, json } = await api("POST", "/tunnels", { port, label, sessionId });
   expect(status, json.error).toBe(201);
   return json.tunnel;
 }

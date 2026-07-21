@@ -86,7 +86,7 @@ test("persisted URLs are published only while the current tunnel identity is hea
   updateHublotProcessMetadata(state, tunnelProcess.id, { status: "lost", ended_at: "lost", observed_at: "lost" });
   assert.equal(store.repositories.hublots.find(hublot.id).public_url, "https://confirmed.trycloudflare.com", "SQLite may retain the last observed URL for history");
   assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id), false);
-  assert.equal(listTunnels(state)[0].url, null, "an unconfirmed persisted URL must not be published");
+  assert.deepEqual(listTunnels(state), [], "an unconfirmed persisted URL must not be published as an active tunnel");
 
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
