@@ -45,3 +45,10 @@ export const SESSION_PICKER_DELETE_ACTION = "sessionPicker.delete";
 export const SESSION_PICKER_OPEN_SEARCH_HIT_ACTION = "sessionPicker.openSearchHit";
 export const SESSION_PICKER_LOAD_FOLDER_ACTION = "sessionPicker.loadFolder";
 export const SESSION_PICKER_CANCEL_ACTION = "sessionPicker.cancel";
+
+export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
+export const HEADER_CYCLE_THINKING_ACTION = "header.cycleThinking";
+export const HEADER_OPEN_CONFIG_ACTION = "header.openConfig";
+export const HEADER_TOGGLE_HUBLOTS_ACTION = "header.toggleHublots";
+export const HEADER_TOGGLE_TREE_ACTION = "header.toggleTree";
+export const SETTINGS_CHANGED_ACTION = "settings.changed";

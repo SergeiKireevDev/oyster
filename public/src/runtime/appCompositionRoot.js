@@ -755,6 +755,7 @@ async function fetchSessionEntries() {
 
 const layoutDom = createLayoutDomAdapters({ documentTarget: document, windowTarget: window, findElement: $ });
 const settingsLayoutRuntime = createSettingsLayoutRuntime({
+  uiActions,
   rpc,
   extensionUiAdapters,
   refreshState: () => getSessionRuntime().refreshState(),

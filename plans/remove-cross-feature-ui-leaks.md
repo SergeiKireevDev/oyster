@@ -104,7 +104,7 @@ module-global feature callback state.
   `SessionPickerModal.svelte` into a pure session-picker view-model helper.
   Move only pure transforms; leave DOM focus and debounce lifecycle in the
   component. Add focused transform tests.
-- [ ] Add scoped names for header and settings-change actions, and register
+- [x] Add scoped names for header and settings-change actions, and register
   them from the settings/layout runtime with teardown-safe unregister functions.
 - [ ] Change `Header.svelte` and `SettingsModal.svelte` to invoke scoped
   actions, then delete `features/settings/headerActions.js`,
