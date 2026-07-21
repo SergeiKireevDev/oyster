@@ -15,7 +15,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createConnection } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
 import { readProcessIdentity } from "./persistence/processIdentity.mjs";
 
@@ -170,6 +170,32 @@ export function listTunnels(state) {
   return hublotRepository(state).list()
     .filter((row) => row.status !== "closed" && row.status !== "opening")
     .map((row) => persistedTunnelInfo(state, row));
+}
+
+export function isLocalPortAvailable(port, host = "127.0.0.1") {
+  return new Promise((resolvePromise) => {
+    const server = createServer();
+    server.unref();
+    server.once("error", () => resolvePromise(false));
+    server.listen({ port, host, exclusive: true }, () => server.close(() => resolvePromise(true)));
+  });
+}
+
+/** Allocate a free port without process-local counters, then reserve it transactionally. */
+export async function allocateHublot(state, options = {}, {
+  startPort = 3000,
+  checkPort = isLocalPortAvailable,
+} = {}) {
+  for (let port = startPort; port <= 65535; port++) {
+    const inUse = hublotRepository(state).list().some((row) => row.port === port && row.status !== "closed");
+    if (inUse || !(await checkPort(port))) continue;
+    try { return reserveHublot(state, { ...options, port }); }
+    catch (error) {
+      if (/unique constraint|already tunneled/i.test(error.message)) continue;
+      throw error;
+    }
+  }
+  throw new Error(`no free hublot port available from ${startPort}`);
 }
 
 /** Allocate durable identity and recovery configuration before any process starts. */

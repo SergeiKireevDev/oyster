@@ -1,4 +1,4 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -8,20 +8,13 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
     "POST /tunnels": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      // no port given: allocate the next free one, starting at 3000
-      let port = body?.port;
-      if (!port) {
-        if (!state.nextHublotPort) state.nextHublotPort = 3000;
-        const used = new Set(listTunnels(state).map((t) => t.port));
-        while (used.has(state.nextHublotPort)) state.nextHublotPort++;
-        port = state.nextHublotPort++;
-      }
+      const requestedPort = body?.port;
       const brief = body?.brief ? String(body.brief) : null;
       let prepared = null;
       let reserved = null;
       try {
         const options = {
-          port,
+          port: requestedPort,
           label: body?.label ? String(body.label).slice(0, 200) : null,
           sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
         };
@@ -30,9 +23,11 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         options.brief = brief;
         // Durable identity and recovery path must exist before either setup
         // agent or cloudflared can start.
-        reserved = reserveHublot(state, options);
+        reserved = requestedPort
+          ? reserveHublot(state, options)
+          : await allocateHublot(state, options);
         const reservedOptions = {
-          ...options, id: reserved.id,
+          ...options, id: reserved.id, port: reserved.port,
           serviceStartScriptPath: reserved.service_start_script_path,
         };
         if (brief) prepared = await spawnHublotAgent(state, reservedOptions, brief);

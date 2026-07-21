@@ -171,6 +171,13 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX hublot_processes_hublot_role_idx ON hublot_processes(hublot_id, role, status);
     `,
   }),
+  Object.freeze({
+    version: 7,
+    name: "hublot_port_allocation",
+    sql: `
+      CREATE UNIQUE INDEX hublots_active_port_idx ON hublots(port) WHERE status <> 'closed';
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

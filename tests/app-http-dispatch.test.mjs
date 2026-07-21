@@ -23,7 +23,7 @@ function stableState() {
     legacyCheckpointsImported: true,
     legacyRoutinesImported: true,
     appStore: {
-      path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 6, appliedVersions: [1, 2, 3, 4, 5, 6] },
+      path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
         sessions: { upsert: (owner) => owner }, operations: { listIncomplete: () => [] },
         checkpoints: { load: () => ({}), save() {} },

@@ -324,7 +324,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Record transitions through `opening`, `open`, `recovering`, `closing`, `closed`, `failed`, and `interrupted`.
 - [x] Persist session rebinding and process metadata updates transactionally.
 - [x] Keep only `ChildProcess` handles in an in-memory registry keyed by persistent process/hublot ID.
-- [ ] Replace `state.nextHublotPort` with transactional allocation plus a live port check.
+- [x] Replace `state.nextHublotPort` with transactional allocation plus a live port check.
 - [ ] Add a supervisor that periodically reconciles desired-open hublots and their persisted process identities.
 - [ ] On startup, load persisted hublots and reconcile every row whose desired state is open.
 - [ ] Restart dead services from the persisted startup script, verify the port, and persist the replacement PID before reopening their tunnels.
