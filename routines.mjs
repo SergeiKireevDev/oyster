@@ -44,7 +44,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -75,8 +75,18 @@ function emit(state, r, reason) {
 
 // ---- session bindings, persisted so teardown works across server restarts
 
+// load→modify→save is always synchronous here, so mutations are serialized
+// by the event loop; the defenses below are against crash-mid-write (atomic
+// rename) and a corrupt file silently reading as {} and then being saved over
 function loadBindings() {
-  try { return JSON.parse(readFileSync(BINDINGS_PATH, "utf8")); } catch { return {}; }
+  if (!existsSync(BINDINGS_PATH)) return {};
+  try { return JSON.parse(readFileSync(BINDINGS_PATH, "utf8")); }
+  catch (e) {
+    const backup = `${BINDINGS_PATH}.corrupt-${Date.now()}`;
+    try { renameSync(BINDINGS_PATH, backup); } catch {}
+    console.error(`[pi-ui] routine bindings.json is corrupt (${e.message}) — set aside as ${backup}`);
+    return {};
+  }
 }
 
 function saveBinding(r) {
@@ -85,7 +95,9 @@ function saveBinding(r) {
   else delete bindings[r.name];
   try {
     mkdirSync(ROUTINES_DIR, { recursive: true });
-    writeFileSync(BINDINGS_PATH, JSON.stringify(bindings, null, 2));
+    const tmp = `${BINDINGS_PATH}.tmp`;
+    writeFileSync(tmp, JSON.stringify(bindings, null, 2));
+    renameSync(tmp, BINDINGS_PATH);
   } catch (e) {
     console.error(`[pi-ui] failed to save routine bindings: ${e.message}`);
   }

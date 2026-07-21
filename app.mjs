@@ -830,13 +830,30 @@ export function init(state) {
 
   const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
 
+  // NOTE: every load→modify→save of this store is synchronous (no await in
+  // between), so Node's single thread already serializes mutations. The
+  // failure modes to defend against are a crash mid-write (→ write tmp +
+  // atomic rename) and a corrupt file being silently read as {} and then
+  // overwritten on the next save (→ set the corrupt file aside, loudly).
   function loadCheckpoints() {
-    try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); } catch { return {}; }
+    if (!existsSync(CHECKPOINTS_PATH)) return {};
+    try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); }
+    catch (e) {
+      const backup = `${CHECKPOINTS_PATH}.corrupt-${Date.now()}`;
+      try { renameSync(CHECKPOINTS_PATH, backup); } catch {}
+      console.error(`[pi-ui] checkpoints.json is corrupt (${e.message}) — set aside as ${backup}`);
+      return {};
+    }
   }
 
   function saveCheckpoints(db) {
-    try { writeFileSync(CHECKPOINTS_PATH, JSON.stringify(db, null, 2)); }
-    catch (e) { console.error(`[pi-ui] failed to save checkpoints: ${e.message}`); }
+    try {
+      const tmp = `${CHECKPOINTS_PATH}.tmp`;
+      writeFileSync(tmp, JSON.stringify(db, null, 2));
+      renameSync(tmp, CHECKPOINTS_PATH);
+    } catch (e) {
+      console.error(`[pi-ui] failed to save checkpoints: ${e.message}`);
+    }
   }
 
   /** anchor a commit to the session's current tip; returns the record or null */
