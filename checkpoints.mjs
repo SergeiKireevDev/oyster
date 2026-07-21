@@ -9,7 +9,7 @@
  * history ends at the checkpointed entry.
  */
 
-import { spawn, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -158,7 +158,7 @@ export function git(dir, args) {
 /** Ask a one-shot pi sub-agent (no tools, no session) to summarize a staged
  *  diff into a single commit-message line. Resolves null on any failure so
  *  the caller can fall back to a timestamp message. */
-function summarizeDiff(piBin, dir, model, diff) {
+function summarizeDiff(piProcesses, dir, model, diff) {
   return new Promise((resolvePromise) => {
     const prompt =
       "You are writing a git commit message for a checkpoint commit.\n" +
@@ -167,7 +167,7 @@ function summarizeDiff(piBin, dir, model, diff) {
       `<diff>\n${diff}\n</diff>`;
     const args = ["--no-session", "--no-tools", "--thinking", "off", "--model", model, "-p", prompt];
     console.log(`[pi-ui] checkpoint summary sub-agent (${model}) for ${dir}`);
-    const proc = spawn(piBin, args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
+    const proc = piProcesses.ephemeral(args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
     proc.stdout.on("data", (c) => { out += c; });
     proc.stderr.on("data", (c) => { err += c; });
@@ -193,7 +193,7 @@ function summarizeDiff(piBin, dir, model, diff) {
  *  `model`, the staged diff is summarized into the commit message; `label`
  *  is the fallback message (before the timestamp) when there is no model
  *  or the sub-agent fails. */
-export async function checkpointWorkdir(piBin, dir, label, model = null) {
+export async function checkpointWorkdir(piProcesses, dir, label, model = null) {
   const top = await git(dir, ["rev-parse", "--show-toplevel"]);
   if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
   const st = await git(dir, ["status", "--porcelain"]);
@@ -212,7 +212,8 @@ export async function checkpointWorkdir(piBin, dir, label, model = null) {
   let summarized = false;
   if (model) {
     const diff = (await git(dir, ["diff", "--cached"])).stdout.slice(0, 40_000);
-    const summary = diff.trim() ? await summarizeDiff(piBin, dir, model, diff) : null;
+    if (!piProcesses?.ephemeral) throw new Error("pi process launcher is required for checkpoint summaries");
+    const summary = diff.trim() ? await summarizeDiff(piProcesses, dir, model, diff) : null;
     if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
   }
   if (!message && label) message = `checkpoint: ${label}`;

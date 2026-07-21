@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createRunnerManager } from "../runners.mjs";
+import { createPiProcessLauncher } from "../pi-processes.mjs";
 import { createSessionReferenceCodec } from "../session-references.mjs";
 
 function fakeProcess() {
@@ -37,13 +38,15 @@ function setup(t) {
     sessionReferences,
     serverEvent() {},
   };
-  const manager = createRunnerManager(state, {
+  state.piProcesses = createPiProcessLauncher({
+    config: state.config,
     spawnImpl(bin, args, options) {
       const proc = fakeProcess();
       spawns.push({ bin, args, options, proc });
       return proc;
     },
   });
+  const manager = createRunnerManager(state);
   t.after(() => {
     clearInterval(state.runnerWatchdogTimer);
     clearInterval(state.runnerReaperTimer);

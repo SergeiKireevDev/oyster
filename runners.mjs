@@ -31,7 +31,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
 const RUNNER_BUFFER_MAX = 400;
@@ -47,8 +46,12 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-export function createRunnerManager(state, { spawnImpl = spawn } = {}) {
+export function createRunnerManager(state, { spawnImpl = null } = {}) {
   const { config, serverEvent, sessionReferences } = state;
+  const piProcesses = spawnImpl
+    ? { launch: (args, options) => spawnImpl(config.PI_BIN, args, options) }
+    : state.piProcesses;
+  if (!piProcesses) throw new Error("pi process launcher is required");
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // id -> runner
@@ -210,9 +213,8 @@ export function createRunnerManager(state, { spawnImpl = spawn } = {}) {
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
     const args = ["--mode", "rpc", ...sqliteResumeArgs, ...config.PI_EXTRA_ARGS];
     console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
-    const proc = spawnImpl(config.PI_BIN, args, {
+    const proc = piProcesses.launch(args, {
       cwd: runner.dir,
-      env: { ...process.env, PERSISTENT_STORE: config.PERSISTENT_STORE ?? "jsonl" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     runner.proc = proc;

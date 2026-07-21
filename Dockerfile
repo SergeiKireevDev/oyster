@@ -35,7 +35,7 @@ WORKDIR /app
 # Frontend build dependencies + app sources (see .dockerignore)
 COPY package.json package-lock.json vite.config.js ./
 RUN npm ci
-COPY server.mjs app.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
+COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
 COPY public ./public
 COPY http ./http

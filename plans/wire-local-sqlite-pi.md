@@ -130,7 +130,7 @@ database as though it were one session.
 
 ## 5. Wire One-Shot Processes and Runtime Environment Consistently
 
-- [ ] Centralize pi subprocess creation so runners, checkpoint summarizers, and
+- [x] Centralize pi subprocess creation so runners, checkpoint summarizers, and
   hublot agents all use the validated local executable and an explicit inherited
   store environment. Ensure `--no-session` helpers remain ephemeral and cannot
   create SQLite rows.

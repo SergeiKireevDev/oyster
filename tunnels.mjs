@@ -223,7 +223,7 @@ export function spawnHublotAgent(state, hublot, brief) {
     console.log(`[pi-ui] preparing local service for hublot :${hublot.port}`);
     // --no-session: these one-shot setup runs must not leave session files
     // behind (they would clutter the sessions list)
-    const proc = spawn(state.config.PI_BIN, ["--no-session", "-p", prompt], {
+    const proc = state.piProcesses.ephemeral(["-p", prompt], {
       cwd: state.currentDir,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,

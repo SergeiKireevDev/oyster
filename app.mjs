@@ -27,6 +27,7 @@ export async function init(state) {
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
+  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -72,6 +73,7 @@ export async function init(state) {
     jsonlRoot: SESSIONS_ROOT,
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
+  state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, sessionReferences: state.sessionReferences });
   const runners = createRunnerManager(state);
   const {

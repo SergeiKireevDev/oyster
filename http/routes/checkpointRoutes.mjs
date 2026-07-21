@@ -9,7 +9,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
       const runner = runnerFromReq(url);
       const label = body?.label ? String(body.label).slice(0, 200) : null;
       const model = body?.model ? String(body.model).slice(0, 200) : null;
-      const { status, body: out } = await checkpointWorkdir(config.PI_BIN, runner.dir, label, model);
+      const { status, body: out } = await checkpointWorkdir(state.piProcesses, runner.dir, label, model);
       // anchor the checkpoint to the session's latest message (also when the
       // tree was already clean: HEAD marks that state just as well)
       if (status === 200 && out.hash && runner.sessionRef) {
@@ -78,7 +78,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
         let safety = null;
         const st = await git(cp.dir, ["status", "--porcelain"]);
         if (st.code === 0 && st.stdout.trim()) {
-          const saved = await checkpointWorkdir(config.PI_BIN, cp.dir, `auto before rollback to ${hash}`, model);
+          const saved = await checkpointWorkdir(state.piProcesses, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
             try { recordCheckpoint(sessionRef, cp.dir, saved.body, { catalog: state.sessionCatalog }); } catch {}
