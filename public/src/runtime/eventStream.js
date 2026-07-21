@@ -16,6 +16,15 @@ export function stateRefreshRequired(command) {
 
 /** Handle live runner exit without surfacing replayed historical exits. */
 /** Surface a live Pi spawn failure while ignoring replayed history. */
+export function createRunnerUnhealthyController({ isReplaying, toast, setBusy }) {
+  return (message) => {
+    if (isReplaying()) return false;
+    toast(`pi was unresponsive — restarting it (${message.reason ?? "health probes failed"})`, "warning");
+    setBusy(false);
+    return true;
+  };
+}
+
 export function createPiErrorController({ isReplaying, toast }) {
   return (message) => {
     if (isReplaying()) return false;
