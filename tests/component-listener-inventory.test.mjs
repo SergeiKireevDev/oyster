@@ -39,7 +39,7 @@ test("component browser and imperative listener inventory is explicit", () => {
 test("Svelte-managed document and element integrations stay on the approved list", () => {
   assert.deepEqual(locations(/<svelte:(?:document|window)\b|\buse:[\w]+/), [
     "components/FolderBrowserModal.svelte:40:use:focusOnMount",
-    "components/HublotManagerModal.svelte:87:use:commandPalette",
+    "components/HublotManagerModal.svelte:90:use:commandPalette",
     "components/Menu.svelte:18:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
     "components/SessionPickerModal.svelte:113:use:focusOnMount",

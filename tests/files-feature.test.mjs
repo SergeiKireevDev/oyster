@@ -38,3 +38,12 @@ test("file explorer component routes browse, edit, save, upload, back, and retur
   assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION\)/);
   assert.doesNotMatch(source, /features\/files\/fileExplorerActions\.js/);
 });
+
+test("both hublot entry points open the current-workdir explorer through the scoped action", () => {
+  for (const component of ["HublotList.svelte", "HublotManagerModal.svelte"]) {
+    const source = readFileSync(new URL(`../public/src/components/${component}`, import.meta.url), "utf8");
+    assert.match(source, /getUiActionRegistry\(\)/);
+    assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_OPEN_ACTION\)/);
+    assert.doesNotMatch(source, /features\/files\/filesActions\.js/);
+  }
+});

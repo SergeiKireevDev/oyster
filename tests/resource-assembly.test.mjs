@@ -14,6 +14,7 @@ import {
   FILE_EXPLORER_BACK_ACTION,
   FILE_EXPLORER_BROWSE_ACTION,
   FILE_EXPLORER_EDIT_ACTION,
+  FILE_EXPLORER_OPEN_ACTION,
   FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
   FILE_EXPLORER_SAVE_ACTION,
   FILE_EXPLORER_UPLOAD_ACTION,
@@ -106,7 +107,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
       back: () => calls.push(["explorer-back"]),
       backToHublots: () => calls.push(["explorer-return"]),
     },
-    files: {},
+    files: { openExplorer: () => calls.push(["explorer-open"]) },
     hublots: {},
     routine() {},
   });
@@ -125,6 +126,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
   uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
   uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
+  uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
@@ -140,11 +142,13 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
     ["explorer-upload"],
     ["explorer-back"],
     ["explorer-return"],
+    ["explorer-open"],
   ]);
 
   assembly.teardown();
   assert.equal(uiActions.invoke(FILE_PICKER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, "/stale"), undefined);
-  assert.equal(calls.length, 14);
+  assert.equal(uiActions.invoke(FILE_EXPLORER_OPEN_ACTION), undefined);
+  assert.equal(calls.length, 15);
 });

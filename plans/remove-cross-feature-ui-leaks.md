@@ -55,7 +55,7 @@ cd tests/e2e && npm test
   change `FileExplorerModal.svelte` to invoke them. Delete
   `features/files/fileExplorerActions.js` and its configuration call; test
   browse, edit, save, upload, back, and return-to-hublot routing.
-- [ ] Register the built-in file-explorer opener through
+- [x] Register the built-in file-explorer opener through
   `createResourceAssembly()` and change `HublotList.svelte` and
   `HublotManagerModal.svelte` to invoke it. Delete
   `features/files/filesActions.js` and its configuration call; test both entry

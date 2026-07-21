@@ -1,11 +1,14 @@
 <script>
-  import { openFilesExplorer as openFileExplorer } from "../features/files/filesActions.js";
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
   import { addToast } from "../stores/toasts.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { FILE_EXPLORER_OPEN_ACTION } from "../runtime/uiActionNames.js";
 
   const browserActions = getBrowserActions();
+  const uiActions = getUiActionRegistry();
+  const openFileExplorer = () => uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
 
   async function closeHublot(id) {
     try {

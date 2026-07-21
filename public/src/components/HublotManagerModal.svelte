@@ -3,11 +3,14 @@
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { closeModalState } from "../stores/modal.js";
   import { addToast } from "../stores/toasts.js";
-  import { openFilesExplorer as openManagedFileExplorer } from "../features/files/filesActions.js";
   import { createManagedHublot, openManagedHublotCommandPalette, toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { FILE_EXPLORER_OPEN_ACTION } from "../runtime/uiActionNames.js";
 
   const browserActions = getBrowserActions();
+  const uiActions = getUiActionRegistry();
+  const openManagedFileExplorer = () => uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
 
   async function closeManagedHublot(id) {
     try {

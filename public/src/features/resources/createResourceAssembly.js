@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureFilesActions } from "../files/filesActions.js";
 import { configureHublotActions } from "../hublots/hublotActions.js";
 import { configureRoutineActions } from "../routines/routineActions.js";
 import {
@@ -16,6 +15,7 @@ import {
   FILE_EXPLORER_BACK_ACTION,
   FILE_EXPLORER_BROWSE_ACTION,
   FILE_EXPLORER_EDIT_ACTION,
+  FILE_EXPLORER_OPEN_ACTION,
   FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
   FILE_EXPLORER_SAVE_ACTION,
   FILE_EXPLORER_UPLOAD_ACTION,
@@ -75,7 +75,7 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(FILE_EXPLORER_UPLOAD_ACTION, actions.fileExplorer.upload),
         deps.uiActions.register(FILE_EXPLORER_BACK_ACTION, actions.fileExplorer.back),
         deps.uiActions.register(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION, actions.fileExplorer.backToHublots),
-        configureFilesActions(actions.files),
+        deps.uiActions.register(FILE_EXPLORER_OPEN_ACTION, actions.files.openExplorer),
         configureHublotActions(actions.hublots),
         configureRoutineActions(actions.routine),
       );
