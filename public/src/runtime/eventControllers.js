@@ -9,6 +9,12 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerCommandPaletteEvents(target, { run }) {
+  const onRun = (event) => run(event.detail);
+  target.addEventListener("pi-command-palette-run", onRun);
+  return () => target.removeEventListener("pi-command-palette-run", onRun);
+}
+
 export function registerCheckpointTreeEvents(target, { openSession, rollback }) {
   const onOpen = (event) => openSession(event.detail);
   const onRollback = (event) => rollback(event.detail.checkpoint, event.detail.target);

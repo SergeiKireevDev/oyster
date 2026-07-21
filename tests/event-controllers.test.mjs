@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents } from "../public/src/runtime/eventControllers.js";
+
+test("command palette event adapter routes its selected index", () => {
+  let listener;
+  const target = {
+    addEventListener(_name, fn) { listener = fn; },
+    removeEventListener(_name, fn) { if (listener === fn) listener = null; },
+  };
+  const calls = [];
+  const remove = registerCommandPaletteEvents(target, { run: (index) => calls.push(index) });
+  listener({ detail: 4 });
+  assert.deepEqual(calls, [4]);
+  remove();
+  assert.equal(listener, null);
+});
 
 test("checkpoint tree event adapter routes typed details and tears down", () => {
   const listeners = new Map();
