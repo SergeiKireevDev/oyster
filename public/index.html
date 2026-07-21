@@ -355,6 +355,17 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     margin-top: 2px;
   }
+  #modal .m-path {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 0 10px;
+    word-break: break-all;
+  }
+  #modal .m-option.dir { padding: 6px 12px; margin-bottom: 4px; }
+  #modal .m-option.dir::before { content: "📁 "; }
+  #modal .m-option.up::before { content: "⬆️ "; }
+  #modal .m-option.homeDir::before { content: "🏠 "; }
   #modal .m-actions {
     display: flex; gap: 8px; justify-content: flex-end;
     padding: 10px 16px 14px;
@@ -424,6 +435,7 @@
 
 <div id="menu">
   <button data-action="newSession">New session</button>
+  <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
   <button data-action="compact">Compact context</button>
   <button data-action="restart">Restart pi process</button>
@@ -439,6 +451,7 @@
   </div>
   <div id="statusbar">
     <span id="stateInfo">connecting…</span>
+    <span id="workdirInfo" title="pi working directory"></span>
     <span id="usageInfo"></span>
   </div>
 </div>
@@ -919,6 +932,16 @@ function applyState(s) {
     (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : "");
 }
 
+let workdir = null;
+let awaitingRespawn = false;
+
+function setWorkdir(dir) {
+  workdir = dir;
+  const el = $("workdirInfo");
+  el.textContent = dir ? `📁 ${dir.length > 40 ? "…" + dir.slice(-39) : dir}` : "";
+  el.title = dir || "";
+}
+
 let busy = false;
 function setBusy(b) {
   busy = b;
@@ -972,6 +995,10 @@ function connect() {
 
 function handleEvent(msg) {
   switch (msg.type) {
+    case "replay_done":
+      if (msg.workdir) setWorkdir(msg.workdir);
+      return;
+
     case "response":
       handleResponse(msg);
       // state changes often follow commands; refresh cheaply
@@ -1064,7 +1091,19 @@ function handleEvent(msg) {
       return;
 
     case "pi_started":
-      if (msg.startCount > 1) { toast("pi process restarted"); refreshState(); }
+      if (awaitingRespawn) {
+        awaitingRespawn = false;
+        setTimeout(() => reloadTranscript().catch(() => refreshState()), 400);
+      } else if (msg.startCount > 1) {
+        toast("pi process restarted");
+        refreshState();
+      }
+      return;
+
+    case "workdir_changed":
+      setWorkdir(msg.workdir);
+      toast(`folder: ${msg.workdir}`);
+      clearMessages();
       return;
 
     case "pi_error":
@@ -1149,6 +1188,8 @@ menu.addEventListener("click", async (e) => {
       await rpc({ type: "new_session" });
       clearMessages();
       toast("new session");
+    } else if (action === "newSessionIn") {
+      await showFolderBrowser();
     } else if (action === "sessions") {
       await showSessionPicker();
     } else if (action === "compact") {
@@ -1170,6 +1211,77 @@ menu.addEventListener("click", async (e) => {
     toast(err.message, "error");
   }
 });
+
+// ------------------------------------------------------------ folder browser
+
+async function showFolderBrowser() {
+  const body = $("mBody"), actions = $("mActions");
+  let browsePath = workdir;
+  let done = null;
+  const finished = new Promise((resolve) => { done = resolve; });
+
+  async function load(path) {
+    const q = path ? `&path=${encodeURIComponent(path)}` : "";
+    const res = await fetch(`/browse?token=${encodeURIComponent(token)}${q}`);
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || "cannot open folder", "error"); return; }
+    browsePath = data.path;
+    $("mTitle").textContent = "New session in folder";
+    body.innerHTML = "";
+    const pathEl = document.createElement("div");
+    pathEl.className = "m-path";
+    pathEl.textContent = data.path;
+    body.appendChild(pathEl);
+    const addEntry = (label, cls, target) => {
+      const b = document.createElement("button");
+      b.className = `m-option dir ${cls}`;
+      b.textContent = label;
+      b.addEventListener("click", () => load(target));
+      body.appendChild(b);
+    };
+    if (data.path !== data.home) addEntry("home", "homeDir", data.home);
+    if (data.parent) addEntry("..", "up", data.parent);
+    for (const name of data.dirs) {
+      addEntry(name, "", data.path.replace(/\/$/, "") + "/" + name);
+    }
+    if (!data.dirs.length) {
+      const empty = document.createElement("div");
+      empty.className = "m-path";
+      empty.textContent = "(no subfolders)";
+      body.appendChild(empty);
+    }
+  }
+
+  actions.innerHTML = "";
+  const cancel = document.createElement("span");
+  cancel.className = "chip";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => { closeModal(); done(null); });
+  const ok = document.createElement("button");
+  ok.className = "btn";
+  ok.textContent = "Start session here";
+  ok.style.padding = "6px 16px";
+  ok.addEventListener("click", () => { closeModal(); done(browsePath); });
+  actions.append(cancel, ok);
+  overlay.classList.add("open");
+  await load(browsePath);
+
+  const chosen = await finished;
+  if (!chosen) return;
+  if (chosen === workdir) { toast("already in this folder"); return; }
+  awaitingRespawn = true;
+  const res = await fetch(`/workdir?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: chosen }),
+  });
+  if (!res.ok) {
+    awaitingRespawn = false;
+    const data = await res.json().catch(() => ({}));
+    toast(data.error || `failed (${res.status})`, "error");
+  }
+  // on success the workdir_changed + pi_started events clear and reload the UI
+}
 
 // ------------------------------------------------------------ session picker
 
