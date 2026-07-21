@@ -18,7 +18,7 @@ import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependenc
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
-import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
+import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
@@ -39,7 +39,7 @@ import { updateHeaderState } from "../stores/header.js";
 import { updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
 import { openConfirmPrompt, openEditorPrompt, openTextPrompt } from "../stores/dialogs.js";
-import { closeModalState, openModal, updateModal } from "../stores/modal.js";
+import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { openOptionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
@@ -402,13 +402,22 @@ function refreshState() {
 
 const input = composerOperations.input;
 
-const extensionUiAdapters = createExtensionUiAdapters({
+const dialogAdapters = createDialogAdapters({
   openOptionPicker,
   openTextPrompt,
   openConfirmPrompt,
   openEditorPrompt,
+  openModal: openModalState,
+  closeModal: closeModalState,
+  updateModal: updateModalState,
+  findElement: $,
   setTitle: (title) => updateAppSession({ titleOverride: title }),
 });
+const extensionUiAdapters = dialogAdapters.extensionUi;
+const openModal = dialogAdapters.modal.open;
+const closeModal = dialogAdapters.modal.close;
+const updateModal = dialogAdapters.modal.update;
+const showSettingsModal = dialogAdapters.modal.showSettings;
 
 const promptRpcCommand = composerOperations.promptRpcCommand;
 const setupCommandPalette = composerOperations.setupCommandPalette;
@@ -828,19 +837,6 @@ async function fetchSessionEntries() {
   return fetchPersistedSessionEntries(fetch, path);
 }
 
-// ------------------------------------------------------------ modal helpers
-
-const overlay = $("overlay");
-
-function closeModal() {
-  closeModalState();
-}
-
-/** Settings modal — rendered by Svelte; runtime only opens the modal shell. */
-async function showSettingsModal() {
-  openModal({ title: "Settings", content: "settings" });
-}
-
 // ------------------------------------------------------------ extension UI bridge
 
 const settingsLayoutRuntime = createSettingsLayoutRuntime({
@@ -877,7 +873,7 @@ const commandRuntime = composerAssembly.configureCommands({
   setPaletteState: setCommandPaletteState,
   closePaletteState: closeCommandPaletteState,
   showFilePicker,
-  isOverlayOpen: () => overlay.classList.contains("open"),
+  isOverlayOpen: dialogAdapters.modal.isOverlayOpen,
   schedule: (...args) => delayedTasks.schedule(...args),
   session: {
     openNew: () => getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() }),
@@ -957,6 +953,7 @@ const detachRuntimeEventAdapters = () => {
   detachSessionPickerActions();
   detachFilesActions();
   transcriptAssembly.teardown();
+  dialogAdapters.teardown();
 };
 const runtimeTeardown = createRuntimeCleanup({
   closeEventStream: () => connectionCoordinator.disconnect(),
