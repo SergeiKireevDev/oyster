@@ -12,3 +12,33 @@ export function createSessionPickerController({ stopRunner, getRunners, markStop
   }
   return { stopSession };
 }
+
+export function createSessionPickerFolderController({ fetchSessions, getSnapshot, update, getRunners, setSessions, toast }) {
+  async function refreshCurrent() {
+    const sessions = await fetchSessions();
+    setSessions(sessions);
+    update({ sessions, runners: getRunners() });
+    return sessions;
+  }
+
+  async function loadFolder(folder) {
+    const snapshot = getSnapshot();
+    if (snapshot.otherFolderSessions[folder.dir]) return;
+    update({ loadingFolders: { ...snapshot.loadingFolders, [folder.dir]: true } });
+    try {
+      const sessions = await fetchSessions(folder.dir);
+      const latest = getSnapshot();
+      update({
+        otherFolderSessions: { ...latest.otherFolderSessions, [folder.dir]: sessions },
+        loadingFolders: { ...latest.loadingFolders, [folder.dir]: false },
+        runners: getRunners(),
+      });
+    } catch (error) {
+      const latest = getSnapshot();
+      update({ loadingFolders: { ...latest.loadingFolders, [folder.dir]: false } });
+      toast(`failed to list ${folder.label}: ${error.message}`, "error");
+    }
+  }
+
+  return { refreshCurrent, loadFolder };
+}

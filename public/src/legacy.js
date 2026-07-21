@@ -50,7 +50,7 @@ import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
-import { createSessionPickerController } from "./lib/sessionPickerController.js";
+import { createSessionPickerController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -1872,35 +1872,23 @@ function updateSessionPickerRunners(runners = runnersNow) {
   updateSessionPicker({ runners });
 }
 
-async function refreshSessionPickerCurrentFolder() {
-  const dirQ = workdir ? `?dir=${encodeURIComponent(workdir)}` : "";
-  const res = await fetch(`/sessions${dirQ}`);
-  if (!res.ok) throw new Error(`failed to list sessions (${res.status})`);
-  const { sessions } = await res.json();
-  sessionPickerSessions = sessions;
-  updateSessionPicker({ sessions, runners: runnersNow });
-}
-
-async function loadSessionPickerFolder(folder) {
-  const snap = sessionPickerSnapshot();
-  if (snap.otherFolderSessions[folder.dir]) return;
-  updateSessionPicker({ loadingFolders: { ...snap.loadingFolders, [folder.dir]: true } });
-  try {
-    const res = await fetch(`/sessions?path=${encodeURIComponent(folder.dir)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
-    const latest = sessionPickerSnapshot();
-    updateSessionPicker({
-      otherFolderSessions: { ...latest.otherFolderSessions, [folder.dir]: data.sessions ?? [] },
-      loadingFolders: { ...latest.loadingFolders, [folder.dir]: false },
-      runners: runnersNow,
-    });
-  } catch (e) {
-    const latest = sessionPickerSnapshot();
-    updateSessionPicker({ loadingFolders: { ...latest.loadingFolders, [folder.dir]: false } });
-    toast(`failed to list ${folder.label}: ${e.message}`, "error");
-  }
-}
+const sessionPickerFolderController = createSessionPickerFolderController({
+  async fetchSessions(folder) {
+    const dir = folder ?? workdir;
+    const query = dir ? `${folder ? "path" : "dir"}=${encodeURIComponent(dir)}` : "";
+    const response = await fetch(`/sessions${query ? `?${query}` : ""}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `failed to list sessions (${response.status})`);
+    return data.sessions ?? [];
+  },
+  getSnapshot: sessionPickerSnapshot,
+  update: updateSessionPicker,
+  getRunners: () => runnersNow,
+  setSessions: (sessions) => { sessionPickerSessions = sessions; },
+  toast,
+});
+const refreshSessionPickerCurrentFolder = sessionPickerFolderController.refreshCurrent;
+const loadSessionPickerFolder = sessionPickerFolderController.loadFolder;
 
 const sessionPickerController = createSessionPickerController({
   stopRunner: (id) => stopSessionRunner(fetch, id),
