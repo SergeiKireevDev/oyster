@@ -154,7 +154,7 @@ removes it from that file while preserving unrelated credentials.
 
 ## 5. Document Semantics and Complete Validation
 
-- [ ] Update README configuration, feature, security, and endpoint sections to
+- [x] Update README configuration, feature, security, and endpoint sections to
   document the **API Keys…** menu, `PI_AGENT_DIR/auth.json` ownership, stored
   credential precedence, all-runner restart behavior, environment/models.json
   fallback, and the distinction between removing from pi and provider-side
