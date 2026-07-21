@@ -113,8 +113,8 @@ function checkCompletedStep(ctx: ExtensionContext, planPath: string, step: strin
   writeFileSync(path, lines.join("\n"), "utf8");
 }
 
-function simpleContinuationPrompt() {
-  return "proceed";
+function simpleContinuationPrompt(goal: GoalState) {
+  return `Goal loop remains active. Do not only summarize, select, defer, or describe work. Inspect ${goal.planPath}; if the recorded step is checked, use the first unchecked checklist item. Implement exactly one item now, add focused tests, then call goal_loop verify with the exact checklist text and a meaningful commit message.`;
 }
 
 function continuationPrompt(ctx: ExtensionContext, goal: GoalState) {
@@ -136,7 +136,7 @@ Current recorded step: ${current}
 Last result: ${goal.lastResult || "n/a"}
 Suggested next unchecked plan item: ${next}
 
-Continue with the current unimplemented step recorded above. Use the plan below only to confirm that step and its requirements; do not skip ahead to another item. Before reporting success, call goal_loop verify with a precise step description and commit message. If the plan has no remaining incomplete steps, call goal_loop complete.
+Implement exactly one unchecked checklist item now. Treat the recorded step as advisory: if it is already [x], use the suggested first unchecked item. Do not merely summarize, select a step, ask for more time, or report pending work. Inspect the relevant code, make the change, add/update focused tests, and call goal_loop verify with the exact checklist text and a meaningful commit message. If verification fails, fix the same item in place. Call goal_loop complete only when no unchecked items remain.
 
 Plan excerpt:
 \`\`\`
