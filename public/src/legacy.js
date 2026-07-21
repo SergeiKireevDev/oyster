@@ -45,6 +45,7 @@ import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./
 import { createHublotController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController } from "./lib/folderBrowserController.js";
+import { createFileExplorerController } from "./lib/fileExplorerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
@@ -1701,34 +1702,17 @@ let fileExplorerState = {
   editContent: "",
 };
 
-async function loadFileExplorer(path) {
-  updateFileExplorer({ loading: true, mode: "list" });
-  let data;
-  try {
-    data = await browseFiles(fetch, path);
-  } catch (error) {
-    updateFileExplorer({ loading: false });
-    toast(error.message, "error");
-    if (path !== workdir) return loadFileExplorer(workdir);
-    return;
-  }
-  fileExplorerState.curPath = data.path;
-  updateModal({ title: "📁 File explorer" });
-  updateFileExplorer({
-    mode: "list",
-    path: data.path,
-    home: data.home,
-    workdir: data.workdir,
-    parent: data.parent,
-    dirs: data.dirs ?? [],
-    files: data.files ?? [],
-    showHidden: get(fileExplorer).showHidden,
-    loading: false,
-    token,
-    uploadText: "⬆ Upload…",
-    uploading: false,
-  });
-}
+const fileExplorerController = createFileExplorerController({
+  browse: (path) => browseFiles(fetch, path),
+  update: updateFileExplorer,
+  updateTitle: (title) => updateModal({ title }),
+  getShowHidden: () => get(fileExplorer).showHidden,
+  getWorkdir: () => workdir,
+  getToken: () => token,
+  setPath: (path) => { fileExplorerState.curPath = path; },
+  toast,
+});
+const loadFileExplorer = fileExplorerController.load;
 
 async function showFileExplorer() {
   // always open in the current session's working directory
