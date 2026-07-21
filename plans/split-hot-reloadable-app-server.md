@@ -132,7 +132,7 @@ route factories with confinement tests.
 - [x] Move routine list and action routes into `http/routes/routineRoutes.mjs`.
   Preserve create/run/stop/teardown/release/delete validation, session binding,
   progress events, and teardown behavior with contract tests.
-- [ ] Remove extracted tunnel/routine route bodies from `app.mjs`; keep
+- [x] Remove extracted tunnel/routine route bodies from `app.mjs`; keep
   `stopTunnels()` and `stopRoutines()` exposed through the composed app API for
   stable-core shutdown.
 
