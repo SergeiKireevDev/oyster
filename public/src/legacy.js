@@ -2085,14 +2085,15 @@ const carouselHeaderController = createCarouselHeaderController({
   carousel: carouselController,
 });
 
-createHeaderEventController({
+const headerEventController = createHeaderEventController({
   documentTarget: document,
   chooseModel,
   cycleThinking,
   openConfig: openConfigPicker,
   toggleHublots: carouselHeaderController.toggleHublots,
   toggleTree: carouselHeaderController.toggleTree,
-}).attach();
+});
+headerEventController.attach();
 
 // apply initial page on load + whenever the page becomes mobile/desktop
 carouselEventRegistration.attach();
@@ -2149,5 +2150,6 @@ export function teardownLegacyRuntime() {
   teardownReconnectWatchdog();
   carouselEventRegistration.detach();
   mobileDrawerDismissController.detach();
+  headerEventController.detach();
   connectionState.lost();
 }
