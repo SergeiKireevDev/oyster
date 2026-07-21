@@ -1542,36 +1542,21 @@ const filePickerController = createFilePickerController({
   browse: (path) => browseFiles(fetch, path),
   update: updateFilePicker,
   updateTitle: (title) => updateModal({ title }),
+  openModal,
   getShowHidden: () => get(filePicker).showHidden,
   getWorkdir: () => workdir,
   setPath: (path) => { filePickerState.curDir = path; },
+  resetState: ({ path, onPick, onCancel, returnToHublot }) => {
+    filePickerState = { curDir: path, showHidden: true, onPick, onCancel, returnToHublot };
+  },
   toast,
 });
 const loadFilePicker = filePickerController.load;
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
-async function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
-  // always open in the current session's working directory
-  filePickerState = {
-    curDir: workdir,
-    showHidden: true,
-    onPick,
-    onCancel,
-    returnToHublot,
-  };
-  updateFilePicker({
-    path: "",
-    home: "",
-    workdir: "",
-    parent: null,
-    dirs: [],
-    files: [],
-    showHidden: true,
-    loading: true,
-  });
-  openModal({ title: "Attach file", content: "filePicker" });
-  await loadFilePicker(filePickerState.curDir);
+function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
+  return filePickerController.show({ path: workdir, onPick, onCancel, returnToHublot });
 }
 
 registerFilePickerEvents(window, {

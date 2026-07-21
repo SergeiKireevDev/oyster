@@ -1,4 +1,4 @@
-export function createFilePickerController({ browse, update, updateTitle, getShowHidden, getWorkdir, setPath, toast }) {
+export function createFilePickerController({ browse, update, updateTitle, openModal, getShowHidden, getWorkdir, setPath, resetState, toast }) {
   async function load(path) {
     update({ loading: true });
     let data;
@@ -15,5 +15,12 @@ export function createFilePickerController({ browse, update, updateTitle, getSho
     update({ path: data.path, home: data.home, workdir: data.workdir, parent: data.parent, dirs: data.dirs ?? [], files: data.files ?? [], showHidden: getShowHidden(), loading: false });
   }
 
-  return { load };
+  async function show({ path, onPick, onCancel, returnToHublot }) {
+    resetState({ path, onPick, onCancel, returnToHublot });
+    update({ path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true });
+    openModal({ title: "Attach file", content: "filePicker" });
+    await load(path);
+  }
+
+  return { load, show };
 }

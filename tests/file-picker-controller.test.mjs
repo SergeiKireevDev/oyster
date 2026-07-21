@@ -23,6 +23,31 @@ test("file picker loads a directory into picker state", async () => {
   ]);
 });
 
+test("file picker initializes its modal before loading the current workdir", async () => {
+  const calls = [];
+  const controller = createFilePickerController({
+    resetState: (value) => calls.push(["reset", value]),
+    update: (value) => calls.push(["update", value]),
+    openModal: (value) => calls.push(["modal", value]),
+    browse: async (path) => { calls.push(["browse", path]); return { path, dirs: [], files: [] }; },
+    updateTitle: () => {},
+    getShowHidden: () => true,
+    setPath: () => {},
+    toast: () => {},
+  });
+  const onPick = () => {};
+
+  await controller.show({ path: "/work", onPick, onCancel: null, returnToHublot: true });
+
+  assert.deepEqual(calls.slice(0, 4), [
+    ["reset", { path: "/work", onPick, onCancel: null, returnToHublot: true }],
+    ["update", { path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true }],
+    ["modal", { title: "Attach file", content: "filePicker" }],
+    ["update", { loading: true }],
+  ]);
+  assert.equal(calls[4][1], "/work");
+});
+
 test("file picker falls back to its workdir after a failed browse", async () => {
   const calls = [];
   const controller = createFilePickerController({
