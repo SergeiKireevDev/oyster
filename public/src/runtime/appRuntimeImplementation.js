@@ -19,6 +19,7 @@ import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
 import { createPlatformConnection } from "../platform/createPlatformConnection.js";
+import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
 import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
@@ -1756,6 +1757,13 @@ const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
   requireToken,
   boot,
 }));
+
+const featureAssembly = createFeatureAssembly({
+  platform: connectionCoordinator,
+  sessions: sessionFeature,
+  transcript: transcriptFeature,
+  features: {},
+});
 
 const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [

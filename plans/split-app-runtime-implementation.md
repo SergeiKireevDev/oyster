@@ -324,7 +324,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
 - [x] Move EventSource/RPC/reconnect state and construction into
   `platform/connectionCoordinator.js`, leaving only coordinator construction
   in the root.
-- [ ] Split the root into feature assembly modules until `appComposition.js`
+- [x] Split the root into feature assembly modules until `appComposition.js`
   is the only runtime entry and is no more than 400 lines; remove
   `appRuntimeImplementation.js` after no-reference checks.
 
