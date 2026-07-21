@@ -281,8 +281,19 @@ The previous completion of section 7 was premature: as of 2026-07-14,
 `public/src/runtime/appRuntimeImplementation.js` still exists at roughly 1,786
 lines. Complete the remaining migration in small verified commits:
 
-- [ ] Inventory the remaining root-owned state, controller construction, event
+- [x] Inventory the remaining root-owned state, controller construction, event
   registrations, and DOM access; record each owner feature/platform module.
+
+  **Inventory (2026-07-14):** the root is 1,786 lines with 26 `let` bindings,
+  17 event-controller/registration references, and 5 direct browser-global
+  references. Session runner/route/picker state is assembled around
+  `getSessionRuntime` (`features/sessions/`); transcript stream/render/reload
+  controllers are assembled in-place (`features/transcript/`); EventSource,
+  reconnect, and RPC wiring remain in the root and `runtime/`
+  (`platform/connectionCoordinator.js`); carousel/mobile drawer wiring belongs
+  to layout; hublot/routine/settings controller blocks belong to their named
+  feature directories. The remaining direct browser references are platform or
+  layout adapters and must not grow.
 - [ ] Move session-owned runner, route, picker, and hydration wiring out of the
   root into `features/sessions/`, leaving only injected interfaces at the
   composition boundary.
