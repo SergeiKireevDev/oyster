@@ -38,6 +38,7 @@ import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { createCommandGuard } from "./lib/commandActions.js";
+import { promptCommand } from "./lib/promptActions.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -1247,9 +1248,7 @@ function composerKeydown(e) {
 // the pi process or folder changes
 let commandGuard = createCommandGuard({ rpc, confirm: confirmDialog });
 
-function promptRpcCommand(text) {
-  return { type: "prompt", message: text, ...(busy ? { streamingBehavior: "steer" } : {}) };
-}
+const promptRpcCommand = (text) => promptCommand(text, busy);
 
 async function send() {
   const text = input.value.trim();

@@ -33,12 +33,9 @@ test("legacy UI module parses (node --check)", () => {
   execFileSync(process.execPath, ["--check", file]);
 });
 
-test("composer prompts include steering behavior while busy", () => {
-  assert.match(
-    js,
-    /function promptRpcCommand\(text\) \{\s*return \{ type: "prompt", message: text, \.\.\.\(busy \? \{ streamingBehavior: "steer" \} : \{\}\) \};\s*\}/,
-    "busy composer sends must include streamingBehavior=steer so pi accepts mid-stream steering"
-  );
+test("composer prompts delegate busy steering behavior to prompt actions", () => {
+  assert.match(js, /import \{ promptCommand \} from "\.\/lib\/promptActions\.js";/);
+  assert.match(js, /const promptRpcCommand = \(text\) => promptCommand\(text, busy\);/);
   assert.match(js, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });
 
