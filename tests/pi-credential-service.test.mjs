@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createPiCredentialService, resolveConfiguredPiSdk } from "../pi-credential-service.mjs";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
 function fixture({ sdkSource, manifest = {} } = {}) {
   const root = mkdtempSync(join(tmpdir(), "pi-credential-service-"));
@@ -142,7 +143,7 @@ test("credential operations preserve unrelated credentials, provider env, concur
     // provider IDs are rejected.
     await service.setApiKey("alpha", "alpha-new-canary");
 
-    const sdk = await import("file:///home/ubuntu/pi-coding-agent/packages/coding-agent/dist/index.js");
+    const sdk = await import(pathToFileURL(resolveConfiguredPiSdk(LOCAL_PI).entry).href);
     const concurrentStorage = sdk.AuthStorage.create(authPath);
     concurrentStorage.set("refreshed-oauth", { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: 99 });
     await service.setApiKey("openai", "added-canary");

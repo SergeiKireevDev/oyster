@@ -9,7 +9,7 @@ import { createRestartActiveRunners } from "../runner-restart-service.mjs";
 import { createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
 import { openAppStore } from "../persistence/appStore.mjs";
 
-const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
+const LOCAL_PI = process.env.PI_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
 function filesBelow(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {

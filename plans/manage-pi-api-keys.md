@@ -159,7 +159,7 @@ removes it from that file while preserving unrelated credentials.
   credential precedence, all-runner restart behavior, environment/models.json
   fallback, and the distinction between removing from pi and provider-side
   revocation.
-- [ ] Update menu-action, modal ownership/history, UI boundary, server route
+- [x] Update menu-action, modal ownership/history, UI boundary, server route
   composition, and endpoint documentation tests. Add an e2e flow with a mock
   provider that adds a key, observes newly available models after restart,
   replaces it without exposing either value, removes it, and verifies the
