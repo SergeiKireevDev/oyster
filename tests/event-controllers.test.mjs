@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("folder browser event adapter routes each browser action", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const calls = [];
+  registerFolderBrowserEvents(target, { browse: (path) => calls.push(["browse", path]), create: () => calls.push("create"), cancel: () => calls.push("cancel"), submit: () => calls.push("submit") });
+  listeners.get("pi-folder-browser-browse")({ detail: "/tmp" });
+  listeners.get("pi-folder-browser-create")();
+  listeners.get("pi-folder-browser-cancel")();
+  listeners.get("pi-folder-browser-submit")();
+  assert.deepEqual(calls, [["browse", "/tmp"], "create", "cancel", "submit"]);
+});
 
 test("file picker event adapter routes each picker action", () => {
   const listeners = new Map();

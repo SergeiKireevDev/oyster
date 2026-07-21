@@ -9,6 +9,17 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerFolderBrowserEvents(target, { browse, create, cancel, submit }) {
+  const listeners = [
+    ["pi-folder-browser-browse", (event) => browse(event.detail)],
+    ["pi-folder-browser-create", () => create()],
+    ["pi-folder-browser-cancel", () => cancel()],
+    ["pi-folder-browser-submit", () => submit()],
+  ];
+  for (const [name, listener] of listeners) target.addEventListener(name, listener);
+  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
+}
+
 export function registerFilePickerEvents(target, { useFolder, browse, pick, cancel }) {
   const listeners = [
     ["pi-file-picker-use-folder", () => useFolder()],

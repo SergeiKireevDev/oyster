@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -1842,10 +1842,12 @@ const createFolderBrowser = async () => {
     }
 };
 
-window.addEventListener("pi-folder-browser-browse", (event) => loadFolderBrowser(event.detail));
-window.addEventListener("pi-folder-browser-create", () => createFolderBrowser());
-window.addEventListener("pi-folder-browser-cancel", () => { closeModal(); folderBrowserState.done?.(null); });
-window.addEventListener("pi-folder-browser-submit", () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); });
+registerFolderBrowserEvents(window, {
+  browse: loadFolderBrowser,
+  create: createFolderBrowser,
+  cancel: () => { closeModal(); folderBrowserState.done?.(null); },
+  submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
+});
 
 // ------------------------------------------------------------ tunnels
 
