@@ -1,0 +1,72 @@
+# pi-remote-ui
+
+A small web UI for driving the [pi coding agent](https://github.com/badlogic/pi-mono) remotely — from a phone or any browser — through a tunnel.
+
+```
+browser ──HTTP/SSE──> server.mjs ──stdin/stdout JSONL──> pi --mode rpc
+```
+
+- **Zero dependencies** — plain Node ≥ 18, no `npm install`.
+- **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
+- **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.
+
+## Quick start
+
+```sh
+node server.mjs                 # serves on 0.0.0.0:8080, prints the auth token
+```
+
+Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the browser's localStorage and stripped from the URL. Without a token in the URL the UI shows a token prompt.
+
+## Configuration
+
+| Flag | Env | Default | Meaning |
+|---|---|---|---|
+| `--port` | `PORT` | `8080` | listen port |
+| `--host` | `HOST` | `0.0.0.0` | bind address |
+| `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
+| `--dir` | `PI_DIR` | cwd | working directory pi runs in |
+| `--pi` | `PI_BIN` | `pi` | pi executable |
+| `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` (e.g. `--provider anthropic -c`) |
+
+A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.
+
+## Endpoints
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /` | no | the UI (static, secret-free) |
+| `GET /health` | no | liveness probe |
+| `GET /events` | yes | SSE stream of pi's stdout (events + responses), with replay of recent lines |
+| `POST /rpc` | yes | JSON body forwarded verbatim to pi's stdin |
+| `POST /restart` | yes | kill and respawn the pi process |
+
+Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
+
+## UI features
+
+- Streaming assistant output with markdown rendering, collapsible **thinking** blocks, and per-tool-call cards (args, live partial output, result, error state).
+- Send prompts (Enter), steer mid-stream (send while streaming), **Stop** to abort.
+- Model picker, thinking-level cycling, new session, context compaction, pi process restart — from the header chips / ☰ menu.
+- Extension UI bridge: pi extensions that ask for confirm/select/input get a modal in the browser; notifications become toasts.
+- Reconnects automatically (EventSource); recent events are replayed on reconnect so a page refresh mid-run doesn't lose context.
+- Mobile-friendly layout.
+
+## Running it in the background
+
+```sh
+PI_UI_TOKEN=$(cat .ui-token) nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
+```
+
+or a systemd user unit if you want it supervised.
+
+## Tunnel notes
+
+Anything that forwards plain HTTP to port 8080 works, e.g.:
+
+```sh
+cloudflared tunnel --url http://localhost:8080
+ssh -R 80:localhost:8080 nokey@localhost.run
+```
+
+The token is your only line of defense once tunneled — treat the URL-with-token like a password.

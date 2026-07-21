@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>pi remote</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #7aa2f7;
+    --accent-dim: #3d5285;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --yellow: #e0af68;
+    --user-bubble: #26436e;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+  }
+  header .dot.ok { background: var(--green); }
+  header .dot.busy { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  header .title {
+    font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
+  }
+  header .spacer { flex: 1; }
+  .chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent-dim); }
+  #menuBtn { font-size: 16px; line-height: 1; padding: 2px 9px; }
+
+  /* ---------- menu ---------- */
+  #menu {
+    position: absolute;
+    top: 44px; right: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    display: none;
+    flex-direction: column;
+    min-width: 200px;
+    z-index: 30;
+    overflow: hidden;
+  }
+  #menu.open { display: flex; }
+  #menu button {
+    all: unset;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #menu button:hover { background: var(--accent-dim); }
+
+  /* ---------- messages ---------- */
+  #scroller { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  #messages {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 16px 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg { min-width: 0; }
+  .msg.user {
+    align-self: flex-end;
+    max-width: 85%;
+    background: var(--user-bubble);
+    border-radius: 14px 14px 4px 14px;
+    padding: 8px 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.assistant { align-self: stretch; }
+  .msg.assistant .md { word-break: break-word; }
+  .msg .meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .msg.error-msg {
+    align-self: stretch;
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--red);
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* markdown */
+  .md p { margin: 0 0 .7em; }
+  .md p:last-child { margin-bottom: 0; }
+  .md h1, .md h2, .md h3, .md h4 { margin: .9em 0 .4em; line-height: 1.3; }
+  .md h1 { font-size: 1.35em; } .md h2 { font-size: 1.2em; } .md h3 { font-size: 1.08em; }
+  .md ul, .md ol { margin: 0 0 .7em; padding-left: 1.5em; }
+  .md li { margin: .15em 0; }
+  .md code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .md pre {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 0 0 .7em;
+  }
+  .md pre code { background: none; border: none; padding: 0; font-size: 13px; }
+  .md blockquote {
+    border-left: 3px solid var(--accent-dim);
+    margin: 0 0 .7em;
+    padding: 2px 0 2px 12px;
+    color: var(--muted);
+  }
+  .md a { color: var(--accent); }
+  .md table { border-collapse: collapse; margin: 0 0 .7em; display: block; overflow-x: auto; }
+  .md th, .md td { border: 1px solid var(--border); padding: 4px 10px; font-size: 13.5px; }
+  .md hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+
+  /* thinking + tools */
+  details.block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    margin: 4px 0;
+    overflow: hidden;
+  }
+  details.block > summary {
+    cursor: pointer;
+    padding: 7px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  details.block > summary::-webkit-details-marker { display: none; }
+  details.block > summary::before { content: "▸"; transition: transform .15s; flex-shrink: 0; }
+  details.block[open] > summary::before { transform: rotate(90deg); }
+  details.block > .body {
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+  }
+  details.thinking > summary { color: var(--yellow); font-style: italic; }
+  details.thinking > .body { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+
+  .tool summary .tname { color: var(--accent); font-family: var(--mono); font-size: 12.5px; }
+  .tool summary .targ {
+    color: var(--muted); font-family: var(--mono); font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0; flex: 1;
+  }
+  .tool summary .status { margin-left: auto; flex-shrink: 0; font-size: 12px; }
+  .tool .status.running { color: var(--yellow); }
+  .tool .status.ok { color: var(--green); }
+  .tool .status.err { color: var(--red); }
+  .tool .body pre {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 350px;
+    overflow-y: auto;
+  }
+  .tool .args-pre { color: var(--muted); margin-bottom: 8px !important; }
+
+  /* ---------- composer ---------- */
+  #composer {
+    flex-shrink: 0;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  #composer .inner {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font: inherit;
+    padding: 9px 12px;
+    resize: none;
+    max-height: 200px;
+    outline: none;
+  }
+  #input:focus { border-color: var(--accent-dim); }
+  .btn {
+    background: var(--accent);
+    color: #10131a;
+    border: none;
+    border-radius: 12px;
+    font: inherit;
+    font-weight: 600;
+    padding: 9px 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.stop { background: var(--red); }
+  #statusbar {
+    max-width: 860px;
+    margin: 4px auto 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  /* ---------- modal ---------- */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 50;
+    padding: 16px;
+  }
+  #overlay.open { display: flex; }
+  #modal {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-width: 480px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #modal .m-title { padding: 14px 16px 6px; font-weight: 600; }
+  #modal .m-body { padding: 6px 16px 14px; overflow-y: auto; }
+  #modal .m-body input[type=text] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    padding: 8px 10px;
+  }
+  #modal .m-option {
+    display: block; width: 100%; text-align: left;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  #modal .m-option:hover { border-color: var(--accent); }
+  #modal .m-actions {
+    display: flex; gap: 8px; justify-content: flex-end;
+    padding: 10px 16px 14px;
+  }
+  #modal .m-actions .chip { font-size: 13px; padding: 6px 14px; }
+
+  /* toast */
+  #toasts {
+    position: fixed;
+    bottom: 90px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 6px;
+    z-index: 60;
+    align-items: center;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    animation: fadein .2s;
+  }
+  .toast.warning { border-color: var(--yellow); }
+  .toast.error { border-color: var(--red); }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
+
+  /* token gate */
+  #gate {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  #gate.open { display: flex; }
+  #gate .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px;
+    max-width: 380px; width: 100%;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  #gate input {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    padding: 9px 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="connDot"></span>
+  <span class="title" id="sessionTitle">pi remote</span>
+  <span class="spacer"></span>
+  <span class="chip" id="modelChip" title="Change model">model</span>
+  <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
+  <span class="chip" id="menuBtn">☰</span>
+</header>
+
+<div id="menu">
+  <button data-action="newSession">New session</button>
+  <button data-action="compact">Compact context</button>
+  <button data-action="restart">Restart pi process</button>
+  <button data-action="logout">Forget token</button>
+</div>
+
+<div id="scroller"><div id="messages"></div></div>
+
+<div id="composer">
+  <div class="inner">
+    <textarea id="input" rows="1" placeholder="Message pi… (Enter to send)"></textarea>
+    <button class="btn" id="sendBtn">Send</button>
+  </div>
+  <div id="statusbar">
+    <span id="stateInfo">connecting…</span>
+    <span id="usageInfo"></span>
+  </div>
+</div>
+
+<div id="overlay"><div id="modal">
+  <div class="m-title" id="mTitle"></div>
+  <div class="m-body" id="mBody"></div>
+  <div class="m-actions" id="mActions"></div>
+</div></div>
+
+<div id="toasts"></div>
+
+<div id="gate"><div class="card">
+  <div style="font-weight:600;font-size:17px">pi remote</div>
+  <div style="color:var(--muted);font-size:13.5px">Enter the auth token printed by the server on startup.</div>
+  <input type="password" id="gateInput" placeholder="token">
+  <button class="btn" id="gateBtn">Connect</button>
+</div></div>
+
+<script>
+"use strict";
+
+// ------------------------------------------------------------ token
+
+let token = null;
+{
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const query = new URLSearchParams(location.search);
+  const fromUrl = hash.get("token") || query.get("token");
+  if (fromUrl) {
+    localStorage.setItem("pi_ui_token", fromUrl);
+    history.replaceState(null, "", location.pathname);
+  }
+  token = localStorage.getItem("pi_ui_token");
+}
+
+const $ = (id) => document.getElementById(id);
+const gate = $("gate");
+
+function requireToken() {
+  gate.classList.add("open");
+  $("gateInput").focus();
+}
+$("gateBtn").addEventListener("click", () => {
+  const v = $("gateInput").value.trim();
+  if (!v) return;
+  localStorage.setItem("pi_ui_token", v);
+  location.reload();
+});
+$("gateInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("gateBtn").click();
+});
+
+// ------------------------------------------------------------ rpc plumbing
+
+const clientId = Math.random().toString(36).slice(2, 8);
+let cmdSeq = 0;
+const pending = new Map(); // id -> {resolve, reject}
+
+async function rpc(cmd, { wait = true } = {}) {
+  const id = `${clientId}-${++cmdSeq}`;
+  cmd = { id, ...cmd };
+  let waiter = null;
+  if (wait) {
+    waiter = new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      setTimeout(() => {
+        if (pending.has(id)) {
+          pending.delete(id);
+          reject(new Error(`timeout waiting for ${cmd.type}`));
+        }
+      }, 60000);
+    });
+  }
+  const res = await fetch("/rpc", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(cmd),
+  });
+  if (res.status === 401) { localStorage.removeItem("pi_ui_token"); requireToken(); throw new Error("unauthorized"); }
+  if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
+  return wait ? waiter : null;
+}
+
+function handleResponse(msg) {
+  const p = pending.get(msg.id);
+  if (!p) return;
+  pending.delete(msg.id);
+  if (msg.success) p.resolve(msg.data);
+  else p.reject(new Error(msg.error || "command failed"));
+}
+
+// ------------------------------------------------------------ markdown (small, escape-first)
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+}
+
+function inlineMd(s) {
+  // s is already HTML-escaped
+  return s
+    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+    .replace(/(^|[\s(])_([^_\s][^_]*)_/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+}
+
+function renderMarkdown(src) {
+  const lines = src.split("\n");
+  const out = [];
+  let i = 0;
+  let para = [];
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${inlineMd(escapeHtml(para.join("\n"))).replace(/\n/g, "<br>")}</p>`); para = []; }
+  };
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```(.*)$/);
+    if (fence) {
+      flushPara();
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++; // skip closing fence
+      out.push(`<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>`);
+      continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { flushPara(); out.push(`<h${h[1].length}>${inlineMd(escapeHtml(h[2]))}</h${h[1].length}>`); i++; continue; }
+    if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flushPara(); out.push("<hr>"); i++; continue; }
+    if (/^\s*>/.test(line)) {
+      flushPara();
+      const buf = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+      out.push(`<blockquote>${inlineMd(escapeHtml(buf.join("\n"))).replace(/\n/g, "<br>")}</blockquote>`);
+      continue;
+    }
+    const ul = line.match(/^(\s*)([-*+])\s+(.*)$/);
+    const ol = line.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+    if (ul || ol) {
+      flushPara();
+      const ordered = !!ol;
+      const items = [];
+      const re = ordered ? /^(\s*)(\d+)[.)]\s+(.*)$/ : /^(\s*)([-*+])\s+(.*)$/;
+      while (i < lines.length) {
+        const m = lines[i].match(re);
+        if (m) { items.push(m[3]); i++; }
+        else if (/^\s{2,}\S/.test(lines[i]) && items.length) { items[items.length - 1] += "\n" + lines[i].trim(); i++; }
+        else break;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>${items.map((it) => `<li>${inlineMd(escapeHtml(it)).replace(/\n/g, "<br>")}</li>`).join("")}</${tag}>`);
+      continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      flushPara();
+      const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => inlineMd(escapeHtml(c.trim())));
+      const head = cells(rows[0]);
+      const body = rows.slice(2).map(cells);
+      out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      continue;
+    }
+    if (/^\s*$/.test(line)) { flushPara(); i++; continue; }
+    para.push(line);
+    i++;
+  }
+  flushPara();
+  return out.join("");
+}
+
+// ------------------------------------------------------------ message rendering
+
+const messagesEl = $("messages");
+const scroller = $("scroller");
+
+function nearBottom() {
+  return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+}
+function scrollToBottom(force) {
+  if (force || nearBottom()) scroller.scrollTop = scroller.scrollHeight;
+}
+
+const toolCards = new Map(); // toolCallId -> {el, argsEl, resultEl, statusEl}
+
+function summarizeArgs(name, args) {
+  if (!args || typeof args !== "object") return "";
+  if (typeof args.command === "string") return args.command;
+  if (typeof args.path === "string") return args.path;
+  if (typeof args.file_path === "string") return args.file_path;
+  const first = Object.values(args).find((v) => typeof v === "string");
+  return first || "";
+}
+
+function createToolCard(tc) {
+  const details = document.createElement("details");
+  details.className = "block tool";
+  const argSummary = summarizeArgs(tc.name, tc.arguments);
+  details.innerHTML =
+    `<summary><span class="tname">${escapeHtml(tc.name)}</span>` +
+    `<span class="targ">${escapeHtml(argSummary)}</span>` +
+    `<span class="status running">⏳</span></summary>` +
+    `<div class="body"><pre class="args-pre"></pre><pre class="result-pre"></pre></div>`;
+  const card = {
+    el: details,
+    argsEl: details.querySelector(".args-pre"),
+    resultEl: details.querySelector(".result-pre"),
+    statusEl: details.querySelector(".status"),
+    summaryArgEl: details.querySelector(".targ"),
+  };
+  card.argsEl.textContent = JSON.stringify(tc.arguments, null, 2) ?? "";
+  toolCards.set(tc.id, card);
+  return details;
+}
+
+function updateToolCard(tc) {
+  const card = toolCards.get(tc.id);
+  if (!card) return;
+  card.summaryArgEl.textContent = summarizeArgs(tc.name, tc.arguments);
+  card.argsEl.textContent = JSON.stringify(tc.arguments, null, 2) ?? "";
+}
+
+function toolResultText(msg) {
+  if (!msg) return "";
+  const parts = [];
+  const content = msg.content;
+  if (typeof content === "string") parts.push(content);
+  else if (Array.isArray(content)) {
+    for (const c of content) {
+      if (c.type === "text") parts.push(c.text);
+      else if (c.type === "image") parts.push(`[image ${c.mimeType}]`);
+    }
+  }
+  return parts.join("\n");
+}
+
+function finishToolCard(toolCallId, resultMsgOrText, isError) {
+  const card = toolCards.get(toolCallId);
+  if (!card) return;
+  card.statusEl.textContent = isError ? "✗" : "✓";
+  card.statusEl.className = `status ${isError ? "err" : "ok"}`;
+  const text = typeof resultMsgOrText === "string" ? resultMsgOrText : toolResultText(resultMsgOrText);
+  card.resultEl.textContent = text.length > 20000 ? text.slice(0, 20000) + "\n… (truncated)" : text;
+}
+
+let liveAssistant = null; // { root, msg }
+
+function renderAssistantInto(root, message) {
+  root.innerHTML = "";
+  for (const block of message.content || []) {
+    if (block.type === "thinking") {
+      const d = document.createElement("details");
+      d.className = "block thinking";
+      d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
+      d.querySelector(".body").textContent = block.thinking || "";
+      root.appendChild(d);
+    } else if (block.type === "text") {
+      const div = document.createElement("div");
+      div.className = "md";
+      div.innerHTML = renderMarkdown(block.text || "");
+      root.appendChild(div);
+    } else if (block.type === "toolCall") {
+      const existing = toolCards.get(block.id);
+      if (existing) { updateToolCard(block); root.appendChild(existing.el); }
+      else root.appendChild(createToolCard(block));
+    }
+  }
+  if (message.stopReason === "error" && message.errorMessage) {
+    const div = document.createElement("div");
+    div.className = "msg error-msg";
+    div.textContent = message.errorMessage;
+    root.appendChild(div);
+  }
+}
+
+function addUserMessage(message) {
+  const div = document.createElement("div");
+  div.className = "msg user";
+  let text = "";
+  if (typeof message.content === "string") text = message.content;
+  else if (Array.isArray(message.content)) {
+    text = message.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
+  }
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  scrollToBottom(true);
+}
+
+function addAssistantContainer() {
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  messagesEl.appendChild(div);
+  return div;
+}
+
+function renderFullMessage(message) {
+  const role = message.role;
+  if (role === "user") { addUserMessage(message); return; }
+  if (role === "assistant") {
+    const root = addAssistantContainer();
+    renderAssistantInto(root, message);
+    return;
+  }
+  if (role === "toolResult") {
+    if (toolCards.has(message.toolCallId)) {
+      finishToolCard(message.toolCallId, message, message.isError);
+    }
+    return;
+  }
+  // custom messages (extensions etc.) — show generically if they carry text
+  if (message.content) {
+    const text = toolResultText(message);
+    if (text) {
+      const root = addAssistantContainer();
+      root.innerHTML = `<div class="md">${renderMarkdown(text)}</div>`;
+    }
+  }
+}
+
+function clearMessages() {
+  messagesEl.innerHTML = "";
+  toolCards.clear();
+  liveAssistant = null;
+}
+
+// ------------------------------------------------------------ state / header
+
+let state = null;
+
+function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : "$0"; }
+
+function applyState(s) {
+  state = s;
+  $("sessionTitle").textContent = s.sessionName || "pi remote";
+  $("modelChip").textContent = s.model ? s.model.id : "no model";
+  $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
+  setBusy(s.isStreaming || s.isCompacting);
+  $("stateInfo").textContent =
+    `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
+    (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : "");
+}
+
+let busy = false;
+function setBusy(b) {
+  busy = b;
+  const dot = $("connDot");
+  if (connected) dot.className = "dot " + (b ? "busy" : "ok");
+  $("sendBtn").textContent = b ? "Stop" : "Send";
+  $("sendBtn").classList.toggle("stop", b && !$("input").value.trim());
+}
+
+function updateUsage(message) {
+  const u = message?.usage;
+  if (!u) return;
+  $("usageInfo").textContent =
+    `↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()} tok · ${fmtCost(u.cost?.total ?? 0)}`;
+}
+
+// ------------------------------------------------------------ event stream
+
+let connected = false;
+let es = null;
+let firstConnect = true;
+
+function connect() {
+  if (!token) { requireToken(); return; }
+  es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
+  es.onopen = async () => {
+    connected = true;
+    $("connDot").className = "dot ok";
+    $("stateInfo").textContent = "connected";
+    try {
+      const s = await rpc({ type: "get_state" });
+      applyState(s);
+      if (firstConnect || !messagesEl.childElementCount) {
+        firstConnect = false;
+        const { messages } = await rpc({ type: "get_messages" });
+        clearMessages();
+        for (const m of messages) renderFullMessage(m);
+        scrollToBottom(true);
+      }
+    } catch (e) {
+      if (String(e.message).includes("unauthorized")) return;
+      toast(`init failed: ${e.message}`, "error");
+    }
+  };
+  es.onerror = () => {
+    connected = false;
+    $("connDot").className = "dot";
+    $("stateInfo").textContent = "reconnecting…";
+    // EventSource auto-reconnects; if the token is bad the fetch guard handles it
+  };
+  es.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    handleEvent(msg);
+  };
+}
+
+function handleEvent(msg) {
+  switch (msg.type) {
+    case "response":
+      handleResponse(msg);
+      // state changes often follow commands; refresh cheaply
+      if (["set_model", "set_thinking_level", "cycle_thinking_level", "new_session",
+           "switch_session", "compact", "set_session_name"].includes(msg.command)) {
+        refreshState();
+      }
+      return;
+
+    case "agent_start":
+      setBusy(true);
+      return;
+
+    case "agent_end":
+      setBusy(false);
+      liveAssistant = null;
+      refreshState();
+      return;
+
+    case "message_start": {
+      const m = msg.message;
+      if (m.role === "assistant") {
+        liveAssistant = { root: addAssistantContainer(), msg: m };
+        renderAssistantInto(liveAssistant.root, m);
+        scrollToBottom(true);
+      } else if (m.role === "user") {
+        // echoed user message (e.g. steering) — only add if we didn't render it locally
+        if (!m._localEcho) addUserMessage(m);
+      }
+      return;
+    }
+
+    case "message_update": {
+      const m = msg.message;
+      if (m.role === "assistant") {
+        if (!liveAssistant) liveAssistant = { root: addAssistantContainer(), msg: m };
+        renderAssistantInto(liveAssistant.root, m);
+        scrollToBottom(false);
+      }
+      return;
+    }
+
+    case "message_end": {
+      const m = msg.message;
+      if (m.role === "assistant") {
+        if (liveAssistant) { renderAssistantInto(liveAssistant.root, m); liveAssistant = null; }
+        else { const root = addAssistantContainer(); renderAssistantInto(root, m); }
+        updateUsage(m);
+      } else if (m.role === "toolResult") {
+        finishToolCard(m.toolCallId, m, m.isError);
+      }
+      scrollToBottom(false);
+      return;
+    }
+
+    case "tool_execution_start": {
+      const card = toolCards.get(msg.toolCallId);
+      if (card) { card.statusEl.textContent = "⏳"; card.statusEl.className = "status running"; }
+      return;
+    }
+
+    case "tool_execution_update": {
+      const card = toolCards.get(msg.toolCallId);
+      if (card && msg.partialResult) {
+        const text = typeof msg.partialResult === "string"
+          ? msg.partialResult
+          : toolResultText(msg.partialResult) || JSON.stringify(msg.partialResult);
+        card.resultEl.textContent = text.slice(-20000);
+      }
+      return;
+    }
+
+    case "tool_execution_end":
+      finishToolCard(
+        msg.toolCallId,
+        typeof msg.result === "string" ? msg.result : toolResultText(msg.result) || JSON.stringify(msg.result, null, 2),
+        msg.isError
+      );
+      scrollToBottom(false);
+      return;
+
+    case "extension_ui_request":
+      handleExtensionUI(msg);
+      return;
+
+    case "pi_exit":
+      toast("pi process exited — it will restart on next message", "warning");
+      setBusy(false);
+      return;
+
+    case "pi_started":
+      if (msg.startCount > 1) { toast("pi process restarted"); refreshState(); }
+      return;
+
+    case "pi_error":
+      toast(`pi spawn error: ${msg.error}`, "error");
+      return;
+  }
+}
+
+let stateRefreshTimer = null;
+function refreshState() {
+  clearTimeout(stateRefreshTimer);
+  stateRefreshTimer = setTimeout(async () => {
+    try { applyState(await rpc({ type: "get_state" })); } catch {}
+  }, 150);
+}
+
+// ------------------------------------------------------------ composer
+
+const input = $("input");
+const sendBtn = $("sendBtn");
+
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  setBusy(busy); // refresh Send/Stop label
+});
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    send();
+  }
+});
+
+sendBtn.addEventListener("click", () => {
+  if (busy && !input.value.trim()) abort();
+  else send();
+});
+
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  input.style.height = "auto";
+  addUserMessage({ role: "user", content: text, _localEcho: true });
+  try {
+    await rpc({ type: "prompt", message: text }, { wait: false });
+  } catch (e) {
+    toast(`send failed: ${e.message}`, "error");
+  }
+}
+
+async function abort() {
+  try { await rpc({ type: "abort" }, { wait: false }); toast("aborted"); }
+  catch (e) { toast(`abort failed: ${e.message}`, "error"); }
+}
+
+// ------------------------------------------------------------ menu & actions
+
+const menu = $("menu");
+$("menuBtn").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("open"); });
+document.addEventListener("click", () => menu.classList.remove("open"));
+
+menu.addEventListener("click", async (e) => {
+  const action = e.target.dataset?.action;
+  if (!action) return;
+  menu.classList.remove("open");
+  try {
+    if (action === "newSession") {
+      await rpc({ type: "new_session" });
+      clearMessages();
+      toast("new session");
+    } else if (action === "compact") {
+      toast("compacting…");
+      await rpc({ type: "compact" });
+      toast("compacted");
+      const { messages } = await rpc({ type: "get_messages" });
+      clearMessages();
+      for (const m of messages) renderFullMessage(m);
+    } else if (action === "restart") {
+      await fetch("/restart", { method: "POST", headers: { authorization: `Bearer ${token}` } });
+      clearMessages();
+    } else if (action === "logout") {
+      localStorage.removeItem("pi_ui_token");
+      location.reload();
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
+$("modelChip").addEventListener("click", async () => {
+  try {
+    const { models } = await rpc({ type: "get_available_models" });
+    const choice = await pickOption(
+      "Select model",
+      models.map((m) => `${m.provider}/${m.id}`)
+    );
+    if (choice == null) return;
+    const m = models[choice];
+    await rpc({ type: "set_model", provider: m.provider, modelId: m.id });
+    toast(`model: ${m.id}`);
+  } catch (e) { toast(e.message, "error"); }
+});
+
+$("thinkChip").addEventListener("click", async () => {
+  try {
+    const data = await rpc({ type: "cycle_thinking_level" });
+    if (data) toast(`thinking: ${data.level}`);
+    refreshState();
+  } catch (e) { toast(e.message, "error"); }
+});
+
+// ------------------------------------------------------------ modal helpers
+
+const overlay = $("overlay");
+
+function closeModal() {
+  overlay.classList.remove("open");
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+}
+
+function pickOption(title, options) {
+  return new Promise((resolve) => {
+    $("mTitle").textContent = title;
+    const body = $("mBody");
+    body.innerHTML = "";
+    options.forEach((opt, idx) => {
+      const b = document.createElement("button");
+      b.className = "m-option";
+      b.textContent = opt;
+      b.addEventListener("click", () => { closeModal(); resolve(idx); });
+      body.appendChild(b);
+    });
+    const actions = $("mActions");
+    const cancel = document.createElement("span");
+    cancel.className = "chip";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => { closeModal(); resolve(null); });
+    actions.appendChild(cancel);
+    overlay.classList.add("open");
+  });
+}
+
+function promptText(title, placeholder, prefill) {
+  return new Promise((resolve) => {
+    $("mTitle").textContent = title;
+    const body = $("mBody");
+    body.innerHTML = "";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.placeholder = placeholder || "";
+    inp.value = prefill || "";
+    body.appendChild(inp);
+    const actions = $("mActions");
+    const cancel = document.createElement("span");
+    cancel.className = "chip";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => { closeModal(); resolve(null); });
+    const ok = document.createElement("button");
+    ok.className = "btn";
+    ok.textContent = "OK";
+    ok.style.padding = "6px 16px";
+    ok.addEventListener("click", () => { const v = inp.value; closeModal(); resolve(v); });
+    actions.append(cancel, ok);
+    overlay.classList.add("open");
+    inp.focus();
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
+  });
+}
+
+function confirmDialog(title, message) {
+  return new Promise((resolve) => {
+    $("mTitle").textContent = title;
+    $("mBody").textContent = message;
+    const actions = $("mActions");
+    const no = document.createElement("span");
+    no.className = "chip";
+    no.textContent = "No";
+    no.addEventListener("click", () => { closeModal(); resolve(false); });
+    const yes = document.createElement("button");
+    yes.className = "btn";
+    yes.textContent = "Yes";
+    yes.style.padding = "6px 16px";
+    yes.addEventListener("click", () => { closeModal(); resolve(true); });
+    actions.append(no, yes);
+    overlay.classList.add("open");
+  });
+}
+
+// ------------------------------------------------------------ extension UI bridge
+
+async function handleExtensionUI(req) {
+  const respond = (payload) =>
+    rpc({ type: "extension_ui_response", id: req.id, ...payload }, { wait: false }).catch(() => {});
+  switch (req.method) {
+    case "notify":
+      toast(req.message, req.notifyType);
+      return;
+    case "confirm": {
+      const ok = await confirmDialog(req.title, req.message);
+      respond({ confirmed: ok });
+      return;
+    }
+    case "select": {
+      const idx = await pickOption(req.title, req.options);
+      if (idx == null) respond({ cancelled: true });
+      else respond({ value: req.options[idx] });
+      return;
+    }
+    case "input": {
+      const v = await promptText(req.title, req.placeholder);
+      if (v == null) respond({ cancelled: true });
+      else respond({ value: v });
+      return;
+    }
+    case "editor": {
+      const v = await promptText(req.title, "", req.prefill);
+      if (v == null) respond({ cancelled: true });
+      else respond({ value: v });
+      return;
+    }
+    case "setTitle":
+      $("sessionTitle").textContent = req.title;
+      return;
+    default:
+      return; // setStatus / setWidget / set_editor_text: no-op in web UI
+  }
+}
+
+// ------------------------------------------------------------ toasts
+
+function toast(text, kind) {
+  const t = document.createElement("div");
+  t.className = "toast" + (kind ? ` ${kind}` : "");
+  t.textContent = text;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// ------------------------------------------------------------ go
+
+if (!token) requireToken();
+else connect();
+</script>
+</body>
+</html>
