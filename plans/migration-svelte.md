@@ -175,14 +175,17 @@ Target direction:
 - Svelte components import stores/actions directly.
 - `legacyBridge.js` shrinks as `legacy.js` becomes smaller.
 
-### 12. Periodic Cleanup
+### 12. Periodic Cleanup ✅
 
 After several migrations:
 
-- Remove unused helpers/imports from `legacy.js`.
-- Remove stale CSS.
-- Remove stale DOM IDs only if no tests or legacy code depend on them.
-- Run `rg` for stale references.
+- ✅ Removed unused header/composer bridge exports and imports.
+- ✅ Slimmed `headerState` to the remaining status/usage fields after header/app display moved to `appSession` derived state.
+- ✅ Removed stale passive transcript store and simplified `Transcript.svelte` to the preserved `#messages` mount point.
+- ✅ Removed stale legacy header/composer state updates now owned by Svelte stores.
+- ✅ Re-ran stale reference searches for removed conversation tree and bridge symbols.
+
+Keep doing this periodically after further migrations:
 
 Useful checks:
 

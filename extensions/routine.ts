@@ -36,8 +36,8 @@ const BASE = process.env.PI_UI_URL ?? "http://127.0.0.1:8080";
 function uiToken(): string {
   if (process.env.PI_UI_TOKEN) return process.env.PI_UI_TOKEN.trim();
   const candidates = [
+    join(process.cwd(), ".ui-token"),
     join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".ui-token"),
-    "/home/ubuntu/tree-pi/.ui-token",
   ];
   for (const p of candidates) {
     try {

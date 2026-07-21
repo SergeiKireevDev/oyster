@@ -7,13 +7,17 @@
 import { chromium } from "playwright";
 import { execSync } from "node:child_process";
 import { mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..", "..");
 
 const TOKEN = "e2e-test-token";
 const CONTROLLER = "pi-lot-video";
 const PORT = 4030;
 const BASE = `http://localhost:${PORT}`;
-const OUT = "/home/ubuntu/tree-pi/preview-videos";
+const OUT = join(ROOT, "preview-videos");
 const RAW = join(OUT, "raw");
 
 function sh(cmd) { return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(); }
@@ -23,7 +27,7 @@ async function main() {
 
   // build image if needed
   try { sh(`docker images -q pi-lot-ui`); } catch {
-    sh("docker build -t pi-lot-ui /home/ubuntu/tree-pi");
+    sh(`docker build -t pi-lot-ui ${JSON.stringify(ROOT)}`);
   }
 
   // start container

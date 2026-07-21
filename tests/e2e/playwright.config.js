@@ -38,21 +38,22 @@ if (existsSync(SYSLIBS) && !process.env.E2E_VIDEO) {
   }
 }
 const SHELL = headlessShellPath();
-const launchOptions = SHELL ? { executablePath: SHELL } : {};
+const ACTION_DELAY_MS = Number(process.env.E2E_ACTION_DELAY_MS ?? (process.env.E2E_VIDEO ? 1000 : 0));
+const launchOptions = SHELL ? { executablePath: SHELL, slowMo: ACTION_DELAY_MS } : { slowMo: ACTION_DELAY_MS };
 // Video is opt-in: recording every normal e2e run leaves large artifacts in
 // preview-videos/. Also, chrome-headless-shell cannot record video, so when
 // E2E_VIDEO is set we let Playwright use its bundled full Chromium instead.
 // In video mode, do not force the rootless ~/.pw-syslibs fontconfig file: it
 // only points at DejaVu fonts, so emoji/icon controls render as tofu boxes in
 // recordings. Full Chromium can use the host fontconfig, including Noto Emoji.
-// slowMo adds a one-second pause between browser actions so recordings are
-// readable instead of instantly jumping from state to state.
+// E2E_ACTION_DELAY_MS adds a configurable pause between browser actions so
+// recordings are readable instead of instantly jumping from state to state.
+const videoOutputDir = process.env.E2E_VIDEO_DIR ?? join(HERE, "..", "..", "preview-videos", "raw");
 const projectUse = process.env.E2E_VIDEO
   ? {
       ...devices["Desktop Chrome"],
-      video: { mode: "on", size: { width: 1400, height: 900 } },
-      outputDir: join(HERE, "..", "..", "preview-videos", "raw"),
-      launchOptions: { headless: true, slowMo: 1000 },
+      video: { mode: "on" },
+      launchOptions: { headless: true, slowMo: ACTION_DELAY_MS },
     }
   : { ...devices["Desktop Chrome"], launchOptions };
 
@@ -72,6 +73,7 @@ export default defineConfig({
   globalSetup: "./global-setup.js",
   globalTeardown: "./global-teardown.js",
   reporter: [["list"], ["html", { open: "never" }]],
+  outputDir: process.env.E2E_VIDEO ? videoOutputDir : undefined,
   use: {
     baseURL: process.env.PI_UI_URL ?? "http://localhost:4000",
     viewport: { width: 1400, height: 900 }, // desktop is the default

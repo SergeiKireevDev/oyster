@@ -7,6 +7,7 @@ export const appSession = writable({
   workdir: null,
   busy: false,
   connected: false,
+  titleOverride: null,
 });
 
 export const appHeader = derived(appSession, ($appSession) => {
@@ -17,7 +18,7 @@ export const appHeader = derived(appSession, ($appSession) => {
   const workdir = $appSession.workdir ?? "";
   return {
     connectionClass: $appSession.connected ? `dot ${$appSession.busy ? "busy" : "ok"}` : "dot",
-    sessionTitle: state?.sessionName || "pi-lot",
+    sessionTitle: $appSession.titleOverride || state?.sessionName || "pi-lot",
     modelChip: modelId,
     thinkChip: state ? `think: ${thinking}` : "think",
     cfgChip: state ? `${modelId} · ${thinking}` : "model · think",

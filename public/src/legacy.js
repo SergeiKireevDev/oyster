@@ -756,7 +756,7 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
-  updateAppSession({ state: s });
+  updateAppSession({ state: s, ...(sessionChanged ? { titleOverride: null } : {}) });
   if (sessionChanged) {
     routines.set(routinesNow.filter(routineVisible));
     routineScopeAll.set(tunnelScopeAll);
@@ -765,10 +765,6 @@ function applyState(s) {
   } // sidebar tunnels are session-scoped; routines follow the workdir
   if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
   updateHeaderState({
-    sessionTitle: s.sessionName || "pi-lot",
-    modelChip: s.model ? s.model.id : "no model",
-    thinkChip: `think: ${s.thinkingLevel}`,
-    cfgChip: `${s.model ? s.model.id : "no model"} · ${s.thinkingLevel}`,
     stateInfo: `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
       (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : ""),
   });
@@ -870,21 +866,12 @@ let onRunnersUpdate = null;
 function setWorkdir(dir) {
   workdir = dir;
   updateAppSession({ workdir });
-  updateHeaderState({
-    workdirText: dir ? `📁 ${dir.length > 40 ? "…" + dir.slice(-39) : dir}` : "",
-    workdirTitle: dir || "",
-  });
 }
 
 let busy = false;
 function setBusy(b) {
   busy = b;
   updateAppSession({ busy });
-  updateHeaderState({
-    connectionClass: connected ? `dot ${b ? "busy" : "ok"}` : "dot",
-    sendText: b ? "Steer" : "Send",
-    stopHidden: !b,
-  });
 }
 
 function updateUsage(message) {
@@ -910,7 +897,7 @@ setInterval(() => {
     es.close();
     connected = false;
     updateAppSession({ connected });
-    updateHeaderState({ connectionClass: "dot", stateInfo: "connection lost — reconnecting…" });
+    updateHeaderState({ stateInfo: "connection lost — reconnecting…" });
     connect();
   }
 }, 15000);
@@ -924,7 +911,7 @@ function connect() {
   es.onopen = async () => {
     connected = true;
     updateAppSession({ connected });
-    updateHeaderState({ connectionClass: "dot ok", stateInfo: "connected" });
+    updateHeaderState({ stateInfo: "connected" });
     try {
       // Always rebuild from the canonical transcript: the SSE replay buffer
       // re-delivers recent events on reconnect, so rendering them onto the
@@ -940,7 +927,7 @@ function connect() {
   es.onerror = () => {
     connected = false;
     updateAppSession({ connected });
-    updateHeaderState({ connectionClass: "dot", stateInfo: "reconnecting…" });
+    updateHeaderState({ stateInfo: "reconnecting…" });
     // EventSource can't see HTTP status codes, so a 401 (bad stored token)
     // looks identical to a network blip and would retry forever. Probe
     // /authcheck to tell them apart, at most once per 10s.
@@ -2784,7 +2771,7 @@ async function handleExtensionUI(req) {
       return;
     }
     case "setTitle":
-      updateHeaderState({ sessionTitle: req.title });
+      updateAppSession({ titleOverride: req.title });
       return;
     default:
       return; // setStatus / setWidget / set_editor_text: no-op in web UI

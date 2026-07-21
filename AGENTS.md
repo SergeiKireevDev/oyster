@@ -62,7 +62,7 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 A systemd user unit is provided as `pi-ui.service`: it auto-restarts on crash and starts on login. Before using it, update the hardcoded `WorkingDirectory=` and `ExecStart=` paths to match your clone location:
 
 ```bash
-sed "s|/home/ubuntu/tree-pi|$(pwd)|" pi-ui.service > ~/.config/systemd/user/pi-ui.service
+sed "s|__PI_UI_DIR__|$(pwd)|g" pi-ui.service > ~/.config/systemd/user/pi-ui.service
 systemctl --user daemon-reload
 systemctl --user enable --now pi-ui.service
 sudo loginctl enable-linger $USER   # keep running without an active login session

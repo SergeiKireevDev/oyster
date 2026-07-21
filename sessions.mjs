@@ -29,7 +29,7 @@ export function sessionDirFor(cwd) {
 }
 
 /** best-effort human-readable name for a session folder like
- *  "--home-ubuntu-tree-pi--" -> "/home/ubuntu/tree-pi" (lossy for dashes) */
+ *  "--home-ubuntu-my-project--" -> "/home/ubuntu/my/project" (lossy for dashes) */
 export function decodeFolderName(name) {
   return "/" + name.replace(/^--/, "").replace(/--$/, "").replace(/-/g, "/");
 }

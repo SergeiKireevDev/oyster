@@ -7,6 +7,7 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
+    "record:videos": "node record-all-videos.mjs",
     "report": "playwright show-report"
   },
   "devDependencies": {
