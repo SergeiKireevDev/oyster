@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents, registerRoutineEvents } from "../public/src/runtime/eventControllers.js";
+
+test("routine event adapter unpacks name and action", () => {
+  let listener;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  const calls = [];
+  registerRoutineEvents(target, { run: (...args) => calls.push(args) });
+  listener({ detail: { name: "build", action: "run" } });
+  assert.deepEqual(calls, [["build", "run"]]);
+});
 
 test("menu event adapter routes its action detail", () => {
   let listener;

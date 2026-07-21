@@ -9,6 +9,15 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerRoutineEvents(target, { run }) {
+  const onAction = (event) => {
+    const { name, action } = event.detail ?? {};
+    run(name, action);
+  };
+  target.addEventListener("pi-routine-action", onAction);
+  return () => target.removeEventListener("pi-routine-action", onAction);
+}
+
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);
