@@ -17,8 +17,6 @@
   import { getDialogService } from "../runtime/dialogServiceContext.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
   import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
-  import { filePicker, updateFilePicker } from "../stores/filePicker.js";
-  import { cancelFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
   import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
 
   const dialogs = getDialogService();
@@ -79,10 +77,6 @@
       {:else if $modalState.content === "confirmPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
-      {:else if $modalState.content === "filePicker"}
-        <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={useFilePickerFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") useFilePickerFolder(); }}>📁 Use this folder</span>
-        <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
         <span class="chip" role="button" tabindex="0" onclick={saveFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveFileExplorer(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
         <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>

@@ -1,8 +1,8 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
-  import { filePicker } from "../stores/filePicker.js";
-  import { browseFilePicker, pickFilePicker } from "../features/files/filePickerActions.js";
+  import { filePicker, updateFilePicker } from "../stores/filePicker.js";
+  import { browseFilePicker, cancelFilePicker, pickFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
 
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
 </script>
@@ -30,3 +30,9 @@
     <div class="m-path">(empty folder)</div>
   {/if}
 {/if}
+
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={useFilePickerFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") useFilePickerFolder(); }}>📁 Use this folder</span>
+  <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
+  <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
+</div>

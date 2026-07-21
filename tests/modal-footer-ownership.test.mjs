@@ -30,3 +30,10 @@ test("folder browser owns its footer actions", () => {
   for (const action of ["New folder", "showHidden", "cancelFolderBrowser", "submitFolderBrowser"]) assert.match(component, new RegExp(action));
   assert.doesNotMatch(overlays, /cancelFolderBrowser|submitFolderBrowser|\$folderBrowser/);
 });
+
+test("file picker owns its footer actions", () => {
+  const component = read("FilePickerModal.svelte");
+  const overlays = read("Overlays.svelte");
+  for (const action of ["useFilePickerFolder", "showHidden", "cancelFilePicker"]) assert.match(component, new RegExp(action));
+  assert.doesNotMatch(overlays, /useFilePickerFolder|cancelFilePicker|\$filePicker/);
+});
