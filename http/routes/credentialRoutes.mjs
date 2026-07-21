@@ -1,4 +1,6 @@
 const MAX_KEY_LENGTH = 16 * 1024;
+// Credential JSON is deliberately capped at 20 KiB: enough for a 16 KiB key
+// plus provider metadata, while preventing the general 5 MiB API limit here.
 const MAX_BODY_LENGTH = 20 * 1024;
 
 function mutationInput(body, { keyRequired = false } = {}) {
@@ -51,7 +53,11 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
     json(res, status, { error: safeMessage, code: error?.code ?? "credential_service_unavailable" });
   }
 
-  async function mutate(req, res, { remove = false } = {}) {
+  async function mutate(req, res, url, { remove = false } = {}) {
+    if (url?.search) {
+      json(res, 400, { error: "credential mutations require a JSON body without query parameters" });
+      return;
+    }
     const body = await credentialJsonBody(req, res);
     if (body === undefined) return;
     const input = mutationInput(body, { keyRequired: !remove });
@@ -102,8 +108,8 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
         json(res, 503, { error: "credential service unavailable", code: error?.code ?? "credential_service_unavailable" });
       }
     },
-    "POST /api-keys": (req, res) => mutate(req, res),
-    "DELETE /api-keys": (req, res) => mutate(req, res, { remove: true }),
+    "POST /api-keys": (req, res, url) => mutate(req, res, url),
+    "DELETE /api-keys": (req, res, url) => mutate(req, res, url, { remove: true }),
   };
 }
 

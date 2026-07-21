@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CREDENTIAL_BODY_LIMIT, CREDENTIAL_KEY_LIMIT, createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
+import { createRequestContext } from "../http/createRequestContext.mjs";
 
 function response() {
   return { status: null, body: null };
@@ -70,6 +71,40 @@ test("credential mutations require bounded input and explicit restart confirmati
   await routes["DELETE /api-keys"]({ body: { provider: "openai" } }, remove);
   assert.equal(remove.status, 400);
   assert.equal(writes, 0);
+});
+
+test("credential mutations reject URLs with query data before reading secret bodies", async () => {
+  let reads = 0;
+  const requestContext = context();
+  const originalReadBody = requestContext.readBody;
+  requestContext.readBody = (...args) => { reads += 1; return originalReadBody(...args); };
+  const routes = createCredentialRoutes({ requestContext, credentialService: {}, restartActiveRunners() {} });
+  const res = response();
+  await routes["POST /api-keys"](
+    { body: { provider: "openai", key: "url-canary", restart: true } },
+    res,
+    new URL("http://localhost/api-keys?key=url-canary"),
+  );
+  assert.equal(res.status, 400);
+  assert.equal(reads, 0);
+  assert.doesNotMatch(JSON.stringify(res.body), /url-canary/);
+});
+
+test("authentication failures never inspect or log credential request bodies", () => {
+  const logs = [];
+  const requestContext = createRequestContext({
+    config: { TOKEN: "ui-token", PI_DIR: process.cwd(), DIRNAME: process.cwd() },
+    authFails: new Map(),
+  }, { logger: { log: (line) => logs.push(line) } });
+  const canary = "auth-body-canary";
+  const req = {
+    method: "POST",
+    headers: { authorization: "Bearer wrong", "user-agent": "test" },
+    socket: { remoteAddress: "192.0.2.8" },
+    body: JSON.stringify({ provider: "openai", key: canary, restart: true }),
+  };
+  assert.equal(requestContext.checkAuth(req, new URL("http://localhost/api-keys")), "fail");
+  assert.doesNotMatch(logs.join("\n"), new RegExp(canary));
 });
 
 test("credential routes return stable safe statuses for malformed bodies and service errors", async () => {

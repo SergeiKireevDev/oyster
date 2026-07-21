@@ -144,7 +144,7 @@ modal behavior remain keyboard- and mobile-accessible.
 - [x] Add tests that seed recognizable canary keys and assert they are absent
   from route responses, server events, runner state, application SQLite rows,
   logs captured through injected loggers, and built client assets.
-- [ ] Ensure request handling does not place keys in URLs and applies a small,
+- [x] Ensure request handling does not place keys in URLs and applies a small,
   documented JSON body limit suitable for provider credentials. Confirm auth
   failures and validation failures cannot echo request bodies.
 
