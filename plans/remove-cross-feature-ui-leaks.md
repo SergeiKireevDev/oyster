@@ -83,7 +83,7 @@ workflow and import no mutable `*Actions.js` bridge.
 - [x] Change `Composer.svelte` to invoke scoped composer actions, then delete
   `features/composer/composerActions.js` and its configuration call. Test text
   input, Enter, send, and abort routing after remount.
-- [ ] Register checkpoint-tree open and rollback operations from
+- [x] Register checkpoint-tree open and rollback operations from
   `createCheckpointAssembly()` with teardown-safe unregister functions.
 - [ ] Change `CheckpointTreeNode.svelte` to invoke scoped checkpoint actions,
   then delete `features/checkpoints/checkpointTreeActions.js` and its

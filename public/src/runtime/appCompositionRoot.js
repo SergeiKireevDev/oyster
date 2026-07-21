@@ -145,6 +145,7 @@ const renderTranscript = transcriptOperations.renderTranscript;
 // state the conversation reached at that point.
 
 const checkpointAssembly = createCheckpointAssembly({
+  uiActions,
   fetchImpl: fetch,
   tick,
   rpc,

@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createCheckpointAssembly } from "../public/src/features/checkpoints/createCheckpointAssembly.js";
 import { openCheckpointTreeSession } from "../public/src/features/checkpoints/checkpointTreeActions.js";
+import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
+import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "../public/src/runtime/uiActionNames.js";
 
-function dependencies(switches = []) {
+function dependencies(switches = [], uiActions = createUiActionRegistry()) {
   return {
+    uiActions,
     fetchImpl: async () => ({ ok: true, json: async () => ({}) }),
-    tick: async () => {}, rpc: async () => ({}), openModelPicker: async () => null, setModelOptions() {},
+    tick: async () => {}, rpc: async () => ({}), openModelPicker: async () => ({ cancelled: true }), setModelOptions() {},
     setTarget() {}, setRestores() {}, setTreeState() {}, setBusy() {}, setRestoreBusy() {},
     transcript: { chatElements: () => [], fetchSessionEntries: async () => [] },
     session: {
@@ -48,6 +51,21 @@ test("checkpoint assembly remounts marker tree and action registration ownership
   await openCheckpointTreeSession({ id: "other-2", path: "/two.jsonl", cwd: "/tmp" });
   assert.equal(secondSwitches.length, 1);
   second.teardown();
+});
+
+test("checkpoint assembly registers scoped tree actions until teardown", async () => {
+  const switches = [];
+  const uiActions = createUiActionRegistry();
+  const assembly = createCheckpointAssembly(dependencies(switches, uiActions));
+
+  await uiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, { id: "other", path: "/other.jsonl", cwd: "/tmp" });
+  assert.equal(switches.length, 1);
+  await uiActions.invoke(CHECKPOINT_TREE_ROLLBACK_ACTION, { hash: "abc", sessionId: "session" }, null);
+
+  assembly.teardown();
+  assert.equal(uiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, { id: "stale" }), undefined);
+  assert.equal(uiActions.invoke(CHECKPOINT_TREE_ROLLBACK_ACTION, { hash: "stale" }), undefined);
+  assert.equal(switches.length, 1);
 });
 
 test("checkpoint assembly receives session transcript fetch modal and toast interfaces", () => {

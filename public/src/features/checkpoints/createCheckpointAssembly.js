@@ -1,6 +1,7 @@
 import { openCheckpointModelPicker as openModelPicker } from "../../lib/checkpointActions.js";
 import { createCheckpointFeature } from "./checkpointFeature.js";
 import { configureCheckpointTreeActions } from "./checkpointTreeActions.js";
+import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "../../runtime/uiActionNames.js";
 
 /** Owns checkpoint model selection, marker, tree, freeze, rollback, and actions. */
 export function createCheckpointAssembly(deps) {
@@ -42,10 +43,13 @@ export function createCheckpointAssembly(deps) {
       toast: deps.toast,
     },
   });
-  const detachActions = configureCheckpointTreeActions({
-    openSession: (...args) => feature.tree.openTreeSession(...args),
-    rollback: (checkpoint, target) => feature.controller.rollback(checkpoint, target),
-  });
+  const openSession = (...args) => feature.tree.openTreeSession(...args);
+  const rollback = (checkpoint, target) => feature.controller.rollback(checkpoint, target);
+  const detachActions = configureCheckpointTreeActions({ openSession, rollback });
+  const detachUiActions = [
+    deps.uiActions.register(CHECKPOINT_TREE_OPEN_ACTION, openSession),
+    deps.uiActions.register(CHECKPOINT_TREE_ROLLBACK_ACTION, rollback),
+  ];
   const operations = Object.freeze({
       placeMarker: () => feature.marker.place(),
       refreshMarkers: () => feature.marker.refresh(),
@@ -58,6 +62,7 @@ export function createCheckpointAssembly(deps) {
     operations,
     teardown() {
       detachActions();
+      detachUiActions.splice(0).reverse().forEach((detach) => detach());
       feature.teardown?.();
     },
   };
