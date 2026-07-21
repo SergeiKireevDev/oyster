@@ -1,25 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Oyster Aperture logo</title>
+  <desc id="desc">A symmetrical technical oyster aperture in two greys with an accent pearl.</desc>
   <defs>
-    <linearGradient id="shell" x1="13" y1="10" x2="50" y2="55" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#D8DCFF"/>
-      <stop offset=".48" stop-color="#9DA9FF"/>
-      <stop offset="1" stop-color="#737FE0"/>
-    </linearGradient>
-    <radialGradient id="pearl" cx="0" cy="0" r="1" gradientTransform="translate(34 36) rotate(125) scale(11)">
-      <stop stop-color="#FFFFFF"/>
-      <stop offset=".45" stop-color="#E7E9FF"/>
-      <stop offset="1" stop-color="#9DA9FF"/>
-    </radialGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="2.3" result="blur"/>
-      <feFlood flood-color="#9DA9FF" flood-opacity=".72"/>
-      <feComposite in2="blur" operator="in"/>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <path id="cap" d="M32 3 7 16l13 8 12-5Z"/>
+    <path id="side" d="M7 16 3 34l13 2 4-12Z"/>
+    <path id="base" d="M3 34 8 49l19 9-11-22Z"/>
+    <path id="iris" d="m16 36 11 22 5-14V31Z"/>
   </defs>
-  <path d="M8.5 39.2C7.1 31 11.4 20.6 20 14.3 27.6 8.7 38.7 8.2 46.9 14c8.7 6.2 11.3 17.8 7.3 27.1-3.7 8.5-12.9 13.7-22.7 13.2-10.7-.5-21.2-5.2-23-15.1Z" fill="#10131E" stroke="url(#shell)" stroke-width="2.5" filter="url(#glow)"/>
-  <path d="M11.4 39.5 27.7 29M16.2 47.1l14.1-16.4M25.1 52.1l7.6-20.4M51.8 42.1 38.3 30M45.2 49.2l-9.7-17.8M18.1 18.3l12.7 10M28.4 12.3l4.2 15.4M43.1 15.2l-8.5 12.6M52 24.8l-16.1 4.3" stroke="url(#shell)" stroke-width="1.35" stroke-linecap="round" opacity=".72"/>
-  <path d="M14.2 40.1c6.1-6.7 11.9-10 18-10.1 6.9-.1 12.8 3.2 18.3 10.1-3 7.2-10.2 11.6-18.5 11.6-8.4 0-15.2-4.3-17.8-11.6Z" fill="#181C2D" stroke="url(#shell)" stroke-width="1.7"/>
-  <circle cx="33.5" cy="39.4" r="7.1" fill="url(#pearl)" stroke="#F6F7FF" stroke-width="1" filter="url(#glow)"/>
-  <circle cx="31.2" cy="37" r="1.8" fill="white" fill-opacity=".82"/>
+  <use href="#cap" fill="#C5C9CC"/><use href="#cap" transform="translate(64) scale(-1 1)" fill="#C5C9CC"/>
+  <use href="#side" fill="#555B61"/><use href="#side" transform="translate(64) scale(-1 1)" fill="#555B61"/>
+  <use href="#base" fill="#C5C9CC"/><use href="#base" transform="translate(64) scale(-1 1)" fill="#C5C9CC"/>
+  <use href="#iris" fill="#555B61"/><use href="#iris" transform="translate(64) scale(-1 1)" fill="#555B61"/>
+  <path fill="#9DA9FF" d="m32 28 9 8-3 12H26l-3-12Z"/>
 </svg>

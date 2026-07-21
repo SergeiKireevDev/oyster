@@ -46,7 +46,7 @@ explicitly. Provider-side revocation remains the user's responsibility.
 - Preserve active-runner identity, resumability, queued work policy, SSE
   continuity, and the existing watchdog/restart behavior.
 - Respect unrelated work already present in the worktree.
-- After every implementation step run:
+- Validate after every implementation step:
 
 ```sh
 npm test
@@ -56,7 +56,7 @@ Run the build and broader checks in the final step.
 
 ## 1. Add a pi Credential Adapter
 
-- [ ] Add a server-side credential service that locates the package entry next
+- [x] Add a server-side credential service that locates the package entry next
   to the real path of `PI_BIN`, dynamically imports that installed pi SDK, and
   constructs `AuthStorage` and `ModelRegistry` against
   `PI_AGENT_DIR/auth.json` and `PI_AGENT_DIR/models.json`. Fail with an
@@ -167,7 +167,7 @@ removes it from that file while preserving unrelated credentials.
 - [ ] Run the complete validation matrix and check this item only after all
   results pass:
 
-```sh
+```text
 npm run build
 npm test
 cd tests/e2e && npm test
