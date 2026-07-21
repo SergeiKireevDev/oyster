@@ -27,7 +27,7 @@ import { setCommandPaletteState, closeCommandPaletteState } from "../stores/comm
 import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
 import { filePicker, updateFilePicker } from "../stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
-import { setComposerTextValue } from "../stores/composer.js";
+import { setComposerTextValue, setComposerVoiceState } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
@@ -102,6 +102,14 @@ const composerAssembly = createComposerAssembly({
   uiActions,
   findElement: $,
   setTextValue: setComposerTextValue,
+  setVoiceState: setComposerVoiceState,
+  SpeechRecognition: window.SpeechRecognition ?? window.webkitSpeechRecognition,
+  voiceLanguage: window.navigator.language,
+  useLocalWhisper: !!window.navigator.brave || !(window.SpeechRecognition ?? window.webkitSpeechRecognition),
+  mediaDevices: window.navigator.mediaDevices,
+  MediaRecorder: window.MediaRecorder,
+  AudioContext: window.AudioContext ?? window.webkitAudioContext,
+  createWhisperWorker: () => new Worker(new URL("../workers/whisper.worker.js", import.meta.url), { type: "module" }),
   setBusy: (value) => setBusy(value),
   getBusy: () => getBusy(),
   composerReadyForSend: () => composerReadyForSend(),

@@ -127,7 +127,10 @@ function runScript(state, definition, mode) {
     const match = line.match(PROGRESS_RE);
     if (match) {
       const current = repository.findRun(run.id);
-      const progress = match[1] === undefined ? current?.progress ?? null : Math.min(100, Number(match[1]));
+      const requested = match[1] === undefined ? current?.progress ?? null : Math.min(100, Number(match[1]));
+      const progress = requested === null || current?.progress === null || current?.progress === undefined
+        ? requested
+        : Math.max(current.progress, requested);
       const message = match[2] || current?.message || null;
       repository.updateProgress(run.id, progress, message);
       emit(state, definition, "progress");
@@ -314,7 +317,10 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
     "Use the routine tool with action=create and session_id exactly as supplied.",
     "Write the complete self-contained script yourself. It MUST handle both run and teardown,",
     "teardown MUST remove every byproduct made by run, it must not require interactive input,",
-    "and it should emit useful ::progress <0-100> <message> milestones.",
+    "Plan explicit weighted steps for both modes and emit monotonic ::progress <0-100> <message> lines",
+    "at startup, before and after every meaningful step, and at 100% only after success.",
+    "For long-running steps, relay native done/total counts, subdivide or poll when possible,",
+    "or emit a newline-flushed heartbeat at least every 30 seconds so progression never stalls.",
     "Do not merely write a file and do not start the routine. Choose a concise .sh name.",
     `Target session_id: ${sessionId}`,
     `User request: ${text}`,

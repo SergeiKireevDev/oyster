@@ -58,6 +58,15 @@ async function api(method: string, path: string, body?: unknown) {
   return data as any;
 }
 
+function progressionWarnings(script: string): string[] {
+  const warnings: string[] = [];
+  const markers = script.match(/::progress\b/g)?.length ?? 0;
+  if (markers < 3) warnings.push("fewer than three explicit progress updates");
+  if (!/::progress\s+(?:0|[1-9])%?(?:\s|[\"'])/.test(script)) warnings.push("no explicit starting progress update");
+  if (!/::progress\s+100%?(?:\s|[\"'])/.test(script)) warnings.push("no explicit 100% completion update");
+  return warnings;
+}
+
 function describe(r: any): string {
   const bits = [`status=${r.status}`];
   if (r.progress !== null && r.progress !== undefined) bits.push(`progress=${r.progress}%`);
@@ -77,7 +86,9 @@ export default function routineExtension(pi: ExtensionAPI) {
       "'create a routine' for some task, use action=create with a `script` implementing the " +
       "protocol: the script receives one argument, `run` (do the job) or `teardown` (remove " +
       "EVERY byproduct the run created), and reports progression by printing " +
-      "'::progress <0-100> <message>' lines to stdout. Both modes execute with cwd = this " +
+      "'::progress <0-100> <message>' lines to stdout. Progress MUST be monotonic and should " +
+      "be emitted at startup, before and after every meaningful step, periodically during " +
+      "long-running steps, and at 100% on success. Both modes execute with cwd = this " +
       "session's workdir. Actions: 'create' stores the script and binds it to this " +
       "session; 'start' runs it; 'stop' kills it (SIGTERM/SIGKILL to its process group); " +
       "'teardown' removes its byproducts; 'status' reports live state, progress and recent " +
@@ -90,8 +101,14 @@ export default function routineExtension(pi: ExtensionAPI) {
         "user asks for one, write the script yourself and register it with routine action=create " +
         "— do not just drop a file in the project.",
       "Routine scripts MUST handle both arguments: `run` and `teardown` (teardown removes every " +
-        "byproduct run created), SHOULD print '::progress <0-100> <message>' milestones on " +
-        "stdout, and must be self-contained (shebang, set -u, no interactive input).",
+        "byproduct run created), and must be self-contained (shebang, set -u, no interactive input).",
+      "Design progression before writing the script: divide run and teardown into explicit, " +
+        "weighted steps; emit monotonic '::progress <0-100> <message>' updates at startup, " +
+        "before and after every meaningful step, and at 100% only after successful completion.",
+      "A long-running step MUST attempt live progress instead of leaving the UI stalled: relay " +
+        "native done/total counts when available, subdivide or poll the operation otherwise, " +
+        "and emit a heartbeat message at least every 30 seconds when no measurable count exists. " +
+        "Progress output must be newline-terminated and flushed promptly.",
       "Prefer routine action=start over running such scripts manually, so the user sees live " +
         "progression in the UI and can stop/teardown from there.",
     ],
@@ -106,7 +123,8 @@ export default function routineExtension(pi: ExtensionAPI) {
         Type.String({
           description:
             "For 'create': full script content, starting with a shebang, handling the `run` and " +
-            "`teardown` arguments and printing '::progress <0-100> <message>' lines while running",
+            "`teardown` arguments and printing monotonic '::progress <0-100> <message>' lines " +
+            "at startup, around every meaningful step, during long operations, and at completion",
         }),
       ),
       session_id: Type.Optional(
@@ -149,6 +167,7 @@ export default function routineExtension(pi: ExtensionAPI) {
 
       if (action === "create" && !params.script) throw new Error("'create' requires a script");
 
+      const progressionNotes = action === "create" ? progressionWarnings(params.script as string) : [];
       const { routine } = await api("POST", "/routines", {
         name,
         action,
@@ -160,7 +179,8 @@ export default function routineExtension(pi: ExtensionAPI) {
         create:
           `Routine "${routine.name}" registered as ${routine.path} and bound to this session ` +
           `(runs in ${routine.cwd ?? "the session workdir"}). It appears in the UI sidebar; ` +
-          `start it with routine action=start.`,
+          `start it with routine action=start.` +
+          (progressionNotes.length ? ` Progression warning: ${progressionNotes.join("; ")}.` : " Progression contract detected."),
         start:
           `Routine "${routine.name}" started (cwd ${routine.cwd ?? "?"}). Progression from its ` +
           `'::progress' lines streams live to the UI; check on it with routine action=status.`,
@@ -170,7 +190,7 @@ export default function routineExtension(pi: ExtensionAPI) {
         delete: `Routine "${routine.name}" deleted from the store (its byproducts were NOT touched).`,
       }[action];
 
-      return { content: [{ type: "text", text }], details: routine };
+      return { content: [{ type: "text", text }], details: { ...routine, progressionWarnings: progressionNotes } };
     },
   });
 }

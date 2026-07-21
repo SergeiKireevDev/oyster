@@ -34,6 +34,7 @@ export const COMPOSER_INPUT_ACTION = "composer.input";
 export const COMPOSER_KEYDOWN_ACTION = "composer.keydown";
 export const COMPOSER_SEND_ACTION = "composer.send";
 export const COMPOSER_ABORT_ACTION = "composer.abort";
+export const COMPOSER_VOICE_ACTION = "composer.voice";
 
 export const CHECKPOINT_TREE_OPEN_ACTION = "checkpointTree.open";
 export const CHECKPOINT_TREE_ROLLBACK_ACTION = "checkpointTree.rollback";

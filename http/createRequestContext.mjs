@@ -19,6 +19,7 @@ const MIME_TYPES = new Map([
   [".gif", "image/gif"],
   [".webp", "image/webp"],
   [".ico", "image/x-icon"],
+  [".wasm", "application/wasm"],
 ]);
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);

@@ -7,6 +7,7 @@
   let {
     target = null,
     copyText = "",
+    copy = false,
     onPermalink = () => {},
     onCopy = () => {},
     onCheckpoint = () => {},
@@ -18,7 +19,7 @@
 </script>
 
 <PermalinkButton {target} {onPermalink} />
-{#if copyText}
+{#if copy}
   <CopyMessageButton text={copyText} {onCopy} />
 {/if}
 {#if checkpoint}

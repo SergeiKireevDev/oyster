@@ -14,6 +14,12 @@
   const interfaceBody = $derived(iface ? text.slice(iface[0].length) : "");
   const restore = $derived($checkpointRestores.find((item) => item.target === root));
   $effect(() => { if (root) onRoot(root); });
+
+  function selectOnFirstTouch(event) {
+    if (event.pointerType !== "touch" || event.currentTarget.matches(":focus-within")) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+  }
 </script>
 
 {#if iface}
@@ -28,7 +34,7 @@
     {/if}
   </details>
 {:else}
-  <div class="msg user" class:ckpt-frozen={!!restore} data-role="user" bind:this={root}>
+  <div class="msg user" class:ckpt-frozen={!!restore} data-role="user" tabindex="-1" onpointerdowncapture={selectOnFirstTouch} bind:this={root}>
     {text}<PermalinkButton target={root} {onPermalink} />
     <CopyMessageButton {text} {onCopy} />
     {#if $checkpointMarker.target === root}

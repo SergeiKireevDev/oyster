@@ -605,6 +605,7 @@
       box-shadow: 8px 0 30px rgba(0,0,0,.5);
       border-right: 1px solid var(--border);
       touch-action: pan-x pan-y;
+      animation: sessions-slide-in 120ms cubic-bezier(.2,.8,.2,1);
     }
     #sessions .session-sidebar-action {
       width: 40px;
@@ -623,6 +624,18 @@
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
       border-left: 1px solid var(--border);
       touch-action: pan-x pan-y;
+      animation: hublots-slide-in 120ms cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes sessions-slide-in {
+      from { opacity: .92; transform: translateX(-14px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes hublots-slide-in {
+      from { opacity: .92; transform: translateX(14px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #sessions.open, #hublots.open { animation: none; }
     }
     /* ---------- thin mobile carousel position indicator ---------- */
     #carouselIndicator {
@@ -665,10 +678,14 @@
     padding: 16px 12px 8px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 4px;
   }
   .msg { min-width: 0; position: relative; }
-  .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .assistant-part[data-assistant-part="thinking"] + .assistant-part[data-assistant-part="toolCall"],
+  .assistant-part[data-assistant-part="thinking"] + .assistant-part[data-assistant-part="toolGroup"] { margin-top: 2px; }
+  #messages > [data-role="user"] + .assistant-entry,
+  #messages > .assistant-entry + [data-role="user"] { margin-top: 2px; }
   /* message actions — revealed on hover; copy text or a shareable permalink */
   .permalink, .message-copy {
     position: absolute;
@@ -683,16 +700,23 @@
     cursor: pointer;
     user-select: none;
     opacity: 0;
+    pointer-events: none;
     transition: opacity .15s;
     z-index: 2;
   }
-  .msg:hover > .permalink, .msg:hover > .message-copy { opacity: .85; }
+  .msg:hover > .permalink, .msg:hover > .message-copy { opacity: .85; pointer-events: auto; }
   .permalink:hover, .message-copy:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1 !important; }
   .msg.user > .permalink { left: -34px; }
   .msg.user > .message-copy { left: -62px; }
   .msg.assistant > .permalink { right: 0; top: -8px; }
   .msg.assistant > .message-copy { right: 28px; top: -8px; }
-  @media (hover: none) { .msg > .permalink, .msg > .message-copy { opacity: .35; } }
+  .msg[tabindex]:focus { outline: none; }
+  .msg[tabindex]:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+  @media (hover: none) {
+    .msg:hover > .permalink, .msg:hover > .message-copy { opacity: 0; pointer-events: none; }
+    .msg:focus-within > .permalink, .msg:focus-within > .message-copy { opacity: .85; pointer-events: auto; }
+    .msg:focus-within { outline: 1px solid var(--accent-dim); outline-offset: 3px; }
+  }
   /* checkpoint button — iceberg on the latest message; commits workdir changes */
   .checkpoint {
     position: absolute;
@@ -942,6 +966,29 @@
   }
   .btn:disabled { opacity: .45; cursor: default; }
   .btn.stop { background: var(--red); }
+  .voice-btn {
+    width: 40px;
+    height: 40px;
+    padding: 9px;
+    flex: none;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .voice-btn svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+  .voice-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+  .voice-btn.recording { color: #ff8ba0; background: rgba(255,125,145,.14); animation: voice-pulse 1.4s ease-in-out infinite; }
+  .voice-waveform { height: 20px; display: flex; align-items: center; justify-content: center; gap: 2px; }
+  .voice-waveform i { width: 3px; height: 5px; border-radius: 2px; background: currentColor; animation: voice-wave .72s ease-in-out infinite alternate; }
+  .voice-waveform i:nth-child(2), .voice-waveform i:nth-child(4) { animation-delay: -.24s; }
+  .voice-waveform i:nth-child(3) { animation-delay: -.48s; }
+  .voice-btn.transcribing { cursor: wait; color: var(--accent); background: rgba(157,169,255,.12); animation: none; }
+  .voice-loading { width: 18px; height: 18px; display: block; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: voice-spin .8s linear infinite; }
+  @keyframes voice-spin { to { transform: rotate(360deg); } }
+  @keyframes voice-pulse { 50% { box-shadow: 0 0 0 5px rgba(255,125,145,.08); } }
+  @keyframes voice-wave { from { height: 5px; } to { height: 19px; } }
   #statusbar {
     max-width: 860px;
     margin: 4px auto 0;
@@ -1628,7 +1675,7 @@ header .dot { width: 7px; height: 7px; margin-left: -5px; box-shadow: 0 0 0 4px 
 
 /* Transcript: quiet canvas with readable rhythm */
 #scroller { background: radial-gradient(circle at 50% 0, rgba(132,145,255,.035), transparent 34%); }
-#messages { max-width: 920px; padding: 22px 32px 16px; gap: 14px; }
+#messages { max-width: 920px; padding: 22px 32px 16px; gap: 4px; }
 .msg.user {
   max-width: min(78%, 680px);
   padding: 8px 13px;
@@ -1646,7 +1693,7 @@ header .dot { width: 7px; height: 7px; margin-left: -5px; box-shadow: 0 0 0 4px 
 .md h1, .md h2, .md h3, .md h4 { color: #f5f6fa; letter-spacing: -.025em; }
 .md code { border-color: rgba(255,255,255,.08); border-radius: 5px; background: #181c25; color: #d8dcff; }
 .md pre { padding: 10px 13px; border-color: rgba(255,255,255,.075); border-radius: 10px; background: #12151c; box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
-details.block { margin: 3px 0; border-color: rgba(255,255,255,.075); border-radius: 9px; background: rgba(24,28,37,.72); }
+details.block { margin: 0; border-color: rgba(255,255,255,.075); border-radius: 9px; background: rgba(24,28,37,.72); }
 details.block > summary { min-height: 32px; padding: 5px 11px; font-size: 11.5px; }
 details.block > .body { padding: 7px 11px 8px; }
 details.block > summary::before { content: "›"; color: #656e82; font-size: 16px; }
@@ -1685,7 +1732,7 @@ details.thinking[open] .thinking-preview { display: none; }
 .tool-group-status.error { color: var(--red); }
 .tool-group-body {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   padding: 5px;
   border-top: 1px solid var(--border);
   background: rgba(8,10,14,.22);
@@ -1722,6 +1769,7 @@ details.thinking[open] .thinking-preview { display: none; }
 .btn { min-height: 40px; padding: 8px 17px; border-radius: 11px; background: linear-gradient(145deg, #b0b9ff, #8f9cf3); box-shadow: 0 5px 16px rgba(106,120,225,.2); color: #10131e; font-size: 13px; transition: transform .15s, filter .15s; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .btn.stop { background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
+.voice-btn { transition: color .15s, background .15s, box-shadow .15s; }
 #statusbar { max-width: 900px; margin-top: 7px; padding: 0 5px; gap: 9px; font-size: 10px; }
 #statusbar span + span::before { content: "·"; margin-right: 9px; color: #4e5668; }
 
@@ -1772,6 +1820,8 @@ details.thinking[open] .thinking-preview { display: none; }
   header .title { margin: 0; max-width: 32vw; font-size: 14px; }
   header .dot { margin-left: -3px; }
   .chip { min-height: 30px; padding-inline: 9px; }
+  #cfgChip { font-size: 11px; }
+  #menuBtn::before { font-size: 12px; letter-spacing: 1.5px; }
   #treeChip { display: none; }
   #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
   #sessions .session-sidebar-lifecycle {
@@ -1779,7 +1829,7 @@ details.thinking[open] .thinking-preview { display: none; }
     height: 40px;
     margin-right: 3px;
   }
-  #messages { padding: 17px 16px 12px; gap: 12px; }
+  #messages { padding: 17px 16px 12px; gap: 4px; }
   .msg.user { max-width: 88%; padding: 8px 12px; }
   .msg.assistant { font-size: 13.75px; line-height: 1.52; }
   #composer { padding: 8px 10px calc(11px + env(safe-area-inset-bottom)); }

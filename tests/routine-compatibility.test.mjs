@@ -32,7 +32,8 @@ function owner(store, sessionId) {
 const SCRIPT = `#!/bin/sh
 case "$1" in
   run)
-    echo "::progress 40 working"
+    echo "::progress 60 working"
+    echo "::progress 40 regressing update"
     echo "ordinary output"
     ;;
   teardown)
@@ -75,9 +76,11 @@ test("SQLite-backed routines preserve payloads, SSE lifecycle, and session bindi
   assert.equal(afterRun.sessionId, "session-b");
   assert.equal(afterRun.status, "done");
   assert.equal(afterRun.progress, 100);
-  assert.equal(afterRun.message, "working");
+  assert.equal(afterRun.message, "regressing update");
   assert.deepEqual(afterRun.log, ["ordinary output"]);
-  assert.deepEqual(events.filter((event) => ["started", "progress", "output", "finished"].includes(event.reason)).map((event) => event.reason), ["started", "progress", "output", "finished"]);
+  const lifecycle = events.filter((event) => ["started", "progress", "output", "finished"].includes(event.reason));
+  assert.deepEqual(lifecycle.map((event) => event.reason), ["started", "progress", "progress", "output", "finished"]);
+  assert.deepEqual(lifecycle.filter((event) => event.reason === "progress").map((event) => event.routine.progress), [60, 60]);
   assert.ok(events.filter((event) => event.type === "routine_update").every((event) => !Object.hasOwn(event.routine, "proc") && typeof event.routine.alive === "boolean"));
 
   const tornDown = waitFor("teardown_finished");

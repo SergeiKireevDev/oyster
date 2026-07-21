@@ -13,6 +13,12 @@
   const restore = $derived($checkpointRestores.find((item) => item.target === root));
   $effect(() => { if (root) onRoot(root); });
 
+  function selectOnFirstTouch(event) {
+    if (event.pointerType !== "touch" || event.currentTarget.matches(":focus-within")) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+  }
+
   function thinkingPreview(text, maxLength = 110) {
     const compact = String(text ?? "").replace(/\s+/g, " ").trim();
     if (compact.length <= maxLength) return compact;
@@ -46,7 +52,7 @@
 
 <div class="assistant-entry" data-role={role} bind:this={root}>
   {#each displayBlocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
-    <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type}>
+    <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {#if block.type === "text"}
         <div class="md">{@html block.html}</div>
       {:else if block.type === "thinking"}
@@ -67,6 +73,7 @@
       <AssistantPartActions
         target={root}
         copyText={block.type === "text" ? block.text : ""}
+        copy={block.type === "text"}
         {onPermalink}
         {onCopy}
         {onCheckpoint}
@@ -78,7 +85,7 @@
     </div>
   {/each}
   {#if data.errorMessage}
-    <div class="msg assistant assistant-part error-msg" class:ckpt-frozen={!!restore} data-assistant-part="error">
+    <div class="msg assistant assistant-part error-msg" class:ckpt-frozen={!!restore} data-assistant-part="error" tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {data.errorMessage}
       {#if displayBlocks.length === 0}
         <AssistantPartActions

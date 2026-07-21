@@ -2,6 +2,7 @@ import { derived, writable } from "svelte/store";
 import { appSession } from "./appSession.js";
 
 export const composerText = writable("");
+export const composerVoice = writable({ available: false, listening: false, speaking: false, transcribing: false, status: "", local: false });
 
 export function composerUiState(session, text) {
   const busy = !!session.busy;
@@ -37,4 +38,15 @@ export const composerUi = derived([appSession, composerText], ([$appSession, $co
 
 export function setComposerTextValue(text) {
   composerText.set(text ?? "");
+}
+
+export function setComposerVoiceState(state) {
+  composerVoice.set({
+    available: !!state?.available,
+    listening: !!state?.listening,
+    speaking: !!state?.speaking,
+    transcribing: !!state?.transcribing,
+    status: String(state?.status ?? ""),
+    local: !!state?.local,
+  });
 }

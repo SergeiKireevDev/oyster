@@ -4,6 +4,8 @@ import { createComposerHistoryController } from "../../lib/composerHistoryContro
 import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
+import { createVoiceInputController } from "../../lib/voiceInputController.js";
+import { createLocalWhisperInputController } from "../../lib/localWhisperInputController.js";
 import {
   ANALYTICS_LOAD_ACTION,
   COMMAND_PALETTE_RUN_ACTION,
@@ -11,6 +13,7 @@ import {
   COMPOSER_INPUT_ACTION,
   COMPOSER_KEYDOWN_ACTION,
   COMPOSER_SEND_ACTION,
+  COMPOSER_VOICE_ACTION,
   MENU_ACTION,
 } from "../../runtime/uiActionNames.js";
 
@@ -59,6 +62,26 @@ export function createComposerAssembly(deps) {
     input.dispatchEvent(new Event("input"));
     input.focus();
   }
+
+  const voiceCallbacks = {
+    getDraft: () => input.value,
+    setDraft: setText,
+    onStateChange: (state) => deps.setVoiceState?.(state),
+    onError: (message) => deps.toast(message, "error"),
+  };
+  const voice = deps.useLocalWhisper
+    ? createLocalWhisperInputController({
+        ...voiceCallbacks,
+        mediaDevices: deps.mediaDevices,
+        MediaRecorder: deps.MediaRecorder,
+        AudioContext: deps.AudioContext,
+        createWorker: deps.createWhisperWorker,
+      })
+    : createVoiceInputController({
+        ...voiceCallbacks,
+        SpeechRecognition: deps.SpeechRecognition,
+        language: deps.voiceLanguage,
+      });
 
   const promptRpcCommand = (text) => promptCommand(text, deps.getBusy());
 
@@ -109,6 +132,7 @@ export function createComposerAssembly(deps) {
     deps.uiActions.register(COMPOSER_KEYDOWN_ACTION, keydown),
     deps.uiActions.register(COMPOSER_SEND_ACTION, send),
     deps.uiActions.register(COMPOSER_ABORT_ACTION, abort),
+    deps.uiActions.register(COMPOSER_VOICE_ACTION, voice.toggle),
   ];
 
   function configureCommands(commandDeps) {
@@ -320,6 +344,8 @@ export function createComposerAssembly(deps) {
     teardown() {
       commandRuntime?.teardown();
       detachUiActions.splice(0).reverse().forEach((detach) => detach());
+      voice.teardown();
+      deps.setVoiceState?.({ available: false, listening: false, speaking: false });
       history.clear();
     },
   };
