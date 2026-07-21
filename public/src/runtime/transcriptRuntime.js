@@ -219,6 +219,49 @@ export function createAssistantStream({ mount, update, finish }) {
   };
 }
 
+/** Route transcript streaming events through injected item and scroll adapters. */
+export function createTranscriptStreamEventHandler({
+  assistantStream, userMessageText, consumeLocalEcho, addUserMessage, updateUsage,
+  finishToolCard, startToolCard, updateToolCard, toolResultText, scrollToBottom,
+}) {
+  return (message) => {
+    const transcript = message.message;
+    switch (message.type) {
+      case "message_start":
+        if (transcript.role === "assistant") {
+          assistantStream.start(transcript);
+          scrollToBottom(true);
+        } else if (transcript.role === "user" && !consumeLocalEcho(userMessageText(transcript))) addUserMessage(transcript);
+        return true;
+      case "message_update":
+        if (transcript.role === "assistant") {
+          assistantStream.update(transcript);
+          scrollToBottom(false);
+        }
+        return true;
+      case "message_end":
+        if (transcript.role === "assistant") {
+          assistantStream.end(transcript);
+          updateUsage(transcript);
+        } else if (transcript.role === "toolResult") finishToolCard(transcript.toolCallId, transcript, transcript.isError);
+        scrollToBottom(false);
+        return true;
+      case "tool_execution_start":
+        startToolCard(message.toolCallId);
+        return true;
+      case "tool_execution_update":
+        updateToolCard(message.toolCallId, message.partialResult);
+        return true;
+      case "tool_execution_end":
+        finishToolCard(message.toolCallId, typeof message.result === "string" ? message.result : toolResultText(message.result) || JSON.stringify(message.result, null, 2), message.isError);
+        scrollToBottom(false);
+        return true;
+      default:
+        return false;
+    }
+  };
+}
+
 export function createRenderJobs() {
   let current = 0;
   return {

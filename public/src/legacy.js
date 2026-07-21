@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
@@ -233,6 +233,23 @@ const rememberPrompt = (text) => composerHistory.remember(text);
 // Texts we already rendered locally on send; pi echoes each prompt back as a
 // user message_start, which must not be rendered a second time.
 const localEchoes = [];
+const handleTranscriptStreamEvent = createTranscriptStreamEventHandler({
+  assistantStream,
+  userMessageText,
+  consumeLocalEcho: (text) => {
+    const index = localEchoes.indexOf(text);
+    if (index === -1) return false;
+    localEchoes.splice(index, 1);
+    return true;
+  },
+  addUserMessage,
+  updateUsage: (message) => updateUsage(message),
+  finishToolCard,
+  startToolCard: (id) => toolCards.start(id),
+  updateToolCard: (id, result) => toolCards.updateResult(id, result),
+  toolResultText,
+  scrollToBottom,
+});
 
 // ------------------------------------------------------------ checkpoints
 //
@@ -654,55 +671,13 @@ function handleEvent(msg) {
       schedulePostAgentTranscriptSync();
       return;
 
-    case "message_start": {
-      const m = msg.message;
-      if (m.role === "assistant") {
-        assistantStream.start(m);
-        scrollToBottom(true);
-      } else if (m.role === "user") {
-        const idx = localEchoes.indexOf(userMessageText(m));
-        if (idx !== -1) localEchoes.splice(idx, 1); // already rendered on send
-        else addUserMessage(m);
-      }
-      return;
-    }
-
-    case "message_update": {
-      const m = msg.message;
-      if (m.role === "assistant") {
-        assistantStream.update(m);
-        scrollToBottom(false);
-      }
-      return;
-    }
-
-    case "message_end": {
-      const m = msg.message;
-      if (m.role === "assistant") {
-        assistantStream.end(m);
-        updateUsage(m);
-      } else if (m.role === "toolResult") {
-        finishToolCard(m.toolCallId, m, m.isError);
-      }
-      scrollToBottom(false);
-      return;
-    }
-
+    case "message_start":
+    case "message_update":
+    case "message_end":
     case "tool_execution_start":
-      toolCards.start(msg.toolCallId);
-      return;
-
     case "tool_execution_update":
-      toolCards.updateResult(msg.toolCallId, msg.partialResult);
-      return;
-
     case "tool_execution_end":
-      finishToolCard(
-        msg.toolCallId,
-        typeof msg.result === "string" ? msg.result : toolResultText(msg.result) || JSON.stringify(msg.result, null, 2),
-        msg.isError
-      );
-      scrollToBottom(false);
+      handleTranscriptStreamEvent(msg);
       return;
 
     case "extension_ui_request":

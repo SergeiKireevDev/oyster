@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -135,6 +135,25 @@ test("assistant stream mounts, updates, and finishes a streamed assistant", () =
   stream.end({ id: "b", text: "replayed" });
   assert.equal(stream.live, null);
   assert.deepEqual(calls.map(([name]) => name), ["mount", "update", "update", "finish"]);
+});
+
+test("transcript stream handler assembles assistants, tools, and local user echoes", () => {
+  const calls = []; let local = true;
+  const handler = createTranscriptStreamEventHandler({
+    assistantStream: { start: (message) => calls.push(["start", message]), update: (message) => calls.push(["update", message]), end: (message) => calls.push(["end", message]) },
+    userMessageText: (message) => message.text,
+    consumeLocalEcho: () => { const matched = local; local = false; return matched; },
+    addUserMessage: (message) => calls.push(["user", message]), updateUsage: (message) => calls.push(["usage", message]),
+    finishToolCard: (...args) => calls.push(["finish", ...args]), startToolCard: (id) => calls.push(["tool-start", id]), updateToolCard: (...args) => calls.push(["tool-update", ...args]),
+    toolResultText: (result) => result?.text, scrollToBottom: (force) => calls.push(["scroll", force]),
+  });
+  handler({ type: "message_start", message: { role: "user", text: "echo" } });
+  handler({ type: "message_start", message: { role: "user", text: "remote" } });
+  handler({ type: "message_update", message: { role: "assistant", text: "partial" } });
+  handler({ type: "message_end", message: { role: "assistant", text: "done" } });
+  handler({ type: "tool_execution_end", toolCallId: "tool", result: { text: "result" }, isError: false });
+  assert.deepEqual(calls.map(([name]) => name), ["user", "update", "scroll", "end", "usage", "scroll", "finish", "scroll"]);
+  assert.equal(calls[6][2], "result");
 });
 
 test("scroll adapter preserves reading position unless pinned or forced", () => {
