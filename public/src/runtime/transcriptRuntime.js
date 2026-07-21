@@ -35,6 +35,11 @@ export async function reconcileTranscriptReload({ messages, render, setReplaying
 }
 
 /** Delay canonical sync until the selected runner is ready, retrying through replay. */
+/** A composer can send once transport is connected and replay is no longer gated. */
+export function isComposerReadyForSend({ connected, replaying, transcriptGateRequired }) {
+  return connected && (!replaying || !transcriptGateRequired);
+}
+
 export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout }) {
   const schedule = (label, delay = 250) => setTimeoutImpl(() => {
     if (isReplaying() || !hasRunner()) return schedule(label, 500);

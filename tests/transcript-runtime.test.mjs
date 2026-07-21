@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, filterReplayEvents, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -21,6 +21,12 @@ test("transcript sync scheduler retries during replay before reloading", async (
   timers.shift()[0]();
   await Promise.resolve();
   assert.equal(reloads, 1);
+});
+
+test("composer readiness preserves transcript replay gating", () => {
+  assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: true }), false);
+  assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: false }), true);
+  assert.equal(isComposerReadyForSend({ connected: false, replaying: false, transcriptGateRequired: false }), false);
 });
 
 test("transcript snippet focus reveals matching nested details", () => {
