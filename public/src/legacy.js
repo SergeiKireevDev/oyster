@@ -17,6 +17,7 @@ import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependen
 import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
 import { createExtensionUiAdapters } from "./runtime/extensionUiAdapters.js";
+import { createLegacyRuntimeEventAdapters } from "./runtime/legacyRuntimeEventAdapters.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1787,34 +1788,22 @@ const runtimeTeardown = createRuntimeTeardown([
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
 
-let runtimeEventAdaptersAttached = false;
-function attachRuntimeEventAdapters() {
-  if (runtimeEventAdaptersAttached) return;
-  runtimeEventAdaptersAttached = true;
-  checkpointTreeEventController.attach();
-  composerEventController.attach();
-  commandPaletteRunController.attach();
-  commandPaletteKeyboardController.attach();
-  menuEventController.attach();
-  filePickerEventController.attach();
-  folderBrowserEventController.attach();
-  fileExplorerEventController.attach();
-  managedHublotEventController.attach();
-  hublotSidebarEventController.attach();
-  mobileDrawerDismissController.attach();
-  openFileExplorerEventController.attach();
-  routineEventController.attach();
-  sessionPickerEventController.attach();
-  settingsChangeController.attach();
-  headerEventController.attach();
-  carouselEventRegistration.attach();
-  carouselController.apply();
-}
+const runtimeEventAdapters = createLegacyRuntimeEventAdapters({
+  attachers: [
+    checkpointTreeEventController, composerEventController, commandPaletteRunController,
+    commandPaletteKeyboardController, menuEventController, filePickerEventController,
+    folderBrowserEventController, fileExplorerEventController, managedHublotEventController,
+    hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
+    routineEventController, sessionPickerEventController, settingsChangeController,
+    headerEventController, carouselEventRegistration,
+  ],
+  applyCarousel: () => carouselController.apply(),
+});
 
 export function createLegacyRuntimeLifecycleDependencies() {
   return createLegacyRuntimeDependencies({
     attachAuthenticatedFetch,
-    attachEventAdapters: attachRuntimeEventAdapters,
+    attachEventAdapters: runtimeEventAdapters.attach,
     attachDebugHooks,
     start: runtimeStarter,
     teardown: runtimeTeardown,
