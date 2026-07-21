@@ -9,6 +9,12 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerOpenFileExplorerEvent(target, { open }) {
+  const onOpen = () => open();
+  target.addEventListener("pi-open-file-explorer", onOpen);
+  return () => target.removeEventListener("pi-open-file-explorer", onOpen);
+}
+
 export function registerManagedHublotEvents(target, { create, openCommandPalette, toggleScope }) {
   const listeners = [
     ["pi-managed-hublot-create", (event) => create(event.detail)],
