@@ -4,6 +4,7 @@
  * existing startup behavior.
  */
 export async function startAppRuntime() {
-  const { startLegacyRuntime } = await import("../legacy.js");
+  const { startLegacyRuntime, teardownLegacyRuntime } = await import("../legacy.js");
   startLegacyRuntime();
+  return teardownLegacyRuntime;
 }

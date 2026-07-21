@@ -28,9 +28,11 @@ test("Svelte entry module is wired from index.html", () => {
 });
 
 test("app runtime explicitly starts the deferred legacy bootstrap", () => {
-  assert.match(appRuntime, /const \{ startLegacyRuntime \} = await import\("\.\.\/legacy\.js"\);/);
+  assert.match(appRuntime, /const \{ startLegacyRuntime(?:, teardownLegacyRuntime)? \} = await import\("\.\.\/legacy\.js"\);/);
   assert.match(appRuntime, /startLegacyRuntime\(\);/);
+  assert.match(appRuntime, /return teardownLegacyRuntime;/);
   assert.match(js, /export function startLegacyRuntime\(\)/);
+  assert.match(js, /export function teardownLegacyRuntime\(\)/);
   assert.doesNotMatch(js, /if \(!token\) requireToken\(\);\nelse boot\(\);/);
 });
 

@@ -8,7 +8,16 @@
   import { startAppRuntime } from "./runtime/appRuntime.js";
 
   onMount(() => {
-    startAppRuntime();
+    let teardown;
+    let disposed = false;
+    startAppRuntime().then((dispose) => {
+      if (disposed) dispose();
+      else teardown = dispose;
+    });
+    return () => {
+      disposed = true;
+      teardown?.();
+    };
   });
 </script>
 

@@ -2145,3 +2145,11 @@ export function startLegacyRuntime() {
   if (!token) requireToken();
   else boot();
 }
+
+/** Release runtime-owned long-lived transport resources on app unmount. */
+export function teardownLegacyRuntime() {
+  eventStream.close();
+  es = null;
+  teardownReconnectWatchdog();
+  connectionState.lost();
+}
