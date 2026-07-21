@@ -363,6 +363,9 @@
     word-break: break-all;
   }
   #modal .m-option.dir { padding: 6px 12px; margin-bottom: 4px; }
+  #modal .newdir-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  #modal .newdir-row input { flex: 1; min-width: 0; }
+  #modal .newdir-row .btn { padding: 6px 12px; }
   #modal .m-option.dir::before { content: "📁 "; }
   #modal .m-option.up::before { content: "⬆️ "; }
   #modal .m-option.homeDir::before { content: "🏠 "; }
@@ -1109,6 +1112,20 @@ function handleEvent(msg) {
     case "pi_error":
       toast(`pi spawn error: ${msg.error}`, "error");
       return;
+
+    case "ui_reload":
+      // the page on disk changed; refresh when it won't interrupt anything
+      if (!busy && !input.value.trim()) location.reload();
+      else toast("UI updated — refresh when convenient", "warning");
+      return;
+
+    case "code_reloaded":
+      toast("server code hot-reloaded");
+      return;
+
+    case "code_reload_failed":
+      toast(`server reload failed: ${msg.error}`, "error");
+      return;
   }
 }
 
@@ -1252,7 +1269,51 @@ async function showFolderBrowser() {
     }
   }
 
+  function showCreateRow() {
+    const existing = body.querySelector(".newdir-row");
+    if (existing) { existing.querySelector("input").focus(); return; }
+    const row = document.createElement("div");
+    row.className = "newdir-row";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.placeholder = "new folder name";
+    const create = document.createElement("button");
+    create.className = "btn";
+    create.textContent = "Create";
+    create.addEventListener("click", async () => {
+      const name = inp.value.trim();
+      if (!name) { inp.focus(); return; }
+      create.disabled = true;
+      try {
+        const res = await fetch(`/mkdir?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: browsePath, name }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(data.error || `mkdir failed (${res.status})`, "error"); create.disabled = false; return; }
+        toast(`created ${data.path}`);
+        await load(data.path); // descend into the new folder
+      } catch (e) {
+        toast(`mkdir failed: ${e.message}`, "error");
+        create.disabled = false;
+      }
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") create.click();
+      else if (e.key === "Escape") row.remove();
+    });
+    row.append(inp, create);
+    // insert right below the path display
+    body.insertBefore(row, body.children[1] ?? null);
+    inp.focus();
+  }
+
   actions.innerHTML = "";
+  const newFolder = document.createElement("span");
+  newFolder.className = "chip";
+  newFolder.textContent = "New folder";
+  newFolder.addEventListener("click", showCreateRow);
   const cancel = document.createElement("span");
   cancel.className = "chip";
   cancel.textContent = "Cancel";
@@ -1262,7 +1323,7 @@ async function showFolderBrowser() {
   ok.textContent = "Start session here";
   ok.style.padding = "6px 16px";
   ok.addEventListener("click", () => { closeModal(); done(browsePath); });
-  actions.append(cancel, ok);
+  actions.append(newFolder, cancel, ok);
   overlay.classList.add("open");
   await load(browsePath);
 
