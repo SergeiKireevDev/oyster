@@ -58,6 +58,29 @@ export function createCarouselController({
 }
 
 /** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
+/** Coordinate header drawer chips with desktop sidebars and mobile carousel pages. */
+export function createCarouselHeaderController({ isDesktop, hublots, treebar, loadHublots, loadCheckpointTree, carousel }) {
+  function toggleHublots() {
+    if (isDesktop()) {
+      hublots.classList.toggle("open");
+      if (hublots.classList.contains("open")) loadHublots();
+      return;
+    }
+    carousel.set(hublots.classList.contains("open") ? 0 : 1);
+  }
+
+  function toggleTree() {
+    if (isDesktop()) {
+      treebar.classList.toggle("open");
+      if (treebar.classList.contains("open")) loadCheckpointTree();
+      return;
+    }
+    carousel.set(treebar.classList.contains("open") ? 0 : 2);
+  }
+
+  return { toggleHublots, toggleTree };
+}
+
 export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {
   let touchStart = null;
   let handled = false;

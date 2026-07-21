@@ -8,7 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
-import { createCarouselController, createCarouselSwipeController } from "./runtime/carouselController.js";
+import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2800,37 +2800,21 @@ function attachSwipeListeners() {
   window._piSwipeAttached = true;
 }
 
-// ---- unify the header chip taps with the carousel ----
-function toggleHublotsFromHeader() {
-  const hublots = $("hublots");
-  if (window.matchMedia("(min-width: 761px)").matches) {
-    // desktop: default toggle behaviour
-    hublots.classList.toggle("open");
-    if (hublots.classList.contains("open")) { loadHublots(); loadRoutines(); }
-    return;
-  }
-  // mobile: carousel
-  const opening = !hublots.classList.contains("open");
-  carouselController.set(opening ? 1 : 0);
-}
-
-function toggleTreeFromHeader() {
-  const treebar = $("treebar");
-  if (window.matchMedia("(min-width: 761px)").matches) {
-    treebar.classList.toggle("open");
-    if (treebar.classList.contains("open")) loadCheckpointTree();
-    return;
-  }
-  const opening = !treebar.classList.contains("open");
-  carouselController.set(opening ? 2 : 0);
-}
+const carouselHeaderController = createCarouselHeaderController({
+  isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
+  hublots: $("hublots"),
+  treebar: $("treebar"),
+  loadHublots: () => { loadHublots(); loadRoutines(); },
+  loadCheckpointTree,
+  carousel: carouselController,
+});
 
 registerHeaderEvents(document, {
   chooseModel,
   cycleThinking,
   openConfig: openConfigPicker,
-  toggleHublots: toggleHublotsFromHeader,
-  toggleTree: toggleTreeFromHeader,
+  toggleHublots: carouselHeaderController.toggleHublots,
+  toggleTree: carouselHeaderController.toggleTree,
 });
 
 // apply initial page on load + whenever the page becomes mobile/desktop

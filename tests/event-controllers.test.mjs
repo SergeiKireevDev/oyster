@@ -1,12 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
   assert.equal(swipeAxis(40, 10), "h");
   assert.equal(swipeAxis(10, -40), "v");
+});
+
+test("carousel header controller toggles desktop drawers and mobile pages", () => {
+  const drawer = () => {
+    const values = new Set();
+    return { classList: { toggle: (name) => values.has(name) ? values.delete(name) : values.add(name), contains: (name) => values.has(name) } };
+  };
+  const hublots = drawer();
+  const treebar = drawer();
+  const calls = [];
+  let desktop = true;
+  const controller = createCarouselHeaderController({
+    isDesktop: () => desktop,
+    hublots,
+    treebar,
+    loadHublots: () => calls.push("hublots"),
+    loadCheckpointTree: () => calls.push("tree"),
+    carousel: { set: (page) => calls.push(page) },
+  });
+  controller.toggleHublots();
+  controller.toggleTree();
+  desktop = false;
+  controller.toggleHublots();
+  controller.toggleTree();
+  assert.deepEqual(calls, ["hublots", "tree", 0, 0]);
 });
 
 test("carousel swipe controller routes horizontal single and multi-touch gestures", () => {
