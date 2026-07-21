@@ -89,7 +89,7 @@ test("startup reconciliation includes every persisted desired-open state", async
   assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
 });
 
-test("automatic recovery uses persisted bounded backoff and stops crash loops", async (t) => {
+test("repeated service failure uses bounded backoff and crash-loop protection instead of unbounded spawning", async (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4221, brief: "managed service" });
   recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://crashing.test" });
@@ -135,8 +135,14 @@ test("automatic recovery uses persisted bounded backoff and stops crash loops", 
   assert.equal(store.repositories.hublots.find(hublot.id).next_restart_at, null);
   assert.match(store.repositories.hublots.find(hublot.id).last_error, /automatic restart disabled after 3 consecutive failures/);
 
-  await supervisor.reconcile();
-  assert.equal(restartAttempts, 3, "crash-looped hublots must not spawn again");
+  const historyAtCutoff = store.repositories.hublots.listLifecycleEvents(hublot.id).length;
+  for (let pass = 0; pass < 100; pass++) {
+    time += 60_000;
+    await supervisor.reconcile();
+  }
+  assert.equal(store.repositories.hublots.listLifecycleEvents(hublot.id).length, historyAtCutoff, "cutoff does not append unbounded transition history");
+  assert.equal(restartAttempts, 3, "crash-looped hublots must not spawn again even after backoff deadlines pass");
+  assert.equal(store.repositories.hublots.find(hublot.id).desired_state, "open", "cutoff remains durable until an operator intervenes");
 });
 
 test("periodic supervisor starts and stops one unrefed timer", async (t) => {
