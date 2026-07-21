@@ -40,7 +40,7 @@ import { createCheckpointMarkerController } from "./lib/checkpointMarkerControll
 import { createCommandGuard } from "./lib/commandActions.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
-import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
+import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
@@ -1926,9 +1926,9 @@ registerFileExplorerEvents(window, {
 // toggle to see every session's.
 let tunnelScopeAll = false;
 
-function tunnelVisible(t) {
+function tunnelVisible(tunnel) {
   // unbound tunnels (opened before session binding existed) stay visible
-  return tunnelScopeAll || !t.sessionId || t.sessionId === state?.sessionId;
+  return hublotVisible(tunnel, tunnelScopeAll, state?.sessionId);
 }
 
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)

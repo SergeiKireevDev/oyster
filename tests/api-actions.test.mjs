@@ -2,8 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker } from "../public/src/lib/checkpointActions.js";
 import { listRoutines, runRoutine } from "../public/src/lib/routineActions.js";
-import { createHublot, refreshHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
+import { createHublot, hublotVisible, refreshHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
+
+test("hublot visibility keeps unbound tunnels and the active session", () => {
+  assert.equal(hublotVisible({ sessionId: null }, false, "current"), true);
+  assert.equal(hublotVisible({ sessionId: "current" }, false, "current"), true);
+  assert.equal(hublotVisible({ sessionId: "other" }, false, "current"), false);
+  assert.equal(hublotVisible({ sessionId: "other" }, true, "current"), true);
+});
 
 test("API actions normalize successful checkpoint and routine responses", async () => {
   const calls = [];

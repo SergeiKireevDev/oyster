@@ -5,6 +5,10 @@ export async function listHublots(fetchImpl, visible) {
   return (data.tunnels ?? []).filter(visible);
 }
 
+export function hublotVisible(tunnel, scopeAll, sessionId) {
+  return scopeAll || !tunnel.sessionId || tunnel.sessionId === sessionId;
+}
+
 export function nextHublotScope(scopeAll) {
   return !scopeAll;
 }
