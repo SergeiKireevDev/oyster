@@ -26,3 +26,11 @@ export const HUBLOT_REMOVE_ACTION = "hublot.remove";
 export const HUBLOT_OPEN_COMMAND_PALETTE_ACTION = "hublot.openCommandPalette";
 
 export const ROUTINE_RUN_ACTION = "routine.run";
+
+export const COMPOSER_INPUT_ACTION = "composer.input";
+export const COMPOSER_KEYDOWN_ACTION = "composer.keydown";
+export const COMPOSER_SEND_ACTION = "composer.send";
+export const COMPOSER_ABORT_ACTION = "composer.abort";
+
+export const CHECKPOINT_TREE_OPEN_ACTION = "checkpointTree.open";
+export const CHECKPOINT_TREE_ROLLBACK_ACTION = "checkpointTree.rollback";

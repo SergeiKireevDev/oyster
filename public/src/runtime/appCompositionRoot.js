@@ -96,6 +96,7 @@ const { token, requireToken, probeTokenValidity, rpc, handleResponse, dispose: d
 // ------------------------------------------------------------ markdown (small, escape-first)
 
 const composerAssembly = createComposerAssembly({
+  uiActions,
   findElement: $,
   setTextValue: setComposerTextValue,
   setBusy: (value) => setBusy(value),

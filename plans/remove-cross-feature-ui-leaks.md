@@ -77,7 +77,7 @@ workflow and import no mutable `*Actions.js` bridge.
 
 ## 3. Convert Composer and Checkpoint UI Actions
 
-- [ ] Add scoped action names for composer input, keydown, send, abort, and
+- [x] Add scoped action names for composer input, keydown, send, abort, and
   checkpoint-tree open/rollback. Register the composer actions from
   `createComposerAssembly()` with teardown-safe unregister functions.
 - [ ] Change `Composer.svelte` to invoke scoped composer actions, then delete

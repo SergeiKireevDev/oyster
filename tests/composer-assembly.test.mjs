@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import { createComposerAssembly } from "../public/src/features/composer/createComposerAssembly.js";
 import { runComposerAction } from "../public/src/features/composer/composerActions.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
-import { COMMAND_PALETTE_RUN_ACTION, MENU_ACTION } from "../public/src/runtime/uiActionNames.js";
+import {
+  COMMAND_PALETTE_RUN_ACTION,
+  COMPOSER_ABORT_ACTION,
+  COMPOSER_INPUT_ACTION,
+  COMPOSER_KEYDOWN_ACTION,
+  COMPOSER_SEND_ACTION,
+  MENU_ACTION,
+} from "../public/src/runtime/uiActionNames.js";
 
 function createHarness({ rpc = async () => ({}) } = {}) {
   const calls = [];
@@ -21,7 +28,9 @@ function createHarness({ rpc = async () => ({}) } = {}) {
     getBoundingClientRect: () => ({ left: 0, top: 0, bottom: 20, width: 100 }),
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
   };
+  const uiActions = createUiActionRegistry();
   const assembly = createComposerAssembly({
+    uiActions,
     findElement: () => input,
     setTextValue: (value) => calls.push(["text", value]),
     setBusy: (value) => calls.push(["busy", value]),
@@ -36,7 +45,7 @@ function createHarness({ rpc = async () => ({}) } = {}) {
     toast: (...args) => calls.push(["toast", ...args]),
     isCommandPaletteOpen: () => false,
   });
-  return { assembly, operations: assembly.operations, input, calls };
+  return { assembly, operations: assembly.operations, input, calls, uiActions };
 }
 
 test("composer assembly owns prompt history send and abort workflows", async () => {
@@ -52,6 +61,46 @@ test("composer assembly owns prompt history send and abort workflows", async () 
   await operations.abort();
   assert.ok(calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));
   assembly.teardown();
+});
+
+test("composer and checkpoint-tree actions have scoped names", async () => {
+  const names = await import("../public/src/runtime/uiActionNames.js");
+  assert.deepEqual({
+    input: names.COMPOSER_INPUT_ACTION,
+    keydown: names.COMPOSER_KEYDOWN_ACTION,
+    send: names.COMPOSER_SEND_ACTION,
+    abort: names.COMPOSER_ABORT_ACTION,
+    checkpointOpen: names.CHECKPOINT_TREE_OPEN_ACTION,
+    checkpointRollback: names.CHECKPOINT_TREE_ROLLBACK_ACTION,
+  }, {
+    input: "composer.input",
+    keydown: "composer.keydown",
+    send: "composer.send",
+    abort: "composer.abort",
+    checkpointOpen: "checkpointTree.open",
+    checkpointRollback: "checkpointTree.rollback",
+  });
+});
+
+test("composer assembly registers scoped actions until teardown", async () => {
+  const { assembly, input, calls, uiActions } = createHarness();
+  input.value = "draft";
+  uiActions.invoke(COMPOSER_INPUT_ACTION);
+  assert.ok(calls.some((call) => call[0] === "text" && call[1] === "draft"));
+
+  let prevented = false;
+  uiActions.invoke(COMPOSER_KEYDOWN_ACTION, { key: "Enter", shiftKey: false, isComposing: false, preventDefault: () => { prevented = true; } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(prevented, true);
+  input.value = "again";
+  await uiActions.invoke(COMPOSER_SEND_ACTION);
+  await uiActions.invoke(COMPOSER_ABORT_ACTION);
+  assert.ok(calls.some((call) => call[0] === "user" && call[1] === "again"));
+  assert.ok(calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));
+
+  assembly.teardown();
+  assert.equal(uiActions.invoke(COMPOSER_INPUT_ACTION), undefined);
+  assert.equal(uiActions.invoke(COMPOSER_SEND_ACTION), undefined);
 });
 
 test("composer assembly owns command guard palette menu and listener construction", async () => {

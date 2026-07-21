@@ -4,7 +4,14 @@ import { createComposerHistoryController } from "../../lib/composerHistoryContro
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
 import { configureComposerActions } from "./composerActions.js";
-import { COMMAND_PALETTE_RUN_ACTION, MENU_ACTION } from "../../runtime/uiActionNames.js";
+import {
+  COMMAND_PALETTE_RUN_ACTION,
+  COMPOSER_ABORT_ACTION,
+  COMPOSER_INPUT_ACTION,
+  COMPOSER_KEYDOWN_ACTION,
+  COMPOSER_SEND_ACTION,
+  MENU_ACTION,
+} from "../../runtime/uiActionNames.js";
 
 /** Owns composer input, prompt history, send/abort, and local-echo coordination. */
 export function createComposerAssembly(deps) {
@@ -91,6 +98,12 @@ export function createComposerAssembly(deps) {
   }
 
   const detachActions = configureComposerActions({ inputChanged, keydown, send, abort });
+  const detachUiActions = [
+    deps.uiActions.register(COMPOSER_INPUT_ACTION, inputChanged),
+    deps.uiActions.register(COMPOSER_KEYDOWN_ACTION, keydown),
+    deps.uiActions.register(COMPOSER_SEND_ACTION, send),
+    deps.uiActions.register(COMPOSER_ABORT_ACTION, abort),
+  ];
 
   function configureCommands(commandDeps) {
     if (commandRuntime) return commandRuntime;
@@ -235,6 +248,7 @@ export function createComposerAssembly(deps) {
     teardown() {
       commandRuntime?.teardown();
       detachActions();
+      detachUiActions.splice(0).reverse().forEach((detach) => detach());
       history.clear();
     },
   };
