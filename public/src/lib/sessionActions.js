@@ -1,6 +1,6 @@
-import { createSessionPreviewController } from "../runtime/sessionRuntime.js";
+import { createSessionPreviewController, createSessionStateRefresher } from "../runtime/sessionRuntime.js";
 
-export { createSessionPreviewController };
+export { createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -205,18 +205,6 @@ export function createSessionUiController({ updateAppSession, updateHeaderState 
       const info = usageInfo(message?.usage);
       if (info) updateHeaderState({ usageInfo: info });
     },
-  };
-}
-
-/** Debounce state RPC refreshes while preserving the latest request only. */
-export function createStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
-  let timer = null;
-  return () => {
-    if (timer) clearTimeoutImpl(timer);
-    timer = setTimeoutImpl(async () => {
-      timer = null;
-      try { applyState(await rpc({ type: "get_state" })); } catch (error) { onError(error); }
-    }, delay);
   };
 }
 
