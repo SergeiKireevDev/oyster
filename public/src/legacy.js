@@ -449,11 +449,12 @@ const checkpointController = createCheckpointController({
 function handleCheckpointClick(event) { return checkpointController.freeze(event); }
 function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
 
-createCheckpointTreeEventController({
+const checkpointTreeEventController = createCheckpointTreeEventController({
   windowTarget: window,
   openSession: checkpointTreeController.openTreeSession,
   rollback: rollbackToCheckpoint,
-}).attach();
+});
+checkpointTreeEventController.attach();
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;
@@ -2161,5 +2162,6 @@ export function teardownLegacyRuntime() {
   composerEventController.detach();
   commandPaletteKeyboardController.detach();
   commandPaletteRunController.detach();
+  checkpointTreeEventController.detach();
   connectionState.lost();
 }
