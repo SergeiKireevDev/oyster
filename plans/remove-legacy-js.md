@@ -27,21 +27,21 @@ docker build -t pi-lot-ui .
 cd tests/e2e && npm test
 ```
 
-## 1. Create a Replacement App Runtime
+## 1. Create a Replacement App Runtime ✅
 
 Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 
-- ✅ Moved app startup behind an explicit `startAppRuntime()` composition root;
+- [x] Moved app startup behind an explicit `startAppRuntime()` composition root;
   `App.svelte` no longer imports `legacy.js` directly.
-- Move shared non-Svelte dependencies there incrementally: token access, fetch
-  wrapper, lifecycle logging, document/window event registration, and teardown
-  hooks.
-- Do not move feature logic in this step.
+- [x] Added explicit teardown-capable runtime boundaries.
+- [ ] Finish moving the remaining composition from `legacy.js` into this root
+  after the final event/global wiring extraction.
+- [x] Kept feature logic out of the initial bootstrap extraction.
 
 **Acceptance:** application startup behavior is unchanged, with a small
 bootstrap module replacing the direct `legacy.js` import.
 
-## 2. Extract Transport Runtime
+## 2. Extract Transport Runtime ✅
 
 Create modules for:
 
@@ -56,7 +56,7 @@ Inject callbacks rather than importing feature modules cyclically.
 **Acceptance:** reconnect, unauthorized handling, SSE replay, and tunnel
 behavior remain covered by existing e2e tests.
 
-## 3. Extract Session Runtime
+## 3. Extract Session Runtime ✅
 
 Expand `sessionActions.js` into a session runtime owning:
 
@@ -72,7 +72,7 @@ Expose narrow methods to UI actions: `openSession`, `switchRunner`,
 **Acceptance:** session picker, model restoration, preview, transcript,
 new-session, and stop-session e2e tests pass.
 
-## 4. Extract Transcript Runtime
+## 4. Extract Transcript Runtime ✅
 
 Combine transcript-specific orchestration into `transcriptRuntime.js`:
 
@@ -89,7 +89,7 @@ injection.
 actions/runtime; scrolling, streaming, checkpoints, and permalinks remain
 covered.
 
-## 5. Extract Feature Controllers
+## 5. Extract Feature Controllers ✅
 
 Move remaining imperative feature workflows into focused controllers, each
 called by direct component events or Svelte stores:
@@ -107,13 +107,18 @@ old `legacy.js` module.
 **Acceptance:** move event listeners from `legacy.js` to controllers/runtime
 registration one domain at a time; maintain RPC and extension UI contracts.
 
-## 6. Move Global DOM Events into Svelte or Runtime Adapters
+## 6. Move Global DOM Events into Svelte or Runtime Adapters 🔄
 
 Classify each remaining `document`/`window` listener:
 
-- component-local listeners move into the owning Svelte component;
-- global keyboard/resize/scroll listeners move into dedicated runtime adapters;
-- custom `pi-*` events become typed controller calls or a small typed event bus.
+- [x] Moved component-local rendering/events into their owning Svelte components.
+- [x] Extracted lifecycle/global adapters and focused SSE event controllers for
+  runner exit/unhealthy, Pi errors/restarts, reload notices, response refresh,
+  hublots, routines, and runner lists.
+- [ ] Move the `extension_ui_request` SSE branch into
+  `createExtensionUiEventController()`.
+- [ ] Classify and move the remaining feature-specific document/window/custom
+  event listeners from `legacy.js`.
 
 Avoid replacing one global imperative module with another untyped global event
 hub.
@@ -121,7 +126,7 @@ hub.
 **Acceptance:** custom event names are centralized and typed, or eliminated;
 no feature-specific listener is left in the app composition root.
 
-## 7. Reduce the Composition Root and Delete `legacy.js`
+## 7. Reduce the Composition Root and Delete `legacy.js` ⏳
 
 After all domains are extracted:
 
@@ -134,6 +139,16 @@ After all domains are extracted:
 ```sh
 rg "legacy\.js|legacy" public/src tests
 ```
+
+## Progress Snapshot
+
+- [x] Svelte owns visible rendering and local UI state.
+- [x] Transport, session, transcript, feature, lifecycle, and several stream
+  event domains have importable runtime/controller boundaries.
+- [ ] Remaining global/event dispatch and final composition still live in
+  `public/src/legacy.js` (currently about 1,816 lines).
+- [ ] Delete `legacy.js` only after Step 6 is complete and its remaining
+  startup/teardown composition has moved to `appRuntime.js`.
 
 ## Completion Criteria
 
