@@ -1814,12 +1814,11 @@ function finishFilePicker() {
 
 async function loadFilePicker(path) {
   updateFilePicker({ loading: true });
-  const q = path ? `&path=${encodeURIComponent(path)}` : "";
-  const res = await fetch(`/browse?files=1${q}`);
-  const data = await res.json();
-  if (!res.ok) {
+  let data;
+  try { data = await browseFiles(fetch, path); }
+  catch (error) {
     updateFilePicker({ loading: false });
-    toast(data.error || "cannot open folder", "error");
+    toast(error.message, "error");
     // e.g. remembered folder was deleted — fall back to the workdir
     if (path !== workdir) return loadFilePicker(workdir);
     return;
