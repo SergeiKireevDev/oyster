@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -122,18 +122,6 @@ test("command palette input adapter registers and tears down local listeners", (
   listeners.get("blur")();
   assert.deepEqual(calls, ["input", "blur"]);
   remove();
-});
-
-test("hublot sidebar adapter invokes show and tears down", () => {
-  let listener;
-  const calls = [];
-  const target = { addEventListener: (_, fn) => { listener = fn; }, removeEventListener: (...args) => calls.push(args) };
-  let shown = 0;
-  const remove = registerHublotSidebarEvents(target, { show: () => shown++ });
-  listener();
-  assert.equal(shown, 1);
-  remove();
-  assert.equal(calls.length, 1);
 });
 
 test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {

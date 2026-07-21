@@ -1,3 +1,15 @@
+export function createHublotSidebarController({ target, show }) {
+  const onClick = () => show();
+  function attach() {
+    target.addEventListener("click", onClick);
+    return detach;
+  }
+  function detach() {
+    target.removeEventListener("click", onClick);
+  }
+  return { attach, detach };
+}
+
 export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, isVisible, updateManager, getScopeAll, getDescription }) {
   async function create(description) {
     const text = (description ?? "").trim();

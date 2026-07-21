@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHublotController } from "../public/src/lib/hublotController.js";
+import { createHublotController, createHublotSidebarController } from "../public/src/lib/hublotController.js";
+test("hublot sidebar controller invokes show and tears down", () => {
+  let listener;
+  let removed;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
+  let shown = 0;
+  const controller = createHublotSidebarController({ target, show: () => shown++ });
+  controller.attach();
+  listener();
+  controller.detach();
+  assert.equal(shown, 1);
+  assert.equal(removed, listener);
+});
+
 test("hublot controller binds creation to current session", async () => {
   let request; const states = [];
   const controller = createHublotController({ createHublot: async (value) => { request = value; return { tunnel: { url: "https://x" } }; }, getSessionId: () => "session", setDescription: (value) => states.push(value), setCreating: () => {}, close: () => {}, toast: () => {} });

@@ -23,12 +23,6 @@ export function registerCommandPaletteInput(target, { onInput, onBlur }) {
   };
 }
 
-export function registerHublotSidebarEvents(target, { show }) {
-  const onClick = () => show();
-  target.addEventListener("click", onClick);
-  return () => target.removeEventListener("click", onClick);
-}
-
 export function registerHeaderEvents(target, { chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
   const onHeader = (event) => {
     const { action, sourceEvent } = event.detail ?? {};

@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -46,7 +46,7 @@ import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createComposerHistoryController } from "./lib/composerHistoryController.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
-import { createHublotController } from "./lib/hublotController.js";
+import { createHublotController, createHublotSidebarController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController } from "./lib/fileExplorerController.js";
@@ -1632,9 +1632,10 @@ registerManagedHublotEvents(window, {
 
 // ------------------------------------------------------------ hublot sidebar
 
-registerHublotSidebarEvents($("hublotAdd"), {
+createHublotSidebarController({
+  target: $("hublotAdd"),
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
-});
+}).attach();
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
 // tap outside the drawer closes it (mobile only — on desktop they're
