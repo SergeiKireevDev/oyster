@@ -147,6 +147,27 @@ export async function ensureContainer({ sqlite = false } = {}) {
   await waitUntilReachable();
 }
 
+/**
+ * Terminate the container's server.mjs process and start that same container
+ * again. Unlike replaceContainer(), this exercises process-level shutdown and
+ * startup while retaining both the writable layer and named agent volume.
+ */
+export async function restartServerProcess() {
+  if (!container) throw new Error("e2e container has not been allocated");
+  const pid = sh(`docker exec ${container} pgrep -fo '^node server.mjs$'`);
+  if (!pid) throw new Error(`server.mjs process not found in ${container}`);
+
+  try { sh(`docker exec ${container} kill -TERM ${pid}`); } catch {}
+  const stopDeadline = Date.now() + 60000;
+  while (running(container) && Date.now() < stopDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (running(container)) throw new Error(`server.mjs process ${pid} did not stop ${container}`);
+
+  sh(`docker start ${container}`);
+  await waitUntilReachable();
+}
+
 /** Replace the current container while retaining its agent volume. */
 export async function replaceContainer({ sqlite = selectedStore === "sqlite" } = {}) {
   if (!container || !agentVolume) throw new Error("e2e container has not been allocated");

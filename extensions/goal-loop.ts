@@ -3,24 +3,32 @@
  *
  * Drives a plan one verified commit at a time. The agent implements a single
  * plan step, then MUST call goal_loop({ action: "verify", ... }). Verification
- * runs the project's full validation suite. Passing work is committed; failed
- * work is left in place so the agent can analyze the validation output, fix
- * the current attempt, and verify again. The agent calls complete only after
+ * infers the project's validation suite from a required shell/PowerShell/cmd
+ * block in the plan. Passing work is committed; failed work is left in place
+ * so the agent can analyze the validation output, fix the current attempt,
+ * and verify again. The agent calls complete only after
  * inspecting the plan and finding no remaining steps.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+interface ValidationCheck {
+  label: string;
+  command: string;
+  args: string[];
+  cwd?: string;
+  timeoutMs?: number;
+}
 
 interface GoalState {
   active: boolean;
   planPath: string;
   baseline: string;
   retries: number;
-  maxRetries: number;
   currentStep: string;
   lastResult: string;
   lastVerifyAt: number;
@@ -28,17 +36,15 @@ interface GoalState {
   lastCommit?: string;
 }
 
-const DEFAULT_PLAN = "plans/migration-svelte.md";
 const VALIDATION_TIMEOUT = 30 * 60 * 1000;
 const OUTPUT_LIMIT = 8_000;
 const PLAN_CONTEXT_LIMIT = 12_000;
 function blankState(): GoalState {
   return {
     active: false,
-    planPath: DEFAULT_PLAN,
+    planPath: "",
     baseline: "",
     retries: 0,
-    maxRetries: 3,
     currentStep: "",
     lastResult: "",
     lastVerifyAt: 0,
@@ -61,6 +67,58 @@ function planFilePath(ctx: ExtensionContext, planPath: string) {
 
 function readPlan(ctx: ExtensionContext, planPath: string) {
   return readFileSync(planFilePath(ctx, planPath), "utf8");
+}
+
+function inferValidation(plan: string): ValidationCheck[] {
+  const lines = plan.split(/\r?\n/);
+  const headings: string[] = [];
+  const candidates: Array<{ score: number; index: number; check: ValidationCheck }> = [];
+  const validationWords = /\b(validat(?:e|es|ed|ing|ion)?|verif(?:y|ies|ied|ication)|tests?|checks?|quality|acceptance)\b/i;
+  const optionalWords = /\b(optional(?:ly)?|targeted|useful while iterating|does not replace)\b/i;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const heading = lines[index].match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      headings[heading[1].length - 1] = heading[2];
+      headings.length = heading[1].length;
+      continue;
+    }
+
+    const fence = lines[index].match(/^```(sh|bash|shell|zsh|powershell|pwsh|cmd|batch)\s*$/i);
+    if (!fence) continue;
+    const end = lines.findIndex((line, candidate) => candidate > index && /^```\s*$/.test(line));
+    if (end < 0) throw new Error(`Unclosed validation command block at plan line ${index + 1}.`);
+    const script = lines.slice(index + 1, end).join("\n").trim();
+    const nearby = lines.slice(Math.max(0, index - 6), index).join("\n");
+    const headingText = headings.filter(Boolean).join(" > ");
+    let score = (validationWords.test(headingText) ? 4 : 0) + (validationWords.test(nearby) ? 2 : 0);
+    if (optionalWords.test(nearby)) score -= 5;
+
+    if (script && score > 0) {
+      const language = fence[1].toLowerCase();
+      const label = headingText && validationWords.test(headingText) ? headingText : "Plan validation";
+      const check = language === "powershell" || language === "pwsh"
+        ? { label, command: "pwsh", args: ["-NoProfile", "-NonInteractive", "-Command", script] }
+        : language === "cmd" || language === "batch"
+          ? { label, command: "cmd", args: ["/d", "/s", "/c", script] }
+          : { label, command: language === "shell" ? "sh" : language, args: ["-eu", "-c", script] };
+      candidates.push({ score, index, check });
+    }
+    index = end;
+  }
+
+  candidates.sort((left, right) => right.score - left.score || right.index - left.index);
+  if (!candidates.length) {
+    throw new Error("Could not infer validation from the plan. Add a fenced sh, bash, zsh, PowerShell, or cmd block under a validation/test heading or immediately after prose such as ‘Validate every step:’.");
+  }
+  return [candidates[0].check];
+}
+
+function findDefaultPlan(ctx: ExtensionContext) {
+  for (const candidate of ["PLAN.md", "plan.md"]) {
+    if (existsSync(planFilePath(ctx, candidate))) return candidate;
+  }
+  return "";
 }
 
 function findNextUncheckedStep(plan: string) {
@@ -165,7 +223,7 @@ export default function goalLoop(pi: ExtensionAPI) {
       ctx.ui.setWidget("goal-loop", undefined);
       return;
     }
-    const retry = state.retries ? ` · retry ${state.retries}/${state.maxRetries}` : "";
+    const retry = state.retries ? ` · failed verifications ${state.retries}` : "";
     ctx.ui.setStatus("goal-loop", `🎯 ${state.currentStep || "choosing step"}${retry}`);
     ctx.ui.setWidget("goal-loop", [
       `🎯 Goal loop active — ${state.currentStep || "inspect the plan for the next step"}`,
@@ -179,19 +237,13 @@ export default function goalLoop(pi: ExtensionAPI) {
   }
 
   async function validation(ctx: ExtensionContext, onUpdate?: (value: any) => void) {
-    const checks: Array<{ label: string; command: string; args: string[]; cwd?: string }> = [
-      { label: "build", command: "npm", args: ["run", "build"] },
-      { label: "unit tests", command: "npm", args: ["test"] },
-      { label: "Docker build", command: "docker", args: ["build", "-t", "pi-lot-ui", "."] },
-      { label: "full e2e", command: "npm", args: ["test"], cwd: "tests/e2e" },
-    ];
     const reports: string[] = [];
-    for (const check of checks) {
+    for (const check of inferValidation(readPlan(ctx, state.planPath))) {
       onUpdate?.({ content: [{ type: "text", text: `Running ${check.label}…` }] });
       const result = await pi.exec(check.command, check.args, {
-        cwd: check.cwd ? `${ctx.cwd}/${check.cwd}` : ctx.cwd,
+        cwd: check.cwd ? (isAbsolute(check.cwd) ? check.cwd : join(ctx.cwd, check.cwd)) : ctx.cwd,
         signal: ctx.signal,
-        timeout: VALIDATION_TIMEOUT,
+        timeout: check.timeoutMs ?? VALIDATION_TIMEOUT,
       });
       reports.push(`## ${check.label} (exit ${result.code})\n${clipped(result)}`);
       if (result.code !== 0 || result.killed) return { ok: false, reports };
@@ -205,7 +257,7 @@ export default function goalLoop(pi: ExtensionAPI) {
       const [action = "status", ...rest] = args.trim().split(/\s+/).filter(Boolean);
       if (action === "status") {
         ctx.ui.notify(state.active
-          ? `Goal loop: ${state.currentStep || "choosing step"}; baseline ${state.baseline}; retries ${state.retries}/${state.maxRetries}`
+          ? `Goal loop: ${state.currentStep || "choosing step"}; baseline ${state.baseline}; failed verifications ${state.retries}`
           : "Goal loop is inactive.", "info");
         return;
       }
@@ -220,7 +272,15 @@ export default function goalLoop(pi: ExtensionAPI) {
         ctx.ui.notify("Usage: /goal-loop start [plan-path] | status | stop", "warning");
         return;
       }
-      const planPath = rest.join(" ") || DEFAULT_PLAN;
+      const planPath = rest.join(" ") || findDefaultPlan(ctx);
+      if (!planPath) {
+        ctx.ui.notify("Provide a plan path or create PLAN.md.", "error");
+        return;
+      }
+      if (!ctx.isProjectTrusted()) {
+        ctx.ui.notify("Goal loop will not execute validation commands from an untrusted project.", "error");
+        return;
+      }
       const dirty = await command("git", ["status", "--porcelain"], ctx);
       if (dirty.code !== 0) {
         ctx.ui.notify(`Cannot start goal loop: ${clipped(dirty)}`, "error");
@@ -231,9 +291,14 @@ export default function goalLoop(pi: ExtensionAPI) {
         return;
       }
       const head = await command("git", ["rev-parse", "HEAD"], ctx);
-      const plan = await command("test", ["-f", planPath], ctx);
-      if (head.code !== 0 || plan.code !== 0) {
+      if (head.code !== 0 || !existsSync(planFilePath(ctx, planPath))) {
         ctx.ui.notify(head.code !== 0 ? "Goal loop requires a Git repository." : `Plan not found: ${planPath}`, "error");
+        return;
+      }
+      try {
+        inferValidation(readPlan(ctx, planPath));
+      } catch (error) {
+        ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
         return;
       }
       state = {
@@ -241,7 +306,6 @@ export default function goalLoop(pi: ExtensionAPI) {
         planPath,
         baseline: head.stdout.trim(),
         retries: 0,
-        maxRetries: 3,
         currentStep: "inspect plan and choose one incomplete step",
         lastResult: "Started",
         lastVerifyAt: 0,
@@ -375,7 +439,7 @@ export default function goalLoop(pi: ExtensionAPI) {
 Plan: ${state.planPath}
 Current step: ${state.currentStep || "choose one incomplete step"}
 Baseline commit: ${state.baseline}
-Retries: ${state.retries}/${state.maxRetries}
+Failed verifications: ${state.retries}
 
 Implement exactly one unchecked checklist item now. Do not only select, summarize, defer, or describe work: inspect code and make the change. If the recorded step is checked, use the first unchecked item in the plan. Call goal_loop verify after changing code; on failure, fix the same item in place and verify again. After every passing commit, inspect the plan and implement the next unchecked item. Call goal_loop complete only when none remain.`,
       },

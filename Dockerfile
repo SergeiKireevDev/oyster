@@ -22,7 +22,7 @@ LABEL org.opencontainers.image.pi-source="published-package" \
 
 # Tools the pi agent (and the UI's file explorer / routines) rely on
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git curl ca-certificates procps ripgrep \
+        git curl ca-certificates procps ripgrep lsof \
     && git config --system user.name "Jane Doe" \
     && git config --system user.email "jane.doe@example.com" \
     && rm -rf /var/lib/apt/lists/*

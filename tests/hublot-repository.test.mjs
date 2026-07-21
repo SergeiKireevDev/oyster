@@ -46,6 +46,7 @@ test("hublot repository persists authoritative configuration, state, processes, 
   const created = createHublot(store, owner.id);
   assert.equal(created.session_id, "session-a");
   assert.equal(created.service_start_script, "#!/bin/sh\nexec server\n");
+  assert.equal(created.public_url, "https://first.trycloudflare.com");
   assert.equal(created.desired_state, "open");
 
   assert.equal(store.repositories.hublots.appendLifecycleEvent({ hublotId: created.id, status: "opening", desiredState: "open", createdAt: "event-1" }), 1);
