@@ -236,7 +236,7 @@ For every feature:
 not change public UI/API behavior; its listeners are attached exactly once and
 removed on teardown.
 
-## [ ] 6. Replace the Global Event Bridge
+## [x] 6. Replace the Global Event Bridge
 
 After the owning feature has moved, remove its `window.dispatchEvent` /
 `document.dispatchEvent` protocol and matching global listener.

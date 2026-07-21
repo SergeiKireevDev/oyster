@@ -1,5 +1,5 @@
 <script>
-  const sessionAction = (type, ...args) => window.dispatchEvent(new CustomEvent("pi-session-picker-action", { detail: { type, args } }));
+  import { sessionPickerAction as sessionAction } from "../features/sessions/sessionPickerActions.js";
   const choosePickedSession = (...args) => sessionAction("chooseSession", ...args);
   const deletePickedSession = (...args) => sessionAction("deleteSession", ...args);
   const loadPickedSessionFolder = (...args) => sessionAction("loadFolder", ...args);

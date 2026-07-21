@@ -20,6 +20,7 @@ import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
 import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
 import { createSessionFeature } from "../features/sessions/createSessionFeature.js";
+import { configureSessionPickerActions } from "../features/sessions/sessionPickerActions.js";
 import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
@@ -1452,11 +1453,8 @@ const sessionPickerActions = {
   },
   loadFolder: loadSessionPickerFolder,
 };
-const sessionPickerEventController = createSessionPickerEventController({
-  windowTarget: window,
-  dispatch: (type, ...args) => sessionPickerActions[type]?.(...args),
-  cancel: () => { closeModal(); sessionPickerResolve?.(null); },
-});
+const cancelSessionPicker = () => { closeModal(); sessionPickerResolve?.(null); };
+const detachSessionPickerActions = configureSessionPickerActions((type, ...args) => type === "cancel" ? cancelSessionPicker() : sessionPickerActions[type]?.(...args));
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
@@ -1741,7 +1739,7 @@ const detachRuntimeEventAdapters = () => {
   detachFileExplorerActions();
   detachHublotActions();
   detachRoutineActions();
-  sessionPickerEventController.detach();
+  detachSessionPickerActions();
   detachFilesActions();
   commandPaletteInputController?.detach();
 };
@@ -1767,7 +1765,6 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
     mobileDrawerDismissController,
-    sessionPickerEventController,
     carouselEventRegistration,
   ],
   applyCarousel: () => carouselController.apply(),
