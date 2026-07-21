@@ -304,6 +304,44 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       listProcesses: (hublotId) => database.prepare("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id").all(hublotId).map((row) => ({ ...row })),
     }),
+    runners: Object.freeze({
+      list: () => database.prepare("SELECT * FROM runners ORDER BY created_at, id").all().map((row) => ({ ...row })),
+      find: (id) => {
+        const row = database.prepare("SELECT * FROM runners WHERE id = ?").get(id);
+        return row ? { ...row } : null;
+      },
+      create: ({
+        id, ownerId = null, dir, sessionBackend = null, sessionId = null, sessionStoragePath = null,
+        sessionName = null, isDefault = false, desiredState = "running", lastStatus = "starting",
+        startCount = 0, createdAt, lastStartedAt = null, lastStoppedAt = null,
+      }) => {
+        database.prepare(`
+          INSERT INTO runners(
+            id, owner_id, dir, session_backend, session_id, session_storage_path, session_name,
+            is_default, desired_state, last_status, start_count, created_at, last_started_at, last_stopped_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, ownerId, dir, sessionBackend, sessionId, sessionStoragePath, sessionName,
+          isDefault ? 1 : 0, desiredState, lastStatus, startCount, createdAt, lastStartedAt, lastStoppedAt);
+        return repositories.runners.find(id);
+      },
+      update: (id, changes) => {
+        const allowed = new Set([
+          "owner_id", "dir", "session_backend", "session_id", "session_storage_path", "session_name",
+          "is_default", "desired_state", "last_status", "start_count", "last_started_at", "last_stopped_at",
+        ]);
+        const entries = Object.entries(changes ?? {});
+        if (!entries.length) return 0;
+        for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported runner field: ${column}`);
+        return database.prepare(`UPDATE runners SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`)
+          .run(...entries.map(([, value]) => value), id).changes;
+      },
+      setDefault: (id) => {
+        if (id != null && !repositories.runners.find(id)) throw new Error(`no such runner: ${id}`);
+        database.prepare("UPDATE runners SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END").run(id);
+        return id == null ? null : repositories.runners.find(id);
+      },
+      delete: (id) => database.prepare("DELETE FROM runners WHERE id = ?").run(id).changes,
+    }),
     operations: Object.freeze({
       create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
         INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)

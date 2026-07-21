@@ -178,6 +178,33 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE UNIQUE INDEX hublots_active_port_idx ON hublots(port) WHERE status <> 'closed';
     `,
   }),
+  Object.freeze({
+    version: 8,
+    name: "runner_descriptors",
+    sql: `
+      CREATE TABLE runners (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        dir TEXT NOT NULL,
+        session_backend TEXT,
+        session_id TEXT,
+        session_storage_path TEXT,
+        session_name TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+        desired_state TEXT NOT NULL CHECK (desired_state IN ('running', 'stopped')),
+        last_status TEXT NOT NULL CHECK (last_status IN ('starting', 'running', 'stopped', 'dead', 'interrupted')),
+        start_count INTEGER NOT NULL DEFAULT 0 CHECK (start_count >= 0),
+        created_at TEXT NOT NULL,
+        last_started_at TEXT,
+        last_stopped_at TEXT,
+        CHECK ((session_backend IS NULL AND session_id IS NULL AND session_storage_path IS NULL)
+          OR (session_backend IS NOT NULL AND session_id IS NOT NULL))
+      ) WITHOUT ROWID;
+      CREATE INDEX runners_owner_idx ON runners(owner_id);
+      CREATE INDEX runners_session_idx ON runners(session_backend, session_id, session_storage_path);
+      CREATE UNIQUE INDEX runners_one_default_idx ON runners(is_default) WHERE is_default = 1;
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

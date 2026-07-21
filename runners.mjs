@@ -47,8 +47,12 @@ const WATCHDOG_MAX_MISSES = 2;
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID } = {}) {
+export function createRunnerManager(state, {
+  spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
+  appStore = state.appStore, now = () => new Date().toISOString(),
+} = {}) {
   const { config, serverEvent, sessionReferences } = state;
+  const runnerRepository = appStore?.repositories?.runners ?? null;
   const piProcesses = spawnImpl
     ? createPiProcessLauncher({ config, spawnImpl })
     : state.piProcesses;
@@ -156,6 +160,16 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
         runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
         runner.sessionId = d.sessionId ?? runner.sessionId;
         runner.sessionName = d.sessionName ?? null;
+        if (changed) {
+          const owner = nextReference ? ensureSessionOwner(nextReference) : null;
+          runnerRepository?.update(runner.id, {
+            owner_id: owner?.id ?? null,
+            session_backend: nextReference?.backend ?? null,
+            session_id: nextReference?.id ?? null,
+            session_storage_path: nextReference?.storagePath ?? null,
+            session_name: runner.sessionName,
+          });
+        }
         runner.busy = !!(d.isStreaming || d.isCompacting);
         if (changed) runnersChanged();
       } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
@@ -192,9 +206,18 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
 
   function spawnRunner({ dir, sessionRef = null }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
-    if (reference) ensureSessionOwner(reference);
+    const owner = reference ? ensureSessionOwner(reference) : null;
+    const id = allocateRunnerId();
+    const createdAt = now();
+    runnerRepository?.create({
+      id, ownerId: owner?.id ?? null, dir,
+      sessionBackend: reference?.backend ?? null,
+      sessionId: reference?.id ?? null,
+      sessionStoragePath: reference?.storagePath ?? null,
+      desiredState: "running", lastStatus: "starting", createdAt,
+    });
     const runner = {
-      id: allocateRunnerId(),
+      id,
       dir,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
@@ -213,14 +236,18 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
 
   function startRunner(runner) {
     if (runner.proc) return;
-    const now = Date.now();
+    const nowMs = Date.now();
     // crash-loop guard: if this runner died within 2s of spawning, wait
-    if (now - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
+    if (nowMs - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
       setTimeout(() => { if (!runner.proc && state.runners.has(runner.id)) startRunner(runner); }, 2000);
       return;
     }
-    runner.lastSpawnAt = now;
+    runner.lastSpawnAt = nowMs;
     runner.startCount++;
+    const startedAt = now();
+    runnerRepository?.update(runner.id, {
+      desired_state: "running", last_status: "starting", start_count: runner.startCount, last_started_at: startedAt,
+    });
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
     const args = ["--mode", "rpc", ...sqliteResumeArgs, ...config.PI_EXTRA_ARGS];
     console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
@@ -229,6 +256,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
       stdio: ["pipe", "pipe", "pipe"],
     });
     runner.proc = proc;
+    runnerRepository?.update(runner.id, { last_status: "running" });
 
     // health watchdog bookkeeping: only procs started by watchdog-aware
     // code update lastLineAt, so only those are probed (watchdogOk)
@@ -255,6 +283,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
       console.error(`[pi-ui] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
       if (runner.proc === proc) runner.proc = null;
+      runnerRepository?.update(runner.id, { last_status: "dead" });
       runnersChanged();
     });
 
@@ -263,6 +292,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
       if (runner.proc === proc) {
         runner.proc = null;
         runner.busy = false;
+        runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
         runnerEvent(runner, { type: "pi_exit", code, signal });
         runnersChanged();
       }
@@ -287,6 +317,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
 
   function stopRunner(runner) {
     const proc = runner.proc;
+    runnerRepository?.update(runner.id, { desired_state: "stopped", last_status: "stopped", last_stopped_at: now() });
     if (!proc) return;
     runner.proc = null;
     runner.busy = false;
@@ -318,6 +349,7 @@ export function createRunnerManager(state, { spawnImpl = null, ensureSessionOwne
       r = [...state.runners.values()].find((x) => x.proc) ?? [...state.runners.values()][0];
       if (!r) r = spawnRunner({ dir: state.currentDir });
       state.defaultRunnerId = r.id;
+      runnerRepository?.setDefault(r.id);
     }
     return r;
   }
