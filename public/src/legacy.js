@@ -27,6 +27,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
+import { applySessionState, sessionFileQuery } from "./lib/sessionActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -757,38 +758,13 @@ let state = null;
 function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : "$0"; }
 
 function applyState(s) {
-  const sessionChanged = s?.sessionId !== state?.sessionId;
-  lifecycleLog("applyState", {
-    incomingSessionId: s?.sessionId ?? null,
-    previousSessionId: state?.sessionId ?? null,
-    sessionChanged,
-    messageCount: s?.messageCount ?? null,
-    pendingMessageCount: s?.pendingMessageCount ?? null,
-    isStreaming: !!s?.isStreaming,
-    isCompacting: !!s?.isCompacting,
-    model: s?.model?.id ?? null,
-    sessionFile: s?.sessionFile ?? null,
-  });
-  state = s;
-  updateAppSession({ state: s, ...(sessionChanged ? { titleOverride: null } : {}) });
-  if (sessionChanged) {
-    // New sessions may have a sessionFile header before any messages exist.
-    // Keep them marked as empty until the first message is actually recorded;
-    // otherwise a reconnect can re-enable replay gating and drop the first
-    // prompt/response sequence from the SSE replay buffer.
-    if ((s?.messageCount ?? 0) > 0) emptySessionRunners.delete(currentRunner);
-    setTranscriptGateRequired(!emptySessionRunners.has(currentRunner) && (s?.messageCount ?? 0) > 0);
-    routines.set(routinesNow.filter(routineVisible));
-    routineScopeAll.set(tunnelScopeAll);
-    routineCurrentSessionId.set(s?.sessionId ?? null);
-    loadHublots(); loadRoutines();
-  } // sidebar tunnels are session-scoped; routines follow the workdir
-  if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
-  updateHeaderState({
-    stateInfo: `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
-      (s.pendingMessageCount ? ` · ${s.pendingMessageCount} queued` : ""),
-  });
-  setBusy(s.isStreaming || s.isCompacting);
+  const result = applySessionState({ incoming: s, previousState: state, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks: {
+    log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: s?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: s?.messageCount ?? null, pendingMessageCount: s?.pendingMessageCount ?? null, isStreaming: !!s?.isStreaming, isCompacting: !!s?.isCompacting, model: s?.model?.id ?? null, sessionFile: s?.sessionFile ?? null }),
+    setState: (next) => { state = next; }, updateAppSession, setTranscriptGateRequired,
+    setRoutines: routines.set, setRoutineScopeAll: routineScopeAll.set, setRoutineCurrentSessionId: routineCurrentSessionId.set,
+    loadHublots, loadRoutines, syncUrlToSession, updateHeaderState, setBusy,
+  } });
+  state = result.state;
 }
 
 let workdir = null;
@@ -843,14 +819,6 @@ function switchToRunner(id) {
 // slow preview response can never overwrite fresh state.
 
 let lastPreview = null; // { sessionPath, messages|null }
-
-function sessionFileQuery(sessionPath) {
-  const raw = String(sessionPath ?? "");
-  const marker = "/.pi/agent/sessions/";
-  const i = raw.indexOf(marker);
-  const relative = i !== -1 ? raw.slice(i + marker.length) : raw.replace(/^\/+/, "");
-  return `path=${encodeURIComponent(relative)}`;
-}
 
 function renderPreviewNow() {
   if (!lastPreview?.messages?.length) return;
