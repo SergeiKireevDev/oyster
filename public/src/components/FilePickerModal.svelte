@@ -2,7 +2,19 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
-  import { browseFilePicker, cancelFilePicker, pickFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import {
+    FILE_PICKER_BROWSE_ACTION,
+    FILE_PICKER_CANCEL_ACTION,
+    FILE_PICKER_CHOOSE_ACTION,
+    FILE_PICKER_USE_FOLDER_ACTION,
+  } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const browseFilePicker = (path) => uiActions.invoke(FILE_PICKER_BROWSE_ACTION, path);
+  const pickFilePicker = (path) => uiActions.invoke(FILE_PICKER_CHOOSE_ACTION, path);
+  const useFilePickerFolder = () => uiActions.invoke(FILE_PICKER_USE_FOLDER_ACTION);
+  const cancelFilePicker = () => uiActions.invoke(FILE_PICKER_CANCEL_ACTION);
 
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
 </script>

@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureFilePickerActions } from "../files/filePickerActions.js";
 import { configureFolderBrowserActions } from "../files/folderBrowserActions.js";
 import { configureFileExplorerActions } from "../files/fileExplorerActions.js";
 import { configureFilesActions } from "../files/filesActions.js";
@@ -58,7 +57,6 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(FILE_PICKER_CHOOSE_ACTION, actions.filePicker.pick),
         deps.uiActions.register(FILE_PICKER_USE_FOLDER_ACTION, actions.filePicker.useFolder),
         deps.uiActions.register(FILE_PICKER_CANCEL_ACTION, actions.filePicker.cancel),
-        configureFilePickerActions(actions.filePicker),
         configureFolderBrowserActions(actions.folderBrowser),
         configureFileExplorerActions(actions.fileExplorer),
         configureFilesActions(actions.files),

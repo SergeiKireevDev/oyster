@@ -44,7 +44,7 @@ cd tests/e2e && npm test
 - [x] Make `createResourceAssembly()` accept the scoped UI action registry and
   register its existing file-picker handlers. Return their unregister functions
   from resource teardown without changing any component yet.
-- [ ] Change `FilePickerModal.svelte` to invoke the scoped file-picker actions,
+- [x] Change `FilePickerModal.svelte` to invoke the scoped file-picker actions,
   then delete `features/files/filePickerActions.js` and its configuration call.
   Test browse, choose, use-folder, and cancel routing.
 - [ ] Register folder-browser handlers through `createResourceAssembly()` and
