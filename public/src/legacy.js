@@ -47,7 +47,7 @@ import { createComposerHistoryController } from "./lib/composerHistoryController
 import { createComposerEventController } from "./lib/composerController.js";
 import { createCheckpointTreeController, createCheckpointTreeEventController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
-import { createHublotController, createHublotSidebarController, createManagedHublotEventController } from "./lib/hublotController.js";
+import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController, createFolderBrowserEventController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController, createFileExplorerEventController, registerFileUploadInput, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
@@ -1638,8 +1638,8 @@ createManagedHublotEventController({
 
 // ------------------------------------------------------------ hublot sidebar
 
-createHublotSidebarController({
-  target: $("hublotAdd"),
+createHublotSidebarEventController({
+  windowTarget: window,
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
 }).attach();
 

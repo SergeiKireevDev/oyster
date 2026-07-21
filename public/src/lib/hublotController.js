@@ -1,11 +1,12 @@
-export function createHublotSidebarController({ target, show }) {
-  const onClick = () => show();
+/** Route the Svelte-owned sidebar add action to the hublot workflow. */
+export function createHublotSidebarEventController({ windowTarget, show }) {
+  const onShow = () => show();
   function attach() {
-    target.addEventListener("click", onClick);
+    windowTarget.addEventListener("pi-hublot-show", onShow);
     return detach;
   }
   function detach() {
-    target.removeEventListener("click", onClick);
+    windowTarget.removeEventListener("pi-hublot-show", onShow);
   }
   return { attach, detach };
 }

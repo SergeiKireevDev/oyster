@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHublotController, createHublotSidebarController } from "../public/src/lib/hublotController.js";
-test("hublot sidebar controller invokes show and tears down", () => {
+import { createHublotController, createHublotSidebarEventController } from "../public/src/lib/hublotController.js";
+test("hublot sidebar event controller invokes show and tears down", () => {
   let listener;
   let removed;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
+  const windowTarget = { addEventListener(name, fn) { assert.equal(name, "pi-hublot-show"); listener = fn; }, removeEventListener(name, fn) { assert.equal(name, "pi-hublot-show"); removed = fn; } };
   let shown = 0;
-  const controller = createHublotSidebarController({ target, show: () => shown++ });
+  const controller = createHublotSidebarEventController({ windowTarget, show: () => shown++ });
   controller.attach();
   listener();
   controller.detach();
