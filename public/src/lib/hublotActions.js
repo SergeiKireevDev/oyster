@@ -5,6 +5,10 @@ export async function listHublots(fetchImpl, visible) {
   return (data.tunnels ?? []).filter(visible);
 }
 
+export function nextHublotScope(scopeAll) {
+  return !scopeAll;
+}
+
 export async function createHublot(fetchImpl, { label, sessionId, brief }) {
   const res = await fetchImpl("/tunnels", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label, sessionId, brief }) });
   const data = await res.json().catch(() => ({}));
