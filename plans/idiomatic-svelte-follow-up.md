@@ -89,7 +89,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Move hublot-manager footer controls from `Overlays.svelte` to
   `HublotManagerModal.svelte`, preserving scope toggle and close behavior with
   a focused test.
-- [ ] Move folder-browser footer controls from `Overlays.svelte` to
+- [x] Move folder-browser footer controls from `Overlays.svelte` to
   `FolderBrowserModal.svelte`, preserving create, hidden-files, cancel, and
   submit behavior with a focused test.
 - [ ] Move file-picker footer controls from `Overlays.svelte` to

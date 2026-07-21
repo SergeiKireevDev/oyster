@@ -2,7 +2,7 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
-  import { browseFolderBrowser, createFolderBrowser } from "../features/files/folderBrowserActions.js";
+  import { browseFolderBrowser, cancelFolderBrowser, createFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
 
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
@@ -44,3 +44,10 @@
     <div class="m-path">(no subfolders)</div>
   {/if}
 {/if}
+
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
+  <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ showHidden: !$folderBrowser.showHidden }); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
+  <span class="chip" role="button" tabindex="0" onclick={cancelFolderBrowser} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFolderBrowser(); }}>Cancel</span>
+  <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
+</div>

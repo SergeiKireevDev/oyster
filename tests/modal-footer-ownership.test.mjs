@@ -23,3 +23,10 @@ test("hublot manager owns its footer actions", () => {
   assert.match(component, /onclick=\{closeModalState\}/);
   assert.doesNotMatch(overlays, /toggleManagedHublotScope|\$hublotManager/);
 });
+
+test("folder browser owns its footer actions", () => {
+  const component = read("FolderBrowserModal.svelte");
+  const overlays = read("Overlays.svelte");
+  for (const action of ["New folder", "showHidden", "cancelFolderBrowser", "submitFolderBrowser"]) assert.match(component, new RegExp(action));
+  assert.doesNotMatch(overlays, /cancelFolderBrowser|submitFolderBrowser|\$folderBrowser/);
+});
