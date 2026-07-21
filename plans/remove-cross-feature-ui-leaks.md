@@ -145,7 +145,7 @@ services rather than global stores or component platform calls.
 - [x] Replace clickable hublot preview/list `div[role="button"]` controls with
   native buttons or documented composite-widget controls. Preserve iframe
   overlay behavior and external-open keyboard activation.
-- [ ] Add a static boundary test forbidding mutable module-global action bridges
+- [x] Add a static boundary test forbidding mutable module-global action bridges
   (`let actions`, `let action`, or `let dispatch`) in feature action modules,
   direct `removeHublot(fetch, ...)` in components, and direct browser globals
   in `AuthGate.svelte` or `SettingsModal.svelte`.

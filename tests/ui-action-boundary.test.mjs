@@ -27,6 +27,22 @@ test("global menu and command-palette custom event paths are removed", () => {
   }
 });
 
+test("feature boundaries forbid global action bridges and component-owned platform workflows", () => {
+  const featureActionModules = sources.filter(({ path }) => path.startsWith("features/") && /Actions\.js$/.test(path));
+  for (const { path, source } of featureActionModules) {
+    assert.doesNotMatch(source, /\blet\s+actions\s*=\s*\{\s*\}|\blet\s+action\s*;|\blet\s+dispatch\s*;/, path);
+  }
+
+  for (const { path, source } of sources.filter(({ path }) => path.startsWith("components/"))) {
+    assert.doesNotMatch(source, /removeHublot\s*\(\s*fetch\s*,/, path);
+  }
+
+  for (const component of ["components/AuthGate.svelte", "components/SettingsModal.svelte"]) {
+    const source = sources.find(({ path }) => path === component)?.source ?? "";
+    assert.doesNotMatch(source, /\blocalStorage\b|\blocation\.reload\s*\(/, component);
+  }
+});
+
 test("remaining dispatchEvent calls are native composer input synchronization", () => {
   const dispatches = sources.flatMap(({ path, source }) =>
     [...source.matchAll(/^.*\.dispatchEvent\(.*$/gm)].map((match) => ({ path, call: match[0].trim() })),
