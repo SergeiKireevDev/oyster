@@ -375,7 +375,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify deleting a session removes all and only its checkpoints, routines, runs, logs, hublots, and lifecycle records.
 - [x] Verify a failed agent deletion preserves all owned resources.
 - [x] Verify a crash after agent deletion completes the cascade on restart.
-- [ ] Verify fork deletion does not delete ancestor-owned resources.
+- [x] Verify fork deletion does not delete ancestor-owned resources.
 - [ ] Verify both SQLite and JSONL session backends can safely reference the app database.
 - [ ] Run `npm run build`, `npm test`, and the Docker/e2e matrix before cutover.
 

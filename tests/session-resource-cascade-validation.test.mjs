@@ -202,3 +202,55 @@ test("restart completes the owned-resource cascade after a crash following agent
   assert.equal(operation.stage, "completed");
   assert.equal(operation.owner_id, null);
 });
+
+test("fork deletion removes fork-owned rows without deleting ancestor-owned resources", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-fork-resource-isolation-"));
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const storagePath = "/sessions/family.sqlite";
+  const ancestorRef = { backend: "sqlite", id: "ancestor", storagePath };
+  const forkRef = { backend: "sqlite", id: "fork", storagePath };
+  const ancestor = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "ancestor", storagePath, createdAt: "ancestor" });
+  const fork = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "fork", storagePath, createdAt: "fork" });
+  for (const [kind, owner, reference, port] of [["ancestor", ancestor, ancestorRef, 4330], ["fork", fork, forkRef, 4331]]) {
+    store.repositories.checkpoints.record(reference, { hash: `${kind}-hash`, anchorId: `${kind}-anchor`, sessionRef: reference, timestamp: `${kind}-checkpoint` });
+    store.repositories.routines.upsert({ id: `${kind}-routine`, ownerId: owner.id, name: `${kind}.sh`, script: `echo ${kind}`, now: `${kind}-routine` });
+    store.repositories.routines.createRun({ id: `${kind}-run`, routineId: `${kind}-routine`, mode: "run", startedAt: `${kind}-run` });
+    store.repositories.routines.appendLog(`${kind}-run`, "stdout", `${kind}-log`, `${kind}-log`);
+    store.repositories.hublots.create({ id: `${kind}-hublot`, ownerId: owner.id, port, workdir: `/${kind}`, serviceKind: "self_served", status: "open", desiredState: "open", createdAt: `${kind}-hublot` });
+    store.repositories.hublots.appendLifecycleEvent({ hublotId: `${kind}-hublot`, status: "open", desiredState: "open", createdAt: `${kind}-event` });
+    store.repositories.runners.create({ id: `${kind}-runner0`, ownerId: owner.id, dir: `/${kind}`, sessionBackend: "sqlite", sessionId: reference.id, sessionStoragePath: storagePath, desiredState: "stopped", lastStatus: "stopped", createdAt: `${kind}-runner` });
+  }
+  const ancestorSnapshot = {
+    checkpoints: store.repositories.checkpoints.listForSession(ancestorRef),
+    routine: store.repositories.routines.findByName("ancestor.sh"),
+    run: store.repositories.routines.findRun("ancestor-run"),
+    logs: store.repositories.routines.listLogs("ancestor-run"),
+    hublot: store.repositories.hublots.find("ancestor-hublot"),
+    history: store.repositories.hublots.listLifecycleEvents("ancestor-hublot"),
+    runner: store.repositories.runners.find("ancestor-runner0"),
+  };
+  const workflow = createSessionDeletionWorkflow({ appStore: store, ensureSessionOwner: () => fork, operationId: () => "delete-fork", now: () => "deleted" });
+  await workflow({
+    reference: forkRef,
+    stopRunners: () => ["fork-runner0"], stopRoutines: () => ["fork.sh"],
+    deleteAgentSession: () => ({ deleted: "fork" }),
+    closeHublots: () => [4331], deleteRoutines: () => ["fork.sh"], removeRuntime() {}, broadcast() {},
+  });
+
+  assert.equal(store.repositories.sessions.find({ backend: "sqlite", sessionId: "fork", storagePath }), null);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), []);
+  assert.equal(store.repositories.routines.findByName("fork.sh"), null);
+  assert.equal(store.repositories.hublots.find("fork-hublot"), null);
+  assert.equal(store.repositories.runners.find("fork-runner0"), null);
+  assert.ok(store.repositories.sessions.find({ backend: "sqlite", sessionId: "ancestor", storagePath }));
+  assert.deepEqual({
+    checkpoints: store.repositories.checkpoints.listForSession(ancestorRef),
+    routine: store.repositories.routines.findByName("ancestor.sh"),
+    run: store.repositories.routines.findRun("ancestor-run"),
+    logs: store.repositories.routines.listLogs("ancestor-run"),
+    hublot: store.repositories.hublots.find("ancestor-hublot"),
+    history: store.repositories.hublots.listLifecycleEvents("ancestor-hublot"),
+    runner: store.repositories.runners.find("ancestor-runner0"),
+  }, ancestorSnapshot);
+});
