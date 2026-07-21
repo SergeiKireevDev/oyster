@@ -245,8 +245,8 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       return;
     }
     const reservation = id ? hublotRepository(state).find(id) : null;
-    if (!reservation || reservation.status !== "opening" || reservation.port !== port) {
-      reject(new Error("hublot must be durably reserved before opening its tunnel"));
+    if (!reservation || !["opening", "recovering"].includes(reservation.status) || reservation.port !== port) {
+      reject(new Error("hublot must be durably reserved or recovering before opening its tunnel"));
       return;
     }
 
@@ -423,11 +423,59 @@ export function invokeHublotStartupScript(state, id, { spawnProcess = spawn } = 
     recordHublotTransition(state, id, "failed", { publicUrl: null, lastError: error.message });
     throw error;
   }
-  const processRow = persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: proc.pid, status: "starting" });
+  const processRow = persistHublotProcessIdentity(state, { hublotId: id, role: "setup_agent", pid: proc.pid, status: "starting" });
   registerHublotProcessHandle(state, processRow, proc);
   proc.once?.("error", () => { removeHublotProcessHandle(state, processRow, proc); finishPersistedProcess(state, processRow, { status: "failed" }); });
   proc.once?.("exit", (exitCode, signal) => { removeHublotProcessHandle(state, processRow, proc); finishPersistedProcess(state, processRow, { exitCode, signal }); });
   return { proc, process: processRow, ...materialized };
+}
+
+export function localPortAnswers(port, timeoutMs = 1500) {
+  return new Promise((resolvePromise) => {
+    const socket = createConnection({ host: "127.0.0.1", port, timeout: timeoutMs });
+    socket.on("connect", () => { socket.destroy(); resolvePromise(true); });
+    socket.on("error", () => resolvePromise(false));
+    socket.on("timeout", () => { socket.destroy(); resolvePromise(false); });
+  });
+}
+
+export async function waitForLocalPort(port, { timeoutMs = 20_000, intervalMs = 250, check = localPortAnswers } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (await check(port)) return true;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, intervalMs));
+  } while (Date.now() < deadline);
+  throw new Error(`service did not answer on port ${port} within ${timeoutMs / 1000}s`);
+}
+
+/** Restart an agent-managed service and persist its replacement before tunneling. */
+export async function restartHublotService(state, hublot, {
+  invoke = invokeHublotStartupScript,
+  waitForPort = waitForLocalPort,
+  discoverPids = pidsOnPort,
+  persistProcess = persistHublotProcessIdentity,
+  reopenTunnel = openTunnel,
+} = {}) {
+  const current = hublotRepository(state).find(hublot.id);
+  if (!current || current.desired_state !== "open" || current.service_kind !== "agent_managed") {
+    throw new Error(`hublot ${hublot.id} is not a desired-open agent-managed service`);
+  }
+  try {
+    invoke(state, current.id);
+    await waitForPort(current.port);
+    const servicePid = discoverPids(current.port)[0] ?? null;
+    if (!servicePid) throw new Error(`service answers on port ${current.port} but its PID could not be discovered`);
+    const serviceProcess = persistProcess(state, {
+      hublotId: current.id, role: "service", pid: servicePid, status: "running",
+    });
+    const tunnel = await reopenTunnel(state, {
+      id: current.id, port: current.port, label: current.label, sessionId: current.session_id,
+    });
+    return Object.freeze({ hublotId: current.id, servicePid, serviceProcess, tunnel });
+  } catch (error) {
+    recordHublotTransition(state, current.id, "failed", { publicUrl: null, lastError: error.message });
+    throw error;
+  }
 }
 
 const START_SCRIPT_MAX_BYTES = 256 * 1024;

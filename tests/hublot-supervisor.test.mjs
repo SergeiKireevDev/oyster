@@ -48,7 +48,7 @@ test("supervisor reconciles every desired-open hublot against persisted identiti
   });
   const result = await supervisor.reconcile();
 
-  assert.deepEqual(result, { skipped: false, checked: 2, recovering: 1 });
+  assert.deepEqual(result, { skipped: false, checked: 2, recovering: 1, restarted: 0 });
   assert.equal(store.repositories.hublots.find(healthy.id).status, "open");
   assert.equal(store.repositories.hublots.find(healthy.id).public_url, "https://healthy.test");
   assert.equal(store.repositories.hublots.findProcess("healthy-tunnel").observed_at, "observed");

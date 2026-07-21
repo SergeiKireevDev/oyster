@@ -4,6 +4,7 @@ import { verifyPersistedProcessIdentity } from "./processIdentity.mjs";
 export function createHublotSupervisor({
   appStore,
   recordTransition,
+  restartService = null,
   verifyIdentity = verifyPersistedProcessIdentity,
   intervalMs = 5_000,
   setIntervalFn = setInterval,
@@ -17,10 +18,11 @@ export function createHublotSupervisor({
   let reconciling = false;
 
   async function reconcile({ includeOpening = false } = {}) {
-    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0 });
+    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0 });
     reconciling = true;
     let checked = 0;
     let recovering = 0;
+    let restarted = 0;
     try {
       const desired = appStore.repositories.hublots.list()
         .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
@@ -44,15 +46,20 @@ export function createHublotSupervisor({
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
         const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy);
         if (criticalIdentityMissing) {
-          const missing = !tunnelHealthy ? "tunnel" : "service";
+          const serviceDead = hublot.service_kind === "agent_managed" && !serviceHealthy;
+          const missing = serviceDead ? "service" : "tunnel";
           const error = `persisted ${missing} process identity is not live`;
           if (hublot.status !== "recovering" || hublot.public_url !== null || hublot.last_error !== error) {
             recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
             recovering++;
           }
+          if (serviceDead && restartService) {
+            try { await restartService(hublot); restarted++; }
+            catch (error) { logger.error(`[pi-ui] hublot ${hublot.id} service restart failed: ${error.message}`); }
+          }
         }
       }
-      return Object.freeze({ skipped: false, checked, recovering });
+      return Object.freeze({ skipped: false, checked, recovering, restarted });
     } finally {
       reconciling = false;
     }

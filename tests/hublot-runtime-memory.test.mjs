@@ -33,7 +33,7 @@ test("hublot runtime registry contains only ChildProcess handles keyed by persis
   assert.equal(state.hublotProcessHandles.size, 1);
   assert.equal(state.hublotProcessHandles.get(invoked.process.id), childProcess);
   assert.equal(invoked.process.hublot_id, hublot.id);
-  assert.equal(invoked.process.role, "service");
+  assert.equal(invoked.process.role, "setup_agent");
   assert.equal(state.tunnels, undefined);
   for (const value of state.hublotProcessHandles.values()) assert.equal(value, childProcess);
 
