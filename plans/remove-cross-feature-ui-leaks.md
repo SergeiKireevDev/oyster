@@ -118,7 +118,7 @@ bridge or direct persistence policy.
 
 ## 5. Scope Checkpoint Picker and Auth Browser Effects
 
-- [ ] Add `createCheckpointModelPickerService()` with instance-scoped picker
+- [x] Add `createCheckpointModelPickerService()` with instance-scoped picker
   state, pending resolver, model preference adapter, and modal-shell interface.
   Add independent-instance and replacement-settlement tests.
 - [ ] Provide the checkpoint picker service from `App.svelte` and pass it into
