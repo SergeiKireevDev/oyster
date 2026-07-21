@@ -242,7 +242,7 @@ jobs. Existing API-key secret-boundary tests continue to pass unchanged.
   auth, sign out, and verify the provider becomes unavailable when no fallback
   remains. Assert no secret appears in rendered text, local/session storage, or
   collected network/error output.
-- [ ] Run the complete validation matrix and check this item only after all
+- [x] Run the complete validation matrix and check this item only after all
   results pass:
 
 ```text

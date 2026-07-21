@@ -109,10 +109,27 @@ export async function waitFor(fn, { timeout = 30000, interval = 500, label = "co
  * Load the UI with the token in the fragment and wait until the SSE stream is
  * connected (green dot). Returns once the composer is ready.
  */
-export async function login(page) {
+export async function login(page, { keepCredentialSetup = false } = {}) {
   await page.goto(`${baseUrl()}/#token=${authToken()}`);
   await page.waitForSelector("#connDot.ok", { timeout: 30000 });
   await page.waitForSelector("#input", { state: "visible" });
+  if (!keepCredentialSetup) {
+    const setup = page.locator("#mTitle", { hasText: "Set up credentials" });
+    if (await setup.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+      await page.getByRole("button", { name: "Close" }).click();
+      await expectOverlayClosed(page);
+    }
+  }
+}
+
+async function expectOverlayClosed(page) {
+  await page.locator("#overlay").evaluate((overlay) => new Promise((resolve) => {
+    if (!overlay.classList.contains("open")) return resolve();
+    const observer = new MutationObserver(() => {
+      if (!overlay.classList.contains("open")) { observer.disconnect(); resolve(); }
+    });
+    observer.observe(overlay, { attributes: true, attributeFilter: ["class"] });
+  }));
 }
 
 /** The current session id the UI is showing. The inline script is a classic

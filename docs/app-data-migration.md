@@ -1,3 +1,9 @@
+---
+title: Application-data migration
+description: Migrate legacy checkpoints and routines into the pi-lot-ui application database.
+tags: migration, sqlite, recovery
+---
+
 # Application-data migration runbook
 
 This runbook applies only to pi-lot-ui's application database, `pi-lot-ui.sqlite`. The coding agent owns its session SQLite/JSONL stores separately; **never copy, replace, delete, or migrate those stores as part of this procedure**.

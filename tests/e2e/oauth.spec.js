@@ -107,7 +107,7 @@ async function runOAuthFlow(page) {
   test.setTimeout(180000);
   writeMockOAuth(false);
   const mock = await installMockOAuthRoutes(page);
-  await login(page);
+  await login(page, { keepCredentialSetup: true });
   await expectAnthropicAvailability(page, false);
 
   // Empty auth.json opens credential setup automatically, without navigating.

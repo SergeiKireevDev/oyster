@@ -2,6 +2,8 @@
 
 A small web UI for driving the [pi coding agent](https://github.com/badlogic/pi-mono) remotely — from a phone or any browser — through a tunnel.
 
+Full installation, operation, user, architecture, and API guides are available in the [GitDocs documentation](docs/readme.md).
+
 ```
 browser ──HTTP/SSE──> server.mjs ──stdin/stdout RPC──> pi --mode rpc (one per open session)
                               │

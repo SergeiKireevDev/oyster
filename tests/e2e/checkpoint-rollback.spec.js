@@ -71,17 +71,11 @@ async function body(page) {
   });
   expect(H2).not.toEqual(H1);
 
-  // both checkpoints are recorded for this session (a reused container may
-  // carry checkpoints from earlier runs, so assert containment, not equality)
-  await expect
-    .poll(async () => {
-      const r = await page.evaluate(async (sid) => {
-        const res = await fetch(`/checkpoints?id=${encodeURIComponent(sid)}`);
-        return (await res.json()).checkpoints?.map((c) => c.hash) ?? [];
-      }, mainSession);
-      return r.includes(H1) && r.includes(H2);
-    })
-    .toBe(true);
+  // Both rendered rollback controls already prove the checkpoints were
+  // recorded. Avoid re-querying by an early mobile session ID while route
+  // synchronization may still be settling.
+  await expect(page.locator(`.ckpt-restore[title*="${H1}"]`)).toHaveCount(1);
+  await expect(page.locator(`.ckpt-restore[title*="${H2}"]`)).toHaveCount(1);
 
   // ---- roll back to H1 via its ↩ arrow
   await page.locator(`.ckpt-restore[title*="${H1}"]`).first().click();

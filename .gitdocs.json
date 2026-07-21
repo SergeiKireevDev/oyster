@@ -1,0 +1,13 @@
+{
+  "name": "pi-lot-ui",
+  "root": "docs",
+  "output": ".gitdocs_build",
+  "baseURL": "/",
+  "languages": ["bash", "javascript", "json"],
+  "breadcrumbs": true,
+  "prefix_titles": true,
+  "table_of_contents": {
+    "page": true,
+    "folder": true
+  }
+}
