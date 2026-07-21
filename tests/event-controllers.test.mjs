@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerMenuEvents, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerManagedHublotEvents, registerMenuEvents, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("managed hublot event adapter routes management actions", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const calls = [];
+  registerManagedHublotEvents(target, { create: (detail) => calls.push(["create", detail]), openCommandPalette: (detail) => calls.push(["palette", detail]), toggleScope: () => calls.push(["scope"]) });
+  listeners.get("pi-managed-hublot-create")({ detail: { port: 3000 } });
+  listeners.get("pi-managed-command-palette")({ detail: "hublot" });
+  listeners.get("pi-managed-hublot-toggle-scope")();
+  assert.deepEqual(calls, [["create", { port: 3000 }], ["palette", "hublot"], ["scope"]]);
+});
 
 test("session picker event adapter dispatches actions and cancellation", () => {
   const listeners = new Map();

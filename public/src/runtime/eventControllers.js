@@ -9,6 +9,16 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerManagedHublotEvents(target, { create, openCommandPalette, toggleScope }) {
+  const listeners = [
+    ["pi-managed-hublot-create", (event) => create(event.detail)],
+    ["pi-managed-command-palette", (event) => openCommandPalette(event.detail)],
+    ["pi-managed-hublot-toggle-scope", () => toggleScope()],
+  ];
+  for (const [name, listener] of listeners) target.addEventListener(name, listener);
+  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
+}
+
 export function registerSessionPickerEvents(target, { dispatch, cancel }) {
   const onAction = (event) => {
     const { type, args } = event.detail ?? {};
