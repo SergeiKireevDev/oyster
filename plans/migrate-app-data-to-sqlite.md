@@ -317,7 +317,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 ### 6. Migrate and persist hublots
 
 - [x] Make SQLite authoritative for hublot identity, configuration, ownership, brief, workdir, startup script, desired state, observed state, URL, errors, processes, restart state, and lifecycle history.
-- [ ] Persist a hublot row and its allocated startup-script path before starting its setup agent or tunnel process.
+- [x] Persist a hublot row and its allocated startup-script path before starting its setup agent or tunnel process.
 - [ ] Require the setup agent to create and invoke an idempotent startup script at the allocated path; validate and store its contents and SHA-256 in SQLite.
 - [ ] Rematerialize a missing or mismatched startup script from SQLite before invoking it.
 - [ ] Persist the PID and verifiable process identity of every service, cloudflared tunnel, and setup agent immediately after spawn or discovery.

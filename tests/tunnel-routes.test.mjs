@@ -15,14 +15,15 @@ test("tunnel routes prepare the local service before opening and publishing its 
       readJsonBody: async (req) => req.body,
     },
     listTunnels,
+    reserveHublot: (_state, options) => { order.push("reserved"); return { id: "t1", service_start_script_path: "/agent/hublots/t1/start.sh", ...options }; },
     openTunnel: async (_state, options) => { order.push("tunnel"); const t = { id: "t1", url: "https://ready.test", ...options, proc: {} }; state.tunnels.set(t.id, t); return t; },
     closeTunnel: (_state, id) => { if (!state.tunnels.has(id)) return null; state.tunnels.delete(id); closed.push(id); return id; },
-    spawnHublotAgent: async (_state, options, brief) => { order.push("service"); agents.push([options.port, brief]); return { servicePid: 123, agentProc: { exitCode: 0 }, createdAt: "2026-01-01T00:00:00.000Z" }; },
+    spawnHublotAgent: async (_state, options, brief) => { order.push("service"); agents.push([options.port, brief, options.serviceStartScriptPath]); return { servicePid: 123, agentProc: { exitCode: 0 }, createdAt: "2026-01-01T00:00:00.000Z" }; },
   });
   const created = response(); await routes["POST /tunnels"]({ body: { port: 4000, sessionId: "s1", brief: "serve" } }, created);
   assert.equal(created.status, 201);
-  assert.deepEqual(order, ["owner:s1", "service", "tunnel"]);
-  assert.deepEqual(agents, [[4000, "serve"]]);
+  assert.deepEqual(order, ["owner:s1", "reserved", "service", "tunnel"]);
+  assert.deepEqual(agents, [[4000, "serve", "/agent/hublots/t1/start.sh"]]);
   assert.equal(created.body.tunnel.servicePid, 123);
   const rebound = response(); await routes["PATCH /tunnels"]({ body: { id: "t1", sessionId: "s2" } }, rebound);
   assert.equal(rebound.body.tunnel.sessionId, "s2"); assert.equal(events[0].type, "tunnel_opened");

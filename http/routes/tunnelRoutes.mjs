@@ -1,4 +1,4 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, reserveHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -18,6 +18,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       }
       const brief = body?.brief ? String(body.brief) : null;
       let prepared = null;
+      let reserved = null;
       try {
         const options = {
           port,
@@ -27,11 +28,15 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         const owner = options.sessionId ? ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
         options.brief = brief;
-        // Agent-managed hublots are prepared locally first. Nothing is added
-        // to state.tunnels (and therefore nothing reaches the UI) until the
-        // requested service is actually listening on its allocated port.
-        if (brief) prepared = await spawnHublotAgent(state, options, brief);
-        const tunnel = await openTunnel(state, { ...options, createdAt: prepared?.createdAt });
+        // Durable identity and recovery path must exist before either setup
+        // agent or cloudflared can start.
+        reserved = reserveHublot(state, options);
+        const reservedOptions = {
+          ...options, id: reserved.id,
+          serviceStartScriptPath: reserved.service_start_script_path,
+        };
+        if (brief) prepared = await spawnHublotAgent(state, reservedOptions, brief);
+        const tunnel = await openTunnel(state, reservedOptions);
         if (prepared) {
           const live = state.tunnels.get(tunnel.id);
           if (live) {
@@ -49,6 +54,10 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });
       } catch (e) {
+        if (reserved && state.appStore?.repositories?.hublots?.find(reserved.id)?.status === "opening") {
+          state.appStore.repositories.hublots.update(reserved.id, { status: "failed", last_error: e.message });
+          state.appStore.repositories.hublots.appendLifecycleEvent({ hublotId: reserved.id, status: "failed", desiredState: "open", error: e.message, createdAt: new Date().toISOString() });
+        }
         if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
         if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}
         json(res, 502, { error: e.message });

@@ -25,6 +25,8 @@
 import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createConnection } from "node:net";
 
 const URL_TIMEOUT_MS = 20_000;
@@ -90,19 +92,52 @@ function persistedTunnelInfo(state, row) {
 
 export function listTunnels(state) {
   return hublotRepository(state).list()
-    .filter((row) => row.status !== "closed")
+    .filter((row) => row.status !== "closed" && row.status !== "opening")
     .map((row) => persistedTunnelInfo(state, row));
+}
+
+/** Allocate durable identity and recovery configuration before any process starts. */
+export function reserveHublot(state, {
+  port, label = null, sessionId = null, ownerId = null, brief = null,
+  serviceKind = brief ? "agent_managed" : "self_served",
+} = {}) {
+  port = Number(port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
+  for (const row of hublotRepository(state).list()) {
+    if (row.port === port && row.status !== "closed") throw new Error(`port ${port} is already tunneled: ${row.public_url}`);
+  }
+  const id = randomBytes(6).toString("hex");
+  const createdAt = new Date().toISOString();
+  const scriptRoot = state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  const serviceStartScriptPath = serviceKind === "agent_managed"
+    ? join(scriptRoot, "hublots", id, "start.sh")
+    : null;
+  const row = hublotRepository(state).create({
+    id, ownerId, port, label, brief, workdir: state.currentDir, serviceKind,
+    serviceStartScriptPath, status: "opening", desiredState: "open", createdAt,
+  });
+  hublotRepository(state).appendLifecycleEvent({
+    hublotId: id, status: "opening", desiredState: "open", createdAt,
+  });
+  return row;
+}
+
+function failOpeningHublot(state, id, error) {
+  const row = hublotRepository(state).find(id);
+  if (!row || row.status !== "opening") return;
+  const message = error instanceof Error ? error.message : String(error);
+  hublotRepository(state).update(id, { status: "failed", public_url: null, last_error: message });
+  hublotRepository(state).appendLifecycleEvent({
+    hublotId: id, status: "failed", desiredState: row.desired_state,
+    error: message, createdAt: new Date().toISOString(),
+  });
 }
 
 /**
  * Spawn a tunnel for a local port. Resolves with the tunnel entry once the
  * public URL is known; rejects if the process dies or times out first.
  */
-export function openTunnel(state, {
-  port, label = null, sessionId = null, ownerId = null, brief = null,
-  serviceKind = brief ? "agent_managed" : "self_served",
-  createdAt = new Date().toISOString(),
-}) {
+export function openTunnel(state, { id, port, label = null, sessionId = null }) {
   return new Promise((resolvePromise, reject) => {
     port = Number(port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -110,11 +145,10 @@ export function openTunnel(state, {
       return;
     }
     if (!state.tunnels) state.tunnels = new Map();
-    for (const t of hublotRepository(state).list()) {
-      if (t.port === port && t.status !== "closed") {
-        reject(new Error(`port ${port} is already tunneled: ${t.public_url}`));
-        return;
-      }
+    const reservation = id ? hublotRepository(state).find(id) : null;
+    if (!reservation || reservation.status !== "opening" || reservation.port !== port) {
+      reject(new Error("hublot must be durably reserved before opening its tunnel"));
+      return;
     }
 
     const bin = state.config.TUNNEL_BIN;
@@ -125,8 +159,8 @@ export function openTunnel(state, {
     const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
 
     const tunnel = {
-      id: randomBytes(6).toString("hex"), port, label, sessionId, ownerId, brief,
-      serviceKind, url: null, workdir: state.currentDir, createdAt, proc,
+      id, port, label, sessionId, url: null,
+      workdir: reservation.workdir, createdAt: reservation.created_at, proc,
     };
 
     let settled = false;
@@ -134,7 +168,9 @@ export function openTunnel(state, {
       if (settled) return;
       settled = true;
       proc.kill("SIGTERM");
-      reject(new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / 1000}s`));
+      const error = new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / 1000}s`);
+      failOpeningHublot(state, id, error);
+      reject(error);
     }, URL_TIMEOUT_MS);
 
     // cloudflared prints the assigned URL on stderr
@@ -147,15 +183,14 @@ export function openTunnel(state, {
         settled = true;
         clearTimeout(timer);
         tunnel.url = m[0];
-        const row = hublotRepository(state).create({
-          id: tunnel.id, ownerId, port, label, brief, workdir: tunnel.workdir,
-          serviceKind, publicUrl: tunnel.url, status: "open", desiredState: "open",
-          createdAt, openedAt: new Date().toISOString(),
+        hublotRepository(state).update(id, {
+          public_url: tunnel.url, status: "open", opened_at: new Date().toISOString(), last_error: null,
         });
         hublotRepository(state).appendLifecycleEvent({
           hublotId: tunnel.id, status: "open", desiredState: "open",
           publicUrl: tunnel.url, createdAt: new Date().toISOString(),
         });
+        const row = hublotRepository(state).find(id);
         state.tunnels.set(tunnel.id, tunnel);
         console.log(`[pi-ui] tunnel up: ${tunnel.url} -> localhost:${port}`);
         state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
@@ -169,18 +204,22 @@ export function openTunnel(state, {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(new Error(
+      const error = new Error(
         err.code === "ENOENT"
           ? `tunnel binary "${bin}" not found — install cloudflared or set --tunnel-bin / TUNNEL_BIN`
           : `tunnel spawn failed: ${err.message}`
-      ));
+      );
+      failOpeningHublot(state, id, error);
+      reject(error);
     });
 
     proc.on("exit", (code, signal) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        reject(new Error(`tunnel exited before reporting a URL (code=${code}): ${errTail.trim().split("\n").pop() ?? ""}`));
+        const error = new Error(`tunnel exited before reporting a URL (code=${code}): ${errTail.trim().split("\n").pop() ?? ""}`);
+        failOpeningHublot(state, id, error);
+        reject(error);
         return;
       }
       if (state.tunnels.delete(tunnel.id)) {
