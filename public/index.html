@@ -600,7 +600,7 @@
     outline: none;
   }
   #input:focus { border-color: var(--accent-dim); }
-  #attachBtn, .attach-btn {
+  .attach-btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -611,7 +611,7 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  #attachBtn:hover, .attach-btn:hover { color: var(--text); border-color: var(--accent-dim); }
+  .attach-btn:hover { color: var(--text); border-color: var(--accent-dim); }
   #modal .m-option.file { padding: 6px 12px; margin-bottom: 4px; }
   #modal .m-option.file::before { content: "📄 "; }
   #modal .m-option.file .f-size { color: var(--muted); font-size: 11px; margin-left: 8px; }
@@ -640,18 +640,17 @@
 
   /* ---------- command palette ---------- */
   #cmdPalette {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 0;
-    right: 0;
+    position: fixed;
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 10px;
-    box-shadow: 0 -8px 30px rgba(0,0,0,.5);
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
     display: none;
     flex-direction: column;
     overflow: hidden;
-    z-index: 40;
+    z-index: 80;
+    min-width: 280px;
+    max-width: 420px;
     max-height: 320px;
     overflow-y: auto;
   }
@@ -990,9 +989,7 @@
 
     <div id="composer">
       <div class="inner">
-        <div id="cmdPalette"></div>
-        <button id="attachBtn" title="Attach a server file path">📎</button>
-        <textarea id="input" rows="1" placeholder="message pi"></textarea>
+        <textarea id="input" rows="1" placeholder="message (type : for commands)"></textarea>
         <button class="btn" id="sendBtn">Send</button>
         <button class="btn stop" id="stopBtn" hidden>Stop</button>
       </div>
@@ -1025,6 +1022,8 @@
 </div></div>
 
 <div id="toasts"></div>
+
+<div id="cmdPalette"></div>
 
 <div id="gate"><div class="card">
   <div style="font-weight:600;font-size:17px">pi-lot</div>
@@ -2871,8 +2870,6 @@ function insertIntoComposer(text) {
   inp.dispatchEvent(new Event("input")); // resize textarea
   inp.focus();
 }
-
-$("attachBtn").addEventListener("click", () => showFilePicker().catch((e) => toast(e.message, "error")));
 
 // ------------------------------------------------------------ folder browser
 
