@@ -13,6 +13,17 @@ imports: `runners.mjs` (pi processes), `sessions.mjs` (.jsonl parsing,
 mtime-cached), `checkpoints.mjs` (git checkpoints/rollback),
 `tunnels.mjs` (cloudflared + hublot agents), `routines.mjs` (scripts).
 
+### Hot reload scope
+
+The stable core watches `app.mjs` and the HTTP route modules under `http/`.
+During development or runtime recovery, changes are loaded with mtime query
+parameters and the complete route table is constructed before the active
+handler is swapped. A failed import or construction leaves the previous
+handler and existing SSE connections running. Each successful reload creates
+new ESM cache entries, so this mechanism is not intended as a production
+rollout strategy: production deployments should replace the Node process to
+bound module-cache growth and guarantee a clean application version.
+
 - **Zero dependencies** — plain Node ≥ 18, no `npm install`. Tests: `npm test` (node --test).
 - **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
 - **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.

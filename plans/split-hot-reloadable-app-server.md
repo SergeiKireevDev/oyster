@@ -165,7 +165,7 @@ or session-fork semantics.
 - [x] Add a route-factory reload integration test that changes a temporary
   route module, confirms the new response is served, and confirms an existing
   SSE client remains connected.
-- [ ] Document that cache-busted hot reload is a development/runtime recovery
+- [x] Document that cache-busted hot reload is a development/runtime recovery
   feature and that production deployments use process replacement, avoiding
   unbounded long-lived ESM cache growth.
 
