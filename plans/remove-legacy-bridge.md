@@ -64,6 +64,8 @@ creation into store-backed action modules.
 
 - Move open/create/scope-toggle and managed command-palette setup into a
   hublot manager action module.
+- ✅ Hublot Manager description input now writes directly to its store; its
+  bridge export and registration were removed.
 - Refresh manager and sidebar stores atomically after mutations, respecting
   current session scope.
 - Keep File Explorer opening as a store/modal action, not a bridge callback.
