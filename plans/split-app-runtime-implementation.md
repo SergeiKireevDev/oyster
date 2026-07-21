@@ -138,7 +138,7 @@ features.
 **Acceptance:** remount/restart tests pass; no module-level runtime state is
 reused after teardown.
 
-## [ ] 2. Extract Platform and Connection Coordination
+## [x] 2. Extract Platform and Connection Coordination
 
 Keep transport mechanics below features and extract the remaining wiring from
 the root.

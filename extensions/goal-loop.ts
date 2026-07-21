@@ -69,7 +69,9 @@ function findNextUncheckedStep(plan: string) {
   for (const line of lines) {
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
     if (heading) {
-      headings[heading[1].length - 1] = heading[2];
+      const title = heading[2];
+      if (title.startsWith("[ ] ")) return title.slice(4);
+      headings[heading[1].length - 1] = title;
       headings.length = heading[1].length;
       continue;
     }
@@ -93,7 +95,9 @@ function checkCompletedStep(ctx: ExtensionContext, planPath: string, step: strin
     const line = lines[index];
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
     if (heading) {
-      headings[heading[1].length - 1] = heading[2];
+      const title = heading[2];
+      if (title.startsWith("[ ] ") && (step === title.slice(4) || step.startsWith(`${title.slice(4)} `))) matches.push(index);
+      headings[heading[1].length - 1] = title;
       headings.length = heading[1].length;
       continue;
     }

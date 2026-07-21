@@ -18,6 +18,7 @@ import { createRuntimeLifecycleDependencies as assembleRuntimeLifecycleDependenc
 import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
+import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
@@ -477,7 +478,7 @@ const teardownReconnectWatchdog = registerReconnectWatchdog({
   onExpired: () => {
     eventStream.close();
     connectionState.lost();
-    connect();
+    connectionCoordinator.connect();
   },
 });
 
@@ -494,6 +495,13 @@ const connect = createEventConnectionController({
   },
   onError: () => { connectionState.reconnecting(); probeTokenValidity(); },
   onMessage: (event) => processEventMessage(event.data, { onReceived: () => { lastEventAt = Date.now(); }, dedupe: isDuplicateSseEvent, dispatch: handleEvent, onError: (error, message) => console.error("event handling failed", error, message) }),
+});
+
+const connectionCoordinator = createConnectionCoordinator({
+  connect,
+  disconnect: () => eventStream.close(),
+  refreshState: (...args) => refreshState(...args),
+  dispatch: (...args) => handleEvent(...args),
 });
 
 // True from (re)connect until the canonical transcript's tail is rendered.
