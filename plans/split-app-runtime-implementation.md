@@ -210,7 +210,7 @@ session identity but not on each other:
 
 - [x] **Checkpoints** — marker, tree, freeze, rollback, and checkpoint event UI.
 - [x] **Composer** — input state, send/abort action, prompt history, command guard, and command palette.
-- [ ] **Files** — file picker, folder browser, explorer, upload input, and editor.
+- [x] **Files** — file picker, folder browser, explorer, upload input, and editor.
   - [x] Create `features/files/createFilesFeature.js` to assemble picker, folder-browser, and explorer controllers with injected browser/API dependencies.
   - [x] Move file-picker state and actions (`browse`, `pick`, `use folder`, `cancel`) behind the files feature; replace its global custom events with feature actions.
   - [x] Move folder-browser state and actions (`browse`, `create`, `submit`, `cancel`) behind the files feature; replace its global custom events with feature actions.
