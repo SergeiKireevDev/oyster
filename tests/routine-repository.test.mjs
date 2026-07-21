@@ -22,7 +22,7 @@ test("routine repository persists definitions, ownership, scripts, bindings, and
     id: "routine-1", ownerId: owner.id, name: "build.sh", script: "#!/bin/sh\necho one", cwd: "/work", now: "time-1",
   });
   assert.deepEqual(created, {
-    id: "routine-1", owner_id: owner.id, name: "build.sh", script: "#!/bin/sh\necho one",
+    id: "routine-1", owner_id: owner.id, session_id: "session-a", name: "build.sh", script: "#!/bin/sh\necho one",
     revision: 1, cwd: "/work", created_at: "time-1", updated_at: "time-1",
   });
 

@@ -9,7 +9,7 @@ test("routine routes validate and preserve every session-bound lifecycle action"
   const operation = (action) => (...args) => { calls.push([action, ...args.slice(1)]); return { name: "job", action, progress: action === "start" ? 0 : 100 }; };
   const routes = createRoutineRoutes({
     state,
-    ensureSessionOwner: (sessionId) => owners.push(sessionId),
+    ensureSessionOwner: (sessionId) => { owners.push(sessionId); return { id: `owner-${sessionId}` }; },
     requestContext: { json(r, status, body) { r.status = status; r.body = body; }, readJsonBody: async (req) => req.body },
     routines: {
       listRoutines: () => [{ name: "job", progress: 50 }], routinesDir: () => "/routines",
@@ -31,7 +31,7 @@ test("routine routes validate and preserve every session-bound lifecycle action"
     assert.equal(response.status, action === "create" ? 201 : 200);
     assert.equal(response.body.routine.action, action);
   }
-  assert.deepEqual(owners, ["s1"]);
-  assert.deepEqual(calls[0][1], { name: "job", script: "#!/bin/sh\necho ok", sessionId: "s1", cwd: "/session" });
-  assert.deepEqual(calls[1][2], { sessionId: "s1", cwd: "/session" });
+  assert.deepEqual(owners, ["s1", "s1"]);
+  assert.deepEqual(calls[0][1], { name: "job", script: "#!/bin/sh\necho ok", sessionId: "s1", ownerId: "owner-s1", cwd: "/session" });
+  assert.deepEqual(calls[1][2], { sessionId: "s1", ownerId: "owner-s1", cwd: "/session" });
 });

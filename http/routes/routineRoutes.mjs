@@ -34,10 +34,11 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
             json(res, 400, { error: "create requires a `script` string (max 256KB)" });
             return;
           }
-          if (sessionId) ensureSessionOwner(sessionId);
-          json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
+          const owner = sessionId ? ensureSessionOwner(sessionId) : null;
+          json(res, 201, { routine: createRoutine(state, { name, script, sessionId, ownerId: owner?.id ?? null, cwd: sessionCwd() }) });
         } else if (action === "start") {
-          json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });
+          const owner = sessionId ? ensureSessionOwner(sessionId) : null;
+          json(res, 200, { routine: startRoutine(state, name, { sessionId, ownerId: owner?.id ?? null, cwd: sessionCwd() }) });
         } else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
         else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
         else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });

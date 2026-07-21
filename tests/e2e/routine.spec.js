@@ -1,12 +1,13 @@
 // Feature 2 — Start a session, create a dummy routine and run it.
 //
-// A routine is any executable in ~/.pi/routines/. We create a dummy one (that
-// reports progress, drops a byproduct on `run`, and removes it on `teardown`),
+// The routine API stores the authoritative definition in SQLite and
+// materializes its executable for runs. The script reports progress, drops a
+// byproduct on `run`, and removes it on `teardown`; we
 // then drive it entirely from the UI sidebar: ▶ start, watch it reach 100% /
 // done, then 🧹 teardown and watch the byproduct disappear.
 
 import { test, expect } from "@playwright/test";
-import { login, dexec, waitFor, MOBILE_VIEWPORT } from "./lib/harness.js";
+import { login, dexec, api, waitFor, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const NAME = "e2e-dummy.sh";
@@ -42,9 +43,8 @@ esac
 // beforeEach (not beforeAll) because it needs a live container.
 test.beforeEach(async () => {
   await ensureContainer();
-  dexec(`mkdir -p "$HOME/.pi/routines" && rm -f "$HOME/.pi/routines/${NAME}"`);
-  dexec(`cat > "$HOME/.pi/routines/${NAME}" <<'PIEOF'\n${SCRIPT}\nPIEOF`);
-  dexec(`chmod +x "$HOME/.pi/routines/${NAME}"`);
+  const created = await api("POST", "/routines", { name: NAME, action: "create", script: SCRIPT });
+  expect(created.status).toBe(201);
   dexec(`rm -f ${ARTIFACT}`);
 });
 test.afterEach(() => { teardownContainer(); });

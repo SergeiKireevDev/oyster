@@ -141,9 +141,15 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       delete: (id) => database.prepare("DELETE FROM app_sessions WHERE id = ?").run(id).changes,
     }),
     routines: Object.freeze({
-      list: () => database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines ORDER BY name").all().map((row) => ({ ...row })),
+      list: () => database.prepare(`
+        SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
+        FROM routines r LEFT JOIN app_sessions s ON s.id = r.owner_id ORDER BY r.name
+      `).all().map((row) => ({ ...row })),
       findByName: (name) => {
-        const row = database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines WHERE name = ?").get(name);
+        const row = database.prepare(`
+          SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
+          FROM routines r LEFT JOIN app_sessions s ON s.id = r.owner_id WHERE r.name = ?
+        `).get(name);
         return row ? { ...row } : null;
       },
       upsert: ({ id, ownerId = null, name, script, cwd = null, now }) => {
@@ -154,7 +160,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
             owner_id = excluded.owner_id, script = excluded.script, cwd = excluded.cwd,
             revision = routines.revision + 1, updated_at = excluded.updated_at
         `).run(id, ownerId, name, script, cwd, now, now);
-        return { ...database.prepare("SELECT id, owner_id, name, script, revision, cwd, created_at, updated_at FROM routines WHERE name = ?").get(name) };
+        return { ...database.prepare(`
+          SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
+          FROM routines r LEFT JOIN app_sessions s ON s.id = r.owner_id WHERE r.name = ?
+        `).get(name) };
       },
       bind: (id, ownerId, cwd, updatedAt) => database.prepare("UPDATE routines SET owner_id = ?, cwd = ?, updated_at = ? WHERE id = ?").run(ownerId, cwd, updatedAt, id).changes,
       release: (id, updatedAt) => database.prepare("UPDATE routines SET owner_id = NULL, cwd = NULL, updated_at = ? WHERE id = ?").run(updatedAt, id).changes,

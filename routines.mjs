@@ -1,14 +1,9 @@
 /**
  * pi-lot-ui — routine manager
  *
- * A "routine" is a runnable script living in the GLOBAL store
- * `~/.pi/routines/` (any executable file). Routines are *bound to the
- * session using them*: starting one from a session binds it to that
- * session's id (persisted in `~/.pi/routines/bindings.json`, along with the
- * working directory the run happened in, so teardown finds the byproducts
- * even after a server restart). Unbound routines are visible to every
- * session until someone starts them; deleting a session releases (and stops)
- * its routines.
+ * A routine definition and its optional session binding are authoritative in
+ * the app SQLite store. Executable files under `~/.pi/routines/` are runtime
+ * artifacts only. Unbound routines are visible to every session until bound.
  *
  * The server drives a routine through a tiny protocol:
  *
@@ -44,26 +39,17 @@
  */
 
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 const ROUTINES_DIR = join(homedir(), ".pi", "routines");
-const BINDINGS_PATH = join(ROUTINES_DIR, "bindings.json");
 const LOG_MAX = 80;
 const PROGRESS_RE = /^::progress\s+(?:(\d{1,3})%?(?:\s+|$))?(.*)$/;
 
-// Scan result cache — listRoutines does synchronous stat/readdir/readFileSync
-// on every call; cache it briefly so rapid-fire fetches (SSE replay_done,
-// mobile sidebar open) don't each pay the full disk cost. Invalidated on
-// any mutation (create / delete / binding change).
-let routinesCache = null; // { at, value }
-const ROUTINES_CACHE_TTL_MS = 500;
-
-function invalidateRoutinesCache() {
-  routinesCache = null;
-};
+function invalidateRoutinesCache() {}
 
 export function routinesDir() {
   return ROUTINES_DIR;
@@ -71,7 +57,7 @@ export function routinesDir() {
 
 /** Client-safe view of a routine (no process handle). */
 export function routineInfo(r) {
-  const { proc, ...info } = r;
+  const { proc, id: _id, revision: _revision, ...info } = r;
   return { ...info, alive: !!proc };
 }
 
@@ -84,91 +70,40 @@ function emit(state, r, reason) {
   state.serverEvent({ type: "routine_update", reason, routine: routineInfo(r) });
 }
 
-// ---- session bindings, persisted so teardown works across server restarts
-
-// load→modify→save is always synchronous here, so mutations are serialized
-// by the event loop; the defenses below are against crash-mid-write (atomic
-// rename) and a corrupt file silently reading as {} and then being saved over
-function loadBindings() {
-  if (!existsSync(BINDINGS_PATH)) return {};
-  try { return JSON.parse(readFileSync(BINDINGS_PATH, "utf8")); }
-  catch (e) {
-    const backup = `${BINDINGS_PATH}.corrupt-${Date.now()}`;
-    try { renameSync(BINDINGS_PATH, backup); } catch {}
-    console.error(`[pi-ui] routine bindings.json is corrupt (${e.message}) — set aside as ${backup}`);
-    return {};
-  }
+function routineRepository(state) {
+  const repository = state.appStore?.repositories?.routines;
+  if (!repository) throw new Error("routine repository is required");
+  return repository;
 }
 
-function saveBinding(r) {
-  const bindings = loadBindings();
-  if (r.sessionId || r.cwd) bindings[r.name] = { sessionId: r.sessionId ?? null, cwd: r.cwd ?? null };
-  else delete bindings[r.name];
-  try {
-    mkdirSync(ROUTINES_DIR, { recursive: true });
-    const tmp = `${BINDINGS_PATH}.tmp`;
-    writeFileSync(tmp, JSON.stringify(bindings, null, 2));
-    renameSync(tmp, BINDINGS_PATH);
-  } catch (e) {
-    console.error(`[pi-ui] failed to save routine bindings: ${e.message}`);
-  }
-}
-
-/** Scan ~/.pi/routines/ and merge with live state + persisted bindings. */
-function scanRoutinesDisk() {
-  // the expensive part: synchronous disk I/O (readdir + stat every file + read bindings)
-  try { mkdirSync(ROUTINES_DIR, { recursive: true }); } catch {}
-  const bindings = loadBindings();
-  const found = new Set();
-  const fresh = new Map(); // name -> new idle entry
-  for (const e of readdirSync(ROUTINES_DIR, { withFileTypes: true })) {
-    if (!e.isFile() && !e.isSymbolicLink()) continue;
-    const path = join(ROUTINES_DIR, e.name);
-    let st;
-    try { st = statSync(path); } catch { continue; }
-    if (!st.isFile() || !(st.mode & 0o111)) continue; // executables only
-    found.add(e.name);
-    fresh.set(e.name, {
-      name: e.name, path,
-      sessionId: bindings[e.name]?.sessionId ?? null,
-      cwd: bindings[e.name]?.cwd ?? null,
-      status: "idle", progress: null, message: null,
-      startedAt: null, finishedAt: null, exitCode: null,
-      log: [], proc: null,
-    });
-  }
-  return { found, fresh };
+function mergeRoutineRow(state, row) {
+  const map = routinesMap(state);
+  const existing = map.get(row.name);
+  const entry = existing ?? {
+    id: row.id, name: row.name, path: join(ROUTINES_DIR, row.name),
+    status: "idle", progress: null, message: null,
+    startedAt: null, finishedAt: null, exitCode: null, log: [], proc: null,
+  };
+  entry.id = row.id;
+  entry.sessionId = row.session_id ?? null;
+  entry.cwd = row.cwd ?? null;
+  entry.revision = row.revision;
+  map.set(row.name, entry);
+  return entry;
 }
 
 export function listRoutines(state) {
   const map = routinesMap(state);
-  const now = Date.now();
-  if (!routinesCache || now - routinesCache.at > ROUTINES_CACHE_TTL_MS) {
-    const { found, fresh } = scanRoutinesDisk();
-    // merge disk findings into live state
-    for (const [name, entry] of fresh) {
-      if (!map.has(name)) map.set(name, entry);
-    }
-    // forget entries whose script vanished (or that pre-date the global store)
-    // — unless they are still running (keep those visible so they can be stopped)
-    for (const [key, r] of [...map.entries()]) {
-      if (!found.has(key) && !r.proc) map.delete(key);
-    }
-    routinesCache = { at: now, found: [...found], snapshot: new Map(map) };
-  }
-  return [...map.values()]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(routineInfo);
+  const rows = routineRepository(state).list();
+  const names = new Set(rows.map((row) => row.name));
+  for (const row of rows) mergeRoutineRow(state, row);
+  for (const [name, routine] of map) if (!names.has(name) && !routine.proc) map.delete(name);
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name)).map(routineInfo);
 }
 
 function findRoutine(state, name) {
-  const map = routinesMap(state);
-  // if it's already in live state (the common case — the routine was listed
-  // before any action), we don't need the disk scan
-  if (map.has(name)) return map.get(name);
-  // not in the map yet (e.g. routine added to disk by hand): scan to pick it up
-  listRoutines(state);
-  return map.get(name) ?? null;
+  const row = routineRepository(state).findByName(name);
+  return row ? mergeRoutineRow(state, row) : null;
 }
 
 function runScript(state, r, mode) {
@@ -240,12 +175,12 @@ function runScript(state, r, mode) {
 /** Create (or overwrite) a routine script in the global store and bind it
  *  to the calling session. The script must implement the routine protocol:
  *  `<script> run` and `<script> teardown`, with optional `::progress` lines. */
-export function createRoutine(state, { name, script, sessionId = null, cwd = null }) {
+export function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
   if (!/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
-  listRoutines(state);
+  if (sessionId && !ownerId) throw new Error("session owner is required to bind a routine");
   const map = routinesMap(state);
   invalidateRoutinesCache();
-  const existing = map.get(name);
+  const existing = findRoutine(state, name);
   if (existing?.proc) throw new Error(`routine "${name}" is currently ${existing.status} — stop it before overwriting`);
   if (existing?.sessionId && sessionId && existing.sessionId !== sessionId) {
     throw new Error(`routine "${name}" exists and is bound to another session`);
@@ -254,16 +189,11 @@ export function createRoutine(state, { name, script, sessionId = null, cwd = nul
   const path = join(ROUTINES_DIR, name);
   writeFileSync(path, script, { mode: 0o755 });
   chmodSync(path, 0o755); // writeFileSync's mode is ignored when the file existed
-  const r = existing ?? {
-    name, path, sessionId: null, cwd: null,
-    status: "idle", progress: null, message: null,
-    startedAt: null, finishedAt: null, exitCode: null,
-    log: [], proc: null,
-  };
-  if (sessionId) r.sessionId = sessionId;
-  if (cwd) r.cwd = cwd;
+  const row = routineRepository(state).upsert({
+    id: existing?.id ?? randomUUID(), ownerId, name, script, cwd, now: new Date().toISOString(),
+  });
+  const r = mergeRoutineRow(state, row);
   map.set(name, r);
-  saveBinding(r);
   invalidateRoutinesCache();
   console.log(`[pi-ui] routine ${existing ? "updated" : "created"}: ${path} (session ${r.sessionId ?? "-"})`);
   emit(state, r, existing ? "updated" : "created");
@@ -276,10 +206,10 @@ export function deleteRoutine(state, name) {
   const r = findRoutine(state, name);
   if (!r) throw new Error(`no such routine: ${name}`);
   if (r.proc) throw new Error(`routine "${name}" is ${r.status} — stop it first`);
-  try { unlinkSync(r.path); } catch (e) { throw new Error(`failed to delete ${r.path}: ${e.message}`); }
+  routineRepository(state).delete(r.id);
+  try { unlinkSync(r.path); } catch (e) { if (e.code !== "ENOENT") throw new Error(`failed to delete ${r.path}: ${e.message}`); }
   r.sessionId = null;
   r.cwd = null;
-  saveBinding(r); // removes the bindings.json entry
   routinesMap(state).delete(name);
   invalidateRoutinesCache();
   emit(state, r, "deleted");
@@ -288,16 +218,19 @@ export function deleteRoutine(state, name) {
 
 /** Start a routine's `run`. Binds it to the calling session (and its
  *  workdir); the binding persists until the session releases it. */
-export function startRoutine(state, name, { sessionId = null, cwd = null } = {}) {
+export function startRoutine(state, name, { sessionId = null, ownerId = null, cwd = null } = {}) {
   const r = findRoutine(state, name);
   if (!r) throw new Error(`no such routine: ${name}`);
   if (r.proc) throw new Error(`routine "${name}" is already ${r.status}`);
   if (r.sessionId && sessionId && r.sessionId !== sessionId) {
     throw new Error(`routine "${name}" is bound to another session — release it there first`);
   }
-  if (sessionId) r.sessionId = sessionId;
+  if (sessionId) {
+    if (!ownerId) throw new Error("session owner is required to bind a routine");
+    routineRepository(state).bind(r.id, ownerId, cwd, new Date().toISOString());
+    r.sessionId = sessionId;
+  }
   if (cwd) r.cwd = cwd;
-  saveBinding(r);
   invalidateRoutinesCache();
   runScript(state, r, "run");
   return routineInfo(r);
@@ -331,9 +264,9 @@ export function releaseRoutine(state, name) {
   const r = findRoutine(state, name);
   if (!r) throw new Error(`no such routine: ${name}`);
   if (r.proc) throw new Error(`routine "${name}" is ${r.status} — stop it first`);
+  routineRepository(state).release(r.id, new Date().toISOString());
   r.sessionId = null;
   r.cwd = null;
-  saveBinding(r);
   invalidateRoutinesCache();
   emit(state, r, "released");
   return routineInfo(r);
@@ -365,10 +298,10 @@ export function deleteSessionRoutines(state, sessionId) {
       proc.removeAllListeners?.("exit");
       try { process.kill(-proc.pid, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch {} }
     }
+    routineRepository(state).delete(r.id);
     try { unlinkSync(r.path); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete ${r.path}: ${error.message}`); }
     r.sessionId = null;
     r.cwd = null;
-    saveBinding(r);
     routinesMap(state).delete(r.name);
     deleted.push(r.name);
     emit(state, r, "deleted");
@@ -385,9 +318,9 @@ export function releaseSessionRoutines(state, sessionId) {
   for (const r of routinesMap(state).values()) {
     if (r.sessionId !== sessionId) continue;
     if (r.proc) { try { stopRoutine(state, r.name); } catch {} }
+    routineRepository(state).release(r.id, new Date().toISOString());
     r.sessionId = null;
     r.cwd = null;
-    saveBinding(r);
     released.push(r.name);
     emit(state, r, "released");
   }

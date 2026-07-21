@@ -306,7 +306,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 ### 5. Migrate routines
 
 - [x] Store routine definitions, ownership, scripts, bindings, runs, progress, results, and capped logs in SQLite.
-- [ ] Replace routine directory scanning and `bindings.json` as authoritative stores.
+- [x] Replace routine directory scanning and `bindings.json` as authoritative stores.
 - [ ] Materialize scripts securely and atomically for `run` and `teardown`.
 - [ ] Keep only process handles and stream readers in memory.
 - [ ] Mark unfinished runs as interrupted during startup reconciliation.
