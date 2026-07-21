@@ -17,7 +17,11 @@ export function createSessionRoutes({
   const { json } = requestContext;
   const { catalog, sessionReferenceFor, sessionTargetFromSearch, readSessionHeaderInfo } = sessions;
   const { stopRunner, runnersChanged } = runners;
-  const { closeTunnel, releaseSessionRoutines } = resources;
+  const {
+    closeTunnel,
+    stopSessionRoutines = () => [],
+    deleteSessionRoutines = resources.releaseSessionRoutines ?? (() => []),
+  } = resources;
   const sqlite = catalog.backend === "sqlite";
 
   function referenceFor(session) {
@@ -126,8 +130,8 @@ export function createSessionRoutes({
         await steps.removeRuntime(stoppedRunners);
         await steps.broadcast();
         const closedHublots = await steps.closeHublots();
-        const stoppedRoutines = await steps.stopRoutines();
-        return { agentResult, closedHublots, stoppedRoutines };
+        const deletedRoutines = await steps.deleteRoutines();
+        return { agentResult, closedHublots, stoppedRoutines: deletedRoutines, deletedRoutines };
       });
       try {
         const outcome = await workflow({
@@ -143,7 +147,8 @@ export function createSessionRoutes({
             }
             return closed;
           },
-          stopRoutines: () => releaseSessionRoutines(state, reference.id),
+          stopRoutines: () => stopSessionRoutines(state, reference.id),
+          deleteRoutines: () => deleteSessionRoutines(state, reference.id),
           deleteAgentSession: () => operations.deleteSession(reference),
           removeRuntime: (stoppedRunners) => {
             for (const runner of stoppedRunners) {
@@ -156,7 +161,7 @@ export function createSessionRoutes({
         json(res, 200, {
           deleted: outcome.agentResult.deleted,
           closedHublots: outcome.closedHublots,
-          releasedRoutines: outcome.stoppedRoutines,
+          releasedRoutines: outcome.deletedRoutines,
         });
       } catch (error) {
         const status = error.code === "capability_unavailable" ? 409 : 500;

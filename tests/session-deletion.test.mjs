@@ -45,6 +45,7 @@ test("session deletion journals each cross-store stage and completes the app cas
     closeHublots: () => { order.push("hublots"); return [4000]; },
     stopRoutines: () => { order.push("routines"); return ["build.sh"]; },
     deleteAgentSession: () => { order.push("agent"); return { deleted: reference.storagePath }; },
+    deleteRoutines: () => { order.push("routine-definitions"); return ["build.sh"]; },
     removeRuntime: (runners) => {
       order.push("runtime");
       assert.deepEqual(runners, ["r1"]);
@@ -53,24 +54,25 @@ test("session deletion journals each cross-store stage and completes the app cas
     broadcast: () => { order.push("broadcast"); },
   });
 
-  assert.deepEqual(order, ["runners", "hublots", "routines", "agent", "runtime", "broadcast"]);
+  assert.deepEqual(order, ["runners", "hublots", "routines", "agent", "routine-definitions", "runtime", "broadcast"]);
   assert.deepEqual(removeStatuses, ["app_resources_deleted"]);
   assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
   assert.deepEqual(store.repositories.operations.find("delete-session-a"), {
     id: "delete-session-a", owner_id: null, kind: "delete_session", status: "completed", stage: "completed",
     payload: JSON.stringify({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }),
-    error: null, created_at: "time-1", updated_at: "time-8",
+    error: null, created_at: "time-1", updated_at: "time-9",
   });
   assert.equal(result.agentResult.deleted, reference.storagePath);
   assert.deepEqual(result.closedHublots, [4000]);
   assert.deepEqual(result.stoppedRoutines, ["build.sh"]);
+  assert.deepEqual(result.deletedRoutines, ["build.sh"]);
 });
 
 test("startup reconciliation retries agent deletion or infers its completion before cascading owners", async (t) => {
   const store = fixture(t, "pi-ui-session-reconcile-");
   const existing = pendingDeletion(store, "delete-existing", "existing", "routines_stopped");
   const missing = pendingDeletion(store, "delete-missing", "missing", "routines_stopped");
-  const deleted = [];
+  const deleted = [], deletedRoutineOwners = [];
   const results = await reconcileSessionDeletions({
     appStore: store,
     sessionReferences: { validate: (reference) => reference },
@@ -79,10 +81,12 @@ test("startup reconciliation retries agent deletion or infers its completion bef
       capabilities: { delete: { sqlite: true } },
       deleteSession: async (reference) => deleted.push(reference.id),
     },
+    deleteSessionRoutines: (sessionId) => deletedRoutineOwners.push(sessionId),
     now: () => "reconciled",
   });
 
   assert.deepEqual(deleted, ["existing"]);
+  assert.deepEqual(deletedRoutineOwners, ["existing", "missing"]);
   assert.deepEqual(results, [
     { id: "delete-existing", status: "completed" },
     { id: "delete-missing", status: "completed" },

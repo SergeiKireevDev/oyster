@@ -339,8 +339,45 @@ export function releaseRoutine(state, name) {
   return routineInfo(r);
 }
 
-/** Release every routine bound to a session (e.g. when it is deleted):
- *  stops running ones and removes the binding. Returns the released names. */
+/** Stop live routines before their owning session is deleted, retaining definitions. */
+export function stopSessionRoutines(state, sessionId) {
+  if (!sessionId) return [];
+  listRoutines(state);
+  const stopped = [];
+  for (const r of routinesMap(state).values()) {
+    if (r.sessionId !== sessionId) continue;
+    if (r.proc) { try { stopRoutine(state, r.name); } catch {} }
+    stopped.push(r.name);
+  }
+  return stopped;
+}
+
+/** Permanently delete every definition bound to a deleted session. */
+export function deleteSessionRoutines(state, sessionId) {
+  if (!sessionId) return [];
+  listRoutines(state);
+  const deleted = [];
+  for (const r of [...routinesMap(state).values()]) {
+    if (r.sessionId !== sessionId) continue;
+    if (r.proc) {
+      const proc = r.proc;
+      r.proc = null;
+      proc.removeAllListeners?.("exit");
+      try { process.kill(-proc.pid, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch {} }
+    }
+    try { unlinkSync(r.path); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete ${r.path}: ${error.message}`); }
+    r.sessionId = null;
+    r.cwd = null;
+    saveBinding(r);
+    routinesMap(state).delete(r.name);
+    deleted.push(r.name);
+    emit(state, r, "deleted");
+  }
+  invalidateRoutinesCache();
+  return deleted;
+}
+
+/** Release every routine bound to a session without deleting its definition. */
 export function releaseSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   listRoutines(state); // make sure persisted bindings are materialized

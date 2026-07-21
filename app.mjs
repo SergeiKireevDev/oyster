@@ -10,7 +10,7 @@ const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
   const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
-  const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
+  const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir } =
     await import(bust("routines.mjs"));
   const {
     SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
@@ -72,7 +72,7 @@ export async function init(state) {
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
-    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations });
+    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
     state.incompleteOperations = new Map(appStore.hydrate().incompleteOperations.map((entry) => [entry.id, entry]));
     state.sessionDeletionReconciled = true;
   }
@@ -141,7 +141,7 @@ export async function init(state) {
       sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
-    resources: { closeTunnel, releaseSessionRoutines },
+    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines },
     sessionOperations: state.sessionOperations,
     deleteOwnedSession,
   });
