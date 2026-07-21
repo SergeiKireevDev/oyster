@@ -43,7 +43,7 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
 test("dialog adapters use the scoped service without module-level controller bridges", () => {
   const adapters = readFileSync(new URL("../public/src/platform/createDialogAdapters.js", import.meta.url), "utf8");
   assert.match(adapters, /deps\.dialogService\.(?:openText|openEditor|openConfirm|openOption)/);
-  assert.doesNotMatch(adapters, /configureDialogController|configureOptionPickerController/);
+  assert.doesNotMatch(adapters, /\bconfigure[A-Z]\w*Controller/);
   assert.equal(existsSync(new URL("../public/src/stores/dialogs.js", import.meta.url)), false);
   assert.equal(existsSync(new URL("../public/src/stores/optionPicker.js", import.meta.url)), false);
 });

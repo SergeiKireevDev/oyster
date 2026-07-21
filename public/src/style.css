@@ -69,6 +69,7 @@
     cursor: pointer;
     white-space: nowrap;
     user-select: none;
+    font-family: inherit;
   }
   .chip:hover { color: var(--text); border-color: var(--accent-dim); }
   #menuBtn { font-size: 16px; line-height: 1; padding: 2px 9px; }

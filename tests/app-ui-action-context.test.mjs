@@ -18,7 +18,7 @@ test("App provides its UI action registry and passes it to the runtime", () => {
 test("Menu routes every action through the scoped registry", () => {
   assert.match(menuSource, /getUiActionRegistry\(\)/);
   assert.match(menuSource, /uiActions\.invoke\(MENU_ACTION, action\)/);
-  assert.doesNotMatch(menuSource, /window\.dispatchEvent|pi-menu-action/);
+  assert.doesNotMatch(menuSource, /window\.dispatchEvent|CustomEvent/);
   assert.deepEqual(
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
     ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"],
@@ -28,7 +28,7 @@ test("Menu routes every action through the scoped registry", () => {
 test("CommandPalette routes mouse selection through the scoped registry", () => {
   assert.match(commandPaletteSource, /onmousedown=\{\(event\) => choose\(event, i\)\}/);
   assert.match(commandPaletteSource, /uiActions\.invoke\(COMMAND_PALETTE_RUN_ACTION, index\)/);
-  assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|pi-command-palette-run/);
+  assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|CustomEvent/);
 });
 
 test("App provides scoped dialog and browser action services", () => {

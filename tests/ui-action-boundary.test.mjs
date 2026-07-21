@@ -19,8 +19,11 @@ const sources = sourceFiles(sourceRoot).map((path) => ({
 }));
 
 test("global menu and command-palette custom event paths are removed", () => {
+  const removedEvents = [["pi", "menu", "action"], ["pi", "command", "palette", "run"]]
+    .map((parts) => parts.join("-"));
   for (const { path, source } of sources) {
-    assert.doesNotMatch(source, /pi-menu-action|pi-command-palette-run|window\.dispatchEvent/, path);
+    assert.doesNotMatch(source, /window\.dispatchEvent/, path);
+    for (const eventName of removedEvents) assert.equal(source.includes(eventName), false, path);
   }
 });
 

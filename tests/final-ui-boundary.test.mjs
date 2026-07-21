@@ -44,12 +44,15 @@ test("overlay host imports components and shell state, not feature actions", () 
   assert.doesNotMatch(overlays, /\b(?:onclick|onkeydown|onsubmit)=/);
 });
 
-test("modal and overlay components do not emulate buttons with spans", () => {
-  const modalComponents = files(componentRoot, /(?:Modal|Overlays)\.svelte$/);
-  assert.ok(modalComponents.length > 0);
+test("components do not emulate buttons with spans", () => {
+  const components = files(componentRoot, /\.svelte$/);
+  assert.ok(components.length > 0);
 
-  for (const path of modalComponents) {
+  for (const path of components) {
     const source = readFileSync(path, "utf8");
     assert.doesNotMatch(source, /<span\b[^>]*\brole=["']button["']/i, relative(componentRoot, path));
   }
+
+  assert.match(readFileSync(join(componentRoot, "Header.svelte"), "utf8"), /<button class="chip" id="menuBtn"/);
+  assert.match(readFileSync(join(componentRoot, "HublotList.svelte"), "utf8"), /<button class="x" title="close this tunnel"/);
 });

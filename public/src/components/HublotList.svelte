@@ -36,7 +36,7 @@
         </div>
         <div class="cap">
           <span class="lbl" title={`${hublot.url} → :${hublot.port}\n${hublot.label ?? ""}`}>{hublot.label || new URL(hublot.url).hostname}</span>
-          <span class="x" title="close this tunnel" role="button" tabindex="0" onclick={() => closeHublot(hublot.id)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); closeHublot(hublot.id); } }}>✕</span>
+          <button class="x" title="close this tunnel" onclick={() => closeHublot(hublot.id)}>✕</button>
         </div>
       </div>
     {/each}

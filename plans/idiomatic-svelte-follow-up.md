@@ -136,7 +136,7 @@ browser effects and listeners have explicit, testable owners.
 - [x] Add a static boundary test that forbids global menu/command custom-event
   dispatch, module-level dialog controllers, feature-action imports in
   `Overlays.svelte`, and clickable span role-buttons in modal/overlay components.
-- [ ] Run stale-reference checks and the complete validation matrix, then update
+- [x] Run stale-reference checks and the complete validation matrix, then update
   this plan's final checkbox only after all checks pass.
 
 ```sh
