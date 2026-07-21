@@ -1487,8 +1487,10 @@ function addUserMessage(message) {
   addPermalinkBtn(div);
   messagesEl.appendChild(div);
   placeCheckpointBtn();
-  scrollToBottom(true);
-  rememberPrompt(text);
+  if (!backfilling) {
+    scrollToBottom(true);
+    rememberPrompt(text); // bulk renders prefill history in chronological order
+  }
 }
 
 // Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
@@ -1833,6 +1835,7 @@ function renderFullMessage(message) {
 }
 
 function clearMessages() {
+  renderJob++; // cancel any in-flight transcript backfill
   checkpointBtn.remove();
   messagesEl.innerHTML = "";
   toolCards.clear();
@@ -1840,6 +1843,85 @@ function clearMessages() {
   promptHistory.length = 0;
   histIdx = null;
   histDraft = "";
+}
+
+// ---- transcript rendering: tail first, history backfilled above -----------
+// The viewport is pinned to the BOTTOM, so only the newest turns need to be
+// on screen immediately. renderTranscript() renders those synchronously and
+// then backfills older turns in chunks: each chunk is rendered through the
+// normal (appending) helpers and moved above the existing content within the
+// same task — before the browser paints — with a scrollTop correction, so
+// the visible area never moves. Chunks split at user messages only, keeping
+// toolCall/toolResult pairs (which finish each other's cards) together.
+
+let renderJob = 0;      // bumped to cancel in-flight backfills
+let backfilling = false; // suppresses per-message scroll/history side effects
+
+const TAIL_MSGS = 40;    // rendered synchronously (visible screenful + slack)
+const CHUNK_MSGS = 60;   // per backfill timeslice
+
+function splitTurns(messages) {
+  const turns = [];
+  let cur = [];
+  for (const m of messages) {
+    if (m.role === "user" && cur.length) { turns.push(cur); cur = []; }
+    cur.push(m);
+  }
+  if (cur.length) turns.push(cur);
+  return turns;
+}
+
+/** pop whole turns off the end of `turns` until ~max messages (≥ 1 turn) */
+function takeTailChunk(turns, max) {
+  const chunk = [];
+  while (turns.length && (chunk.length === 0 || chunk.length + turns[turns.length - 1].length <= max)) {
+    chunk.unshift(...turns.pop());
+    if (chunk.length >= max) break;
+  }
+  return chunk;
+}
+
+function renderChunk(chunk) {
+  backfilling = true;
+  try { for (const m of chunk) renderFullMessage(m); }
+  finally { backfilling = false; }
+}
+
+/** Render `messages`; resolves true when the FULL transcript is in the DOM
+ *  (false if superseded by a newer render). */
+function renderTranscript(messages) {
+  clearMessages(); // also bumps renderJob, cancelling any older backfill
+  const myJob = ++renderJob;
+  // ↑/↓ prompt recall must stay chronological even though rendering is
+  // tail-first: prefill it from the full list (same skip rule as addUserMessage)
+  for (const m of messages) {
+    if (m.role !== "user") continue;
+    const t = userText(m);
+    if (t && !/^Opening interface: /.test(t)) rememberPrompt(t);
+  }
+  const turns = splitTurns(messages);
+  const tail = takeTailChunk(turns, TAIL_MSGS);
+  renderChunk(tail);
+  scrollToBottom(true);
+  return new Promise((resolve) => {
+    const backfill = () => {
+      if (myJob !== renderJob) { resolve(false); return; }
+      if (!turns.length) { resolve(true); return; }
+      const chunk = takeTailChunk(turns, CHUNK_MSGS);
+      const anchor = messagesEl.firstChild;
+      const before = messagesEl.children.length;
+      renderChunk(chunk); // appended at the bottom by the shared helpers…
+      // …then moved above everything in the same task (no paint in between)
+      const added = [...messagesEl.children].slice(before);
+      const h0 = scroller.scrollHeight;
+      const t0 = scroller.scrollTop;
+      for (const el of added) messagesEl.insertBefore(el, anchor);
+      scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // viewport stays put
+      placeCheckpointBtn(); // back onto the true last message
+      setTimeout(backfill, 0); // yield so live events/input stay responsive
+    };
+    setTimeout(backfill, 0);
+  });
 }
 
 // ------------------------------------------------------------ state / header
@@ -1904,11 +1986,9 @@ let lastPreview = null; // { sessionPath, messages|null }
 
 function renderPreviewNow() {
   if (!lastPreview?.messages?.length) return;
-  clearMessages();
-  for (const m of lastPreview.messages) renderFullMessage(m);
-  scrollToBottom(true);
   // no checkpoint markers here: `state` still describes the previous session
   // until get_state answers; the canonical reload adds them right after
+  renderTranscript(lastPreview.messages);
 }
 
 async function fetchPreview(sessionPath) {
@@ -2259,9 +2339,11 @@ async function reloadTranscript() {
   ]);
   applyState(s);
   lastPreview = null; // canonical content from pi supersedes the file preview
-  clearMessages();
-  for (const m of messages) renderFullMessage(m);
-  scrollToBottom(true);
+  const complete = await renderTranscript(messages);
+  // markers and the permalink-focus callback need the FULL transcript in the
+  // DOM (their targets may live in a backfilled chunk); skip both if this
+  // render was superseded by a newer one meanwhile
+  if (!complete) return;
   refreshCheckpointMarkers().catch(() => {});
   refreshTreeIfOpen();
   const cb = afterTranscript;
