@@ -1,10 +1,5 @@
-let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-
-export function setFilePickerHandlers(handlers) {
-  filePickerHandlers = handlers ?? {};
-}
 
 export function setFileExplorerHandlers(handlers) {
   fileExplorerHandlers = handlers ?? {};
@@ -84,9 +79,5 @@ export function backToHublotsFromExplorer() {
 
 export function toggleFileExplorerHidden() {
   return fileExplorerHandlers.toggleHidden?.();
-}
-
-export function usePickedFolder() {
-  return filePickerHandlers.useFolder?.();
 }
 

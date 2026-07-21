@@ -16,7 +16,7 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelSessionPicker, saveExploredFile, toggleFileExplorerHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelSessionPicker, saveExploredFile, toggleFileExplorerHidden, uploadExploredFiles } from "../lib/legacyBridge.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -91,7 +91,7 @@
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-folder-browser-cancel")); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-submit"))}>Start session here</button>
       {:else if $modalState.content === "filePicker"}
-        <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={usePickedFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") usePickedFolder(); }}>📁 Use this folder</span>
+        <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={() => window.dispatchEvent(new Event("pi-file-picker-use-folder"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-use-folder")); }}>📁 Use this folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-picker-cancel")); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
