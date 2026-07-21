@@ -79,7 +79,7 @@ collisions fail during construction, before a handler swap.
 
 ## 4. Extract Runner, SSE, and RPC Routes
 
-- [ ] Move `GET /events` into `http/routes/runnerRoutes.mjs`, injecting runner
+- [x] Move `GET /events` into `http/routes/runnerRoutes.mjs`, injecting runner
   lookup, state-owned SSE client registration, replay behavior, and disconnect
   cleanup. Add reconnect and reload-continuity tests.
 - [ ] Move `POST /rpc`, `GET /runners`, `DELETE /runners`, `POST /restart`, and

@@ -82,6 +82,7 @@ import { createRequestContext } from "./http/createRequestContext.mjs";
 import { createRouteTable } from "./http/createRouteTable.mjs";
 import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
 import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
+import { createRunnerRoutes } from "./http/routes/runnerRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -198,57 +199,12 @@ export function init(state) {
 
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
+  const runnerRoutes = createRunnerRoutes({ state, runnerFromReq, startRunner, listRunnerInfo });
 
   // ---------------------------------------------------------------- routes (auth required)
 
   const routes = {
     // -------------------------------------------------- runner I/O
-
-    "GET /events": (req, res, url) => {
-      const runner = runnerFromReq(url);
-      if (!runner.proc) startRunner(runner);
-      res.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache, no-transform",
-        connection: "keep-alive",
-        "x-accel-buffering": "no",
-      });
-      // Cloudflare tunnels can otherwise buffer the first tiny SSE chunks for
-      // long enough that EventSource appears open but no messages reach the UI.
-      // A harmless padded comment forces the stream through intermediary
-      // buffering without affecting onmessage handlers.
-      res.write(`: connected ${" ".repeat(2048)}\n\n`);
-      res.runnerId = runner.id; // this client sees only this runner's stream
-      // Register the client BEFORE replaying buffered events. Browser
-      // EventSource may fire `open` as soon as headers/first bytes arrive, and
-      // the UI immediately sends get_state/get_messages RPCs. If this response
-      // is still replaying and not yet in state.sseClients, those RPC responses
-      // can be broadcast to nobody and the client times out waiting for them.
-      state.sseClients.add(res);
-      let ping = null;
-      req.on("close", () => {
-        if (ping) clearInterval(ping);
-        state.sseClients.delete(res);
-      });
-      // replay this runner's buffered events so the client can reconstruct
-      // in-flight state
-      if (url.searchParams.get("replay") !== "0") {
-        for (const line of runner.buffer) res.write(`data: ${line}\n\n`);
-      }
-      res.write(`data: ${JSON.stringify({
-        type: "replay_done", _server: true,
-        runner: runner.id, piRunning: !!runner.proc, workdir: runner.dir,
-        runners: listRunnerInfo(),
-      })}\n\n`);
-      // data pings (not SSE comments) so the client can detect a dead
-      // connection: comments never reach onmessage, real events do. They
-      // carry the runner list so a client that missed a pi_exit/pi_started
-      // (buffer overflow, reconnect gap) still converges on real liveness.
-      ping = setInterval(
-        () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true, runners: listRunnerInfo() })}\n\n`),
-        25000
-      );
-    },
 
     "POST /rpc": async (req, res, url) => {
       const cmd = await readJsonBody(req, res);
@@ -836,7 +792,7 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch
