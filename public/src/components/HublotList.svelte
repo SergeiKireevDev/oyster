@@ -1,5 +1,5 @@
 <script>
-  import { openFileExplorer } from "../lib/legacyBridge.js";
+  const openFileExplorer = () => window.dispatchEvent(new Event("pi-open-file-explorer"));
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
   import { addToast } from "../stores/toasts.js";

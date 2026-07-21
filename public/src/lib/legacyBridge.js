@@ -1,17 +1,8 @@
-let hublotHandlers = {};
 let hublotManagerHandlers = {};
 let folderBrowserHandlers = {};
 let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-
-export function setHublotHandlers(handlers) {
-  hublotHandlers = handlers ?? {};
-}
-
-export function openFileExplorer() {
-  return hublotHandlers.openFileExplorer?.();
-}
 
 export function setHublotManagerHandlers(handlers) {
   hublotManagerHandlers = handlers ?? {};

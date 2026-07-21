@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotManagerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2328,9 +2328,7 @@ async function loadHublots() {
   hublotsLoading.set(false);
 }
 
-setHublotHandlers({
-  openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
-});
+window.addEventListener("pi-open-file-explorer", () => showFileExplorer().catch((e) => toast(e.message, "error")));
 
 // ------------------------------------------------------------ routines sidebar
 //
