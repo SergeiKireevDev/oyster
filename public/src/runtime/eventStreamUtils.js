@@ -2,6 +2,16 @@ export function watchdogExpired(lastEventAt, now = Date.now(), timeoutMs = 70000
   return now - lastEventAt > timeoutMs;
 }
 
+/** Wrap SSE deduplication with an optional duplicate-event diagnostic. */
+export function createLoggedSseDeduper({ log = () => {}, maxIds = 2000 } = {}) {
+  const dedupe = createSseDeduper(maxIds);
+  return (message) => {
+    const duplicate = dedupe(message);
+    if (duplicate) log("sse:duplicate", { type: message?.type, sseId: message?._sseId });
+    return duplicate;
+  };
+}
+
 export function createSseDeduper(maxIds = 2000) {
   const ids = new Set();
   const queue = [];

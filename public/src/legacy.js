@@ -4,7 +4,7 @@ import { tick } from "svelte";
 import { get, writable } from "svelte/store";
 import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
-import { createSseDeduper } from "./runtime/eventStreamUtils.js";
+import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
@@ -552,17 +552,12 @@ let replaying = true;
 let replayDoneSeen = false;
 let replayBufferedEvents = [];
 let transcriptGateRequired = true;
-const dedupeSseEvent = createSseDeduper();
+const isDuplicateSseEvent = createLoggedSseDeduper({ log: lifecycleLog });
 const emptySessionRunners = new Set();
 updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired });
 function setTranscriptGateRequired(value) {
   transcriptGateRequired = !!value;
   updateAppSession({ transcriptGateRequired });
-}
-function isDuplicateSseEvent(msg) {
-  const duplicate = dedupeSseEvent(msg);
-  if (duplicate) lifecycleLog("sse:duplicate", { type: msg?.type, sseId: msg?._sseId });
-  return duplicate;
 }
 const composerReadyForSend = () => isComposerReadyForSend({ connected, replaying, transcriptGateRequired });
 function setReplaying(value, phase = null) {
