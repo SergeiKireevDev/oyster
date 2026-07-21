@@ -36,6 +36,14 @@ export async function openSession(fetchImpl, { sessionPath = null, dir = null } 
   return data.runner;
 }
 
+/** Stop a runner and normalize the endpoint's error payload. */
+export async function stopSessionRunner(fetchImpl, id) {
+  const res = await fetchImpl(`/runners?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `stop failed (${res.status})`);
+  return data;
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }

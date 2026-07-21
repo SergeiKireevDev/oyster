@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
+import { applySessionState, fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -2394,9 +2394,7 @@ const sessionPickerActions = {
     const runner = runnersNow.find((x) => x.sessionFile === session.path) ?? { id: session.runnerId };
     if (!runner.id) return;
     try {
-      const res = await fetch(`/runners?id=${encodeURIComponent(runner.id)}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast(data.error || `stop failed (${res.status})`, "error"); return; }
+      await stopSessionRunner(fetch, runner.id);
       toast("process stopped");
       updateSessionPickerRunners(runnersNow.map((r) => r.id === runner.id ? { ...r, alive: false, busy: false } : r));
     } catch (err) {

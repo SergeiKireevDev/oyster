@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
+import { fetchSessionPreview, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -34,6 +34,16 @@ test("session actions open a runner with normalized server errors", async () => 
   assert.deepEqual(runner, { id: "r2" });
   assert.deepEqual(JSON.parse(calls[0][1].body), { sessionPath: "/a.jsonl", dir: "/work" });
   await assert.rejects(() => openSession(async () => ({ ok: false, status: 409, json: async () => ({ error: "busy" }) })), /busy/);
+});
+
+test("session actions stop runners with normalized errors", async () => {
+  let request;
+  await stopSessionRunner(async (url, options) => {
+    request = [url, options];
+    return { ok: true, json: async () => ({ stopped: true }) };
+  }, "runner/a");
+  assert.deepEqual(request, ["/runners?id=runner%2Fa", { method: "DELETE" }]);
+  await assert.rejects(() => stopSessionRunner(async () => ({ ok: false, status: 404, json: async () => ({ error: "missing" }) }), "r"), /missing/);
 });
 
 test("session actions skip transcript replay for empty runners", () => {
