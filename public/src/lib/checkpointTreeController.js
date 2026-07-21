@@ -1,3 +1,18 @@
+export function createCheckpointTreeEventController({ windowTarget, openSession, rollback }) {
+  const onOpen = (event) => openSession(event.detail);
+  const onRollback = (event) => rollback(event.detail.checkpoint, event.detail.target);
+  function attach() {
+    windowTarget.addEventListener("pi-checkpoint-tree-open-session", onOpen);
+    windowTarget.addEventListener("pi-checkpoint-tree-rollback", onRollback);
+    return detach;
+  }
+  function detach() {
+    windowTarget.removeEventListener("pi-checkpoint-tree-open-session", onOpen);
+    windowTarget.removeEventListener("pi-checkpoint-tree-rollback", onRollback);
+  }
+  return { attach, detach };
+}
+
 export function createCheckpointTreeController({
   fetchImpl,
   getState,

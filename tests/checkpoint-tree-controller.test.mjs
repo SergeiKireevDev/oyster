@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCheckpointTreeController } from "../public/src/lib/checkpointTreeController.js";
+import { createCheckpointTreeController, createCheckpointTreeEventController } from "../public/src/lib/checkpointTreeController.js";
 
 function controller(overrides = {}) {
   const states = [];
@@ -20,6 +20,19 @@ function controller(overrides = {}) {
   };
   return { controller: createCheckpointTreeController(options), states, toasts };
 }
+
+test("checkpoint tree event controller routes typed details and tears down", () => {
+  const listeners = new Map();
+  const windowTarget = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name); } };
+  const calls = [];
+  const controller = createCheckpointTreeEventController({ windowTarget, openSession: (session) => calls.push(["open", session]), rollback: (checkpoint, target) => calls.push(["rollback", checkpoint, target]) });
+  controller.attach();
+  listeners.get("pi-checkpoint-tree-open-session")({ detail: { id: "session" } });
+  listeners.get("pi-checkpoint-tree-rollback")({ detail: { checkpoint: "abc", target: "message" } });
+  controller.detach();
+  assert.deepEqual(calls, [["open", { id: "session" }], ["rollback", "abc", "message"]]);
+  assert.equal(listeners.size, 0);
+});
 
 test("checkpoint tree controller loads the current session tree", async () => {
   const requests = [];
