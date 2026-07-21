@@ -604,6 +604,23 @@
   /* the ■ glyph renders much larger than ✕ at equal font-size; shrink it
      and pin the line-height so both controls occupy the same box */
   #modal .m-option .s-stop { font-size: 21px; line-height: 19.6px; }
+  #modal .s-section {
+    margin: 14px 0 10px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  #modal .s-ico { font-size: 10px; vertical-align: 1px; }
+  #modal .s-wd {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin: 4px 0 4px 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   #modal .s-folders { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
   #modal .s-folders > summary, #modal .s-folder > summary {
     cursor: pointer;
@@ -2986,11 +3003,71 @@ async function showSessionPicker() {
       container.appendChild(b);
     }
 
-    for (const s of sessions) addSessionRow(s, listEl);
+    // ---- active sessions first, then inactive ones (both sectioned by workdir)
+    const folderOf = (p) => p.slice(0, p.lastIndexOf("/"));
+    const labelFor = (dir) =>
+      folders.find((f) => f.dir === dir)?.label ?? (dir === currentFolder ? workdir : dir) ?? "?";
+    const addHeader = (text, container) => {
+      const h = document.createElement("div");
+      h.className = "s-section";
+      h.textContent = text;
+      container.appendChild(h);
+    };
+    const addFolderLabel = (dir, container) => {
+      const l = document.createElement("div");
+      l.className = "s-wd";
+      const ico = document.createElement("span");
+      ico.className = "s-ico";
+      ico.textContent = "\u{1F4C1}";
+      l.append(ico, ` ${labelFor(dir)}`);
+      container.appendChild(l);
+    };
 
-    // ---- collapsed section: sessions from other folders
+    const activeCur = sessions.filter((s) => s.alive);
+    const inactiveCur = sessions.filter((s) => !s.alive);
+
+    // active sessions living in OTHER folders, discovered via live runners
+    const activeOther = new Map(); // session folder dir -> Set(session paths)
+    for (const r of runnersNow) {
+      if (!r.alive || !r.sessionFile) continue;
+      const fd = folderOf(r.sessionFile);
+      if (fd === currentFolder) continue;
+      if (!activeOther.has(fd)) activeOther.set(fd, new Set());
+      activeOther.get(fd).add(r.sessionFile);
+    }
+
+    if (activeCur.length || activeOther.size) {
+      addHeader("Active sessions", listEl);
+      if (activeCur.length) {
+        addFolderLabel(currentFolder, listEl);
+        for (const s of activeCur) addSessionRow(s, listEl);
+      }
+      for (const [fd, paths] of activeOther) {
+        const holder = document.createElement("div");
+        addFolderLabel(fd, holder);
+        listEl.appendChild(holder);
+        // fetch that folder's session summaries to render full rows
+        fetch(`/sessions?token=${encodeURIComponent(token)}&path=${encodeURIComponent(fd)}`)
+          .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+          .then(({ ok, d }) => {
+            if (!ok) throw new Error(d.error || "failed");
+            for (const s of d.sessions.filter((x) => paths.has(x.path))) addSessionRow(s, holder);
+            onRunnersUpdate?.(runnersNow); // sync freshly added dots
+          })
+          .catch(() => holder.remove());
+      }
+    }
+
+    // ---- inactive sessions, sectioned by workdir
+    const others = folders.filter((f) => f.dir !== currentFolder);
+    if (inactiveCur.length || others.length) addHeader("Inactive sessions", listEl);
+    if (inactiveCur.length) {
+      addFolderLabel(currentFolder, listEl);
+      for (const s of inactiveCur) addSessionRow(s, listEl);
+    }
+
+    // collapsed section: inactive sessions from other folders
     (() => {
-      const others = folders.filter((f) => f.dir !== currentFolder);
       if (!others.length) return;
 
       const section = document.createElement("details");
@@ -3003,7 +3080,10 @@ async function showSessionPicker() {
         const fd = document.createElement("details");
         fd.className = "s-folder";
         const fsum = document.createElement("summary");
-        fsum.textContent = `📁 ${f.label} (${f.count})`;
+        const fico = document.createElement("span");
+        fico.className = "s-ico";
+        fico.textContent = "📁";
+        fsum.append(fico, ` ${f.label} (${f.count})`);
         fd.appendChild(fsum);
         // lazy-load the folder's sessions on first expand
         let loaded = false;
@@ -3014,13 +3094,14 @@ async function showSessionPicker() {
             const r = await fetch(`/sessions?token=${encodeURIComponent(token)}&path=${encodeURIComponent(f.dir)}`);
             const d = await r.json();
             if (!r.ok) throw new Error(d.error || `failed (${r.status})`);
-            if (!d.sessions.length) {
+            const inactive = d.sessions.filter((s) => !s.alive); // active ones are shown above
+            if (!inactive.length) {
               const empty = document.createElement("div");
               empty.className = "m-path";
-              empty.textContent = "(no sessions)";
+              empty.textContent = "(no inactive sessions)";
               fd.appendChild(empty);
             }
-            for (const s of d.sessions) addSessionRow(s, fd);
+            for (const s of inactive) addSessionRow(s, fd);
             onRunnersUpdate?.(runnersNow); // sync freshly added dots
           } catch (e) {
             loaded = false;
