@@ -14,7 +14,28 @@ export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420
 /** Create Svelte palette state from the active command match. */
 export function commandPaletteView(items, match, active) {
   if (!items.length) return { open: true, match, emptyText: `no command matches ":${match}"`, items: [] };
-  return { open: true, match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
+  return { open: true, match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, prefix: ":", highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
+}
+
+/** Create palette state for path matches or the file-explorer fallback. */
+export function pathPaletteView(items, trigger, active) {
+  return {
+    open: true,
+    match: trigger.text,
+    emptyText: items.length ? "" : `no path matches "${trigger.text}"`,
+    items: items.map((item, index) => {
+      const label = item.label ?? item.path;
+      const highlighted = label.toLowerCase().startsWith(trigger.text.toLowerCase()) ? trigger.text.length : 0;
+      return {
+        icon: item.icon ?? (item.directory ? "📁" : "📄"),
+        desc: item.desc ?? (item.directory ? "folder" : "file"),
+        prefix: "",
+        highlight: label.slice(0, highlighted),
+        rest: label.slice(highlighted),
+        active: index === active,
+      };
+    }),
+  };
 }
 
 /** Wrap a command palette selection index across the visible command list. */

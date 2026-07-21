@@ -1,6 +1,7 @@
 import { createCommandGuard, commandTrigger, filterCommands } from "../../lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive } from "../../lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
+import { pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
 import {
@@ -117,18 +118,6 @@ export function createComposerAssembly(deps) {
     let inputController = null;
     const commands = [
       {
-        name: "file",
-        desc: "Open file explorer and insert a path",
-        icon: "📂",
-        run() {
-          const trigger = commandTrigger(state.target);
-          const placeholder = trigger ? trigger.text : null;
-          const target = state.target;
-          close();
-          commandDeps.showFilePicker((path) => insertAtTextarea(target, placeholder, path), null, commandDeps.isOverlayOpen());
-        },
-      },
-      {
         name: "sessions",
         desc: "Open the full sessions manager",
         icon: "◫",
@@ -138,43 +127,89 @@ export function createComposerAssembly(deps) {
         },
       },
     ];
-    const filtered = (match) => filterCommands(commands, match);
-    const render = () => state && commandDeps.setPaletteState(commandPaletteView(filtered(state.match), state.match, state.active));
+    let requestVersion = 0;
+    const visibleItems = () => state?.mode === "command" ? filterCommands(commands, state.match) : (state?.items ?? []);
+    const render = () => {
+      if (!state) return;
+      const items = visibleItems();
+      commandDeps.setPaletteState(state.mode === "command"
+        ? commandPaletteView(items, state.match, state.active)
+        : pathPaletteView(items, state.trigger, state.active));
+    };
     const position = (element) => commandDeps.setPaletteState(commandPalettePosition(element.getBoundingClientRect(), commandDeps.windowTarget));
-    const open = (element, match, trigger) => { state = { target: element, match: match || "", active: 0, trigger }; position(element); render(); };
-    function close() { state = null; commandDeps.closePaletteState(); }
+    const openCommand = (element, match, trigger) => { state = { mode: "command", target: element, match: match || "", active: 0, trigger }; position(element); render(); };
+    const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element); render(); };
+    function close() { requestVersion++; state = null; commandDeps.closePaletteState(); }
     const move = (direction) => {
       if (!state) return;
-      const items = filtered(state.match);
+      const items = visibleItems();
       if (!items.length) return;
       state.active = moveCommandPaletteActive(state.active, items.length, direction);
       render();
     };
     const setActive = (index) => {
       if (!state || state.active === index) return;
-      const items = filtered(state.match);
+      const items = visibleItems();
       if (index < 0 || index >= items.length) return;
       state.active = index;
       render();
     };
     const runActive = () => {
       if (!state) return false;
-      const items = filtered(state.match);
+      const items = visibleItems();
       if (!items.length) { close(); return false; }
       items[state.active].run();
       return true;
     };
     const runIndex = (index) => { if (!state) return false; setActive(index); return runActive(); };
+    async function updatePathCompletions(element, trigger, version) {
+      const request = pathCompletionRequest(trigger.text, commandDeps.getWorkdir());
+      try {
+        const data = await commandDeps.browseFiles(request.browsePath);
+        if (version !== requestVersion || pathTrigger(element)?.text !== trigger.text) return;
+        const matches = pathCompletionItems(trigger, request, data);
+        if (matches.length > 10) {
+          openPaths(element, trigger, [{
+            label: "Open file explorer…",
+            icon: "📂",
+            desc: `${matches.length} matching paths`,
+            run() {
+              const target = element;
+              close();
+              commandDeps.showFilePicker((path) => insertAtTextarea(target, trigger.text, path), null, commandDeps.isOverlayOpen(), request.browsePath);
+            },
+          }]);
+          return;
+        }
+        openPaths(element, trigger, matches.map((match) => ({
+          ...match,
+          run() {
+            close();
+            insertAtTextarea(element, trigger.text, match.path);
+          },
+        })));
+      } catch {
+        if (version === requestVersion) close();
+      }
+    }
     function setup(element) {
       inputController?.detach();
       inputController = createCommandPaletteInputController({
         target: element,
         onInput() {
+          const version = ++requestVersion;
           const trigger = commandTrigger(element);
           if (trigger && trigger.text.length >= 1) {
             const match = trigger.text.slice(1);
-            if (!state || state.target !== element || state.trigger?.text !== trigger.text) open(element, match, trigger);
+            if (!state || state.mode !== "command" || state.target !== element || state.trigger?.text !== trigger.text) openCommand(element, match, trigger);
             else { state.match = match; state.active = 0; position(element); render(); }
+            return;
+          }
+          const path = pathTrigger(element);
+          if (path) {
+            state = null;
+            commandDeps.closePaletteState();
+            updatePathCompletions(element, path, version);
           } else if (state?.target === element) close();
         },
         onBlur: () => commandDeps.schedule(() => { if (state?.target === element) close(); }, 150),
