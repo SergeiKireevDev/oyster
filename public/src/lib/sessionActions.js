@@ -1,17 +1,7 @@
-import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "../runtime/sessionRuntime.js";
 
-export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl };
 
-/** Session lifecycle decisions that do not own RPC or EventSource transport. */
-export function parseSessionRoute(pathname) {
-  const match = pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);
-  return match ? { sessionId: match[1], messageId: match[2] ?? null } : { sessionId: null, messageId: null };
-}
-
-export function syncSessionUrl({ location, history, sessionId }) {
-  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
-  if (location.pathname !== path) history.replaceState(null, "", path);
-}
 export function readPersistedRunner(storage, key = "pi_runner") {
   return storage.getItem(key) || null;
 }

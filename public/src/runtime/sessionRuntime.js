@@ -39,6 +39,16 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+export function parseSessionRoute(pathname) {
+  const match = pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);
+  return match ? { sessionId: match[1], messageId: match[2] ?? null } : { sessionId: null, messageId: null };
+}
+
+export function syncSessionUrl({ location, history, sessionId }) {
+  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
+  if (location.pathname !== path) history.replaceState(null, "", path);
+}
+
 /** Return runner metadata after a process has been stopped. */
 export function markRunnerStopped(runners, id) {
   return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
