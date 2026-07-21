@@ -442,8 +442,22 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
   });
 
   if (mobile) {
-    test("mobile Return dismisses settings and the built-in file explorer", async ({ page }) => {
+    test("mobile Return dismisses model selection, settings, and the built-in file explorer", async ({ page }) => {
+      await installSecondMockModel();
       await login(page);
+      await expect(modelChip(page, true)).toContainText("e2e-mock", { timeout: 15000 });
+
+      const originalModel = await modelChip(page, true).textContent();
+      await page.click("#cfgChip");
+      await expect(page.locator("#mTitle")).toHaveText("Settings");
+      await page.locator("#mBody .m-option", { hasText: "Model:" }).click();
+      await expect(page.locator("#mTitle")).toHaveText("Select model");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await expect(page.locator("#mBody .m-option.active")).toContainText("e2e-mock-b");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+      await expect(modelChip(page, true)).toHaveText(originalModel ?? "");
 
       await page.click("#menuBtn");
       await page.click('#menu button[data-action="settings"]');

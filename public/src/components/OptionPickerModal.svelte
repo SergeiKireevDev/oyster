@@ -20,7 +20,11 @@
   }
 
   function onKey(event) {
-    if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
+    if (event.key === "Enter" && event.currentTarget.documentElement.clientWidth <= 760) {
+      event.preventDefault();
+      event.stopPropagation();
+      dialogs.cancelOption();
+    } else if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
     else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
     else if (event.key === "Enter") {
       event.preventDefault();
