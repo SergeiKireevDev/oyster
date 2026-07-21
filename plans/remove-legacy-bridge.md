@@ -123,8 +123,9 @@ Replace registry dispatch with a typed command/action catalog.
   lifecycle callbacks.
 - Keep global keyboard/document listeners in `legacy.js` until moved safely.
 
-**Acceptance:** remove `setMenuActionHandler`, `setCommandPaletteHandlers`,
-and their dispatch exports.
+✅ Removed `setMenuActionHandler`, `setCommandPaletteHandlers`, and their
+dispatch exports. Menu and command palette emit direct action events consumed
+by the legacy transport/session dispatcher.
 
 ## 7. Remove Settings Bridge
 
