@@ -109,7 +109,7 @@ factory, not the composition root.
 
 ## 6. Extract Filesystem and Workdir Routes
 
-- [ ] Move directory browse and mkdir routes into `http/routes/fileRoutes.mjs`.
+- [x] Move directory browse and mkdir routes into `http/routes/fileRoutes.mjs`.
   Preserve configured-root confinement, hidden-file behavior, and status codes
   with traversal and mkdir tests.
 - [ ] Move file download, content, save, and chunked upload routes into the

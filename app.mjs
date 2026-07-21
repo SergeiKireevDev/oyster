@@ -84,6 +84,7 @@ import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
 import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
 import { createRunnerRoutes } from "./http/routes/runnerRoutes.mjs";
 import { createSessionRoutes } from "./http/routes/sessionRoutes.mjs";
+import { createFileRoutes } from "./http/routes/fileRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -205,6 +206,7 @@ export function init(state) {
     sendToRunner, stopRunner, runnerInfo, openSessionRunner,
     sessionFileParam, autoTitleFork,
   });
+  const fileRoutes = createFileRoutes({ state, requestContext });
   const sessionRoutes = createSessionRoutes({
     state,
     requestContext,
@@ -221,42 +223,6 @@ export function init(state) {
 
   const routes = {
     // -------------------------------------------------- file explorer (confined)
-
-    "GET /browse": (req, res, url) => {
-      const target = confinePath(resolve(url.searchParams.get("path") || state.currentDir));
-      if (!target) { forbidden(res, url.searchParams.get("path")); return; }
-      let entries;
-      try {
-        entries = readdirSync(target, { withFileTypes: true });
-      } catch (e) {
-        json(res, 400, { error: `cannot read ${target}: ${e.message}` });
-        return;
-      }
-      const dirs = entries
-        .filter((e) => e.isDirectory())
-        .map((e) => ({ name: e.name, hidden: isHidden(e.name) }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      // files are only needed by the attach-file picker (?files=1)
-      let files;
-      if (url.searchParams.get("files") === "1") {
-        files = entries
-          .filter((e) => e.isFile())
-          .map((e) => {
-            let size = null;
-            try { size = statSync(join(target, e.name)).size; } catch {}
-            return { name: e.name, size, hidden: isHidden(e.name) };
-          })
-          .sort((a, b) => a.name.localeCompare(b.name));
-      }
-      json(res, 200, {
-        path: target,
-        parent: dirname(target) === target ? null : dirname(target),
-        dirs,
-        ...(files ? { files } : {}),
-        home: homedir(),
-        workdir: state.currentDir,
-      });
-    },
 
     "GET /file-download": (req, res, url) => {
       const target = confinePath(resolve(String(url.searchParams.get("path") ?? "")));
@@ -370,37 +336,6 @@ export function init(state) {
       } else {
         json(res, 200, { received: offset + buf.length });
       }
-    },
-
-    "POST /mkdir": async (req, res) => {
-      const body = await readJsonBody(req, res);
-      if (body === undefined) return;
-      const parent = confinePath(resolve(String(body?.path ?? "")));
-      if (!parent) { forbidden(res, body?.path); return; }
-      const name = String(body?.name ?? "").trim();
-      if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
-        json(res, 400, { error: "invalid folder name" });
-        return;
-      }
-      let parentOk = false;
-      try { parentOk = statSync(parent).isDirectory(); } catch {}
-      if (!parentOk) {
-        json(res, 400, { error: `not a directory: ${parent}` });
-        return;
-      }
-      const target = join(parent, name);
-      if (existsSync(target)) {
-        json(res, 409, { error: `already exists: ${target}` });
-        return;
-      }
-      try {
-        mkdirSync(target);
-      } catch (e) {
-        json(res, 500, { error: `mkdir failed: ${e.message}` });
-        return;
-      }
-      console.log(`[pi-ui] created folder ${target}`);
-      json(res, 201, { path: target });
     },
 
     "POST /workdir": async (req, res) => {
@@ -610,7 +545,7 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch
