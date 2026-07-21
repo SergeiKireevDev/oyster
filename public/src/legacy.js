@@ -27,7 +27,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, sessionFileQuery } from "./lib/sessionActions.js";
+import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -794,19 +794,23 @@ function setRunnersNow(runners) {
 
 /** attach this client to another runner and rebuild the UI from its stream */
 function switchToRunner(id) {
-  lifecycleLog("switchToRunner:start", { targetRunner: id, sameRunner: id === currentRunner });
-  if (id === currentRunner) { lastPreview = null; refreshState(); return; }
-  setRunner(id);
-  clearMessages();
-  // the new session has its own tree — reset the carousel/sidebar so a
-  // lingering open sidebar from the previous session doesn't show stale data
-  if (carousel !== 0) { carousel = 0; localStorage.setItem("pi_carousel", "0"); }
-  $("hublots").classList.remove("open");
-  $("treebar").classList.remove("open");
-  setCarouselDots();
-  renderPreviewNow(); // instant transcript from the session file, if fetched
-  knownCommands = null; // commands can differ per project
-  connect({ replay: false }); // intentional switch: canonical reload replaces old transcript; skip buffered SSE replay
+  switchSessionRunner({ id, currentRunner, hooks: {
+    log: (details) => lifecycleLog("switchToRunner:start", details),
+    resetPreview: () => { lastPreview = null; },
+    refreshState,
+    setRunner,
+    clearTranscript: clearMessages,
+    resetSessionUi: () => {
+      // The new session has its own tree; do not leave stale sidebars visible.
+      if (carousel !== 0) { carousel = 0; localStorage.setItem("pi_carousel", "0"); }
+      $("hublots").classList.remove("open");
+      $("treebar").classList.remove("open");
+      setCarouselDots();
+    },
+    renderPreview: renderPreviewNow,
+    resetCommands: () => { knownCommands = null; },
+    connect,
+  } });
 }
 
 // ---- instant transcript preview -------------------------------------------

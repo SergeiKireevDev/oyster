@@ -11,6 +11,24 @@ export function transcriptGateRequired({ runner, messageCount, emptySessionRunne
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }
 
+export function switchSessionRunner({ id, currentRunner, hooks }) {
+  hooks.log({ targetRunner: id, sameRunner: id === currentRunner });
+  if (id === currentRunner) {
+    hooks.resetPreview();
+    hooks.refreshState();
+    return false;
+  }
+  hooks.setRunner(id);
+  hooks.clearTranscript();
+  hooks.resetSessionUi();
+  hooks.renderPreview();
+  hooks.resetCommands();
+  // A deliberate switch always replaces the transcript from canonical history;
+  // never append buffered replay events from the previously selected runner.
+  hooks.connect({ replay: false });
+  return true;
+}
+
 export function applySessionState({ incoming, previousState, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks }) {
   const sessionChanged = incoming?.sessionId !== previousState?.sessionId;
   hooks.log(sessionChanged);

@@ -39,18 +39,15 @@ and event listeners.
 
 ## 2. Extract a Session Lifecycle Action Module
 
-Create `public/src/lib/sessionActions.js` with dependency-injected actions for:
+✅ Created `public/src/lib/sessionActions.js` with dependency-injected actions
+for applying `get_state` results, selecting/switching runners, replay-gate
+decisions, and session-root-relative file queries. The module receives callback
+hooks and does not import legacy code.
 
-- applying `get_state` results to app/session stores;
-- selecting/switching runners;
-- deciding whether a session needs transcript replay;
-- resolving the session-root-relative file transcript query.
+Connection creation, `EventSource` ownership, and RPC implementation remain in
+`legacy.js`.
 
-Keep connection creation, `EventSource` ownership, and RPC implementation in
-`legacy.js` initially. The module must receive callbacks for transport calls,
-logging, and transcript reload rather than importing legacy code.
-
-**Acceptance:** deliberate session switches still use `connect({ replay: false })`;
+**Acceptance:** deliberate session switches use `connect({ replay: false })`;
 fresh empty sessions do not wait on transcript replay; model/session restoration
 e2e coverage remains green.
 
