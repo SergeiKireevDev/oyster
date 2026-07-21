@@ -1865,10 +1865,6 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
 
 setFilePickerHandlers({
   browse: loadFilePicker,
-  pickFile: (path) => {
-    filePickerState.onPick?.(path);
-    finishFilePicker();
-  },
   useFolder: () => {
     filePickerState.onPick?.(filePickerState.curDir);
     finishFilePicker();
@@ -1877,6 +1873,10 @@ setFilePickerHandlers({
     filePickerState.showHidden = !filePickerState.showHidden;
     updateFilePicker({ showHidden: filePickerState.showHidden });
   },
+});
+window.addEventListener("pi-file-picker-pick", (event) => {
+  filePickerState.onPick?.(event.detail);
+  finishFilePicker();
 });
 window.addEventListener("pi-file-picker-cancel", () => {
   filePickerState.onCancel?.();

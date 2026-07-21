@@ -90,10 +90,6 @@ export function browsePickedFileFolder(path) {
   return filePickerHandlers.browse?.(path);
 }
 
-export function pickFile(path) {
-  return filePickerHandlers.pickFile?.(path);
-}
-
 export function usePickedFolder() {
   return filePickerHandlers.useFolder?.();
 }

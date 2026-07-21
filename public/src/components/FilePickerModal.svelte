@@ -1,6 +1,6 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
-  import { browsePickedFileFolder, pickFile } from "../lib/legacyBridge.js";
+  import { browsePickedFileFolder } from "../lib/legacyBridge.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker } from "../stores/filePicker.js";
 
@@ -22,7 +22,7 @@
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($filePicker.path, file)}
-    <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} title={fullPath} onclick={() => pickFile(fullPath)}>
+    <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} title={fullPath} onclick={() => window.dispatchEvent(new CustomEvent("pi-file-picker-pick", { detail: fullPath }))}>
       {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
     </button>
   {/each}
