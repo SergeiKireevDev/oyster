@@ -148,13 +148,6 @@ export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   return res.json();
 }
 
-/** DOM scroll adapter injected into transcript orchestration. */
-export function registerTranscriptLoadScroll(target, scrollToBottom) {
-  const onLoad = () => scrollToBottom(false);
-  target.addEventListener("load", onLoad, true);
-  return () => target.removeEventListener("load", onLoad, true);
-}
-
 export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
   return {
     nearBottom() {
