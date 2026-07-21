@@ -9,6 +9,8 @@
  *
  * Routes:
  *   GET  /            -> static UI (public/index.html)              (no auth)
+ *   GET  /s/<sessionId>[/m/<entryId>] -> same UI; the client opens that
+ *                        session (and scrolls to the message)        (no auth)
  *   GET  /health      -> liveness probe                             (no auth)
  *   GET  /authcheck   -> which credentials arrived + validity       (no auth)
  *   GET  /events      -> SSE stream of one runner's stdout (?runner=id)
@@ -18,6 +20,9 @@
  *   POST /open-session -> get-or-spawn a runner { sessionPath?, dir? }
  *   GET  /sessions    -> saved pi sessions for the active workdir
  *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
+ *   GET  /session-by-id -> locate a session file from its session id (?id=…)
+ *   GET  /session-entries -> ordered user/assistant entries of the active
+ *                          branch of one session (?path=…) — permalink anchors
  *   GET  /session-folders -> all folders under ~/.pi/agent/sessions
  *   GET  /search      -> full-text search (?q=…&scope=session|folder|all[&path=…])
  *   GET  /browse      -> list subdirectories for the folder picker
@@ -647,6 +652,82 @@ export function init(state) {
     return { session: sessionMeta, nodes };
   }
 
+  /** Locate a session .jsonl file from its session id, across every folder.
+   *  Fast path: files are named <timestamp>_<id>.jsonl; fall back to reading
+   *  each file's session header. */
+  function findSessionById(id) {
+    if (!existsSync(SESSIONS_ROOT)) return null;
+    const folders = readdirSync(SESSIONS_ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => join(SESSIONS_ROOT, e.name));
+    for (const dir of folders) {
+      let files;
+      try { files = readdirSync(dir); } catch { continue; }
+      for (const f of files) {
+        if (f.endsWith(`_${id}.jsonl`) || f === `${id}.jsonl`) return join(dir, f);
+      }
+    }
+    for (const dir of folders) {
+      let files;
+      try { files = readdirSync(dir); } catch { continue; }
+      for (const f of files) {
+        if (!f.endsWith(".jsonl")) continue;
+        const path = join(dir, f);
+        try {
+          for (const line of readFileSync(path, "utf8").split("\n", 5)) {
+            if (!line.trim()) continue;
+            const e = JSON.parse(line);
+            if (e.type === "session") {
+              if (e.id === id) return path;
+              break;
+            }
+          }
+        } catch {}
+      }
+    }
+    return null;
+  }
+
+  /** Ordered user/assistant message entries of a session's ACTIVE branch
+   *  (the chain from the last entry up to the root). These entry ids are the
+   *  stable anchors used by message permalinks: the client zips them against
+   *  its rendered transcript. */
+  function sessionEntries(path) {
+    const text = readFileSync(path, "utf8");
+    const byId = new Map();
+    let sessionId = null;
+    let leafId = null;
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === "session") { sessionId = e.id; continue; }
+      if (!e.id) continue;
+      byId.set(e.id, e);
+      leafId = e.id;
+    }
+    const chain = [];
+    for (let cur = leafId ? byId.get(leafId) : null; cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
+      chain.push(cur);
+    }
+    chain.reverse();
+    const entries = [];
+    for (const e of chain) {
+      if (e.type !== "message") continue;
+      const m = e.message ?? {};
+      if (m.role !== "user" && m.role !== "assistant") continue;
+      const c = m.content;
+      let t = typeof c === "string" ? c : c?.find?.((b) => b.type === "text")?.text;
+      if (!t && Array.isArray(c)) {
+        const tc = c.find((b) => b.type === "toolCall");
+        if (tc) t = `[tool: ${tc.name}]`;
+        else if (c.find((b) => b.type === "thinking")) t = "[thinking]";
+      }
+      entries.push({ id: e.id, role: m.role, text: (t ?? "").slice(0, 200), timestamp: e.timestamp ?? null });
+    }
+    return { sessionId, entries };
+  }
+
   // ---------------------------------------------------------------- http helpers
 
   const INDEX_PATH = join(config.DIRNAME, "public", "index.html");
@@ -692,7 +773,11 @@ export function init(state) {
   async function handleRequest(req, res) {
     const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+    // permalink routes are client-side: /s/<sessionId> and /s/<sessionId>/m/<entryId>
+    // both serve the UI; the client parses the path and opens the session
+    const isAppRoute = url.pathname === "/" || url.pathname === "/index.html" ||
+      /^\/s\/[\w.-]+(\/m\/[\w.-]+)?$/.test(url.pathname);
+    if (req.method === "GET" && isAppRoute) {
       if (!existsSync(INDEX_PATH)) {
         res.writeHead(500, { "content-type": "text/plain" });
         res.end("public/index.html missing");
@@ -822,7 +907,8 @@ export function init(state) {
     }
 
     if (req.method === "GET" && url.pathname === "/sessions") {
-      // ?path= lists another sessions folder (must live under the sessions root)
+      // ?path= lists another sessions folder (must live under the sessions root);
+      // ?dir= lists the sessions of a working directory (e.g. the current session's)
       let dir;
       if (url.searchParams.get("path")) {
         dir = resolve(String(url.searchParams.get("path")));
@@ -830,6 +916,8 @@ export function init(state) {
           json(res, 400, { error: "folder must be under the sessions root" });
           return;
         }
+      } else if (url.searchParams.get("dir")) {
+        dir = sessionDirFor(resolve(String(url.searchParams.get("dir"))));
       }
       // annotate each session with its live runner (if any) so the picker
       // can show running/busy indicators
@@ -904,8 +992,37 @@ export function init(state) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/session-by-id") {
+      const id = String(url.searchParams.get("id") ?? "").trim();
+      if (!id) { json(res, 400, { error: "id required" }); return; }
+      const path = findSessionById(id);
+      if (!path) { json(res, 404, { error: `no session with id ${id}` }); return; }
+      try {
+        json(res, 200, { session: { path, ...summarizeSessionFile(path) } });
+      } catch (e) {
+        json(res, 500, { error: `failed to read session: ${e.message}` });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/session-entries") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+        json(res, 400, { error: `not a session file: ${target}` });
+        return;
+      }
+      try {
+        json(res, 200, sessionEntries(target));
+      } catch (e) {
+        json(res, 500, { error: `failed to parse session: ${e.message}` });
+      }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/session-folders") {
-      json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(state.currentDir) });
+      // ?dir= reports "current" relative to that working directory
+      const forDir = url.searchParams.get("dir") ? resolve(String(url.searchParams.get("dir"))) : state.currentDir;
+      json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(forDir) });
       return;
     }
 

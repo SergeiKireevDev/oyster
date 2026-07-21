@@ -278,7 +278,29 @@
     flex-direction: column;
     gap: 12px;
   }
-  .msg { min-width: 0; }
+  .msg { min-width: 0; position: relative; }
+  /* permalink button — revealed on hover, copies a shareable /s/<sid>/m/<eid> URL */
+  .permalink {
+    position: absolute;
+    top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 5px;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 2;
+  }
+  .msg:hover > .permalink { opacity: .85; }
+  .permalink:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1 !important; }
+  .msg.user > .permalink { left: -34px; }
+  .msg.assistant > .permalink { right: 0; top: -8px; }
+  @media (hover: none) { .msg > .permalink { opacity: .35; } }
   .msg.user {
     align-self: flex-end;
     max-width: 85%;
@@ -732,7 +754,7 @@
   <span class="dot" id="connDot"></span>
   <span class="title" id="sessionTitle">pi remote</span>
   <span class="spacer"></span>
-  <span class="chip" id="hublotChip" title="Show hublots">⧉</span>
+  <span class="chip" id="hublotChip" title="Show hublots">❖</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
@@ -814,8 +836,25 @@ let token = null;
   }
 }
 
+// ------------------------------------------------------------ url routes
+// /s/<sessionId>            -> open that session on load
+// /s/<sessionId>/m/<entryId> -> …and scroll to / flash that message
+// The URL is kept in sync with the active session (history.replaceState),
+// so a reload or a shared link always lands on the same session.
+
+const route = (() => {
+  const m = location.pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);
+  return m ? { sessionId: m[1], messageId: m[2] ?? null } : { sessionId: null, messageId: null };
+})();
+
+function syncUrlToSession(sessionId) {
+  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
+  if (location.pathname !== path) history.replaceState(null, "", path);
+}
+
 const $ = (id) => document.getElementById(id);
 const gate = $("gate");
+
 
 function requireToken() {
   gate.classList.add("open");
@@ -1241,6 +1280,7 @@ function addUserMessage(message) {
   if (iface) {
     const details = document.createElement("details");
     details.className = "block tool";
+    details.dataset.role = "user"; // still a user message for permalink alignment
     details.innerHTML =
       `<summary><span class="tname">opening interface</span>` +
       `<span class="targ"></span></summary>` +
@@ -1253,7 +1293,9 @@ function addUserMessage(message) {
   }
   const div = document.createElement("div");
   div.className = "msg user";
+  div.dataset.role = "user";
   div.textContent = text;
+  addPermalinkBtn(div);
   messagesEl.appendChild(div);
   scrollToBottom(true);
   rememberPrompt(text);
@@ -1275,11 +1317,18 @@ function rememberPrompt(text) {
 // user message_start, which must not be rendered a second time.
 const localEchoes = [];
 
+/** Outer .msg wrapper (carries role + permalink button) with an inner body
+ *  used as the render root, so renderAssistantInto can replaceChildren()
+ *  without wiping the button. */
 function addAssistantContainer() {
-  const div = document.createElement("div");
-  div.className = "msg assistant";
-  messagesEl.appendChild(div);
-  return div;
+  const wrap = document.createElement("div");
+  wrap.className = "msg assistant";
+  wrap.dataset.role = "assistant";
+  const body = document.createElement("div");
+  wrap.appendChild(body);
+  addPermalinkBtn(wrap);
+  messagesEl.appendChild(wrap);
+  return body;
 }
 
 function renderFullMessage(message) {
@@ -1301,6 +1350,8 @@ function renderFullMessage(message) {
     const text = toolResultText(message);
     if (text) {
       const root = addAssistantContainer();
+      // not a real assistant message: exclude it from permalink alignment
+      root.parentElement.dataset.role = message.role || "custom";
       root.innerHTML = `<div class="md">${renderMarkdown(text)}</div>`;
     }
   }
@@ -1325,6 +1376,7 @@ function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
   if (sessionChanged) { loadHublots(); loadRoutines(); } // sidebar tunnels are session-scoped; routines follow the workdir
+  if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
   $("sessionTitle").textContent = s.sessionName || "pi remote";
   $("modelChip").textContent = s.model ? s.model.id : "no model";
   $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
@@ -1877,7 +1929,8 @@ function fmtSize(n) {
  *  inserting the path into the composer. */
 async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
   const body = $("mBody"), actions = $("mActions");
-  let startPath = localStorage.getItem("pi_attach_dir") || workdir;
+  // always open in the current session's working directory
+  let startPath = workdir;
 
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
@@ -1889,7 +1942,6 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
       if (path !== workdir) return load(workdir);
       return;
     }
-    localStorage.setItem("pi_attach_dir", data.path);
     $("mTitle").textContent = "Attach file";
     body.innerHTML = "";
     const pathEl = document.createElement("div");
@@ -2094,7 +2146,8 @@ async function sendAgentMessage(text) {
 
 async function showFileExplorer() {
   const body = $("mBody"), actions = $("mActions");
-  let startPath = localStorage.getItem("pi_fx_dir") || workdir;
+  // always open in the current session's working directory
+  let startPath = workdir;
   let curPath = startPath;
 
   async function load(path) {
@@ -2107,7 +2160,6 @@ async function showFileExplorer() {
       return;
     }
     curPath = data.path;
-    localStorage.setItem("pi_fx_dir", data.path);
     $("mTitle").textContent = "\u{1F4C1} File explorer";
     body.innerHTML = "";
     const pathEl = document.createElement("div");
@@ -2492,8 +2544,8 @@ function renderHublots(tunnels) {
     cap.className = "cap";
     const lbl = document.createElement("span");
     lbl.className = "lbl";
-    lbl.textContent = t.label ? `:${t.port} · ${t.label}` : `:${t.port}`;
-    lbl.title = `${t.url}\n${t.label ?? ""}`;
+    lbl.textContent = t.label || new URL(t.url).hostname;
+    lbl.title = `${t.url} → :${t.port}\n${t.label ?? ""}`;
     const x = document.createElement("span");
     x.className = "x";
     x.textContent = "✕";
@@ -2684,7 +2736,10 @@ function fmtSessionDate(iso) {
 }
 
 async function showSessionPicker() {
-  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}`);
+  // list the sessions of the CURRENT session's directory, not the server's
+  // last-set global workdir
+  const dirQ = workdir ? `&dir=${encodeURIComponent(workdir)}` : "";
+  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}${dirQ}`);
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
   if (!sessions.length) { toast("no saved sessions"); return; }
@@ -2706,7 +2761,7 @@ async function showSessionPicker() {
   // folders for the search scope selector and the "other folders" section
   let folders = [], currentFolder = null;
   try {
-    const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}`);
+    const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}${dirQ}`);
     const d = await r.json();
     if (r.ok) { folders = d.folders; currentFolder = d.current; }
   } catch {}
@@ -3082,13 +3137,129 @@ function focusMessageBySnippet(snippet) {
     for (const det of el.querySelectorAll("details")) {
       if (norm(det.textContent).includes(needle)) det.open = true;
     }
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add("msg-flash");
-    setTimeout(() => el.classList.add("fading"), 1500);
-    setTimeout(() => el.classList.remove("msg-flash", "fading"), 3000);
+    flashEl(el);
     return true;
   }
   return false;
+}
+
+function flashEl(el) {
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("msg-flash");
+  setTimeout(() => el.classList.add("fading"), 1500);
+  setTimeout(() => el.classList.remove("msg-flash", "fading"), 3000);
+}
+
+// ------------------------------------------------------------ message permalinks
+//
+// Every user/assistant message can be shared as /s/<sessionId>/m/<entryId>.
+// Entry ids come from the session's .jsonl (via /session-entries, which
+// returns the ACTIVE branch in order); the rendered transcript carries no
+// ids, so elements and entries are zipped together by position, with a
+// text-match fallback when the two sides disagree (e.g. mid-stream).
+
+function addPermalinkBtn(el) {
+  const b = document.createElement("span");
+  b.className = "permalink";
+  b.textContent = "\u{1F517}";
+  b.title = "copy a permalink to this message";
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error"));
+  });
+  el.appendChild(b);
+}
+
+/** rendered transcript elements that correspond to persisted user/assistant entries */
+function chatEls() {
+  return [...messagesEl.children].filter(
+    (el) => el.dataset.role === "user" || el.dataset.role === "assistant"
+  );
+}
+
+async function fetchSessionEntries() {
+  const path = state?.sessionFile
+    ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
+  if (!path) throw new Error("session not saved yet");
+  const res = await fetch(`/session-entries?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+  return data.entries ?? [];
+}
+
+const normText = (s) => s.replace(/\s+/g, " ").trim();
+
+/** does this entry plausibly describe this element? (labels like "[tool: …]"
+ *  never appear verbatim in the DOM, so only verify real text) */
+function entryMatchesEl(entry, el) {
+  if (entry.role !== el.dataset.role) return false;
+  const t = normText(entry.text ?? "");
+  if (!t || t.startsWith("[")) return true;
+  return normText(el.textContent).includes(t.slice(0, 60));
+}
+
+async function entryIdForElement(el) {
+  const entries = await fetchSessionEntries();
+  const els = chatEls();
+  const idx = els.indexOf(el);
+  if (idx === -1 || !entries.length) return null;
+  // same length -> zip by index; otherwise align from the end (the file can
+  // briefly run ahead of / behind the rendered transcript while streaming)
+  const pos = entries.length === els.length ? idx : entries.length - (els.length - idx);
+  if (pos >= 0 && pos < entries.length && entryMatchesEl(entries[pos], el)) return entries[pos].id;
+  const found = entries.find((e) => e.role === el.dataset.role && e.text && !e.text.startsWith("[")
+    && normText(el.textContent).includes(normText(e.text).slice(0, 60)));
+  return found?.id ?? (pos >= 0 && pos < entries.length ? entries[pos].id : null);
+}
+
+async function copyPermalink(el) {
+  if (!state?.sessionId) { toast("no session id yet — send a message first", "warning"); return; }
+  const eid = await entryIdForElement(el);
+  if (!eid) { toast("could not identify this message in the session file", "warning"); return; }
+  const url = `${location.origin}/s/${encodeURIComponent(state.sessionId)}/m/${encodeURIComponent(eid)}`;
+  if (await copyText(url)) toast("permalink copied");
+  else promptText("Permalink", "", url); // clipboard unavailable: show it instead
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    ta.remove();
+    return ok;
+  }
+}
+
+/** opening a /s/<sid>/m/<eid> permalink: scroll to / flash that message */
+async function focusEntryById(entryId) {
+  try {
+    const entries = await fetchSessionEntries();
+    const els = chatEls();
+    const pos = entries.findIndex((e) => e.id === entryId);
+    if (pos === -1) { toast("linked message not found in this session", "warning"); return; }
+    const entry = entries[pos];
+    let el = entries.length === els.length
+      ? els[pos]
+      : els[els.length - (entries.length - pos)] ?? null;
+    if (!el || !entryMatchesEl(entry, el)) {
+      const t = normText(entry.text ?? "");
+      el = (t && !t.startsWith("[")
+        ? els.find((x) => x.dataset.role === entry.role && normText(x.textContent).includes(t.slice(0, 60)))
+        : null) ?? el;
+    }
+    if (!el) { toast("linked message not visible in transcript", "warning"); return; }
+    flashEl(el);
+  } catch (e) {
+    toast(`permalink: ${e.message}`, "warning");
+  }
 }
 
 // ------------------------------------------------------------ conversation tree
@@ -3370,8 +3541,30 @@ function toast(text, kind, { onClick, sticky } = {}) {
 
 // ------------------------------------------------------------ go
 
+/** URL-driven boot: /s/<sessionId> attaches to that session's runner before
+ *  the first SSE connect, so a reload (or a shared link) always lands on the
+ *  same session; /m/<entryId> then focuses the linked message. */
+async function boot() {
+  if (route.sessionId) {
+    try {
+      const res = await fetch(`/session-by-id?token=${encodeURIComponent(token)}&id=${encodeURIComponent(route.sessionId)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
+      const r = await openSessionRunner({ sessionPath: data.session.path, dir: data.session.cwd || null });
+      setRunner(r.id);
+      if (route.messageId) {
+        const mid = route.messageId;
+        afterTranscript = () => focusEntryById(mid);
+      }
+    } catch (e) {
+      toast(`could not open linked session: ${e.message}`, "warning");
+    }
+  }
+  connect();
+}
+
 if (!token) requireToken();
-else connect();
+else boot();
 </script>
 </body>
 </html>
