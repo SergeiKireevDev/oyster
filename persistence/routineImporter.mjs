@@ -15,6 +15,7 @@ export function importLegacyRoutines({
   now = () => new Date().toISOString(),
   apply = true,
   onConflict = () => {},
+  onCandidate = () => {},
 } = {}) {
   if (!repository) throw new Error("routine repository is required");
   if (typeof resolveOwner !== "function") throw new Error("routine owner resolver is required");
@@ -43,7 +44,7 @@ export function importLegacyRoutines({
     if (!binding || typeof binding !== "object" || Array.isArray(binding)) throw new Error(`cannot import malformed legacy binding for ${entry.name}`);
     if (binding.sessionId != null && (typeof binding.sessionId !== "string" || !binding.sessionId)) throw new Error(`cannot import malformed legacy session binding for ${entry.name}`);
     if (binding.cwd != null && typeof binding.cwd !== "string") throw new Error(`cannot import malformed legacy working directory for ${entry.name}`);
-    candidates.push({ name: entry.name, script: readFileSync(sourcePath, "utf8"), binding });
+    candidates.push({ name: entry.name, sourcePath, script: readFileSync(sourcePath, "utf8"), binding });
   }
 
   const names = new Set(candidates.map((candidate) => candidate.name));
@@ -51,6 +52,7 @@ export function importLegacyRoutines({
   let importedCount = 0;
   let existingCount = 0;
   for (const candidate of candidates) {
+    onCandidate(candidate);
     const existing = repository.findByName(candidate.name);
     if (existing) {
       existingCount++;

@@ -7,7 +7,7 @@ export const LEGACY_CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoi
 /** Import the legacy checkpoint snapshot without modifying or renaming it. */
 export function importLegacyCheckpoints({
   repository, sessionReferences, sourcePath = LEGACY_CHECKPOINTS_PATH, readFile = readFileSync,
-  apply = true, onConflict = () => {},
+  apply = true, onConflict = () => {}, onCandidate = () => {},
 } = {}) {
   if (!repository) throw new Error("checkpoint repository is required");
   if (!sessionReferences) throw new Error("session reference codec is required");
@@ -40,6 +40,7 @@ export function importLegacyCheckpoints({
   let importedCount = 0;
   let existingCount = 0;
   for (const { reference, checkpoint } of candidates) {
+    onCandidate({ reference, checkpoint });
     const exists = repository.listForSession(reference)
       .some((item) => item.hash === checkpoint.hash && item.anchorId === checkpoint.anchorId);
     if (exists) {
