@@ -5,6 +5,20 @@ async function jsonRequest(fetchImpl, url, body) {
   return data;
 }
 
+export function openCheckpointModelPicker({ openPicker, rpc, setOptions, options = {} }) {
+  const picker = openPicker({
+    title: "Freeze checkpoint",
+    hint: "The model summarizes the diff into the commit message. Your choice is remembered.",
+    okLabel: "Freeze 🧊",
+    ...options,
+    loading: true,
+  });
+  rpc({ type: "get_available_models" })
+    .then(({ models }) => setOptions(models.map((model) => `${model.provider}/${model.id}`)))
+    .catch(() => setOptions([]));
+  return picker;
+}
+
 export function createCheckpoint(fetchImpl, runner, model) {
   return jsonRequest(fetchImpl, `/checkpoint?runner=${encodeURIComponent(runner ?? "")}`, { model });
 }

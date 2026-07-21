@@ -34,7 +34,7 @@ import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
-import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
+import { createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -405,11 +405,12 @@ function pickCheckpointModel({
   hint = "The model summarizes the diff into the commit message. Your choice is remembered.",
   okLabel = "Freeze \u{1F9CA}",
 } = {}) {
-  const picker = openCheckpointModelPicker({ title, hint, okLabel, loading: true });
-  rpc({ type: "get_available_models" }).then(({ models }) => {
-    updateCheckpointModelOptions(models.map((m) => `${m.provider}/${m.id}`));
-  }).catch(() => updateCheckpointModelOptions([]));
-  return picker;
+  return openModelPicker({
+    openPicker: openCheckpointModelPicker,
+    rpc,
+    setOptions: updateCheckpointModelOptions,
+    options: { title, hint, okLabel },
+  });
 }
 
 async function handleCheckpointClick(e) {
