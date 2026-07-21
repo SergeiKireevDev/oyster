@@ -180,16 +180,16 @@ export function createCarouselSwipeController({ isDesktop, now = Date.now, step,
   let handled = false;
   const ignoredSelector = "textarea, input, select, .toast, #modal, #cmdPalette, #menu";
 
-  function scrollableAncestor(target) {
-    for (let node = target; node; node = node.parentElement) {
-      if ((node.scrollWidth > node.clientWidth + 1) || (node.scrollHeight > node.clientHeight + 1)) return node;
-    }
-    return null;
+  function scrollableCodeSnippet(target) {
+    const snippet = target.closest?.(".md pre");
+    return snippet && ((snippet.scrollWidth > snippet.clientWidth + 1) || (snippet.scrollHeight > snippet.clientHeight + 1))
+      ? snippet
+      : null;
   }
 
   function onTouchStart(event) {
     if (isDesktop() || event.target.closest?.(ignoredSelector)) return;
-    const scrollable = scrollableAncestor(event.target);
+    const scrollable = scrollableCodeSnippet(event.target);
     touchStart = {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY,

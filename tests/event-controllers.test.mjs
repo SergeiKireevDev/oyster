@@ -117,21 +117,22 @@ test("carousel swipe controller routes horizontal single and multi-touch gesture
   gesture(1, -80);
   gesture(2, 80);
   gesture(1, 10, 80);
-  const horizontalItem = { parentElement: null, scrollWidth: 400, clientWidth: 100, scrollHeight: 40, clientHeight: 40, scrollLeft: 0, scrollTop: 0 };
+  const horizontalItem = { scrollWidth: 400, clientWidth: 100, scrollHeight: 40, clientHeight: 40, scrollLeft: 0, scrollTop: 0 };
   controller.onTouchStart({
-    target: { parentElement: horizontalItem, closest: () => null },
+    target: { closest: (selector) => selector === ".md pre" ? horizontalItem : null },
     touches: [{ clientX: 0, clientY: 0 }],
   });
   controller.onTouchMove({ touches: [{ clientX: -80, clientY: 2 }], preventDefault() {} });
   controller.onTouchEnd({ changedTouches: [{ clientX: -100, clientY: 2 }] });
-  const verticalItem = { parentElement: null, scrollWidth: 100, clientWidth: 100, scrollHeight: 400, clientHeight: 100, scrollLeft: 0, scrollTop: 0 };
+  const verticalItem = { scrollWidth: 100, clientWidth: 100, scrollHeight: 400, clientHeight: 100, scrollLeft: 0, scrollTop: 0 };
   controller.onTouchStart({
-    target: { parentElement: verticalItem, closest: () => null },
+    // A non-code scrollable item must not take ownership of carousel swipes.
+    target: { closest: () => null, parentElement: verticalItem },
     touches: [{ clientX: 0, clientY: 0 }],
   });
   controller.onTouchMove({ touches: [{ clientX: -50, clientY: 30 }], preventDefault() {} });
   controller.onTouchEnd({ changedTouches: [{ clientX: -100, clientY: 60 }] });
-  assert.deepEqual(calls, [["page", 1], ["runner", -1]]);
+  assert.deepEqual(calls, [["page", 1], ["runner", -1], ["page", 1]]);
 });
 
 test("carousel controller persists and applies mobile drawer pages", () => {
