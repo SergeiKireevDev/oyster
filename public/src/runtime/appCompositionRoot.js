@@ -21,7 +21,6 @@ import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
-import { createTranscriptRuntime } from "../features/transcript/createTranscriptRuntime.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
@@ -141,15 +140,12 @@ const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handle
 
 // ------------------------------------------------------------ markdown (small, escape-first)
 
-const messagesEl = $("messages");
-const scroller = $("scroller");
 // Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
 let composerHistory;
 const rememberPrompt = (text) => composerHistory.remember(text);
 
 const transcriptAssembly = createTranscriptAssembly({
-  messagesElement: messagesEl,
-  scroller,
+  findElement: $,
   storage: localStorage,
   tick,
   log: lifecycleLog,
@@ -169,11 +165,9 @@ const transcriptAssembly = createTranscriptAssembly({
   composerReadyForSend: () => platformEvents.isComposerReady(connected, transcriptGateRequired),
 });
 const transcriptOperations = transcriptAssembly.operations;
-const transcriptScroll = transcriptOperations.domAdapter;
 const addUserMessage = transcriptOperations.addUserMessage;
 const assistantAlreadyRendered = transcriptOperations.assistantAlreadyRendered;
 const clearMessages = transcriptOperations.clearMessages;
-const handleTranscriptStreamEvent = transcriptOperations.handleStreamEvent;
 const renderFullMessage = transcriptOperations.renderFullMessage;
 const renderTranscript = transcriptOperations.renderTranscript;
 
@@ -196,7 +190,7 @@ function pickCheckpointModel(options = {}) {
 
 const checkpointFeature = createCheckpointFeature({
   fetchImpl: fetch,
-  marker: { tick, chatElements: chatEls, setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => state?.sessionId, fetchSessionEntries },
+  marker: { tick, chatElements: () => transcriptOperations.chatElements(), setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => state?.sessionId, fetchSessionEntries },
   tree: { fetchImpl: fetch, getState: () => state, getRunners: () => runnersNow, getCurrentRunner: () => currentRunner, getWorkdir: () => sessionUi.workdir, setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
   controller: { pickModel: pickCheckpointModel, getRunner: () => currentRunner, getSessionId: () => state?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
 });
@@ -1099,21 +1093,14 @@ async function focusSearchHit(hit) {
 // ids, so elements and entries are zipped together by position, with a
 // text-match fallback when the two sides disagree (e.g. mid-stream).
 
-const transcriptRuntime = createTranscriptRuntime({
-  reloadTranscript,
-  handleStreamEvent: handleTranscriptStreamEvent,
-  domAdapter: transcriptScroll,
-  messageElements: () => [...messagesEl.children],
-  transcriptElements: () => [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
-  findDirect: (entryId) => messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`),
+const transcriptRuntime = transcriptAssembly.configureFeature({
   fetchEntries: fetchSessionEntries,
-  toast: addToast,
   getSessionId: () => state?.sessionId,
   getOrigin: () => location.origin,
   copy: copyTextToClipboard,
   prompt: extensionUiAdapters.input,
+  escape: CSS.escape,
 });
-transcriptAssembly.setPermalinkOperations(transcriptRuntime);
 const transcriptFeature = transcriptRuntime.feature;
 const annotateTranscriptEntries = transcriptOperations.annotateTranscriptEntries;
 const copyPermalink = transcriptOperations.copyPermalink;
@@ -1121,10 +1108,6 @@ const focusEntryById = transcriptOperations.focusEntryById;
 const { focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
 
 /** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
-function chatEls() {
-  return [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant");
-}
-
 /** Read the active session's persisted entries for checkpoint and permalink adapters. */
 async function fetchSessionEntries() {
   const path = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;

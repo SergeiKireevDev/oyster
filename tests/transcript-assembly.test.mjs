@@ -6,6 +6,7 @@ function createDependencies() {
   const messagesElement = {
     children: [],
     querySelectorAll: () => [],
+    querySelector: () => null,
     appendChild() {},
     insertBefore() {},
   };
@@ -16,8 +17,7 @@ function createDependencies() {
     scrollTo() {},
   };
   return {
-    messagesElement,
-    scroller,
+    findElement: (id) => id === "messages" ? messagesElement : scroller,
     storage: { getItem: () => null },
     tick: async () => {},
     log() {},
@@ -85,11 +85,15 @@ test("transcript assembly owns reload and synchronization controller constructio
   assert.equal(assembly.configureSynchronization({}), synchronization);
   assert.equal(typeof assembly.operations.reloadTranscript, "function");
   assert.equal(typeof assembly.operations.composerReadyForSend, "function");
-  assembly.setPermalinkOperations({
-    annotateTranscriptEntries() {},
-    copyPermalink() {},
-    focusEntryById() {},
+  const feature = assembly.configureFeature({
+    fetchEntries: async () => [],
+    getSessionId: () => "session",
+    getOrigin: () => "http://example.test",
+    copy() {},
+    prompt: async () => null,
+    escape: (value) => value,
   });
+  assert.equal(typeof feature.feature.reloadForSession, "function");
   assert.equal(typeof assembly.operations.copyPermalink, "function");
   assembly.teardown();
 });

@@ -26,7 +26,7 @@ wrapping the existing root as extraction.
 **Acceptance:** every remaining block has a documented owner and new root
 coupling cannot grow unnoticed.
 
-## [ ] 2. Extract Transcript Assembly
+## [x] 2. Extract Transcript Assembly
 
 - [x] Create `features/transcript/createTranscriptAssembly.js` and move transcript DOM adapter, action, tool-card, assistant-stream, and renderer construction into it.
 - [x] Move canonical reload, replay reconciliation, transcript sync, post-agent sync, and post-send sync construction into the transcript assembly.

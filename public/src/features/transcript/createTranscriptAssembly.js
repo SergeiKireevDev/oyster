@@ -5,6 +5,7 @@ import { backfillTranscriptTurns } from "../../lib/transcriptBackfill.js";
 import { createPostSendTranscriptSyncController } from "../../lib/postSendTranscriptSyncController.js";
 import { createTranscriptActions } from "../../lib/transcriptActions.js";
 import { splitTurns, takeTailChunk } from "../../lib/transcriptUtils.js";
+import { createTranscriptRuntime } from "./createTranscriptRuntime.js";
 import {
   createAgentCompletionController,
   createAgentStartController,
@@ -21,7 +22,9 @@ import {
 
 /** Owns transcript rendering, stream assembly, local echoes, and DOM scrolling. */
 export function createTranscriptAssembly(deps) {
-  const transcriptScroll = createTranscriptScrollAdapter({ scroller: deps.scroller });
+  const messagesElement = deps.findElement("messages");
+  const scroller = deps.findElement("scroller");
+  const transcriptScroll = createTranscriptScrollAdapter({ scroller });
   const toolCards = createToolCardRegistry({ createStore: writable, resultText: toolResultText });
   const localEchoes = [];
   let afterTranscript = null;
@@ -107,8 +110,8 @@ export function createTranscriptAssembly(deps) {
   }
 
   let renderer = createTailFirstTranscriptRenderer({
-    messagesElement: deps.messagesElement,
-    scroller: deps.scroller,
+    messagesElement,
+    scroller,
     splitTurns,
     takeTailChunk,
     backfillTurns: backfillTranscriptTurns,
@@ -200,14 +203,34 @@ export function createTranscriptAssembly(deps) {
     return synchronization;
   }
 
+  function configureFeature(featureDeps) {
+    const runtime = createTranscriptRuntime({
+      reloadTranscript: operations.reloadTranscript,
+      handleStreamEvent,
+      domAdapter: transcriptScroll,
+      messageElements: () => [...messagesElement.children],
+      transcriptElements: () => [...messagesElement.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
+      findDirect: (entryId) => messagesElement.querySelector(`[data-entry-id="${featureDeps.escape(entryId)}"]`),
+      fetchEntries: featureDeps.fetchEntries,
+      toast: deps.toast,
+      getSessionId: featureDeps.getSessionId,
+      getOrigin: featureDeps.getOrigin,
+      copy: featureDeps.copy,
+      prompt: featureDeps.prompt,
+    });
+    permalinkOperations = runtime;
+    return runtime;
+  }
+
   const operations = {
     domAdapter: transcriptScroll,
+    chatElements: () => [...messagesElement.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
     addUserMessage,
     assistantAlreadyRendered(message) {
       const text = transcriptActions.assistantPlainText(message);
       if (!text) return false;
       const needle = text.slice(0, 120);
-      return [...deps.messagesElement.querySelectorAll(".msg.assistant")].some((element) =>
+      return [...messagesElement.querySelectorAll(".msg.assistant")].some((element) =>
         element.textContent.replace(/\s+/g, " ").includes(needle));
     },
     clearAssistant: () => assistantStream.clear(),
@@ -234,9 +257,9 @@ export function createTranscriptAssembly(deps) {
   };
 
   return {
+    configureFeature,
     configureSynchronization,
     operations,
-    setPermalinkOperations: (next) => { permalinkOperations = next; },
     teardown() {
       synchronization?.teardown();
       renderer.cancel();
