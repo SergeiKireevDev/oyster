@@ -11,6 +11,21 @@ export function initializeAuth() {
   return token;
 }
 
+export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }) {
+  let lastProbeAt = 0;
+  return async () => {
+    const now = Date.now();
+    if (now - lastProbeAt < intervalMs || !getToken()) return;
+    lastProbeAt = now;
+    try {
+      const res = await fetch("/authcheck");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.authorized === false) onUnauthorized();
+    } catch {}
+  };
+}
+
 export function installAuthenticatedFetch(token) {
   const rawFetch = window.fetch.bind(window);
   window.fetch = (input, opts = {}) => {

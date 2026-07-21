@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
+import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
@@ -101,25 +101,15 @@ function requireToken() {
 
 // SSE failures: distinguish "server unreachable" from "token rejected".
 // Only the server itself saying the token is invalid clears it.
-let lastProbeAt = 0;
-async function probeTokenValidity() {
-  const now = Date.now();
-  if (now - lastProbeAt < 10000 || !token) return;
-  lastProbeAt = now;
-  try {
-    const res = await fetch(`/authcheck`);
-    if (!res.ok) return; // server not healthy — treat as network issue
-    const data = await res.json();
-    if (data.authorized === false) {
-      localStorage.removeItem("pi_ui_token");
-      document.cookie = "pi_ui_token=; path=/; max-age=0";
-      updateHeaderState({ stateInfo: "invalid token" });
-      requireToken();
-    }
-  } catch {
-    // network error — keep retrying silently
-  }
-}
+const probeTokenValidity = createAuthProbe({
+  getToken: () => token,
+  onUnauthorized: () => {
+    localStorage.removeItem("pi_ui_token");
+    document.cookie = "pi_ui_token=; path=/; max-age=0";
+    updateHeaderState({ stateInfo: "invalid token" });
+    requireToken();
+  },
+});
 
 // Only drop the stored token if the server itself rejects it on a direct
 // probe — a stripped header or transient proxy error must not log the user out.
