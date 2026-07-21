@@ -39,6 +39,18 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+/** Debounce authoritative state refresh requests. */
+export function createSessionStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+  let timer = null;
+  return () => {
+    if (timer) clearTimeoutImpl(timer);
+    timer = setTimeoutImpl(async () => {
+      timer = null;
+      try { applyState(await rpc({ type: "get_state" })); } catch (error) { onError(error); }
+    }, delay);
+  };
+}
+
 /** Apply authoritative get_state responses through injectable session/store adapters. */
 export function createSessionStateApplier({ applySessionState, getState, setState, getCurrentRunner, getEmptySessionRunners, getRoutines, routineVisible, getTunnelScopeAll, hooks }) {
   return (incoming) => {
