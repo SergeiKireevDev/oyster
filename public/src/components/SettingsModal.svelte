@@ -1,5 +1,6 @@
 <script>
   import { settingsChanged } from "../features/settings/settingsActions.js";
+  import { closeModalState } from "../stores/modal.js";
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
   ];
@@ -25,3 +26,7 @@
     <span>{label}</span>
   </label>
 {/each}
+
+<div class="m-actions" id="mActions">
+  <button class="btn" onclick={closeModalState}>Done</button>
+</div>

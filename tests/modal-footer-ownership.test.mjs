@@ -46,3 +46,16 @@ test("file explorer owns browse and edit footer actions", () => {
   }
   assert.doesNotMatch(overlays, /saveFileExplorer|uploadFileExplorer|backFileExplorer|\$fileExplorer/);
 });
+
+test("settings and session picker own their footer actions", () => {
+  const settings = read("SettingsModal.svelte");
+  const sessions = read("SessionPickerModal.svelte");
+  const overlays = read("Overlays.svelte");
+
+  assert.match(settings, /class="m-actions" id="mActions"/);
+  assert.match(settings, /onclick=\{closeModalState\}>Done/);
+  assert.match(sessions, /class="m-actions" id="mActions"/);
+  assert.match(sessions, /onclick=\{cancelSessionPicker\}/);
+  assert.doesNotMatch(overlays, /closeModalState|cancelSessionPicker/);
+  assert.doesNotMatch(overlays, /content === "settings"[^]*Done/);
+});

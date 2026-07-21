@@ -1,5 +1,5 @@
 <script>
-  import { sessionPickerAction as sessionAction } from "../features/sessions/sessionPickerActions.js";
+  import { cancelSessionPicker, sessionPickerAction as sessionAction } from "../features/sessions/sessionPickerActions.js";
   const choosePickedSession = (...args) => sessionAction("chooseSession", ...args);
   const deletePickedSession = (...args) => sessionAction("deleteSession", ...args);
   const loadPickedSessionFolder = (...args) => sessionAction("loadFolder", ...args);
@@ -246,3 +246,7 @@
 {#snippet FolderLabel({ label })}
   <div class="s-wd"><span class="s-ico">📁</span> {label}</div>
 {/snippet}
+
+<div class="m-actions" id="mActions">
+  <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => keyActivate(event, cancelSessionPicker)}>Cancel</span>
+</div>

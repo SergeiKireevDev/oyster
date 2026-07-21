@@ -13,9 +13,8 @@
   import SessionPickerModal from "./SessionPickerModal.svelte";
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
-  import { closeModalState, modalState } from "../stores/modal.js";
+  import { modalState } from "../stores/modal.js";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
-  import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
 
   const dialogs = getDialogService();
 </script>
@@ -56,9 +55,7 @@
     </div>
 
     <div class="m-actions" id="mActions">
-      {#if $modalState.content === "settings"}
-        <button class="btn" onclick={closeModalState}>Done</button>
-      {:else if $modalState.content === "optionPicker"}
+      {#if $modalState.content === "optionPicker"}
         <span
           class="chip"
           role="button"
@@ -75,8 +72,6 @@
       {:else if $modalState.content === "confirmPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
-      {:else if $modalState.content === "sessionPicker"}
-        <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelSessionPicker(); }}>Cancel</span>
       {/if}
     </div>
   {/if}
