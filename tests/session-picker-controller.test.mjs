@@ -6,6 +6,8 @@ test("session picker controller stops the runner owning a session", async () => 
   const controller = createSessionPickerController({ stopRunner: async (id) => { stopped = id; }, getRunners: () => runners, markStopped: (items, id) => items.map((item) => ({ ...item, alive: item.id !== id })), setRunners: (items) => { next = items; }, toast: () => {} });
   await controller.stopSession({ path: "/session.jsonl" });
   assert.equal(stopped, "runner"); assert.equal(next[0].alive, false);
+  assert.deepEqual(controller.chooseSession("/session.jsonl", [{ path: "/session.jsonl" }]), { path: "/session.jsonl" });
+  assert.equal(controller.chooseSession("missing", []), null);
 });
 
 test("session picker folder controller loads a folder once and clears loading on errors", async () => {

@@ -1904,9 +1904,8 @@ const sessionPickerActions = {
   setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },
   runSearch: runSessionPickerSearch,
   chooseSession: (sessionPath) => {
-    const session = sessionPickerSessions.find((item) => item.path === sessionPath) ?? null;
     closeModal();
-    sessionPickerResolve?.(session);
+    sessionPickerResolve?.(sessionPickerController.chooseSession(sessionPath, sessionPickerSessions));
   },
   stopSession: sessionPickerController.stopSession,
   deleteSession: async (session) => {

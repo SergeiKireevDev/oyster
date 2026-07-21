@@ -10,7 +10,11 @@ export function createSessionPickerController({ stopRunner, getRunners, markStop
       toast(`stop failed: ${error.message}`, "error");
     }
   }
-  return { stopSession };
+  function chooseSession(sessionPath, sessions) {
+    return sessions.find((session) => session.path === sessionPath) ?? null;
+  }
+
+  return { stopSession, chooseSession };
 }
 
 export function createSessionPickerFolderController({ fetchSessions, getSnapshot, update, getRunners, setSessions, toast }) {
