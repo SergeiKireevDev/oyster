@@ -15,12 +15,16 @@ const PORT_MIN = Number(process.env.E2E_PORT_MIN ?? 4000);
 const PORT_MAX = Number(process.env.E2E_PORT_MAX ?? 4018);
 
 const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui";
+const DEFAULT_IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui:published";
+const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "pi-lot-ui:sqlite";
 
 let allocatedPort = null;
 let lockFile = null;
 let container = null;
+let agentVolume = null;
 let base = null;
+let selectedImage = DEFAULT_IMAGE;
+let selectedStore = "jsonl";
 
 function sh(args) {
   return execSync(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -38,7 +42,7 @@ async function reachable() {
   } catch { return false; }
 }
 
-function imageExists() { try { return !!sh(`docker images -q ${IMAGE}`); } catch { return false; } }
+function imageExists(image) { try { return !!sh(`docker images -q ${image}`); } catch { return false; } }
 
 function allocatePort() {
   mkdirSync(LOCK_DIR, { recursive: true });
@@ -56,6 +60,7 @@ function allocatePort() {
       allocatedPort = port;
       lockFile = file;
       container = `pi-lot-e2e-${port}`;
+      agentVolume = `pi-lot-e2e-agent-${port}`;
       base = `http://localhost:${port}`;
       process.env.PI_UI_URL = base;
       process.env.PI_UI_CONTAINER = container;
@@ -74,6 +79,7 @@ function allocatePort() {
           allocatedPort = port;
           lockFile = file;
           container = staleContainer;
+          agentVolume = `pi-lot-e2e-agent-${port}`;
           base = `http://localhost:${port}`;
           process.env.PI_UI_URL = base;
           process.env.PI_UI_CONTAINER = container;
@@ -86,9 +92,30 @@ function allocatePort() {
   throw new Error(`no free e2e ports in ${PORT_MIN}..${PORT_MAX}`);
 }
 
+async function waitUntilReachable() {
+  const start = Date.now();
+  while (Date.now() - start < 60000) {
+    if (await reachable()) {
+      console.log(`[e2e] container ${container} up`);
+      writeFileSync(STATE_FILE, JSON.stringify({ container, agentVolume, base, port: allocatedPort, startedByUs: true, mock: true, store: selectedStore }));
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`container ${container} did not come up within 60s`);
+}
+
+function startContainer() {
+  console.log(`[e2e] starting ${selectedStore} mock container ${container} on ${base} with volume ${agentVolume} …`);
+  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -v "${agentVolume}:/root/.pi/agent" -e "PI_UI_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" -e "PERSISTENT_STORE=${selectedStore}" ${selectedImage}`);
+}
+
 // Start a container if one isn't already reachable — records state so
-// teardown knows to remove it.
-export async function ensureContainer() {
+// teardown knows to remove it. The named agent volume deliberately survives
+// replaceContainer() so persistence tests exercise a real container restart.
+export async function ensureContainer({ sqlite = false } = {}) {
+  selectedImage = sqlite ? SQLITE_IMAGE : DEFAULT_IMAGE;
+  selectedStore = sqlite ? "sqlite" : "jsonl";
   if (allocatedPort == null) allocatePort();
   if (running(container) && (await reachable())) return;
 
@@ -100,35 +127,36 @@ export async function ensureContainer() {
     }
   } catch {}
 
-  if (!imageExists()) {
-    console.log(`[e2e] building image ${IMAGE} …`);
-    sh(`docker build -t ${IMAGE} "${join(HERE, "..", "..", "..")}"`);
+  if (!imageExists(selectedImage)) {
+    throw new Error(`e2e image ${selectedImage} is missing; run the documented container build first`);
   }
 
-  console.log(`[e2e] starting self-contained mock container ${container} on ${base} …`);
-  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -e "PI_UI_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" ${IMAGE}`);
-
-  const start = Date.now();
-  while (Date.now() - start < 60000) {
-    if (await reachable()) {
-      console.log(`[e2e] container ${container} up`);
-      writeFileSync(STATE_FILE, JSON.stringify({ container, base, port: allocatedPort, startedByUs: true, mock: true }));
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error(`container ${container} did not come up within 60s`);
+  try { sh(`docker volume rm -f ${agentVolume}`); } catch {}
+  startContainer();
+  await waitUntilReachable();
 }
 
-// Remove the container (called in afterEach)
+/** Replace the current container while retaining its SQLite agent volume. */
+export async function replaceContainer() {
+  if (!container || !agentVolume) throw new Error("e2e container has not been allocated");
+  try { sh(`docker rm -f ${container}`); } catch {}
+  startContainer();
+  await waitUntilReachable();
+}
+
+// Remove the container and its isolated agent volume (called in afterEach).
 export function teardownContainer() {
   if (!container) return;
-  console.log(`[e2e] tearing down container ${container}`);
+  console.log(`[e2e] tearing down container ${container} and volume ${agentVolume}`);
   try { execSync(`docker rm -f ${container}`, { stdio: "pipe" }); } catch {}
+  try { execSync(`docker volume rm -f ${agentVolume}`, { stdio: "pipe" }); } catch {}
   try { rmSync(STATE_FILE, { force: true }); } catch {}
   try { if (lockFile) rmSync(lockFile, { force: true }); } catch {}
   allocatedPort = null;
   lockFile = null;
   container = null;
+  agentVolume = null;
   base = null;
+  selectedImage = DEFAULT_IMAGE;
+  selectedStore = "jsonl";
 }

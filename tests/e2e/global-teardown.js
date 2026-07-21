@@ -21,6 +21,11 @@ export default async function globalTeardown() {
     console.log(`[e2e] removing leftover container ${name}`);
     sh(["rm", "-f", name]);
   }
+  const volumes = sh(["volume", "ls", "--filter", "name=^pi-lot-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+  for (const volume of volumes) {
+    console.log(`[e2e] removing leftover volume ${volume}`);
+    sh(["volume", "rm", "-f", volume]);
+  }
   try { rmSync(LOCK_DIR, { recursive: true, force: true }); } catch {}
   try { rmSync(STATE_FILE, { force: true }); } catch {}
 }

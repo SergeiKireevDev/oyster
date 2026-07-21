@@ -12,7 +12,9 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..");
 const LOCK_DIR = join(HERE, ".port-locks");
-const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui";
+const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui:published";
+const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "pi-lot-ui:sqlite";
+const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? "/home/ubuntu/pi-coding-agent";
 
 const sh = (args, opts = {}) =>
   execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
@@ -27,12 +29,33 @@ export default async function globalSetup() {
       console.log(`[e2e] removing stale container ${name}`);
       try { sh(["rm", "-f", name]); } catch {}
     }
+    const volumes = sh(["volume", "ls", "--filter", "name=^pi-lot-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+    for (const volume of volumes) {
+      console.log(`[e2e] removing stale volume ${volume}`);
+      try { sh(["volume", "rm", "-f", volume]); } catch {}
+    }
   } catch {}
   try { rmSync(LOCK_DIR, { recursive: true, force: true }); } catch {}
   mkdirSync(LOCK_DIR, { recursive: true });
 
   if (!imageExists()) {
-    console.log(`[e2e] building image ${IMAGE} …`);
+    console.log(`[e2e] building published JSONL image ${IMAGE} …`);
     sh(["build", "-t", IMAGE, "."], { cwd: REPO_ROOT, stdio: "inherit" });
+  }
+
+  const sqliteImageExists = () => {
+    try { return !!sh(["images", "-q", SQLITE_IMAGE]).trim(); } catch { return false; }
+  };
+  if (!sqliteImageExists()) {
+    let revision;
+    try { revision = execFileSync("git", ["-C", PI_SOURCE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(); }
+    catch { throw new Error(`local pi source is unavailable at ${PI_SOURCE}`); }
+    console.log(`[e2e] building SQLite image ${SQLITE_IMAGE} from ${PI_SOURCE} (${revision}) …`);
+    sh([
+      "build", "-f", "Dockerfile.local-pi",
+      "--build-context", `pi-source=${PI_SOURCE}`,
+      "--build-arg", `PI_LOCAL_REV=${revision}`,
+      "-t", SQLITE_IMAGE, ".",
+    ], { cwd: REPO_ROOT, stdio: "inherit" });
   }
 }

@@ -154,7 +154,7 @@ the intended persistence policy.
   while retaining an intentional published-package fallback for release builds.
   Pin the selected source/version in image labels and verify the image uses
   Node 22 plus the SQLite-capable CLI.
-- [ ] Extend the isolated Docker/e2e harness to enable SQLite, persist the agent
+- [x] Extend the isolated Docker/e2e harness to enable SQLite, persist the agent
   directory on a volume, create a conversation, replace the container, resume
   it, and verify session picker/search/transcript behavior and absence of JSONL
   session files.

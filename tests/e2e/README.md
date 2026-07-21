@@ -12,16 +12,21 @@ no network model calls, fully deterministic**.
 | `routine.spec.js` | Start a session → create a **dummy routine** in the store → ▶ run it from the sidebar to completion → 🧹 tear it down. |
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; use a **":" prompt command** (command palette) to open the file picker. |
+| `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container while retaining its isolated agent volume, then verify picker, search, transcript resume, and the absence of session JSONL files. |
 
 ## Prerequisites
 
-- Docker with the `pi-lot-ui` image built (`docker build -t pi-lot-ui .` in the
-  repo root). The suite builds it automatically if missing.
+- Docker. The suite uses `pi-lot-ui:published` for the existing JSONL scenarios
+  and `pi-lot-ui:sqlite` for the container-replacement contract. It builds
+  missing images automatically; the SQLite build uses `Dockerfile.local-pi`
+  with `/home/ubuntu/pi-coding-agent` (override with `PI_SOURCE_CONTEXT`).
 - Node ≥ 18.
 
-The image bundles a mock LLM, so no host credentials or external model access
-are needed — `global-setup.js` starts the container with `E2E_MOCK_LLM=1` and
-nothing is mounted.
+Both images bundle a mock LLM, so no host credentials or external model access
+are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`, an
+explicit `PERSISTENT_STORE`, and a fresh named volume at `/root/.pi/agent`.
+The SQLite persistence scenario retains that volume across deliberate container
+replacement; every test removes its volume during teardown.
 
 ## Run
 
@@ -46,9 +51,8 @@ npx playwright install chromium
 npm test
 ```
 
-`global-setup.js` will **reuse** any container already serving `:4000` with the
-token `e2e-test-token` (e.g. your running `pi-lot-ui-test`); otherwise it starts
-a throwaway `pi-lot-e2e` container and removes it on teardown.
+Each test starts a throwaway container and isolated agent volume on an allocated
+port. Both are removed on teardown.
 
 ### Config (env)
 
@@ -56,8 +60,10 @@ a throwaway `pi-lot-e2e` container and removes it on teardown.
 |---|---|---|
 | `PI_UI_URL` | `http://localhost:4000` | UI base URL |
 | `PI_UI_TOKEN` | `e2e-test-token` | auth token |
-| `PI_UI_IMAGE` | `pi-lot-ui` | image to run if nothing is on :4000 |
-| `PI_UI_CONTAINER` | `pi-lot-e2e` | name for a container the suite starts |
+| `PI_UI_IMAGE` | `pi-lot-ui:published` | published-package JSONL image for the existing scenarios |
+| `PI_UI_SQLITE_IMAGE` | `pi-lot-ui:sqlite` | local-source image for the SQLite persistence scenario |
+| `PI_SOURCE_CONTEXT` | `/home/ubuntu/pi-coding-agent` | named BuildKit source used when the SQLite image must be built |
+| `PI_UI_CONTAINER` | allocated per test | name for a container the suite starts |
 
 ## Notes
 

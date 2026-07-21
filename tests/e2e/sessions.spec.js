@@ -180,14 +180,14 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await expect(beta.locator(".s-stop")).toBeVisible();
 
     // confirm via the server that ALPHA's runner process is gone while BETA
-    // lives. (The mock doesn't persist the auto-title as a session name, so key
-    // the session by its first-message preview instead, joining sessions <-path-
-    // sessionFile-> runners.)
-    const byPath = async () => {
+    // lives. The mock doesn't persist the auto-title as a session name, so key
+    // by first-message preview and join sessions to runners through the opaque
+    // backend-neutral session key rather than a storage-path assumption.
+    const byKey = async () => {
       const [{ json: ss }, { json: rs }] = await Promise.all([api("GET", "/sessions?dir=/workspace"), api("GET", "/runners")]);
       const sessions = (ss.sessions ?? []).map((s) => ({
         ...s,
-        runner: (rs.runners ?? []).find((r) => r.sessionFile === s.path),
+        runner: (rs.runners ?? []).find((r) => r.sessionKey === s.sessionKey),
       }));
       return {
         alpha: sessions.find((s) => (s.preview ?? "").includes(A)),
@@ -196,7 +196,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     };
     await waitFor(
       async () => {
-        const { alpha, beta } = await byPath();
+        const { alpha, beta } = await byKey();
         return alpha && beta && !alpha.runner?.alive && beta.runner?.alive;
       },
       { timeout: 15000, label: "ALPHA stopped, BETA still running" }
