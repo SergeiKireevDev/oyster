@@ -7,10 +7,11 @@
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
-  let { assistantStore = writable({ blocks: [], errorMessage: "" }), role = "assistant", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {} } = $props();
+  let { assistantStore = writable({ blocks: [], errorMessage: "" }), role = "assistant", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
   let root = $state();
   const data = $derived($assistantStore);
   const restore = $derived($checkpointRestores.find((item) => item.target === root));
+  $effect(() => { if (root) onRoot(root); });
 </script>
 
 <div class="msg assistant" class:ckpt-frozen={!!restore} data-role={role} bind:this={root}>

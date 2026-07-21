@@ -187,6 +187,7 @@ After several migrations:
 - ✅ Removed remaining direct `#mBody`/`#mActions` clearing from Svelte-owned modal transitions (checkpoint picker, file/folder/session pickers, settings, prompts, confirmation). This prevents imperative cleanup from deleting Svelte modal content during a transition.
 - ✅ Moved the latest-message checkpoint iceberg’s placement and busy rendering into `checkpointMarker` store state and Svelte transcript components. Legacy retains only checkpoint API/model-picker orchestration.
 - ✅ Moved per-message checkpoint frozen styling, rollback arrows, and rollback busy rendering into `checkpointRestores` store state and Svelte transcript components. Legacy retains checkpoint lookup/alignment and rollback API orchestration.
+- ✅ Moved transcript-root item ownership to `transcriptItems` store and keyed `Transcript.svelte` rendering; removed imperative per-message Svelte mounting, unmounting, DOM clearing, and prepend/reorder operations from `legacy.js`. Legacy retains stream assembly, tail-first chunk scheduling, and scroll correction.
 
 Keep doing this periodically after further migrations:
 
@@ -218,9 +219,8 @@ cd tests/e2e && E2E_VIDEO=1 npm test
 
 ## Recommended Next Target
 
-Reduce the remaining imperative transcript mounting surface:
+Move remaining transcript orchestration helpers into an action/store boundary:
 
-- Replace direct `mount()`/`unmount()` message-component ownership with a transcript store and keyed `Transcript.svelte` rendering.
-- Keep SSE, RPC, chunk scheduling, and scroll correction in `legacy.js` initially.
-- Preserve `#messages`, transcript selectors, tail-first backfill, and existing e2e behavior.
-- Validate each small extraction before proceeding.
+- Keep SSE/RPC ownership in `legacy.js` initially, but isolate transcript item construction, streaming updates, and backfill operations behind an importable transcript action module.
+- Preserve `#messages`, transcript selectors, tail-first backfill, scroll correction, and existing e2e behavior.
+- Reduce direct legacy knowledge of transcript component props before migrating another feature domain.

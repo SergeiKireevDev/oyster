@@ -1,9 +1,7 @@
 "use strict";
 
-import { mount, unmount } from "svelte";
+import { tick } from "svelte";
 import { writable } from "svelte/store";
-import UserMessage from "./components/transcript/UserMessage.svelte";
-import AssistantMessage from "./components/transcript/AssistantMessage.svelte";
 import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -27,6 +25,7 @@ import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
+import { appendTranscriptItems, createTranscriptItem, prependTranscriptItems, resetTranscriptItems } from "./stores/transcriptItems.js";
 
 const lifecycleStartedAt = performance.now();
 function lifecycleLog(label, data = {}) {
@@ -383,19 +382,18 @@ function finishToolCard(toolCallId, resultMsgOrText, isError) {
   }));
 }
 
-let liveAssistant = null; // { root, msg }
-const mountedTranscriptComponents = [];
+let liveAssistant = null; // { item, msg }
 
-function mountTranscriptComponent(component, props = {}) {
-  const instance = mount(component, { target: messagesEl, props });
-  mountedTranscriptComponents.push(instance);
-  return instance;
-}
+const transcriptCallbacks = {
+  onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+  onCheckpoint: handleCheckpointClick,
+  onRollback: rollbackToCheckpoint,
+};
 
-function unmountTranscriptComponents() {
-  for (const instance of mountedTranscriptComponents.splice(0)) {
-    try { unmount(instance); } catch {}
-  }
+function makeTranscriptItem(item) {
+  const result = createTranscriptItem(item);
+  result.setRoot = (root) => { result.root = root; };
+  return result;
 }
 
 function assistantBlockModels(message) {
@@ -440,17 +438,11 @@ function assistantAlreadyRendered(message) {
   );
 }
 
-function mountSvelteAssistantMessage(message, role = "assistant") {
+function mountSvelteAssistantMessage(message, role = "assistant", { prepend = false } = {}) {
   const assistantStore = writable(assistantModel(message));
-  mountTranscriptComponent(AssistantMessage, {
-    assistantStore,
-    role,
-    onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
-    onCheckpoint: handleCheckpointClick,
-    onRollback: rollbackToCheckpoint,
-  });
-  const el = messagesEl.lastElementChild;
-  return { el, store: assistantStore, msg: message, svelte: true };
+  const item = makeTranscriptItem({ kind: "assistant", assistantStore, role, ...transcriptCallbacks });
+  (prepend ? prependTranscriptItems : appendTranscriptItems)([item]);
+  return { item, store: assistantStore, msg: message, svelte: true };
 }
 
 function updateSvelteAssistant(live, message) {
@@ -458,8 +450,8 @@ function updateSvelteAssistant(live, message) {
   live.store.set(assistantModel(message));
 }
 
-function addSvelteAssistantMessage(message, role = "assistant") {
-  mountSvelteAssistantMessage(message, role);
+function addSvelteAssistantMessage(message, role = "assistant", options = {}) {
+  mountSvelteAssistantMessage(message, role, options);
   if (role === "assistant") placeCheckpointBtn();
 }
 
@@ -467,14 +459,10 @@ function addSvelteCustomMessage(role, text) {
   addSvelteAssistantMessage({ role, content: [{ type: "text", text }] }, role || "custom");
 }
 
-function addUserMessage(message) {
+function addUserMessage(message, { prepend = false } = {}) {
   const text = userMessageText(message);
-  mountTranscriptComponent(UserMessage, {
-    text,
-    onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
-    onCheckpoint: handleCheckpointClick,
-    onRollback: rollbackToCheckpoint,
-  });
+  const item = makeTranscriptItem({ kind: "user", text, ...transcriptCallbacks });
+  (prepend ? prependTranscriptItems : appendTranscriptItems)([item]);
   if (/^Opening interface: /.test(text)) {
     scrollToBottom(true);
     return;
@@ -564,8 +552,12 @@ async function handleCheckpointClick(e) {
 
 /** keep the Svelte-owned iceberg on the latest user/assistant message */
 function placeCheckpointBtn() {
-  const els = chatEls();
-  setCheckpointTarget(els[els.length - 1] ?? null);
+  // Store updates render on Svelte's next flush, so wait before querying the
+  // preserved DOM selectors used by checkpoint alignment.
+  void tick().then(() => {
+    const els = chatEls();
+    setCheckpointTarget(els[els.length - 1] ?? null);
+  });
 }
 
 /** put a return arrow on every message a checkpoint is anchored to */
@@ -676,10 +668,10 @@ async function openTreeSession(node) {
 
 setCheckpointTreeHandlers({ openSession: openTreeSession, rollback: rollbackToCheckpoint });
 
-function renderFullMessage(message) {
+function renderFullMessage(message, options = {}) {
   const role = message.role;
-  if (role === "user") { addUserMessage(message); return; }
-  if (role === "assistant") { addSvelteAssistantMessage(message); return; }
+  if (role === "user") { addUserMessage(message, options); return; }
+  if (role === "assistant") { addSvelteAssistantMessage(message, role, options); return; }
   if (role === "toolResult") {
     if (toolCards.has(message.toolCallId)) {
       finishToolCard(message.toolCallId, message, message.isError);
@@ -689,7 +681,7 @@ function renderFullMessage(message) {
   // custom messages (extensions etc.) — show generically if they carry text
   if (message.content) {
     const text = toolResultText(message);
-    if (text) addSvelteCustomMessage(message.role || "custom", text);
+    if (text) addSvelteAssistantMessage({ role: message.role, content: [{ type: "text", text }] }, message.role || "custom", options);
   }
 }
 
@@ -697,8 +689,7 @@ function clearMessages() {
   renderJob++; // cancel any in-flight transcript backfill
   setCheckpointTarget(null);
   setCheckpointRestores([]);
-  unmountTranscriptComponents();
-  messagesEl.innerHTML = "";
+  resetTranscriptItems();
   toolCards.clear();
   liveAssistant = null;
   promptHistory.length = 0;
@@ -721,15 +712,19 @@ let backfilling = false; // suppresses per-message scroll/history side effects
 const TAIL_MSGS = 40;    // rendered synchronously (visible screenful + slack)
 const CHUNK_MSGS = 60;   // per backfill timeslice
 
-function renderChunk(chunk) {
+function renderChunk(chunk, { prepend = false } = {}) {
   backfilling = true;
-  try { for (const m of chunk) renderFullMessage(m); }
-  finally { backfilling = false; }
+  try {
+    // Prepending individual items reverses their order, so consume older
+    // chunks backwards to retain chronological transcript order.
+    const messages = prepend ? [...chunk].reverse() : chunk;
+    for (const m of messages) renderFullMessage(m, { prepend });
+  } finally { backfilling = false; }
 }
 
 /** Render `messages`; resolves true when the FULL transcript is in the DOM
  *  (false if superseded by a newer render). */
-function renderTranscript(messages) {
+async function renderTranscript(messages) {
   lifecycleLog("renderTranscript:start", { messages: messages?.length ?? 0 });
   clearMessages(); // also bumps renderJob, cancelling any older backfill
   const myJob = ++renderJob;
@@ -743,38 +738,27 @@ function renderTranscript(messages) {
   const turns = splitTurns(messages);
   const tail = takeTailChunk(turns, TAIL_MSGS);
   renderChunk(tail);
+  await tick();
   scrollToBottom(true);
-  return new Promise((resolve) => {
-    const backfill = () => {
-      if (myJob !== renderJob) {
-        lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
-        resolve(false);
-        return;
-      }
-      if (!turns.length) {
-        lifecycleLog("renderTranscript:complete", { job: myJob, domMessages: messagesEl.children.length });
-        resolve(true);
-        return;
-      }
-      const chunk = takeTailChunk(turns, CHUNK_MSGS);
-      const anchor = messagesEl.firstChild;
-      const before = messagesEl.children.length;
-      // measure BEFORE rendering: the chunk is appended at the bottom first,
-      // so the height it adds must be attributed to the top once moved there
-      const pinned = nearBottom();
-      const h0 = scroller.scrollHeight;
-      const t0 = scroller.scrollTop;
-      renderChunk(chunk); // appended at the bottom by the shared helpers…
-      // …then moved above everything in the same task (no paint in between)
-      const added = [...messagesEl.children].slice(before);
-      for (const el of added) messagesEl.insertBefore(el, anchor);
-      if (pinned) scrollToBottom(true); // stay glued to the newest message
-      else scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // keep reading position
-      placeCheckpointBtn(); // back onto the true last message
-      setTimeout(backfill, 0); // yield so live events/input stay responsive
-    };
-    setTimeout(backfill, 0);
-  });
+
+  while (turns.length) {
+    await new Promise((resolve) => setTimeout(resolve, 0)); // keep input/live events responsive
+    if (myJob !== renderJob) {
+      lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
+      return false;
+    }
+    const chunk = takeTailChunk(turns, CHUNK_MSGS);
+    const pinned = nearBottom();
+    const h0 = scroller.scrollHeight;
+    const t0 = scroller.scrollTop;
+    renderChunk(chunk, { prepend: true });
+    await tick();
+    if (pinned) scrollToBottom(true); // stay glued to the newest message
+    else scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // keep reading position
+  }
+  placeCheckpointBtn();
+  lifecycleLog("renderTranscript:complete", { job: myJob, domMessages: messagesEl.children.length });
+  return true;
 }
 
 // ------------------------------------------------------------ state / header

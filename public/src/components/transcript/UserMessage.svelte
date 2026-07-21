@@ -5,13 +5,14 @@
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
-  let { text = "", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {} } = $props();
+  let { text = "", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
 
   let root = $state();
   const iface = $derived(text.match(/^Opening interface: (.*)\n/));
   const interfaceTitle = $derived(iface ? iface[1] : "");
   const interfaceBody = $derived(iface ? text.slice(iface[0].length) : "");
   const restore = $derived($checkpointRestores.find((item) => item.target === root));
+  $effect(() => { if (root) onRoot(root); });
 </script>
 
 {#if iface}
