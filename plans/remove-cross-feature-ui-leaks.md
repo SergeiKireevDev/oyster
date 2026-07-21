@@ -142,7 +142,7 @@ services rather than global stores or component platform calls.
 - [x] Replace the clickable checkpoint-tree `div[role="button"]` controls with
   native buttons while preserving tree nesting, current-session styling,
   keyboard activation, and rollback target behavior.
-- [ ] Replace clickable hublot preview/list `div[role="button"]` controls with
+- [x] Replace clickable hublot preview/list `div[role="button"]` controls with
   native buttons or documented composite-widget controls. Preserve iframe
   overlay behavior and external-open keyboard activation.
 - [ ] Add a static boundary test forbidding mutable module-global action bridges

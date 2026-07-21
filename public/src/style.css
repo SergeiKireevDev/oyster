@@ -126,6 +126,14 @@
     overflow: hidden;
     flex-shrink: 0;
   }
+  button.hublot-block {
+    width: 100%;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
   .hublot-block .preview {
     position: relative;
     height: 130px;
@@ -139,7 +147,13 @@
     border: 0;
     pointer-events: none; /* the block itself handles clicks */
   }
-  .hublot-block .preview .hit { position: absolute; inset: 0; }
+  .hublot-block .preview .hit {
+    position: absolute; inset: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
   /* built-in hublots (e.g. file explorer): icon instead of an iframe */
   .hublot-block .preview.builtin {
     display: flex; align-items: center; justify-content: center;
@@ -174,6 +188,8 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 38px;
     color: var(--muted);
+    background: transparent;
+    font-family: inherit;
     cursor: pointer;
     user-select: none;
   }

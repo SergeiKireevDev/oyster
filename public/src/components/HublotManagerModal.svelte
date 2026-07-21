@@ -18,13 +18,6 @@
   const createManagedHublot = (description) => uiActions.invoke(HUBLOT_CREATE_ACTION, description);
   const toggleManagedHublotScope = () => uiActions.invoke(HUBLOT_TOGGLE_SCOPE_ACTION);
   const commandPalette = (node) => uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node);
-
-  function keyActivate(event, fn) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      fn();
-    }
-  }
 </script>
 
 <div class="m-option" style="align-items:center;">
@@ -48,14 +41,12 @@
       <div class="hublot-block">
         <div class="preview">
           <iframe src={tunnel.url} loading="lazy" sandbox="allow-scripts allow-same-origin" title={tunnel.label ?? tunnel.url}></iframe>
-          <div
+          <button
+            type="button"
             class="hit"
             title={`open ${tunnel.url}`}
-            role="button"
-            tabindex="0"
             onclick={() => browserActions.openExternal(tunnel.url)}
-            onkeydown={(event) => keyActivate(event, () => browserActions.openExternal(tunnel.url))}
-          ></div>
+          ></button>
         </div>
         <div class="cap">
           <span class="lbl" title={`${tunnel.url}\n${tunnel.label ?? ""}`}>

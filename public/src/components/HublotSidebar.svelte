@@ -11,12 +11,7 @@
 <aside id="hublots">
   <div class="side-head">Hublots</div>
   <HublotList />
-  <div id="hublotAdd" title="Open a new hublot" role="button" tabindex="0" onclick={showHublotManager} onkeydown={(event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      showHublotManager();
-    }
-  }}>+</div>
+  <button type="button" id="hublotAdd" title="Open a new hublot" onclick={showHublotManager}>+</button>
   <div class="side-head routines">Routines</div>
   <RoutineList />
 </aside>

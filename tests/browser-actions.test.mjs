@@ -36,6 +36,17 @@ test("hublot components invoke injected browser actions without direct window ac
     assert.doesNotMatch(source, /window\.open/);
   }
 
+  const list = readFileSync(new URL("../public/src/components/HublotList.svelte", import.meta.url), "utf8");
+  const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
+  const sidebar = readFileSync(new URL("../public/src/components/HublotSidebar.svelte", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+  assert.match(list, /<button type="button" class="hublot-block" onclick=\{openFileExplorer\}>/);
+  assert.match(list, /<button type="button" class="hit"[^>]*onclick=\{\(\) => browserActions\.openExternal\(hublot\.url\)\}/);
+  assert.match(manager, /<button[\s\S]*type="button"[\s\S]*class="hit"[\s\S]*browserActions\.openExternal\(tunnel\.url\)/);
+  assert.match(sidebar, /<button type="button" id="hublotAdd"[^>]*onclick=\{showHublotManager\}>/);
+  for (const source of [list, manager, sidebar]) assert.doesNotMatch(source, /role="button"/);
+  assert.match(styles, /\.hublot-block \.preview \.hit \{[\s\S]*position: absolute; inset: 0;/);
+
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(root, /openUrl: browserActions\.openExternal/);
   assert.doesNotMatch(root, /window\.open/);
