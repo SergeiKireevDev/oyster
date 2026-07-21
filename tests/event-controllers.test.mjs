@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+
+test("carousel gesture classifier distinguishes taps and axes", () => {
+  assert.equal(swipeAxis(20, 20), null);
+  assert.equal(swipeAxis(40, 10), "h");
+  assert.equal(swipeAxis(10, -40), "v");
+});
 
 test("file upload input adapter registers and tears down its change listener", () => {
   let listener;

@@ -8,6 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
+import { swipeAxis } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2799,11 +2800,6 @@ function carouselStep(dir) {
 // Vertical scrolling, pinch-zoom and the composer textarea are left alone.
 let touchStart = null; // { x, y, t, n }
 let swipeHandled = false;
-
-function swipeAxis(dx, dy) {
-  if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return null;
-  return Math.abs(dx) > Math.abs(dy) ? "h" : "v";
-}
 
 function onTouchStart(e) {
   if (window.matchMedia("(min-width: 761px)").matches) return; // desktop only
