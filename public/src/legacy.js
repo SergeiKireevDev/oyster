@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createRenderJobs, filterReplayEvents, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -929,16 +929,7 @@ function flushReplayBufferedEvents(events) {
   // buffered assistant/tool sequence avoids painting a duplicate while still
   // preserving the normal in-progress case (no message_end yet) where buffered
   // deltas are the only copy the user can see without a refresh.
-  const finishedAssistantAlreadyRendered = events.some((event) =>
-    event.type === "message_end" && event.message?.role === "assistant" && assistantAlreadyRendered(event.message)
-  );
-  for (const event of events) {
-    if (finishedAssistantAlreadyRendered && (
-      ["message_start", "message_update", "message_end"].includes(event.type) && event.message?.role === "assistant" ||
-      ["tool_execution_start", "tool_execution_update", "tool_execution_end"].includes(event.type)
-    )) continue;
-    handleEvent(event);
-  }
+  for (const event of filterReplayEvents(events, assistantAlreadyRendered)) handleEvent(event);
 }
 
 function handleEvent(msg) {

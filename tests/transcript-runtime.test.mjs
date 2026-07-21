@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, fetchDurableTranscript, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createRenderJobs, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+
+test("replay filtering drops completed assistant and tool duplicates", () => {
+  const events = [{ type: "message_start", message: { role: "assistant" } }, { type: "message_end", message: { role: "assistant" } }, { type: "tool_execution_end" }, { type: "response" }];
+  assert.deepEqual(filterReplayEvents(events, () => true), [{ type: "response" }]);
+});
 
 test("reload reconciliation releases buffered events only after rendering begins", async () => {
   const calls = [];

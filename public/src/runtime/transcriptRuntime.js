@@ -13,6 +13,12 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
   });
 }
 
+export function filterReplayEvents(events, assistantAlreadyRendered) {
+  const finished = events.some((event) => event.type === "message_end" && event.message?.role === "assistant" && assistantAlreadyRendered(event.message));
+  if (!finished) return events;
+  return events.filter((event) => !(( ["message_start", "message_update", "message_end"].includes(event.type) && event.message?.role === "assistant") || ["tool_execution_start", "tool_execution_update", "tool_execution_end"].includes(event.type)));
+}
+
 export async function reconcileTranscriptReload({ messages, render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   const rendered = render(messages);
   setReplaying(false);
