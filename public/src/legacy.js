@@ -32,7 +32,7 @@ import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { listHublots } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
-import { browseFiles } from "./lib/fileBrowserActions.js";
+import { browseFiles, readFile } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2164,9 +2164,9 @@ async function uploadExplorerFiles() {
 }
 
 async function editExplorerFile(path) {
-  const res = await fetch(`/file-content?path=${encodeURIComponent(path)}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
+  let data;
+  try { data = await readFile(fetch, path); }
+  catch (error) { toast(error.message, "error"); return; }
 
   fileExplorerState.editPath = path;
   fileExplorerState.editContent = data.content;
