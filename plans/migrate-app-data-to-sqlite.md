@@ -326,7 +326,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Keep only `ChildProcess` handles in an in-memory registry keyed by persistent process/hublot ID.
 - [x] Replace `state.nextHublotPort` with transactional allocation plus a live port check.
 - [x] Add a supervisor that periodically reconciles desired-open hublots and their persisted process identities.
-- [ ] On startup, load persisted hublots and reconcile every row whose desired state is open.
+- [x] On startup, load persisted hublots and reconcile every row whose desired state is open.
 - [ ] Restart dead services from the persisted startup script, verify the port, and persist the replacement PID before reopening their tunnels.
 - [ ] Recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
 - [ ] Use bounded exponential backoff and crash-loop protection for automatic restarts.

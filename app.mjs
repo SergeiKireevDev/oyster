@@ -70,7 +70,7 @@ export async function init(state) {
     state.checkpointImport = importLegacyCheckpoints({ repository: checkpointRepository, sessionReferences: state.sessionReferences });
     state.legacyCheckpointsImported = true;
   }
-  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) { state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options) }); state.hublotSupervisor.start(); }
+  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options) }); if (!state.hublotStartupReconciled) { state.hublotStartupReconciliation = await state.hublotSupervisor.reconcile({ includeOpening: true }); state.hublotStartupReconciled = true; } state.hublotSupervisor.start();
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });

@@ -16,14 +16,15 @@ export function createHublotSupervisor({
   let timer = null;
   let reconciling = false;
 
-  async function reconcile() {
+  async function reconcile({ includeOpening = false } = {}) {
     if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0 });
     reconciling = true;
     let checked = 0;
     let recovering = 0;
     try {
       const desired = appStore.repositories.hublots.list()
-        .filter((row) => row.desired_state === "open" && !["opening", "closing", "closed"].includes(row.status));
+        .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
+        .filter((row) => includeOpening || row.status !== "opening");
       for (const hublot of desired) {
         checked++;
         const processes = appStore.repositories.hublots.listProcesses(hublot.id);
@@ -42,14 +43,13 @@ export function createHublotSupervisor({
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
         const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy);
-        if (criticalIdentityMissing && hublot.status !== "recovering") {
+        if (criticalIdentityMissing) {
           const missing = !tunnelHealthy ? "tunnel" : "service";
-          recordTransition(hublot.id, "recovering", {
-            publicUrl: null,
-            lastError: `persisted ${missing} process identity is not live`,
-            at: observedAt,
-          });
-          recovering++;
+          const error = `persisted ${missing} process identity is not live`;
+          if (hublot.status !== "recovering" || hublot.public_url !== null || hublot.last_error !== error) {
+            recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
+            recovering++;
+          }
         }
       }
       return Object.freeze({ skipped: false, checked, recovering });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
@@ -60,6 +60,35 @@ test("supervisor reconciles every desired-open hublot against persisted identiti
   assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
 });
 
+test("startup reconciliation includes every persisted desired-open state", async (t) => {
+  const { store, state } = fixture(t);
+  const statuses = ["opening", "open", "recovering", "failed", "interrupted"];
+  const rows = [];
+  for (const [index, status] of statuses.entries()) {
+    const row = reserveHublot(state, { port: 4210 + index });
+    if (status !== "opening") recordHublotTransition(state, row.id, status, { publicUrl: `https://${status}.test` });
+    rows.push(row);
+  }
+  const closed = reserveHublot(state, { port: 4220 });
+  recordHublotTransition(state, closed.id, "closed", { desiredState: "closed", closedAt: "closed" });
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    verifyIdentity: () => false,
+    now: () => "startup",
+  });
+
+  const result = await supervisor.reconcile({ includeOpening: true });
+
+  assert.equal(result.checked, statuses.length);
+  assert.equal(result.recovering, statuses.length);
+  for (const row of rows) {
+    assert.equal(store.repositories.hublots.find(row.id).status, "recovering");
+    assert.equal(store.repositories.hublots.find(row.id).public_url, null);
+  }
+  assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
+});
+
 test("periodic supervisor starts and stops one unrefed timer", async (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4203 });
@@ -86,6 +115,14 @@ test("periodic supervisor starts and stops one unrefed timer", async (t) => {
   supervisor.stop();
   assert.equal(cleared, timer);
   assert.equal(supervisor.running, false);
+});
+
+test("application startup awaits one full reconciliation before periodic supervision", () => {
+  const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
+  assert.ok(app.indexOf("await state.hublotSupervisor.reconcile({ includeOpening: true })") < app.indexOf("state.hublotSupervisor.start()"));
+  assert.match(app, /if \(!state\.hublotStartupReconciled\)/);
+  assert.ok(server.indexOf("await loadApp()") < server.indexOf("server.listen("));
 });
 
 test("identity verification rejects PID-only, restarted, and fingerprint-mismatched processes", () => {
