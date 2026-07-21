@@ -155,7 +155,7 @@ the root.
 **Acceptance:** the composition root only creates the platform coordinator; it
 contains no EventSource lifecycle state, watchdog state, or event `switch`.
 
-## [ ] 3. Extract the Sessions Feature Runtime
+## [x] 3. Extract the Sessions Feature Runtime
 
 Create `features/sessions/createSessionFeature.js` around the existing session
 runtime/controllers.

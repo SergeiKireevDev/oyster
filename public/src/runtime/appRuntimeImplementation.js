@@ -19,6 +19,7 @@ import { createSessionBootController } from "./sessionBootController.js";
 import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createEventConnectionController } from "./eventConnectionController.js";
 import { createConnectionCoordinator } from "../platform/connectionCoordinator.js";
+import { createSessionFeature } from "../features/sessions/createSessionFeature.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
@@ -403,7 +404,7 @@ let sessionRuntime = null;
 function getSessionRuntime() {
   // Create this only once all feature adapters have initialized; a switch can
   // occur much later from the picker, tree, or adjacent-runner controls.
-  return sessionRuntime ??= createSessionRuntime({
+  return sessionRuntime ??= createSessionFeature({ createRuntime: createSessionRuntime, dependencies: {
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
@@ -421,7 +422,7 @@ function getSessionRuntime() {
     renderPreview: () => previewController.renderNow(),
     resetCommands: () => commandGuard?.reset(),
     connect,
-  });
+  }});
 }
 // ---- instant transcript preview -------------------------------------------
 // Opening a session waits on a pi process spawning AND resuming the session
