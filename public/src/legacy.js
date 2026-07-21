@@ -834,7 +834,7 @@ function switchToRunner(id) {
   setCarouselDots();
   renderPreviewNow(); // instant transcript from the session file, if fetched
   knownCommands = null; // commands can differ per project
-  connect(); // reopen SSE on the new runner; onopen reloads the transcript
+  connect({ replay: false }); // intentional switch: canonical reload replaces old transcript; skip buffered SSE replay
 }
 
 // ---- instant transcript preview -------------------------------------------
@@ -928,7 +928,7 @@ setInterval(() => {
   }
 }, 15000);
 
-function connect() {
+function connect({ replay = true } = {}) {
   if (!token) { requireToken(); return; }
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
@@ -940,7 +940,8 @@ function connect() {
   setReplaying(!skipTranscriptGate, skipTranscriptGate ? null : "replay");
   replayDoneSeen = false;
   replayBufferedEvents = [];
-  es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
+  const replayParam = replay ? "1" : "0";
+  es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}&replay=${replayParam}`);
   es.onopen = async () => {
     connected = true;
     updateAppSession({ connected });
@@ -975,6 +976,7 @@ function connect() {
     lastEventAt = Date.now();
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
+    if (isDuplicateSseEvent(msg)) return;
     try { handleEvent(msg); } catch (e) {
       console.error("event handling failed", e, msg);
     }
@@ -991,11 +993,25 @@ let replaying = true;
 let replayDoneSeen = false;
 let replayBufferedEvents = [];
 let transcriptGateRequired = true;
+const seenSseIds = new Set();
+const seenSseIdQueue = [];
+const SEEN_SSE_ID_MAX = 2000;
 const emptySessionRunners = new Set();
 updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired });
 function setTranscriptGateRequired(value) {
   transcriptGateRequired = !!value;
   updateAppSession({ transcriptGateRequired });
+}
+function isDuplicateSseEvent(msg) {
+  const id = msg?._sseId;
+  if (!id) return false;
+  if (seenSseIds.has(id)) return true;
+  seenSseIds.add(id);
+  seenSseIdQueue.push(id);
+  while (seenSseIdQueue.length > SEEN_SSE_ID_MAX) {
+    seenSseIds.delete(seenSseIdQueue.shift());
+  }
+  return false;
 }
 function composerReadyForSend() {
   return connected && (!replaying || !transcriptGateRequired);
@@ -1279,13 +1295,17 @@ function handleEvent(msg) {
 }
 
 async function reloadTranscript() {
-  // one parallel round trip instead of two serial ones (both commands queue
-  // behind an in-flight session resume anyway, so order doesn't matter)
-  const [s, { messages }] = await Promise.all([
-    rpc({ type: "get_state" }),
-    rpc({ type: "get_messages" }),
-  ]);
-  applyState(s);
+  // Kick off both requests in parallel, but apply get_state as soon as it is
+  // available. Existing sessions can have a slow transcript replay/resume;
+  // the header/composer/session-scoped sidebars should still converge without
+  // waiting for the full message list to render.
+  const statePromise = rpc({ type: "get_state" });
+  const messagesPromise = rpc({ type: "get_messages" });
+  const stateApplied = statePromise.then((s) => {
+    applyState(s);
+    return s;
+  });
+  const [{ messages }] = await Promise.all([messagesPromise, stateApplied]);
   lastPreview = null; // canonical content from pi supersedes the file preview
   const rendered = renderTranscript(messages); // tail is in the DOM after this call
   // the transcript now shows the right last messages: let live events through

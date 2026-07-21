@@ -62,7 +62,7 @@ async function installSecondMockModel() {
       "apiKey": "sk-e2e-mock",
       "models": [
         { "id": "e2e-mock", "name": "E2E Mock", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 4096 },
-        { "id": "e2e-alt", "name": "E2E Alt", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 4096 }
+        { "id": "e2e-mock-b", "name": "E2E Mock B", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 4096 }
       ]
     }
   }
@@ -260,6 +260,34 @@ function defineSessionManagementTests({ includeResourceSwitch = false, mobile = 
     await expect(page.locator("#modal", { hasText: "file" })).toBeVisible();
   });
 
+  test("switching sessions restores each session's model", async ({ page }) => {
+    await installSecondMockModel();
+    await login(page);
+
+    const A = tag("MODEL-A");
+    const B = tag("MODEL-B");
+
+    await newSession(page);
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${A}.`);
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock", { timeout: 15000 });
+
+    await newSession(page);
+    await page.evaluate(async () => {
+      await rpc({ type: "set_model", provider: "mock", modelId: "e2e-mock-b" });
+      await refreshState();
+    });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
+    await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${B}.`);
+
+    await switchToSessionByToken(page, A, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: A }).last()).toBeVisible({ timeout: 15000 });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock", { timeout: 15000 });
+
+    await switchToSessionByToken(page, B, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: B }).last()).toBeVisible({ timeout: 15000 });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
+  });
+
   if (includeResourceSwitch) test("switching sessions restores session-scoped hublots, routines, and model", async ({ page }) => {
     await installSecondMockModel();
     await installFakeCloudflared();
@@ -286,10 +314,10 @@ function defineSessionManagementTests({ includeResourceSwitch = false, mobile = 
     expect(sessionB).not.toEqual(sessionA);
 
     await page.evaluate(async () => {
-      await rpc({ type: "set_model", provider: "mock", modelId: "e2e-alt" });
+      await rpc({ type: "set_model", provider: "mock", modelId: "e2e-mock-b" });
       await refreshState();
     });
-    await expect(modelChip(page, mobile)).toContainText("e2e-alt", { timeout: 15000 });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
 
     const bHublots = [tag("hublot-b-1")];
     const bRoutines = [tag("routine-b-1") + ".sh"];
@@ -309,7 +337,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, mobile = 
     await closeResourceSidebarIfMobile(page, mobile);
 
     await switchToSessionByToken(page, B, { mobile });
-    await expect(modelChip(page, mobile)).toContainText("e2e-alt", { timeout: 15000 });
+    await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
     await expectSidebarResources(page, { hublots: bHublots, routines: bRoutines, mobile });
     await expect(page.locator("#hublotList")).not.toContainText(aHublots[0]);
     await expect(page.locator("#routineList")).not.toContainText(aRoutines[0]);

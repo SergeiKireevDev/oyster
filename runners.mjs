@@ -29,6 +29,7 @@
  * reconciler for a stuck `busy` flag (isStreaming/isCompacting overwrite it).
  */
 
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -82,14 +83,25 @@ export function createRunnerManager(state) {
     serverEvent({ type: "runners_update", runners: listRunnerInfo() });
   }
 
+  function withSseId(line) {
+    try {
+      const obj = JSON.parse(line);
+      if (!obj._sseId) obj._sseId = randomUUID();
+      return JSON.stringify(obj);
+    } catch {
+      return line;
+    }
+  }
+
   /** deliver a line only to SSE clients subscribed to this runner */
   function runnerWrite(runner, line) {
-    runner.buffer.push(line);
+    const eventLine = withSseId(line);
+    runner.buffer.push(eventLine);
     if (runner.buffer.length > RUNNER_BUFFER_MAX) runner.buffer.shift();
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
-      res.write(`data: ${line}\n\n`);
+      res.write(`data: ${eventLine}\n\n`);
     }
   }
 
