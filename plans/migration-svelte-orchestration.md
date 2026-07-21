@@ -92,7 +92,7 @@ shared browse action; picker-specific selection UI remains legacy-owned.
 **Acceptance:** each extraction preserves existing response contracts and e2e
 coverage. Do not extract two domains in one commit.
 
-## 5. Replace Legacy DOM Event Wiring with Component Actions
+## 5. Replace Legacy DOM Event Wiring with Component Actions (in progress)
 
 For each remaining top-level `addEventListener` in `legacy.js`:
 
