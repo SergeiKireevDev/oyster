@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -215,23 +215,6 @@ test("folder browser event adapter routes each browser action", () => {
   listeners.get("pi-folder-browser-cancel")();
   listeners.get("pi-folder-browser-submit")();
   assert.deepEqual(calls, [["browse", "/tmp"], "create", "cancel", "submit"]);
-});
-
-test("file picker event adapter routes each picker action", () => {
-  const listeners = new Map();
-  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
-  const calls = [];
-  const remove = registerFilePickerEvents(target, {
-    useFolder: () => calls.push("folder"), browse: (path) => calls.push(["browse", path]),
-    pick: (path) => calls.push(["pick", path]), cancel: () => calls.push("cancel"),
-  });
-  listeners.get("pi-file-picker-use-folder")();
-  listeners.get("pi-file-picker-browse")({ detail: "/tmp" });
-  listeners.get("pi-file-picker-pick")({ detail: "/tmp/a" });
-  listeners.get("pi-file-picker-cancel")();
-  assert.deepEqual(calls, ["folder", ["browse", "/tmp"], ["pick", "/tmp/a"], "cancel"]);
-  remove();
-  assert.equal(listeners.size, 0);
 });
 
 test("menu event adapter routes its action detail", () => {

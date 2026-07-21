@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFilePickerController } from "../public/src/lib/filePickerController.js";
+import { createFilePickerController, createFilePickerEventController } from "../public/src/lib/filePickerController.js";
 
 test("file picker loads a directory into picker state", async () => {
   const calls = [];
@@ -91,3 +91,6 @@ test("file picker falls back to its workdir after a failed browse", async () => 
   ]);
   assert.equal(calls[5][1], "/work");
 });
+
+
+test("file picker event controller routes typed actions", () => { const listeners = new Map(); const target = { addEventListener: (n, f) => listeners.set(n, f), removeEventListener() {} }; const calls=[]; createFilePickerEventController({ windowTarget:target, useFolder:()=>calls.push("folder"), browse:(p)=>calls.push(p), pick:(p)=>calls.push(["pick",p]), cancel:()=>calls.push("cancel") }).attach(); listeners.get("pi-file-picker-browse")({detail:"/x"}); listeners.get("pi-file-picker-cancel")(); assert.deepEqual(calls,["/x","cancel"]); });

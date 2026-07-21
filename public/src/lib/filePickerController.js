@@ -1,3 +1,15 @@
+export function createFilePickerEventController({ windowTarget, useFolder, browse, pick, cancel }) {
+  const listeners = [
+    ["pi-file-picker-use-folder", () => useFolder()],
+    ["pi-file-picker-browse", (event) => browse(event.detail)],
+    ["pi-file-picker-pick", (event) => pick(event.detail)],
+    ["pi-file-picker-cancel", () => cancel()],
+  ];
+  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
+  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
+  return { attach, detach };
+}
+
 export function createFilePickerController({ browse, update, updateTitle, openModal, closeModal, showHublots, getShowHidden, getWorkdir, setPath, resetState, toast }) {
   async function load(path) {
     update({ loading: true });

@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -50,7 +50,7 @@ import { createHublotController, createHublotSidebarController } from "./lib/hub
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
-import { createFilePickerController } from "./lib/filePickerController.js";
+import { createFilePickerController, createFilePickerEventController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsChangeController, createSettingsController } from "./lib/settingsController.js";
@@ -1407,12 +1407,13 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
   return filePickerController.show({ path: sessionUi.workdir, onPick, onCancel, returnToHublot });
 }
 
-registerFilePickerEvents(window, {
+createFilePickerEventController({
+  windowTarget: window,
   useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   browse: loadFilePicker,
   pick: (path) => filePickerController.complete({ ...filePickerState, path }),
   cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
-});
+}).attach();
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
 function insertIntoComposer(text) {

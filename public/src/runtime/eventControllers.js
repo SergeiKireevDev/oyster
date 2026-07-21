@@ -95,17 +95,6 @@ export function registerFolderBrowserEvents(target, { browse, create, cancel, su
   return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
 }
 
-export function registerFilePickerEvents(target, { useFolder, browse, pick, cancel }) {
-  const listeners = [
-    ["pi-file-picker-use-folder", () => useFolder()],
-    ["pi-file-picker-browse", (event) => browse(event.detail)],
-    ["pi-file-picker-pick", (event) => pick(event.detail)],
-    ["pi-file-picker-cancel", () => cancel()],
-  ];
-  for (const [name, listener] of listeners) target.addEventListener(name, listener);
-  return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
-}
-
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);
