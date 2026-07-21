@@ -30,7 +30,7 @@ import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
-import { listHublots } from "./lib/hublotActions.js";
+import { createHublot, listHublots } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
@@ -2262,17 +2262,7 @@ async function createManagedHublot(descText) {
   try {
     // no port sent: the server allocates the next free one from 3000 up;
     // a `brief` makes the server hand the setup to a background pi agent
-    const res = await fetch(`/tunnels`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        label: desc || null,
-        sessionId: state?.sessionId ?? null,
-        brief: desc,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { toast(data.error || `failed (${res.status})`, "error"); return; }
+    const data = await createHublot(fetch, { label: desc || null, sessionId: state?.sessionId ?? null, brief: desc });
     tunnelForm.desc = "";
     updateHublotManager({ desc: "" });
     closeModal();
