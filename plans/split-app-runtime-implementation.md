@@ -297,7 +297,7 @@ lines. Complete the remaining migration in small verified commits:
 - [x] Move session-owned runner, route, picker, and hydration wiring out of the
   root into `features/sessions/`, leaving only injected interfaces at the
   composition boundary.
-- [ ] Move transcript controller assembly and transcript DOM adapters behind
+- [x] Move transcript controller assembly and transcript DOM adapters behind
   `features/transcript/`, replacing the current placeholder feature wrapper.
 - [ ] Move platform EventSource/RPC/reconnect construction behind
   `platform/connectionCoordinator.js`; the root may only construct and wire

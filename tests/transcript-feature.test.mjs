@@ -4,7 +4,11 @@ import { createTranscriptFeature } from "../public/src/features/transcript/creat
 
 test("transcript feature exposes session reload and stream handling", () => {
   const runtime = { reloadForSession: () => "reload", handleStreamEvent: () => "event" };
-  const feature = createTranscriptFeature({ createRuntime: () => runtime, dependencies: {} });
+  const adapter = { scroll() {} };
+  const feature = createTranscriptFeature({ createRuntime: () => runtime, dependencies: {}, domAdapter: adapter });
   assert.equal(feature.reloadForSession(), "reload");
   assert.equal(feature.handleStreamEvent(), "event");
+  assert.equal(feature.getDomAdapter(), adapter);
+  feature.teardown();
+  assert.equal(feature.getDomAdapter(), null);
 });

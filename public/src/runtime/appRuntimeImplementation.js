@@ -1617,6 +1617,7 @@ async function showSettingsModal() {
 const transcriptFeature = createTranscriptFeature({
   createRuntime: () => ({ reloadForSession: reloadTranscript, handleStreamEvent: handleTranscriptStreamEvent }),
   dependencies: {},
+  domAdapter: transcriptScroll,
 });
 
 // ------------------------------------------------------------ extension UI bridge
