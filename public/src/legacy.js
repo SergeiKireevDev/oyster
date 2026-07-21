@@ -9,6 +9,7 @@ import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistan
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
+import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -108,6 +109,7 @@ const route = parseSessionRoute(location.pathname);
 const syncUrlToSession = (sessionId) => syncSessionUrl({ location, history, sessionId });
 
 const $ = (id) => document.getElementById(id);
+const delayedTasks = createDelayedTaskRegistry();
 const gate = $("gate");
 
 
@@ -953,8 +955,8 @@ function handleEvent(msg) {
         // iframe is the only way to reload a possibly-captured error page,
         // and the edge can lag a moment behind the ready signal
         loadHublots();
-        setTimeout(loadHublots, 5000);
-        setTimeout(loadHublots, 15000);
+        delayedTasks.schedule(loadHublots, 5000);
+        delayedTasks.schedule(loadHublots, 15000);
       }
       return;
 
@@ -2189,5 +2191,6 @@ export function teardownLegacyRuntime() {
   openFileExplorerEventController.detach();
   commandPaletteInputController?.detach();
   debugHookRegistration.detach();
+  delayedTasks.cancelAll();
   connectionState.lost();
 }
