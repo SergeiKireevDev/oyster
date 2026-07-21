@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setRoutineHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotHandlers, setHublotManagerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2383,7 +2383,7 @@ async function routineAction(name, action) {
   }
   loadRoutines();
 }
-setRoutineHandlers({ runAction: routineAction });
+window.addEventListener("pi-routine-action", (event) => routineAction(event.detail.name, event.detail.action));
 
 // ------------------------------------------------------------ session picker
 

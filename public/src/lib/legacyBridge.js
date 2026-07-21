@@ -4,7 +4,6 @@ let folderBrowserHandlers = {};
 let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-let routineHandlers = {};
 
 export function setHublotHandlers(handlers) {
   hublotHandlers = handlers ?? {};
@@ -172,13 +171,5 @@ export function toggleManagedHublotScope() {
 
 export function setupManagedCommandPalette(node) {
   return hublotManagerHandlers.setupCommandPalette?.(node);
-}
-
-export function setRoutineHandlers(handlers) {
-  routineHandlers = handlers ?? {};
-}
-
-export function runRoutineAction(name, action) {
-  return routineHandlers.runAction?.(name, action);
 }
 

@@ -1,10 +1,10 @@
 <script>
-  import { runRoutineAction } from "../lib/legacyBridge.js";
   import { routineCurrentSessionId, routines, routinesLoading, routineScopeAll, routinesTotal } from "../stores/routines.js";
 
   const dotClass = (status) => ({ running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[status] ?? "");
   const msg = (routine) => routine.message ?? routine.log?.[routine.log.length - 1] ?? null;
   const title = (routine) => `${routine.path}\nstatus: ${routine.status}${routine.exitCode !== null ? ` (exit ${routine.exitCode})` : ""}${routine.sessionId ? `\nbound to session ${routine.sessionId}` : "\nnot bound to a session yet"}${routine.cwd ? `\nruns in ${routine.cwd}` : ""}`;
+  const runRoutineAction = (name, action) => window.dispatchEvent(new CustomEvent("pi-routine-action", { detail: { name, action } }));
   const confirmDelete = (routine) => {
     if (confirm(`Delete routine “${routine.name}”? Its script is removed from ~/.pi/routines/ (byproducts stay — teardown first if needed).`)) runRoutineAction(routine.name, "delete");
   };
