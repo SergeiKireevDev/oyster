@@ -50,7 +50,8 @@ import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "../lib/transc
 import { backfillTranscriptTurns } from "../lib/transcriptBackfill.js";
 import { createTranscriptActions } from "../lib/transcriptActions.js";
 import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
-import { createCheckpointFeatureRuntime } from "./checkpointFeatureRuntime.js";
+import { createCheckpointFeature } from "../features/checkpoints/checkpointFeature.js";
+import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "../lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "../lib/commandController.js";
 import { promptCommand } from "../lib/promptActions.js";
@@ -256,9 +257,8 @@ function pickCheckpointModel(options = {}) {
   });
 }
 
-const checkpointFeature = createCheckpointFeatureRuntime({
+const checkpointFeature = createCheckpointFeature({
   fetchImpl: fetch,
-  windowTarget: window,
   marker: { tick, chatElements: chatEls, setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => state?.sessionId, fetchSessionEntries },
   tree: { fetchImpl: fetch, getState: () => state, getRunners: () => runnersNow, getCurrentRunner: () => currentRunner, getWorkdir: () => sessionUi.workdir, setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
   controller: { pickModel: pickCheckpointModel, getRunner: () => currentRunner, getSessionId: () => state?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
@@ -270,7 +270,10 @@ const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
 const loadCheckpointTree = () => checkpointTreeController.load();
 function handleCheckpointClick(event) { return checkpointController.freeze(event); }
 function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
-const checkpointTreeEventController = checkpointFeature.createEventAdapter();
+const detachCheckpointTreeActions = configureCheckpointTreeActions({
+  openSession: (...args) => checkpointTreeController.openTreeSession(...args),
+  rollback: (checkpoint, target) => checkpointController.rollback(checkpoint, target),
+});
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;
@@ -1721,7 +1724,7 @@ const detachRuntimeEventAdapters = () => {
   composerEventController.detach();
   commandPaletteKeyboardController.detach();
   commandPaletteRunController.detach();
-  checkpointTreeEventController.detach();
+  detachCheckpointTreeActions();
   filePickerEventController.detach();
   folderBrowserEventController.detach();
   fileExplorerEventController.detach();
@@ -1751,7 +1754,7 @@ const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
 
 const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
-    checkpointTreeEventController, composerEventController, commandPaletteRunController,
+    composerEventController, commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController, filePickerEventController,
     folderBrowserEventController, fileExplorerEventController, managedHublotEventController,
     hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,

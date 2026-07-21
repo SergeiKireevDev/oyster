@@ -208,7 +208,7 @@ and scroll tests remain green.
 Move one feature per commit, in this order, because later features depend on
 session identity but not on each other:
 
-- [ ] **Checkpoints** — marker, tree, freeze, rollback, and checkpoint event UI.
+- [x] **Checkpoints** — marker, tree, freeze, rollback, and checkpoint event UI.
 - [ ] **Composer** — input state, send/abort action, prompt history, command
   guard, and command palette.
 - [ ] **Files** — file picker, folder browser, explorer, upload input, and editor.

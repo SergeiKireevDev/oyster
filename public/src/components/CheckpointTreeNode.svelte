@@ -1,11 +1,7 @@
 <script>
-  function rollbackCheckpoint(checkpoint, target) {
-    window.dispatchEvent(new CustomEvent("pi-checkpoint-tree-rollback", { detail: { checkpoint, target } }));
-  }
+  import { openCheckpointTreeSession, rollbackCheckpointTree } from "../features/checkpoints/checkpointTreeActions.js";
 
-  function openCheckpointTreeSession(node) {
-    window.dispatchEvent(new CustomEvent("pi-checkpoint-tree-open-session", { detail: node }));
-  }
+  const rollbackCheckpoint = rollbackCheckpointTree;
 
   export let node;
   export let currentSessionId = null;
