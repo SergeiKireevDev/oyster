@@ -1,7 +1,8 @@
 import { writable } from "svelte/store";
 import { renderMarkdown } from "../../lib/markdownRenderer.js";
-import { shouldShowThinking, toolResultText, userMessageText } from "../../lib/messageUtils.js";
+import { assistantMessageText, shouldShowThinking, toolResultText, userMessageText } from "../../lib/messageUtils.js";
 import { backfillTranscriptTurns } from "../../lib/transcriptBackfill.js";
+import { createMessageCopyController } from "../../lib/clipboardController.js";
 import { createPostSendTranscriptSyncController } from "../../lib/postSendTranscriptSyncController.js";
 import { createTranscriptActions } from "../../lib/transcriptActions.js";
 import { splitTurns, takeTailChunk } from "../../lib/transcriptUtils.js";
@@ -30,15 +31,18 @@ export function createTranscriptAssembly(deps) {
   let afterTranscript = null;
   let synchronization = null;
   let permalinkOperations = null;
+  let copyMessage = async () => {};
 
   const transcriptActions = createTranscriptActions({
     callbacks: {
       onPermalink: (element) => deps.copyPermalink(element).catch((error) => deps.toast(`permalink failed: ${error.message}`, "error")),
+      onCopy: (text) => copyMessage(text).catch((error) => deps.toast(`copy failed: ${error.message}`, "error")),
       onCheckpoint: deps.handleCheckpoint,
       onRollback: deps.rollbackCheckpoint,
     },
     renderMarkdown,
     shouldShowThinking,
+    assistantMessageText,
     storage: deps.storage,
     ensureToolCardStore: (toolCall) => toolCards.ensure(toolCall),
   });
@@ -214,6 +218,7 @@ export function createTranscriptAssembly(deps) {
   }
 
   function configureFeature(featureDeps) {
+    copyMessage = createMessageCopyController({ copy: featureDeps.copy, prompt: featureDeps.prompt, toast: deps.toast });
     const runtime = createTranscriptRuntime({
       reloadTranscript: operations.reloadTranscript,
       handleStreamEvent,
@@ -277,6 +282,7 @@ export function createTranscriptAssembly(deps) {
       afterTranscript = null;
       synchronization = null;
       permalinkOperations = null;
+      copyMessage = async () => {};
       toolCards.clear();
       assistantStream.clear();
       renderer = null;

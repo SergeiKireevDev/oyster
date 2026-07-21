@@ -1,3 +1,13 @@
+/** Own message-copy feedback and the manual fallback when clipboard access fails. */
+export function createMessageCopyController({ copy, prompt, toast }) {
+  return async (text) => {
+    const value = String(text ?? "");
+    if (!value) return toast("message has no text to copy", "warning");
+    if (await copy(value)) toast("message copied");
+    else await prompt("Message", "", value);
+  };
+}
+
 /** Copy text with a DOM fallback for browsers without Clipboard API permission. */
 export async function copyTextToClipboard(text, { clipboard = globalThis.navigator?.clipboard, documentTarget = globalThis.document } = {}) {
   try {

@@ -26,6 +26,7 @@
       <UserMessage
         text={item.text}
         onPermalink={item.onPermalink}
+        onCopy={item.onCopy}
         onCheckpoint={item.onCheckpoint}
         onRollback={item.onRollback}
         onRoot={item.setRoot}
@@ -35,6 +36,7 @@
         assistantStore={item.assistantStore}
         role={item.role}
         onPermalink={item.onPermalink}
+        onCopy={item.onCopy}
         onCheckpoint={item.onCheckpoint}
         onRollback={item.onRollback}
         onRoot={item.setRoot}

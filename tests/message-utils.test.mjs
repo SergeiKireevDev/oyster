@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assistantMessageText,
   messageEntryMatchesElement,
   shouldShowThinking,
   summarizeToolArgs,
@@ -20,6 +21,12 @@ test("message utils: extract tool result and user text", () => {
   assert.equal(toolResultText({ content: "plain" }), "plain");
   assert.equal(toolResultText({ content: [{ type: "text", text: "hello" }, { type: "image", mimeType: "image/png" }] }), "hello\n[image image/png]");
   assert.equal(userMessageText({ content: [{ type: "text", text: "hello" }, { type: "file" }] }), "hello\n[file]");
+  assert.equal(assistantMessageText({ content: [
+    { type: "thinking", thinking: "private" },
+    { type: "text", text: "first" },
+    { type: "toolCall", name: "read" },
+    { type: "text", text: "second" },
+  ] }), "first\n\nsecond");
 });
 
 test("message utils: thinking visibility and entry matching", () => {

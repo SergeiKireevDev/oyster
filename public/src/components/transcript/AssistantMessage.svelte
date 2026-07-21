@@ -1,14 +1,12 @@
 <script>
   import { writable } from "svelte/store";
-  import PermalinkButton from "./PermalinkButton.svelte";
+  import AssistantPartActions from "./AssistantPartActions.svelte";
   import ToolCard from "./ToolCard.svelte";
   import ToolGroup from "./ToolGroup.svelte";
-  import CheckpointButton from "./CheckpointButton.svelte";
-  import CheckpointRestoreButton from "./CheckpointRestoreButton.svelte";
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
-  let { assistantStore = writable({ blocks: [], errorMessage: "" }), role = "assistant", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
+  let { assistantStore = writable({ blocks: [], copyText: "", errorMessage: "" }), role = "assistant", onPermalink = () => {}, onCopy = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
   let root = $state();
   const data = $derived($assistantStore);
   const displayBlocks = $derived(groupConsecutiveTools(data.blocks));
@@ -46,9 +44,9 @@
   }
 </script>
 
-<div class="msg assistant" class:ckpt-frozen={!!restore} data-role={role} bind:this={root}>
-  <div>
-    {#each displayBlocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
+<div class="assistant-entry" data-role={role} bind:this={root}>
+  {#each displayBlocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
+    <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type}>
       {#if block.type === "text"}
         <div class="md">{@html block.html}</div>
       {:else if block.type === "thinking"}
@@ -66,16 +64,33 @@
       {:else if block.type === "toolGroup"}
         <ToolGroup blocks={block.blocks} />
       {/if}
-    {/each}
-    {#if data.errorMessage}
-      <div class="msg error-msg">{data.errorMessage}</div>
-    {/if}
-  </div>
-  <PermalinkButton target={root} {onPermalink} />
-  {#if $checkpointMarker.target === root}
-    <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
-  {/if}
-  {#if restore}
-    <CheckpointRestoreButton {restore} {onRollback} />
+      <AssistantPartActions
+        target={root}
+        copyText={block.type === "text" ? block.text : ""}
+        {onPermalink}
+        {onCopy}
+        {onCheckpoint}
+        {onRollback}
+        checkpoint={$checkpointMarker.target === root && index === displayBlocks.length - 1}
+        checkpointBusy={$checkpointMarker.busy}
+        restore={index === displayBlocks.length - 1 ? restore : null}
+      />
+    </div>
+  {/each}
+  {#if data.errorMessage}
+    <div class="msg assistant assistant-part error-msg" class:ckpt-frozen={!!restore} data-assistant-part="error">
+      {data.errorMessage}
+      {#if displayBlocks.length === 0}
+        <AssistantPartActions
+          target={root}
+          {onPermalink}
+          {onCheckpoint}
+          {onRollback}
+          checkpoint={$checkpointMarker.target === root}
+          checkpointBusy={$checkpointMarker.busy}
+          {restore}
+        />
+      {/if}
+    </div>
   {/if}
 </div>

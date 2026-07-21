@@ -29,6 +29,16 @@ export function userMessageText(message) {
   return "";
 }
 
+/** Extract the authored assistant response without thinking or tool-call UI. */
+export function assistantMessageText(message) {
+  if (typeof message?.content === "string") return message.content;
+  if (!Array.isArray(message?.content)) return "";
+  return message.content
+    .filter((item) => item.type === "text" && item.text)
+    .map((item) => item.text)
+    .join("\n\n");
+}
+
 export function shouldShowThinking(localStorageLike = globalThis.localStorage) {
   return localStorageLike?.getItem?.("pi_show_thinking") !== "0";
 }

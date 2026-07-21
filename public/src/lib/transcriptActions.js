@@ -6,7 +6,7 @@ import { appendTranscriptItems, createTranscriptItem, prependTranscriptItems } f
  * adapters and controls when items are appended/prepended; this module keeps
  * component props and writable assistant state out of the orchestration loop.
  */
-export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowThinking, storage, ensureToolCardStore }) {
+export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowThinking, assistantMessageText, storage, ensureToolCardStore }) {
   function insert(items, prepend) {
     (prepend ? prependTranscriptItems : appendTranscriptItems)(items);
   }
@@ -20,7 +20,7 @@ export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowT
   function assistantModel(message) {
     const blocks = (message.content || []).map((block) => {
       if (block.type === "text") {
-        return { type: "text", html: renderMarkdown(block.text || ""), key: block.text || "" };
+        return { type: "text", text: block.text || "", html: renderMarkdown(block.text || ""), key: block.text || "" };
       }
       if (block.type === "thinking") {
         if (!shouldShowThinking(storage) || !block.thinking?.trim()) return null;
@@ -33,6 +33,7 @@ export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowT
     }).filter(Boolean);
     return {
       blocks,
+      copyText: assistantMessageText(message),
       errorMessage: message.stopReason === "error" ? (message.errorMessage || "") : "",
     };
   }

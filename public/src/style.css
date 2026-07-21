@@ -668,8 +668,9 @@
     gap: 12px;
   }
   .msg { min-width: 0; position: relative; }
-  /* permalink button — revealed on hover, copies a shareable /s/<sid>/m/<eid> URL */
-  .permalink {
+  .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  /* message actions — revealed on hover; copy text or a shareable permalink */
+  .permalink, .message-copy {
     position: absolute;
     top: 2px;
     font-size: 12px;
@@ -685,11 +686,13 @@
     transition: opacity .15s;
     z-index: 2;
   }
-  .msg:hover > .permalink { opacity: .85; }
-  .permalink:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1 !important; }
+  .msg:hover > .permalink, .msg:hover > .message-copy { opacity: .85; }
+  .permalink:hover, .message-copy:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1 !important; }
   .msg.user > .permalink { left: -34px; }
+  .msg.user > .message-copy { left: -62px; }
   .msg.assistant > .permalink { right: 0; top: -8px; }
-  @media (hover: none) { .msg > .permalink { opacity: .35; } }
+  .msg.assistant > .message-copy { right: 28px; top: -8px; }
+  @media (hover: none) { .msg > .permalink, .msg > .message-copy { opacity: .35; } }
   /* checkpoint button — iceberg on the latest message; commits workdir changes */
   .checkpoint {
     position: absolute;
@@ -708,8 +711,8 @@
   }
   .checkpoint:hover { border-color: var(--accent-dim); opacity: 1; }
   .checkpoint.busy { opacity: .3; cursor: wait; }
-  .msg.user > .checkpoint { left: -62px; }
-  .msg.assistant > .checkpoint { right: 28px; top: -8px; }
+  .msg.user > .checkpoint { left: -90px; }
+  .msg.assistant > .checkpoint { right: 56px; top: -8px; }
   /* return arrow — shown on checkpointed messages; rolls the workdir back
      to that checkpoint and opens a forked session there */
   .ckpt-restore {
@@ -730,8 +733,8 @@
   }
   .ckpt-restore:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1; }
   .ckpt-restore.busy { opacity: .3; cursor: wait; }
-  .msg.user > .ckpt-restore { left: -90px; }
-  .msg.assistant > .ckpt-restore { right: 56px; top: -8px; }
+  .msg.user > .ckpt-restore { left: -118px; }
+  .msg.assistant > .ckpt-restore { right: 84px; top: -8px; }
   /* checkpointed (rollbackable) messages carry an icy accent */
   .msg.user.ckpt-frozen {
     border: 1px solid rgba(127, 212, 255, .45);
@@ -1690,7 +1693,7 @@ details.thinking[open] .thinking-preview { display: none; }
 .tool-group-body > details.block { margin: 0; background: rgba(24,28,37,.88); }
 .tool summary .status.ok { font-size: 0; }
 .tool summary .status.ok::after { content: "✓"; font-size: 12px; }
-.permalink, .checkpoint, .ckpt-restore { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.permalink, .message-copy, .checkpoint, .ckpt-restore { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
 #transcriptNotice { width: 36px; height: 36px; bottom: 20px; border-color: rgba(157,169,255,.35); background: #20263a; box-shadow: 0 10px 28px rgba(0,0,0,.38); }
 
 /* Floating composer */

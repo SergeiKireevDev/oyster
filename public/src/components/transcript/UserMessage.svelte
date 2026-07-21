@@ -1,11 +1,12 @@
 <script>
   import PermalinkButton from "./PermalinkButton.svelte";
+  import CopyMessageButton from "./CopyMessageButton.svelte";
   import CheckpointButton from "./CheckpointButton.svelte";
   import CheckpointRestoreButton from "./CheckpointRestoreButton.svelte";
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
-  let { text = "", onPermalink = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
+  let { text = "", onPermalink = () => {}, onCopy = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
 
   let root = $state();
   const iface = $derived(text.match(/^Opening interface: (.*)\n/));
@@ -29,6 +30,7 @@
 {:else}
   <div class="msg user" class:ckpt-frozen={!!restore} data-role="user" bind:this={root}>
     {text}<PermalinkButton target={root} {onPermalink} />
+    <CopyMessageButton {text} {onCopy} />
     {#if $checkpointMarker.target === root}
       <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
     {/if}
