@@ -1,3 +1,20 @@
+export function createSessionPickerEventController({ windowTarget, dispatch, cancel }) {
+  const onAction = (event) => {
+    const { type, args } = event.detail ?? {};
+    return dispatch(type, ...(args ?? []));
+  };
+  function attach() {
+    windowTarget.addEventListener("pi-session-picker-action", onAction);
+    windowTarget.addEventListener("pi-session-picker-cancel", cancel);
+    return detach;
+  }
+  function detach() {
+    windowTarget.removeEventListener("pi-session-picker-action", onAction);
+    windowTarget.removeEventListener("pi-session-picker-cancel", cancel);
+  }
+  return { attach, detach };
+}
+
 export function createSessionPickerController({ stopRunner, getRunners, markStopped, setRunners, toast }) {
   async function stopSession(session) {
     const runner = getRunners().find((item) => item.sessionFile === session.path) ?? { id: session.runnerId };

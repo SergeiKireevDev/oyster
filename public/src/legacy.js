@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerMenuEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerMenuEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -55,7 +55,7 @@ import { createFilePickerController, createFilePickerEventController } from "./l
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsChangeController, createSettingsController } from "./lib/settingsController.js";
-import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
+import { createSessionPickerController, createSessionPickerEventController, createSessionPickerDeleteController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -1791,10 +1791,11 @@ const sessionPickerActions = {
   },
   loadFolder: loadSessionPickerFolder,
 };
-registerSessionPickerEvents(window, {
+createSessionPickerEventController({
+  windowTarget: window,
   dispatch: (type, ...args) => sessionPickerActions[type]?.(...args),
   cancel: () => { closeModal(); sessionPickerResolve?.(null); },
-});
+}).attach();
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's

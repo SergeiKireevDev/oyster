@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerMenuEvents } from "../public/src/runtime/eventControllers.js";
 import { createComposerEventController } from "../public/src/lib/composerController.js";
+import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
@@ -181,7 +182,7 @@ test("session picker event adapter dispatches actions and cancellation", () => {
   const listeners = new Map();
   const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
   const calls = [];
-  registerSessionPickerEvents(target, { dispatch: (type, ...args) => calls.push([type, args]), cancel: () => calls.push(["cancel"]) });
+  createSessionPickerEventController({ windowTarget: target, dispatch: (type, ...args) => calls.push([type, args]), cancel: () => calls.push(["cancel"]) }).attach();
   listeners.get("pi-session-picker-action")({ detail: { type: "open", args: ["/a"] } });
   listeners.get("pi-session-picker-cancel")();
   assert.deepEqual(calls, [["open", ["/a"]], ["cancel"]]);

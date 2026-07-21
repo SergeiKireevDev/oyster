@@ -13,19 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerSessionPickerEvents(target, { dispatch, cancel }) {
-  const onAction = (event) => {
-    const { type, args } = event.detail ?? {};
-    return dispatch(type, ...(args ?? []));
-  };
-  target.addEventListener("pi-session-picker-action", onAction);
-  target.addEventListener("pi-session-picker-cancel", cancel);
-  return () => {
-    target.removeEventListener("pi-session-picker-action", onAction);
-    target.removeEventListener("pi-session-picker-cancel", cancel);
-  };
-}
-
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);
