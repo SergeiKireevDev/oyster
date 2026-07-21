@@ -1,11 +1,24 @@
 /**
- * pi-lot-ui — hot-reloadable application logic
+ * pi-lot-ui — hot-reloadable application logic (composition root + router)
  *
  * Loaded by server.mjs (the stable core) via dynamic import. Everything here
  * can be edited while the server runs; the core re-imports this module on
  * change and swaps the handler atomically. All state that must survive a
- * reload (pi process, SSE clients, event buffer, config) lives in the `state`
+ * reload (pi processes, SSE clients, buffers, config) lives in the `state`
  * object owned by the core — this module only reads/writes it.
+ *
+ * The domain logic lives in sibling modules, each imported with a
+ * cache-busting query so hot reloads of app.mjs pick up their current
+ * versions too (edit a sibling, then touch app.mjs to reload):
+ *   runners.mjs     – one pi process per open session
+ *   sessions.mjs    – session .jsonl parsing (mtime-cached), search, forking
+ *   checkpoints.mjs – git checkpoints, rollback forks, commit summaries
+ *   tunnels.mjs     – cloudflared tunnels + background hublot agents
+ *   routines.mjs    – runnable scripts with progress reporting
+ *
+ * This file owns: auth (token + rate limiting), filesystem confinement,
+ * HTTP helpers, and the route table. Handlers are `(req, res, url)` and are
+ * looked up by "METHOD /path"; `openRoutes` skip auth.
  *
  * Routes:
  *   GET  /            -> static UI (public/index.html)              (no auth)
@@ -19,6 +32,7 @@
  *   DELETE /runners   -> stop a runner (?id=…)
  *   POST /open-session -> get-or-spawn a runner { sessionPath?, dir? }
  *   GET  /sessions    -> saved pi sessions for the active workdir
+ *   DELETE /session   -> delete a session file (?path=…)
  *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
  *   GET  /session-by-id -> locate a session file from its session id (?id=…)
  *   GET  /session-entries -> ordered user/assistant entries of the active
@@ -28,6 +42,8 @@
  *                        — only user/assistant text by default; tools=1 also
  *                        searches tool calls and thinking blocks
  *   GET  /browse      -> list subdirectories for the folder picker
+ *   GET  /file-download, /file-content, POST /file-save, /file-upload
+ *                     -> built-in file explorer (confined, see below)
  *   POST /workdir     -> switch folder (spawns a new runner there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn one runner (?runner=id)
@@ -46,365 +62,51 @@
  *                        sub-agent when `model` is given — then git reset
  *                        --hard) and open a forked session at that entry
  *   GET  /tunnels     -> live tunnels spawned by this server
- *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
+ *   POST /tunnels     -> open a tunnel { port, label?, sessionId?, brief? }
+ *   PATCH /tunnels    -> rebind a tunnel to another session { id, sessionId }
  *   DELETE /tunnels   -> close a tunnel (?id=…)
  *   GET  /routines    -> runnable scripts in ~/.pi/routines/ (+ live state & session bindings)
  *   POST /routines    -> { name, action: "create" | "start" | "stop" | "teardown" | "release" | "delete",
  *                          sessionId?, script? (create only) }
  */
 
-import { spawn, execFile } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
-import { createConnection } from "node:net";
 import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { createInterface } from "node:readline";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// import tunnels.mjs with a cache-busting query so hot reloads of app.mjs
-// pick up the current version instead of a stale cached module
-const TUNNELS_PATH = join(dirname(fileURLToPath(import.meta.url)), "tunnels.mjs");
-const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, pidsOnPort } =
-  await import(`./tunnels.mjs?v=${statSync(TUNNELS_PATH).mtimeMs}`);
+// sibling modules are imported with a cache-busting query so hot reloads of
+// app.mjs pick up their current versions instead of stale cached modules
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 
-const ROUTINES_PATH = join(dirname(fileURLToPath(import.meta.url)), "routines.mjs");
+const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, spawnHublotAgent } =
+  await import(bust("tunnels.mjs"));
+
 const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, releaseSessionRoutines, stopAllRoutines, routinesDir } =
-  await import(`./routines.mjs?v=${statSync(ROUTINES_PATH).mtimeMs}`);
+  await import(bust("routines.mjs"));
 
-// all session .jsonl reading/parsing lives in sessions.mjs (mtime-cached)
-const SESSIONS_MOD_PATH = join(dirname(fileURLToPath(import.meta.url)), "sessions.mjs");
 const {
   SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions, listSessionFolders,
   searchSessions, sessionTree, sessionEntries, findSessionById, forkSessionAt,
   readSessionHeaderInfo,
-} = await import(`./sessions.mjs?v=${statSync(SESSIONS_MOD_PATH).mtimeMs}`);
+} = await import(bust("sessions.mjs"));
+
+const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
+  await import(bust("checkpoints.mjs"));
+
+const { createRunnerManager } = await import(bust("runners.mjs"));
 
 export function init(state) {
-  const { config, broadcast, serverEvent } = state;
+  const { config } = state;
 
-  // ---------------------------------------------------------------- pi runners
-  //
-  // One pi process per open session ("runner"). Runners keep working in the
-  // background when the browser looks at another session; each SSE client
-  // subscribes to exactly one runner, and runner status (busy/idle/dead) is
-  // broadcast to everyone so session lists can show live indicators.
-
-  const RUNNER_BUFFER_MAX = 400;
-
-  if (!state.runners) state.runners = new Map(); // id -> runner
-  if (!state.runnerSeq) state.runnerSeq = 0;
-
-  function runnerInfo(r) {
-    return {
-      id: r.id, dir: r.dir, sessionFile: r.sessionFile, sessionId: r.sessionId,
-      sessionName: r.sessionName, busy: r.busy, alive: !!r.proc,
-    };
-  }
-
-  /** global (all-clients) notification that some runner changed state */
-  function runnersChanged() {
-    serverEvent({ type: "runners_update", runners: [...state.runners.values()].map(runnerInfo) });
-  }
-
-  /** deliver a line only to SSE clients subscribed to this runner */
-  function runnerWrite(runner, line) {
-    runner.buffer.push(line);
-    if (runner.buffer.length > RUNNER_BUFFER_MAX) runner.buffer.shift();
-    for (const res of state.sseClients) {
-      if (res.runnerId === runner.id) res.write(`data: ${line}\n\n`);
-    }
-  }
-
-  function runnerEvent(runner, obj) {
-    runnerWrite(runner, JSON.stringify({ ...obj, _server: true, runner: runner.id }));
-  }
-
-  /** watch a runner's stdout to maintain busy/session metadata */
-  function trackRunner(runner, line) {
-    let msg;
-    try { msg = JSON.parse(line); } catch { return; }
-    if (msg.type === "agent_start") { runner.busy = true; runnersChanged(); }
-    else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(); requestState(runner); }
-    else if (msg.type === "response" && msg.id === runner.resumeId) {
-      // session resume finished (success or not): deliver held-back commands
-      finishResume(runner);
-      if (msg.success) requestState(runner);
-    }
-    else if (msg.type === "response" && msg.success) {
-      if (msg.command === "get_state" && msg.data) {
-        const d = msg.data;
-        const changed = runner.sessionFile !== d.sessionFile ||
-          runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
-        runner.sessionFile = d.sessionFile ?? runner.sessionFile;
-        runner.sessionId = d.sessionId ?? runner.sessionId;
-        runner.sessionName = d.sessionName ?? null;
-        runner.busy = !!(d.isStreaming || d.isCompacting);
-        if (changed) runnersChanged();
-      } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
-        requestState(runner);
-      }
-    }
-  }
-
-  let srvSeq = 0;
-  function requestState(runner) {
-    sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "get_state" }, { autostart: false });
-  }
-
-  /** flush commands that were held back while a session resume was in flight */
-  function finishResume(runner) {
-    if (!runner.resumeId) return;
-    runner.resumeId = null;
-    clearTimeout(runner.resumeTimer);
-    const queued = runner.resumeQueue ?? [];
-    runner.resumeQueue = [];
-    for (const obj of queued) {
-      if (runner.proc?.stdin.writable) runner.proc.stdin.write(JSON.stringify(obj) + "\n");
-    }
-  }
-
-  function spawnRunner({ dir, sessionPath = null }) {
-    const runner = {
-      id: `r${++state.runnerSeq}`,
-      dir,
-      sessionFile: sessionPath,
-      sessionId: null,
-      sessionName: null,
-      busy: false,
-      proc: null,
-      buffer: [],
-      startCount: 0,
-      lastSpawnAt: 0,
-    };
-    state.runners.set(runner.id, runner);
-    startRunner(runner);
-    return runner;
-  }
-
-  function startRunner(runner) {
-    if (runner.proc) return;
-    const now = Date.now();
-    // crash-loop guard: if this runner died within 2s of spawning, wait
-    if (now - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
-      setTimeout(() => { if (!runner.proc && state.runners.has(runner.id)) startRunner(runner); }, 2000);
-      return;
-    }
-    runner.lastSpawnAt = now;
-    runner.startCount++;
-    const args = ["--mode", "rpc", ...config.PI_EXTRA_ARGS];
-    console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
-    const proc = spawn(config.PI_BIN, args, { cwd: runner.dir, stdio: ["pipe", "pipe", "pipe"] });
-    runner.proc = proc;
-
-    const rl = createInterface({ input: proc.stdout });
-    rl.on("line", (line) => {
-      line = line.trim();
-      if (!line) return;
-      trackRunner(runner, line);
-      runnerWrite(runner, line);
-    });
-
-    proc.stderr.on("data", (chunk) => {
-      const text = String(chunk).trim();
-      if (text) console.error(`[pi ${runner.id} stderr] ${text}`);
-    });
-
-    proc.on("error", (err) => {
-      console.error(`[pi-ui] failed to spawn runner ${runner.id}: ${err.message}`);
-      runnerEvent(runner, { type: "pi_error", error: err.message });
-      if (runner.proc === proc) runner.proc = null;
-      runnersChanged();
-    });
-
-    proc.on("exit", (code, signal) => {
-      console.log(`[pi-ui] runner ${runner.id} exited (code=${code}, signal=${signal})`);
-      if (runner.proc === proc) {
-        runner.proc = null;
-        runner.busy = false;
-        runnerEvent(runner, { type: "pi_exit", code, signal });
-        runnersChanged();
-      }
-    });
-
-    // resume the runner's session after a restart (fresh runners with a
-    // requested sessionPath also land here). pi handles a prompt arriving
-    // right behind switch_session concurrently, and the switch then discards
-    // the run — so hold every other command back until the resume completes.
-    if (runner.sessionFile) {
-      runner.resumeId = `_srv-${++srvSeq}`;
-      proc.stdin.write(JSON.stringify({ id: runner.resumeId, type: "switch_session", sessionPath: runner.sessionFile }) + "\n");
-      // safety valve: never hold commands forever if the response goes missing
-      clearTimeout(runner.resumeTimer);
-      runner.resumeTimer = setTimeout(() => finishResume(runner), 15000);
-      runner.resumeTimer.unref?.();
-    } else {
-      requestState(runner);
-    }
-    runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
-    runnersChanged();
-  }
-
-  function stopRunner(runner) {
-    const proc = runner.proc;
-    if (!proc) return;
-    runner.proc = null;
-    runner.busy = false;
-    proc.removeAllListeners("exit");
-    proc.on("exit", () => runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" }));
-    proc.kill("SIGTERM");
-    setTimeout(() => {
-      if (proc.exitCode === null && !proc.killed) proc.kill("SIGKILL");
-    }, 3000).unref();
-    runnersChanged();
-  }
-
-  function sendToRunner(runner, obj, { autostart = true } = {}) {
-    if (!runner.proc && autostart) startRunner(runner);
-    if (!runner.proc || !runner.proc.stdin.writable) return false;
-    if (runner.resumeId) {
-      // a session resume is in flight; deliver after it completes
-      (runner.resumeQueue ??= []).push(obj);
-      return true;
-    }
-    runner.proc.stdin.write(JSON.stringify(obj) + "\n");
-    return true;
-  }
-
-  /** the runner new/unspecified clients get; created on demand */
-  function defaultRunner() {
-    let r = state.runners.get(state.defaultRunnerId);
-    if (!r) {
-      r = [...state.runners.values()].find((x) => x.proc) ?? [...state.runners.values()][0];
-      if (!r) r = spawnRunner({ dir: state.currentDir });
-      state.defaultRunnerId = r.id;
-    }
-    return r;
-  }
-
-  function runnerFromReq(url) {
-    const id = url.searchParams.get("runner");
-    return (id && state.runners.get(id)) || defaultRunner();
-  }
-
-  /** reuse the runner already attached to a session file, else spawn one */
-  function openSessionRunner({ sessionPath = null, dir = null }) {
-    if (sessionPath) {
-      for (const r of state.runners.values()) {
-        if (r.sessionFile === sessionPath) {
-          if (!r.proc) startRunner(r);
-          return r;
-        }
-      }
-    }
-    return spawnRunner({ dir: dir || state.currentDir, sessionPath });
-  }
-
-  // legacy entry points used by server.mjs
-  function startPi() { defaultRunner(); }
-  function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
-
-  // one-time migration from the single-process era: a pre-runner pi process
-  // may survive a hot reload as state.pi; its stdout listeners belong to old
-  // code, so retire it and let runners take over
-  if (state.pi) {
-    console.log("[pi-ui] retiring pre-runner pi process (multi-runner migration)");
-    try { state.pi.kill("SIGTERM"); } catch {}
-    state.pi = null;
-  }
-
-  // ---------------------------------------------------------------- background hublot agents
-
-  /** Spawn a one-shot background pi agent (`pi -p`) that sets up whatever the
-   *  hublot should expose, and notify clients when the port answers. */
-  function spawnHublotAgent(tunnel, brief) {
-    const prompt =
-      `A public tunnel ${tunnel.url} forwards to http://localhost:${tunnel.port} on this machine.\n\n` +
-      `Make the following available on local port ${tunnel.port} so it is reachable through the tunnel:\n${brief}\n\n` +
-      `Whatever serves it must keep running after you exit: start it detached in the background ` +
-      `(e.g. nohup … & disown) and verify it responds on port ${tunnel.port} before finishing.`;
-    console.log(`[pi-ui] spawning background agent for hublot :${tunnel.port} (${tunnel.url})`);
-    // --no-session: these one-shot setup runs must not leave session files
-    // behind (they would clutter the sessions list)
-    const proc = spawn(config.PI_BIN, ["--no-session", "-p", prompt], {
-      cwd: state.currentDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    tunnel.agentProc = proc; // so deleting the hublot can kill it
-    let tail = "";
-    const onOut = (c) => { tail = (tail + String(c)).slice(-1500); };
-    proc.stdout.on("data", onOut);
-    proc.stderr.on("data", onOut);
-
-    let done = false;
-    let agentExited = false;
-    const started = Date.now();
-    const TIMEOUT_MS = 5 * 60 * 1000;
-
-    /** the local port answering is not enough: the cloudflare edge can keep
-     *  returning 502 for a few seconds after — wait until the PUBLIC url
-     *  responds so previews don't capture an error page */
-    async function publicUrlUp() {
-      for (let i = 0; i < 15; i++) {
-        try {
-          const r = await fetch(tunnel.url, { method: "HEAD", signal: AbortSignal.timeout(3000) });
-          if (r.status < 500) return true;
-        } catch {}
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      return false; // give up; report ready anyway (edge may just be slow)
-    }
-
-    const finish = (ok, error) => {
-      if (done) return;
-      done = true;
-      clearInterval(poll);
-      if (ok) {
-        // remember who serves the port so closing the hublot can kill it
-        const pids = pidsOnPort(tunnel.port);
-        if (pids.length) {
-          tunnel.servicePid = pids[0];
-          console.log(`[pi-ui] hublot :${tunnel.port} served by pid ${tunnel.servicePid}`);
-        }
-      }
-      serverEvent(ok
-        ? { type: "hublot_ready", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label } }
-        : { type: "hublot_failed", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label }, error });
-    };
-
-    const checkPort = () => new Promise((resolvePromise) => {
-      const sock = createConnection({ host: "127.0.0.1", port: tunnel.port, timeout: 1500 });
-      sock.on("connect", () => { sock.destroy(); resolvePromise(true); });
-      sock.on("error", () => resolvePromise(false));
-      sock.on("timeout", () => { sock.destroy(); resolvePromise(false); });
-    });
-
-    let confirming = false;
-    const poll = setInterval(async () => {
-      if (done || confirming) return;
-      if (await checkPort()) {
-        confirming = true;
-        await publicUrlUp();
-        finish(true);
-        return;
-      }
-      // give a just-exited agent a short grace period before declaring failure
-      if (agentExited && Date.now() - agentExitAt > 10_000) {
-        finish(false, `agent finished but nothing answers on port ${tunnel.port}: ${tail.trim().split("\n").pop() ?? ""}`);
-      }
-      if (Date.now() - started > TIMEOUT_MS) finish(false, "timed out waiting for the hublot to come up");
-    }, 2000);
-
-    let agentExitAt = 0;
-    proc.on("exit", (code) => {
-      agentExited = true;
-      agentExitAt = Date.now();
-      console.log(`[pi-ui] hublot agent for :${tunnel.port} exited (code=${code})`);
-    });
-    proc.on("error", (err) => finish(false, `failed to spawn background agent: ${err.message}`));
-    proc.unref();
-  }
+  const runners = createRunnerManager(state);
+  const {
+    srvId, runnerInfo, listRunnerInfo, runnersChanged,
+    spawnRunner, startRunner, stopRunner, sendToRunner,
+    runnerFromReq, openSessionRunner, startPi, stopPi,
+  } = runners;
 
   // ---------------------------------------------------------------- auth
 
@@ -519,202 +221,11 @@ export function init(state) {
     json(res, 403, { error: `path outside the allowed roots: ${p}` });
   }
 
-  // ---------------------------------------------------------------- checkpoints
-  //
-  // A checkpoint = one commit of every pending workdir change, anchored to the
-  // session message it was taken at. Records live in ~/.pi/agent/checkpoints.json
-  // ({ sessionId: [{ hash, anchorId, leafId, dir, sessionPath, … }] }) so they
-  // survive restarts. Rolling back restores the workdir to the commit
-  // (deterministically — no LLM involved) and opens a forked session whose
-  // history ends at the checkpointed entry.
-
-  const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
-
-  // NOTE: every load→modify→save of this store is synchronous (no await in
-  // between), so Node's single thread already serializes mutations. The
-  // failure modes to defend against are a crash mid-write (→ write tmp +
-  // atomic rename) and a corrupt file being silently read as {} and then
-  // overwritten on the next save (→ set the corrupt file aside, loudly).
-  function loadCheckpoints() {
-    if (!existsSync(CHECKPOINTS_PATH)) return {};
-    try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); }
-    catch (e) {
-      const backup = `${CHECKPOINTS_PATH}.corrupt-${Date.now()}`;
-      try { renameSync(CHECKPOINTS_PATH, backup); } catch {}
-      console.error(`[pi-ui] checkpoints.json is corrupt (${e.message}) — set aside as ${backup}`);
-      return {};
-    }
-  }
-
-  function saveCheckpoints(db) {
-    try {
-      const tmp = `${CHECKPOINTS_PATH}.tmp`;
-      writeFileSync(tmp, JSON.stringify(db, null, 2));
-      renameSync(tmp, CHECKPOINTS_PATH);
-    } catch (e) {
-      console.error(`[pi-ui] failed to save checkpoints: ${e.message}`);
-    }
-  }
-
-  /** anchor a commit to the session's current tip; returns the record or null */
-  function recordCheckpoint(sessionPath, dir, { hash, message }) {
-    const { sessionId, leafId, entries } = sessionEntries(sessionPath);
-    const anchorId = entries[entries.length - 1]?.id ?? null; // last rendered message
-    if (!sessionId || !anchorId || !hash) return null;
-    const db = loadCheckpoints();
-    const list = (db[sessionId] ??= []);
-    let rec = list.find((c) => c.hash === hash && c.anchorId === anchorId);
-    if (!rec) {
-      rec = { hash, anchorId, leafId, dir, sessionPath, message: message ?? null, timestamp: new Date().toISOString() };
-      list.push(rec);
-      saveCheckpoints(db);
-    }
-    return rec;
-  }
-
-  /** Forked sessions are born with the placeholder name "\u23EA <hash>"; the
-   *  first prompt sent to one replaces it with a short title based on that
-   *  message, so forks read like what they went on to do. */
-  function autoTitleFork(runner, cmd) {
-    if (cmd.type !== "prompt" || typeof cmd.message !== "string") return;
-    if (!/^\u23EA [0-9a-f]{4,12}$/.test(runner.sessionName ?? "")) return;
-    const title = cmd.message.replace(/\s+/g, " ").trim();
-    if (!title) return;
-    const short = title.length > 42 ? title.slice(0, 41).trimEnd() + "\u2026" : title;
-    sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${short}` }, { autostart: false });
-    runner.sessionName = `\u23EA ${short}`; // optimistic until get_state confirms
-    runnersChanged();
-  }
-
-  /** The session family of `sessionPath` as a tree: walk parentSession links up
-   *  to the root ancestor, then nest every descendant fork, with each session's
-   *  checkpoint records attached. */
-  function checkpointTree(sessionPath) {
-    const dir = dirname(sessionPath);
-    const infos = [];
-    for (const f of readdirSync(dir)) {
-      if (!f.endsWith(".jsonl")) continue;
-      try {
-        const info = readSessionHeaderInfo(join(dir, f));
-        if (info) infos.push(info);
-      } catch {}
-    }
-    const byPath = new Map(infos.map((i) => [i.path, i]));
-    let root = byPath.get(sessionPath);
-    if (!root) throw new Error("session not found in its folder");
-    const seen = new Set();
-    while (root.parentSession && byPath.has(root.parentSession) && !seen.has(root.path)) {
-      seen.add(root.path);
-      root = byPath.get(root.parentSession);
-    }
-    const db = loadCheckpoints();
-    // forks inherit their ancestors' checkpoint records (so ↩ works inside
-    // them), but the tree must not display those twice: each node only shows
-    // checkpoints an ancestor hasn't already shown
-    const build = (info, depth, shownAbove = new Set()) => {
-      const all = db[info.id] ?? [];
-      const key = (c) => `${c.hash}@${c.anchorId}`;
-      const shown = new Set([...shownAbove, ...all.map(key)]);
-      // legacy forks (pre-forkedAtHash headers): the newest record inherited
-      // from an ancestor IS the checkpoint the fork was created from
-      const inherited = all.filter((c) => shownAbove.has(key(c)));
-      const forkedAtHash = info.forkedAtHash
-        ?? (inherited.length
-          ? inherited.reduce((a, b) => ((a.timestamp ?? "") > (b.timestamp ?? "") ? a : b)).hash
-          : null);
-      return {
-        ...info,
-        forkedAtHash,
-        checkpoints: all
-          .filter((c) => !shownAbove.has(key(c)))
-          .map(({ hash, anchorId, message, timestamp }) => ({ hash, anchorId, message, timestamp })),
-        children: depth > 25 ? [] : infos
-          .filter((i) => i.parentSession === info.path)
-          .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
-          .map((i) => build(i, depth + 1, shown)),
-      };
-    };
-    return { root: build(root, 0) };
-  }
-
-  /** run git in a workdir; resolves with { code, stdout, stderr } (never rejects) */
-  function git(dir, args) {
-    return new Promise((resolvePromise) => {
-      execFile("git", args, { cwd: dir, timeout: 30_000 }, (err, stdout, stderr) => {
-        resolvePromise({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
-      });
-    });
-  }
-
-  /** Ask a one-shot pi sub-agent (no tools, no session) to summarize a staged
-   *  diff into a single commit-message line. Resolves null on any failure so
-   *  the caller can fall back to a timestamp message. */
-  function summarizeDiff(dir, model, diff) {
-    return new Promise((resolvePromise) => {
-      const prompt =
-        "You are writing a git commit message for a checkpoint commit.\n" +
-        "Summarize the following diff as ONE concise line: imperative mood, max 72 characters.\n" +
-        "Reply with ONLY that line — no quotes, no code fences, no explanation.\n\n" +
-        `<diff>\n${diff}\n</diff>`;
-      const args = ["--no-session", "--no-tools", "--thinking", "off", "--model", model, "-p", prompt];
-      console.log(`[pi-ui] checkpoint summary sub-agent (${model}) for ${dir}`);
-      const proc = spawn(config.PI_BIN, args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
-      let out = "", err = "";
-      proc.stdout.on("data", (c) => { out += c; });
-      proc.stderr.on("data", (c) => { err += c; });
-      const timer = setTimeout(() => { try { proc.kill("SIGKILL"); } catch {} }, 60_000);
-      timer.unref?.();
-      proc.on("error", () => { clearTimeout(timer); resolvePromise(null); });
-      proc.on("exit", (code) => {
-        clearTimeout(timer);
-        if (code !== 0) {
-          console.error(`[pi-ui] summary sub-agent failed (code=${code}): ${err.trim().split("\n").pop() ?? ""}`);
-          resolvePromise(null);
-          return;
-        }
-        // first meaningful line, stripped of quotes/fences, length-capped
-        const line = out.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("```"))[0] ?? "";
-        const clean = line.replace(/^["'`]+|["'`]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
-        resolvePromise(clean || null);
-      });
-    });
-  }
-
-  /** Commit every pending change in `dir` as a checkpoint commit. With a
-   *  `model`, the staged diff is summarized into the commit message; `label`
-   *  is the fallback message (before the timestamp) when there is no model
-   *  or the sub-agent fails. */
-  async function checkpointWorkdir(dir, label, model = null) {
-    const top = await git(dir, ["rev-parse", "--show-toplevel"]);
-    if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
-    const st = await git(dir, ["status", "--porcelain"]);
-    if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
-    const files = st.stdout.split("\n").filter(Boolean).length;
-    if (!files) {
-      // clean tree: nothing to commit, but HEAD still marks this exact state;
-      // carry its subject so the tree can label the checkpoint
-      const head = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-      const subject = (await git(dir, ["log", "-1", "--format=%s"])).stdout.trim();
-      return { status: 200, body: { committed: false, reason: "workdir is clean", hash: head || undefined, message: subject || undefined } };
-    }
-    const add = await git(dir, ["add", "-A"]);
-    if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
-    let message = null;
-    let summarized = false;
-    if (model) {
-      const diff = (await git(dir, ["diff", "--cached"])).stdout.slice(0, 40_000);
-      const summary = diff.trim() ? await summarizeDiff(dir, model, diff) : null;
-      if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
-    }
-    if (!message && label) message = `checkpoint: ${label}`;
-    message ??= `checkpoint ${new Date().toISOString()}`;
-    const ci = await git(dir, ["commit", "-m", message]);
-    if (ci.code !== 0) {
-      return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };
-    }
-    const hash = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-    console.log(`[pi-ui] checkpoint ${hash} in ${dir} (${files} files): ${message}`);
-    return { status: 200, body: { committed: true, hash, message, files, dir, summarized } };
+  /** validate a ?path=/body path that must be a session .jsonl; null if not */
+  function sessionFileParam(raw) {
+    const target = resolve(String(raw ?? ""));
+    if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) return null;
+    return target;
   }
 
   // ---------------------------------------------------------------- http helpers
@@ -776,42 +287,37 @@ export function init(state) {
     }
   }
 
-  // ---------------------------------------------------------------- request handler
+  // ---------------------------------------------------------------- misc app logic
 
-  async function handleRequest(req, res) {
-    const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  /** Forked sessions are born with the placeholder name "⏪ <hash>"; the
+   *  first prompt sent to one replaces it with a short title based on that
+   *  message, so forks read like what they went on to do. */
+  function autoTitleFork(runner, cmd) {
+    if (cmd.type !== "prompt" || typeof cmd.message !== "string") return;
+    if (!/^\u23EA [0-9a-f]{4,12}$/.test(runner.sessionName ?? "")) return;
+    const title = cmd.message.replace(/\s+/g, " ").trim();
+    if (!title) return;
+    const short = title.length > 42 ? title.slice(0, 41).trimEnd() + "\u2026" : title;
+    sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${short}` }, { autostart: false });
+    runner.sessionName = `\u23EA ${short}`; // optimistic until get_state confirms
+    runnersChanged();
+  }
 
-    // permalink routes are client-side: /s/<sessionId> and /s/<sessionId>/m/<entryId>
-    // both serve the UI; the client parses the path and opens the session
-    const isAppRoute = url.pathname === "/" || url.pathname === "/index.html" ||
-      /^\/s\/[\w.-]+(\/m\/[\w.-]+)?$/.test(url.pathname);
-    if (req.method === "GET" && isAppRoute) {
-      if (!existsSync(INDEX_PATH)) {
-        res.writeHead(500, { "content-type": "text/plain" });
-        res.end("public/index.html missing");
-        return;
-      }
-      res.writeHead(200, {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-cache",
-      });
-      res.end(readFileSync(INDEX_PATH));
-      return;
-    }
+  // ---------------------------------------------------------------- routes (no auth)
 
-    if (req.method === "GET" && url.pathname === "/health") {
+  const openRoutes = {
+    "GET /health": (req, res) => {
       json(res, 200, {
         ok: true,
-        runners: [...state.runners.values()].map(runnerInfo),
+        runners: listRunnerInfo(),
         clients: state.sseClients.size,
         reloadCount: state.reloadCount,
       });
-      return;
-    }
+    },
 
     // debug: shows which auth credentials reached the server (and whether each
     // validates) without requiring auth — helps diagnose header-stripping proxies
-    if (req.method === "GET" && url.pathname === "/authcheck") {
+    "GET /authcheck": (req, res, url) => {
       const ip = clientIp(req);
       if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) {
         json(res, 429, { error: "too many auth failures — try again later" });
@@ -827,18 +333,15 @@ export function init(state) {
       // same budget as regular auth failures
       if (!authorized && Object.values(candidates).some(Boolean)) recordAuthFailure(ip);
       json(res, 200, { authorized, credentials: report });
-      return;
-    }
+    },
+  };
 
-    // everything below requires auth
-    const auth = checkAuth(req, url);
-    if (auth !== "ok") {
-      if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
-      else json(res, 401, { error: "unauthorized" });
-      return;
-    }
+  // ---------------------------------------------------------------- routes (auth required)
 
-    if (req.method === "GET" && url.pathname === "/events") {
+  const routes = {
+    // -------------------------------------------------- runner I/O
+
+    "GET /events": (req, res, url) => {
       const runner = runnerFromReq(url);
       if (!runner.proc) startRunner(runner);
       res.writeHead(200, {
@@ -857,7 +360,7 @@ export function init(state) {
       res.write(`data: ${JSON.stringify({
         type: "replay_done", _server: true,
         runner: runner.id, piRunning: !!runner.proc, workdir: runner.dir,
-        runners: [...state.runners.values()].map(runnerInfo),
+        runners: listRunnerInfo(),
       })}\n\n`);
       state.sseClients.add(res);
       // data pings (not SSE comments) so the client can detect a dead
@@ -870,10 +373,9 @@ export function init(state) {
         clearInterval(ping);
         state.sseClients.delete(res);
       });
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/rpc") {
+    "POST /rpc": async (req, res, url) => {
       const cmd = await readJsonBody(req, res);
       if (cmd === undefined) return;
       if (!cmd || typeof cmd !== "object" || typeof cmd.type !== "string") {
@@ -884,34 +386,37 @@ export function init(state) {
       const ok = sendToRunner(runner, cmd);
       if (ok) autoTitleFork(runner, cmd);
       json(res, ok ? 202 : 503, ok ? { queued: true, runner: runner.id } : { error: "pi process unavailable" });
-      return;
-    }
+    },
 
-    if (url.pathname === "/runners") {
-      if (req.method === "GET") {
-        json(res, 200, { runners: [...state.runners.values()].map(runnerInfo) });
-        return;
-      }
-      if (req.method === "DELETE") {
-        const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
-        if (!runner) { json(res, 404, { error: "no such runner" }); return; }
-        // stop the process but KEEP the runner entry: it remembers its
-        // session, so the next rpc/prompt to it respawns pi and resumes
-        stopRunner(runner);
-        json(res, 200, { stopped: runner.id });
-        return;
-      }
-      json(res, 405, { error: "method not allowed" });
-      return;
-    }
+    "GET /runners": (req, res) => {
+      json(res, 200, { runners: listRunnerInfo() });
+    },
+
+    "DELETE /runners": (req, res, url) => {
+      const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
+      if (!runner) { json(res, 404, { error: "no such runner" }); return; }
+      // stop the process but KEEP the runner entry: it remembers its
+      // session, so the next rpc/prompt to it respawns pi and resumes
+      stopRunner(runner);
+      json(res, 200, { stopped: runner.id });
+    },
+
+    "POST /restart": (req, res, url) => {
+      const runner = runnerFromReq(url);
+      stopRunner(runner);
+      setTimeout(() => { if (state.runners.has(runner.id)) startRunner(runner); }, 300);
+      json(res, 202, { restarting: true, runner: runner.id });
+    },
+
+    // -------------------------------------------------- sessions
 
     // get-or-spawn a runner for a session (or a fresh session in a folder)
-    if (req.method === "POST" && url.pathname === "/open-session") {
+    "POST /open-session": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      let sessionPath = body?.sessionPath ? resolve(String(body.sessionPath)) : null;
-      if (sessionPath && (!sessionPath.startsWith(SESSIONS_ROOT + "/") || !sessionPath.endsWith(".jsonl") || !existsSync(sessionPath))) {
-        json(res, 400, { error: `not a session file: ${sessionPath}` });
+      let sessionPath = body?.sessionPath ? sessionFileParam(body.sessionPath) : null;
+      if (body?.sessionPath && !sessionPath) {
+        json(res, 400, { error: `not a session file: ${body.sessionPath}` });
         return;
       }
       let dir = body?.dir ? confinePath(resolve(String(body.dir))) : null;
@@ -924,10 +429,9 @@ export function init(state) {
       }
       const runner = openSessionRunner({ sessionPath, dir });
       json(res, 200, { runner: runnerInfo(runner) });
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/sessions") {
+    "GET /sessions": (req, res, url) => {
       // ?path= lists another sessions folder (must live under the sessions root);
       // ?dir= lists the sessions of a working directory (e.g. the current session's)
       let dir;
@@ -942,19 +446,18 @@ export function init(state) {
       }
       // annotate each session with its live runner (if any) so the picker
       // can show running/busy indicators
-      const runners = [...state.runners.values()];
+      const live = [...state.runners.values()];
       const sessions = listSessions(dir ?? sessionDirFor(state.currentDir)).map((s) => {
-        const r = runners.find((x) => x.sessionFile === s.path);
+        const r = live.find((x) => x.sessionFile === s.path);
         return { ...s, runnerId: r?.id ?? null, alive: !!r?.proc, busy: !!r?.busy };
       });
       json(res, 200, { sessions });
-      return;
-    }
+    },
 
-    if (req.method === "DELETE" && url.pathname === "/session") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
-      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
-        json(res, 400, { error: `not a session file: ${target}` });
+    "DELETE /session": (req, res, url) => {
+      const target = sessionFileParam(url.searchParams.get("path"));
+      if (!target) {
+        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;
       }
       try {
@@ -988,13 +491,12 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `failed to delete session: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/session-tree") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
-      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
-        json(res, 400, { error: `not a session file: ${target}` });
+    "GET /session-tree": (req, res, url) => {
+      const target = sessionFileParam(url.searchParams.get("path"));
+      if (!target) {
+        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;
       }
       try {
@@ -1002,10 +504,9 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `failed to parse session: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/session-by-id") {
+    "GET /session-by-id": (req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
       if (!id) { json(res, 400, { error: "id required" }); return; }
       const path = findSessionById(id);
@@ -1015,13 +516,12 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `failed to read session: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/session-entries") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
-      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
-        json(res, 400, { error: `not a session file: ${target}` });
+    "GET /session-entries": (req, res, url) => {
+      const target = sessionFileParam(url.searchParams.get("path"));
+      if (!target) {
+        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;
       }
       try {
@@ -1029,17 +529,15 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `failed to parse session: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/session-folders") {
+    "GET /session-folders": (req, res, url) => {
       // ?dir= reports "current" relative to that working directory
       const forDir = url.searchParams.get("dir") ? resolve(String(url.searchParams.get("dir"))) : state.currentDir;
       json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(forDir) });
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/search") {
+    "GET /search": (req, res, url) => {
       const q = String(url.searchParams.get("q") ?? "").trim();
       const scope = String(url.searchParams.get("scope") ?? "folder");
       const path = url.searchParams.get("path") ? resolve(String(url.searchParams.get("path"))) : null;
@@ -1065,10 +563,11 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `search failed: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/browse") {
+    // -------------------------------------------------- file explorer (confined)
+
+    "GET /browse": (req, res, url) => {
       const target = confinePath(resolve(url.searchParams.get("path") || state.currentDir));
       if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let entries;
@@ -1102,12 +601,9 @@ export function init(state) {
         home: homedir(),
         workdir: state.currentDir,
       });
-      return;
-    }
+    },
 
-    // ---- built-in file explorer: download / read / save arbitrary files
-
-    if (req.method === "GET" && url.pathname === "/file-download") {
+    "GET /file-download": (req, res, url) => {
       const target = confinePath(resolve(String(url.searchParams.get("path") ?? "")));
       if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let st;
@@ -1119,10 +615,9 @@ export function init(state) {
         "content-disposition": `attachment; filename="${target.split("/").pop().replace(/"/g, "'")}"`,
       });
       createReadStream(target).pipe(res);
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/file-content") {
+    "GET /file-content": (req, res, url) => {
       const target = confinePath(resolve(String(url.searchParams.get("path") ?? "")));
       if (!target) { forbidden(res, url.searchParams.get("path")); return; }
       let st;
@@ -1132,10 +627,9 @@ export function init(state) {
       const buf = readFileSync(target);
       if (buf.includes(0)) { json(res, 415, { error: "binary file — download it instead" }); return; }
       json(res, 200, { path: target, content: buf.toString("utf8") });
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/file-save") {
+    "POST /file-save": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const target = confinePath(resolve(String(body?.path ?? "")));
@@ -1152,10 +646,9 @@ export function init(state) {
       }
       console.log(`[pi-ui] file saved via explorer: ${target}`);
       json(res, 200, { saved: target, bytes: Buffer.byteLength(body.content) });
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/file-upload") {
+    "POST /file-upload": async (req, res, url) => {
       // chunked raw body upload:
       //   ?dir=<target folder>&name=<file name>&offset=<byte offset>&last=<0|1>
       // chunks must arrive in order; offset=0 starts a fresh upload, last=1 finalizes.
@@ -1219,10 +712,9 @@ export function init(state) {
       } else {
         json(res, 200, { received: offset + buf.length });
       }
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/mkdir") {
+    "POST /mkdir": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const parent = confinePath(resolve(String(body?.path ?? "")));
@@ -1251,10 +743,9 @@ export function init(state) {
       }
       console.log(`[pi-ui] created folder ${target}`);
       json(res, 201, { path: target });
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/workdir") {
+    "POST /workdir": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const target = confinePath(resolve(String(body?.path ?? "")));
@@ -1269,124 +760,119 @@ export function init(state) {
       console.log(`[pi-ui] workdir changed to ${state.currentDir}, spawning a runner there`);
       const runner = spawnRunner({ dir: target });
       json(res, 200, { workdir: state.currentDir, runner: runnerInfo(runner) });
-      return;
-    }
+    },
 
-    if (url.pathname === "/tunnels") {
-      if (req.method === "GET") {
-        json(res, 200, { tunnels: listTunnels(state), bin: config.TUNNEL_BIN });
+    // -------------------------------------------------- tunnels / hublots
+
+    "GET /tunnels": (req, res) => {
+      json(res, 200, { tunnels: listTunnels(state), bin: config.TUNNEL_BIN });
+    },
+
+    "POST /tunnels": async (req, res) => {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      // no port given: allocate the next free one, starting at 3000
+      let port = body?.port;
+      if (!port) {
+        if (!state.nextHublotPort) state.nextHublotPort = 3000;
+        const used = new Set([...(state.tunnels?.values() ?? [])].map((t) => t.port));
+        while (used.has(state.nextHublotPort)) state.nextHublotPort++;
+        port = state.nextHublotPort++;
+      }
+      const brief = body?.brief ? String(body.brief) : null;
+      try {
+        const tunnel = await openTunnel(state, {
+          port,
+          label: body?.label ? String(body.label).slice(0, 200) : null,
+          sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
+        });
+        if (brief) {
+          const live = state.tunnels.get(tunnel.id);
+          spawnHublotAgent(state, live ?? tunnel, brief);
+        }
+        json(res, 201, { tunnel, agent: !!brief });
+      } catch (e) {
+        json(res, 502, { error: e.message });
+      }
+    },
+
+    "PATCH /tunnels": async (req, res) => {
+      // rebind a hublot to another session (e.g. opened by a one-shot
+      // agent on behalf of a UI session)
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const t = state.tunnels.get(String(body?.id ?? ""));
+      if (!t) {
+        json(res, 404, { error: "no such hublot" });
         return;
       }
-      if (req.method === "POST") {
-        const body = await readJsonBody(req, res);
-        if (body === undefined) return;
-        // no port given: allocate the next free one, starting at 3000
-        let port = body?.port;
-        if (!port) {
-          if (!state.nextHublotPort) state.nextHublotPort = 3000;
-          const used = new Set([...(state.tunnels?.values() ?? [])].map((t) => t.port));
-          while (used.has(state.nextHublotPort)) state.nextHublotPort++;
-          port = state.nextHublotPort++;
-        }
-        const brief = body?.brief ? String(body.brief) : null;
-        try {
-          const tunnel = await openTunnel(state, {
-            port,
-            label: body?.label ? String(body.label).slice(0, 200) : null,
-            sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
-          });
-          if (brief) {
-            const live = state.tunnels.get(tunnel.id);
-            spawnHublotAgent(live ?? tunnel, brief);
+      t.sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+      state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
+      json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
+    },
+
+    "DELETE /tunnels": (req, res, url) => {
+      const closed = closeTunnel(state, String(url.searchParams.get("id") ?? ""));
+      if (!closed) {
+        json(res, 404, { error: "no such tunnel" });
+        return;
+      }
+      json(res, 200, { closed });
+    },
+
+    // -------------------------------------------------- routines
+
+    "GET /routines": (req, res) => {
+      json(res, 200, { routines: listRoutines(state), dir: routinesDir() });
+    },
+
+    "POST /routines": async (req, res) => {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const name = String(body?.name ?? "").trim();
+      const action = String(body?.action ?? "");
+      const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+      if (!name || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
+        json(res, 400, { error: `invalid routine name: ${name}` });
+        return;
+      }
+      // create/start bind the routine to the calling session and run it in
+      // that session's workdir (so byproducts land in the right project)
+      const sessionCwd = () => {
+        const runner = sessionId
+          ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
+          : null;
+        return runner?.dir ?? state.currentDir;
+      };
+      try {
+        if (action === "create") {
+          const script = typeof body?.script === "string" ? body.script : null;
+          if (!script || script.length > 256 * 1024) {
+            json(res, 400, { error: "create requires a `script` string (max 256KB)" });
+            return;
           }
-          json(res, 201, { tunnel, agent: !!brief });
-        } catch (e) {
-          json(res, 502, { error: e.message });
+          json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
         }
-        return;
+        else if (action === "start") json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });
+        else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
+        else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
+        else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });
+        else if (action === "delete") json(res, 200, { routine: deleteRoutine(state, name) });
+        else json(res, 400, { error: `unknown action: ${action}` });
+      } catch (e) {
+        json(res, 400, { error: e.message });
       }
-      if (req.method === "PATCH") {
-        // rebind a hublot to another session (e.g. opened by a one-shot
-        // agent on behalf of a UI session)
-        const body = await readJsonBody(req, res);
-        if (body === undefined) return;
-        const t = state.tunnels.get(String(body?.id ?? ""));
-        if (!t) {
-          json(res, 404, { error: "no such hublot" });
-          return;
-        }
-        t.sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-        state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
-        json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
-        return;
-      }
-      if (req.method === "DELETE") {
-        const closed = closeTunnel(state, String(url.searchParams.get("id") ?? ""));
-        if (!closed) {
-          json(res, 404, { error: "no such tunnel" });
-          return;
-        }
-        json(res, 200, { closed });
-        return;
-      }
-      json(res, 405, { error: "method not allowed" });
-      return;
-    }
+    },
 
-    if (url.pathname === "/routines") {
-      if (req.method === "GET") {
-        json(res, 200, { routines: listRoutines(state), dir: routinesDir() });
-        return;
-      }
-      if (req.method === "POST") {
-        const body = await readJsonBody(req, res);
-        if (body === undefined) return;
-        const name = String(body?.name ?? "").trim();
-        const action = String(body?.action ?? "");
-        const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-        if (!name || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
-          json(res, 400, { error: `invalid routine name: ${name}` });
-          return;
-        }
-        // create/start bind the routine to the calling session and run it in
-        // that session's workdir (so byproducts land in the right project)
-        const sessionCwd = () => {
-          const runner = sessionId
-            ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
-            : null;
-          return runner?.dir ?? state.currentDir;
-        };
-        try {
-          if (action === "create") {
-            const script = typeof body?.script === "string" ? body.script : null;
-            if (!script || script.length > 256 * 1024) {
-              json(res, 400, { error: "create requires a `script` string (max 256KB)" });
-              return;
-            }
-            json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
-          }
-          else if (action === "start") json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });
-          else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
-          else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
-          else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });
-          else if (action === "delete") json(res, 200, { routine: deleteRoutine(state, name) });
-          else json(res, 400, { error: `unknown action: ${action}` });
-        } catch (e) {
-          json(res, 400, { error: e.message });
-        }
-        return;
-      }
-      json(res, 405, { error: "method not allowed" });
-      return;
-    }
+    // -------------------------------------------------- checkpoints / rollback
 
-    if (req.method === "POST" && url.pathname === "/checkpoint") {
+    "POST /checkpoint": async (req, res, url) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const runner = runnerFromReq(url);
       const label = body?.label ? String(body.label).slice(0, 200) : null;
       const model = body?.model ? String(body.model).slice(0, 200) : null;
-      const { status, body: out } = await checkpointWorkdir(runner.dir, label, model);
+      const { status, body: out } = await checkpointWorkdir(config.PI_BIN, runner.dir, label, model);
       // anchor the checkpoint to the session's latest message (also when the
       // tree was already clean: HEAD marks that state just as well)
       if (status === 200 && out.hash && runner.sessionFile && existsSync(runner.sessionFile)) {
@@ -1398,20 +884,18 @@ export function init(state) {
         }
       }
       json(res, status, out);
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/checkpoints") {
+    "GET /checkpoints": (req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
       if (!id) { json(res, 400, { error: "id required" }); return; }
       json(res, 200, { checkpoints: loadCheckpoints()[id] ?? [] });
-      return;
-    }
+    },
 
-    if (req.method === "GET" && url.pathname === "/checkpoint-tree") {
-      const target = resolve(String(url.searchParams.get("path") ?? ""));
-      if (!target.startsWith(SESSIONS_ROOT + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
-        json(res, 400, { error: `not a session file: ${target}` });
+    "GET /checkpoint-tree": (req, res, url) => {
+      const target = sessionFileParam(url.searchParams.get("path"));
+      if (!target) {
+        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
         return;
       }
       try {
@@ -1419,10 +903,9 @@ export function init(state) {
       } catch (e) {
         json(res, 500, { error: `tree failed: ${e.message}` });
       }
-      return;
-    }
+    },
 
-    if (req.method === "POST" && url.pathname === "/rollback") {
+    "POST /rollback": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const sessionId = String(body?.sessionId ?? "").trim();
@@ -1437,7 +920,7 @@ export function init(state) {
         let safety = null;
         const st = await git(cp.dir, ["status", "--porcelain"]);
         if (st.code === 0 && st.stdout.trim()) {
-          const saved = await checkpointWorkdir(cp.dir, `auto before rollback to ${hash}`, model);
+          const saved = await checkpointWorkdir(config.PI_BIN, cp.dir, `auto before rollback to ${hash}`, model);
           if (saved.body.committed) {
             safety = saved.body.hash;
             try { recordCheckpoint(cp.sessionPath, cp.dir, saved.body); } catch {}
@@ -1459,25 +942,62 @@ export function init(state) {
         saveCheckpoints(db);
         // 4. attach a runner to the fork and hand it to the client
         const runner = openSessionRunner({ sessionPath: fork.path, dir: cp.dir });
-        sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${hash}` });
+        sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
         runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
         console.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
         json(res, 200, { rolledBack: hash, safety, fork: { id: fork.id, path: fork.path }, runner: runnerInfo(runner) });
       } catch (e) {
         json(res, 500, { error: `rollback failed: ${e.message}` });
       }
+    },
+  };
+
+  // ---------------------------------------------------------------- dispatch
+
+  // permalink routes are client-side: /s/<sessionId> and /s/<sessionId>/m/<entryId>
+  // both serve the UI; the client parses the path and opens the session
+  function isAppRoute(pathname) {
+    return pathname === "/" || pathname === "/index.html" ||
+      /^\/s\/[\w.-]+(\/m\/[\w.-]+)?$/.test(pathname);
+  }
+
+  function serveApp(res) {
+    if (!existsSync(INDEX_PATH)) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end("public/index.html missing");
+      return;
+    }
+    res.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-cache",
+    });
+    res.end(readFileSync(INDEX_PATH));
+  }
+
+  async function handleRequest(req, res) {
+    const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+    const key = `${req.method} ${url.pathname}`;
+
+    if (req.method === "GET" && isAppRoute(url.pathname)) return serveApp(res);
+
+    const open = openRoutes[key];
+    if (open) return open(req, res, url);
+
+    // everything below requires auth
+    const auth = checkAuth(req, url);
+    if (auth !== "ok") {
+      if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
+      else json(res, 401, { error: "unauthorized" });
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/restart") {
-      const runner = runnerFromReq(url);
-      stopRunner(runner);
-      setTimeout(() => { if (state.runners.has(runner.id)) startRunner(runner); }, 300);
-      json(res, 202, { restarting: true, runner: runner.id });
-      return;
-    }
+    const route = routes[key];
+    if (route) return route(req, res, url);
 
-    json(res, 404, { error: "not found" });
+    // same path exists under another method -> 405, otherwise 404
+    const pathKnown = [...Object.keys(routes), ...Object.keys(openRoutes)]
+      .some((k) => k.endsWith(` ${url.pathname}`));
+    json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 
   return {
