@@ -133,12 +133,42 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         json(res, 503, { error: "OAuth service unavailable" });
         return;
       }
+      let credential;
       try {
-        const credential = await credentialService.logoutOAuth(input.provider);
-        const restart = await restartActiveRunners();
-        json(res, restart?.status === "partial" ? 503 : 200, { credential, restart });
+        credential = await credentialService.logoutOAuth(input.provider);
       } catch (error) {
         operationError(res, error);
+        return;
+      }
+
+      let source = "not_configured";
+      try {
+        const providers = await credentialService.listProviders();
+        source = providers.find((item) => item.provider === input.provider)?.source ?? source;
+      } catch {
+        // Logout is already durable. Failure to refresh safe fallback metadata
+        // must not trigger an unsafe credential rollback.
+      }
+      const result = { credential, source, upstreamRevoked: false };
+      try {
+        const restart = await restartActiveRunners();
+        if (restart?.status === "partial") {
+          json(res, 503, {
+            error: "OAuth credential removed but some pi runners failed to restart",
+            code: "runner_restart_partial",
+            ...result,
+            restart,
+          });
+          return;
+        }
+        json(res, 200, { ...result, restart });
+      } catch {
+        json(res, 503, {
+          error: "OAuth credential removed but pi runners could not be restarted",
+          code: "runner_restart_failed",
+          ...result,
+          restart: { status: "failed", runnerIds: [] },
+        });
       }
     },
   };

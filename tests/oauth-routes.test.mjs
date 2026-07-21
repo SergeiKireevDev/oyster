@@ -126,6 +126,49 @@ test("OAuth routes map failures to stable safe statuses without echoing inputs",
   assert.doesNotMatch(JSON.stringify(res.body), /restart-canary/);
 });
 
+test("OAuth logout reports fallback and durable success when runner restart is incomplete", async () => {
+  for (const restartFailure of ["partial", "throw"]) {
+    const order = [];
+    const routes = createOAuthRoutes(dependencies({
+      credentialService: {
+        async listProviders() {
+          order.push("status");
+          return [{ provider: "mock", oauthCapable: true, credentialType: null, source: "environment" }];
+        },
+        async logoutOAuth(provider) { order.push("logout"); return { provider, removed: true }; },
+      },
+      restartActiveRunners: async () => {
+        order.push("restart");
+        if (restartFailure === "throw") throw new Error("restart-secret-canary");
+        return { status: "partial", runnerIds: ["runner-a"], failedRunnerIds: ["runner-a"] };
+      },
+    }));
+    const res = response();
+    await routes["DELETE /oauth"]({ body: { provider: "mock", restart: true } }, res);
+    assert.equal(res.status, 503);
+    assert.deepEqual(order, ["logout", "status", "restart"]);
+    assert.deepEqual(res.body.credential, { provider: "mock", removed: true });
+    assert.equal(res.body.source, "environment");
+    assert.equal(res.body.upstreamRevoked, false);
+    assert.equal(res.body.restart.status, restartFailure === "throw" ? "failed" : "partial");
+    assert.match(res.body.error, /credential removed/);
+    assert.doesNotMatch(JSON.stringify(res.body), /restart-secret-canary/);
+  }
+
+  let restarts = 0;
+  const busy = createOAuthRoutes(dependencies({
+    credentialService: {
+      async listProviders() { return []; },
+      async logoutOAuth() { throw Object.assign(new Error("busy"), { code: "credential_busy" }); },
+    },
+    restartActiveRunners: async () => { restarts += 1; },
+  }));
+  const res = response();
+  await busy["DELETE /oauth"]({ body: { provider: "mock", restart: true } }, res);
+  assert.equal(res.status, 409);
+  assert.equal(restarts, 0);
+});
+
 test("OAuth polling, response, cancellation, and logout keep flow data in JSON bodies", async () => {
   const calls = [];
   const routes = createOAuthRoutes(dependencies({
@@ -157,6 +200,9 @@ test("OAuth polling, response, cancellation, and logout keep flow data in JSON b
   await routes["DELETE /oauth"]({ body: { provider: "mock", restart: true } }, logout);
   assert.equal(logout.status, 200);
   assert.deepEqual(logout.body, {
-    credential: { provider: "mock", removed: true }, restart: { status: "restarted", runnerIds: [] },
+    credential: { provider: "mock", removed: true },
+    source: "not_configured",
+    upstreamRevoked: false,
+    restart: { status: "restarted", runnerIds: [] },
   });
 });

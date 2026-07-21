@@ -155,7 +155,7 @@ DELETE /oauth          { "provider": "...", "restart": true }
   `413` oversized body, and `503` unavailable configured SDK or post-mutation
   restart failure. Never echo request bodies, callback values, redirect URLs,
   device codes, OAuth credentials, or provider exception text in errors.
-- [ ] Integrate OAuth logout with provider reservations and all-active-runner
+- [x] Integrate OAuth logout with provider reservations and all-active-runner
   restart semantics. Return safe source metadata after removal so the browser
   can warn about environment or `models.json` fallback, while clearly
   distinguishing upstream revocation from local sign-out.
