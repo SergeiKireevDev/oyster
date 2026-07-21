@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHublotManagerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2288,10 +2288,8 @@ async function toggleManagedHublotScope() {
 
 window.addEventListener("pi-managed-hublot-create", (event) => createManagedHublot(event.detail));
 
-setHublotManagerHandlers({
-  toggleScope: toggleManagedHublotScope,
-});
 window.addEventListener("pi-managed-command-palette", (event) => setupCommandPalette(event.detail));
+window.addEventListener("pi-managed-hublot-toggle-scope", () => toggleManagedHublotScope());
 
 // ------------------------------------------------------------ hublot sidebar
 

@@ -1,12 +1,7 @@
-let hublotManagerHandlers = {};
 let folderBrowserHandlers = {};
 let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-
-export function setHublotManagerHandlers(handlers) {
-  hublotManagerHandlers = handlers ?? {};
-}
 
 export function setFolderBrowserHandlers(handlers) {
   folderBrowserHandlers = handlers ?? {};
@@ -146,9 +141,5 @@ export function cancelFolderBrowser() {
 
 export function submitFolderBrowser() {
   return folderBrowserHandlers.submit?.();
-}
-
-export function toggleManagedHublotScope() {
-  return hublotManagerHandlers.toggleScope?.();
 }
 
