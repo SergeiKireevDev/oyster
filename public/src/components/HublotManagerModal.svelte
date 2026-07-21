@@ -82,7 +82,7 @@
     ></textarea>
   </div>
   <button class="btn" disabled={$hublotManager.creating} onclick={() => createManagedHublot($hublotManager.desc)}>
-    {$hublotManager.creating ? "Opening…" : "Open hublot"}
+    {$hublotManager.creating ? "Preparing service…" : "Open hublot"}
   </button>
 </div>
 <div class="m-actions" id="mActions">

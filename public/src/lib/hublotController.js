@@ -33,7 +33,7 @@ export function createHublotController({ createHublot, getSessionId, setDescript
     setDescription(description ?? "");
     if (!text) { toast("describe what the hublot should expose", "warning"); return; }
     setCreating(true);
-    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`hublot opening at ${data.tunnel.url} — background agent is setting it up…`); }
+    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`hublot ready at ${data.tunnel.url}`); }
     catch (error) { toast(`hublot failed: ${error.message}`, "error"); } finally { setCreating(false); }
   }
   async function refresh({ loading = false } = {}) {

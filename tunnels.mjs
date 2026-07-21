@@ -210,93 +210,82 @@ export function closeAllTunnels(state) {
 
 // ---------------------------------------------------------------- hublot agents
 
-/** Spawn a one-shot background pi agent (`pi -p`) that sets up whatever the
- *  hublot should expose, and notify clients when the port answers. */
-export function spawnHublotAgent(state, tunnel, brief) {
-  const prompt =
-    `A public tunnel ${tunnel.url} forwards to http://localhost:${tunnel.port} on this machine.\n\n` +
-    `Make the following available on local port ${tunnel.port} so it is reachable through the tunnel:\n${brief}\n\n` +
-    `Whatever serves it must keep running after you exit: start it detached in the background ` +
-    `(e.g. nohup … & disown) and verify it responds on port ${tunnel.port} before finishing.`;
-  console.log(`[pi-ui] spawning background agent for hublot :${tunnel.port} (${tunnel.url})`);
-  // --no-session: these one-shot setup runs must not leave session files
-  // behind (they would clutter the sessions list)
-  const proc = spawn(state.config.PI_BIN, ["--no-session", "-p", prompt], {
-    cwd: state.currentDir,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
-  tunnel.agentProc = proc; // so deleting the hublot can kill it
-  let tail = "";
-  const onOut = (c) => { tail = (tail + String(c)).slice(-1500); };
-  proc.stdout.on("data", onOut);
-  proc.stderr.on("data", onOut);
+/** Spawn a one-shot background pi agent (`pi -p`) and resolve only after
+ *  its local service answers. The caller opens and publishes the tunnel
+ *  afterwards, so users never see a hublot that still returns 502. */
+export function spawnHublotAgent(state, hublot, brief) {
+  return new Promise((resolvePromise, reject) => {
+    const prompt =
+      `Prepare the following service on local port ${hublot.port}:\n${brief}\n\n` +
+      `Do not open a public tunnel. Whatever serves it must keep running after you exit: ` +
+      `start it detached in the background (e.g. nohup … & disown) and verify it responds ` +
+      `on port ${hublot.port} before finishing.`;
+    console.log(`[pi-ui] preparing local service for hublot :${hublot.port}`);
+    // --no-session: these one-shot setup runs must not leave session files
+    // behind (they would clutter the sessions list)
+    const proc = spawn(state.config.PI_BIN, ["--no-session", "-p", prompt], {
+      cwd: state.currentDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    let tail = "";
+    const onOut = (chunk) => { tail = (tail + String(chunk)).slice(-1500); };
+    proc.stdout.on("data", onOut);
+    proc.stderr.on("data", onOut);
 
-  let done = false;
-  let agentExited = false;
-  const started = Date.now();
-  const TIMEOUT_MS = 5 * 60 * 1000;
+    let done = false;
+    let agentExited = false;
+    let agentExitAt = 0;
+    const createdAt = new Date().toISOString();
+    const started = Date.now();
+    const timeoutMs = 5 * 60 * 1000;
 
-  /** the local port answering is not enough: the cloudflare edge can keep
-   *  returning 502 for a few seconds after — wait until the PUBLIC url
-   *  responds so previews don't capture an error page */
-  async function publicUrlUp() {
-    for (let i = 0; i < 15; i++) {
-      try {
-        const r = await fetch(tunnel.url, { method: "HEAD", signal: AbortSignal.timeout(3000) });
-        if (r.status < 500) return true;
-      } catch {}
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-    return false; // give up; report ready anyway (edge may just be slow)
-  }
+    const checkPort = () => new Promise((resolveCheck) => {
+      const socket = createConnection({ host: "127.0.0.1", port: hublot.port, timeout: 1500 });
+      socket.on("connect", () => { socket.destroy(); resolveCheck(true); });
+      socket.on("error", () => resolveCheck(false));
+      socket.on("timeout", () => { socket.destroy(); resolveCheck(false); });
+    });
 
-  const finish = (ok, error) => {
-    if (done) return;
-    done = true;
-    clearInterval(poll);
-    if (ok) {
-      // remember who serves the port so closing the hublot can kill it
-      const pids = pidsOnPort(tunnel.port);
-      if (pids.length) {
-        tunnel.servicePid = pids[0];
-        console.log(`[pi-ui] hublot :${tunnel.port} served by pid ${tunnel.servicePid}`);
+    const finish = (error = null) => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      if (error) {
+        if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+        reject(new Error(error));
+        return;
       }
-    }
-    state.serverEvent(ok
-      ? { type: "hublot_ready", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label } }
-      : { type: "hublot_failed", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label }, error });
-  };
+      const servicePid = pidsOnPort(hublot.port)[0] ?? null;
+      if (servicePid) console.log(`[pi-ui] hublot :${hublot.port} served by pid ${servicePid}`);
+      resolvePromise({ agentProc: proc, servicePid, createdAt });
+    };
 
-  const checkPort = () => new Promise((resolvePromise) => {
-    const sock = createConnection({ host: "127.0.0.1", port: tunnel.port, timeout: 1500 });
-    sock.on("connect", () => { sock.destroy(); resolvePromise(true); });
-    sock.on("error", () => resolvePromise(false));
-    sock.on("timeout", () => { sock.destroy(); resolvePromise(false); });
+    let checking = false;
+    const poll = setInterval(async () => {
+      if (done || checking) return;
+      checking = true;
+      const ready = await checkPort();
+      checking = false;
+      if (ready) {
+        finish();
+        return;
+      }
+      // Give a just-exited agent a short grace period: detached services can
+      // take a moment to bind after the setup process exits.
+      if (agentExited && Date.now() - agentExitAt > 10_000) {
+        finish(`agent finished but nothing answers on port ${hublot.port}: ${tail.trim().split("\n").pop() ?? ""}`);
+      } else if (Date.now() - started > timeoutMs) {
+        finish("timed out waiting for the local hublot service to come up");
+      }
+    }, 2000);
+
+    proc.on("exit", (code) => {
+      agentExited = true;
+      agentExitAt = Date.now();
+      console.log(`[pi-ui] hublot service agent for :${hublot.port} exited (code=${code})`);
+    });
+    proc.on("error", (error) => finish(`failed to spawn background agent: ${error.message}`));
+    proc.unref();
   });
-
-  let confirming = false;
-  const poll = setInterval(async () => {
-    if (done || confirming) return;
-    if (await checkPort()) {
-      confirming = true;
-      await publicUrlUp();
-      finish(true);
-      return;
-    }
-    // give a just-exited agent a short grace period before declaring failure
-    if (agentExited && Date.now() - agentExitAt > 10_000) {
-      finish(false, `agent finished but nothing answers on port ${tunnel.port}: ${tail.trim().split("\n").pop() ?? ""}`);
-    }
-    if (Date.now() - started > TIMEOUT_MS) finish(false, "timed out waiting for the hublot to come up");
-  }, 2000);
-
-  let agentExitAt = 0;
-  proc.on("exit", (code) => {
-    agentExited = true;
-    agentExitAt = Date.now();
-    console.log(`[pi-ui] hublot agent for :${tunnel.port} exited (code=${code})`);
-  });
-  proc.on("error", (err) => finish(false, `failed to spawn background agent: ${err.message}`));
-  proc.unref();
 }

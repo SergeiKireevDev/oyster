@@ -6,9 +6,9 @@
  * tunnel to a local port, managed by the pi-remote-ui server (server.mjs).
  * Opening one through this tool:
  *   - lets the server allocate the next free port (3000+)
- *   - optionally spawns a background pi agent to serve the brief on that port
- *   - binds the interface to the CURRENT session, so it appears instantly in
- *     the UI sidebar / Interfaces modal (via the server's SSE broadcast) and
+ *   - optionally has a background pi agent bring up the local service first
+ *   - opens cloudflared only after that service answers, then binds the
+ *     interface to the CURRENT session so it appears ready in the UI, and
  *     is torn down (service + agent + tunnel) when closed or when the
  *     session is deleted
  *
@@ -103,7 +103,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
 
       if (params.action === "open") {
         if (!params.description) throw new Error("'open' requires a description");
-        onUpdate?.({ content: [{ type: "text", text: "Opening tunnel…" }] });
+        onUpdate?.({ content: [{ type: "text", text: params.self_serve ? "Opening tunnel…" : "Preparing local service…" }] });
         const data = await api("POST", "/tunnels", {
           label: params.description.slice(0, 200),
           brief: params.self_serve ? null : params.description,
@@ -114,8 +114,8 @@ export default function hublotExtension(pi: ExtensionAPI) {
           ? `Hublot open: ${t.url} → http://localhost:${t.port}\n` +
             `No background agent was spawned: YOU must now make local port ${t.port} serve the ` +
             `content, with whatever serves it kept running detached (e.g. nohup … & disown).`
-          : `Hublot open: ${t.url} → http://localhost:${t.port}\n` +
-            `A background agent is setting it up; the UI will be notified when the port answers. ` +
+          : `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
+            `The background agent brought the local service up before the tunnel was opened. ` +
             `Do not serve the port yourself.`;
         return { content: [{ type: "text", text }], details: t };
       }

@@ -17,18 +17,30 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         port = state.nextHublotPort++;
       }
       const brief = body?.brief ? String(body.brief) : null;
+      let prepared = null;
       try {
-        const tunnel = await openTunnel(state, {
+        const options = {
           port,
           label: body?.label ? String(body.label).slice(0, 200) : null,
           sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
-        });
-        if (brief) {
+        };
+        // Agent-managed hublots are prepared locally first. Nothing is added
+        // to state.tunnels (and therefore nothing reaches the UI) until the
+        // requested service is actually listening on its allocated port.
+        if (brief) prepared = await spawnHublotAgent(state, options, brief);
+        const tunnel = await openTunnel(state, options);
+        if (prepared) {
           const live = state.tunnels.get(tunnel.id);
-          spawnHublotAgent(state, live ?? tunnel, brief);
+          if (live) {
+            live.agentProc = prepared.agentProc;
+            live.servicePid = prepared.servicePid;
+            live.createdAt = prepared.createdAt;
+          }
         }
-        json(res, 201, { tunnel, agent: !!brief });
+        json(res, 201, { tunnel: listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel, agent: !!brief });
       } catch (e) {
+        if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
+        if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}
         json(res, 502, { error: e.message });
       }
     },
