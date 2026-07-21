@@ -333,7 +333,7 @@ export function createAssistantStream({ mount, update, finish }) {
 /** Route transcript streaming events through injected item and scroll adapters. */
 export function createTranscriptStreamEventHandler({
   assistantStream, userMessageText, consumeLocalEcho, addUserMessage, updateUsage,
-  finishToolCard, startToolCard, updateToolCard, toolResultText, scrollToBottom,
+  finishToolCard, startToolCard, updateToolCard, toolResultText, notifyNewContent,
 }) {
   return (message) => {
     const transcript = message.message;
@@ -341,13 +341,16 @@ export function createTranscriptStreamEventHandler({
       case "message_start":
         if (transcript.role === "assistant") {
           assistantStream.start(transcript);
-          scrollToBottom(true);
-        } else if (transcript.role === "user" && !consumeLocalEcho(userMessageText(transcript))) addUserMessage(transcript);
+          notifyNewContent();
+        } else if (transcript.role === "user" && !consumeLocalEcho(userMessageText(transcript))) {
+          addUserMessage(transcript, { preserveScroll: true });
+          notifyNewContent();
+        }
         return true;
       case "message_update":
         if (transcript.role === "assistant") {
           assistantStream.update(transcript);
-          scrollToBottom(false);
+          notifyNewContent();
         }
         return true;
       case "message_end":
@@ -355,17 +358,19 @@ export function createTranscriptStreamEventHandler({
           assistantStream.end(transcript);
           updateUsage(transcript);
         } else if (transcript.role === "toolResult") finishToolCard(transcript.toolCallId, transcript, transcript.isError);
-        scrollToBottom(false);
+        notifyNewContent();
         return true;
       case "tool_execution_start":
         startToolCard(message.toolCallId);
+        notifyNewContent();
         return true;
       case "tool_execution_update":
         updateToolCard(message.toolCallId, message.partialResult);
+        notifyNewContent();
         return true;
       case "tool_execution_end":
         finishToolCard(message.toolCallId, typeof message.result === "string" ? message.result : toolResultText(message.result) || JSON.stringify(message.result, null, 2), message.isError);
-        scrollToBottom(false);
+        notifyNewContent();
         return true;
       default:
         return false;

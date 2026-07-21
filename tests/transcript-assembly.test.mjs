@@ -31,6 +31,8 @@ function createDependencies() {
     updateUsage() {},
     clearCheckpointState() {},
     resetTranscriptItems() {},
+    showTranscriptNotice() {},
+    clearTranscriptNotice() {},
     composerReadyForSend: () => true,
   };
 }

@@ -103,7 +103,25 @@
      the whole transcript ("replay"), and backfill corrections sampled
      scrollTop mid-animation, accumulating drift. Deliberate smooth scrolling
      (permalink focus) requests it explicitly via scrollIntoView(). */
-  #scroller { flex: 1; overflow-y: auto; }
+  .transcript-shell { flex: 1; min-height: 0; position: relative; }
+  #scroller { height: 100%; overflow-y: auto; }
+  #transcriptNotice {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    translate: -50% 0;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--accent-dim);
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--accent);
+    box-shadow: 0 5px 18px rgba(0,0,0,.45);
+    font: 700 18px/1 inherit;
+    cursor: pointer;
+    z-index: 12;
+  }
+  #transcriptNotice:hover { background: var(--accent-dim); color: var(--text); }
 
   /* ---------- main row: chat column + hublots sidebar ---------- */
   #main { flex: 1; display: flex; min-height: 0; }

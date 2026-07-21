@@ -44,6 +44,7 @@ import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
 import { copyTextToClipboard } from "../lib/clipboardController.js";
 import { resetTranscriptItems } from "../stores/transcriptItems.js";
+import { clearTranscriptNotice, showTranscriptNotice } from "../stores/transcriptNotice.js";
 
 /** Application assembly graph: browser adapters, feature interfaces, and lifecycle wiring. */
 
@@ -130,6 +131,8 @@ const transcriptAssembly = createTranscriptAssembly({
     setCheckpointRestores([]);
   },
   resetTranscriptItems,
+  showTranscriptNotice,
+  clearTranscriptNotice,
   composerReadyForSend: () => platformAssembly.events.isComposerReady(platformAssembly.state.isConnected(), platformAssembly.state.isTranscriptGateRequired()),
 });
 const transcriptOperations = transcriptAssembly.operations;

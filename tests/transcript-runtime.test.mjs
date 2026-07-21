@@ -203,17 +203,18 @@ test("transcript stream handler assembles assistants, tools, and local user echo
     assistantStream: { start: (message) => calls.push(["start", message]), update: (message) => calls.push(["update", message]), end: (message) => calls.push(["end", message]) },
     userMessageText: (message) => message.text,
     consumeLocalEcho: () => { const matched = local; local = false; return matched; },
-    addUserMessage: (message) => calls.push(["user", message]), updateUsage: (message) => calls.push(["usage", message]),
+    addUserMessage: (...args) => calls.push(["user", ...args]), updateUsage: (message) => calls.push(["usage", message]),
     finishToolCard: (...args) => calls.push(["finish", ...args]), startToolCard: (id) => calls.push(["tool-start", id]), updateToolCard: (...args) => calls.push(["tool-update", ...args]),
-    toolResultText: (result) => result?.text, scrollToBottom: (force) => calls.push(["scroll", force]),
+    toolResultText: (result) => result?.text, notifyNewContent: () => calls.push(["notice"]),
   });
   handler({ type: "message_start", message: { role: "user", text: "echo" } });
   handler({ type: "message_start", message: { role: "user", text: "remote" } });
   handler({ type: "message_update", message: { role: "assistant", text: "partial" } });
   handler({ type: "message_end", message: { role: "assistant", text: "done" } });
   handler({ type: "tool_execution_end", toolCallId: "tool", result: { text: "result" }, isError: false });
-  assert.deepEqual(calls.map(([name]) => name), ["user", "update", "scroll", "end", "usage", "scroll", "finish", "scroll"]);
-  assert.equal(calls[6][2], "result");
+  assert.deepEqual(calls.map(([name]) => name), ["user", "notice", "update", "notice", "end", "usage", "notice", "finish", "notice"]);
+  assert.deepEqual(calls[0][2], { preserveScroll: true });
+  assert.equal(calls[7][2], "result");
 });
 
 test("scroll adapter preserves reading position unless pinned or forced", () => {

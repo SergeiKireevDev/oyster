@@ -63,7 +63,7 @@ export function createTranscriptAssembly(deps) {
     }
     deps.placeCheckpoint();
     if (!renderer?.backfilling) {
-      transcriptScroll.scrollToBottom(true);
+      if (!options.preserveScroll) transcriptScroll.scrollToBottom(true);
       deps.rememberPrompt(text);
     }
   }
@@ -83,7 +83,7 @@ export function createTranscriptAssembly(deps) {
     startToolCard: (id) => toolCards.start(id),
     updateToolCard: (id, result) => toolCards.updateResult(id, result),
     toolResultText,
-    scrollToBottom: (force) => transcriptScroll.scrollToBottom(force),
+    notifyNewContent: deps.showTranscriptNotice,
   });
 
   function renderFullMessage(message, options = {}) {
@@ -106,6 +106,7 @@ export function createTranscriptAssembly(deps) {
     deps.resetTranscriptItems();
     toolCards.clear();
     assistantStream.clear();
+    deps.clearTranscriptNotice();
     deps.clearComposerHistory();
   }
 

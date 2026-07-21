@@ -166,6 +166,9 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     const A = tag(`SIDEBAR-A-${mobile ? "M" : "D"}`);
     const B = tag(`SIDEBAR-B-${mobile ? "M" : "D"}`);
     await sendPrompt(page, `Reply with exactly the word ${A}`);
+    await expect(page.locator("#transcriptNotice")).toBeVisible();
+    await page.locator("#transcriptNotice").click();
+    await expect(page.locator("#transcriptNotice")).toHaveCount(0);
     await newSession(page);
     await sendPrompt(page, `Reply with exactly the word ${B}`);
 
