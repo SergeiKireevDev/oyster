@@ -29,6 +29,7 @@ import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
+import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -505,12 +506,7 @@ async function handleCheckpointClick(e) {
   setCheckpointBusy(true);
   if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
-    const res = await fetch(
-      `/checkpoint?runner=${encodeURIComponent(currentRunner ?? "")}`,
-      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model }) }
-    );
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    const data = await createCheckpoint(fetch, currentRunner, model);
     if (data.committed) {
       const what = data.summarized
         ? `“${data.message.replace(/^checkpoint: /, "")}”`
@@ -583,13 +579,7 @@ async function rollbackToCheckpoint(cp, target = null) {
   if (pick.cancelled) return;
   if (target) setCheckpointRestoreBusy(target, true);
   try {
-    const res = await fetch(`/rollback`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash, model: pick.model }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    const data = await rollbackCheckpoint(fetch, { sessionId: cp.sessionId ?? state?.sessionId, hash: cp.hash, model: pick.model });
     toast(`\u23EA rolled back to ${data.rolledBack}${data.safety ? ` (pending work saved as ${data.safety})` : ""} — forked session opened`);
     if (data.runner?.id) switchToRunner(data.runner.id);
   } catch (err) {
