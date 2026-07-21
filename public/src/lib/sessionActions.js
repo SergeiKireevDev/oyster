@@ -31,6 +31,19 @@ export function createCurrentRunnerController({ storage, updateAppSession, key =
   };
 }
 
+/** Keep the latest runner list mirrored into the UI session store. */
+export function createRunnerListController({ updateAppSession }) {
+  let runners = [];
+  return {
+    get runners() { return runners; },
+    set(next) {
+      runners = next ?? [];
+      updateAppSession({ runners });
+      return runners;
+    },
+  };
+}
+
 export function sessionFileQuery(sessionPath) {
   const raw = String(sessionPath ?? "");
   const marker = "/.pi/agent/sessions/";

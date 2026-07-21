@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createCurrentRunnerController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createCurrentRunnerController, createRunnerListController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -42,6 +42,14 @@ test("current runner controller persists and publishes selection", () => {
   controller.set(null);
   assert.deepEqual(patches, [{ currentRunner: "next" }, { currentRunner: null }]);
   assert.equal(values.has("pi_runner"), false);
+});
+
+test("runner list controller publishes normalized runner lists", () => {
+  const patches = [];
+  const controller = createRunnerListController({ updateAppSession: (patch) => patches.push(patch) });
+  assert.deepEqual(controller.set([{ id: "r1" }]), [{ id: "r1" }]);
+  assert.deepEqual(controller.set(null), []);
+  assert.deepEqual(patches, [{ runners: [{ id: "r1" }] }, { runners: [] }]);
 });
 
 test("session actions select adjacent active runners in the current workdir", () => {
