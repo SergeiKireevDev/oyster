@@ -84,6 +84,7 @@ import { createSessionRoutes } from "./http/routes/sessionRoutes.mjs";
 import { createFileRoutes } from "./http/routes/fileRoutes.mjs";
 import { createWorkdirRoutes } from "./http/routes/workdirRoutes.mjs";
 import { createTunnelRoutes } from "./http/routes/tunnelRoutes.mjs";
+import { createRoutineRoutes } from "./http/routes/routineRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -207,6 +208,13 @@ export function init(state) {
     state, config, requestContext, listTunnels, openTunnel, closeTunnel,
     spawnHublotAgent,
   });
+  const routineRoutes = createRoutineRoutes({
+    state, requestContext,
+    routines: {
+      listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
+      teardownRoutine, releaseRoutine, deleteRoutine,
+    },
+  });
   const sessionRoutes = createSessionRoutes({
     state,
     requestContext,
@@ -223,50 +231,6 @@ export function init(state) {
 
   const routes = {
     // -------------------------------------------------- tunnels / hublots
-
-    "GET /routines": (req, res) => {
-      json(res, 200, { routines: listRoutines(state), dir: routinesDir() });
-    },
-
-    "POST /routines": async (req, res) => {
-      const body = await readJsonBody(req, res);
-      if (body === undefined) return;
-      const name = String(body?.name ?? "").trim();
-      const action = String(body?.action ?? "");
-      const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-      if (!name || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
-        json(res, 400, { error: `invalid routine name: ${name}` });
-        return;
-      }
-      // create/start bind the routine to the calling session and run it in
-      // that session's workdir (so byproducts land in the right project)
-      const sessionCwd = () => {
-        const runner = sessionId
-          ? [...state.runners.values()].find((r) => r.sessionId === sessionId)
-          : null;
-        return runner?.dir ?? state.currentDir;
-      };
-      try {
-        if (action === "create") {
-          const script = typeof body?.script === "string" ? body.script : null;
-          if (!script || script.length > 256 * 1024) {
-            json(res, 400, { error: "create requires a `script` string (max 256KB)" });
-            return;
-          }
-          json(res, 201, { routine: createRoutine(state, { name, script, sessionId, cwd: sessionCwd() }) });
-        }
-        else if (action === "start") json(res, 200, { routine: startRoutine(state, name, { sessionId, cwd: sessionCwd() }) });
-        else if (action === "stop") json(res, 200, { routine: stopRoutine(state, name) });
-        else if (action === "teardown") json(res, 200, { routine: teardownRoutine(state, name) });
-        else if (action === "release") json(res, 200, { routine: releaseRoutine(state, name) });
-        else if (action === "delete") json(res, 200, { routine: deleteRoutine(state, name) });
-        else json(res, 400, { error: `unknown action: ${action}` });
-      } catch (e) {
-        json(res, 400, { error: e.message });
-      }
-    },
-
-    // -------------------------------------------------- checkpoints / rollback
 
     "POST /checkpoint": async (req, res, url) => {
       const body = await readJsonBody(req, res);
@@ -354,7 +318,7 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch
