@@ -64,7 +64,8 @@ import { createHublotController, createHublotSidebarEventController, createManag
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
 import { createFolderBrowserController } from "../lib/folderBrowserController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
-import { createFileExplorerController, createFileExplorerEventController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
+import { createFileExplorerController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
+import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
 import { createFilePickerController } from "../lib/filePickerController.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
@@ -1227,12 +1228,12 @@ const saveExplorerFile = () => fileExplorerController.saveEditor(
   get(fileExplorer).editContent,
 );
 
-const fileExplorerEventController = createFileExplorerEventController({ windowTarget: window,
+const detachFileExplorerActions = configureFileExplorerActions({
   browse: loadFileExplorer,
   edit: editExplorerFile,
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
-  backToList: () => loadFileExplorer(fileExplorerState.curPath),
+  back: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
 });
 
@@ -1727,7 +1728,7 @@ const detachRuntimeEventAdapters = () => {
   detachCheckpointTreeActions();
   detachFilePickerActions();
   detachFolderBrowserActions();
-  fileExplorerEventController.detach();
+  detachFileExplorerActions();
   managedHublotEventController.detach();
   hublotSidebarEventController.detach();
   routineEventController.detach();
@@ -1756,7 +1757,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
-    fileExplorerEventController, managedHublotEventController,
+    managedHublotEventController,
     hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
     routineEventController, sessionPickerEventController, settingsChangeController,
     headerEventController, carouselEventRegistration,

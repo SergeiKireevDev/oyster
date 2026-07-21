@@ -4,9 +4,10 @@
   import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
+  import { browseFileExplorer, editFileExplorer, saveFileExplorer } from "../features/files/fileExplorerActions.js";
 
-  const editExploredFile = (path) => window.dispatchEvent(new CustomEvent("pi-file-explorer-edit", { detail: path }));
-  const saveExploredFile = () => window.dispatchEvent(new Event("pi-file-explorer-save"));
+  const editExploredFile = editFileExplorer;
+  const saveExploredFile = saveFileExplorer;
 
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
 </script>
@@ -36,7 +37,7 @@
     dirs={$fileExplorer.dirs}
     showHidden={$fileExplorer.showHidden}
     showWorkdir={true}
-    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-file-explorer-browse", { detail: path }))}
+    onBrowse={browseFileExplorer}
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}

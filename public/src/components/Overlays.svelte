@@ -17,6 +17,7 @@
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
+  import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { cancelFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -96,14 +97,14 @@
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={cancelFilePicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFilePicker(); }}>Cancel</span>
       {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
-        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-save"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-save")); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
+        <span class="chip" role="button" tabindex="0" onclick={saveFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-save")); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
         <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
-        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-back-list"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-back-list")); }}>← Back</span>
+        <span class="chip" role="button" tabindex="0" onclick={backFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorer(); }}>← Back</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "fileExplorer"}
-        <span class="chip" role="button" tabindex="0" title={`upload local files to ${$fileExplorer.path}`} onclick={() => window.dispatchEvent(new Event("pi-file-explorer-upload"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-upload")); }}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</span>
+        <span class="chip" role="button" tabindex="0" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") uploadFileExplorer(); }}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFileExplorer({ showHidden: !$fileExplorer.showHidden }); }}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-file-explorer-back-hublots"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-file-explorer-back-hublots")); }}>← Hublots</span>
+        <span class="chip" role="button" tabindex="0" onclick={backFileExplorerToHublots} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorerToHublots(); }}>← Hublots</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "sessionPicker"}
         <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-session-picker-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-session-picker-cancel")); }}>Cancel</span>
