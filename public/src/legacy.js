@@ -1666,7 +1666,11 @@ mobileDrawerDismissController.attach();
 
 const loadHublots = hublotController.refreshSidebar;
 
-createOpenFileExplorerEventController({ windowTarget: window, open: () => showFileExplorer().catch((e) => addToast(e.message, "error")) }).attach();
+const openFileExplorerEventController = createOpenFileExplorerEventController({
+  windowTarget: window,
+  open: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
+});
+openFileExplorerEventController.attach();
 
 // ------------------------------------------------------------ routines sidebar
 //
@@ -2177,5 +2181,6 @@ export function teardownLegacyRuntime() {
   hublotSidebarEventController.detach();
   routineEventController.detach();
   sessionPickerEventController.detach();
+  openFileExplorerEventController.detach();
   connectionState.lost();
 }
