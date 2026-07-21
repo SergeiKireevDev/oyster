@@ -1623,6 +1623,9 @@ const folderBrowserController = createFolderBrowserController({
   updateTitle: (title) => updateModal({ title }),
   getShowHidden: () => get(folderBrowser).showHidden,
   setPath: (path) => { folderBrowserState.browsePath = path; },
+  openSessionRunner,
+  setWorkdir,
+  switchToRunner,
   toast,
 });
 const loadFolderBrowser = folderBrowserController.load;
@@ -1650,15 +1653,8 @@ async function showFolderBrowser() {
 
   const chosen = await finished;
   if (!chosen) return;
-  try {
-    // spawns a NEW runner in that folder; the current session keeps running
-    const r = await openSessionRunner({ dir: chosen });
-    setWorkdir(chosen);
-    switchToRunner(r.id);
-    toast(`folder: ${chosen}`);
-  } catch (e) {
-    toast(e.message, "error");
-  }
+  // Spawns a new runner in that folder; the current session keeps running.
+  await folderBrowserController.createSessionInFolder(chosen);
 }
 
 const createFolderBrowser = async () => {
