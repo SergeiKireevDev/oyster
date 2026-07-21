@@ -1599,7 +1599,7 @@ const sessionPickerActions = {
   deleteSession: sessionPickerDeleteController.deleteSession,
   openSearchHit: (sessionPath, hit) => {
     sessionPickerResolve?.(null);
-    openSearchHit(sessionPath, hit);
+    getSessionRuntime().openSessionAtSearchHit(sessionPath, hit);
   },
   loadFolder: loadSessionPickerFolder,
 };
@@ -1699,8 +1699,6 @@ const searchHitSessionController = createSearchHitSessionController({
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
   toast: addToast,
 });
-const openSearchHit = (...args) => getSessionRuntime().openSessionAtSearchHit(...args);
-
 async function focusSearchHit(hit) {
   if (hit.entryId) {
     await focusEntryById(hit.entryId);
