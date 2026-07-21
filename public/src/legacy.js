@@ -8,7 +8,7 @@ import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
-import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -2047,20 +2047,21 @@ adjacentRunnerController = createAdjacentRunnerController({
   toast: addToast,
 });
 
+const carouselEventRegistration = createCarouselEventRegistration({
+  register: registerSwipeAndResizeEvents,
+  handlers: {
+    documentTarget: document,
+    windowTarget: window,
+    onTouchStart: swipeController.onTouchStart,
+    onTouchMove: swipeController.onTouchMove,
+    onTouchEnd: swipeController.onTouchEnd,
+    onTouchCancel: swipeController.onTouchCancel,
+    onResize: applyCarousel,
+  },
+});
+
 function attachSwipeListeners() {
-  registerCarouselEvents({
-    state: window._piCarouselEvents ??= {},
-    register: registerSwipeAndResizeEvents,
-    handlers: {
-      documentTarget: document,
-      windowTarget: window,
-      onTouchStart: swipeController.onTouchStart,
-      onTouchMove: swipeController.onTouchMove,
-      onTouchEnd: swipeController.onTouchEnd,
-      onTouchCancel: swipeController.onTouchCancel,
-      onResize: applyCarousel,
-    },
-  });
+  carouselEventRegistration.attach();
 }
 
 const carouselHeaderController = createCarouselHeaderController({

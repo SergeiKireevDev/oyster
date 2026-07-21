@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
@@ -10,16 +10,19 @@ test("carousel gesture classifier distinguishes taps and axes", () => {
 });
 
 test("carousel listener registration is idempotent and teardown-capable", () => {
-  const state = {};
   let registrations = 0;
   let removals = 0;
   const register = () => { registrations++; return () => removals++; };
-  const remove = registerCarouselEvents({ register, state, handlers: {} });
-  registerCarouselEvents({ register, state, handlers: {} });
+  const listeners = createCarouselEventRegistration({ register, handlers: {} });
+  const remove = listeners.attach();
+  listeners.attach();
   assert.equal(registrations, 1);
   remove();
   assert.equal(removals, 1);
-  assert.equal(state.attached, false);
+  listeners.attach();
+  assert.equal(registrations, 2);
+  listeners.detach();
+  assert.equal(removals, 2);
 });
 
 test("carousel header controller toggles desktop drawers and mobile pages", () => {
