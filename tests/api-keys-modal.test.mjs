@@ -31,6 +31,7 @@ test("OAuth credential actions use the application palette instead of browser-de
   assert.match(styles, /\.api-key-oauth \{[^}]*border: 1px solid var\(--accent-dim\)[^}]*background: var\(--user-bubble\)[^}]*color: var\(--accent\)/);
   assert.match(styles, /\.api-key-oauth:hover:not\(:disabled\) \{[^}]*border-color: var\(--accent\)[^}]*background: var\(--accent-dim\)[^}]*color: var\(--text\)/);
   assert.match(styles, /\.api-key-oauth:focus-visible \{[^}]*outline: 2px solid var\(--accent\)/);
+  assert.match(styles, /\.btn\.oauth-cancel \{[^}]*background: rgba\(255,125,145,\.14\)[^}]*color: #ff9bac[^}]*box-shadow: none/);
 });
 
 test("the status list shows only active providers while the selector includes inactive OAuth providers", () => {
