@@ -46,7 +46,7 @@ inspect transcript elements, or own transcript-local mutable state.
 **Acceptance:** the root owns no runner, route, picker, preview, or session
 hydration state.
 
-## [ ] 4. Extract Composer and Command Assembly
+## [x] 4. Extract Composer and Command Assembly
 
 - [x] Create `features/composer/createComposerAssembly.js` and move composer history, prompt sending, abort, local echo coordination, and post-send behavior into it.
 - [x] Move command guard, command palette, menu, input, keyboard, and action registration construction into the composer assembly.
