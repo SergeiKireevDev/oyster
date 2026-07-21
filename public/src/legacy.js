@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerMenuEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -39,7 +39,7 @@ import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "./lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { createPostSendTranscriptSyncController } from "./lib/postSendTranscriptSyncController.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
@@ -1373,7 +1373,7 @@ async function runMenuAction(action) {
     addToast(err.message, "error");
   }
 }
-registerMenuEvents(window, { run: runMenuAction });
+createMenuEventController({ windowTarget: window, run: runMenuAction }).attach();
 
 // ------------------------------------------------------------ attach file
 

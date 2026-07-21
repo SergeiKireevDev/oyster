@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerMenuEvents } from "../public/src/runtime/eventControllers.js";
 import { createComposerEventController } from "../public/src/lib/composerController.js";
+import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
 
@@ -195,7 +195,7 @@ test("menu event adapter routes its action detail", () => {
     removeEventListener(_name, fn) { if (listener === fn) listener = null; },
   };
   const calls = [];
-  registerMenuEvents(target, { run: (detail) => calls.push(detail) });
+  createMenuEventController({ windowTarget: target, run: (detail) => calls.push(detail) }).attach();
   listener({ detail: { action: "settings" } });
   assert.deepEqual(calls, [{ action: "settings" }]);
 });

@@ -13,12 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerMenuEvents(target, { run }) {
-  const onAction = (event) => run(event.detail);
-  target.addEventListener("pi-menu-action", onAction);
-  return () => target.removeEventListener("pi-menu-action", onAction);
-}
-
 export function handleRunnerPing(message, { currentRunners, setRunners, onRunnersChanged, refreshTree }) {
   if (!message.runners || JSON.stringify(message.runners) === JSON.stringify(currentRunners())) return false;
   setRunners(message.runners);
