@@ -8,6 +8,9 @@ mario/
 .demo-artifacts/
 foobar.py
 preview-gallery/
+preview-videos/
+test-results/
+playwright-report/
 
 # playwright e2e
 tests/e2e/node_modules/
