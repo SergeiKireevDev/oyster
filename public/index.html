@@ -470,6 +470,8 @@
     cursor: pointer;
   }
   #modal .m-option .s-del:hover { color: var(--red); background: var(--panel); }
+  #modal .m-option .s-stop { font-size: 11px; }
+  #modal .m-option .s-stop:hover { color: var(--yellow); background: var(--panel); }
   #modal .newdir-row { display: flex; gap: 6px; margin-bottom: 8px; }
   #modal .newdir-row input { flex: 1; min-width: 0; }
   #modal .newdir-row .btn { padding: 6px 12px; }
@@ -2082,15 +2084,16 @@ async function showSessionPicker() {
   if (!sessions.length) { toast("no saved sessions"); return; }
   const currentId = state?.sessionId;
 
-  const dots = new Map(); // session path -> dot element (live indicator updates)
-  const applyDot = (dot, alive, busy) => {
-    dot.className = "s-dot" + (busy ? " busy" : alive ? " on" : "");
-    dot.title = busy ? "agent working" : alive ? "process running (idle)" : "no running process";
+  const dots = new Map(); // session path -> { dot, stop } (live indicator updates)
+  const applyDot = (entry, alive, busy) => {
+    entry.dot.className = "s-dot" + (busy ? " busy" : alive ? " on" : "");
+    entry.dot.title = busy ? "agent working" : alive ? "process running (idle)" : "no running process";
+    if (entry.stop) entry.stop.style.display = alive ? "" : "none";
   };
   onRunnersUpdate = (runners) => {
-    for (const [path, dot] of dots) {
+    for (const [path, entry] of dots) {
       const r = runners.find((x) => x.sessionFile === path);
-      applyDot(dot, !!r?.alive, !!r?.busy);
+      applyDot(entry, !!r?.alive, !!r?.busy);
     }
   };
 
@@ -2105,8 +2108,6 @@ async function showSessionPicker() {
       const title = document.createElement("div");
       title.className = "s-title";
       const dot = document.createElement("span");
-      applyDot(dot, s.alive, s.busy);
-      dots.set(s.path, dot);
       title.appendChild(dot);
       const nameEl = document.createElement("span");
       nameEl.className = "s-name";
@@ -2115,6 +2116,30 @@ async function showSessionPicker() {
       dateEl.className = "s-date";
       dateEl.textContent = `${fmtSessionDate(s.modifiedAt)} · ${s.messageCount} msgs`;
       title.append(nameEl, dateEl);
+      // stop (■): kill the session's background process; the session file
+      // and its work stay on disk
+      const stop = document.createElement("span");
+      stop.className = "s-del s-stop";
+      stop.textContent = "■";
+      stop.title = "Stop this session's process (keeps the session)";
+      stop.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const r = runnersNow.find((x) => x.sessionFile === s.path) ?? { id: s.runnerId };
+        if (!r.id) return;
+        try {
+          const res2 = await fetch(`/runners?token=${encodeURIComponent(token)}&id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
+          const d2 = await res2.json().catch(() => ({}));
+          if (!res2.ok) { toast(d2.error || `stop failed (${res2.status})`, "error"); return; }
+          toast("process stopped");
+        } catch (err) {
+          toast(`stop failed: ${err.message}`, "error");
+        }
+      });
+      title.appendChild(stop);
+      const entry = { dot, stop };
+      applyDot(entry, s.alive, s.busy);
+      dots.set(s.path, entry);
+
       if (!isCurrent) {
         const del = document.createElement("span");
         del.className = "s-del";

@@ -712,6 +712,15 @@ export function init(state) {
         return;
       }
       try {
+        // also retire any runner still attached to this session
+        for (const r of [...state.runners.values()]) {
+          if (r.sessionFile === target) {
+            stopRunner(r);
+            state.runners.delete(r.id);
+            if (state.defaultRunnerId === r.id) state.defaultRunnerId = null;
+          }
+        }
+        runnersChanged();
         unlinkSync(target);
         json(res, 200, { deleted: target });
       } catch (e) {
