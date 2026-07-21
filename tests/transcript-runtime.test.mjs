@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -99,6 +99,13 @@ test("transcript entry matcher aligns persisted entries from the tail", () => {
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("response"), false);
+});
+
+test("replay UI state publishes gate and replay status", () => {
+  const updates = []; const state = createReplayUiState({ updateAppSession: (patch) => updates.push(patch) });
+  state.setTranscriptGateRequired(false); state.setReplaying(false);
+  assert.equal(state.replaying, false); assert.equal(state.transcriptGateRequired, false);
+  assert.deepEqual(updates, [{ transcriptGateRequired: false }, { replayingTranscript: false, transcriptLoadPhase: null }]);
 });
 
 test("replay buffer flusher dispatches only filtered live events", () => {

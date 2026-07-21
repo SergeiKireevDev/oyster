@@ -20,6 +20,20 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
 }
 
 /** Flush buffered live events after canonical rendering while suppressing duplicate completions. */
+/** Own transcript replay and gate state while publishing UI-visible status. */
+export function createReplayUiState({ updateAppSession, log = () => {}, replaying = true, transcriptGateRequired = true } = {}) {
+  let replay = replaying;
+  let gate = transcriptGateRequired;
+  const setTranscriptGateRequired = (value) => { gate = !!value; updateAppSession({ transcriptGateRequired: gate }); };
+  const setReplaying = (value, phase = null) => {
+    const next = !!value;
+    if (replay !== next || phase) log("setReplaying", { from: replay, to: next, phase });
+    replay = next;
+    updateAppSession({ replayingTranscript: replay, transcriptLoadPhase: replay ? phase : null });
+  };
+  return { get replaying() { return replay; }, get transcriptGateRequired() { return gate; }, setReplaying, setTranscriptGateRequired };
+}
+
 export function createReplayBufferFlusher({ log = () => {}, assistantAlreadyRendered, dispatch }) {
   return (events) => {
     log("replayBuffer:flush", { events: events.length, types: events.map((event) => event.type).slice(0, 20) });
