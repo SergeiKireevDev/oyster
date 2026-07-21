@@ -41,6 +41,7 @@ import { createCheckpointMarkerController } from "./lib/checkpointMarkerControll
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, moveCommandPaletteActive } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
+import { createPostSendTranscriptSyncController } from "./lib/postSendTranscriptSyncController.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createComposerHistoryController } from "./lib/composerHistoryController.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
@@ -1034,11 +1035,20 @@ const transcriptSyncScheduler = createTranscriptSyncScheduler({
   },
 });
 const postAgentTranscriptSyncController = createDebouncedTranscriptSyncController({ schedule: transcriptSyncScheduler.schedule });
-let postSendFileSyncTimer = null;
 const syncTranscriptSoon = transcriptSyncScheduler.schedule;
 const schedulePostAgentTranscriptSync = () => postAgentTranscriptSyncController.schedule();
+const postSendTranscriptSyncController = createPostSendTranscriptSyncController({
+  getRunner: () => currentRunner,
+  getSessionFile: () => state?.sessionFile,
+  fetchImpl: fetch,
+  sessionFileQuery,
+  userMessageText,
+  renderTranscript,
+  log: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
+});
+const schedulePostSendFileTranscriptSync = (expectedUserText) => postSendTranscriptSyncController.schedule(expectedUserText);
 
-function schedulePostSendFileTranscriptSync(expectedUserText) {
+/*function schedulePostSendFileTranscriptSync(expectedUserText) {
   clearTimeout(postSendFileSyncTimer);
   const runnerId = currentRunner;
   let sessionFile = state?.sessionFile || null;
@@ -1075,7 +1085,7 @@ function schedulePostSendFileTranscriptSync(expectedUserText) {
     if (Date.now() - started < 15000 && runnerId === currentRunner) postSendFileSyncTimer = setTimeout(tick, 750);
   };
   postSendFileSyncTimer = setTimeout(tick, 750);
-}
+}*/
 
 const refreshStateNow = createStateRefresher({
   rpc: async (request) => {
