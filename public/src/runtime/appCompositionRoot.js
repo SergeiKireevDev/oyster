@@ -44,9 +44,7 @@ import { openOptionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
-import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
-import { createCheckpointFeature } from "../features/checkpoints/checkpointFeature.js";
-import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
+import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController } from "../lib/hublotController.js";
@@ -178,34 +176,41 @@ const renderTranscript = transcriptOperations.renderTranscript;
 // runner's workdir (server-side `git add -A && git commit`), freezing the
 // state the conversation reached at that point.
 
-/** Modal with a single model selector for the diff-summary sub-agent; the
- *  choice is remembered (localStorage) and preselected next time. */
-function pickCheckpointModel(options = {}) {
-  return openModelPicker({
-    openPicker: openCheckpointModelPicker,
-    rpc,
-    setOptions: updateCheckpointModelOptions,
-    options,
-  });
-}
-
-const checkpointFeature = createCheckpointFeature({
+const checkpointAssembly = createCheckpointAssembly({
   fetchImpl: fetch,
-  marker: { tick, chatElements: () => transcriptOperations.chatElements(), setTarget: setCheckpointTarget, setRestores: setCheckpointRestores, fetchImpl: fetch, getSessionId: () => getSessionState()?.sessionId, fetchSessionEntries },
-  tree: { fetchImpl: fetch, getState: () => getSessionState(), getRunners: () => getRunners(), getCurrentRunner: () => getCurrentRunner(), getWorkdir: () => getWorkdir(), setTreeState: setCheckpointTreeState, isOpen: () => $("treebar").classList.contains("open"), openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args), toast: addToast },
-  controller: { pickModel: pickCheckpointModel, getRunner: () => getCurrentRunner(), getSessionId: () => getSessionState()?.sessionId, setBusy: setCheckpointBusy, setRestoreBusy: setCheckpointRestoreBusy, switchRunner: (id) => getSessionRuntime().switchRunner(id), toast: addToast },
+  tick,
+  rpc,
+  openModelPicker: openCheckpointModelPicker,
+  setModelOptions: updateCheckpointModelOptions,
+  setTarget: setCheckpointTarget,
+  setRestores: setCheckpointRestores,
+  setTreeState: setCheckpointTreeState,
+  setBusy: setCheckpointBusy,
+  setRestoreBusy: setCheckpointRestoreBusy,
+  transcript: {
+    chatElements: () => transcriptOperations.chatElements(),
+    fetchSessionEntries,
+  },
+  session: {
+    getSessionId: () => getSessionState()?.sessionId,
+    getState: () => getSessionState(),
+    getRunners: () => getRunners(),
+    getCurrentRunner: () => getCurrentRunner(),
+    getWorkdir: () => getWorkdir(),
+    openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
+    switchRunner: (id) => getSessionRuntime().switchRunner(id),
+  },
+  layout: { isTreeOpen: () => $("treebar").classList.contains("open") },
+  toast: addToast,
 });
-const { marker: checkpointMarkerController, tree: checkpointTreeController, controller: checkpointController } = checkpointFeature;
-const placeCheckpointBtn = () => checkpointMarkerController.place();
-const refreshCheckpointMarkers = () => checkpointMarkerController.refresh();
-const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
-const loadCheckpointTree = () => checkpointTreeController.load();
-function handleCheckpointClick(event) { return checkpointController.freeze(event); }
-function rollbackToCheckpoint(checkpoint, target = null) { return checkpointController.rollback(checkpoint, target); }
-const detachCheckpointTreeActions = configureCheckpointTreeActions({
-  openSession: (...args) => checkpointTreeController.openTreeSession(...args),
-  rollback: (checkpoint, target) => checkpointController.rollback(checkpoint, target),
-});
+const checkpointOperations = checkpointAssembly.operations;
+const placeCheckpointBtn = checkpointOperations.placeMarker;
+const refreshCheckpointMarkers = checkpointOperations.refreshMarkers;
+const refreshTreeIfOpen = checkpointOperations.refreshTreeIfOpen;
+const loadCheckpointTree = checkpointOperations.loadTree;
+const handleCheckpointClick = checkpointOperations.freeze;
+const rollbackToCheckpoint = checkpointOperations.rollback;
+const detachCheckpointTreeActions = () => checkpointAssembly.teardown();
 
 // ------------------------------------------------------------ state / header
 
