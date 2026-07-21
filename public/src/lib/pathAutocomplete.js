@@ -1,6 +1,6 @@
-const PATH_TRIGGER = /(^|\s)((?:\.\/|\/)[^\s]*)$/;
+const PATH_TRIGGER = /(^|\s)([^\s]*\/[^\s]*)$/;
 
-/** Return the path token immediately before the caret, if it starts with / or ./. */
+/** Return the slash-containing path token immediately before the caret. */
 export function pathTrigger(element) {
   const caret = element.selectionStart ?? element.value.length;
   const match = element.value.slice(0, caret).match(PATH_TRIGGER);
@@ -14,9 +14,10 @@ export function pathCompletionRequest(text, workdir) {
   const slash = text.lastIndexOf("/");
   const typedDir = text.slice(0, slash + 1);
   const prefix = text.slice(slash + 1);
-  if (text.startsWith("./")) {
-    const relativeDir = typedDir.slice(2);
-    return { browsePath: relativeDir ? `${workdir}/${relativeDir}` : workdir, typedDir, prefix };
+  if (!text.startsWith("/")) {
+    const base = String(workdir ?? "").replace(/\/$/, "");
+    const relativeDir = typedDir.startsWith("./") ? typedDir.slice(2) : typedDir;
+    return { browsePath: base ? `${base}/${relativeDir}` : relativeDir, typedDir, prefix };
   }
   // The filesystem API is deliberately confined and cannot list /. Browse a
   // safe root so its response can identify the allowed workspace/home roots.

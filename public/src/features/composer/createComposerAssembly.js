@@ -165,7 +165,7 @@ export function createComposerAssembly(deps) {
     async function updatePathCompletions(element, trigger, version) {
       try {
         let workdir = commandDeps.getWorkdir();
-        if (!workdir && trigger.text.startsWith("./")) {
+        if (!workdir && !trigger.text.startsWith("/")) {
           const root = await commandDeps.browseFiles("");
           if (version !== requestVersion || pathTrigger(element)?.text !== trigger.text) return;
           workdir = root.workdir ?? root.path;
