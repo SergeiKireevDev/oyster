@@ -297,8 +297,7 @@ const checkpointTreeController = createCheckpointTreeController({
   getWorkdir: () => sessionUi.workdir,
   setTreeState: setCheckpointTreeState,
   isOpen: () => $("treebar").classList.contains("open"),
-  openSession: openSessionRunner,
-  switchRunner: switchToRunner,
+  openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
   toast: addToast,
 });
 const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();

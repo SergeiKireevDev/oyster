@@ -21,8 +21,7 @@ export function createCheckpointTreeController({
   getWorkdir,
   setTreeState,
   isOpen,
-  openSession,
-  switchRunner,
+  openAndSwitchSession,
   toast,
 }) {
   function refreshIfOpen() {
@@ -60,8 +59,7 @@ export function createCheckpointTreeController({
   async function openTreeSession(node) {
     if (node.id === getState()?.sessionId) return;
     try {
-      const runner = await openSession({ sessionPath: node.path, dir: node.cwd || getWorkdir() });
-      switchRunner(runner.id);
+      await openAndSwitchSession({ sessionPath: node.path, dir: node.cwd || getWorkdir() });
       toast(`switched to: ${node.name || node.id.slice(0, 8)}`);
     } catch (error) {
       toast(`switch failed: ${error.message}`, "error");

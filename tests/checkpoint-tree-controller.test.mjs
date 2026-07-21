@@ -13,8 +13,7 @@ function controller(overrides = {}) {
     getWorkdir: () => "/work",
     setTreeState: (state) => states.push(state),
     isOpen: () => false,
-    openSession: async () => ({ id: "opened" }),
-    switchRunner: () => {},
+    openAndSwitchSession: async () => ({ id: "opened" }),
     toast: (...args) => toasts.push(args),
     ...overrides,
   };
@@ -53,13 +52,10 @@ test("checkpoint tree controller treats an unwritten session as empty", async ()
 
 test("checkpoint tree controller opens another tree session", async () => {
   const opened = [];
-  const switched = [];
   const { controller: tree, toasts } = controller({
-    openSession: async (options) => { opened.push(options); return { id: "next-runner" }; },
-    switchRunner: (id) => switched.push(id),
+    openAndSwitchSession: async (options) => { opened.push(options); return { id: "next-runner" }; },
   });
   await tree.openTreeSession({ id: "other", path: "/sessions/other.jsonl", cwd: "/other", name: "Other" });
   assert.deepEqual(opened, [{ sessionPath: "/sessions/other.jsonl", dir: "/other" }]);
-  assert.deepEqual(switched, ["next-runner"]);
   assert.deepEqual(toasts, [["switched to: Other"]]);
 });
