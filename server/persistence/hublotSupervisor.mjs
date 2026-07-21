@@ -1,5 +1,35 @@
 import { verifyPersistedProcessIdentity } from "./processIdentity.mjs";
 
+/**
+ * Start periodic supervision immediately and reconcile persisted hublots in the
+ * background so HTTP startup is not gated on service and tunnel recovery.
+ */
+export function scheduleHublotStartupReconciliation({ state, supervisor, logger = console } = {}) {
+  if (!state) throw new Error("stable state is required");
+  if (!supervisor?.reconcile || !supervisor?.start) throw new Error("hublot supervisor is required");
+
+  if (!state.hublotStartupReconciled && !state.hublotStartupReconciliationTask) {
+    const task = Promise.resolve()
+      .then(() => supervisor.reconcile({ includeOpening: true }))
+      .then((report) => {
+        state.hublotStartupReconciliation = report;
+        state.hublotStartupReconciled = true;
+        return report;
+      })
+      .catch((error) => {
+        logger.error(`[pi-ui] hublot startup reconciliation failed: ${error.message}`);
+        return null;
+      })
+      .finally(() => {
+        if (state.hublotStartupReconciliationTask === task) state.hublotStartupReconciliationTask = null;
+      });
+    state.hublotStartupReconciliationTask = task;
+  }
+
+  supervisor.start();
+  return state.hublotStartupReconciliationTask;
+}
+
 /** Periodically reconcile desired-open hublots against persisted OS identities. */
 export function createHublotSupervisor({
   appStore,

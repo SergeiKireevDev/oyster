@@ -17,6 +17,7 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
   recoveredOperationCount: entry("ephemeral", "startup diagnostic counter"),
   hublotStartupReconciliation: entry("rebuildable", "startup reconciliation report", "hublots"),
   sessionDeletionReconciliation: entry("rebuildable", "startup reconciliation report", "operations"),
+  hublotStartupReconciliationTask: entry("ephemeral", "in-flight asynchronous startup reconciliation"),
   hublotStartupReconciled: entry("ephemeral", "one-process reconciliation guard"),
   sessionDeletionReconciled: entry("ephemeral", "one-process reconciliation guard"),
 
@@ -47,6 +48,7 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
 export function createStableEphemeralState() {
   return {
     hublotProcessHandles: new Map(),
+    hublotStartupReconciliationTask: null,
     sseClients: new Set(),
     authFails: new Map(),
     reloadCount: 0,

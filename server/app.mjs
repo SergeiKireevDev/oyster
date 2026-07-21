@@ -24,7 +24,7 @@ export async function init(state) {
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
-  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor } = await import(bust("persistence/hublotSupervisor.mjs"));
+  const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor, scheduleHublotStartupReconciliation } = await import(bust("persistence/hublotSupervisor.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -67,7 +67,7 @@ export async function init(state) {
     jsonlRoot: SESSIONS_ROOT,
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
-  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options), recoverTunnel: (hublot) => recoverAnsweringHublotService(state, hublot), checkService: (hublot) => localPortAnswers(hublot.port), restartService: (hublot) => restartHublotService(state, hublot) }); if (!state.hublotStartupReconciled) { state.hublotStartupReconciliation = await state.hublotSupervisor.reconcile({ includeOpening: true }); state.hublotStartupReconciled = true; } state.hublotSupervisor.start();
+  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options), recoverTunnel: (hublot) => recoverAnsweringHublotService(state, hublot), checkService: (hublot) => localPortAnswers(hublot.port), restartService: (hublot) => restartHublotService(state, hublot) });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, closeSessionHublots: (id) => closeSessionHublots(state, id), deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
@@ -189,6 +189,7 @@ export async function init(state) {
     json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 
+  scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
   return {
     handleRequest, startPi, stopPi,
     stopTunnels: () => { state.hublotSupervisor?.stop(); return shutdownHublots(state); },

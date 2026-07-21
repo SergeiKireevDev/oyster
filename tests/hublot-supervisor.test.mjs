@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
-import { createHublotSupervisor } from "../server/persistence/hublotSupervisor.mjs";
+import { createHublotSupervisor, scheduleHublotStartupReconciliation } from "../server/persistence/hublotSupervisor.mjs";
 import { processIdentityMatches } from "../server/persistence/processIdentity.mjs";
 import { recordHublotTransition, reserveHublot } from "../server/tunnels.mjs";
 
@@ -174,11 +174,36 @@ test("periodic supervisor starts and stops one unrefed timer", async (t) => {
   assert.equal(supervisor.running, false);
 });
 
-test("application startup awaits one full reconciliation before periodic supervision", () => {
+test("application startup supervises immediately while full hublot reconciliation runs asynchronously", async () => {
+  const calls = [];
+  let finishReconciliation;
+  const report = { checked: 2, recoveredTunnels: 2 };
+  const reconciliation = new Promise((resolve) => { finishReconciliation = resolve; });
+  const state = {
+    hublotStartupReconciled: false,
+    hublotStartupReconciliationTask: null,
+  };
+  const supervisor = {
+    reconcile(options) { calls.push(`reconcile:${options.includeOpening}`); return reconciliation; },
+    start() { calls.push("start"); },
+  };
+
+  const task = scheduleHublotStartupReconciliation({ state, supervisor });
+
+  assert.deepEqual(calls, ["start"], "scheduling must return before reconciliation starts");
+  assert.equal(state.hublotStartupReconciled, false);
+  await Promise.resolve();
+  assert.deepEqual(calls, ["start", "reconcile:true"]);
+
+  finishReconciliation(report);
+  assert.equal(await task, report);
+  assert.equal(state.hublotStartupReconciled, true);
+  assert.equal(state.hublotStartupReconciliation, report);
+  assert.equal(state.hublotStartupReconciliationTask, null);
+
   const app = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
   const server = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
-  assert.ok(app.indexOf("await state.hublotSupervisor.reconcile({ includeOpening: true })") < app.indexOf("state.hublotSupervisor.start()"));
-  assert.match(app, /if \(!state\.hublotStartupReconciled\)/);
+  assert.doesNotMatch(app, /await scheduleHublotStartupReconciliation/);
   assert.ok(server.indexOf("await loadApp()") < server.indexOf("server.listen("));
 });
 

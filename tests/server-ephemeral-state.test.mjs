@@ -10,7 +10,7 @@ import { RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../ser
 
 const REQUIRED_EPHEMERAL = [
   "reloadCount", "sseClients", "authFails", "hublotProcessHandles",
-  "runnerWatchdogTimer", "runnerReaperTimer", "hublotSupervisor",
+  "runnerWatchdogTimer", "runnerReaperTimer", "hublotSupervisor", "hublotStartupReconciliationTask",
 ];
 
 test("reload, connection, throttle, and timer state is explicitly ephemeral and restart-local", () => {
