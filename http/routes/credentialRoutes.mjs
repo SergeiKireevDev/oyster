@@ -66,14 +66,29 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
       return;
     }
 
+    let credential;
     try {
-      const credential = remove
+      credential = remove
         ? await credentialService.removeApiKey(input.provider)
         : await credentialService.setApiKey(input.provider, input.key);
-      const restart = await restartActiveRunners();
-      json(res, 200, { credential, restart });
     } catch (error) {
       operationError(res, error);
+      return;
+    }
+
+    try {
+      const restart = await restartActiveRunners();
+      if (restart?.status === "partial") {
+        json(res, 503, { error: "credential saved but some pi runners failed to restart", credential, restart });
+        return;
+      }
+      json(res, 200, { credential, restart });
+    } catch {
+      json(res, 503, {
+        error: "credential saved but pi runners could not be restarted",
+        credential,
+        restart: { status: "failed", runnerIds: [] },
+      });
     }
   }
 

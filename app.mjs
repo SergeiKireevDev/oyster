@@ -22,6 +22,7 @@ export async function init(state) {
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs"));
+  const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor } = await import(bust("persistence/hublotSupervisor.mjs"));
@@ -117,7 +118,8 @@ export async function init(state) {
     spawnHublotAgent, ensureSessionOwner,
   });
   const credentialService = createPiCredentialService({ config });
-  const credentialRoutes = createCredentialRoutes({ requestContext, credentialService });
+  const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
+  const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,

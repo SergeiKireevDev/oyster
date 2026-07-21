@@ -138,6 +138,25 @@ test("credential mutations return safe results and restart after the durable wri
   assert.deepEqual(calls.slice(2), [["remove", "openai"], ["restart"]]);
 });
 
+test("credential routes report durable writes followed by partial restart failures", async () => {
+  const routes = createCredentialRoutes({
+    requestContext: context(),
+    credentialService: {
+      async setApiKey(provider) { return { provider, credentialType: "api_key" }; },
+    },
+    restartActiveRunners: async () => ({
+      runnerIds: ["ok", "failed"], status: "partial", failedRunnerIds: ["failed"],
+    }),
+  });
+  const res = response();
+  await routes["POST /api-keys"]({ body: { provider: "openai", key: "partial-canary", restart: true } }, res);
+  assert.equal(res.status, 503);
+  assert.equal(res.body.credential.provider, "openai");
+  assert.deepEqual(res.body.restart.failedRunnerIds, ["failed"]);
+  assert.match(res.body.error, /credential saved/);
+  assert.doesNotMatch(JSON.stringify(res.body), /partial-canary/);
+});
+
 test("credential mutations cannot write until restart lifecycle is composed", async () => {
   let wrote = false;
   const routes = createCredentialRoutes({

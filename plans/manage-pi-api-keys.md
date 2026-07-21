@@ -94,7 +94,7 @@ DELETE /api-keys    { "provider": "...", "restart": true }
   unknown provider or missing stored API key, `409` for an OAuth conflict,
   `413` for an oversized body, and `503` when the configured pi SDK/auth store
   cannot be used. Ensure errors never interpolate the submitted key.
-- [ ] Add an injectable restart-active-runners operation. After a successful
+- [x] Add an injectable restart-active-runners operation. After a successful
   credential write, capture all runners that currently own a live process,
   stop them, and restart only that captured set using the established runner
   lifecycle. Return affected runner IDs and a restart status without returning
