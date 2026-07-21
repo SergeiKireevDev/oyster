@@ -79,4 +79,16 @@ test("configuration rejects invalid stores and missing executables", () => {
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /pi executable is missing or not executable/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_DB_PATH: join(tmpdir(), "app.db") } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PI_UI_DB_PATH must name a \.sqlite file/);
+
+  const agentDir = join(tmpdir(), "shared-agent-db");
+  result = checkConfig({ args: ["--pi", process.execPath], env: {
+    PI_CODING_AGENT_DIR: agentDir,
+    PI_UI_DB_PATH: join(agentDir, "sessions.sqlite"),
+  } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must be separate from the coding-agent sessions database/);
 });

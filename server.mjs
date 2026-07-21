@@ -82,6 +82,12 @@ function validateConfig(config) {
   if (!supportedNode) {
     throw new Error(`pi-lot-ui requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
+  if (!config.PI_UI_DB_PATH.endsWith(".sqlite")) {
+    throw new Error(`PI_UI_DB_PATH must name a .sqlite file: ${config.PI_UI_DB_PATH}`);
+  }
+  if (config.SQLITE_PATH && config.PI_UI_DB_PATH === config.SQLITE_PATH) {
+    throw new Error("PI_UI_DB_PATH must be separate from the coding-agent sessions database");
+  }
   if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
     throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
   }
@@ -264,6 +270,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] pi executable: ${config.PI_BIN}`);
   console.log(`[pi-ui] session backend: ${config.PERSISTENT_STORE}`);
   if (config.SQLITE_PATH) console.log(`[pi-ui] SQLite database: ${config.SQLITE_PATH}`);
+  console.log(`[pi-ui] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);

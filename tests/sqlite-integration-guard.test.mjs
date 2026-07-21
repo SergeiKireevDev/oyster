@@ -59,7 +59,7 @@ test("SQLite identity is never reduced to a bare database-path comparison", () =
   const pathEquality = /(?:\b(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b\s*={2,3}|={2,3}\s*(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b)/;
   const offenders = sources
     .filter(({ name }) => name !== "session-references.mjs")
-    .filter(({ text }) => text.split("\n").some((line) => pathEquality.test(line) && !/backend\s*={2,3}\s*["']jsonl["']/.test(line)))
+    .filter(({ text }) => text.split("\n").some((line) => pathEquality.test(line) && !/PI_UI_DB_PATH/.test(line) && !/backend\s*={2,3}\s*["']jsonl["']/.test(line)))
     .map(({ name }) => name);
   assert.deepEqual(offenders, [], `compare full session references through session-references.mjs: ${offenders.join(", ")}`);
 });

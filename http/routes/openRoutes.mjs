@@ -26,6 +26,10 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
         runners: listRunnerInfo(),
         clients: state.sseClients.size,
         reloadCount: state.reloadCount,
+        appDatabase: {
+          path: state.appStore.path,
+          migrations: state.appStore.migrationStatus,
+        },
         pi: piDiagnostics(state),
       });
     },

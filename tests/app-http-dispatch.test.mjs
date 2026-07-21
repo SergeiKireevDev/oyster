@@ -20,6 +20,7 @@ function stableState() {
     tunnels: new Map(),
     sseClients: new Set(),
     reloadCount: 1,
+    appStore: { path: "/tmp/pi-lot-ui.sqlite", migrationStatus: { currentVersion: 1, appliedVersions: [1] } },
     broadcast() {},
     serverEvent() {},
   };
