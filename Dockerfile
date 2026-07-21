@@ -52,8 +52,9 @@ RUN mkdir -p /root/.pi/agent/extensions \
 # credential mounts, no external model calls. Production behavior is unchanged
 # unless E2E_MOCK_LLM=1 is set.
 COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
+COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 
 # Run the test suite at build time — the build fails if the repo is broken
 RUN npm test

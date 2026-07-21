@@ -1,4 +1,13 @@
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
+export function readPersistedRunner(storage, key = "pi_runner") {
+  return storage.getItem(key) || null;
+}
+
+export function persistRunner(storage, id, key = "pi_runner") {
+  if (id) storage.setItem(key, id);
+  else storage.removeItem(key);
+}
+
 export function sessionFileQuery(sessionPath) {
   const raw = String(sessionPath ?? "");
   const marker = "/.pi/agent/sessions/";

@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
+import { applySessionState, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -699,7 +699,7 @@ let workdir = null;
 // is attached to exactly one at a time. Other runners keep working in the
 // background.
 
-let currentRunner = localStorage.getItem("pi_runner") || null;
+let currentRunner = readPersistedRunner(localStorage);
 let runnersNow = []; // latest known runner list (for session indicators)
 updateAppSession({ currentRunner, runners: runnersNow });
 /** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
@@ -708,8 +708,7 @@ let afterTranscript = null;
 function setRunner(id) {
   currentRunner = id || null;
   updateAppSession({ currentRunner });
-  if (id) localStorage.setItem("pi_runner", id);
-  else localStorage.removeItem("pi_runner");
+  persistRunner(localStorage, id);
 }
 
 function setRunnersNow(runners) {
