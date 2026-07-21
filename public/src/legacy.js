@@ -36,6 +36,7 @@ import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
+import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -409,42 +410,17 @@ function pickCheckpointModel(options = {}) {
   });
 }
 
-/** keep the Svelte-owned iceberg on the latest user/assistant message */
-function placeCheckpointBtn() {
-  // Store updates render on Svelte's next flush, so wait before querying the
-  // preserved DOM selectors used by checkpoint alignment.
-  void tick().then(() => {
-    const els = chatEls();
-    setCheckpointTarget(els[els.length - 1] ?? null);
-  });
-}
-
-/** put a return arrow on every message a checkpoint is anchored to */
-async function refreshCheckpointMarkers() {
-  setCheckpointRestores([]);
-  const sid = state?.sessionId;
-  if (!sid) return;
-  const res = await fetch(`/checkpoints?id=${encodeURIComponent(sid)}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return;
-  const checkpoints = data.checkpoints ?? [];
-  if (!checkpoints.length) return;
-  const byAnchor = new Map(checkpoints.map((c) => [c.anchorId, c])); // latest per anchor wins
-  let entries;
-  try { entries = await fetchSessionEntries(); } catch { return; }
-  const els = chatEls();
-  const restores = [];
-  for (let i = 0; i < entries.length; i++) {
-    const cp = { ...byAnchor.get(entries[i].id), sessionId: sid };
-    if (!cp.hash) continue;
-    // Same zip-by-position logic as the permalinks (align from the end when
-    // the file and rendered transcript briefly disagree).
-    const pos = entries.length === els.length ? i : els.length - (entries.length - i);
-    const target = els[pos];
-    if (target) restores.push({ target, checkpoint: cp, busy: false });
-  }
-  setCheckpointRestores(restores);
-}
+const checkpointMarkerController = createCheckpointMarkerController({
+  tick,
+  chatElements: chatEls,
+  setTarget: setCheckpointTarget,
+  setRestores: setCheckpointRestores,
+  fetchImpl: fetch,
+  getSessionId: () => state?.sessionId,
+  fetchSessionEntries,
+});
+const placeCheckpointBtn = () => checkpointMarkerController.place();
+const refreshCheckpointMarkers = () => checkpointMarkerController.refresh();
 
 
 // ------------------------------------------------------------ checkpoint / fork tree sidebar
