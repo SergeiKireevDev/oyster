@@ -1,11 +1,11 @@
 "use strict";
 
 import { tick } from "svelte";
-import { get, writable } from "svelte/store";
+import { get } from "svelte/store";
 import { installAuthenticatedFetch } from "./authClient.js";
 import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
-import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./transcriptRuntime.js";
+import { createAgentCompletionController, createAgentStartController, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTranscriptAfterRenderController, createTranscriptSyncScheduler, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./transcriptRuntime.js";
 import { processEventMessage, runCanonicalReload } from "./eventStream.js";
 import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
 import { createPlatformEventDispatch } from "../platform/createPlatformEventDispatch.js";
@@ -21,6 +21,7 @@ import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
+import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
 import { createTranscriptRuntime } from "../features/transcript/createTranscriptRuntime.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
@@ -48,11 +49,7 @@ import { openOptionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
-import { shouldShowThinking, toolResultText, userMessageText } from "../lib/messageUtils.js";
-import { renderMarkdown } from "../lib/markdownRenderer.js";
-import { splitTurns, takeTailChunk } from "../lib/transcriptUtils.js";
-import { backfillTranscriptTurns } from "../lib/transcriptBackfill.js";
-import { createTranscriptActions } from "../lib/transcriptActions.js";
+import { userMessageText } from "../lib/messageUtils.js";
 import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
 import { createCheckpointFeature } from "../features/checkpoints/checkpointFeature.js";
 import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
@@ -149,107 +146,37 @@ const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handle
 
 const messagesEl = $("messages");
 const scroller = $("scroller");
-const transcriptScroll = createTranscriptScrollAdapter({ scroller });
-const nearBottom = () => transcriptScroll.nearBottom();
-const scrollToBottom = (force) => transcriptScroll.scrollToBottom(force);
-
-const toolCards = createToolCardRegistry({
-  createStore: writable,
-  resultText: toolResultText,
-});
-
-function ensureToolCardStore(toolCall) {
-  return toolCards.ensure(toolCall);
-}
-
-function finishToolCard(toolCallId, resultMsgOrText, isError) {
-  toolCards.finish(toolCallId, resultMsgOrText, isError);
-}
-
-const transcriptCallbacks = {
-  onPermalink: (el) => copyPermalink(el).catch((err) => addToast(`permalink failed: ${err.message}`, "error")),
-  onCheckpoint: handleCheckpointClick,
-  onRollback: rollbackToCheckpoint,
-};
-
-const transcriptActions = createTranscriptActions({
-  callbacks: transcriptCallbacks,
-  renderMarkdown,
-  shouldShowThinking,
-  storage: localStorage,
-  ensureToolCardStore,
-});
-
-function assistantAlreadyRendered(message) {
-  const text = transcriptActions.assistantPlainText(message);
-  if (!text) return false;
-  const needle = text.slice(0, 120);
-  return [...messagesEl.querySelectorAll('.msg.assistant')].some((el) =>
-    el.textContent.replace(/\s+/g, " ").includes(needle)
-  );
-}
-
-function mountSvelteAssistantMessage(message, role = "assistant", options = {}) {
-  return transcriptActions.addAssistant(message, role, options);
-}
-
-function updateSvelteAssistant(live, message) {
-  transcriptActions.updateAssistant(live, message);
-}
-
-function addSvelteAssistantMessage(message, role = "assistant", options = {}) {
-  mountSvelteAssistantMessage(message, role, options);
-  if (role === "assistant") placeCheckpointBtn();
-}
-
-function addSvelteCustomMessage(role, text) {
-  addSvelteAssistantMessage({ role, content: [{ type: "text", text }] }, role || "custom");
-}
-
-const assistantStream = createAssistantStream({
-  mount: (message) => mountSvelteAssistantMessage(message),
-  update: updateSvelteAssistant,
-  finish: (message) => addSvelteAssistantMessage(message),
-});
-
-function addUserMessage(message, options = {}) {
-  const text = userMessageText(message);
-  transcriptActions.addUser(text, options);
-  if (/^Opening interface: /.test(text)) {
-    scrollToBottom(true);
-    return;
-  }
-  placeCheckpointBtn();
-  if (!transcriptRenderer?.backfilling) {
-    scrollToBottom(true);
-    rememberPrompt(text); // bulk renders prefill history in chronological order
-  }
-}
-
 // Prompts sent in this session (replayed + live), for ↑/↓ recall in the composer.
 let composerHistory;
 const rememberPrompt = (text) => composerHistory.remember(text);
 
-// Texts we already rendered locally on send; pi echoes each prompt back as a
-// user message_start, which must not be rendered a second time.
-const localEchoes = [];
-const handleTranscriptStreamEvent = createTranscriptStreamEventHandler({
-  assistantStream,
-  userMessageText,
-  consumeLocalEcho: (text) => {
-    const index = localEchoes.indexOf(text);
-    if (index === -1) return false;
-    localEchoes.splice(index, 1);
-    return true;
-  },
-  addUserMessage,
+const transcriptAssembly = createTranscriptAssembly({
+  messagesElement: messagesEl,
+  scroller,
+  storage: localStorage,
+  tick,
+  log: lifecycleLog,
+  toast: addToast,
+  copyPermalink: (element) => copyPermalink(element),
+  handleCheckpoint: (event) => handleCheckpointClick(event),
+  rollbackCheckpoint: (checkpoint, target) => rollbackToCheckpoint(checkpoint, target),
+  placeCheckpoint: () => placeCheckpointBtn(),
+  rememberPrompt,
+  clearComposerHistory: () => composerHistory.clear(),
   updateUsage: (message) => updateUsage(message),
-  finishToolCard,
-  startToolCard: (id) => toolCards.start(id),
-  updateToolCard: (id, result) => toolCards.updateResult(id, result),
-  toolResultText,
-  scrollToBottom,
+  clearCheckpointState: () => {
+    setCheckpointTarget(null);
+    setCheckpointRestores([]);
+  },
+  resetTranscriptItems,
 });
+const transcriptScroll = transcriptAssembly.domAdapter;
+const addUserMessage = transcriptAssembly.addUserMessage;
+const assistantAlreadyRendered = transcriptAssembly.assistantAlreadyRendered;
+const clearMessages = transcriptAssembly.clearMessages;
+const handleTranscriptStreamEvent = transcriptAssembly.handleStreamEvent;
+const renderFullMessage = transcriptAssembly.renderFullMessage;
+const renderTranscript = transcriptAssembly.renderTranscript;
 
 // ------------------------------------------------------------ checkpoints
 //
@@ -285,72 +212,6 @@ const detachCheckpointTreeActions = configureCheckpointTreeActions({
   openSession: (...args) => checkpointTreeController.openTreeSession(...args),
   rollback: (checkpoint, target) => checkpointController.rollback(checkpoint, target),
 });
-
-function renderFullMessage(message, options = {}) {
-  const role = message.role;
-  if (role === "user") { addUserMessage(message, options); return; }
-  if (role === "assistant") { addSvelteAssistantMessage(message, role, options); return; }
-  if (role === "toolResult") {
-    if (toolCards.has(message.toolCallId)) {
-      finishToolCard(message.toolCallId, message, message.isError);
-    }
-    return;
-  }
-  // custom messages (extensions etc.) — show generically if they carry text
-  if (message.content) {
-    const text = toolResultText(message);
-    if (text) addSvelteAssistantMessage({ role: message.role, content: [{ type: "text", text }] }, message.role || "custom", options);
-  }
-}
-
-function clearMessages() {
-  transcriptRenderer?.cancel(); // cancel any in-flight transcript backfill
-  setCheckpointTarget(null);
-  setCheckpointRestores([]);
-  resetTranscriptItems();
-  toolCards.clear();
-  assistantStream.clear();
-  composerHistory.clear();
-}
-
-// ---- transcript rendering: tail first, history backfilled above -----------
-// The viewport is pinned to the BOTTOM, so only the newest turns need to be
-// on screen immediately. renderTranscript() renders those synchronously and
-// then backfills older turns in chunks: each chunk is rendered through the
-// normal (appending) helpers and moved above the existing content within the
-// same task — before the browser paints — with a scrollTop correction, so
-// the visible area never moves. Chunks split at user messages only, keeping
-// toolCall/toolResult pairs (which finish each other's cards) together.
-
-let transcriptRenderer;
-transcriptRenderer = createTailFirstTranscriptRenderer({
-  messagesElement: messagesEl,
-  scroller,
-  splitTurns,
-  takeTailChunk,
-  backfillTurns: backfillTranscriptTurns,
-  renderMessage: renderFullMessage,
-  clear: clearMessages,
-  rememberPrompt,
-  userMessageText,
-  scrollToBottom,
-  nearBottom,
-  tick,
-  afterRender: () => placeCheckpointBtn(),
-});
-
-/** Render `messages`; resolves true when the FULL transcript is in the DOM
- *  (false if superseded by a newer render). */
-async function renderTranscript(messages) {
-  lifecycleLog("renderTranscript:start", { messages: messages?.length ?? 0 });
-  const complete = await transcriptRenderer.render(messages);
-  if (!complete) {
-    lifecycleLog("renderTranscript:superseded", { activeJob: transcriptRenderer.currentJob });
-    return false;
-  }
-  lifecycleLog("renderTranscript:complete", { domMessages: transcriptRenderer.messageCount });
-  return true;
-}
 
 // ------------------------------------------------------------ state / header
 
@@ -562,7 +423,7 @@ const schedulePostAgentTranscriptSync = () => postAgentTranscriptSyncController.
 const agentStart = createAgentStartController({ setBusy });
 const agentCompletion = createAgentCompletionController({
   setBusy,
-  clearAssistant: () => assistantStream.clear(),
+  clearAssistant: transcriptAssembly.clearAssistant,
   refreshState,
   scheduleSync: schedulePostAgentTranscriptSync,
 });
@@ -706,7 +567,7 @@ async function send() {
   input.style.height = "auto";
   setBusy(sessionUi.busy); // hide the Steer button again
   addUserMessage({ role: "user", content: text });
-  localEchoes.push(text);
+  transcriptAssembly.addLocalEcho(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
     // Cloudflare/EventSource can occasionally stall live SSE delivery. Poll the
@@ -714,8 +575,7 @@ async function send() {
     // fast first response appears without a manual refresh.
     schedulePostSendFileTranscriptSync(text);
   } catch (e) {
-    const idx = localEchoes.indexOf(text);
-    if (idx !== -1) localEchoes.splice(idx, 1);
+    transcriptAssembly.removeLocalEcho(text);
     addToast(`send failed: ${e.message}`, "error");
   }
 }
@@ -1054,12 +914,11 @@ const detachFolderBrowserActions = configureFolderBrowserActions({
 /** Send a message to the agent as if typed in the composer. */
 async function sendAgentMessage(text) {
   addUserMessage({ role: "user", content: text });
-  localEchoes.push(text);
+  transcriptAssembly.addLocalEcho(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
   } catch (e) {
-    const idx = localEchoes.indexOf(text);
-    if (idx !== -1) localEchoes.splice(idx, 1);
+    transcriptAssembly.removeLocalEcho(text);
     addToast(`send failed: ${e.message}`, "error");
   }
 }
