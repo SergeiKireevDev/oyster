@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -1933,24 +1933,7 @@ async function focusSearchHit(hit) {
   if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
 }
 
-function focusMessageBySnippet(snippet) {
-  const norm = (s) => s.replace(/\s+/g, " ").trim();
-  const full = norm(snippet.before.replace(/^…/, "") + snippet.match + snippet.after.replace(/…$/, ""));
-  // longest needle first; fall back to just the matched text
-  const needles = [full, norm(snippet.match)].filter(Boolean);
-  const els = [...messagesEl.children];
-  for (const needle of needles) {
-    const el = els.find((e) => norm(e.textContent).includes(needle));
-    if (!el) continue;
-    // open any collapsed tool cards that contain the match so it is visible
-    for (const det of el.querySelectorAll("details")) {
-      if (norm(det.textContent).includes(needle)) det.open = true;
-    }
-    flashEl(el);
-    return true;
-  }
-  return false;
-}
+const focusMessageBySnippet = (snippet) => focusTranscriptSnippet([...messagesEl.children], snippet, { flash: flashEl });
 
 const flashEl = flashTranscriptElement;
 

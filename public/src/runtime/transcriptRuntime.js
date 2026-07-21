@@ -96,6 +96,19 @@ export function createPermalinkController({ getSessionId, getEntryId, getOrigin,
   };
 }
 
+/** Find and reveal a rendered transcript message containing a search snippet. */
+export function focusTranscriptSnippet(elements, snippet, { normalize = (value) => value.replace(/\s+/g, " ").trim(), flash } = {}) {
+  const full = normalize(snippet.before.replace(/^…/, "") + snippet.match + snippet.after.replace(/…$/, ""));
+  for (const needle of [full, normalize(snippet.match)].filter(Boolean)) {
+    const element = elements.find((candidate) => normalize(candidate.textContent).includes(needle));
+    if (!element) continue;
+    for (const details of element.querySelectorAll("details")) if (normalize(details.textContent).includes(needle)) details.open = true;
+    flash(element);
+    return true;
+  }
+  return false;
+}
+
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -21,6 +21,14 @@ test("transcript sync scheduler retries during replay before reloading", async (
   timers.shift()[0]();
   await Promise.resolve();
   assert.equal(reloads, 1);
+});
+
+test("transcript snippet focus reveals matching nested details", () => {
+  let flashed; const details = { textContent: "needle", open: false };
+  const element = { textContent: "a needle b", querySelectorAll: () => [details] };
+  assert.equal(focusTranscriptSnippet([element], { before: "", match: "needle", after: "" }, { flash: (target) => { flashed = target; } }), true);
+  assert.equal(details.open, true);
+  assert.equal(flashed, element);
 });
 
 test("permalink controller copies an entry URL", async () => {
