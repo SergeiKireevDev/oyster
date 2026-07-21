@@ -28,6 +28,7 @@ import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
+import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -1306,18 +1307,13 @@ async function reloadTranscript() {
   // available. Existing sessions can have a slow transcript replay/resume;
   // the header/composer/session-scoped sidebars should still converge without
   // waiting for the full message list to render.
-  const statePromise = rpc({ type: "get_state" });
-  const messagesPromise = rpc({ type: "get_messages" });
-  const stateApplied = statePromise.then((s) => {
-    lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null });
-    applyState(s);
-    return s;
+  const { messages } = await loadCanonicalTranscript({
+    getState: () => rpc({ type: "get_state" }),
+    getMessages: () => rpc({ type: "get_messages" }),
+    applyState,
+    onState: (s) => lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null }),
+    onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
   });
-  const messagesDone = messagesPromise.then((result) => {
-    lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 });
-    return result;
-  });
-  const [{ messages }] = await Promise.all([messagesDone, stateApplied]);
   lastPreview = null; // canonical content from pi supersedes the file preview
   const rendered = renderTranscript(messages); // tail is in the DOM after this call
   lifecycleLog("reloadTranscript:tail-rendered", { ms: Math.round(performance.now() - started), messages: messages.length });
