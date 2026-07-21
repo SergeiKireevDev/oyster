@@ -1,4 +1,4 @@
-export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, isVisible, updateManager, getScopeAll, getDescription }) {
+export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, isVisible, updateManager, getScopeAll, getDescription }) {
   async function create(description) {
     const text = (description ?? "").trim();
     setDescription(description ?? "");
@@ -13,5 +13,13 @@ export function createHublotController({ createHublot, getSessionId, setDescript
     try { const tunnels = await listHublots(); updateManager({ loading: false, tunnels: tunnels.filter(isVisible), total: tunnels.length, ...common }); }
     catch (error) { updateManager({ loading: false, tunnels: [], total: 0 }); toast(`failed to list hublots: ${error.message}`, "error"); }
   }
-  return { create, refresh };
+  async function refreshSidebar() {
+    if (!isAuthenticated()) return;
+    setSidebarLoading(true);
+    let tunnels = [];
+    try { tunnels = await listSidebarHublots(); } catch { /* sidebar is best-effort */ }
+    setSidebarTunnels(tunnels);
+    setSidebarLoading(false);
+  }
+  return { create, refresh, refreshSidebar };
 }

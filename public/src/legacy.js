@@ -1752,6 +1752,10 @@ const hublotController = createHublotController({
   close: closeModal,
   toast,
   listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
+  listSidebarHublots: () => listHublots(fetch, tunnelVisible),
+  isAuthenticated: () => Boolean(token),
+  setSidebarLoading: (loading) => hublotsLoading.set(loading),
+  setSidebarTunnels: (tunnels) => hublots.set(tunnels),
   isVisible: tunnelVisible,
   updateManager: updateHublotManager,
   getScopeAll: () => tunnelScopeAll,
@@ -1796,16 +1800,7 @@ registerMobileDrawerDismiss(document, {
   },
 });
 
-async function loadHublots() {
-  if (!token) return;
-  hublotsLoading.set(true);
-  let tunnels = [];
-  try {
-    tunnels = await listHublots(fetch, tunnelVisible);
-  } catch { /* sidebar is best-effort */ }
-  hublots.set(tunnels);
-  hublotsLoading.set(false);
-}
+const loadHublots = hublotController.refreshSidebar;
 
 registerOpenFileExplorerEvent(window, { open: () => showFileExplorer().catch((e) => toast(e.message, "error")) });
 
