@@ -191,6 +191,61 @@ export function init(state) {
   assert.equal(await readFile(marker, "utf8"), "callback-before-close");
 });
 
+test("hublot identity, ownership, desired state, and history survive server replacement", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-ui-hublot-server-restart-"));
+  const port = await availablePort();
+  await copyStableServer(root);
+  await writeFile(join(root, "app.mjs"), `
+export function init(state) {
+  const sessions = state.appStore.repositories.sessions;
+  const hublots = state.appStore.repositories.hublots;
+  return {
+    async handleRequest(req, res) {
+      if (req.method === "POST" && !hublots.find("persistent-hublot")) {
+        const owner = sessions.upsert({ backend: "jsonl", sessionId: "owned-session", storagePath: "/sessions/owned.jsonl", createdAt: "owner-created" });
+        hublots.create({ id: "persistent-hublot", ownerId: owner.id, port: 4173, label: "preview", brief: "durable preview", workdir: "/workspace", serviceKind: "self_served", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "created", openedAt: "opened" });
+        hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "opening", desiredState: "open", createdAt: "event-1" });
+        hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "event-2" });
+      }
+      const hublot = hublots.find("persistent-hublot");
+      const history = hublot ? hublots.listLifecycleEvents(hublot.id) : [];
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ hublot, history }));
+    },
+    startPi() {}, stopPi() {}, stopTunnels() {}, stopRoutines() {},
+  };
+}
+`);
+  let child;
+  t.after(async () => {
+    if (child?.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+  const start = async () => {
+    const serverProcess = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+      cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+    });
+    await waitForOutput(serverProcess, "listening on");
+    return serverProcess;
+  };
+
+  child = await start();
+  const createdResponse = await fetch(`http://127.0.0.1:${port}/`, { method: "POST" });
+  const before = await createdResponse.json();
+  child.kill("SIGTERM");
+  await once(child, "exit");
+
+  child = await start();
+  const after = await readJson(port);
+  assert.deepEqual(after, before);
+  assert.equal(after.hublot.id, "persistent-hublot");
+  assert.equal(after.hublot.session_id, "owned-session");
+  assert.equal(after.hublot.desired_state, "open");
+  assert.deepEqual(after.history.map(({ sequence, status, desired_state }) => [sequence, status, desired_state]), [
+    [1, "opening", "open"], [2, "open", "open"],
+  ]);
+});
+
 test("an open SSE response survives an application reload and receives the state-owned broadcast", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-sse-"));
   const port = await availablePort();
