@@ -13,6 +13,7 @@ import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createRuntimeTeardown } from "./runtime/teardownController.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
+import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1873,33 +1874,21 @@ const debugHookRegistration = installDebugHooks(window, {
 /** URL-driven boot: /s/<sessionId> attaches to that session's runner before
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
-async function boot() {
-  lifecycleLog("boot:start", { routeSessionId: route.sessionId, routeMessageId: route.messageId, storedRunner: currentRunner });
-  if (route.sessionId) {
-    try {
-      const lookupStarted = performance.now();
-      lifecycleLog("boot:session-lookup:start", { routeSessionId: route.sessionId });
-      const res = await fetch(`/session-by-id?id=${encodeURIComponent(route.sessionId)}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
-      lifecycleLog("boot:session-lookup:done", { status: res.status, sessionPath: data.session?.path, cwd: data.session?.cwd, ms: Math.round(performance.now() - lookupStarted) });
-      const r = await getSessionRuntime().openInitialSession({
-        sessionPath: data.session.path,
-        dir: data.session.cwd || null,
-      });
-      lifecycleLog("boot:set-runner", { runner: r.id });
-      if (route.messageId) {
-        const mid = route.messageId;
-        afterTranscript = () => focusEntryById(mid);
-      }
-    } catch (e) {
-      lifecycleLog("boot:error", { error: e?.message ?? String(e) });
-      addToast(`could not open linked session: ${e.message}`, "warning");
-    }
-  }
-  lifecycleLog("boot:connect");
-  connect();
-}
+const boot = createSessionBootController({
+  route,
+  lookupSession: async (sessionId) => {
+    const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
+    return data.session;
+  },
+  openInitialSession: (options) => getSessionRuntime().openInitialSession(options),
+  setAfterTranscript: (callback) => { afterTranscript = callback; },
+  focusEntry: focusEntryById,
+  connect,
+  log: lifecycleLog,
+  toast: addToast,
+});
 
 const runtimeTeardown = createRuntimeTeardown([
   () => eventStream.close(), () => { es = null; }, disposeRpcClient, teardownReconnectWatchdog,
