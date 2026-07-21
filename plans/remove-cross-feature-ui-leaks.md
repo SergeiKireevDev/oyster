@@ -41,7 +41,7 @@ cd tests/e2e && npm test
 - [x] Add names for file-picker, folder-browser, file-explorer, hublot, and
   routine UI actions to `runtime/uiActionNames.js`. Add registry tests covering
   namespaced registration, replacement, and unregistration.
-- [ ] Make `createResourceAssembly()` accept the scoped UI action registry and
+- [x] Make `createResourceAssembly()` accept the scoped UI action registry and
   register its existing file-picker handlers. Return their unregister functions
   from resource teardown without changing any component yet.
 - [ ] Change `FilePickerModal.svelte` to invoke the scoped file-picker actions,

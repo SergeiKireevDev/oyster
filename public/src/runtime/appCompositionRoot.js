@@ -394,6 +394,7 @@ const detachComposerActions = () => composerAssembly.teardown();
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
 const resourceAssembly = createResourceAssembly({
+  uiActions,
   files: {
   pickerState: () => ({ curDir: "", showHidden: true, onPick: composerOperations.insertText, onCancel: null, returnToHublot: false }),
   folderState: () => ({ browsePath: "", showHidden: true, done: null }),

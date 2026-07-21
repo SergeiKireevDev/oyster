@@ -7,6 +7,12 @@ import { configureFileExplorerActions } from "../files/fileExplorerActions.js";
 import { configureFilesActions } from "../files/filesActions.js";
 import { configureHublotActions } from "../hublots/hublotActions.js";
 import { configureRoutineActions } from "../routines/routineActions.js";
+import {
+  FILE_PICKER_BROWSE_ACTION,
+  FILE_PICKER_CANCEL_ACTION,
+  FILE_PICKER_CHOOSE_ACTION,
+  FILE_PICKER_USE_FOLDER_ACTION,
+} from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
 export function createResourceAssembly(deps) {
@@ -48,6 +54,10 @@ export function createResourceAssembly(deps) {
     configureActions(actions) {
       if (actionDetachers.length) return;
       actionDetachers.push(
+        deps.uiActions.register(FILE_PICKER_BROWSE_ACTION, actions.filePicker.browse),
+        deps.uiActions.register(FILE_PICKER_CHOOSE_ACTION, actions.filePicker.pick),
+        deps.uiActions.register(FILE_PICKER_USE_FOLDER_ACTION, actions.filePicker.useFolder),
+        deps.uiActions.register(FILE_PICKER_CANCEL_ACTION, actions.filePicker.cancel),
         configureFilePickerActions(actions.filePicker),
         configureFolderBrowserActions(actions.folderBrowser),
         configureFileExplorerActions(actions.fileExplorer),
