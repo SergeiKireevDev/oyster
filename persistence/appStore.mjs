@@ -187,6 +187,11 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         const row = database.prepare("SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC, id DESC LIMIT 1").get(routineId);
         return row ? { ...row } : null;
       },
+      interruptUnfinishedRuns: (finishedAt, error = "server restarted before the routine process finished") => database.prepare(`
+        UPDATE routine_runs
+        SET status = 'interrupted', finished_at = ?, error = COALESCE(error, ?)
+        WHERE finished_at IS NULL
+      `).run(finishedAt, error).changes,
       appendLog: (runId, stream, text, createdAt, limit = 80) => {
         if (!Number.isInteger(limit) || limit < 1) throw new Error("routine log limit must be a positive integer");
         database.exec("BEGIN IMMEDIATE");
@@ -245,6 +250,10 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     return transaction(() => repositories.operations.markRunningInterrupted(now));
   }
 
+  function reconcileInterruptedRoutineRuns(now = new Date().toISOString()) {
+    return transaction(() => repositories.routines.interruptUnfinishedRuns(now));
+  }
+
   function hydrate() {
     if (closed) throw new Error("application database is closed");
     return Object.freeze({
@@ -264,6 +273,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     migrationStatus,
     transaction,
     reconcileInterruptedOperations,
+    reconcileInterruptedRoutineRuns,
     hydrate,
     flush,
     get closed() { return closed; },

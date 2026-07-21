@@ -148,6 +148,7 @@ if (process.argv.includes("--check-config")) {
 // same service through state rather than creating their own connections.
 const appStore = openAppStore({ databasePath: config.PI_UI_DB_PATH });
 const recoveredOperationCount = appStore.reconcileInterruptedOperations();
+const interruptedRoutineRunCount = appStore.reconcileInterruptedRoutineRuns();
 const appHydration = appStore.hydrate();
 
 const state = {
@@ -277,6 +278,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] session backend: ${config.PERSISTENT_STORE}`);
   if (config.SQLITE_PATH) console.log(`[pi-ui] SQLite database: ${config.SQLITE_PATH}`);
   console.log(`[pi-ui] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);
+  if (interruptedRoutineRunCount) console.log(`[pi-ui] reconciled ${interruptedRoutineRunCount} interrupted routine run(s)`);
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
