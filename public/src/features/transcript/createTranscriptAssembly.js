@@ -2,14 +2,21 @@ import { writable } from "svelte/store";
 import { renderMarkdown } from "../../lib/markdownRenderer.js";
 import { shouldShowThinking, toolResultText, userMessageText } from "../../lib/messageUtils.js";
 import { backfillTranscriptTurns } from "../../lib/transcriptBackfill.js";
+import { createPostSendTranscriptSyncController } from "../../lib/postSendTranscriptSyncController.js";
 import { createTranscriptActions } from "../../lib/transcriptActions.js";
 import { splitTurns, takeTailChunk } from "../../lib/transcriptUtils.js";
 import {
+  createAgentCompletionController,
+  createAgentStartController,
   createAssistantStream,
+  createCanonicalTranscriptController,
+  createDebouncedTranscriptSyncController,
   createTailFirstTranscriptRenderer,
   createToolCardRegistry,
+  createTranscriptAfterRenderController,
   createTranscriptScrollAdapter,
   createTranscriptStreamEventHandler,
+  createTranscriptSyncScheduler,
 } from "../../runtime/transcriptRuntime.js";
 
 /** Owns transcript rendering, stream assembly, local echoes, and DOM scrolling. */
@@ -17,6 +24,8 @@ export function createTranscriptAssembly(deps) {
   const transcriptScroll = createTranscriptScrollAdapter({ scroller: deps.scroller });
   const toolCards = createToolCardRegistry({ createStore: writable, resultText: toolResultText });
   const localEchoes = [];
+  let afterTranscript = null;
+  let synchronization = null;
 
   const transcriptActions = createTranscriptActions({
     callbacks: {
@@ -123,8 +132,67 @@ export function createTranscriptAssembly(deps) {
     return true;
   }
 
+  function configureSynchronization(syncDeps) {
+    if (synchronization) return synchronization;
+    const afterRender = createTranscriptAfterRenderController({
+      annotate: syncDeps.annotate,
+      refreshCheckpointMarkers: syncDeps.refreshCheckpointMarkers,
+      refreshTree: syncDeps.refreshTree,
+      takeAfterTranscript: () => {
+        const callback = afterTranscript;
+        afterTranscript = null;
+        return callback;
+      },
+    });
+    const reloadTranscript = createCanonicalTranscriptController({
+      rpc: syncDeps.rpc,
+      applyState: syncDeps.applyState,
+      fetchImpl: syncDeps.fetchImpl,
+      sessionFileQuery: syncDeps.sessionFileQuery,
+      clearPreview: syncDeps.clearPreview,
+      log: syncDeps.log,
+      render: renderTranscript,
+      setReplaying: syncDeps.setReplaying,
+      takeBufferedEvents: syncDeps.takeBufferedEvents,
+      flushBufferedEvents: syncDeps.flushBufferedEvents,
+      afterRender,
+    });
+    const scheduler = createTranscriptSyncScheduler({
+      isReplaying: syncDeps.isReplaying,
+      hasRunner: syncDeps.hasRunner,
+      reload: reloadTranscript,
+      onError: syncDeps.onSyncError,
+    });
+    const postAgentSync = createDebouncedTranscriptSyncController({ schedule: scheduler.schedule });
+    const agentStart = createAgentStartController({ setBusy: syncDeps.setBusy });
+    const agentCompletion = createAgentCompletionController({
+      setBusy: syncDeps.setBusy,
+      clearAssistant: () => assistantStream.clear(),
+      refreshState: syncDeps.refreshState,
+      scheduleSync: () => postAgentSync.schedule(),
+    });
+    const postSendSync = createPostSendTranscriptSyncController({
+      getRunner: syncDeps.getRunner,
+      getSessionFile: syncDeps.getSessionFile,
+      fetchImpl: syncDeps.fetchImpl,
+      sessionFileQuery: syncDeps.sessionFileQuery,
+      userMessageText,
+      renderTranscript,
+      log: syncDeps.logPostSend,
+    });
+    synchronization = {
+      reloadTranscript,
+      syncTranscriptSoon: scheduler.schedule,
+      agentStart,
+      agentCompletion,
+      schedulePostSendFileTranscriptSync: postSendSync.schedule,
+    };
+    return synchronization;
+  }
+
   return {
     domAdapter: transcriptScroll,
+    configureSynchronization,
     addUserMessage,
     assistantAlreadyRendered(message) {
       const text = transcriptActions.assistantPlainText(message);
@@ -144,9 +212,12 @@ export function createTranscriptAssembly(deps) {
       if (index !== -1) localEchoes.splice(index, 1);
     },
     scrollToBottom: (force) => transcriptScroll.scrollToBottom(force),
+    setAfterTranscript: (callback) => { afterTranscript = callback; },
     teardown() {
       renderer.cancel();
       localEchoes.length = 0;
+      afterTranscript = null;
+      synchronization = null;
       toolCards.clear();
       assistantStream.clear();
       renderer = null;

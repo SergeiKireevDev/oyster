@@ -49,3 +49,37 @@ test("transcript assembly owns DOM, stream, action, tool-card, and renderer cons
   assembly.removeLocalEcho("hello");
   assembly.teardown();
 });
+
+test("transcript assembly owns reload and synchronization controller construction", () => {
+  const assembly = createTranscriptAssembly(createDependencies());
+  const synchronization = assembly.configureSynchronization({
+    rpc: async () => ({}),
+    applyState() {},
+    fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [] }) }),
+    sessionFileQuery: (path) => `path=${path}`,
+    clearPreview() {},
+    log() {},
+    setReplaying() {},
+    takeBufferedEvents: () => [],
+    flushBufferedEvents() {},
+    annotate() {},
+    refreshCheckpointMarkers() {},
+    refreshTree() {},
+    isReplaying: () => false,
+    hasRunner: () => true,
+    onSyncError() {},
+    setBusy() {},
+    refreshState: async () => {},
+    getRunner: () => "runner",
+    getSessionFile: () => "/tmp/session.jsonl",
+    logPostSend() {},
+  });
+
+  assert.equal(typeof synchronization.reloadTranscript, "function");
+  assert.equal(typeof synchronization.syncTranscriptSoon, "function");
+  assert.equal(typeof synchronization.agentStart, "function");
+  assert.equal(typeof synchronization.agentCompletion, "function");
+  assert.equal(typeof synchronization.schedulePostSendFileTranscriptSync, "function");
+  assert.equal(assembly.configureSynchronization({}), synchronization);
+  assembly.teardown();
+});

@@ -5,7 +5,6 @@ import { get } from "svelte/store";
 import { installAuthenticatedFetch } from "./authClient.js";
 import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
-import { createAgentCompletionController, createAgentStartController, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createTranscriptAfterRenderController, createTranscriptSyncScheduler, loadDurableCanonicalTranscript, reconcileTranscriptReload } from "./transcriptRuntime.js";
 import { processEventMessage, runCanonicalReload } from "./eventStream.js";
 import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
 import { createPlatformEventDispatch } from "../platform/createPlatformEventDispatch.js";
@@ -49,14 +48,12 @@ import { openOptionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
-import { userMessageText } from "../lib/messageUtils.js";
 import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
 import { createCheckpointFeature } from "../features/checkpoints/checkpointFeature.js";
 import { configureCheckpointTreeActions } from "../features/checkpoints/checkpointTreeActions.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "../lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createMenuEventController, createCommandPaletteRunController, moveCommandPaletteActive } from "../lib/commandController.js";
 import { promptCommand } from "../lib/promptActions.js";
-import { createPostSendTranscriptSyncController } from "../lib/postSendTranscriptSyncController.js";
 import { insertionAtCaret, insertionReplacing } from "../lib/textInsertion.js";
 import { createComposerHistoryController } from "../lib/composerHistoryController.js";
 import { configureComposerActions } from "../features/composer/composerActions.js";
@@ -251,7 +248,6 @@ let currentRunner = runnerState.currentRunner;
 let runnersNow = runnerState.runners; // latest known runner list (for session indicators)
 updateAppSession({ currentRunner, runners: runnersNow });
 /** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
-let afterTranscript = null;
 
 function setRunner(id) {
   currentRunner = runnerState.setRunner(id);
@@ -384,98 +380,37 @@ platformEvents = createPlatformEventDispatch({
 });
 const flushReplayBufferedEvents = platformEvents.flushBufferedEvents;
 
-const afterTranscriptRender = createTranscriptAfterRenderController({
-  annotate: () => annotateTranscriptEntries(),
-  refreshCheckpointMarkers,
-  refreshTree: refreshTreeIfOpen,
-  takeAfterTranscript: () => {
-    const callback = afterTranscript;
-    afterTranscript = null;
-    return callback;
-  },
-});
-
-const reloadTranscript = createCanonicalTranscriptController({
+const transcriptSynchronization = transcriptAssembly.configureSynchronization({
   rpc,
   applyState,
   fetchImpl: fetch,
   sessionFileQuery,
   clearPreview: previewController.clear,
   log: lifecycleLog,
-  render: renderTranscript,
   setReplaying,
   takeBufferedEvents: platformEvents.takeBufferedEvents,
   flushBufferedEvents: flushReplayBufferedEvents,
-  afterRender: afterTranscriptRender,
-});
-
-const transcriptSyncScheduler = createTranscriptSyncScheduler({
+  annotate: () => annotateTranscriptEntries(),
+  refreshCheckpointMarkers,
+  refreshTree: refreshTreeIfOpen,
   isReplaying: () => platformEvents.isReplaying(),
   hasRunner: () => Boolean(currentRunner),
-  reload: reloadTranscript,
-  onError: (label, error) => {
+  onSyncError: (label, error) => {
     if (!String(error.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, error);
   },
-});
-const postAgentTranscriptSyncController = createDebouncedTranscriptSyncController({ schedule: transcriptSyncScheduler.schedule });
-const syncTranscriptSoon = transcriptSyncScheduler.schedule;
-const schedulePostAgentTranscriptSync = () => postAgentTranscriptSyncController.schedule();
-const agentStart = createAgentStartController({ setBusy });
-const agentCompletion = createAgentCompletionController({
   setBusy,
-  clearAssistant: transcriptAssembly.clearAssistant,
   refreshState,
-  scheduleSync: schedulePostAgentTranscriptSync,
-});
-const postSendTranscriptSyncController = createPostSendTranscriptSyncController({
   getRunner: () => currentRunner,
   getSessionFile: () => state?.sessionFile,
-  fetchImpl: fetch,
-  sessionFileQuery,
-  userMessageText,
-  renderTranscript,
-  log: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
+  logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
-const schedulePostSendFileTranscriptSync = (expectedUserText) => postSendTranscriptSyncController.schedule(expectedUserText);
-
-/*function schedulePostSendFileTranscriptSync(expectedUserText) {
-  clearTimeout(postSendFileSyncTimer);
-  const runnerId = currentRunner;
-  let sessionFile = state?.sessionFile || null;
-  const started = Date.now();
-  const tick = async () => {
-    try {
-      if (!sessionFile && runnerId) {
-        const runnersRes = await fetch(`/runners`);
-        if (runnersRes.ok) {
-          const runnersData = await runnersRes.json();
-          sessionFile = (runnersData.runners ?? []).find((r) => r.id === runnerId)?.sessionFile || null;
-        }
-      }
-      if (sessionFile && runnerId === currentRunner) {
-        const res = await fetch(`/session-messages?${sessionFileQuery(sessionFile)}`);
-        if (!res.ok && res.status >= 400 && res.status < 500) {
-          lifecycleLog("postSendFileSync:session-messages:stop", { status: res.status, sessionFile });
-          return;
-        }
-        if (res.ok) {
-          const data = await res.json();
-          const messages = Array.isArray(data.messages) ? data.messages : [];
-          const sawUser = messages.some((m) => m.role === "user" && userMessageText(m) === expectedUserText);
-          const sawAssistantAfterUser = sawUser && messages.some((m, i) =>
-            m.role === "assistant" && messages.slice(0, i).some((prev) => prev.role === "user" && userMessageText(prev) === expectedUserText)
-          );
-          if (sawAssistantAfterUser) {
-            renderTranscript(messages);
-            return;
-          }
-        }
-      }
-    } catch {}
-    if (Date.now() - started < 15000 && runnerId === currentRunner) postSendFileSyncTimer = setTimeout(tick, 750);
-  };
-  postSendFileSyncTimer = setTimeout(tick, 750);
-}*/
+const {
+  reloadTranscript,
+  syncTranscriptSoon,
+  agentStart,
+  agentCompletion,
+  schedulePostSendFileTranscriptSync,
+} = transcriptSynchronization;
 
 const refreshStateNow = createSessionStateRefresher({
   rpc: async (request) => {
@@ -1140,7 +1075,7 @@ const sessionPickerRuntime = createSessionPickerRuntime({
   setWorkdir,
   reloadTranscript,
   focusSearchHit,
-  setAfterTranscript: (callback) => { afterTranscript = callback; },
+  setAfterTranscript: transcriptAssembly.setAfterTranscript,
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
 });
 const showSessionPicker = sessionPickerRuntime.show;
@@ -1264,7 +1199,7 @@ const boot = createSessionBootController(createSessionBootDependencies({
     return data.session;
   },
   openInitialSession: (options) => getSessionRuntime().openInitialSession(options),
-  setAfterTranscript: (callback) => { afterTranscript = callback; },
+  setAfterTranscript: transcriptAssembly.setAfterTranscript,
   focusEntry: focusEntryById,
   connect,
   log: lifecycleLog,
