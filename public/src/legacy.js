@@ -4,6 +4,7 @@ import { tick } from "svelte";
 import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
+import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -920,9 +921,7 @@ let replaying = true;
 let replayDoneSeen = false;
 let replayBufferedEvents = [];
 let transcriptGateRequired = true;
-const seenSseIds = new Set();
-const seenSseIdQueue = [];
-const SEEN_SSE_ID_MAX = 2000;
+const dedupeSseEvent = createSseDeduper();
 const emptySessionRunners = new Set();
 updateAppSession({ replayingTranscript: true, transcriptLoadPhase: "replay", transcriptGateRequired });
 function setTranscriptGateRequired(value) {
@@ -930,18 +929,9 @@ function setTranscriptGateRequired(value) {
   updateAppSession({ transcriptGateRequired });
 }
 function isDuplicateSseEvent(msg) {
-  const id = msg?._sseId;
-  if (!id) return false;
-  if (seenSseIds.has(id)) {
-    lifecycleLog("sse:duplicate", { type: msg?.type, sseId: id });
-    return true;
-  }
-  seenSseIds.add(id);
-  seenSseIdQueue.push(id);
-  while (seenSseIdQueue.length > SEEN_SSE_ID_MAX) {
-    seenSseIds.delete(seenSseIdQueue.shift());
-  }
-  return false;
+  const duplicate = dedupeSseEvent(msg);
+  if (duplicate) lifecycleLog("sse:duplicate", { type: msg?.type, sseId: msg?._sseId });
+  return duplicate;
 }
 function composerReadyForSend() {
   return connected && (!replaying || !transcriptGateRequired);
