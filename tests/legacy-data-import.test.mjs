@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -106,6 +106,11 @@ test("stopped-service import plans then applies checkpoints, routine definitions
   assert.match(checkpointBackup.backupPath, /\.legacy-backup-2026-07-16T05-00-00\.000Z$/);
   assert.equal(readFileSync(checkpointBackup.backupPath, "utf8"), checkpointSource);
   assert.equal(readFileSync(bindingBackup.backupPath, "utf8"), bindingsSource);
+  for (const backup of applied.backups) {
+    assert.equal(backup.readOnly, true);
+    assert.equal(backup.minimumReleaseCount, 1);
+    assert.equal(statSync(backup.backupPath).mode & 0o222, 0, "legacy backups have no write bits");
+  }
   assert.deepEqual(store.repositories.migrationLedger.list().map((row) => [row.id, row.mode, row.status]), [
     ["apply", "apply", "completed"], ["dry", "dry-run", "completed"],
   ]);

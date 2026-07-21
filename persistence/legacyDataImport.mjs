@@ -1,8 +1,9 @@
-import { existsSync, renameSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { LEGACY_CHECKPOINTS_PATH, importLegacyCheckpoints } from "./checkpointImporter.mjs";
 import { LEGACY_ROUTINES_DIR, importLegacyRoutines } from "./routineImporter.mjs";
 import { runLegacyMigration } from "./legacyMigration.mjs";
+import { retainLegacyFileAsReadOnlyBackup } from "./legacyBackup.mjs";
 
 /** Import every supported legacy source under one stopped-service migration ledger entry. */
 export async function importLegacyAppData({
@@ -16,7 +17,7 @@ export async function importLegacyAppData({
   routineBindingsPath,
   id,
   now = () => new Date().toISOString(),
-  rename = renameSync,
+  backupFile = retainLegacyFileAsReadOnlyBackup,
 } = {}) {
   if (serviceStopped !== true) throw new Error("legacy import requires the pi-lot-ui service to be stopped");
   if (!sessionReferences) throw new Error("session reference codec is required");
@@ -92,9 +93,7 @@ export async function importLegacyAppData({
     const stamp = new Date(now()).toISOString().replaceAll(":", "-");
     for (const sourcePath of validatedSourcePaths) {
       if (!existsSync(sourcePath)) continue;
-      const backupPath = `${sourcePath}.legacy-backup-${stamp}`;
-      rename(sourcePath, backupPath);
-      backups.push({ sourcePath, backupPath });
+      backups.push(backupFile({ sourcePath, stamp }));
     }
   }
   return Object.freeze({ ...report, backups: Object.freeze(backups) });

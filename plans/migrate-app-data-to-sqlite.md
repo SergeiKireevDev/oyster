@@ -359,7 +359,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Import checkpoints, routine definitions, and routine bindings while the service is stopped.
 - [x] Validate imported rows before renaming legacy files to dated backups.
 - [x] Start with SQLite-only app repositories; do not silently fall back to legacy writes.
-- [ ] Retain legacy files as read-only backups for at least one release.
+- [x] Retain legacy files as read-only backups for at least one release.
 - [ ] Document backup, restore, downgrade, and failure-recovery procedures.
 
 ### 10. Complete validation
