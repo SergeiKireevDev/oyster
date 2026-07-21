@@ -328,7 +328,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Add a supervisor that periodically reconciles desired-open hublots and their persisted process identities.
 - [x] On startup, load persisted hublots and reconcile every row whose desired state is open.
 - [x] Restart dead services from the persisted startup script, verify the port, and persist the replacement PID before reopening their tunnels.
-- [ ] Recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
+- [x] Recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
 - [ ] Use bounded exponential backoff and crash-loop protection for automatic restarts.
 - [ ] Mark a missing self-served service without a startup script interrupted.
 - [ ] Never publish a persisted URL until its current cloudflared process is confirmed healthy.

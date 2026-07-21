@@ -449,6 +449,31 @@ export async function waitForLocalPort(port, { timeoutMs = 20_000, intervalMs = 
 }
 
 /** Restart an agent-managed service and persist its replacement before tunneling. */
+export async function recoverAnsweringHublotService(state, hublot, {
+  checkPort = localPortAnswers,
+  discoverPids = pidsOnPort,
+  persistProcess = persistHublotProcessIdentity,
+  reopenTunnel = openTunnel,
+} = {}) {
+  const current = hublotRepository(state).find(hublot.id);
+  if (!current || current.desired_state !== "open") throw new Error(`hublot ${hublot.id} is not desired open`);
+  if (!(await checkPort(current.port))) return Object.freeze({ recovered: false, answering: false, hublotId: current.id });
+  try {
+    const servicePid = discoverPids(current.port)[0] ?? null;
+    if (!servicePid) throw new Error(`answering service on port ${current.port} has no discoverable PID`);
+    const serviceProcess = persistProcess(state, {
+      hublotId: current.id, role: "service", pid: servicePid, status: "running",
+    });
+    const tunnel = await reopenTunnel(state, {
+      id: current.id, port: current.port, label: current.label, sessionId: current.session_id,
+    });
+    return Object.freeze({ recovered: true, answering: true, hublotId: current.id, servicePid, serviceProcess, tunnel });
+  } catch (error) {
+    recordHublotTransition(state, current.id, "failed", { publicUrl: null, lastError: error.message });
+    throw error;
+  }
+}
+
 export async function restartHublotService(state, hublot, {
   invoke = invokeHublotStartupScript,
   waitForPort = waitForLocalPort,

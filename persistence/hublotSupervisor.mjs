@@ -4,6 +4,7 @@ import { verifyPersistedProcessIdentity } from "./processIdentity.mjs";
 export function createHublotSupervisor({
   appStore,
   recordTransition,
+  recoverTunnel = null,
   restartService = null,
   verifyIdentity = verifyPersistedProcessIdentity,
   intervalMs = 5_000,
@@ -18,11 +19,12 @@ export function createHublotSupervisor({
   let reconciling = false;
 
   async function reconcile({ includeOpening = false } = {}) {
-    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0 });
+    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0 });
     reconciling = true;
     let checked = 0;
     let recovering = 0;
     let restarted = 0;
+    let recoveredTunnels = 0;
     try {
       const desired = appStore.repositories.hublots.list()
         .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
@@ -53,13 +55,22 @@ export function createHublotSupervisor({
             recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
             recovering++;
           }
+          if (!tunnelHealthy && recoverTunnel) {
+            try {
+              const recovery = await recoverTunnel(hublot);
+              if (recovery?.recovered) { recoveredTunnels++; continue; }
+            } catch (error) {
+              logger.error(`[pi-ui] hublot ${hublot.id} tunnel recovery failed: ${error.message}`);
+              continue;
+            }
+          }
           if (serviceDead && restartService) {
             try { await restartService(hublot); restarted++; }
             catch (error) { logger.error(`[pi-ui] hublot ${hublot.id} service restart failed: ${error.message}`); }
           }
         }
       }
-      return Object.freeze({ skipped: false, checked, recovering, restarted });
+      return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels });
     } finally {
       reconciling = false;
     }
