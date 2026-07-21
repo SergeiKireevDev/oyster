@@ -141,7 +141,7 @@ moving their durable process state out of `state`.
 
 ## 8. Extract Checkpoint Routes
 
-- [ ] Move checkpoint create/list/tree routes into
+- [x] Move checkpoint create/list/tree routes into
   `http/routes/checkpointRoutes.mjs`. Preserve runner/session validation, model
   summary options, checkpoint persistence, and response contracts with tests.
 - [ ] Move rollback route handling into the checkpoint factory. Preserve dirty
