@@ -106,10 +106,10 @@
   /* ---------- messages ---------- */
   #scroller { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
 
-  /* ---------- main row: chat column + interfaces sidebar ---------- */
+  /* ---------- main row: chat column + hublots sidebar ---------- */
   #main { flex: 1; display: flex; min-height: 0; }
   #chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #ifaces {
+  #hublots {
     width: 230px;
     flex-shrink: 0;
     border-left: 1px solid var(--border);
@@ -120,54 +120,54 @@
     flex-direction: column;
     gap: 10px;
   }
-  .iface-block {
+  .hublot-block {
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--panel-2);
     overflow: hidden;
     flex-shrink: 0;
   }
-  .iface-block .preview {
+  .hublot-block .preview {
     position: relative;
     height: 130px;
     background: #fff;
     cursor: pointer;
   }
-  .iface-block .preview iframe {
+  .hublot-block .preview iframe {
     width: 400%; height: 400%;
     transform: scale(0.25);
     transform-origin: 0 0;
     border: 0;
     pointer-events: none; /* the block itself handles clicks */
   }
-  .iface-block .preview .hit { position: absolute; inset: 0; }
-  /* built-in interfaces (e.g. file explorer): icon instead of an iframe */
-  .iface-block .preview.builtin {
+  .hublot-block .preview .hit { position: absolute; inset: 0; }
+  /* built-in hublots (e.g. file explorer): icon instead of an iframe */
+  .hublot-block .preview.builtin {
     display: flex; align-items: center; justify-content: center;
     font-size: 44px;
     background: var(--panel);
   }
-  .iface-block .cap {
+  .hublot-block .cap {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 8px;
     font-size: 12px;
     border-top: 1px solid var(--border);
   }
-  .iface-block .cap .lbl {
+  .hublot-block .cap .lbl {
     flex: 1; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--muted);
   }
-  .iface-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; }
-  .iface-block .cap .x:hover { color: var(--red); }
-  /* interface blocks laid out as a grid inside the Interfaces modal */
-  .iface-grid {
+  .hublot-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; }
+  .hublot-block .cap .x:hover { color: var(--red); }
+  /* hublot blocks laid out as a grid inside the Hublots modal */
+  .hublot-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 10px;
     margin-bottom: 4px;
   }
-  #ifaceAdd {
+  #hublotAdd {
     border: 2px dashed var(--border);
     border-radius: 10px;
     height: 90px;
@@ -178,17 +178,17 @@
     cursor: pointer;
     user-select: none;
   }
-  #ifaceAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
+  #hublotAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
   /* on small screens the sidebar becomes a slide-over drawer, toggled by a
      header chip that only appears there */
-  #ifaceChip, #cfgChip { display: none; }
+  #hublotChip, #cfgChip { display: none; }
   #cfgChip { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 760px) {
     /* model + thinking collapse into one combined chip */
     #modelChip, #thinkChip { display: none; }
     #cfgChip { display: inline-block; }
-    #ifaces { display: none; }
-    #ifaces.open {
+    #hublots { display: none; }
+    #hublots.open {
       display: flex;
       position: fixed;
       top: 0; right: 0; bottom: 0;
@@ -197,7 +197,7 @@
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
       border-left: 1px solid var(--border);
     }
-    #ifaceChip { display: inline-flex; }
+    #hublotChip { display: inline-flex; }
   }
   #messages {
     max-width: 860px;
@@ -661,7 +661,7 @@
   <span class="dot" id="connDot"></span>
   <span class="title" id="sessionTitle">pi remote</span>
   <span class="spacer"></span>
-  <span class="chip" id="ifaceChip" title="Show interfaces">⧉</span>
+  <span class="chip" id="hublotChip" title="Show hublots">⧉</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
@@ -697,9 +697,9 @@
     </div>
   </div>
 
-  <aside id="ifaces">
-    <div id="ifaceList" style="display:contents"></div>
-    <div id="ifaceAdd" title="Open a new interface">+</div>
+  <aside id="hublots">
+    <div id="hublotList" style="display:contents"></div>
+    <div id="hublotAdd" title="Open a new hublot">+</div>
   </aside>
 </div>
 
@@ -1162,7 +1162,7 @@ function userText(message) {
 
 function addUserMessage(message) {
   const text = userText(message);
-  // interface briefings are rendered collapsed, like a tool call
+  // hublot briefings are rendered collapsed, like a tool call
   const iface = text.match(/^Opening interface: (.*)\n/);
   if (iface) {
     const details = document.createElement("details");
@@ -1234,7 +1234,7 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
-  if (sessionChanged) loadInterfaces(); // sidebar tunnels are session-scoped
+  if (sessionChanged) loadHublots(); // sidebar tunnels are session-scoped
   $("sessionTitle").textContent = s.sessionName || "pi remote";
   $("modelChip").textContent = s.model ? s.model.id : "no model";
   $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
@@ -1391,7 +1391,7 @@ function handleEvent(msg) {
       if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
       if (msg.runners) runnersNow = msg.runners;
       if (msg.workdir) setWorkdir(msg.workdir);
-      loadInterfaces();
+      loadHublots();
       return;
 
     case "runners_update":
@@ -1522,35 +1522,35 @@ function handleEvent(msg) {
 
     case "tunnel_opened":
       if (!replaying) {
-        toast(`interface up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
+        toast(`hublot up: ${msg.tunnel?.url} → :${msg.tunnel?.port}`, "info", {
           onClick: () => window.open(msg.tunnel?.url, "_blank"),
         });
-        loadInterfaces();
+        loadHublots();
       }
       return;
 
-    case "interface_ready":
+    case "hublot_ready":
       if (!replaying) {
-        toast(`interface ready: ${msg.tunnel?.url}`, "info", {
+        toast(`hublot ready: ${msg.tunnel?.url}`, "info", {
           onClick: () => window.open(msg.tunnel?.url, "_blank"),
         });
         // rebuild previews now, then again shortly after: recreating the
         // iframe is the only way to reload a possibly-captured error page,
         // and the edge can lag a moment behind the ready signal
-        loadInterfaces();
-        setTimeout(loadInterfaces, 5000);
-        setTimeout(loadInterfaces, 15000);
+        loadHublots();
+        setTimeout(loadHublots, 5000);
+        setTimeout(loadHublots, 15000);
       }
       return;
 
-    case "interface_failed":
-      if (!replaying) toast(`interface failed: ${msg.error ?? "unknown error"}`, "error");
+    case "hublot_failed":
+      if (!replaying) toast(`hublot failed: ${msg.error ?? "unknown error"}`, "error");
       return;
 
     case "tunnel_closed":
       if (!replaying) {
-        toast(`interface closed: :${msg.tunnel?.port}`, "warning");
-        loadInterfaces();
+        toast(`hublot closed: :${msg.tunnel?.port}`, "warning");
+        loadHublots();
       }
       return;
   }
@@ -1917,7 +1917,7 @@ async function sendAgentMessage(text) {
 }
 
 // ------------------------------------------------------------ file explorer
-// Built-in "interface": same modal style as the attach-file picker, but with
+// Built-in "hublot": same modal style as the attach-file picker, but with
 // per-file actions — download the file, or edit it right in the modal.
 
 async function showFileExplorer() {
@@ -1995,8 +1995,8 @@ async function showFileExplorer() {
     actions.innerHTML = "";
     const back = document.createElement("span");
     back.className = "chip";
-    back.textContent = "\u2190 Interfaces";
-    back.addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
+    back.textContent = "\u2190 Hublots";
+    back.addEventListener("click", () => showHublots().catch((e) => toast(e.message, "error")));
     const closeBtn = document.createElement("span");
     closeBtn.className = "chip";
     closeBtn.textContent = "Close";
@@ -2066,7 +2066,7 @@ async function showFileExplorer() {
 }
 
 // Tunnels are bound to the session they were opened in; the modal and the
-// interface sidebar show the current session's tunnels by default, with a
+// hublot sidebar show the current session's tunnels by default, with a
 // toggle to see every session's.
 let tunnelScopeAll = false;
 
@@ -2078,7 +2078,7 @@ function tunnelVisible(t) {
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
 const tunnelForm = { desc: "" };
 
-async function showTunnels() {
+async function showHublots() {
   const body = $("mBody"), actions = $("mActions");
 
   async function load() {
@@ -2086,10 +2086,10 @@ async function showTunnels() {
     const data = await res.json();
     if (!res.ok) { toast(data.error || "failed to load tunnels", "error"); return; }
     const visible = data.tunnels.filter(tunnelVisible);
-    $("mTitle").textContent = tunnelScopeAll ? "Interfaces — all sessions" : "Interfaces — this session";
+    $("mTitle").textContent = tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session";
     body.innerHTML = "";
 
-    // ---- built-in interfaces (always on top)
+    // ---- built-in hublots (always on top)
     const fxRow = document.createElement("div");
     fxRow.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 0 10px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;";
     const fxBtn = document.createElement("button");
@@ -2108,18 +2108,18 @@ async function showTunnels() {
       const empty = document.createElement("div");
       empty.className = "m-path";
       empty.textContent = tunnelScopeAll
-        ? "(no active interfaces)"
+        ? "(no active hublots)"
         : data.tunnels.length
           ? `(none for this session — ${data.tunnels.length} in other sessions)`
-          : "(no active interfaces)";
+          : "(no active hublots)";
       body.appendChild(empty);
     }
     if (visible.length) {
       const grid = document.createElement("div");
-      grid.className = "iface-grid";
+      grid.className = "hublot-grid";
       for (const t of visible) {
         const block = document.createElement("div");
-        block.className = "iface-block";
+        block.className = "hublot-block";
 
         const preview = document.createElement("div");
         preview.className = "preview";
@@ -2146,11 +2146,11 @@ async function showTunnels() {
         const x = document.createElement("span");
         x.className = "x";
         x.textContent = "✕";
-        x.title = "close this interface";
+        x.title = "close this hublot";
         x.addEventListener("click", async () => {
           await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
           await load();
-          loadInterfaces();
+          loadHublots();
         });
         cap.append(lbl, x);
 
@@ -2165,12 +2165,12 @@ async function showTunnels() {
     form.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--border,#333);padding-top:12px;";
     const heading = document.createElement("div");
     heading.style.cssText = "font-weight:600;font-size:13.5px;";
-    heading.textContent = "New interface";
+    heading.textContent = "New hublot";
     const descRow = document.createElement("div");
     descRow.style.cssText = "display:flex;gap:6px;align-items:flex-start;";
     const descInp = document.createElement("textarea");
     descInp.rows = 3;
-    descInp.placeholder = "What should the agent expose through this interface? (e.g. “the vite dev server for the dashboard, with hot reload”)";
+    descInp.placeholder = "What should the agent expose through this hublot? (e.g. “the vite dev server for the dashboard, with hot reload”)";
     descInp.style.cssText = "resize:vertical;flex:1;min-width:0;";
     descInp.value = tunnelForm.desc;
     descInp.addEventListener("input", () => { tunnelForm.desc = descInp.value; });
@@ -2181,7 +2181,7 @@ async function showTunnels() {
     attach.addEventListener("click", () => {
       // the picker reuses the shared modal, so reopen tunnels after choosing;
       // tunnelForm keeps whatever was already typed
-      const reopen = () => showTunnels().catch((e) => toast(e.message, "error"));
+      const reopen = () => showHublots().catch((e) => toast(e.message, "error"));
       showFilePicker((path) => {
         const pad = tunnelForm.desc && !/\s$/.test(tunnelForm.desc) ? " " : "";
         tunnelForm.desc += pad + path;
@@ -2191,10 +2191,10 @@ async function showTunnels() {
     descRow.append(descInp, attach);
     const create = document.createElement("button");
     create.className = "btn";
-    create.textContent = "Open interface";
+    create.textContent = "Open hublot";
     create.addEventListener("click", async () => {
       const desc = descInp.value.trim();
-      if (!desc) { descInp.focus(); toast("describe what the interface should expose", "warning"); return; }
+      if (!desc) { descInp.focus(); toast("describe what the hublot should expose", "warning"); return; }
       create.disabled = true;
       create.textContent = "Opening…";
       try {
@@ -2213,12 +2213,12 @@ async function showTunnels() {
         if (!res2.ok) { toast(d2.error || `failed (${res2.status})`, "error"); return; }
         tunnelForm.desc = "";
         closeModal();
-        toast(`interface opening at ${d2.tunnel.url} — background agent is setting it up…`);
+        toast(`hublot opening at ${d2.tunnel.url} — background agent is setting it up…`);
       } catch (e) {
-        toast(`interface failed: ${e.message}`, "error");
+        toast(`hublot failed: ${e.message}`, "error");
       } finally {
         create.disabled = false;
-        create.textContent = "Open interface";
+        create.textContent = "Open hublot";
       }
     });
     form.append(heading, descRow, create);
@@ -2232,7 +2232,7 @@ async function showTunnels() {
     scope.addEventListener("click", async () => {
       tunnelScopeAll = !tunnelScopeAll;
       await load();
-      loadInterfaces(); // keep the sidebar in the same scope
+      loadHublots(); // keep the sidebar in the same scope
     });
     const closeBtn = document.createElement("span");
     closeBtn.className = "chip";
@@ -2246,25 +2246,25 @@ async function showTunnels() {
   await load();
 }
 
-// ------------------------------------------------------------ interface sidebar
+// ------------------------------------------------------------ hublot sidebar
 
-$("ifaceAdd").addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
+$("hublotAdd").addEventListener("click", () => showHublots().catch((e) => toast(e.message, "error")));
 
-// mobile: toggle the interfaces sidebar as a slide-over drawer
-$("ifaceChip").addEventListener("click", (e) => {
+// mobile: toggle the hublots sidebar as a slide-over drawer
+$("hublotChip").addEventListener("click", (e) => {
   e.stopPropagation();
-  const open = $("ifaces").classList.toggle("open");
-  if (open) loadInterfaces(); // fresh previews when opening
+  const open = $("hublots").classList.toggle("open");
+  if (open) loadHublots(); // fresh previews when opening
 });
 // tap outside the drawer closes it
 document.addEventListener("click", (e) => {
-  const ifaces = $("ifaces");
-  if (ifaces.classList.contains("open") && !ifaces.contains(e.target)) {
-    ifaces.classList.remove("open");
+  const hublots = $("hublots");
+  if (hublots.classList.contains("open") && !hublots.contains(e.target)) {
+    hublots.classList.remove("open");
   }
 });
 
-async function loadInterfaces() {
+async function loadHublots() {
   if (!token) return;
   let tunnels = [];
   try {
@@ -2272,17 +2272,17 @@ async function loadInterfaces() {
     const data = await res.json();
     if (res.ok) tunnels = data.tunnels.filter(tunnelVisible);
   } catch { /* sidebar is best-effort */ }
-  renderInterfaces(tunnels);
+  renderHublots(tunnels);
 }
 
-function renderInterfaces(tunnels) {
-  const list = $("ifaceList");
+function renderHublots(tunnels) {
+  const list = $("hublotList");
   list.innerHTML = "";
 
   // built-in file explorer always comes first
   {
     const block = document.createElement("div");
-    block.className = "iface-block";
+    block.className = "hublot-block";
     const preview = document.createElement("div");
     preview.className = "preview builtin";
     preview.textContent = "\u{1F4C1}";
@@ -2301,7 +2301,7 @@ function renderInterfaces(tunnels) {
 
   for (const t of tunnels) {
     const block = document.createElement("div");
-    block.className = "iface-block";
+    block.className = "hublot-block";
 
     const preview = document.createElement("div");
     preview.className = "preview";
@@ -2327,7 +2327,7 @@ function renderInterfaces(tunnels) {
     x.title = "close this tunnel";
     x.addEventListener("click", async () => {
       await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
-      loadInterfaces();
+      loadHublots();
     });
     cap.append(lbl, x);
 
@@ -2574,9 +2574,9 @@ async function showSessionPicker() {
             const d = await r.json().catch(() => ({}));
             if (!r.ok) { toast(d.error || `delete failed (${r.status})`, "error"); return; }
             b.remove();
-            if (d.closedInterfaces?.length) {
-              toast(`session deleted · closed interface${d.closedInterfaces.length > 1 ? "s" : ""} :${d.closedInterfaces.join(", :")}`);
-              loadInterfaces();
+            if (d.closedHublots?.length) {
+              toast(`session deleted · closed hublot${d.closedHublots.length > 1 ? "s" : ""} :${d.closedHublots.join(", :")}`);
+              loadHublots();
             } else {
               toast("session deleted");
             }

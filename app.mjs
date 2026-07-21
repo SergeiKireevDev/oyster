@@ -277,23 +277,25 @@ export function init(state) {
     state.pi = null;
   }
 
-  // ---------------------------------------------------------------- background interface agents
+  // ---------------------------------------------------------------- background hublot agents
 
   /** Spawn a one-shot background pi agent (`pi -p`) that sets up whatever the
-   *  interface should expose, and notify clients when the port answers. */
-  function spawnInterfaceAgent(tunnel, brief) {
+   *  hublot should expose, and notify clients when the port answers. */
+  function spawnHublotAgent(tunnel, brief) {
     const prompt =
       `A public tunnel ${tunnel.url} forwards to http://localhost:${tunnel.port} on this machine.\n\n` +
       `Make the following available on local port ${tunnel.port} so it is reachable through the tunnel:\n${brief}\n\n` +
       `Whatever serves it must keep running after you exit: start it detached in the background ` +
       `(e.g. nohup … & disown) and verify it responds on port ${tunnel.port} before finishing.`;
-    console.log(`[pi-ui] spawning background agent for interface :${tunnel.port} (${tunnel.url})`);
-    const proc = spawn(config.PI_BIN, ["-p", prompt], {
+    console.log(`[pi-ui] spawning background agent for hublot :${tunnel.port} (${tunnel.url})`);
+    // --no-session: these one-shot setup runs must not leave session files
+    // behind (they would clutter the sessions list)
+    const proc = spawn(config.PI_BIN, ["--no-session", "-p", prompt], {
       cwd: state.currentDir,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
-    tunnel.agentProc = proc; // so deleting the interface can kill it
+    tunnel.agentProc = proc; // so deleting the hublot can kill it
     let tail = "";
     const onOut = (c) => { tail = (tail + String(c)).slice(-1500); };
     proc.stdout.on("data", onOut);
@@ -323,16 +325,16 @@ export function init(state) {
       done = true;
       clearInterval(poll);
       if (ok) {
-        // remember who serves the port so closing the interface can kill it
+        // remember who serves the port so closing the hublot can kill it
         const pids = pidsOnPort(tunnel.port);
         if (pids.length) {
           tunnel.servicePid = pids[0];
-          console.log(`[pi-ui] interface :${tunnel.port} served by pid ${tunnel.servicePid}`);
+          console.log(`[pi-ui] hublot :${tunnel.port} served by pid ${tunnel.servicePid}`);
         }
       }
       serverEvent(ok
-        ? { type: "interface_ready", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label } }
-        : { type: "interface_failed", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label }, error });
+        ? { type: "hublot_ready", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label } }
+        : { type: "hublot_failed", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label }, error });
     };
 
     const checkPort = () => new Promise((resolvePromise) => {
@@ -355,14 +357,14 @@ export function init(state) {
       if (agentExited && Date.now() - agentExitAt > 10_000) {
         finish(false, `agent finished but nothing answers on port ${tunnel.port}: ${tail.trim().split("\n").pop() ?? ""}`);
       }
-      if (Date.now() - started > TIMEOUT_MS) finish(false, "timed out waiting for the interface to come up");
+      if (Date.now() - started > TIMEOUT_MS) finish(false, "timed out waiting for the hublot to come up");
     }, 2000);
 
     let agentExitAt = 0;
     proc.on("exit", (code) => {
       agentExited = true;
       agentExitAt = Date.now();
-      console.log(`[pi-ui] interface agent for :${tunnel.port} exited (code=${code})`);
+      console.log(`[pi-ui] hublot agent for :${tunnel.port} exited (code=${code})`);
     });
     proc.on("error", (err) => finish(false, `failed to spawn background agent: ${err.message}`));
     proc.unref();
@@ -850,7 +852,7 @@ export function init(state) {
           }
         }
         runnersChanged();
-        // close any interfaces bound to this session (kills service,
+        // close any hublots bound to this session (kills service,
         // background agent and cloudflared — see closeTunnel)
         let sessionId = null;
         try {
@@ -860,18 +862,18 @@ export function init(state) {
             if (e.type === "session") { sessionId = e.id; break; }
           }
         } catch {}
-        const closedInterfaces = [];
+        const closedHublots = [];
         if (sessionId) {
           for (const t of [...(state.tunnels?.values() ?? [])]) {
             if (t.sessionId === sessionId) {
               closeTunnel(state, t.id);
-              closedInterfaces.push(t.port);
-              console.log(`[pi-ui] closed interface :${t.port} (session ${sessionId} deleted)`);
+              closedHublots.push(t.port);
+              console.log(`[pi-ui] closed hublot :${t.port} (session ${sessionId} deleted)`);
             }
           }
         }
         unlinkSync(target);
-        json(res, 200, { deleted: target, closedInterfaces });
+        json(res, 200, { deleted: target, closedHublots });
       } catch (e) {
         json(res, 500, { error: `failed to delete session: ${e.message}` });
       }
@@ -1068,10 +1070,10 @@ export function init(state) {
         // no port given: allocate the next free one, starting at 3000
         let port = body?.port;
         if (!port) {
-          if (!state.nextIfacePort) state.nextIfacePort = 3000;
+          if (!state.nextHublotPort) state.nextHublotPort = 3000;
           const used = new Set([...(state.tunnels?.values() ?? [])].map((t) => t.port));
-          while (used.has(state.nextIfacePort)) state.nextIfacePort++;
-          port = state.nextIfacePort++;
+          while (used.has(state.nextHublotPort)) state.nextHublotPort++;
+          port = state.nextHublotPort++;
         }
         const brief = body?.brief ? String(body.brief) : null;
         try {
@@ -1082,7 +1084,7 @@ export function init(state) {
           });
           if (brief) {
             const live = state.tunnels.get(tunnel.id);
-            spawnInterfaceAgent(live ?? tunnel, brief);
+            spawnHublotAgent(live ?? tunnel, brief);
           }
           json(res, 201, { tunnel, agent: !!brief });
         } catch (e) {
@@ -1091,13 +1093,13 @@ export function init(state) {
         return;
       }
       if (req.method === "PATCH") {
-        // rebind an interface to another session (e.g. opened by a one-shot
+        // rebind a hublot to another session (e.g. opened by a one-shot
         // agent on behalf of a UI session)
         const body = await readJsonBody(req, res);
         if (body === undefined) return;
         const t = state.tunnels.get(String(body?.id ?? ""));
         if (!t) {
-          json(res, 404, { error: "no such interface" });
+          json(res, 404, { error: "no such hublot" });
           return;
         }
         t.sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;

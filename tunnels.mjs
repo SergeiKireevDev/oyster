@@ -156,13 +156,13 @@ export function closeTunnel(state, id) {
   const pids = new Set(pidsOnPort(t.port));
   if (t.servicePid) pids.add(t.servicePid);
   for (const pid of pids) {
-    if (killPid(pid)) console.log(`[pi-ui] killed interface service pid ${pid} (port ${t.port})`);
+    if (killPid(pid)) console.log(`[pi-ui] killed hublot service pid ${pid} (port ${t.port})`);
     setTimeout(() => killPid(pid, "SIGKILL"), 3000).unref();
   }
 
   // 2. the background agent, if it is still working
   if (t.agentProc && t.agentProc.exitCode === null && !t.agentProc.killed) {
-    console.log(`[pi-ui] killing interface agent pid ${t.agentProc.pid} (port ${t.port})`);
+    console.log(`[pi-ui] killing hublot agent pid ${t.agentProc.pid} (port ${t.port})`);
     t.agentProc.kill("SIGTERM");
     const ap = t.agentProc;
     setTimeout(() => { if (ap.exitCode === null && !ap.killed) ap.kill("SIGKILL"); }, 3000).unref();
