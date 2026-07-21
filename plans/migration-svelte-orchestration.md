@@ -107,7 +107,8 @@ keyboard handling or transcript scroll listeners.
 ✅ Hublot sidebar and manager close controls now call `hublotActions.js`
 directly; their legacy bridge exports and handlers were removed. Routine and
 file-browser bridge actions remain pending because their direct replacements
-must preserve session-scoped refresh behavior.
+must preserve session-scoped refresh behavior. Keep their existing bridge
+adapters until a focused action can refresh the scoped stores atomically.
 
 **Acceptance:** every removed bridge symbol has no references under
 `public/src`, and `tests/ui-page.test.mjs` continues to validate all legacy DOM
