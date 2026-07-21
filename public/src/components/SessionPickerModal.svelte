@@ -13,6 +13,7 @@
     SESSION_PICKER_STOP_ACTION,
   } from "../runtime/uiActionNames.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
+  import { groupSessionFamilies, partitionSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
 
   const uiActions = getUiActionRegistry();
   const choosePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, ...args);
@@ -60,37 +61,7 @@
     return !!(runner?.busy ?? session.busy);
   }
 
-  function forkFamilies(list) {
-    const byPath = new Map(list.map((session) => [session.path, session]));
-    const rootOf = (input) => {
-      let session = input;
-      const seen = new Set();
-      while (session.parentSession && byPath.has(session.parentSession) && !seen.has(session.path)) {
-        seen.add(session.path);
-        session = byPath.get(session.parentSession);
-      }
-      return session;
-    };
-    const families = new Map();
-    for (const session of list) {
-      const root = rootOf(session);
-      if (!families.has(root.path)) families.set(root.path, { session: root, forks: [] });
-      if (session.path !== root.path) families.get(root.path).forks.push(session);
-    }
-    return [...families.values()];
-  }
-
-  function partitionFamilies(list) {
-    const active = [];
-    const inactive = [];
-    for (const family of forkFamilies(list)) {
-      const members = [family.session, ...family.forks];
-      (members.some(isAlive) ? active : inactive).push(...members);
-    }
-    return { active, inactive };
-  }
-
-  $: currentPartition = partitionFamilies($sessionPicker.sessions);
+  $: currentPartition = partitionSessionFamilies($sessionPicker.sessions, isAlive);
   $: otherFolders = $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder);
   $: activeOtherFolders = (() => {
     const map = new Map();
@@ -236,7 +207,7 @@
 {/snippet}
 
 {#snippet SessionRows({ sessions })}
-  {#each forkFamilies(sessions) as family (family.session.path)}
+  {#each groupSessionFamilies(sessions) as family (family.session.path)}
     {@render sessionRow(family.session)}
     {#if family.forks.length}
       <details class="s-forkgroup" open={family.forks.some((fork) => fork.id === $sessionPicker.currentId)}>

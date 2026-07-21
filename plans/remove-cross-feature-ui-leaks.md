@@ -100,7 +100,7 @@ module-global feature callback state.
   actions, then delete `features/sessions/sessionPickerActions.js` and its
   configuration call. Preserve search debounce, folder loading, choose, stop,
   delete, and cancellation tests.
-- [ ] Extract session-family grouping and active/inactive partitioning from
+- [x] Extract session-family grouping and active/inactive partitioning from
   `SessionPickerModal.svelte` into a pure session-picker view-model helper.
   Move only pure transforms; leave DOM focus and debounce lifecycle in the
   component. Add focused transform tests.
