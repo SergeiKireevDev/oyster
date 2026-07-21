@@ -1299,6 +1299,9 @@ function renderMarkdown(src) {
 // ------------------------------------------------------------ message rendering
 
 const messagesEl = $("messages");
+// late-loading content (images in markdown) grows the transcript after our
+// scroll corrections ran; if the user is at the bottom, stay pinned there
+messagesEl.addEventListener("load", () => scrollToBottom(false), true);
 const scroller = $("scroller");
 
 function nearBottom() {
@@ -1910,13 +1913,17 @@ function renderTranscript(messages) {
       const chunk = takeTailChunk(turns, CHUNK_MSGS);
       const anchor = messagesEl.firstChild;
       const before = messagesEl.children.length;
+      // measure BEFORE rendering: the chunk is appended at the bottom first,
+      // so the height it adds must be attributed to the top once moved there
+      const pinned = nearBottom();
+      const h0 = scroller.scrollHeight;
+      const t0 = scroller.scrollTop;
       renderChunk(chunk); // appended at the bottom by the shared helpers…
       // …then moved above everything in the same task (no paint in between)
       const added = [...messagesEl.children].slice(before);
-      const h0 = scroller.scrollHeight;
-      const t0 = scroller.scrollTop;
       for (const el of added) messagesEl.insertBefore(el, anchor);
-      scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // viewport stays put
+      if (pinned) scrollToBottom(true); // stay glued to the newest message
+      else scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // keep reading position
       placeCheckpointBtn(); // back onto the true last message
       setTimeout(backfill, 0); // yield so live events/input stay responsive
     };
