@@ -26,10 +26,13 @@ const RUN = Date.now();
 const tag = (base) => `${base}-${RUN}`;
 
 async function newSession(page) {
-  await page.click("#menuBtn");
-  await page.click('#menu button[data-action="newSession"]');
+  const mobile = await page.evaluate(() => innerWidth <= 760);
+  await openSessionSidebar(page, mobile);
+  const currentGroup = page.locator("#sessions .session-sidebar-entry.current").locator("xpath=ancestor::details[1]");
+  await currentGroup.locator(":scope > .session-sidebar-cwd-add").click();
   // the toast confirms the freshly spawned runner took over as current
   await expect(page.locator(".toast", { hasText: "new session" })).toBeVisible({ timeout: 10000 });
+  if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
 }
 
 async function openSessionSidebar(page, mobile = false) {
@@ -60,13 +63,15 @@ async function revealSidebarEntry(page, token) {
 }
 
 async function newSessionInFolder(page, folderName) {
-  await page.click("#menuBtn");
-  await page.click('#menu button[data-action="newSessionIn"]');
+  const mobile = await page.evaluate(() => innerWidth <= 760);
+  await openSessionSidebar(page, mobile);
+  await page.locator("#sessions .session-sidebar-create").click();
   await expect(page.locator("#mTitle")).toHaveText("New session in folder");
   await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
   await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);
   await page.getByRole("button", { name: "Start session here" }).click();
   await expect(page.locator(".toast", { hasText: `folder: /workspace/${folderName}` })).toBeVisible({ timeout: 10000 });
+  if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
 }
 
 async function loadOtherFolderAndSwitch(page, token, { mobile = false } = {}) {

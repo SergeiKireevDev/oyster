@@ -180,11 +180,17 @@ export const MOBILE_VIEWPORT = { width: 390, height: 844 };
 // Force a brand-new session for this test: current sessions are reused across
 // tests in the same file (one container), so a session that already has
 // checkpoints/forks from a prior test would otherwise bleed into this one.
-// We click the menu's "New session" and wait for the session id to change.
+// We use the current workdir's sidebar + button and wait for the session id to change.
 export async function forceNewSession(page) {
   const before = await currentSessionId(page);
-  await page.click("#menuBtn");
-  await page.click('button[data-action="newSession"]');
+  const mobile = await page.evaluate(() => innerWidth <= 760);
+  if (mobile) {
+    for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) await swipe(page, "right");
+  }
+  await page.locator("#sessions .session-sidebar-entry.current")
+    .locator("xpath=ancestor::details[1]")
+    .locator(":scope > .session-sidebar-cwd-add")
+    .click();
   // wait for the id to flip to something new (or null on a truly fresh one)
   await page.waitForFunction(
     (b) => {
@@ -205,6 +211,7 @@ export async function forceNewSession(page) {
   });
   // clear any slide-over drawer the previous session left open
   await page.evaluate(() => {
+    document.getElementById("sessions")?.classList.remove("open");
     document.getElementById("hublots")?.classList.remove("open");
     document.getElementById("treebar")?.classList.remove("open");
   });
