@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -320,8 +320,6 @@ function finishToolCard(toolCallId, resultMsgOrText, isError) {
   toolCards.finish(toolCallId, resultMsgOrText, isError);
 }
 
-let liveAssistant = null; // { item, msg }
-
 const transcriptCallbacks = {
   onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
   onCheckpoint: handleCheckpointClick,
@@ -361,6 +359,12 @@ function addSvelteAssistantMessage(message, role = "assistant", options = {}) {
 function addSvelteCustomMessage(role, text) {
   addSvelteAssistantMessage({ role, content: [{ type: "text", text }] }, role || "custom");
 }
+
+const assistantStream = createAssistantStream({
+  mount: (message) => mountSvelteAssistantMessage(message),
+  update: updateSvelteAssistant,
+  finish: (message) => addSvelteAssistantMessage(message),
+});
 
 function addUserMessage(message, options = {}) {
   const text = userMessageText(message);
@@ -583,7 +587,7 @@ function clearMessages() {
   setCheckpointRestores([]);
   resetTranscriptItems();
   toolCards.clear();
-  liveAssistant = null;
+  assistantStream.clear();
   promptHistory.length = 0;
   histIdx = null;
   histDraft = "";
@@ -975,7 +979,7 @@ function handleEvent(msg) {
 
     case "agent_end":
       setBusy(false);
-      liveAssistant = null;
+      assistantStream.clear();
       refreshState();
       // Belt-and-suspenders consistency check: if any message delta/end was
       // missed by EventSource or by the reconnect replay gate, the canonical
@@ -987,7 +991,7 @@ function handleEvent(msg) {
     case "message_start": {
       const m = msg.message;
       if (m.role === "assistant") {
-        liveAssistant = mountSvelteAssistantMessage(m);
+        assistantStream.start(m);
         scrollToBottom(true);
       } else if (m.role === "user") {
         const idx = localEchoes.indexOf(userMessageText(m));
@@ -1000,8 +1004,7 @@ function handleEvent(msg) {
     case "message_update": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (!liveAssistant) liveAssistant = mountSvelteAssistantMessage(m);
-        updateSvelteAssistant(liveAssistant, m);
+        assistantStream.update(m);
         scrollToBottom(false);
       }
       return;
@@ -1010,9 +1013,7 @@ function handleEvent(msg) {
     case "message_end": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (liveAssistant) updateSvelteAssistant(liveAssistant, m);
-        else addSvelteAssistantMessage(m);
-        liveAssistant = null;
+        assistantStream.end(m);
         updateUsage(m);
       } else if (m.role === "toolResult") {
         finishToolCard(m.toolCallId, m, m.isError);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
@@ -42,6 +42,21 @@ test("durable transcript fetch uses the session-file query", async () => {
   assert.deepEqual(messages, { messages: [] });
 });
 
+test("assistant stream mounts, updates, and finishes a streamed assistant", () => {
+  const calls = [];
+  const stream = createAssistantStream({
+    mount: (message) => { calls.push(["mount", message]); return { id: message.id }; },
+    update: (live, message) => calls.push(["update", live, message]),
+    finish: (message) => calls.push(["finish", message]),
+  });
+  stream.start({ id: "a", text: "first" });
+  stream.update({ id: "a", text: "partial" });
+  stream.end({ id: "a", text: "complete" });
+  stream.end({ id: "b", text: "replayed" });
+  assert.equal(stream.live, null);
+  assert.deepEqual(calls.map(([name]) => name), ["mount", "update", "update", "finish"]);
+});
+
 test("scroll adapter preserves reading position unless pinned or forced", () => {
   const scroller = { scrollHeight: 1000, scrollTop: 500, clientHeight: 400 };
   const scroll = createTranscriptScrollAdapter({ scroller });
@@ -67,6 +82,7 @@ test("tool card registry assembles and completes streamed tool cards", () => {
   });
   const store = registry.ensure({ id: "tool-1", name: "read" });
   registry.ensure({ id: "tool-1", name: "read-again" });
+  assert.equal(registry.get("tool-1").store, store);
   assert.equal(registry.has("tool-1"), true);
   assert.equal(registry.finish("tool-1", { text: "done" }, false), true);
   assert.deepEqual(state, { toolCall: { id: "tool-1", name: "read-again" }, status: "ok", resultText: "done" });

@@ -74,8 +74,29 @@ export function createToolCardRegistry({ createStore, resultText }) {
       card.store.update((state) => ({ ...state, status: isError ? "error" : "ok", resultText: text }));
       return true;
     },
+    get(toolCallId) { return cards.get(toolCallId); },
     has(toolCallId) { return cards.has(toolCallId); },
     clear() { cards.clear(); },
+  };
+}
+
+/** Assemble a streamed assistant independently of the rendering implementation. */
+export function createAssistantStream({ mount, update, finish }) {
+  let live = null;
+  return {
+    start(message) { live = mount(message); return live; },
+    update(message) {
+      if (!live) live = mount(message);
+      update(live, message);
+      return live;
+    },
+    end(message) {
+      if (live) update(live, message);
+      else finish(message);
+      live = null;
+    },
+    clear() { live = null; },
+    get live() { return live; },
   };
 }
 
