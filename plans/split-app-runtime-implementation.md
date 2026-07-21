@@ -351,7 +351,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
   - [x] Move the first contiguous controller block (including its imports and
     tests) out of `appRuntimeImplementation.js`; prove the root line count
     decreases by at least 100 lines.
-  - [ ] Repeat controller-block extraction commits until the implementation
+  - [x] Repeat controller-block extraction commits until the implementation
     file is below 400 lines or removed.
   - [ ] Make `appComposition.js` define the runtime factory directly rather
     than re-exporting from `appRuntimeImplementation.js`; delete the legacy
