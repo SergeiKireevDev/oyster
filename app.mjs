@@ -41,7 +41,6 @@ export async function init(state) {
   const { config, appStore } = state;
   if (!appStore) throw new Error("stable core did not provide state.appStore");
   const checkpointRepository = appStore.repositories.checkpoints;
-  const deleteSessionCheckpoints = (id) => checkpointRepository.deleteBySessionId(id, state.sessionCatalog.backend);
 
   // Patch state created by an older stable core; migrations are idempotent.
   if (state.eventBuffer) {
@@ -74,7 +73,7 @@ export async function init(state) {
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
-    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id), deleteSessionCheckpoints });
+    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
     state.incompleteOperations = new Map(appStore.hydrate().incompleteOperations.map((entry) => [entry.id, entry]));
     state.sessionDeletionReconciled = true;
   }
@@ -144,7 +143,7 @@ export async function init(state) {
       sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
-    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines, deleteSessionCheckpoints },
+    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines },
     sessionOperations: state.sessionOperations,
     deleteOwnedSession,
   });

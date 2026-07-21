@@ -6,7 +6,6 @@ function setup() {
   const stopped = [];
   const closed = [];
   const unlinked = [];
-  const deletedCheckpoints = [];
   const deletedRoutineOwners = [];
   const searches = [];
   const runner = { id: "r1", sessionFile: "/sessions/folder/a.jsonl", proc: {}, busy: true };
@@ -46,13 +45,12 @@ function setup() {
     resources: {
       closeTunnel: (_state, id) => closed.push(id),
       releaseSessionRoutines: (_state, id) => { deletedRoutineOwners.push(id); return ["routine-a"]; },
-      deleteSessionCheckpoints: (id) => { deletedCheckpoints.push(id); return 1; },
     },
     resolvePath: (path) => path,
     unlinkFile: (path) => unlinked.push(path),
     logger: { log() {} },
   };
-  return { state, stopped, closed, unlinked, deletedCheckpoints, deletedRoutineOwners, searches, routes: createSessionRoutes(dependencies) };
+  return { state, stopped, closed, unlinked, deletedRoutineOwners, searches, routes: createSessionRoutes(dependencies) };
 }
 
 function response() { return {}; }
@@ -141,7 +139,7 @@ test("search validates scope and preserves filtering options, snippets, and resp
 });
 
 test("deleting a session isolates cross-session, global, rebound, and fork resources", async () => {
-  const { state, stopped, closed, unlinked, deletedCheckpoints, deletedRoutineOwners, routes } = setup();
+  const { state, stopped, closed, unlinked, deletedRoutineOwners, routes } = setup();
   state.runners.set("r-fork", { id: "r-fork", sessionFile: "/sessions/folder/fork.jsonl", sessionId: "fork" });
   state.runners.set("r-other", { id: "r-other", sessionFile: "/sessions/folder/other.jsonl", sessionId: "other" });
   state.runners.set("r-global", { id: "r-global", sessionFile: null, sessionId: null });
@@ -159,7 +157,6 @@ test("deleting a session isolates cross-session, global, rebound, and fork resou
   assert.deepEqual(stopped, ["r1"]);
   assert.deepEqual(closed, ["t1"]);
   assert.deepEqual(unlinked, ["/sessions/folder/a.jsonl"]);
-  assert.deepEqual(deletedCheckpoints, ["session-a"]);
   assert.deepEqual(deletedRoutineOwners, ["session-a"]);
   assert.deepEqual([...state.runners.keys()].sort(), ["r-fork", "r-global", "r-other"]);
   assert.equal(state.defaultRunnerId, null);

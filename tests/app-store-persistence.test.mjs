@@ -105,6 +105,25 @@ test("checkpoint row operations isolate identities and replace fork inheritance"
   assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), []);
 });
 
+test("deleting one app-session owner cascades only its checkpoint rows", (t) => {
+  const { path, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+  const rootRef = { backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" };
+  const forkRef = { backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" };
+  const rootCheckpoint = { hash: "root-hash", anchorId: "root-entry", sessionRef: rootRef, timestamp: "root-time" };
+  const forkCheckpoint = { hash: "fork-hash", anchorId: "fork-entry", sessionRef: forkRef, timestamp: "fork-time" };
+  store.repositories.checkpoints.record(rootRef, rootCheckpoint);
+  store.repositories.checkpoints.record(forkRef, forkCheckpoint);
+  const rootOwner = store.repositories.sessions.find({ backend: rootRef.backend, sessionId: rootRef.id, storagePath: rootRef.storagePath });
+
+  store.transaction((repositories) => repositories.sessions.delete(rootOwner.id));
+
+  assert.deepEqual(store.repositories.checkpoints.listForSession(rootRef), []);
+  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), [forkCheckpoint]);
+  assert.equal(store.repositories.sessions.find({ backend: forkRef.backend, sessionId: forkRef.id, storagePath: forkRef.storagePath }).status, "active");
+});
+
 test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
   const { path, databases, Database } = fixture(t);
   const store = openAppStore({ databasePath: path, Database });

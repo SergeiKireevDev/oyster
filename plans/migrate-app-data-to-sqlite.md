@@ -301,7 +301,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Journal rollback stages because Git and agent session operations cannot share the app transaction.
 - [x] Add an idempotent importer for `~/.pi/agent/checkpoints.json`.
 - [x] Preserve current checkpoint HTTP payloads and rollback behavior.
-- [ ] Verify checkpoint rows cascade when their owner session is deleted.
+- [x] Verify checkpoint rows cascade when their owner session is deleted.
 
 ### 5. Migrate routines
 
