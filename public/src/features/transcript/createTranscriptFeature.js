@@ -5,7 +5,9 @@ export function createTranscriptFeature({ createRuntime, dependencies, domAdapte
   return {
     ...runtime,
     reloadForSession: (...args) => runtime.reloadForSession?.(...args),
+    reload: (...args) => runtime.reloadForSession?.(...args),
     handleStreamEvent: (...args) => runtime.handleStreamEvent?.(...args),
+    dispatch: (...args) => runtime.handleStreamEvent?.(...args),
     getDomAdapter: () => adapter,
     teardown: () => { adapter = null; runtime.teardown?.(); },
   };

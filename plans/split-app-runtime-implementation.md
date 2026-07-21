@@ -318,7 +318,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
 - [x] Move the session construction block and its root-local mutable state into
   `features/sessions/createSessionFeature.js`; the root must only call its
   factory and consume its narrow operations.
-- [ ] Move transcript controller construction, stream dispatch, and reload
+- [x] Move transcript controller construction, stream dispatch, and reload
   wiring into `features/transcript/createTranscriptFeature.js`; delete the
   placeholder wrapper from the root.
 - [ ] Move EventSource/RPC/reconnect state and construction into

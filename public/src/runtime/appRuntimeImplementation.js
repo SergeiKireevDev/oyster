@@ -625,7 +625,7 @@ function handleEvent(msg) {
     case "tool_execution_start":
     case "tool_execution_update":
     case "tool_execution_end":
-      handleTranscriptStreamEvent(msg);
+      transcriptFeature.dispatch(msg);
       return;
 
     case "extension_ui_request":
