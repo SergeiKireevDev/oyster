@@ -284,12 +284,27 @@ server.listen(config.PORT, config.HOST, () => {
   app.startPi();
 });
 
+let shutdownPromise = null;
 function shutdown() {
-  app.stopTunnels?.();
-  app.stopRoutines?.();
-  app.stopPi();
-  state.appStore.close();
-  process.exit(0);
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    server.close();
+    const cleanup = Promise.allSettled([
+      Promise.resolve().then(() => app.stopTunnels?.()),
+      Promise.resolve().then(() => app.stopRoutines?.()),
+      Promise.resolve().then(() => app.stopPi()),
+    ]);
+    const timeout = new Promise((resolveTimeout) => setTimeout(resolveTimeout, 5000));
+    await Promise.race([cleanup, timeout]);
+    state.appStore.flush();
+    state.appStore.close();
+    process.exit(0);
+  })().catch((error) => {
+    console.error(`[pi-ui] shutdown failed: ${error.stack ?? error}`);
+    try { state.appStore.close(); } catch {}
+    process.exit(1);
+  });
+  return shutdownPromise;
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

@@ -280,7 +280,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Define a narrow app-store interface containing repositories and transaction/close operations; inject it from `state` into runner, checkpoint, routine, hublot, session, and settings composition instead of opening SQLite connections inside route modules or domain modules.
 - [x] Add startup hydration that reconstructs rebuildable in-memory indexes and runtime registries from the store without spawning runners, routines, services, or tunnels prematurely.
 - [x] Add startup reconciliation ordering: migrations first, then interrupted operation recovery, then domain hydration, and only then accept HTTP requests and broadcast reconciled state.
-- [ ] Make graceful shutdown stop accepting new work, await bounded runner/routine/hublot cleanup, flush pending repository writes, checkpoint/close the app store once, and remain idempotent across signals and test teardown.
+- [x] Make graceful shutdown stop accepting new work, await bounded runner/routine/hublot cleanup, flush pending repository writes, checkpoint/close the app store once, and remain idempotent across signals and test teardown.
 - [ ] Add integration tests proving hot reload preserves the same store instance, full server restart restores durable state, startup migration failure does not bind the HTTP port, and shutdown closes the store without use-after-close callbacks.
 - [ ] Add an architecture guard forbidding direct `node:sqlite` construction outside the app-store persistence layer and the existing read-only coding-agent session catalog.
 

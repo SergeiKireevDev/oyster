@@ -68,6 +68,11 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     });
   }
 
+  function flush() {
+    if (closed) return;
+    database.exec("PRAGMA wal_checkpoint(PASSIVE)");
+  }
+
   return Object.freeze({
     path,
     repositories,
@@ -75,6 +80,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     transaction,
     reconcileInterruptedOperations,
     hydrate,
+    flush,
     get closed() { return closed; },
     close() {
       if (closed) return;

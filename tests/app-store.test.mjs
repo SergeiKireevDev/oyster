@@ -67,6 +67,19 @@ test("app store exposes synchronous commit and rollback without exposing its dat
   store.close();
 });
 
+test("app store checkpoints WAL writes before close", () => {
+  const statements = [];
+  class FakeDatabase {
+    exec(sql) { statements.push(sql.trim()); }
+    close() { statements.push("CLOSE"); }
+  }
+  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-flush-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
+  store.flush();
+  store.close();
+  store.flush();
+  assert.deepEqual(statements.slice(-2), ["PRAGMA wal_checkpoint(PASSIVE)", "CLOSE"]);
+});
+
 test("app store closes its owned database exactly once", () => {
   let openedPath = null;
   let closes = 0;
