@@ -3,6 +3,14 @@
  * or transport implementations. The supplied connect adapter preserves the
  * canonical, no-replay session-switch contract.
  */
+export function readPersistedRunner(storage, key = "pi_runner") {
+  return storage.getItem(key) || null;
+}
+
+export function persistRunner(storage, id, key = "pi_runner") {
+  if (id) storage.setItem(key, id); else storage.removeItem(key);
+}
+
 /** Own current-runner persistence and runner-list publication for session composition. */
 export function createSessionRunnerState({ storage, updateAppSession, key = "pi_runner" }) {
   let currentRunner = storage.getItem(key) || null;
