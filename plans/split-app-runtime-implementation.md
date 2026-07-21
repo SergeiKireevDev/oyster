@@ -85,7 +85,7 @@ Add focused unit tests for extracted factories/controllers. Run the existing
 browser/e2e suite as applicable before merging a domain that changes DOM,
 scroll, keyboard, or session-switch behavior.
 
-## [ ] Baseline and Characterization
+## [x] Baseline and Characterization
 
 Before the first extraction:
 
