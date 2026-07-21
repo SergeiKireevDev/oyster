@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 const fallback = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const local = readFileSync(new URL("../Dockerfile.local-pi", import.meta.url), "utf8");
-const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+const containerDocs = readFileSync(new URL("../docs/operations/containers.md", import.meta.url), "utf8");
 
 test("published Docker fallback is explicit and version-labelled", () => {
   assert.match(fallback, /ARG PI_PACKAGE_SPEC=@earendil-works\/pi-coding-agent@0\.80\.3/);
@@ -29,9 +29,9 @@ test("both runtime images include lsof for restart-safe hublot PID discovery", (
   assert.match(local, /procps ripgrep lsof/);
 });
 
-test("local-source build command pins context, revision, and version", () => {
-  assert.match(readme, /docker build -f Dockerfile\.local-pi/);
-  assert.match(readme, /--build-context pi-source=\/home\/ubuntu\/pi-coding-agent/);
-  assert.match(readme, /--build-arg PI_LOCAL_REV=/);
-  assert.match(readme, /--build-arg PI_LOCAL_VERSION=0\.80\.6/);
+test("local-source build documentation pins context, revision, and version", () => {
+  assert.match(containerDocs, /docker build -f Dockerfile\.local-pi/);
+  assert.match(containerDocs, /--build-context pi-source=\/path\/to\/pi-coding-agent/);
+  assert.match(containerDocs, /--build-arg PI_LOCAL_REV=/);
+  assert.match(containerDocs, /--build-arg PI_LOCAL_VERSION=0\.80\.6/);
 });

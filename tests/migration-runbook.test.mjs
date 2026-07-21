@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const runbook = readFileSync(new URL("../docs/app-data-migration.md", import.meta.url), "utf8");
-const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
 test("migration runbook covers backup, restore, downgrade, and failure recovery", () => {
   for (const heading of ["## Back up before cutover", "## Restore the application database", "## Downgrade", "## Failure recovery"]) {
@@ -20,5 +19,4 @@ test("runbook keeps application backups isolated from coding-agent stores", () =
   assert.match(runbook, /Do not start an older binary against a newer `oyster\.sqlite`/);
   assert.match(runbook, /database and its sidecars/);
   assert.match(runbook, /legacy sources remain at their original paths/);
-  assert.match(readme, /\[application-data migration runbook\]\(docs\/app-data-migration\.md\)/);
 });
