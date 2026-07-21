@@ -78,7 +78,7 @@ function findNextUncheckedStep(plan: string) {
 }
 
 function simpleContinuationPrompt(goal: GoalState) {
-  return `Goal loop remains active. Proceed with the current step${goal.currentStep ? `: ${goal.currentStep}` : ""}. If requirements are ambiguous, make the smallest reasonable assumption, implement exactly one step, then call goal_loop verify.`;
+  return `Goal loop remains active. Continue with the current unimplemented step${goal.currentStep ? `: ${goal.currentStep}` : ""}. If requirements are ambiguous, make the smallest reasonable assumption, implement exactly one step, then call goal_loop verify.`;
 }
 
 function continuationPrompt(ctx: ExtensionContext, goal: GoalState) {
@@ -100,7 +100,7 @@ Current recorded step: ${current}
 Last result: ${goal.lastResult || "n/a"}
 Suggested next unchecked plan item: ${next}
 
-Determine the next step to continue from the plan below (do not assume the suggestion is exhaustive). Then implement exactly one remaining incomplete step. Before reporting success, call goal_loop verify with a precise step description and commit message. If the plan has no remaining incomplete steps, call goal_loop complete.
+Continue with the current unimplemented step recorded above. Use the plan below only to confirm that step and its requirements; do not skip ahead to another item. Before reporting success, call goal_loop verify with a precise step description and commit message. If the plan has no remaining incomplete steps, call goal_loop complete.
 
 Plan excerpt:
 \`\`\`

@@ -13,6 +13,7 @@ import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createLegacyRuntimeCleanup } from "./runtime/legacyRuntimeCleanup.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
+import { createRuntimeStarterDependencies } from "./runtime/runtimeStarterDependencies.js";
 import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependencies.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { createSessionBootDependencies } from "./runtime/sessionBootDependencies.js";
@@ -1803,7 +1804,11 @@ const runtimeTeardown = createLegacyRuntimeCleanup({
   loseConnection: () => connectionState.lost(),
 });
 
-const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
+const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
+  hasToken: () => Boolean(token),
+  requireToken,
+  boot,
+}));
 
 const runtimeEventAdapters = createLegacyRuntimeEventAdapters({
   attachers: [
