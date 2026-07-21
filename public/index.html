@@ -470,7 +470,9 @@
     cursor: pointer;
   }
   #modal .m-option .s-del:hover { color: var(--red); background: var(--panel); }
-  #modal .m-option .s-stop { font-size: 11px; }
+  /* the ■ glyph renders much larger than ✕ at equal font-size; shrink it
+     and pin the line-height so both controls occupy the same box */
+  #modal .m-option .s-stop { font-size: 9px; line-height: 19.6px; }
   #modal .m-option .s-stop:hover { color: var(--yellow); background: var(--panel); }
   #modal .newdir-row { display: flex; gap: 6px; margin-bottom: 8px; }
   #modal .newdir-row input { flex: 1; min-width: 0; }
