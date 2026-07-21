@@ -1931,8 +1931,10 @@ async function boot() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `lookup failed (${res.status})`);
       lifecycleLog("boot:session-lookup:done", { status: res.status, sessionPath: data.session?.path, cwd: data.session?.cwd, ms: Math.round(performance.now() - lookupStarted) });
-      const r = await openSessionRunner({ sessionPath: data.session.path, dir: data.session.cwd || null });
-      setRunner(r.id);
+      const r = await getSessionRuntime().openInitialSession({
+        sessionPath: data.session.path,
+        dir: data.session.cwd || null,
+      });
       lifecycleLog("boot:set-runner", { runner: r.id });
       if (route.messageId) {
         const mid = route.messageId;

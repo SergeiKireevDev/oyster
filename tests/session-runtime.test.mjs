@@ -19,6 +19,20 @@ test("session runtime delegates deliberate switches with the current runner and 
   assert.equal(typeof calls[1].hooks.connect, "function");
 });
 
+test("session runtime persists an initial route runner without connecting before boot", async () => {
+  const calls = [];
+  const runtime = createSessionRuntime({
+    getCurrentRunner: () => null,
+    openSession: async (options) => { calls.push(["open", options]); return { id: "initial" }; },
+    switchSessionRunner: () => {}, openSearchHit: () => {},
+    log: () => {}, resetPreview: () => {}, refreshState: () => {}, setRunner: (id) => calls.push(["runner", id]),
+    clearTranscript: () => {}, resetSessionUi: () => {}, renderPreview: () => {}, resetCommands: () => {}, connect: () => calls.push(["connect"]),
+  });
+
+  assert.deepEqual(await runtime.openInitialSession({ sessionPath: "/sessions/linked.jsonl" }), { id: "initial" });
+  assert.deepEqual(calls, [["open", { sessionPath: "/sessions/linked.jsonl" }], ["runner", "initial"]]);
+});
+
 test("session runtime opens a picker selection before deliberately switching to its runner", async () => {
   const calls = [];
   const runtime = createSessionRuntime({

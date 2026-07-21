@@ -44,6 +44,11 @@ export function createSessionRuntime({
 
   return {
     openSession(options) { return openSession(options); },
+    async openInitialSession(options) {
+      const runner = await openSession(options);
+      if (runner?.id) setRunner(runner.id);
+      return runner;
+    },
     async openAndSwitchSession(options, { onOpened = () => {} } = {}) {
       const runner = await openSession(options);
       onOpened(runner);
