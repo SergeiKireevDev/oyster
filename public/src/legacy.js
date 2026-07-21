@@ -47,6 +47,7 @@ import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
 import { createSessionPickerController } from "./lib/sessionPickerController.js";
+import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2076,45 +2077,19 @@ function sessionPickerSnapshot() {
 
 const groupSearchResults = groupSessionSearchResults;
 
-async function runSessionPickerSearch() {
-  const snap = sessionPickerSnapshot();
-  const q = snap.query.trim();
-  if (q.length < 2) {
-    updateSessionPicker({ searchStatus: "", searchResults: [], searching: false });
-    return;
-  }
-  const scope = snap.scope;
-  let path = "";
-  if (scope === "folder") path = snap.folderPath ?? "";
-  if (scope === "session") {
-    const cur = snap.sessions.find((s) => s.id === snap.currentId) ?? snap.sessions[0];
-    if (!cur) { updateSessionPicker({ searchStatus: "no saved session to search", searchResults: [] }); return; }
-    path = cur.path;
-  }
-  updateSessionPicker({ searchStatus: "searching…", searchResults: [], searching: true });
-  const params = new URLSearchParams({ token, q, scope });
-  if (path) params.set("path", path);
-  if (!snap.excludeTools) params.set("tools", "1"); // toggle off → include tool output
-  try {
+const sessionPickerSearchController = createSessionPickerSearchController({
+  getSnapshot: sessionPickerSnapshot,
+  update: updateSessionPicker,
+  groupResults: groupSearchResults,
+  async fetchSearch({ q, scope, path, includeTools }) {
+    const params = new URLSearchParams({ token, q, scope });
+    if (path) params.set("path", path);
+    if (includeTools) params.set("tools", "1");
     const res = await fetch(`/search?${params}`);
-    const data = await res.json();
-    const latest = sessionPickerSnapshot();
-    if (latest.query.trim() !== q || latest.scope !== scope) return;
-    if (!res.ok) {
-      updateSessionPicker({ searchStatus: data.error || `search failed (${res.status})`, searchResults: [], searching: false });
-      return;
-    }
-    updateSessionPicker({
-      searchStatus: `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : ""),
-      searchResults: groupSearchResults(data.results),
-      searchFilesSearched: data.filesSearched,
-      searchTruncated: !!data.truncated,
-      searching: false,
-    });
-  } catch (e) {
-    updateSessionPicker({ searchStatus: `search failed: ${e.message}`, searchResults: [], searching: false });
-  }
-}
+    return { ok: res.ok, status: res.status, data: await res.json() };
+  },
+});
+const runSessionPickerSearch = sessionPickerSearchController.search;
 
 function updateSessionPickerRunners(runners = runnersNow) {
   updateSessionPicker({ runners });
