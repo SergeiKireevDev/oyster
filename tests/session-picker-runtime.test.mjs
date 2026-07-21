@@ -1,8 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSessionPickerRuntime } from "../public/src/features/sessions/createSessionPickerRuntime.js";
+import { createSessionPickerRuntime, preserveLoadedSessionLabels } from "../public/src/features/sessions/createSessionPickerRuntime.js";
 import * as actionNames from "../public/src/runtime/uiActionNames.js";
+
+test("sidebar refreshes retain known titles without retaining removed sessions", () => {
+  const existing = [
+    { sessionKey: "ps1_one", name: "Named session", preview: "first prompt" },
+    { sessionKey: "ps1_removed", name: "Removed" },
+  ];
+  assert.deepEqual(preserveLoadedSessionLabels(existing, [
+    { sessionKey: "ps1_one", name: "", preview: "", messageCount: 2 },
+  ]), [
+    { sessionKey: "ps1_one", name: "Named session", preview: "first prompt", messageCount: 2 },
+  ]);
+});
 
 test("session picker runtime owns picker actions and search-hit construction", async () => {
   const toasts = [];

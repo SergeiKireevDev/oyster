@@ -38,7 +38,12 @@
   $: activeRunners = $appSession.runners.filter((runner) => runner.alive && runner.sessionId);
   let runnerSignature = "";
   $: {
-    const nextSignature = activeRunners.map((runner) => `${runner.id}:${runner.sessionKey ?? runner.sessionId}`).join("|");
+    const nextSignature = activeRunners.map((runner) => [
+      runner.id,
+      runner.sessionKey ?? runner.sessionId,
+      runner.sessionName ?? "",
+      runner.busy ? "busy" : "idle",
+    ].join(":")).join("|");
     if (nextSignature && nextSignature !== runnerSignature) {
       runnerSignature = nextSignature;
       queueMicrotask(refreshSessions);

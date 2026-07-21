@@ -20,16 +20,35 @@ import {
 
 const folderOfSessionPath = (path) => String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
 
+function preserveSessionLabels(previous, session) {
+  if (!previous) return session;
+  return {
+    ...previous,
+    ...session,
+    name: session.name || previous.name,
+    preview: session.preview || previous.preview,
+  };
+}
+
 function mergeSessions(existing, additions) {
   const byIdentity = new Map(existing.map((session) => [sessionIdentity(session), session]));
-  for (const session of additions) byIdentity.set(sessionIdentity(session), session);
+  for (const session of additions) {
+    const identity = sessionIdentity(session);
+    byIdentity.set(identity, preserveSessionLabels(byIdentity.get(identity), session));
+  }
   return [...byIdentity.values()];
+}
+
+export function preserveLoadedSessionLabels(existing, loaded) {
+  const byIdentity = new Map(existing.map((session) => [sessionIdentity(session), session]));
+  return loaded.map((session) => preserveSessionLabels(byIdentity.get(sessionIdentity(session)), session));
 }
 
 export function createSessionPickerRuntime(deps) {
   let resolvePicker = null;
   let sessions = [];
   let pickerRevision = 0;
+  let sidebarRefreshSequence = 0;
 
   const snapshot = () => deps.storeSnapshot(deps.sessionPickerStore);
   const search = createSessionPickerSearchController({
@@ -170,19 +189,29 @@ export function createSessionPickerRuntime(deps) {
   }
 
   async function refreshSidebar() {
+    const sequence = ++sidebarRefreshSequence;
+    const revision = pickerRevision;
     try {
       const { sessions: loadedSessions, folders, currentFolder } = await deps.loadInitialPickerData();
       const runners = deps.getRunners();
       const loaded = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, runners);
-      sessions = mergeSessions(sessions, loaded.allSessions);
+      if (sequence !== sidebarRefreshSequence || revision !== pickerRevision) return;
+      const state = snapshot();
+      const currentSessions = preserveLoadedSessionLabels(state.sessions ?? [], loadedSessions ?? []);
+      const otherFolderSessions = Object.fromEntries(Object.entries(loaded.otherFolderSessions).map(([dir, items]) => [
+        dir,
+        preserveLoadedSessionLabels(state.otherFolderSessions?.[dir] ?? [], items),
+      ]));
+      const allSessions = [...currentSessions, ...Object.values(otherFolderSessions).flat()];
+      sessions = mergeSessions(sessions, allSessions);
       deps.updateSessionPicker({
-        sessions: loadedSessions ?? [],
+        sessions: currentSessions,
         folders: loaded.folders,
         currentFolder,
-        currentId: deps.getCurrentSessionId(loaded.allSessions),
+        currentId: deps.getCurrentSessionId(allSessions),
         currentWorkdir: deps.getWorkdir(),
         runners,
-        otherFolderSessions: loaded.otherFolderSessions,
+        otherFolderSessions,
       });
     } catch { /* the persistent sidebar is best-effort */ }
   }
