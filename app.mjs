@@ -72,10 +72,7 @@
  *                          sessionId?, script? (create only) }
  */
 
-import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync, appendFileSync, renameSync } from "node:fs";
-
-const isHidden = (name) => name.startsWith(".");
-import { homedir } from "node:os";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequestContext } from "./http/createRequestContext.mjs";
@@ -140,13 +137,9 @@ export function init(state) {
 
   const requestContext = createRequestContext(state);
   const {
-    json, readRawBody, readJsonBody,
-    clientIp, checkAuth, resolveSafePath: confinePath,
+    json, readJsonBody,
+    clientIp, checkAuth,
   } = requestContext;
-
-  function forbidden(res, p) {
-    json(res, 403, { error: `path outside the allowed roots: ${p}` });
-  }
 
   /** validate a session file reference. Accepts either:
    *  - absolute legacy path under SESSIONS_ROOT

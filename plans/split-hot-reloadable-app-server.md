@@ -118,7 +118,7 @@ factory, not the composition root.
 - [x] Move `POST /workdir` into `http/routes/workdirRoutes.mjs`, injecting only
   the runner manager/state operations it requires. Preserve runner switch and
   broadcast behavior with a contract test.
-- [ ] Remove extracted filesystem/workdir route bodies from `app.mjs` and run a
+- [x] Remove extracted filesystem/workdir route bodies from `app.mjs` and run a
   no-reference check for old inline path and upload helpers.
 
 **Acceptance:** all filesystem mutation and workdir HTTP policy is isolated in
