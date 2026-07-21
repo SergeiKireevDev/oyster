@@ -34,7 +34,7 @@ cd tests/e2e && npm test
 - [x] Have `App.svelte` create one UI action registry, provide it through
   Svelte context, and pass it to `startAppRuntime()`. Add a mount → unmount →
   mount test proving a disposed registry is not reused.
-- [ ] Register the existing menu-action implementation with the runtime's UI
+- [x] Register the existing menu-action implementation with the runtime's UI
   action registry under one named action. Do not change `Menu.svelte` in this
   step; test that invoking the registry reaches the existing implementation.
 - [ ] Change `Menu.svelte` to obtain the registry from context and invoke the

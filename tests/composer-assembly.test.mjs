@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createComposerAssembly } from "../public/src/features/composer/createComposerAssembly.js";
 import { runComposerAction } from "../public/src/features/composer/composerActions.js";
+import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
+import { MENU_ACTION } from "../public/src/runtime/uiActionNames.js";
 
 function createHarness({ rpc = async () => ({}) } = {}) {
   const calls = [];
@@ -56,7 +58,9 @@ test("composer assembly owns command guard palette menu and listener constructio
   const { assembly, calls } = createHarness();
   const target = { addEventListener() {}, removeEventListener() {} };
   const palette = { classList: { contains: () => false } };
+  const uiActions = createUiActionRegistry();
   const commands = assembly.configureCommands({
+    uiActions,
     findElement: () => palette,
     confirm: async () => true,
     windowTarget: target,
@@ -79,11 +83,15 @@ test("composer assembly owns command guard palette menu and listener constructio
   assert.equal(typeof commands.runController.attach, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
   assert.equal(typeof commands.menuController.attach, "function");
-  await commands.runMenuAction("compact");
+  await uiActions.invoke(MENU_ACTION, "compact");
   assert.ok(calls.some((call) => call[0] === "clear"));
   assert.ok(calls.some((call) => call[0] === "render"));
   assert.equal(assembly.configureCommands({}), commands);
   assembly.teardown();
+  const clearCount = calls.filter((call) => call[0] === "clear").length;
+  assert.equal(uiActions.invoke(MENU_ACTION, "compact"), undefined);
+  assert.equal(calls.filter((call) => call[0] === "clear").length, clearCount);
+  uiActions.teardown();
 });
 
 test("composer assembly remounts actions and command listeners without stale ownership", async () => {

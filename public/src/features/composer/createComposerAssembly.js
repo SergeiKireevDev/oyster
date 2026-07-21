@@ -4,6 +4,7 @@ import { createComposerHistoryController } from "../../lib/composerHistoryContro
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
 import { configureComposerActions } from "./composerActions.js";
+import { MENU_ACTION } from "../../runtime/uiActionNames.js";
 
 /** Owns composer input, prompt history, send/abort, and local-echo coordination. */
 export function createComposerAssembly(deps) {
@@ -188,6 +189,7 @@ export function createComposerAssembly(deps) {
       }
     }
     const menuController = createMenuEventController({ windowTarget: commandDeps.windowTarget, run: runMenuAction });
+    const detachMenuAction = commandDeps.uiActions?.register(MENU_ACTION, runMenuAction) ?? (() => {});
     setup(input);
     commandRuntime = {
       guard, setup, runController, keyboardController, menuController, runMenuAction,
@@ -197,6 +199,7 @@ export function createComposerAssembly(deps) {
         keyboardController.detach();
         runController.detach();
         menuController.detach();
+        detachMenuAction();
         close();
         commandRuntime = null;
       },

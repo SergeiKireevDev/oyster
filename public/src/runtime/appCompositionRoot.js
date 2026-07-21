@@ -51,7 +51,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, find } = browser;
-  void stores;
+  const { uiActions } = stores;
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -785,6 +785,7 @@ const layoutOperations = settingsLayoutRuntime.layout;
 const settingsLayoutEvents = { attach: settingsLayoutRuntime.attach };
 
 const commandRuntime = composerAssembly.configureCommands({
+  uiActions,
   findElement: $,
   confirm: extensionUiAdapters.confirm,
   windowTarget: window,
