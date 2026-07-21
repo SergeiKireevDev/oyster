@@ -23,10 +23,13 @@ function installSecuredMockProvider() {
 }
 
 async function openApiKeys(page) {
-  await page.locator("#menuBtn").click();
-  await page.locator('#menu button[data-action="credentials"]').click();
-  await expect(page.locator("#mTitle")).toHaveText("Credentials");
-  await expect(page.locator(`.api-key-row[data-provider="${PROVIDER}"]`)).toBeVisible({ timeout: 15000 });
+  const row = page.locator(`.api-key-row[data-provider="${PROVIDER}"]`);
+  if (!(await row.isVisible().catch(() => false))) {
+    await page.locator("#menuBtn").click();
+    await page.locator('#menu button[data-action="credentials"]').click();
+    await expect(page.locator("#mTitle")).toHaveText("Credentials");
+  }
+  await expect(row).toBeVisible({ timeout: 15000 });
 }
 
 async function confirmYes(page) {

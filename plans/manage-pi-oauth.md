@@ -236,7 +236,7 @@ jobs. Existing API-key secret-boundary tests continue to pass unchanged.
   inventory, and documentation tests. Add mock-SDK integration coverage that
   never contacts a real provider and proves the server delegates login, refresh
   compatibility, and logout to Pi rather than implementing token exchange.
-- [ ] Add desktop and mobile Playwright flows using a mock OAuth provider: sign
+- [x] Add desktop and mobile Playwright flows using a mock OAuth provider: sign
   in through device or manual callbacks, observe models after runner restart,
   re-authenticate without exposing either token, cancel a flow without changing
   auth, sign out, and verify the provider becomes unavailable when no fallback

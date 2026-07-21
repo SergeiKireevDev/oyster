@@ -29,6 +29,15 @@ export function createCredentialsAssembly({
     openModal({ title: "Credentials", wide: true, content: "credentials" });
     return controller.load();
   };
+  const startOAuth = async (provider) => {
+    const result = await controller.startOAuth(provider);
+    if (result?.ok && !tornDown) {
+      setState({ setupMode: false });
+      controller.activate();
+      openModal({ title: "Credentials", wide: true, content: "credentials" });
+    }
+    return result;
+  };
   const initialize = async () => {
     if (tornDown || startupChecked) return false;
     startupChecked = true;
@@ -44,7 +53,7 @@ export function createCredentialsAssembly({
     [CREDENTIALS_CLOSE_ACTION, controller.deactivate],
     [CREDENTIALS_SAVE_API_KEY_ACTION, controller.save],
     [CREDENTIALS_REMOVE_API_KEY_ACTION, controller.remove],
-    [CREDENTIALS_START_OAUTH_ACTION, controller.startOAuth],
+    [CREDENTIALS_START_OAUTH_ACTION, startOAuth],
     [CREDENTIALS_RESPOND_OAUTH_ACTION, controller.respondOAuth],
     [CREDENTIALS_CANCEL_OAUTH_ACTION, controller.cancelOAuth],
     [CREDENTIALS_LOGOUT_OAUTH_ACTION, controller.logoutOAuth],
@@ -53,7 +62,7 @@ export function createCredentialsAssembly({
   return Object.freeze({
     operations: Object.freeze({
       open, initialize, load: controller.load, save: controller.save, remove: controller.remove,
-      startOAuth: controller.startOAuth, respondOAuth: controller.respondOAuth,
+      startOAuth, respondOAuth: controller.respondOAuth,
       cancelOAuth: controller.cancelOAuth, logoutOAuth: controller.logoutOAuth,
     }),
     teardown() {

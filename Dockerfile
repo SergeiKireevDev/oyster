@@ -41,7 +41,7 @@ WORKDIR /app
 # Frontend build dependencies + app sources (see .dockerignore)
 COPY package.json package-lock.json vite.config.js README.md AGENTS.md pi-ui.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
-COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs pi-credential-service.mjs runner-restart-service.mjs runners.mjs tunnels.mjs \
+COPY server.mjs app.mjs pi-processes.mjs sessions.mjs session-references.mjs session-operations.mjs pi-credential-service.mjs pi-oauth-flow-service.mjs runner-restart-service.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
 COPY public ./public
 COPY http ./http
