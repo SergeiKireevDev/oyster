@@ -6,6 +6,8 @@ function setup() {
   const stopped = [];
   const closed = [];
   const unlinked = [];
+  const deletedCheckpoints = [];
+  const deletedRoutineOwners = [];
   const searches = [];
   const runner = { id: "r1", sessionFile: "/sessions/folder/a.jsonl", proc: {}, busy: true };
   const state = {
@@ -43,13 +45,14 @@ function setup() {
     },
     resources: {
       closeTunnel: (_state, id) => closed.push(id),
-      releaseSessionRoutines: () => ["routine-a"],
+      releaseSessionRoutines: (_state, id) => { deletedRoutineOwners.push(id); return ["routine-a"]; },
+      deleteSessionCheckpoints: (id) => { deletedCheckpoints.push(id); return 1; },
     },
     resolvePath: (path) => path,
     unlinkFile: (path) => unlinked.push(path),
     logger: { log() {} },
   };
-  return { state, stopped, closed, unlinked, searches, routes: createSessionRoutes(dependencies) };
+  return { state, stopped, closed, unlinked, deletedCheckpoints, deletedRoutineOwners, searches, routes: createSessionRoutes(dependencies) };
 }
 
 function response() { return {}; }
@@ -137,8 +140,14 @@ test("search validates scope and preserves filtering options, snippets, and resp
   }]);
 });
 
-test("deleting a session retires bound runners, hublots, and routines", async () => {
-  const { state, stopped, closed, unlinked, routes } = setup();
+test("deleting a session isolates cross-session, global, rebound, and fork resources", async () => {
+  const { state, stopped, closed, unlinked, deletedCheckpoints, deletedRoutineOwners, routes } = setup();
+  state.runners.set("r-fork", { id: "r-fork", sessionFile: "/sessions/folder/fork.jsonl", sessionId: "fork" });
+  state.runners.set("r-other", { id: "r-other", sessionFile: "/sessions/folder/other.jsonl", sessionId: "other" });
+  state.runners.set("r-global", { id: "r-global", sessionFile: null, sessionId: null });
+  state.tunnels.set("t-fork", { id: "t-fork", port: 4001, sessionId: "fork" });
+  state.tunnels.set("t-rebound", { id: "t-rebound", port: 4002, sessionId: "session-b" });
+  state.tunnels.set("t-global", { id: "t-global", port: 4003, sessionId: null });
   const res = response();
   await routes["DELETE /session"]({}, res, new URL("http://localhost/session?path=folder/a.jsonl"));
   assert.equal(res.status, 200);
@@ -150,7 +159,10 @@ test("deleting a session retires bound runners, hublots, and routines", async ()
   assert.deepEqual(stopped, ["r1"]);
   assert.deepEqual(closed, ["t1"]);
   assert.deepEqual(unlinked, ["/sessions/folder/a.jsonl"]);
-  assert.equal(state.runners.size, 0);
+  assert.deepEqual(deletedCheckpoints, ["session-a"]);
+  assert.deepEqual(deletedRoutineOwners, ["session-a"]);
+  assert.deepEqual([...state.runners.keys()].sort(), ["r-fork", "r-global", "r-other"]);
   assert.equal(state.defaultRunnerId, null);
+  assert.deepEqual([...state.tunnels.keys()].sort(), ["t-fork", "t-global", "t-rebound", "t1"]);
   assert.equal(state.runnersBroadcast, true);
 });

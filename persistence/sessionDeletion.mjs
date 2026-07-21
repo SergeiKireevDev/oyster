@@ -10,6 +10,7 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
     closeHublots,
     stopRoutines,
     deleteRoutines,
+    deleteCheckpoints,
     deleteAgentSession,
     removeRuntime,
     broadcast,
@@ -47,6 +48,8 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
       update("running", "hublots_closed");
       const deletedRoutines = await deleteRoutines();
       update("running", "routines_deleted");
+      const deletedCheckpoints = await deleteCheckpoints();
+      update("running", "checkpoints_deleted");
       appStore.transaction((repositories) => {
         repositories.sessions.delete(owner.id);
         repositories.operations.update(id, {
@@ -58,7 +61,7 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
       update("running", "runtime_removed");
       await broadcast();
       update("completed", "completed");
-      return { operationId: id, agentResult, closedHublots, stoppedRoutines, deletedRoutines };
+      return { operationId: id, agentResult, closedHublots, stoppedRoutines, deletedRoutines, deletedCheckpoints };
     } catch (error) {
       try { update("failed", stage, error.message); } catch {}
       error.operationId = id;

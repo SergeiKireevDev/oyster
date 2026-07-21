@@ -292,7 +292,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Reconcile incomplete deletion operations at startup.
 - [x] Ensure session deletion deletes owned routines rather than releasing them.
 - [x] Preserve all resources when agent-session deletion fails.
-- [ ] Add cross-session, global/released-resource, rebinding, and fork-isolation tests for every resource type.
+- [x] Add cross-session, global/released-resource, rebinding, and fork-isolation tests for every resource type.
 
 ### 4. Migrate checkpoints
 

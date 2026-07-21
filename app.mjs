@@ -16,7 +16,7 @@ export async function init(state) {
     SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
     sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
-  const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
+  const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
@@ -72,7 +72,7 @@ export async function init(state) {
   state.piProcesses = createPiProcessLauncher({ config });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
-    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
+    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, deleteSessionRoutines: (id) => deleteSessionRoutines(state, id), deleteSessionCheckpoints });
     state.incompleteOperations = new Map(appStore.hydrate().incompleteOperations.map((entry) => [entry.id, entry]));
     state.sessionDeletionReconciled = true;
   }
@@ -141,7 +141,7 @@ export async function init(state) {
       sessionTargetFromSearch,
     },
     runners: { stopRunner, runnersChanged },
-    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines },
+    resources: { closeTunnel, stopSessionRoutines, deleteSessionRoutines, deleteSessionCheckpoints },
     sessionOperations: state.sessionOperations,
     deleteOwnedSession,
   });

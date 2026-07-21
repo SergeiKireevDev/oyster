@@ -19,7 +19,7 @@ const FAKE_HOME = mkdtempSync(join(tmpdir(), "pi-ui-test-home-"));
 process.env.HOME = FAKE_HOME;
 
 const { SESSIONS_ROOT } = await import("../sessions.mjs");
-const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
+const { loadCheckpoints, saveCheckpoints, deleteSessionCheckpoints, recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
   await import("../checkpoints.mjs");
 
 const STORE = join(FAKE_HOME, ".pi", "agent", "checkpoints.json");
@@ -55,6 +55,20 @@ test("store: load returns {} when missing, round-trips a save", () => {
   saveCheckpoints({ root: [{ hash: "h1" }] });
   assert.deepEqual(loadCheckpoints(), { root: [{ hash: "h1" }] });
   assert.ok(!existsSync(STORE + ".tmp"), "atomic tmp file must not linger");
+});
+
+test("store: deleting one owner preserves cross-session and fork-owned checkpoints", () => {
+  saveCheckpoints({
+    root: [{ hash: "root-only" }],
+    fork: [{ hash: "fork-only" }],
+    other: [{ hash: "other-only" }],
+  });
+  assert.equal(deleteSessionCheckpoints("root"), 1);
+  assert.deepEqual(loadCheckpoints(), {
+    fork: [{ hash: "fork-only" }],
+    other: [{ hash: "other-only" }],
+  });
+  assert.equal(deleteSessionCheckpoints("missing"), 0);
 });
 
 test("store: corrupt file is quarantined, not wiped by the next save", () => {

@@ -6,7 +6,7 @@ const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
 const routeSource = readFileSync(new URL("../http/routes/sessionRoutes.mjs", import.meta.url), "utf8");
 
 test("app composes session routes with explicit domain dependencies", () => {
-  assert.match(appSource, /createSessionRoutes\(\{[\s\S]*?sessions: \{[\s\S]*?catalog: state\.sessionCatalog,[\s\S]*?sessionTargetFromSearch,[\s\S]*?runners: \{ stopRunner, runnersChanged \},[\s\S]*?resources: \{ closeTunnel, stopSessionRoutines, deleteSessionRoutines \},[\s\S]*?deleteOwnedSession,[\s\S]*?\}\)/);
+  assert.match(appSource, /createSessionRoutes\(\{[\s\S]*?sessions: \{[\s\S]*?catalog: state\.sessionCatalog,[\s\S]*?sessionTargetFromSearch,[\s\S]*?runners: \{ stopRunner, runnersChanged \},[\s\S]*?resources: \{ closeTunnel, stopSessionRoutines, deleteSessionRoutines, deleteSessionCheckpoints \},[\s\S]*?deleteOwnedSession,[\s\S]*?\}\)/);
   assert.match(appSource, /createRouteTable\(\{[^}]*session: sessionRoutes/);
   assert.equal(routeSource.includes('from "../../app.mjs"'), false);
   assert.equal(routeSource.includes('from "../app.mjs"'), false);

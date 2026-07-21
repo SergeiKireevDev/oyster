@@ -21,6 +21,7 @@ export function createSessionRoutes({
     closeTunnel,
     stopSessionRoutines = () => [],
     deleteSessionRoutines = resources.releaseSessionRoutines ?? (() => []),
+    deleteSessionCheckpoints = () => 0,
   } = resources;
   const sqlite = catalog.backend === "sqlite";
 
@@ -131,6 +132,7 @@ export function createSessionRoutes({
         await steps.broadcast();
         const closedHublots = await steps.closeHublots();
         const deletedRoutines = await steps.deleteRoutines();
+        await steps.deleteCheckpoints();
         return { agentResult, closedHublots, stoppedRoutines: deletedRoutines, deletedRoutines };
       });
       try {
@@ -149,6 +151,7 @@ export function createSessionRoutes({
           },
           stopRoutines: () => stopSessionRoutines(state, reference.id),
           deleteRoutines: () => deleteSessionRoutines(state, reference.id),
+          deleteCheckpoints: () => deleteSessionCheckpoints(reference.id),
           deleteAgentSession: () => operations.deleteSession(reference),
           removeRuntime: (stoppedRunners) => {
             for (const runner of stoppedRunners) {

@@ -48,6 +48,17 @@ export function saveCheckpoints(db) {
   }
 }
 
+/** Delete only records owned by one session; fork and ancestor keys are independent. */
+export function deleteSessionCheckpoints(sessionId) {
+  if (!sessionId) return 0;
+  const db = loadCheckpoints();
+  const count = Array.isArray(db[sessionId]) ? db[sessionId].length : 0;
+  if (!Object.hasOwn(db, sessionId)) return 0;
+  delete db[sessionId];
+  saveCheckpoints(db);
+  return count;
+}
+
 function checkpointContext(input, options = {}) {
   const catalog = options.catalog ?? defaultSessionCatalog;
   if (typeof input === "string") {
