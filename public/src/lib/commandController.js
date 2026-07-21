@@ -31,7 +31,7 @@ export function pathPaletteView(items, trigger, active) {
       const query = trigger.text.slice(trigger.text.lastIndexOf("/") + 1);
       const highlighted = label.toLowerCase().startsWith(query.toLowerCase()) ? query.length : 0;
       return {
-        icon: item.icon ?? (item.directory ? "📁" : "📄"),
+        icon: item.icon ?? (item.directory ? "folder" : "📄"),
         desc: item.desc ?? (item.directory ? "folder" : "file"),
         prefix: "",
         highlight: label.slice(0, highlighted),

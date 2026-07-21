@@ -24,6 +24,8 @@ import {
   HUBLOT_SHOW_ACTION,
   HUBLOT_TOGGLE_SCOPE_ACTION,
   ROUTINE_RUN_ACTION,
+  ROUTINE_SHOW_GENERATOR_ACTION,
+  ROUTINE_GENERATE_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 test("resource assembly composes files hublots and routines with one teardown boundary", () => {
@@ -121,7 +123,11 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
       remove: (id) => calls.push(["hublot-remove", id]),
       openCommandPalette: (node) => calls.push(["hublot-palette", node]),
     },
-    routine: (name, action) => calls.push(["routine", name, action]),
+    routine: {
+      run: (name, action) => calls.push(["routine", name, action]),
+      showGenerator: () => calls.push(["routine-show"]),
+      generate: (brief) => calls.push(["routine-generate", brief]),
+    },
   });
 
   uiActions.invoke(FILE_PICKER_BROWSE_ACTION, "/tmp");
@@ -145,6 +151,8 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   uiActions.invoke(HUBLOT_REMOVE_ACTION, "tunnel-1");
   uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, "textarea");
   uiActions.invoke(ROUTINE_RUN_ACTION, "build.sh", "start");
+  uiActions.invoke(ROUTINE_SHOW_GENERATOR_ACTION);
+  uiActions.invoke(ROUTINE_GENERATE_ACTION, "build docs");
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
@@ -167,6 +175,8 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
     ["hublot-remove", "tunnel-1"],
     ["hublot-palette", "textarea"],
     ["routine", "build.sh", "start"],
+    ["routine-show"],
+    ["routine-generate", "build docs"],
   ]);
 
   assembly.teardown();
@@ -176,5 +186,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   assert.equal(uiActions.invoke(FILE_EXPLORER_OPEN_ACTION), undefined);
   assert.equal(uiActions.invoke(HUBLOT_SHOW_ACTION), undefined);
   assert.equal(uiActions.invoke(ROUTINE_RUN_ACTION, "stale", "start"), undefined);
-  assert.equal(calls.length, 21);
+  assert.equal(uiActions.invoke(ROUTINE_SHOW_GENERATOR_ACTION), undefined);
+  assert.equal(uiActions.invoke(ROUTINE_GENERATE_ACTION, "stale"), undefined);
+  assert.equal(calls.length, 23);
 });

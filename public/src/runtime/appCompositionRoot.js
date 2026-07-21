@@ -33,13 +33,14 @@ import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
+import { resetRoutineManager, updateRoutineManager } from "../stores/routineManager.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
-import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
+import { generateRoutine, listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
@@ -644,13 +645,36 @@ const routineSidebarController = routineRuntime.sidebar;
 const routineController = routineRuntime.controller;
 const syncRoutinesStore = resourceOperations.syncRoutines;
 function loadRoutines() { if (token) return resourceOperations.loadRoutines(); }
+function showRoutineGenerator() {
+  resetRoutineManager();
+  openModal({ title: "New routine", content: "routineManager" });
+}
+async function buildRoutineFromBrief(brief) {
+  const text = String(brief ?? "").trim();
+  if (!text) return;
+  updateRoutineManager({ creating: true });
+  try {
+    await generateRoutine(fetch, { brief: text, sessionId: getSessionState()?.sessionId });
+    closeModal();
+    addToast("routine created");
+    await loadRoutines();
+  } catch (error) {
+    addToast(`routine generation failed: ${error.message}`, "error");
+  } finally {
+    updateRoutineManager({ creating: false });
+  }
+}
 resourceAssembly.configureActions({
   filePicker: filePickerActions,
   folderBrowser: folderBrowserActions,
   fileExplorer: fileExplorerActions,
   files: filesActions,
   hublots: hublotActions,
-  routine: routineController.run,
+  routine: {
+    run: routineController.run,
+    showGenerator: showRoutineGenerator,
+    generate: buildRoutineFromBrief,
+  },
 });
 
 // ------------------------------------------------------------ session picker
@@ -693,9 +717,10 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   openSessionAtSearchHit: (sessionPath, hit) => getSessionRuntime().openSessionAtSearchHit(sessionPath, hit),
   async loadInitialPickerData() {
     const dirQ = getWorkdir() ? `?dir=${encodeURIComponent(getWorkdir())}` : "";
-    const res = await fetch(`/sessions${dirQ}`);
-    if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], folders: [], currentFolder: null }; }
+    const [res, allRes] = await Promise.all([fetch(`/sessions${dirQ}`), fetch("/sessions?all=1")]);
+    if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], allSessions: [], folders: [], currentFolder: null }; }
     const { sessions } = await res.json();
+    const allSessions = allRes.ok ? (await allRes.json()).sessions ?? sessions : sessions;
     const folderData = await (async () => {
       try {
         const response = await fetch(`/session-folders${dirQ}`);
@@ -705,7 +730,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
         return { folders: [], currentFolder: null };
       }
     })();
-    return { sessions, ...folderData };
+    return { sessions, allSessions, ...folderData };
   },
   getCurrentSessionId: (sessions) => {
     const currentIdentity = runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner()))

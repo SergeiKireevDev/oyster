@@ -19,7 +19,7 @@ test("file explorer loads a directory into its list state", async () => {
   assert.deepEqual(calls, [
     ["update", { loading: true, mode: "list" }],
     ["path", "/work/src"],
-    ["title", "📁 File explorer"],
+    ["title", "File explorer"],
     ["update", { mode: "list", path: "/work/src", home: "/home", workdir: "/work", parent: "/", dirs: [{ name: "src" }], files: [{ name: "a.txt" }], showHidden: false, loading: false, token: "token", uploadText: "⬆ Upload…", uploading: false }],
   ]);
 });
@@ -43,7 +43,7 @@ test("file explorer initializes its modal before loading the workdir", async () 
   assert.deepEqual(calls.slice(0, 4), [
     ["reset", "/work"],
     ["update", { mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: "token", editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…" }],
-    ["modal", { title: "📁 File explorer", content: "fileExplorer" }],
+    ["modal", { title: "File explorer", content: "fileExplorer" }],
     ["update", { loading: true, mode: "list" }],
   ]);
   assert.equal(calls[4][1], "/work");

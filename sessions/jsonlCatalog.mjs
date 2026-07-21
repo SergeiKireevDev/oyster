@@ -256,10 +256,19 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
   const q = query.toLowerCase();
   let parsed;
   try { parsed = parseSessionFile(path); } catch { return []; }
-  const { header, name, entries } = parsed;
+  const { header, name, entries, byId } = parsed;
+  let leafId = null;
+  for (const entry of entries) if (entry.id) leafId = entry.id;
+  const activeEntries = [];
+  for (let entry = leafId ? byId.get(leafId) : null; entry; entry = entry.parentId ? byId.get(entry.parentId) : null) {
+    activeEntries.push(entry);
+  }
+  activeEntries.reverse();
+  const activeIds = new Set(activeEntries.map((entry) => entry.id));
+  const searchableEntries = entries.filter((entry) => entry.type === "session_info" || activeIds.has(entry.id));
   const meta = { id: header?.id ?? null, name, preview: null, cwd: header?.cwd ?? null };
   const hits = [];
-  outer: for (const e of entries) {
+  outer: for (const e of searchableEntries) {
     for (const t of entryTexts(e)) {
       if (!meta.preview && t.role === "user" && t.kind === "text") meta.preview = t.text.slice(0, 120);
       // default: only real text responses (user/assistant) and session

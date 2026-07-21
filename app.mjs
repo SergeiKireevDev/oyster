@@ -10,7 +10,7 @@ const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
   const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent } =
     await import(bust("tunnels.mjs"));
-  const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir } =
+  const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
   const {
     SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
@@ -124,7 +124,7 @@ export async function init(state) {
     state, appStore, requestContext, ensureSessionOwner,
     routines: {
       listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
-      teardownRoutine, releaseRoutine, deleteRoutine,
+      teardownRoutine, releaseRoutine, deleteRoutine, spawnRoutineAgent,
     },
   });
   const sessionRoutes = createSessionRoutes({

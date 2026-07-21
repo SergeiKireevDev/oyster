@@ -1,5 +1,6 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
+  import FolderIcon from "./FolderIcon.svelte";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -44,7 +45,7 @@
 {/if}
 
 <div class="m-actions" id="mActions">
-  <button class="chip" title="Insert the current folder path" onclick={useFilePickerFolder}>📁 Use this folder</button>
+  <button class="chip folder-action" title="Insert the current folder path" onclick={useFilePickerFolder}><FolderIcon size={14} /> Use this folder</button>
   <button class="chip toggle-hidden" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
   <button class="chip" data-modal-cancel onclick={cancelFilePicker}>Cancel</button>
 </div>

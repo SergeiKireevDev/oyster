@@ -194,9 +194,9 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     const results = [];
     let truncated = false;
     for (const session of selected) {
-      const loaded = readSession(session.id);
+      const loaded = activeBranch(session.id);
       const hits = [];
-      for (const entry of loaded.allEntries) {
+      for (const entry of loaded.branch) {
         for (const part of searchableParts(entry)) {
           const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
           if (!includeTools && !isText) continue;

@@ -12,6 +12,7 @@
   export let onBrowse = () => {};
 
   $: visibleDirs = visibleBrowserEntries(dirs, showHidden);
+  $: hasNavigation = path !== home || (showWorkdir && workdir && path !== workdir) || parent;
 </script>
 
 {#if showPath}
@@ -26,6 +27,9 @@
 {/if}
 {#if parent}
   <button class="m-option dir up" onclick={() => onBrowse(parent)}>..</button>
+{/if}
+{#if hasNavigation && visibleDirs.length}
+  <div class="browser-directory-separator" role="separator" aria-label="Folders"></div>
 {/if}
 {#each visibleDirs as dir (dir.name)}
   <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => onBrowse(browserPathFor(path, dir))}>{dir.name}</button>

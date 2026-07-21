@@ -59,6 +59,19 @@ test("SQLite usage analytics validates and forwards range aggregation", () => {
   assert.equal(invalid.status, 400);
 });
 
+test("SQLite routes can list every known session without a cwd filter", () => {
+  const { routes, sessions } = setup();
+  sessions.push({ id: "other", cwd: "/other", storagePath: "/agent/sessions.sqlite", parentSessionId: null, preview: "other", messageCount: 1 });
+
+  const scoped = response();
+  routes["GET /sessions"]({}, scoped, new URL("http://localhost/sessions"));
+  assert.equal(scoped.body.sessions.length, 2);
+
+  const all = response();
+  routes["GET /sessions"]({}, all, new URL("http://localhost/sessions?all=1"));
+  assert.equal(all.body.sessions.length, 3);
+});
+
 test("SQLite routes list distinct shared-database identities and parent keys", () => {
   const { routes, codec } = setup();
   const res = response();

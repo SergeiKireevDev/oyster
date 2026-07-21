@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { appHeader } from "../stores/appSession.js";
   import { composerUi } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
@@ -19,6 +20,7 @@
 
 <div id="composer">
   <div class="inner">
+    <div class="composer-prompt" aria-hidden="true">›</div>
     <textarea
       id="input"
       rows="1"
@@ -32,6 +34,6 @@
   </div>
   <div id="statusbar">
     <span id="stateInfo">{$headerState.stateInfo}</span>
-    <span id="workdirInfo" title={$appHeader.workdirTitle}>{$appHeader.workdirText}</span>
+    <span id="workdirInfo" title={$appHeader.workdirTitle}>{#if $appHeader.workdirText}<FolderIcon size={11} />{/if}{$appHeader.workdirText}</span>
   </div>
 </div>

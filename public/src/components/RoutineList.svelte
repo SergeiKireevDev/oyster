@@ -1,5 +1,5 @@
 <script>
-  import { routineCurrentSessionId, routines, routinesLoading, routineScopeAll, routinesTotal } from "../stores/routines.js";
+  import { routineCurrentSessionId, routines, routinesLoading, routineScopeAll } from "../stores/routines.js";
 
   const dotClass = (status) => ({ running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[status] ?? "");
   const msg = (routine) => routine.message ?? routine.log?.[routine.log.length - 1] ?? null;
@@ -17,11 +17,7 @@
 <div id="routineList" style="display:contents">
   {#if $routinesLoading}
     <div class="sidebar-loading"><span class="spin"></span> loading routines…</div>
-  {:else if !$routines.length}
-    <div class="r-empty" title="create routines with the routine tool — starting one binds it to the current session; it is run with “run”, torn down with “teardown”, and can print “::progress <0-100> <message>” lines to report progression">
-      {$routinesTotal ? `(none for this session — ${$routinesTotal} bound elsewhere)` : "(none)"}
-    </div>
-  {:else}
+  {:else if $routines.length}
     {#each $routines as routine (routine.name)}
       <div class="routine-block">
         <div class="r-head">

@@ -23,6 +23,8 @@ import {
   HUBLOT_SHOW_ACTION,
   HUBLOT_TOGGLE_SCOPE_ACTION,
   ROUTINE_RUN_ACTION,
+  ROUTINE_SHOW_GENERATOR_ACTION,
+  ROUTINE_GENERATE_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
@@ -85,7 +87,9 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(HUBLOT_TOGGLE_SCOPE_ACTION, actions.hublots.toggleScope),
         deps.uiActions.register(HUBLOT_REMOVE_ACTION, actions.hublots.remove),
         deps.uiActions.register(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, actions.hublots.openCommandPalette),
-        deps.uiActions.register(ROUTINE_RUN_ACTION, actions.routine),
+        deps.uiActions.register(ROUTINE_RUN_ACTION, actions.routine.run),
+        deps.uiActions.register(ROUTINE_SHOW_GENERATOR_ACTION, actions.routine.showGenerator),
+        deps.uiActions.register(ROUTINE_GENERATE_ACTION, actions.routine.generate),
       );
     },
     teardown() {

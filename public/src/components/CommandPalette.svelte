@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { commandPalette, setCommandPaletteState } from "../stores/commandPalette.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { COMMAND_PALETTE_RUN_ACTION } from "../runtime/uiActionNames.js";
@@ -39,7 +40,7 @@
         onmousedown={(event) => choose(event, i)}
         onmousemove={() => setActive(i)}
       >
-        <span class="cmd-ico">{cmd.icon}</span>
+        <span class="cmd-ico">{#if cmd.icon === "folder"}<FolderIcon size={15} />{:else}{cmd.icon}{/if}</span>
         <div class="cmd-body">
           <div class="cmd-name">{cmd.prefix ?? ":"}<mark>{cmd.highlight}</mark>{cmd.rest}</div>
           <div class="cmd-desc">{cmd.desc}</div>

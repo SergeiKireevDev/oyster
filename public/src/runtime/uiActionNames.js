@@ -27,6 +27,8 @@ export const HUBLOT_REMOVE_ACTION = "hublot.remove";
 export const HUBLOT_OPEN_COMMAND_PALETTE_ACTION = "hublot.openCommandPalette";
 
 export const ROUTINE_RUN_ACTION = "routine.run";
+export const ROUTINE_SHOW_GENERATOR_ACTION = "routine.showGenerator";
+export const ROUTINE_GENERATE_ACTION = "routine.generate";
 
 export const COMPOSER_INPUT_ACTION = "composer.input";
 export const COMPOSER_KEYDOWN_ACTION = "composer.keydown";
@@ -54,6 +56,5 @@ export const SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION = "sessionSidebar.createInF
 export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
 export const HEADER_CYCLE_THINKING_ACTION = "header.cycleThinking";
 export const HEADER_OPEN_CONFIG_ACTION = "header.openConfig";
-export const HEADER_TOGGLE_HUBLOTS_ACTION = "header.toggleHublots";
 export const HEADER_TOGGLE_TREE_ACTION = "header.toggleTree";
 export const SETTINGS_CHANGED_ACTION = "settings.changed";

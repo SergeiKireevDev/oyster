@@ -187,10 +187,7 @@ export async function forceNewSession(page) {
   if (mobile) {
     for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) await swipe(page, "right");
   }
-  await page.locator("#sessions .session-sidebar-entry.current")
-    .locator("xpath=ancestor::details[1]")
-    .locator(":scope > .session-sidebar-cwd-add")
-    .click();
+  await page.locator("#newSessionHere").click();
   // wait for the id to flip to something new (or null on a truly fresh one)
   await page.waitForFunction(
     (b) => {

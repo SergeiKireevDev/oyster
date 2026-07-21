@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { closeModalState } from "../stores/modal.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
@@ -21,7 +22,7 @@
 </script>
 
 <div class="m-option" style="align-items:center;">
-  <button class="btn" style="padding:6px 10px;" onclick={openManagedFileExplorer}>📁 File explorer</button>
+  <button class="btn folder-action" style="padding:6px 10px;" onclick={openManagedFileExplorer}><FolderIcon size={15} /> File explorer</button>
   <span class="m-path" style="margin:0;">browse, download, edit, or upload workspace files</span>
 </div>
 

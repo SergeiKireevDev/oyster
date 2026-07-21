@@ -10,6 +10,14 @@ test("markdown renderer escapes content while preserving supported markup", () =
   assert.match(html, /tok-kw/);
 });
 
+test("markdown renderer supports inline and display math without rendering math inside code", () => {
+  const html = renderMarkdown("Euler: $e^{i\\pi}+1=0$ and `cost = $5`.\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$");
+  assert.match(html, /class="katex"/);
+  assert.match(html, /class="math-block"/);
+  assert.match(html, /<code>cost = \$5<\/code>/);
+  assert.doesNotMatch(html, /katex-error/);
+});
+
 test("markdown renderer keeps loose ordered lists in one numbering sequence", () => {
   const html = renderMarkdown("1. first\n\n2. second\n\n3. third");
   assert.equal(html, "<ol><li>first</li><li>second</li><li>third</li></ol>");

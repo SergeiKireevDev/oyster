@@ -236,10 +236,12 @@ function watchApp() {
     });
   }
 
-  // notify browsers when the Vite UI changes so they can refresh themselves
-  const publicDir = join(__dirname, "public");
-  const srcDir = join(publicDir, "src");
-  if (existsSync(publicDir)) {
+  // Notify browsers only after Vite has emitted the UI they are actually
+  // served. Watching public/ reloaded clients before dist/ had been rebuilt,
+  // leaving them on stale hashed assets.
+  const distDir = join(__dirname, "dist");
+  const assetsDir = join(distDir, "assets");
+  if (existsSync(distDir)) {
     let uiTimer = null;
     const notifyUiChanged = (label) => {
       clearTimeout(uiTimer);
@@ -248,12 +250,10 @@ function watchApp() {
         state.serverEvent({ type: "ui_reload" });
       }, 150);
     };
-    watch(publicDir, (_event, filename) => {
-      if (filename === "index.html") notifyUiChanged("public/index.html");
-    });
-    if (existsSync(srcDir)) {
-      watch(srcDir, (_event, filename) => {
-        if (filename) notifyUiChanged(`public/src/${filename}`);
+    for (const directory of [distDir, assetsDir]) {
+      if (!existsSync(directory)) continue;
+      watch(directory, (_event, filename) => {
+        if (filename) notifyUiChanged(`dist/${directory === assetsDir ? "assets/" : ""}${filename}`);
       });
     }
   }
@@ -285,7 +285,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
-  console.log(`[pi-ui] hot reload: watching app.mjs, http/, public/index.html + public/src`);
+  console.log(`[pi-ui] hot reload: watching app.mjs, http/, dist/`);
   app.startPi();
 });
 

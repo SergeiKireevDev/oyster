@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 
 export const sessionPicker = writable({
   sessions: [],
+  allSessions: [],
   folders: [],
   currentFolder: null,
   currentId: null,

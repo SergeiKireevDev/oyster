@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -15,7 +16,7 @@
     <div class="sidebar-loading"><span class="spin"></span> loading hublots…</div>
   {:else}
     <button type="button" class="hublot-block" onclick={openFileExplorer}>
-      <span class="preview builtin" title="browse server files, download or edit any of them">📁</span>
+      <span class="preview builtin" title="browse server files, download or edit any of them"><FolderIcon size={46} class="folder-icon-hero" /></span>
       <span class="cap">
         <span class="lbl" title="browse server files, download or edit any of them">file explorer · built-in</span>
       </span>

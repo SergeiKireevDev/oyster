@@ -199,7 +199,7 @@ test("search finds user/assistant text but not tools by default", () => {
   assert.equal(r2.results.length, 0); // tool call hidden by default
 
   const r3 = searchSessions({ q: "ls -la", scope: "folder", path: FOLDER, includeTools: true });
-  assert.equal(r3.results[0].kind, "toolCall");
+  assert.equal(r3.results.length, 0); // abandoned-branch hits cannot be focused in the active transcript
 
   const r4 = searchSessions({ q: "pondering", scope: "folder", path: FOLDER, includeTools: true });
   assert.equal(r4.results[0].kind, "thinking");

@@ -25,6 +25,8 @@ const resourceActionNames = [
   "hublot.remove",
   "hublot.openCommandPalette",
   "routine.run",
+  "routine.showGenerator",
+  "routine.generate",
 ];
 
 test("UI action registry replacement registration keeps only the current handler", () => {

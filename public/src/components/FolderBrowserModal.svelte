@@ -26,6 +26,16 @@
 {:else}
   <div class="m-path">{$folderBrowser.path}</div>
 
+  <div class="browser-list-actions" aria-label="Folder actions">
+    <button class="chip" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })}>New folder</button>
+    <button
+      class="chip toggle-hidden"
+      class:active={$folderBrowser.showHidden}
+      aria-pressed={$folderBrowser.showHidden}
+      onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })}
+    >👁 Dotfiles</button>
+  </div>
+
   {#if $folderBrowser.createOpen}
     <div class="newdir-row">
       <input
@@ -58,8 +68,6 @@
 {/if}
 
 <div class="m-actions" id="mActions">
-  <button class="chip" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })}>New folder</button>
-  <button class="chip toggle-hidden" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
   <button class="chip" data-modal-cancel onclick={cancelFolderBrowser}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
 </div>

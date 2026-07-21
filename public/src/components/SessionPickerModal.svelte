@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     SESSION_PICKER_CANCEL_ACTION,
@@ -15,6 +16,7 @@
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { groupSessionFamilies, partitionSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
   import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
+  import { formatRelativeTime } from "../lib/relativeTime.js";
 
   const uiActions = getUiActionRegistry();
   const choosePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, ...args);
@@ -29,13 +31,7 @@
   const cancelSessionPicker = () => uiActions.invoke(SESSION_PICKER_CANCEL_ACTION);
 
   function fmtSessionDate(ts) {
-    const d = new Date(ts);
-    if (Number.isNaN(+d)) return "";
-    const today = new Date();
-    const sameDay = d.toDateString() === today.toDateString();
-    return sameDay
-      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return formatRelativeTime(ts);
   }
 
   $: isSearching = $sessionPicker.query.trim().length >= 2;
@@ -168,7 +164,7 @@
       <summary>Other folders ({otherFolders.length})</summary>
       {#each otherFolders as folder (folder.dir)}
         <details class="s-folder" ontoggle={(event) => { if (event.currentTarget.open) loadPickedSessionFolder(folder); }}>
-          <summary><span class="s-ico">📁</span> {folder.label} ({folder.count})</summary>
+          <summary><FolderIcon size={13} /> {folder.label} ({folder.count})</summary>
           {#if $sessionPicker.loadingFolders[folder.dir]}
             <div class="m-path"><span class="spin"></span> loading…</div>
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
@@ -226,7 +222,7 @@
 {/snippet}
 
 {#snippet FolderLabel({ label })}
-  <div class="s-wd"><span class="s-ico">📁</span> {label}</div>
+  <div class="s-wd"><FolderIcon size={13} /> {label}</div>
 {/snippet}
 
 <div class="m-actions" id="mActions">

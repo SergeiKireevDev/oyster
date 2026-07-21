@@ -3,7 +3,7 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
   const { json, readJsonBody } = requestContext;
   const {
     listRoutines, routinesDir, createRoutine, startRoutine, stopRoutine,
-    teardownRoutine, releaseRoutine, deleteRoutine,
+    teardownRoutine, releaseRoutine, deleteRoutine, spawnRoutineAgent,
   } = routines;
 
   return {
@@ -17,7 +17,7 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
       const name = String(body?.name ?? "").trim();
       const action = String(body?.action ?? "");
       const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-      if (!name || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
+      if (action !== "generate" && (!name || name.includes("/") || name.includes("\\") || name.startsWith("."))) {
         json(res, 400, { error: `invalid routine name: ${name}` });
         return;
       }
@@ -28,7 +28,20 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
         return runner?.dir ?? state.currentDir;
       };
       try {
-        if (action === "create") {
+        if (action === "generate") {
+          const brief = String(body?.brief ?? "").trim();
+          if (!brief || brief.length > 20_000) {
+            json(res, 400, { error: "generate requires a `brief` string (max 20KB)" });
+            return;
+          }
+          if (!sessionId) {
+            json(res, 400, { error: "generate requires a current session" });
+            return;
+          }
+          ensureSessionOwner(sessionId);
+          const agent = await spawnRoutineAgent(state, { brief, sessionId });
+          json(res, 201, { agent: true, output: agent.output, routines: listRoutines(state) });
+        } else if (action === "create") {
           const script = typeof body?.script === "string" ? body.script : null;
           if (!script || script.length > 256 * 1024) {
             json(res, 400, { error: "create requires a `script` string (max 256KB)" });

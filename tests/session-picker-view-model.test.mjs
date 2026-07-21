@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   groupRunnersByCwd,
+  groupSessionsByCwd,
   groupSessionFamilies,
+  isSessionEntryArchived,
   partitionSessionFamilies,
+  partitionSessionGroupsByArchive,
 } from "../public/src/features/sessions/sessionPickerViewModel.js";
 
 test("session sidebar groups runners by cwd in stable activity order", () => {
@@ -29,6 +32,40 @@ test("session sidebar moves stopped processes below active processes on each upd
     { ...activeOne, alive: false },
     activeTwo,
   ])[0].runners.map((runner) => runner.id), ["stopped", "active-two", "active-one"]);
+});
+
+test("session query partitions stopped sessions by two-day head age", () => {
+  const now = Date.parse("2026-07-17T12:00:00.000Z");
+  const recent = { sessionKey: "recent", cwd: "/work", modifiedAt: "2026-07-16T12:00:01.000Z" };
+  const old = { sessionKey: "old", cwd: "/work", modifiedAt: "2026-07-15T11:59:59.000Z" };
+  const oldButAlive = { sessionKey: "alive", cwd: "/work", modifiedAt: "2026-07-01T00:00:00.000Z" };
+  const aliveRunner = { id: "runner", alive: true };
+  const groups = [{ cwd: "/work", entries: [
+    { session: recent, runner: null },
+    { session: old, runner: null },
+    { session: oldButAlive, runner: aliveRunner },
+  ] }];
+
+  assert.equal(isSessionEntryArchived(groups[0].entries[0], now), false);
+  assert.equal(isSessionEntryArchived(groups[0].entries[1], now), true);
+  assert.equal(isSessionEntryArchived(groups[0].entries[2], now), false);
+  assert.deepEqual(partitionSessionGroupsByArchive(groups, now), [
+    { cwd: "/work", entries: [groups[0].entries[0], groups[0].entries[2]], archived: false },
+    { cwd: "/work", entries: [groups[0].entries[1]], archived: true, firstArchived: true },
+  ]);
+});
+
+test("session sidebar groups all persisted sessions and matches their active runners", () => {
+  const sessions = [
+    { sessionKey: "ps1_old", id: "old", cwd: "/work", modifiedAt: "2026-01-01" },
+    { sessionKey: "ps1_live", id: "live", cwd: "/work", modifiedAt: "2026-01-02" },
+    { sessionKey: "ps1_other", id: "other", cwd: "/other", modifiedAt: "2026-01-03" },
+  ];
+  const runner = { id: "runner", dir: "/work", sessionKey: "ps1_live", sessionId: "live", alive: true };
+  assert.deepEqual(groupSessionsByCwd(sessions, [runner]), [
+    { cwd: "/work", entries: [{ session: sessions[1], runner }, { session: sessions[0], runner: null }] },
+    { cwd: "/other", entries: [{ session: sessions[2], runner: null }] },
+  ]);
 });
 
 const sessions = [

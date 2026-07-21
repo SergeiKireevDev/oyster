@@ -86,7 +86,10 @@ export function createSessionRoutes({
     "GET /sessions": (_req, res, url) => {
       let cwd;
       let location;
-      if (url.searchParams.get("path")) {
+      const all = sqlite && url.searchParams.get("all") === "1";
+      if (all) {
+        // Leaving cwd unset asks the SQLite catalog for every known session.
+      } else if (url.searchParams.get("path")) {
         const requested = resolvePath(String(url.searchParams.get("path")));
         if (sqlite) cwd = requested;
         else {

@@ -9,7 +9,6 @@ import {
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
-  HEADER_TOGGLE_HUBLOTS_ACTION,
   HEADER_TOGGLE_TREE_ACTION,
   SETTINGS_CHANGED_ACTION,
 } from "../../runtime/uiActionNames.js";
@@ -91,14 +90,12 @@ export function createSettingsLayoutRuntime(deps) {
     chooseModel: settings.chooseModel,
     cycleThinking: settings.cycleThinking,
     openConfig: settings.openConfig,
-    toggleHublots: header.toggleHublots,
     toggleTree: header.toggleTree,
   };
   const detachUiActions = [
     deps.uiActions.register(HEADER_CHOOSE_MODEL_ACTION, headerActions.chooseModel),
     deps.uiActions.register(HEADER_CYCLE_THINKING_ACTION, headerActions.cycleThinking),
     deps.uiActions.register(HEADER_OPEN_CONFIG_ACTION, headerActions.openConfig),
-    deps.uiActions.register(HEADER_TOGGLE_HUBLOTS_ACTION, headerActions.toggleHublots),
     deps.uiActions.register(HEADER_TOGGLE_TREE_ACTION, headerActions.toggleTree),
     deps.uiActions.register(SETTINGS_CHANGED_ACTION, settingsChanged),
   ];

@@ -98,6 +98,18 @@ function decide(messages, tools) {
   const userText = allUserText(messages);
   const hasToolResult = messages.some((m) => m.role === "tool");
 
+  if (userText.includes("E2E_MAXWELL_KATEX")) {
+    return { kind: "text", text: "$$\n\\nabla \\times \\mathbf{B} = \\mu_0 \\mathbf{J} + \\mu_0 \\varepsilon_0 \\frac{\\partial \\mathbf{E}}{\\partial t}\n$$" };
+  }
+
+  if (userText.includes("E2E_PERSISTED_TOOL") && !hasToolResult) {
+    return {
+      kind: "tool",
+      name: bashToolName(tools),
+      arguments: { command: "printf persisted-tool-result" },
+    };
+  }
+
   // hublot background agent: "...available on local port N..." -> serve it,
   // unless we already ran the tool (then just finish with text).
   const portMatch = userText.match(/(?:local port|localhost:)\s*(\d+)/i);

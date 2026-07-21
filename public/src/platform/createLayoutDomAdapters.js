@@ -11,7 +11,7 @@ export function createLayoutDomAdapters({ documentTarget, windowTarget, findElem
     treebar,
     isTreeOpen: () => treebar.classList.contains("open"),
     isDrawerToggleTarget(target) {
-      return Boolean(target?.closest?.("#hublotChip") || target?.closest?.("#treeChip"));
+      return Boolean(target?.closest?.("#treeChip"));
     },
   });
 }

@@ -1,3 +1,5 @@
+import katex from "katex";
+
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;");
@@ -65,16 +67,36 @@ function highlightCode(src, lang) {
   return out + escapeHtml(src.slice(pos));
 }
 
+function decodeEscapedMath(s) {
+  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+}
+
+function renderMath(expression, displayMode = false) {
+  return katex.renderToString(decodeEscapedMath(expression).trim(), {
+    displayMode,
+    throwOnError: false,
+    strict: "ignore",
+    trust: false,
+  });
+}
+
 function inlineMd(s) {
-  // s is already HTML-escaped
-  return s
-    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
+  // s is already HTML-escaped. Protect generated code/math HTML from the
+  // emphasis and link replacements that follow.
+  const protectedHtml = [];
+  const protect = (html) => `\u0000PIHTML${protectedHtml.push(html) - 1}\u0000`;
+  let rendered = s
+    .replace(/`([^`]+)`/g, (_, code) => protect(`<code>${code}</code>`))
+    .replace(/\\\((.+?)\\\)/g, (_, expression) => protect(renderMath(expression)))
+    .replace(/(^|[^$\\])\$([^$\n]+?)\$(?!\$)/g, (_, prefix, expression) => `${prefix}${protect(renderMath(expression))}`)
     .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
     .replace(/(^|[\s(])_([^_\s][^_]*)_/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+  rendered = rendered.replace(/\u0000PIHTML(\d+)\u0000/g, (_, index) => protectedHtml[Number(index)]);
+  return rendered;
 }
 
 function renderMarkdown(src) {
@@ -98,6 +120,30 @@ function renderMarkdown(src) {
       const label = lang ? `<div class="code-lang">${escapeHtml(lang)}</div>` : "";
       out.push(`<div class="codeblock">${label}<pre><code>${highlightCode(buf.join("\n"), lang)}</code></pre></div>`);
       continue;
+    }
+    const mathFence = line.match(/^\s*(\$\$|\\\[)\s*(.*?)\s*(?:\$\$|\\\])?\s*$/);
+    if (mathFence) {
+      const opener = mathFence[1];
+      const closer = opener === "$$" ? "$$" : "\\]";
+      const sameLineClosed = opener === "$$"
+        ? /^\s*\$\$.+?\$\$\s*$/.test(line)
+        : /^\s*\\\[.+?\\\]\s*$/.test(line);
+      if (sameLineClosed) {
+        flushPara();
+        const expression = line.trim().slice(opener.length, -closer.length);
+        out.push(`<div class="math-block">${renderMath(escapeHtml(expression), true)}</div>`);
+        i++;
+        continue;
+      }
+      if (line.trim() === opener) {
+        flushPara();
+        const buf = [];
+        i++;
+        while (i < lines.length && lines[i].trim() !== closer) { buf.push(lines[i]); i++; }
+        if (i < lines.length) i++;
+        out.push(`<div class="math-block">${renderMath(escapeHtml(buf.join("\n")), true)}</div>`);
+        continue;
+      }
     }
     const h = line.match(/^(#{1,4})\s+(.*)$/);
     if (h) { flushPara(); out.push(`<h${h[1].length}>${inlineMd(escapeHtml(h[2]))}</h${h[1].length}>`); i++; continue; }

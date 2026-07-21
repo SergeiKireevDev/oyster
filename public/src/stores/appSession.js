@@ -21,11 +21,11 @@ export const appHeader = derived(appSession, ($appSession) => {
   const workdir = $appSession.workdir ?? "";
   return {
     connectionClass: $appSession.connected ? `dot ${$appSession.busy ? "busy" : "ok"}` : "dot",
-    sessionTitle: $appSession.titleOverride || state?.sessionName || "pi-lot",
+    sessionTitle: $appSession.titleOverride || state?.sessionName || "oyster",
     modelChip: modelId,
     thinkChip: state ? `think: ${thinking}` : "think",
     cfgChip: state ? `${modelId} · ${thinking}` : "model · think",
-    workdirText: workdir ? `📁 ${workdir.length > 40 ? "…" + workdir.slice(-39) : workdir}` : "",
+    workdirText: workdir ? (workdir.length > 40 ? "…" + workdir.slice(-39) : workdir) : "",
     workdirTitle: workdir,
   };
 });

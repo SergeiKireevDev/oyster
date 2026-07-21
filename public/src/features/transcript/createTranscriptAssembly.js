@@ -99,7 +99,7 @@ export function createTranscriptAssembly(deps) {
     if (role === "user") return addUserMessage(message, options);
     if (role === "assistant") return addAssistantMessage(message, role, options);
     if (role === "toolResult") {
-      if (toolCards.has(message.toolCallId)) toolCards.finish(message.toolCallId, message, message.isError);
+      toolCards.finish(message.toolCallId, message, message.isError);
       return;
     }
     if (message.content) {

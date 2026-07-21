@@ -99,7 +99,7 @@ export function createSessionPickerRuntime(deps) {
       const removed = deletedSession ?? sessions.find((session) => !next.some((item) => sameSession(item, session)));
       sessions = next;
       const state = snapshot();
-      const removedFolder = folderOfSessionPath(removed?.path);
+      const removedFolder = removed?.cwd ?? folderOfSessionPath(removed?.path);
       const otherFolderSessions = Object.fromEntries(Object.entries(state.otherFolderSessions)
         .map(([dir, items]) => [dir, items.filter((item) => !sameSession(item, removed))]));
       const folders = state.folders
@@ -108,6 +108,7 @@ export function createSessionPickerRuntime(deps) {
       if (removedFolder && !otherFolderSessions[removedFolder]?.length) delete otherFolderSessions[removedFolder];
       deps.updateSessionPicker({
         sessions: state.sessions.filter((item) => !sameSession(item, removed)),
+        allSessions: state.allSessions.filter((item) => !sameSession(item, removed)),
         otherFolderSessions,
         folders,
       });
@@ -136,9 +137,15 @@ export function createSessionPickerRuntime(deps) {
     setFolder: search.setFolder,
     setExcludeTools: search.setExcludeTools,
     runSearch: search.search,
-    chooseSession: (identity) => {
-      deps.close();
-      resolvePicker?.(picker.chooseSession(identity, sessions));
+    chooseSession: async (identity) => {
+      const chosen = picker.chooseSession(identity, sessions);
+      if (!chosen) return;
+      if (resolvePicker) {
+        deps.close();
+        resolvePicker(chosen);
+      } else {
+        await deps.openChosenSession(chosen);
+      }
     },
     stopSession: picker.stopSession,
     deleteSession: deletion.deleteSession,
@@ -221,7 +228,7 @@ export function createSessionPickerRuntime(deps) {
     const sequence = ++sidebarRefreshSequence;
     const revision = pickerRevision;
     try {
-      const { sessions: loadedSessions, folders, currentFolder } = await deps.loadInitialPickerData();
+      const { sessions: loadedSessions, allSessions: loadedAllSessions, folders, currentFolder } = await deps.loadInitialPickerData();
       const runners = deps.getRunners();
       const loaded = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, runners);
       if (sequence !== sidebarRefreshSequence || revision !== pickerRevision) return;
@@ -232,9 +239,10 @@ export function createSessionPickerRuntime(deps) {
         preserveLoadedSessionLabels(state.otherFolderSessions?.[dir] ?? [], items),
       ]));
       const allSessions = [...currentSessions, ...Object.values(otherFolderSessions).flat()];
-      sessions = mergeSessions(sessions, allSessions);
+      sessions = mergeSessions(sessions, loadedAllSessions ?? allSessions);
       deps.updateSessionPicker({
         sessions: currentSessions,
+        allSessions: preserveLoadedSessionLabels(state.allSessions ?? [], loadedAllSessions ?? allSessions),
         folders: loaded.folders,
         currentFolder,
         currentId: deps.getCurrentSessionId(allSessions),
@@ -246,12 +254,12 @@ export function createSessionPickerRuntime(deps) {
   }
 
   async function show() {
-    const { sessions: loadedSessions, folders, currentFolder } = await deps.loadInitialPickerData();
+    const { sessions: loadedSessions, allSessions: loadedAllSessions, folders, currentFolder } = await deps.loadInitialPickerData();
     const initialRunners = deps.getRunners();
     const { allSessions, otherFolderSessions, folders: activeFolders } = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, initialRunners);
     if (!allSessions.length) { deps.toast("no saved sessions"); return; }
-    sessions = allSessions;
-    const currentId = deps.getCurrentSessionId(allSessions);
+    sessions = mergeSessions(allSessions, loadedAllSessions ?? []);
+    const currentId = deps.getCurrentSessionId(sessions);
     let syncing = false;
     deps.setRunnersUpdateHandler(async (runners) => {
       deps.updateSessionPicker({ runners });
@@ -275,6 +283,7 @@ export function createSessionPickerRuntime(deps) {
       resolvePicker = resolve;
       deps.updateSessionPicker({
         sessions: loadedSessions,
+        allSessions: loadedAllSessions ?? allSessions,
         folders: activeFolders,
         currentFolder,
         currentId,

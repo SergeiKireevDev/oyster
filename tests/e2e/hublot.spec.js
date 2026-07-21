@@ -27,7 +27,7 @@ async function explorerFileNames(page) {
 
 async function expectFileExplorerPopulated(page, markerName) {
   await expect(page.locator("#overlay")).toHaveClass(/open/, { timeout: 10000 });
-  await expect(page.locator("#mTitle")).toHaveText("📁 File explorer", { timeout: 10000 });
+  await expect(page.locator("#mTitle")).toHaveText("File explorer", { timeout: 10000 });
   await expect.poll(
     async () => page.locator("#mBody").textContent().catch(() => ""),
     { timeout: 15000, message: "file explorer body to list the workspace marker" }

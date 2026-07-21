@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import FolderIcon from "./FolderIcon.svelte";
   import AnalyticsModal from "./AnalyticsModal.svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
   import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
@@ -11,6 +12,7 @@
   import FolderBrowserModal from "./FolderBrowserModal.svelte";
   import HublotManagerModal from "./HublotManagerModal.svelte";
   import OptionPickerModal from "./OptionPickerModal.svelte";
+  import RoutineManagerModal from "./RoutineManagerModal.svelte";
   import SettingsModal from "./SettingsModal.svelte";
   import SessionPickerModal from "./SessionPickerModal.svelte";
   import TextPromptModal from "./TextPromptModal.svelte";
@@ -100,7 +102,10 @@
 <CarouselIndicator />
 
 <div id="overlay" bind:this={overlayElement} class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
-  <div class="m-title" id="mTitle">{$modalState.title}</div>
+  <div class="m-title" id="mTitle">
+    {#if ["fileExplorer", "filePicker", "folderBrowser"].includes($modalState.content)}<FolderIcon size={17} />{/if}
+    <span>{$modalState.title}</span>
+  </div>
 
   {#if $modalState.content === null}
     <div class="m-body" id="mBody"></div>
@@ -123,6 +128,8 @@
         <CheckpointModelPickerModal />
       {:else if $modalState.content === "hublotManager"}
         <HublotManagerModal />
+      {:else if $modalState.content === "routineManager"}
+        <RoutineManagerModal />
       {:else if $modalState.content === "folderBrowser"}
         <FolderBrowserModal />
       {:else if $modalState.content === "filePicker"}

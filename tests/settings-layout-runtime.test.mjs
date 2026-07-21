@@ -7,7 +7,6 @@ import {
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
-  HEADER_TOGGLE_HUBLOTS_ACTION,
   HEADER_TOGGLE_TREE_ACTION,
   SETTINGS_CHANGED_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
@@ -54,7 +53,6 @@ test("settings/layout runtime registers header and settings-change actions until
     HEADER_CHOOSE_MODEL_ACTION,
     HEADER_CYCLE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
-    HEADER_TOGGLE_HUBLOTS_ACTION,
     HEADER_TOGGLE_TREE_ACTION,
     SETTINGS_CHANGED_ACTION,
   ].sort());
@@ -70,7 +68,6 @@ test("header routes scoped actions and settings delegates persistence to its pre
     "HEADER_CHOOSE_MODEL_ACTION",
     "HEADER_CYCLE_THINKING_ACTION",
     "HEADER_OPEN_CONFIG_ACTION",
-    "HEADER_TOGGLE_HUBLOTS_ACTION",
     "HEADER_TOGGLE_TREE_ACTION",
   ]) {
     assert.match(header, new RegExp(`uiActions\\.invoke\\(${name}`));

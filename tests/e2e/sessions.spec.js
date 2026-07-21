@@ -28,8 +28,7 @@ const tag = (base) => `${base}-${RUN}`;
 async function newSession(page) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
-  const currentGroup = page.locator("#sessions .session-sidebar-entry.current").locator("xpath=ancestor::details[1]");
-  await currentGroup.locator(":scope > .session-sidebar-cwd-add").click();
+  await page.locator("#newSessionHere").click();
   // the toast confirms the freshly spawned runner took over as current
   await expect(page.locator(".toast", { hasText: "new session" })).toBeVisible({ timeout: 10000 });
   if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
@@ -65,7 +64,7 @@ async function revealSidebarEntry(page, token) {
 async function newSessionInFolder(page, folderName) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
-  await page.locator("#sessions .session-sidebar-create").click();
+  await page.locator("#newSessionFolder").click();
   await expect(page.locator("#mTitle")).toHaveText("New session in folder");
   await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
   await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);
@@ -478,7 +477,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await page.click("#hublotChip");
       await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
       await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
-      await expect(page.locator("#mTitle")).toHaveText("📁 File explorer");
+      await expect(page.locator("#mTitle")).toHaveText("File explorer");
       await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
     });

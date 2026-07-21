@@ -9,6 +9,13 @@ export async function listRoutines(fetchImpl) {
   return data.routines ?? [];
 }
 
+export async function generateRoutine(fetchImpl, { brief, sessionId }) {
+  const res = await fetchImpl("/routines", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "generate", brief, sessionId }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `routine generation failed (${res.status})`);
+  return data;
+}
+
 export async function runRoutine(fetchImpl, { name, action, sessionId }) {
   const res = await fetchImpl("/routines", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, action, sessionId }) });
   const data = await res.json().catch(() => ({}));

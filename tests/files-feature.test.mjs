@@ -17,6 +17,16 @@ test("file picker component routes browse, choose, use-folder, and cancel throug
   assert.doesNotMatch(source, /features\/files\/filePickerActions\.js/);
 });
 
+test("shared directory lists separate navigation shortcuts from child folders", () => {
+  const list = readFileSync(new URL("../public/src/components/BrowserDirectoryList.svelte", import.meta.url), "utf8");
+  assert.match(list, /hasNavigation && visibleDirs\.length/);
+  assert.match(list, /class="browser-directory-separator" role="separator"/);
+  for (const component of ["FileExplorerModal.svelte", "FilePickerModal.svelte", "FolderBrowserModal.svelte"]) {
+    const source = readFileSync(new URL(`../public/src/components/${component}`, import.meta.url), "utf8");
+    assert.match(source, /<BrowserDirectoryList/);
+  }
+});
+
 test("folder browser component routes browse, create, submit, and cancel through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/FolderBrowserModal.svelte", import.meta.url), "utf8");
   assert.match(source, /getUiActionRegistry\(\)/);

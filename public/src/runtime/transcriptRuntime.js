@@ -273,12 +273,19 @@ export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
 /** Own streaming tool-card state without coupling it to Svelte stores. */
 export function createToolCardRegistry({ createStore, resultText }) {
   const cards = new Map();
+  const pendingResults = new Map();
   return {
     ensure(toolCall) {
       let card = cards.get(toolCall.id);
       if (!card) {
-        card = { store: createStore({ toolCall, status: "running", resultText: "" }) };
+        const pending = pendingResults.get(toolCall.id);
+        card = { store: createStore({
+          toolCall,
+          status: pending?.isError ? "error" : pending ? "ok" : "running",
+          resultText: pending?.text ?? "",
+        }) };
         cards.set(toolCall.id, card);
+        pendingResults.delete(toolCall.id);
       } else {
         card.store.update((state) => ({ ...state, toolCall }));
       }
@@ -299,14 +306,19 @@ export function createToolCardRegistry({ createStore, resultText }) {
     },
     finish(toolCallId, resultOrText, isError) {
       const card = cards.get(toolCallId);
-      if (!card) return false;
       const text = typeof resultOrText === "string" ? resultOrText : resultText(resultOrText);
+      if (!card) {
+        // Historical chunks are prepended in reverse render order, so a
+        // durable tool result can arrive before its tool-call card exists.
+        pendingResults.set(toolCallId, { text, isError });
+        return false;
+      }
       card.store.update((state) => ({ ...state, status: isError ? "error" : "ok", resultText: text }));
       return true;
     },
     get(toolCallId) { return cards.get(toolCallId); },
     has(toolCallId) { return cards.has(toolCallId); },
-    clear() { cards.clear(); },
+    clear() { cards.clear(); pendingResults.clear(); },
   };
 }
 

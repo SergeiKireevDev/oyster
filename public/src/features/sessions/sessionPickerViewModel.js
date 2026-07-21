@@ -1,4 +1,6 @@
-import { parentSessionIdentity, sessionIdentity } from "../../lib/sessionIdentity.js";
+import { parentSessionIdentity, runnerSessionIdentity, sessionIdentity } from "../../lib/sessionIdentity.js";
+
+export const SESSION_ARCHIVE_AGE_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** Groups runners by working directory, with live processes first in stable runner order. */
 export function groupRunnersByCwd(runners) {
@@ -12,6 +14,58 @@ export function groupRunnersByCwd(runners) {
     group.runners.sort((left, right) => Number(Boolean(right.alive)) - Number(Boolean(left.alive)));
   }
   return [...groups.values()];
+}
+
+/** Groups every persisted session by cwd and annotates sessions that own a runner. */
+export function groupSessionsByCwd(sessions, runners) {
+  const runnerByIdentity = new Map(runners.map((runner) => [runnerSessionIdentity(runner), runner]));
+  const matchedRunners = new Set();
+  const entries = sessions.map((session) => {
+    const runner = runnerByIdentity.get(sessionIdentity(session)) ?? null;
+    if (runner) matchedRunners.add(runner.id);
+    return { session, runner };
+  });
+  for (const runner of runners) {
+    if (!matchedRunners.has(runner.id)) entries.push({ session: null, runner });
+  }
+
+  const groups = new Map();
+  for (const entry of entries) {
+    const cwd = entry.session?.cwd || entry.runner?.dir || "(unknown working directory)";
+    if (!groups.has(cwd)) groups.set(cwd, { cwd, entries: [] });
+    groups.get(cwd).entries.push(entry);
+  }
+  for (const group of groups.values()) {
+    group.entries.sort((left, right) => {
+      const activity = Number(Boolean(right.runner?.alive)) - Number(Boolean(left.runner?.alive));
+      if (activity) return activity;
+      return String(right.session?.modifiedAt ?? "").localeCompare(String(left.session?.modifiedAt ?? ""));
+    });
+  }
+  return [...groups.values()];
+}
+
+/** A stopped session is archived manually or when its latest head is older than two days. */
+export function isSessionEntryArchived(entry, now = Date.now()) {
+  if (!entry.session || entry.runner?.alive) return false;
+  const headTime = Date.parse(entry.session.modifiedAt ?? "");
+  return Number.isFinite(headTime) && now - headTime > SESSION_ARCHIVE_AGE_MS;
+}
+
+/** Splits cwd groups while retaining their order and annotating the archived section boundary. */
+export function partitionSessionGroupsByArchive(groups, now = Date.now()) {
+  const recent = [];
+  const archived = [];
+  for (const group of groups) {
+    const currentEntries = group.entries.filter((entry) => !isSessionEntryArchived(entry, now));
+    const archivedEntries = group.entries.filter((entry) => isSessionEntryArchived(entry, now));
+    if (currentEntries.length) recent.push({ ...group, entries: currentEntries, archived: false });
+    if (archivedEntries.length) archived.push({ ...group, entries: archivedEntries, archived: true });
+  }
+  return [
+    ...recent,
+    ...archived.map((group, index) => ({ ...group, firstArchived: index === 0 })),
+  ];
 }
 
 /** Groups a flat session list into root sessions and their forks without mutating input. */

@@ -268,6 +268,25 @@ test("tool card registry assembles and completes streamed tool cards", () => {
   assert.ok(store);
 });
 
+test("tool card registry reconciles durable results rendered before their calls", () => {
+  let state;
+  const registry = createToolCardRegistry({
+    createStore(initial) {
+      state = initial;
+      return { update(fn) { state = fn(state); } };
+    },
+    resultText: (result) => result.text,
+  });
+
+  assert.equal(registry.finish("historical-tool", { text: "saved result" }, false), false);
+  registry.ensure({ id: "historical-tool", name: "read" });
+  assert.deepEqual(state, {
+    toolCall: { id: "historical-tool", name: "read" },
+    status: "ok",
+    resultText: "saved result",
+  });
+});
+
 test("tail-first renderer preserves prompt history and scroll position during backfill", async () => {
   const rendered = []; const remembered = []; const scrolls = []; let cleared = 0; let complete = 0;
   const scroller = { scrollHeight: 100, scrollTop: 20 };

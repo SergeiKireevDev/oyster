@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker } from "../public/src/lib/checkpointActions.js";
-import { listRoutines, routineVisible, runRoutine } from "../public/src/lib/routineActions.js";
+import { generateRoutine, listRoutines, routineVisible, runRoutine } from "../public/src/lib/routineActions.js";
 import { createHublot, hublotVisible, refreshHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
 
@@ -59,6 +59,15 @@ test("hublot create action preserves session payload", async () => {
   let body;
   await createHublot(async (_url, options) => { body = options.body; return { ok: true, status: 200, json: async () => ({ tunnel: {} }) }; }, { label: "demo", sessionId: "s", brief: "demo" });
   assert.deepEqual(JSON.parse(body), { label: "demo", sessionId: "s", brief: "demo" });
+});
+
+test("routine generation sends the brief and target session", async () => {
+  let body;
+  await generateRoutine(async (_url, options) => {
+    body = JSON.parse(options.body);
+    return { ok: true, status: 201, json: async () => ({ agent: true }) };
+  }, { brief: "refresh data", sessionId: "session-a" });
+  assert.deepEqual(body, { action: "generate", brief: "refresh data", sessionId: "session-a" });
 });
 
 test("routine actions normalize list responses", async () => {

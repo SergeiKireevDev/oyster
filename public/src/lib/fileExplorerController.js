@@ -30,7 +30,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
       return;
     }
     setPath(data.path);
-    updateTitle("📁 File explorer");
+    updateTitle("File explorer");
     update({
       mode: "list",
       path: data.path,
@@ -50,7 +50,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
   async function show(path) {
     resetState(path);
     update({ mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: getToken(), editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…" });
-    openModal({ title: "📁 File explorer", content: "fileExplorer" });
+    openModal({ title: "File explorer", content: "fileExplorer" });
     await load(path);
   }
 
