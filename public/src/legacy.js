@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { handleRunnerPing } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -994,15 +994,17 @@ function handleEvent(msg) {
       return;
 
     case "replay_done":
-      replayDoneSeen = true;
-      if (replaying) setReplaying(true, "canonical");
-      // NOTE: `replaying` stays true here — only the canonical transcript
-      // render (reloadTranscript) opens the live-event gate
-      if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
-      if (msg.runners) setRunnersNow(msg.runners);
-      if (msg.workdir) setWorkdir(msg.workdir);
-      loadHublots();
-      loadRoutines();
+      // The canonical transcript render, not this event, opens the live gate.
+      handleReplayDone(msg, {
+        markReplayDone: () => { replayDoneSeen = true; },
+        isReplaying: () => replaying,
+        setReplaying,
+        setRunner,
+        setRunners: setRunnersNow,
+        setWorkdir,
+        refreshHublots: loadHublots,
+        refreshRoutines: loadRoutines,
+      });
       return;
 
     case "runners_update":

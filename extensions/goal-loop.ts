@@ -9,6 +9,8 @@
  * finding no remaining steps.
  */
 
+import { readFileSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -27,6 +29,7 @@ interface GoalState {
 const DEFAULT_PLAN = "plans/migration-svelte.md";
 const VALIDATION_TIMEOUT = 30 * 60 * 1000;
 const OUTPUT_LIMIT = 8_000;
+const PLAN_CONTEXT_LIMIT = 12_000;
 
 function blankState(): GoalState {
   return {
@@ -43,6 +46,62 @@ function blankState(): GoalState {
 function clipped(result: { stdout: string; stderr: string }) {
   const text = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`.trim();
   return text.length > OUTPUT_LIMIT ? `…${text.slice(-OUTPUT_LIMIT)}` : text;
+}
+
+function clipText(text: string, limit: number) {
+  return text.length > limit ? `…${text.slice(-limit)}` : text;
+}
+
+function readPlan(ctx: ExtensionContext, planPath: string) {
+  const path = isAbsolute(planPath) ? planPath : join(ctx.cwd, planPath);
+  return readFileSync(path, "utf8");
+}
+
+function findNextUncheckedStep(plan: string) {
+  const lines = plan.split(/\r?\n/);
+  const headings: string[] = [];
+  for (const line of lines) {
+    const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      headings[heading[1].length - 1] = heading[2];
+      headings.length = heading[1].length;
+      continue;
+    }
+    const unchecked = line.match(/^\s*(?:[-*]|\d+[.)])\s+\[ \]\s+(.+?)\s*$/);
+    if (unchecked) {
+      const section = headings.filter(Boolean).join(" > ");
+      return `${section ? `${section}: ` : ""}${unchecked[1]}`;
+    }
+  }
+  return "";
+}
+
+function continuationPrompt(ctx: ExtensionContext, goal: GoalState) {
+  let plan = "";
+  let suggested = "";
+  try {
+    plan = readPlan(ctx, goal.planPath);
+    suggested = findNextUncheckedStep(plan);
+  } catch (error) {
+    plan = `Could not read plan ${goal.planPath}: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  const current = goal.currentStep || "choose one incomplete step";
+  const next = suggested || "No unchecked '- [ ]' item was detected automatically; inspect the plan manually.";
+  return `Goal loop remains active.
+
+Plan: ${goal.planPath}
+Current recorded step: ${current}
+Last result: ${goal.lastResult || "n/a"}
+Suggested next unchecked plan item: ${next}
+
+Determine the next step to continue from the plan below (do not assume the suggestion is exhaustive). Then implement exactly one remaining incomplete step. Before reporting success, call goal_loop verify with a precise step description and commit message. If the plan has no remaining incomplete steps, call goal_loop complete.
+
+Plan excerpt:
+\`\`\`
+${clipText(plan, PLAN_CONTEXT_LIMIT)}
+\`\`\`
+`;
 }
 
 export default function goalLoop(pi: ExtensionAPI) {
@@ -285,7 +344,7 @@ Implement exactly one plan step at a time. You MUST call goal_loop verify after 
     continuationQueued = true;
     try {
       await pi.sendUserMessage(
-        "Goal loop remains active. Continue the current plan step and call goal_loop verify before reporting success.",
+        continuationPrompt(ctx, state),
         { deliverAs: "followUp" },
       );
     } finally {
