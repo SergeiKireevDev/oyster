@@ -83,6 +83,19 @@ export function flashTranscriptElement(element, { setTimeoutImpl = setTimeout } 
   setTimeoutImpl(() => element.classList.remove("msg-flash", "fading"), 3000);
 }
 
+/** Build and copy transcript permalinks with a dialog fallback. */
+export function createPermalinkController({ getSessionId, getEntryId, getOrigin, copy, prompt, toast }) {
+  return async (element) => {
+    const sessionId = getSessionId();
+    if (!sessionId) return toast("no session id yet — send a message first", "warning");
+    const entryId = await getEntryId(element);
+    if (!entryId) return toast("could not identify this message in the session file", "warning");
+    const url = `${getOrigin()}/s/${encodeURIComponent(sessionId)}/m/${encodeURIComponent(entryId)}`;
+    if (await copy(url)) toast("permalink copied");
+    else prompt("Permalink", "", url);
+  };
+}
+
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {

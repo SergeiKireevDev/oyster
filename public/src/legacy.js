@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -2005,14 +2005,14 @@ async function entryIdForElement(el) {
   return null;
 }
 
-async function copyPermalink(el) {
-  if (!state?.sessionId) { toast("no session id yet — send a message first", "warning"); return; }
-  const eid = await entryIdForElement(el);
-  if (!eid) { toast("could not identify this message in the session file", "warning"); return; }
-  const url = `${location.origin}/s/${encodeURIComponent(state.sessionId)}/m/${encodeURIComponent(eid)}`;
-  if (await copyText(url)) toast("permalink copied");
-  else promptText("Permalink", "", url); // clipboard unavailable: show it instead
-}
+const copyPermalink = createPermalinkController({
+  getSessionId: () => state?.sessionId,
+  getEntryId: entryIdForElement,
+  getOrigin: () => location.origin,
+  copy: (url) => copyText(url),
+  prompt: promptText,
+  toast,
+});
 
 const copyText = copyTextToClipboard;
 

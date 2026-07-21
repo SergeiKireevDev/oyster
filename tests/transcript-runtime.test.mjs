@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -21,6 +21,13 @@ test("transcript sync scheduler retries during replay before reloading", async (
   timers.shift()[0]();
   await Promise.resolve();
   assert.equal(reloads, 1);
+});
+
+test("permalink controller copies an entry URL", async () => {
+  const calls = [];
+  const copy = createPermalinkController({ getSessionId: () => "session", getEntryId: async () => "entry", getOrigin: () => "https://host", copy: async (url) => { calls.push(url); return true; }, prompt: () => {}, toast: (...args) => calls.push(args) });
+  await copy({});
+  assert.deepEqual(calls, ["https://host/s/session/m/entry", ["permalink copied"]]);
 });
 
 test("transcript flash scrolls and schedules highlight cleanup", () => {
