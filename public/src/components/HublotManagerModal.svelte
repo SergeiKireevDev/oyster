@@ -1,12 +1,22 @@
 <script>
   import {
-    closeManagedHublot,
     createManagedHublot,
     openManagedFileExplorer,
     setManagedHublotDesc,
     setupManagedCommandPalette,
   } from "../lib/legacyBridge.js";
+  import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
+  import { addToast } from "../stores/toasts.js";
+
+  async function closeManagedHublot(id) {
+    try {
+      await removeHublot(fetch, id);
+      updateHublotManager({ tunnels: $hublotManager.tunnels.filter((tunnel) => tunnel.id !== id) });
+    } catch (error) {
+      addToast(`close hublot failed: ${error.message}`, "error");
+    }
+  }
 
   function commandPalette(node) {
     setupManagedCommandPalette(node);

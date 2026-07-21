@@ -178,10 +178,6 @@ export function openManagedFileExplorer() {
   return hublotManagerHandlers.openFileExplorer?.();
 }
 
-export function closeManagedHublot(id) {
-  return hublotManagerHandlers.closeHublot?.(id);
-}
-
 export function createManagedHublot(desc) {
   return hublotManagerHandlers.createHublot?.(desc);
 }

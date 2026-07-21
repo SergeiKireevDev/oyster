@@ -2298,12 +2298,6 @@ async function createManagedHublot(descText) {
   }
 }
 
-async function closeManagedHublot(id) {
-  await fetch(`/tunnels?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  await refreshHublotManager({ loading: true });
-  loadHublots();
-}
-
 async function toggleManagedHublotScope() {
   tunnelScopeAll = !tunnelScopeAll;
   updateModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session" });
@@ -2314,7 +2308,6 @@ async function toggleManagedHublotScope() {
 
 setHublotManagerHandlers({
   openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
-  closeHublot: closeManagedHublot,
   createHublot: createManagedHublot,
   setDesc: (desc) => {
     tunnelForm.desc = desc;
