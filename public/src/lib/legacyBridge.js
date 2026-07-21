@@ -148,10 +148,6 @@ export function submitFolderBrowser() {
   return folderBrowserHandlers.submit?.();
 }
 
-export function createManagedHublot(desc) {
-  return hublotManagerHandlers.createHublot?.(desc);
-}
-
 export function toggleManagedHublotScope() {
   return hublotManagerHandlers.toggleScope?.();
 }

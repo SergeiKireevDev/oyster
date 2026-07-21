@@ -1,6 +1,5 @@
 <script>
   import {
-    createManagedHublot,
     setupManagedCommandPalette,
   } from "../lib/legacyBridge.js";
   import { removeHublot } from "../lib/hublotActions.js";
@@ -17,6 +16,7 @@
   }
 
   const openManagedFileExplorer = () => window.dispatchEvent(new Event("pi-open-file-explorer"));
+  const createManagedHublot = (desc) => window.dispatchEvent(new CustomEvent("pi-managed-hublot-create", { detail: desc }));
 
   function commandPalette(node) {
     setupManagedCommandPalette(node);

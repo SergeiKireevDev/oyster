@@ -2286,8 +2286,9 @@ async function toggleManagedHublotScope() {
   });
 }
 
+window.addEventListener("pi-managed-hublot-create", (event) => createManagedHublot(event.detail));
+
 setHublotManagerHandlers({
-  createHublot: createManagedHublot,
   toggleScope: toggleManagedHublotScope,
   setupCommandPalette,
 });
