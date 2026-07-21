@@ -1,4 +1,4 @@
-export function createFilePickerController({ browse, update, updateTitle, openModal, getShowHidden, getWorkdir, setPath, resetState, toast }) {
+export function createFilePickerController({ browse, update, updateTitle, openModal, closeModal, showHublots, getShowHidden, getWorkdir, setPath, resetState, toast }) {
   async function load(path) {
     update({ loading: true });
     let data;
@@ -22,5 +22,12 @@ export function createFilePickerController({ browse, update, updateTitle, openMo
     await load(path);
   }
 
-  return { load, show };
+  function complete({ path, onPick, onCancel, cancel = false, returnToHublot = false }) {
+    if (cancel) onCancel?.();
+    else onPick?.(path);
+    closeModal();
+    if (returnToHublot) showHublots().catch((error) => toast(error.message, "error"));
+  }
+
+  return { load, show, complete };
 }

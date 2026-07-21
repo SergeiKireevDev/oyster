@@ -48,6 +48,29 @@ test("file picker initializes its modal before loading the current workdir", asy
   assert.equal(calls[4][1], "/work");
 });
 
+test("file picker completes a selection and returns to the hublot when requested", async () => {
+  const calls = [];
+  const controller = createFilePickerController({
+    closeModal: () => calls.push("close"),
+    showHublots: async () => calls.push("hublots"),
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  controller.complete({ path: "/work/a.txt", onPick: (path) => calls.push(["pick", path]), returnToHublot: true });
+  await Promise.resolve();
+
+  assert.deepEqual(calls, [["pick", "/work/a.txt"], "close", "hublots"]);
+});
+
+test("file picker completes cancellation without selecting a path", () => {
+  const calls = [];
+  const controller = createFilePickerController({ closeModal: () => calls.push("close"), showHublots: async () => {}, toast: () => {} });
+
+  controller.complete({ onCancel: () => calls.push("cancel"), cancel: true });
+
+  assert.deepEqual(calls, ["cancel", "close"]);
+});
+
 test("file picker falls back to its workdir after a failed browse", async () => {
   const calls = [];
   const controller = createFilePickerController({

@@ -1533,16 +1533,13 @@ let filePickerState = {
   returnToHublot: false,
 };
 
-function finishFilePicker() {
-  closeModal();
-  if (filePickerState.returnToHublot) showHublots().catch((e) => toast(e.message, "error"));
-}
-
 const filePickerController = createFilePickerController({
   browse: (path) => browseFiles(fetch, path),
   update: updateFilePicker,
   updateTitle: (title) => updateModal({ title }),
   openModal,
+  closeModal,
+  showHublots: () => showHublots(),
   getShowHidden: () => get(filePicker).showHidden,
   getWorkdir: () => workdir,
   setPath: (path) => { filePickerState.curDir = path; },
@@ -1560,10 +1557,10 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
 }
 
 registerFilePickerEvents(window, {
-  useFolder: () => { filePickerState.onPick?.(filePickerState.curDir); finishFilePicker(); },
+  useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   browse: loadFilePicker,
-  pick: (path) => { filePickerState.onPick?.(path); finishFilePicker(); },
-  cancel: () => { filePickerState.onCancel?.(); finishFilePicker(); },
+  pick: (path) => filePickerController.complete({ ...filePickerState, path }),
+  cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
 });
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
