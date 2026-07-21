@@ -86,7 +86,7 @@ business logic or resolver state.
 **Acceptance:** the root contains one resource assembly call and no resource
 controller construction or shared resource state.
 
-## [ ] 8. Extract Settings and Layout Assembly
+## [x] 8. Extract Settings and Layout Assembly
 
 - [x] Move remaining settings, extension UI, header, carousel, swipe, drawer, and responsive listener wiring into dedicated settings/layout assemblies.
 - [x] Replace direct root DOM lookups with an explicit component-provided or browser adapter interface.
