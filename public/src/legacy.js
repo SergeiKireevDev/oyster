@@ -1,6 +1,7 @@
 "use strict";
 
 import { setComposerHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+import { addToast } from "./stores/toasts.js";
 
 // ------------------------------------------------------------ token
 
@@ -3715,45 +3716,7 @@ async function handleExtensionUI(req) {
 // ------------------------------------------------------------ toasts
 
 function toast(text, kind, { onClick, sticky } = {}) {
-  const t = document.createElement("div");
-  t.className = "toast" + (kind ? ` ${kind}` : "");
-  t.textContent = text;
-  let swiping = false;
-  if (onClick) {
-    t.style.cursor = "pointer";
-    t.addEventListener("click", () => { if (swiping) return; t.remove(); onClick(); });
-  }
-  // swipe to dismiss
-  let startX = null, dx = 0;
-  t.addEventListener("pointerdown", (e) => { startX = e.clientX; dx = 0; t.setPointerCapture(e.pointerId); });
-  t.addEventListener("pointermove", (e) => {
-    if (startX === null) return;
-    dx = e.clientX - startX;
-    if (Math.abs(dx) > 5) {
-      swiping = true;
-      t.style.transform = `translateX(${dx}px)`;
-      t.style.opacity = String(Math.max(0, 1 - Math.abs(dx) / 150));
-    }
-  });
-  const endSwipe = () => {
-    if (startX === null) return;
-    if (Math.abs(dx) > 60) {
-      t.classList.add("dismissing");
-      t.style.transform = `translateX(${dx > 0 ? 300 : -300}px)`;
-      setTimeout(() => t.remove(), 150);
-    } else {
-      t.style.transform = "";
-      t.style.opacity = "";
-    }
-    startX = null;
-  };
-  t.addEventListener("pointerup", () => {
-    endSwipe();
-    setTimeout(() => { swiping = false; }, 0);
-  });
-  t.addEventListener("pointercancel", endSwipe);
-  $("toasts").appendChild(t);
-  if (!sticky) setTimeout(() => t.remove(), 4000);
+  addToast(text, kind, { onClick, sticky });
 }
 
 // ------------------------------------------------------------ swipe carousel

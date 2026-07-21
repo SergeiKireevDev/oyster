@@ -1,3 +1,7 @@
+<script>
+  import Toasts from "./Toasts.svelte";
+</script>
+
 <div id="carouselDots" aria-hidden="true"><span class="dot"></span><span class="dot active"></span><span class="dot"></span></div>
 
 <div id="overlay"><div id="modal">
@@ -6,6 +10,6 @@
   <div class="m-actions" id="mActions"></div>
 </div></div>
 
-<div id="toasts"></div>
+<Toasts />
 
 <div id="cmdPalette"></div>
