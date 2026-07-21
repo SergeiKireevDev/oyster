@@ -1,4 +1,13 @@
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
+export function parseSessionRoute(pathname) {
+  const match = pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);
+  return match ? { sessionId: match[1], messageId: match[2] ?? null } : { sessionId: null, messageId: null };
+}
+
+export function syncSessionUrl({ location, history, sessionId }) {
+  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
+  if (location.pathname !== path) history.replaceState(null, "", path);
+}
 export function readPersistedRunner(storage, key = "pi_runner") {
   return storage.getItem(key) || null;
 }

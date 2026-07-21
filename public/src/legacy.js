@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -81,15 +81,8 @@ installAuthenticatedFetch(token);
 // The URL is kept in sync with the active session (history.replaceState),
 // so a reload or a shared link always lands on the same session.
 
-const route = (() => {
-  const m = location.pathname.match(/^\/s\/([\w.-]+)(?:\/m\/([\w.-]+))?$/);
-  return m ? { sessionId: m[1], messageId: m[2] ?? null } : { sessionId: null, messageId: null };
-})();
-
-function syncUrlToSession(sessionId) {
-  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
-  if (location.pathname !== path) history.replaceState(null, "", path);
-}
+const route = parseSessionRoute(location.pathname);
+const syncUrlToSession = (sessionId) => syncSessionUrl({ location, history, sessionId });
 
 const $ = (id) => document.getElementById(id);
 const gate = $("gate");

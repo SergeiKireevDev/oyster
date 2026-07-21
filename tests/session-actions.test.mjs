@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+
+test("session actions parse and synchronize session routes", () => {
+  assert.deepEqual(parseSessionRoute("/s/session-1/m/message-2"), { sessionId: "session-1", messageId: "message-2" });
+  const calls = [];
+  syncSessionUrl({ location: { pathname: "/" }, history: { replaceState: (...args) => calls.push(args) }, sessionId: "session 1" });
+  assert.deepEqual(calls, [[null, "", "/s/session%201"]]);
+});
 
 test("session actions persist the current runner", () => {
   const values = new Map();
