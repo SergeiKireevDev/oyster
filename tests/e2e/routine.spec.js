@@ -58,13 +58,14 @@ test("start a session, then run and tear down a dummy routine from the sidebar",
   // ▶ start
   await block.getByRole("button", { name: /start/ }).click();
 
-  // watch it reach 100% (the block shows the running→done state)
-  await expect(block).toContainText("100%", { timeout: 60000 });
+  // watch it finish. The UI shows intermediate percentages while running,
+  // then replaces the final 100% line with the terminal message text.
+  await expect(block).toContainText("complete", { timeout: 60000 });
   await expect(block.locator(".r-dot")).toHaveClass(/done/, { timeout: 10000 });
 
   // confirm the byproduct exists
   await waitFor(
-    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`).then((r) => r === "y"),
+    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`) === "y",
     { timeout: 10000, label: "routine byproduct on disk" },
   );
 
@@ -74,7 +75,7 @@ test("start a session, then run and tear down a dummy routine from the sidebar",
 
   // byproduct is gone
   await waitFor(
-    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`).then((r) => r === "n"),
+    () => dexec(`test -f ${ARTIFACT} && echo y || echo n`) === "n",
     { timeout: 10000, label: "byproduct removed after teardown" },
   );
 });

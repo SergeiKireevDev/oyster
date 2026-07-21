@@ -61,13 +61,17 @@ a throwaway `pi-lot-e2e` container and removes it on teardown.
 
 ## Notes
 
-- Specs run **sequentially** (one worker): they share one container, one pi
-  agent and one `/workspace`.
+- Specs run **sequentially** (one worker). Product specs isolate themselves by
+  starting a fresh mock container in `beforeEach` and removing it in
+  `afterEach`, so workspace/session state does not leak between scenarios.
 - The hublot spec opens a real cloudflared tunnel; the bundled mock serves
   the button page deterministically in seconds (a real model would take
   minutes). with the bundled mock the button
   page is served deterministically in seconds. Per-test timeout is 6 min.
 - `npx playwright show-report` opens the HTML report after a run.
+- `video-*.example.js` files are scratch/manual video-recording examples. They
+  intentionally do not match Playwright's `*.spec.js` pattern and are not part
+  of the product e2e suite.
 
 ### Determinism
 

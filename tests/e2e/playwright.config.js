@@ -1,7 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 // This host (Debian trixie, no root) can't apt-install Chromium's system libs,
 // so we run the lighter chrome-headless-shell against a rootless lib prefix at
@@ -36,6 +39,16 @@ if (existsSync(SYSLIBS)) {
 }
 const SHELL = headlessShellPath();
 const launchOptions = SHELL ? { executablePath: SHELL } : {};
+// Video is opt-in: recording every normal e2e run leaves large artifacts in
+// preview-videos/. Also, chrome-headless-shell cannot record video, so when
+// E2E_VIDEO is set we let Playwright use its bundled full Chromium instead.
+const projectUse = process.env.E2E_VIDEO
+  ? {
+      ...devices["Desktop Chrome"],
+      recordVideo: { dir: join(HERE, "..", "..", "preview-videos", "raw"), size: { width: 1400, height: 900 } },
+      launchOptions: { headless: true },
+    }
+  : { ...devices["Desktop Chrome"], launchOptions };
 
 // These specs drive ONE shared pi-lot-ui container (and one shared pi agent /
 // workspace) through the real browser UI, so they must run sequentially — no
@@ -51,9 +64,6 @@ const launchOptions = SHELL ? { executablePath: SHELL } : {};
 //
 // The two top-level test.describe("desktop") / test.describe("mobile") blocks
 // are intentionally tagged so you can run just one with `--grep`.
-const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const IMAGE = process.env.PI_UI_IMAGE ?? "pi-lot-ui";
-
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
@@ -72,5 +82,5 @@ export default defineConfig({
     screenshot: "only-on-failure",
     launchOptions,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [{ name: "chromium", use: projectUse }],
 });
