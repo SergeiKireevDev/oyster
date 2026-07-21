@@ -34,7 +34,9 @@ function collectBody(req, limit, encoding) {
       size += chunk.length;
       if (size > limit) {
         settled = true;
-        reject(new Error("body too large"));
+        const error = new Error("body too large");
+        error.code = "body_too_large";
+        reject(error);
         req.destroy();
         return;
       }

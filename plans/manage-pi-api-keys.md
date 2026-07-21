@@ -90,7 +90,7 @@ DELETE /api-keys    { "provider": "...", "restart": true }
   `GET` returns provider IDs, display names, stored credential type, and safe
   source/status labels only. Mutations require a non-empty provider, a bounded
   non-empty key where applicable, and explicit restart confirmation.
-- [ ] Return stable status codes: `400` for malformed input, `404` for an
+- [x] Return stable status codes: `400` for malformed input, `404` for an
   unknown provider or missing stored API key, `409` for an OAuth conflict,
   `413` for an oversized body, and `503` when the configured pi SDK/auth store
   cannot be used. Ensure errors never interpolate the submitted key.

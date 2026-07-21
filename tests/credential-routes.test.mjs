@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CREDENTIAL_KEY_LIMIT, createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
+import { CREDENTIAL_BODY_LIMIT, CREDENTIAL_KEY_LIMIT, createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
 
 function response() {
   return { status: null, body: null };
@@ -9,7 +9,16 @@ function response() {
 function context() {
   return {
     json(res, status, body) { res.status = status; res.body = body; },
-    async readJsonBody(req) { return req.body; },
+    async readBody(req, limit) {
+      if (req.readError) throw req.readError;
+      const raw = req.raw ?? JSON.stringify(req.body);
+      if (Buffer.byteLength(raw) > limit) {
+        const error = new Error("body too large");
+        error.code = "body_too_large";
+        throw error;
+      }
+      return raw;
+    },
   };
 }
 
@@ -61,6 +70,40 @@ test("credential mutations require bounded input and explicit restart confirmati
   await routes["DELETE /api-keys"]({ body: { provider: "openai" } }, remove);
   assert.equal(remove.status, 400);
   assert.equal(writes, 0);
+});
+
+test("credential routes return stable safe statuses for malformed bodies and service errors", async () => {
+  const oversizedRoutes = createCredentialRoutes({
+    requestContext: context(), credentialService: {}, restartActiveRunners() {},
+  });
+  const oversized = response();
+  await oversizedRoutes["POST /api-keys"]({ raw: "x".repeat(CREDENTIAL_BODY_LIMIT + 1) }, oversized);
+  assert.deepEqual(oversized, { status: 413, body: { error: "request body too large" } });
+  const malformed = response();
+  await oversizedRoutes["POST /api-keys"]({ raw: '{"key":"malformed-canary"' }, malformed);
+  assert.equal(malformed.status, 400);
+  assert.doesNotMatch(JSON.stringify(malformed.body), /malformed-canary/);
+
+  for (const [code, status] of [
+    ["invalid_provider", 400],
+    ["unknown_provider", 404],
+    ["credential_not_found", 404],
+    ["oauth_conflict", 409],
+    ["credential_service_unavailable", 503],
+  ]) {
+    const routes = createCredentialRoutes({
+      requestContext: context(),
+      credentialService: {
+        async setApiKey() { const error = new Error("submitted-canary must stay private"); error.code = code; throw error; },
+      },
+      restartActiveRunners: async () => ({}),
+    });
+    const res = response();
+    await routes["POST /api-keys"]({ body: { provider: "provider", key: "submitted-canary", restart: true } }, res);
+    assert.equal(res.status, status);
+    assert.equal(res.body.code, code);
+    assert.doesNotMatch(JSON.stringify(res.body), /submitted-canary/);
+  }
 });
 
 test("credential mutations return safe results and restart after the durable write", async () => {
