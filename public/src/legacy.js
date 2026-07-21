@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { createHublotEventController, handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createCodeReloadController, createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -579,6 +579,7 @@ const hublotEvent = createHublotEventController({
   scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
   openUrl: (url) => window.open(url, "_blank"),
 });
+const codeReload = createCodeReloadController({ isReplaying: () => replaying, toast: addToast, reloadPage: () => location.reload() });
 const piStarted = createPiStartedController({ isReplaying: () => replaying, toast: addToast, reloadTranscript: () => reloadTranscript() });
 const runnerUnhealthy = createRunnerUnhealthyController({ isReplaying: () => replaying, toast: addToast, setBusy });
 const piError = createPiErrorController({ isReplaying: () => replaying, toast: addToast });
@@ -688,18 +689,9 @@ function handleEvent(msg) {
       return;
 
     case "ui_reload":
-      // the page on disk changed; offer a refresh. Ignore replayed copies of
-      // this event — after a refresh we already run the newest version.
-      if (replaying) return;
-      addToast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
-      return;
-
     case "code_reloaded":
-      if (!replaying) addToast("server code hot-reloaded");
-      return;
-
     case "code_reload_failed":
-      if (!replaying) addToast(`server reload failed: ${msg.error}`, "error");
+      codeReload(msg);
       return;
 
     case "tunnel_opened":
