@@ -80,7 +80,7 @@ import { configureRoutineActions } from "../features/routines/routineActions.js"
 import { createSettingsController } from "../lib/settingsController.js";
 import { configureSettingsActions } from "../features/settings/settingsActions.js";
 import { configureHeaderActions } from "../features/settings/headerActions.js";
-import { createSessionPickerController, createSessionPickerEventController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../lib/sessionPickerController.js";
+import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "../lib/sessionPickerSearchController.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";

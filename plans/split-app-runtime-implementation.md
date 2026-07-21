@@ -304,7 +304,7 @@ lines. Complete the remaining migration in small verified commits:
   the coordinator.
 - [x] Split the remaining layout, hublot, routine, and settings construction
   blocks into feature factories with teardown ownership.
-- [ ] Remove obsolete event-controller imports and compatibility adapters only
+- [x] Remove obsolete event-controller imports and compatibility adapters only
   after an `rg` no-reference check and focused regression coverage.
 - [ ] Rename or replace `appRuntimeImplementation.js` with a thin composition
   module. Its responsibilities are limited to adapter creation, feature
