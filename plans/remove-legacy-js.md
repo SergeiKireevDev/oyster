@@ -180,7 +180,7 @@ Remaining work, broken into atomic commits:
    `legacyRuntimeDependencies.js`, `legacyRuntimeEventAdapters.js`, and
    `legacyRuntimeCleanup.js` only after their behavior is in a non-legacy
    runtime module. Verify no production module imports `legacy.js`.
-7. [ ] **Delete the legacy module and retarget guards.** Delete
+7. [x] **Delete the legacy module and retarget guards.** Delete
    `public/src/legacy.js`; update `tests/ui-page.test.mjs` so syntax and DOM-ID
    checks cover the replacement composition/runtime modules. Remove or rename
    legacy-named tests and files that no longer describe a live boundary.

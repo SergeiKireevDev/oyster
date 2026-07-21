@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLegacyRuntimeLifecycle } from "../public/src/runtime/legacyRuntimeLifecycle.js";
+import { createRuntimeLifecycle } from "../public/src/runtime/runtimeLifecycle.js";
 
 test("runtime lifecycle attaches integrations before boot and exposes teardown", () => {
   const calls = [];
   const teardown = () => calls.push("teardown");
-  const runtime = createLegacyRuntimeLifecycle({
+  const runtime = createRuntimeLifecycle({
     attachAuthenticatedFetch: () => calls.push("auth"),
     attachEventAdapters: () => calls.push("adapters"),
     attachDebugHooks: () => calls.push("debug"),

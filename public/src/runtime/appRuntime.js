@@ -2,7 +2,7 @@ import { createAppRuntime } from "./createAppRuntime.js";
 
 let runtime;
 
-/** Starts the explicit application composition root without a legacy adapter. */
+/** Starts the explicit application composition root without a compatibility adapter. */
 export async function startAppRuntime() {
   if (!runtime) {
     const { createAppRuntimeDependencies } = await import("./appRuntimeImplementation.js");

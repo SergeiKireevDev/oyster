@@ -1,8 +1,8 @@
-import { createLegacyRuntimeLifecycle } from "./legacyRuntimeLifecycle.js";
+import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 
 /**
  * Application lifecycle composition root. Browser and store dependencies stay
- * explicit while construction is migrated from the legacy module.
+ * explicit while construction is migrated from the previous composition module.
  */
 export function createAppRuntime({ browser, stores, createRuntime }) {
   if (!browser || !stores || typeof createRuntime !== "function") {
@@ -10,7 +10,7 @@ export function createAppRuntime({ browser, stores, createRuntime }) {
   }
 
   let runtime;
-  const ensureRuntime = () => runtime ??= createLegacyRuntimeLifecycle(
+  const ensureRuntime = () => runtime ??= createRuntimeLifecycle(
     createRuntime({ browser, stores }),
   );
 

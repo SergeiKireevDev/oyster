@@ -1,7 +1,7 @@
 /**
  * Schedule tail-first transcript backfill without owning DOM or scroll state.
  * Callers supply the renderer and viewport hooks, keeping this reusable for
- * Svelte transcript stores while preserving the legacy scroll policy.
+ * Svelte transcript stores while preserving the existing scroll policy.
  */
 export async function backfillTranscriptTurns({
   turns,

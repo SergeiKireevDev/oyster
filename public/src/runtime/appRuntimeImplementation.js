@@ -86,7 +86,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
  *   still orchestrated here, but are extraction candidates for focused action
  *   modules.
  * - Components dispatch narrow custom events only for actions that still
- *   require legacy-owned transport or session lifecycle coordination.
+ *   require runtime-owned transport or session lifecycle coordination.
  */
 
 const lifecycleLog = createLifecycleLogger({
@@ -1594,7 +1594,7 @@ const settingsChangeController = createSettingsChangeController({
   changed: () => reloadTranscript().catch(() => {}),
 });
 
-/** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
+/** Settings modal — rendered by Svelte; runtime only opens the modal shell. */
 async function showSettingsModal() {
   openModal({ title: "Settings", content: "settings" });
 }

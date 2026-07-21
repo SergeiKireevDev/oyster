@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 
-// Checkpoints are resolved against rendered transcript elements by legacy.
+// Checkpoints are resolved against rendered transcript elements by the runtime.
 // Svelte owns the corresponding frozen treatment, restore arrow, and busy UI.
 export const checkpointRestores = writable([]);
 

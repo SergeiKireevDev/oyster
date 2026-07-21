@@ -1,4 +1,4 @@
-export function createLegacyRuntimeLifecycle({ attachAuthenticatedFetch, attachEventAdapters, attachDebugHooks, start, teardown }) {
+export function createRuntimeLifecycle({ attachAuthenticatedFetch, attachEventAdapters, attachDebugHooks, start, teardown }) {
   return {
     start() {
       attachAuthenticatedFetch();
