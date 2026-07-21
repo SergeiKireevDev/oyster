@@ -17,12 +17,18 @@ export function createComposerAssembly(deps) {
   const input = deps.findElement("input");
   let commandRuntime = null;
 
+  function resizeInput() {
+    input.style.height = "auto";
+    const contentHeight = input.scrollHeight;
+    input.style.height = Math.min(contentHeight, 200) + "px";
+    input.style.overflowY = contentHeight > 200 ? "auto" : "hidden";
+  }
+
   function setText(text) {
     input.value = text;
     deps.setTextValue(text);
     input.setSelectionRange(text.length, text.length);
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+    resizeInput();
   }
 
   const history = createComposerHistoryController({
@@ -32,8 +38,7 @@ export function createComposerAssembly(deps) {
   });
 
   function inputChanged() {
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+    resizeInput();
     deps.setTextValue(input.value);
     deps.setBusy(deps.getBusy());
     history.reset();
@@ -63,6 +68,7 @@ export function createComposerAssembly(deps) {
     input.value = "";
     deps.setTextValue("");
     input.style.height = "auto";
+    input.style.overflowY = "hidden";
     deps.setBusy(deps.getBusy());
     deps.addUserMessage({ role: "user", content: text });
     deps.addLocalEcho(text);

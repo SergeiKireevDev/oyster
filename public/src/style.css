@@ -753,6 +753,7 @@
     padding: 9px 12px;
     resize: none;
     max-height: 200px;
+    overflow-y: hidden;
     outline: none;
   }
   #input:focus { border-color: var(--accent-dim); }

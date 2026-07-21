@@ -86,6 +86,10 @@ test("composer assembly registers scoped actions until teardown", async () => {
   input.value = "draft";
   uiActions.invoke(COMPOSER_INPUT_ACTION);
   assert.ok(calls.some((call) => call[0] === "text" && call[1] === "draft"));
+  assert.equal(input.style.overflowY, "hidden");
+  input.scrollHeight = 240;
+  uiActions.invoke(COMPOSER_INPUT_ACTION);
+  assert.equal(input.style.overflowY, "auto");
 
   let prevented = false;
   uiActions.invoke(COMPOSER_KEYDOWN_ACTION, { key: "Enter", shiftKey: false, isComposing: false, preventDefault: () => { prevented = true; } });
