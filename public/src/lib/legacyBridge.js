@@ -1,6 +1,10 @@
 let menuActionHandler = null;
 let composerHandlers = {};
 let hublotHandlers = {};
+let hublotManagerHandlers = {};
+let folderBrowserHandlers = {};
+let filePickerHandlers = {};
+let fileExplorerHandlers = {};
 let routineHandlers = {};
 let commandPaletteHandlers = {};
 let checkpointTreeHandlers = {};
@@ -45,6 +49,126 @@ export function openFileExplorer() {
 
 export function closeHublot(id) {
   return hublotHandlers.closeHublot?.(id);
+}
+
+export function setHublotManagerHandlers(handlers) {
+  hublotManagerHandlers = handlers ?? {};
+}
+
+export function setFolderBrowserHandlers(handlers) {
+  folderBrowserHandlers = handlers ?? {};
+}
+
+export function setFilePickerHandlers(handlers) {
+  filePickerHandlers = handlers ?? {};
+}
+
+export function setFileExplorerHandlers(handlers) {
+  fileExplorerHandlers = handlers ?? {};
+}
+
+export function browseExploredFolder(path) {
+  return fileExplorerHandlers.browse?.(path);
+}
+
+export function editExploredFile(path) {
+  return fileExplorerHandlers.editFile?.(path);
+}
+
+export function setExploredFileContent(content) {
+  return fileExplorerHandlers.setEditContent?.(content);
+}
+
+export function saveExploredFile() {
+  return fileExplorerHandlers.saveFile?.();
+}
+
+export function uploadExploredFiles() {
+  return fileExplorerHandlers.uploadFiles?.();
+}
+
+export function backToExploredList() {
+  return fileExplorerHandlers.backToList?.();
+}
+
+export function backToHublotsFromExplorer() {
+  return fileExplorerHandlers.backToHublots?.();
+}
+
+export function toggleFileExplorerHidden() {
+  return fileExplorerHandlers.toggleHidden?.();
+}
+
+export function browsePickedFileFolder(path) {
+  return filePickerHandlers.browse?.(path);
+}
+
+export function pickFile(path) {
+  return filePickerHandlers.pickFile?.(path);
+}
+
+export function usePickedFolder() {
+  return filePickerHandlers.useFolder?.();
+}
+
+export function toggleFilePickerHidden() {
+  return filePickerHandlers.toggleHidden?.();
+}
+
+export function cancelFilePicker() {
+  return filePickerHandlers.cancel?.();
+}
+
+export function browseFolder(path) {
+  return folderBrowserHandlers.browse?.(path);
+}
+
+export function toggleFolderHidden() {
+  return folderBrowserHandlers.toggleHidden?.();
+}
+
+export function showFolderCreateRow() {
+  return folderBrowserHandlers.showCreateRow?.();
+}
+
+export function setFolderNewName(name) {
+  return folderBrowserHandlers.setNewName?.(name);
+}
+
+export function hideFolderCreateRow() {
+  return folderBrowserHandlers.hideCreateRow?.();
+}
+
+export function createFolder() {
+  return folderBrowserHandlers.createFolder?.();
+}
+
+export function cancelFolderBrowser() {
+  return folderBrowserHandlers.cancel?.();
+}
+
+export function submitFolderBrowser() {
+  return folderBrowserHandlers.submit?.();
+}
+
+export function openManagedFileExplorer() {
+  return hublotManagerHandlers.openFileExplorer?.();
+}
+
+export function closeManagedHublot(id) {
+  return hublotManagerHandlers.closeHublot?.(id);
+}
+
+export function createManagedHublot(desc) {
+  return hublotManagerHandlers.createHublot?.(desc);
+}
+
+export function toggleManagedHublotScope() {
+  return hublotManagerHandlers.toggleScope?.();
+}
+
+export function setupManagedCommandPalette(node) {
+  return hublotManagerHandlers.setupCommandPalette?.(node);
 }
 
 export function setRoutineHandlers(handlers) {

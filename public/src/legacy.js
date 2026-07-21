@@ -1,10 +1,15 @@
 "use strict";
 
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHeaderHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHeaderHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
+import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
+import { updateFileExplorer } from "./stores/fileExplorer.js";
+import { updateFilePicker } from "./stores/filePicker.js";
+import { folderBrowser, updateFolderBrowser } from "./stores/folderBrowser.js";
 import { updateHeaderState } from "./stores/header.js";
+import { updateHublotManager } from "./stores/hublotManager.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
 import { openConfirmPrompt, openTextPrompt } from "./stores/dialogs.js";
 import { closeModalState, openModal, updateModal } from "./stores/modal.js";
@@ -565,61 +570,13 @@ function pickCheckpointModel({
   hint = "The model summarizes the diff into the commit message. Your choice is remembered.",
   okLabel = "Freeze \u{1F9CA}",
 } = {}) {
-  return new Promise((resolve) => {
-    updateModal({ title });
-    const body = $("mBody");
-    body.innerHTML = "";
-    const row = document.createElement("div");
-    row.className = "search-row";
-    const sel = document.createElement("select");
-    sel.style.flex = "1";
-    sel.style.maxWidth = "100%";
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = "\u{1F4A8} No summary — timestamp message";
-    sel.appendChild(none);
-    const stored = localStorage.getItem("pi_ckpt_model") ?? "";
-    // fill the selector asynchronously; the stored choice works immediately
-    if (stored) {
-      const o = document.createElement("option");
-      o.value = stored;
-      o.textContent = stored;
-      sel.appendChild(o);
-      sel.value = stored;
-    }
-    rpc({ type: "get_available_models" }).then(({ models }) => {
-      for (const m of models) {
-        const id = `${m.provider}/${m.id}`;
-        if (id === stored) continue; // already there
-        const o = document.createElement("option");
-        o.value = id;
-        o.textContent = id;
-        sel.appendChild(o);
-      }
-    }).catch(() => {});
-    row.appendChild(sel);
-    const hintEl = document.createElement("div");
-    hintEl.className = "m-path";
-    hintEl.textContent = hint;
-    body.append(row, hintEl);
-    const actions = $("mActions");
-    const cancel = document.createElement("span");
-    cancel.className = "chip";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => { closeModal(); resolve({ cancelled: true }); });
-    const ok = document.createElement("button");
-    ok.className = "btn";
-    ok.textContent = okLabel;
-    ok.style.padding = "6px 16px";
-    ok.addEventListener("click", () => {
-      const model = sel.value || null;
-      localStorage.setItem("pi_ckpt_model", sel.value);
-      closeModal();
-      resolve({ model });
-    });
-    actions.append(cancel, ok);
-    openModal({ title });
-  });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  const picker = openCheckpointModelPicker({ title, hint, okLabel, loading: true });
+  rpc({ type: "get_available_models" }).then(({ models }) => {
+    updateCheckpointModelOptions(models.map((m) => `${m.provider}/${m.id}`));
+  }).catch(() => updateCheckpointModelOptions([]));
+  return picker;
 }
 
 checkpointBtn.addEventListener("click", async (e) => {
@@ -1758,98 +1715,91 @@ function fmtSize(n) {
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
-async function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
-  const body = $("mBody"), actions = $("mActions");
-  // always open in the current session's working directory
-  let startPath = workdir;
+let filePickerState = {
+  curDir: "",
+  showHidden: true,
+  onPick: insertIntoComposer,
+  onCancel: null,
+  returnToHublot: false,
+};
 
-  let curDir = startPath; // tracks the folder currently being viewed
-  let showHidden = true;
-  const done = () => { closeModal(); if (returnToHublot) showHublots().catch((e) => toast(e.message, "error")); };
-
-  function addHiddenToggle() {
-    let t = actions.querySelector(".toggle-hidden");
-    if (!t) {
-      t = document.createElement("span");
-      t.className = "chip toggle-hidden";
-      t.addEventListener("click", async () => { showHidden = !showHidden; await load(curDir); });
-      actions.append(t);
-    }
-    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
-  }
-
-  async function load(path) {
-    const q = path ? `&path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse?files=1${q}`);
-    const data = await res.json();
-    if (!res.ok) {
-      toast(data.error || "cannot open folder", "error");
-      // e.g. remembered folder was deleted — fall back to the workdir
-      if (path !== workdir) return load(workdir);
-      return;
-    }
-    curDir = data.path;
-    updateModal({ title: "Attach file" });
-    body.innerHTML = "";
-    const pathEl = document.createElement("div");
-    pathEl.className = "m-path";
-    pathEl.textContent = data.path;
-    body.appendChild(pathEl);
-
-    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
-    const files = showHidden ? (data.files ?? []) : (data.files ?? []).filter((f) => !f.hidden);
-    const addDir = (label, cls, target) => {
-      const b = document.createElement("button");
-      b.className = `m-option dir ${cls}`;
-      b.textContent = label;
-      b.addEventListener("click", () => load(target));
-      body.appendChild(b);
-    };
-    if (data.path !== data.home) addDir("home", "homeDir", data.home);
-    if (data.workdir && data.path !== data.workdir) addDir("workdir", "", data.workdir);
-    if (data.parent) addDir("..", "up", data.parent);
-    for (const d of dirs) {
-      addDir(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
-    }
-    for (const f of files) {
-      const b = document.createElement("button");
-      b.className = `m-option file ${f.hidden ? "hidden-entry" : ""}`.trim();
-      b.textContent = f.name;
-      const size = document.createElement("span");
-      size.className = "f-size";
-      size.textContent = fmtSize(f.size);
-      b.appendChild(size);
-      const full = data.path.replace(/\/$/, "") + "/" + f.name;
-      b.title = full;
-      b.addEventListener("click", () => {
-        onPick(full);
-        done();
-      });
-      body.appendChild(b);
-    }
-    if (!dirs.length && !files.length) {
-      const empty = document.createElement("div");
-      empty.className = "m-path";
-      empty.textContent = "(empty folder)";
-      body.appendChild(empty);
-    }
-  }
-
-  actions.innerHTML = "";
-  const useFolder = document.createElement("span");
-  useFolder.className = "chip";
-  useFolder.textContent = "\u{1F4C1} Use this folder";
-  useFolder.title = "Insert the current folder path";
-  useFolder.addEventListener("click", () => { onPick(curDir); done(); });
-  addHiddenToggle();
-  const cancel = document.createElement("span");
-  cancel.className = "chip";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", () => { onCancel?.(); done(); });
-  actions.append(useFolder, cancel);
-  openModal({ title: "Attach file" });
-  await load(startPath);
+function finishFilePicker() {
+  closeModal();
+  if (filePickerState.returnToHublot) showHublots().catch((e) => toast(e.message, "error"));
 }
+
+async function loadFilePicker(path) {
+  updateFilePicker({ loading: true });
+  const q = path ? `&path=${encodeURIComponent(path)}` : "";
+  const res = await fetch(`/browse?files=1${q}`);
+  const data = await res.json();
+  if (!res.ok) {
+    updateFilePicker({ loading: false });
+    toast(data.error || "cannot open folder", "error");
+    // e.g. remembered folder was deleted — fall back to the workdir
+    if (path !== workdir) return loadFilePicker(workdir);
+    return;
+  }
+  filePickerState.curDir = data.path;
+  updateModal({ title: "Attach file" });
+  updateFilePicker({
+    path: data.path,
+    home: data.home,
+    workdir: data.workdir,
+    parent: data.parent,
+    dirs: data.dirs ?? [],
+    files: data.files ?? [],
+    showHidden: filePickerState.showHidden,
+    loading: false,
+  });
+}
+
+/** Browse server files; onPick(path) gets the chosen file. Defaults to
+ *  inserting the path into the composer. */
+async function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
+  // always open in the current session's working directory
+  filePickerState = {
+    curDir: workdir,
+    showHidden: true,
+    onPick,
+    onCancel,
+    returnToHublot,
+  };
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  updateFilePicker({
+    path: "",
+    home: "",
+    workdir: "",
+    parent: null,
+    dirs: [],
+    files: [],
+    showHidden: true,
+    loading: true,
+  });
+  openModal({ title: "Attach file", content: "filePicker" });
+  await loadFilePicker(filePickerState.curDir);
+}
+
+setFilePickerHandlers({
+  browse: loadFilePicker,
+  pickFile: (path) => {
+    filePickerState.onPick?.(path);
+    finishFilePicker();
+  },
+  useFolder: () => {
+    filePickerState.onPick?.(filePickerState.curDir);
+    finishFilePicker();
+  },
+  toggleHidden: () => {
+    filePickerState.showHidden = !filePickerState.showHidden;
+    updateFilePicker({ showHidden: filePickerState.showHidden });
+  },
+  cancel: () => {
+    filePickerState.onCancel?.();
+    finishFilePicker();
+  },
+});
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
 function insertIntoComposer(text) {
@@ -1869,113 +1819,56 @@ function insertIntoComposer(text) {
 
 // ------------------------------------------------------------ folder browser
 
+let folderBrowserState = {
+  browsePath: "",
+  showHidden: true,
+  done: null,
+};
+
+async function loadFolderBrowser(path) {
+  updateFolderBrowser({ loading: true });
+  const q = path ? `?path=${encodeURIComponent(path)}` : "";
+  const res = await fetch(`/browse${q}`);
+  const data = await res.json();
+  if (!res.ok) {
+    updateFolderBrowser({ loading: false });
+    toast(data.error || "cannot open folder", "error");
+    return;
+  }
+  folderBrowserState.browsePath = data.path;
+  updateModal({ title: "New session in folder" });
+  updateFolderBrowser({
+    path: data.path,
+    home: data.home,
+    parent: data.parent,
+    dirs: data.dirs ?? [],
+    showHidden: folderBrowserState.showHidden,
+    loading: false,
+  });
+}
+
 async function showFolderBrowser() {
-  const body = $("mBody"), actions = $("mActions");
-  let browsePath = workdir;
-  let showHidden = true;
-  let done = null;
-  const finished = new Promise((resolve) => { done = resolve; });
-
-  function addHiddenToggle() {
-    const existing = actions.querySelector(".toggle-hidden");
-    if (existing) { existing.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"; return; }
-    const t = document.createElement("span");
-    t.className = "chip toggle-hidden";
-    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
-    t.addEventListener("click", async () => { showHidden = !showHidden; await load(browsePath); });
-    actions.append(t);
-  }
-
-  async function load(path) {
-    const q = path ? `?path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse${q}`);
-    const data = await res.json();
-    if (!res.ok) { toast(data.error || "cannot open folder", "error"); return; }
-    browsePath = data.path;
-    updateModal({ title: "New session in folder" });
-    body.innerHTML = "";
-    const pathEl = document.createElement("div");
-    pathEl.className = "m-path";
-    pathEl.textContent = data.path;
-    body.appendChild(pathEl);
-    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
-    const addEntry = (label, cls, target) => {
-      const b = document.createElement("button");
-      b.className = `m-option dir ${cls}`;
-      b.textContent = label;
-      b.addEventListener("click", () => load(target));
-      body.appendChild(b);
-    };
-    if (data.path !== data.home) addEntry("home", "homeDir", data.home);
-    if (data.parent) addEntry("..", "up", data.parent);
-    for (const d of dirs) {
-      addEntry(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
-    }
-    if (!data.dirs.length) {
-      const empty = document.createElement("div");
-      empty.className = "m-path";
-      empty.textContent = "(no subfolders)";
-      body.appendChild(empty);
-    }
-  }
-
-  function showCreateRow() {
-    const existing = body.querySelector(".newdir-row");
-    if (existing) { existing.querySelector("input").focus(); return; }
-    const row = document.createElement("div");
-    row.className = "newdir-row";
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.placeholder = "new folder name";
-    const create = document.createElement("button");
-    create.className = "btn";
-    create.textContent = "Create";
-    create.addEventListener("click", async () => {
-      const name = inp.value.trim();
-      if (!name) { inp.focus(); return; }
-      create.disabled = true;
-      try {
-        const res = await fetch(`/mkdir`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: browsePath, name }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) { toast(data.error || `mkdir failed (${res.status})`, "error"); create.disabled = false; return; }
-        toast(`created ${data.path}`);
-        await load(data.path); // descend into the new folder
-      } catch (e) {
-        toast(`mkdir failed: ${e.message}`, "error");
-        create.disabled = false;
-      }
-    });
-    inp.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") create.click();
-      else if (e.key === "Escape") row.remove();
-    });
-    row.append(inp, create);
-    // insert right below the path display
-    body.insertBefore(row, body.children[1] ?? null);
-    inp.focus();
-  }
-
-  actions.innerHTML = "";
-  const newFolder = document.createElement("span");
-  newFolder.className = "chip";
-  newFolder.textContent = "New folder";
-  newFolder.addEventListener("click", showCreateRow);
-  const cancel = document.createElement("span");
-  cancel.className = "chip";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", () => { closeModal(); done(null); });
-  const ok = document.createElement("button");
-  ok.className = "btn";
-  ok.textContent = "Start session here";
-  ok.style.padding = "6px 16px";
-  ok.addEventListener("click", () => { closeModal(); done(browsePath); });
-  actions.append(newFolder, cancel, ok);
-  openModal({ title: "New session in folder" });
-  await load(browsePath);
+  folderBrowserState = {
+    browsePath: workdir,
+    showHidden: true,
+    done: null,
+  };
+  const finished = new Promise((resolve) => { folderBrowserState.done = resolve; });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  updateFolderBrowser({
+    path: "",
+    home: "",
+    parent: null,
+    dirs: [],
+    showHidden: true,
+    loading: true,
+    creating: false,
+    createOpen: false,
+    newName: "",
+  });
+  openModal({ title: "New session in folder", content: "folderBrowser" });
+  await loadFolderBrowser(folderBrowserState.browsePath);
 
   const chosen = await finished;
   if (!chosen) return;
@@ -1989,6 +1882,46 @@ async function showFolderBrowser() {
     toast(e.message, "error");
   }
 }
+
+setFolderBrowserHandlers({
+  browse: loadFolderBrowser,
+  toggleHidden: async () => {
+    folderBrowserState.showHidden = !folderBrowserState.showHidden;
+    updateFolderBrowser({ showHidden: folderBrowserState.showHidden });
+  },
+  showCreateRow: () => updateFolderBrowser({ createOpen: true, newName: "" }),
+  hideCreateRow: () => updateFolderBrowser({ createOpen: false, newName: "" }),
+  setNewName: (newName) => updateFolderBrowser({ newName }),
+  createFolder: async () => {
+    let snapshot;
+    const unsubscribe = folderBrowser.subscribe((s) => { snapshot = s; });
+    unsubscribe();
+    const name = (snapshot?.newName ?? "").trim();
+    if (!name) return;
+    updateFolderBrowser({ creating: true });
+    try {
+      const res = await fetch(`/mkdir`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: folderBrowserState.browsePath, name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error || `mkdir failed (${res.status})`, "error");
+        updateFolderBrowser({ creating: false });
+        return;
+      }
+      toast(`created ${data.path}`);
+      updateFolderBrowser({ creating: false, createOpen: false, newName: "" });
+      await loadFolderBrowser(data.path); // descend into the new folder
+    } catch (e) {
+      toast(`mkdir failed: ${e.message}`, "error");
+      updateFolderBrowser({ creating: false });
+    }
+  },
+  cancel: () => { closeModal(); folderBrowserState.done?.(null); },
+  submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
+});
 
 // ------------------------------------------------------------ tunnels
 
@@ -2009,243 +1942,202 @@ async function sendAgentMessage(text) {
 // Built-in "hublot": same modal style as the attach-file picker, but with
 // per-file actions — download the file, or edit it right in the modal.
 
-async function showFileExplorer() {
-  const body = $("mBody"), actions = $("mActions");
-  // always open in the current session's working directory
-  let startPath = workdir;
-  let curPath = startPath;
-  let showHidden = true;
+let fileExplorerState = {
+  curPath: "",
+  showHidden: true,
+  editPath: "",
+  editContent: "",
+};
 
-  function addHiddenToggle() {
-    let t = actions.querySelector(".toggle-hidden");
-    if (!t) {
-      t = document.createElement("span");
-      t.className = "chip toggle-hidden";
-      t.addEventListener("click", async () => { showHidden = !showHidden; await load(curPath); });
-      actions.append(t);
-    }
-    t.textContent = showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+async function loadFileExplorer(path) {
+  updateFileExplorer({ loading: true, mode: "list" });
+  const q = path ? `&path=${encodeURIComponent(path)}` : "";
+  const res = await fetch(`/browse?files=1${q}`);
+  const data = await res.json();
+  if (!res.ok) {
+    updateFileExplorer({ loading: false });
+    toast(data.error || "cannot open folder", "error");
+    if (path !== workdir) return loadFileExplorer(workdir);
+    return;
   }
-
-  async function load(path) {
-    const q = path ? `&path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(`/browse?files=1${q}`);
-    const data = await res.json();
-    if (!res.ok) {
-      toast(data.error || "cannot open folder", "error");
-      if (path !== workdir) return load(workdir);
-      return;
-    }
-    curPath = data.path;
-    updateModal({ title: "\u{1F4C1} File explorer" });
-    body.innerHTML = "";
-    const pathEl = document.createElement("div");
-    pathEl.className = "m-path";
-    pathEl.textContent = data.path;
-    body.appendChild(pathEl);
-
-    const dirs = showHidden ? data.dirs : data.dirs.filter((d) => !d.hidden);
-    const files = showHidden ? (data.files ?? []) : (data.files ?? []).filter((f) => !f.hidden);
-    const addDir = (label, cls, target) => {
-      const b = document.createElement("button");
-      b.className = `m-option dir ${cls}`;
-      b.textContent = label;
-      b.addEventListener("click", () => load(target));
-      body.appendChild(b);
-    };
-    if (data.path !== data.home) addDir("home", "homeDir", data.home);
-    if (data.workdir && data.path !== data.workdir) addDir("workdir", "", data.workdir);
-    if (data.parent) addDir("..", "up", data.parent);
-    for (const d of dirs) {
-      addDir(d.name, d.hidden ? "hidden-entry" : "", data.path.replace(/\/$/, "") + "/" + d.name);
-    }
-    for (const f of files) {
-      const full = data.path.replace(/\/$/, "") + "/" + f.name;
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:6px;";
-      const b = document.createElement("button");
-      b.className = `m-option file ${f.hidden ? "hidden-entry" : ""}`.trim();
-      b.style.cssText = "flex:1;min-width:0;";
-      b.textContent = f.name;
-      const size = document.createElement("span");
-      size.className = "f-size";
-      size.textContent = fmtSize(f.size);
-      b.appendChild(size);
-      b.title = full;
-      b.addEventListener("click", () => editFile(full));
-      const dl = document.createElement("a");
-      dl.className = "chip";
-      dl.textContent = "\u2B07";
-      dl.title = `download ${f.name}`;
-      dl.href = `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(full)}`;
-      dl.setAttribute("download", f.name);
-      dl.style.textDecoration = "none";
-      const ed = document.createElement("span");
-      ed.className = "chip";
-      ed.textContent = "\u270E";
-      ed.title = `edit ${f.name}`;
-      ed.addEventListener("click", () => editFile(full));
-      row.append(b, dl, ed);
-      body.appendChild(row);
-    }
-    if (!dirs.length && !files.length) {
-      const empty = document.createElement("div");
-      empty.className = "m-path";
-      empty.textContent = "(empty folder)";
-      body.appendChild(empty);
-    }
-
-    actions.innerHTML = "";
-    const up = document.createElement("span");
-    up.className = "chip";
-    up.textContent = "\u2B06 Upload\u2026";
-    up.title = `upload local files to ${data.path}`;
-    up.addEventListener("click", () => uploadFiles(data.path, up));
-    const back = document.createElement("span");
-    back.className = "chip";
-    back.textContent = "\u2190 Hublots";
-    back.addEventListener("click", () => showHublots().catch((e) => toast(e.message, "error")));
-    addHiddenToggle();
-    const closeBtn = document.createElement("span");
-    closeBtn.className = "chip";
-    closeBtn.textContent = "Close";
-    closeBtn.addEventListener("click", closeModal);
-    actions.append(up, back, closeBtn);
-  }
-
-  function uploadFiles(dir, chip) {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.multiple = true;
-    inp.addEventListener("change", async () => {
-      const files = [...inp.files];
-      if (!files.length) return;
-      const CHUNK = 8 * 1024 * 1024; // 8 MB — safe through server cap and cloudflare tunnel
-      const MAX_RETRIES = 6;
-      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
-      let uploadedBytes = 0;
-      const setProgress = () => {
-        if (!chip) return;
-        chip.innerHTML = `<span class="spin">\u27F3</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%`;
-      };
-      if (chip) chip.style.pointerEvents = "none";
-      setProgress();
-      let done = 0;
-      for (const f of files) {
-        try {
-          let offset = 0;
-          let attempts = 0;
-          let finished = false;
-          while (!finished) {
-            const end = Math.min(offset + CHUNK, f.size);
-            const isLast = end >= f.size;
-            let r, d;
-            try {
-              r = await fetch(
-                `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
-                  `&offset=${offset}&last=${isLast ? 1 : 0}`,
-                { method: "POST", body: f.slice(offset, end) }
-              );
-              d = await r.json().catch(() => ({}));
-            } catch {
-              // network drop / tunnel hiccup — retry same chunk with backoff
-              if (++attempts > MAX_RETRIES) throw new Error(`connection lost (gave up after ${MAX_RETRIES} retries)`);
-              await sleep(1000 * attempts);
-              continue;
-            }
-            if (r.ok) {
-              attempts = 0;
-              if (isLast || d.saved) finished = true;
-              else offset = typeof d.received === "number" ? d.received : end;
-              uploadedBytes = files.slice(0, done).reduce((s, x) => s + x.size, 0) + (finished ? f.size : offset);
-              setProgress();
-              continue;
-            }
-            if (r.status === 409 && typeof d.have === "number") {
-              // server tells us how much it actually has — resume from there
-              if (++attempts > MAX_RETRIES) throw new Error(d.error || "upload out of sync");
-              offset = d.have;
-              continue;
-            }
-            if (r.status >= 500 || r.status === 429) {
-              if (++attempts > MAX_RETRIES) throw new Error(d.error || `upload failed (${r.status})`);
-              await sleep(1000 * attempts);
-              continue;
-            }
-            throw new Error(d.error || `upload failed (${r.status})`);
-          }
-          done++;
-        } catch (e) {
-          toast(`${f.name}: ${e.message}`, "error");
-        }
-      }
-      if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
-      await load(dir); // refresh the listing (rebuilds the chip)
-    });
-    inp.click();
-  }
-
-  async function editFile(path) {
-    const res = await fetch(`/file-content?path=${encodeURIComponent(path)}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
-
-    updateModal({ title: `\u270E ${path.split("/").pop()}` });
-    body.innerHTML = "";
-    const pathEl = document.createElement("div");
-    pathEl.className = "m-path";
-    pathEl.textContent = path;
-    const ta = document.createElement("textarea");
-    ta.value = data.content;
-    ta.spellcheck = false;
-    ta.style.cssText = "width:100%;height:50vh;resize:vertical;font:12.5px/1.5 ui-monospace,monospace;white-space:pre;tab-size:4;box-sizing:border-box;margin-top:6px;";
-    body.append(pathEl, ta);
-
-    actions.innerHTML = "";
-    const save = document.createElement("span");
-    save.className = "chip";
-    save.textContent = "Save";
-    save.addEventListener("click", async () => {
-      save.textContent = "Saving\u2026";
-      try {
-        const r = await fetch(`/file-save`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path, content: ta.value }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || `save failed (${r.status})`);
-        toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
-      } catch (e) {
-        toast(e.message, "error");
-      } finally {
-        save.textContent = "Save";
-      }
-    });
-    ta.addEventListener("keydown", (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save.click(); }
-    });
-    const dl = document.createElement("a");
-    dl.className = "chip";
-    dl.textContent = "Download";
-    dl.href = `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
-    dl.setAttribute("download", path.split("/").pop());
-    dl.style.textDecoration = "none";
-    const back = document.createElement("span");
-    back.className = "chip";
-    back.textContent = "\u2190 Back";
-    back.addEventListener("click", () => load(curPath));
-    const closeBtn = document.createElement("span");
-    closeBtn.className = "chip";
-    closeBtn.textContent = "Close";
-    closeBtn.addEventListener("click", closeModal);
-    actions.append(save, dl, back, closeBtn);
-  }
-
-  openModal({ title: "\u{1F4C1} File explorer" });
-  await load(startPath);
+  fileExplorerState.curPath = data.path;
+  updateModal({ title: "📁 File explorer" });
+  updateFileExplorer({
+    mode: "list",
+    path: data.path,
+    home: data.home,
+    workdir: data.workdir,
+    parent: data.parent,
+    dirs: data.dirs ?? [],
+    files: data.files ?? [],
+    showHidden: fileExplorerState.showHidden,
+    loading: false,
+    token,
+    uploadText: "⬆ Upload…",
+    uploading: false,
+  });
 }
+
+async function showFileExplorer() {
+  // always open in the current session's working directory
+  fileExplorerState = {
+    curPath: workdir,
+    showHidden: true,
+    editPath: "",
+    editContent: "",
+  };
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  updateFileExplorer({
+    mode: "list",
+    path: "",
+    home: "",
+    workdir: "",
+    parent: null,
+    dirs: [],
+    files: [],
+    showHidden: true,
+    loading: true,
+    token,
+    editPath: "",
+    editContent: "",
+    saving: false,
+    uploading: false,
+    uploadText: "⬆ Upload…",
+  });
+  openModal({ title: "📁 File explorer", content: "fileExplorer" });
+  await loadFileExplorer(fileExplorerState.curPath);
+}
+
+async function uploadExplorerFiles() {
+  const dir = fileExplorerState.curPath;
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.multiple = true;
+  inp.addEventListener("change", async () => {
+    const files = [...inp.files];
+    if (!files.length) return;
+    const CHUNK = 8 * 1024 * 1024; // 8 MB — safe through server cap and cloudflare tunnel
+    const MAX_RETRIES = 6;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
+    let uploadedBytes = 0;
+    const setProgress = () => {
+      updateFileExplorer({
+        uploading: true,
+        uploadText: `<span class="spin">⟳</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%`,
+      });
+    };
+    setProgress();
+    let done = 0;
+    for (const f of files) {
+      try {
+        let offset = 0;
+        let attempts = 0;
+        let finished = false;
+        while (!finished) {
+          const end = Math.min(offset + CHUNK, f.size);
+          const isLast = end >= f.size;
+          let r, d;
+          try {
+            r = await fetch(
+              `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}` +
+                `&offset=${offset}&last=${isLast ? 1 : 0}`,
+              { method: "POST", body: f.slice(offset, end) }
+            );
+            d = await r.json().catch(() => ({}));
+          } catch {
+            // network drop / tunnel hiccup — retry same chunk with backoff
+            if (++attempts > MAX_RETRIES) throw new Error(`connection lost (gave up after ${MAX_RETRIES} retries)`);
+            await sleep(1000 * attempts);
+            continue;
+          }
+          if (r.ok) {
+            attempts = 0;
+            if (isLast || d.saved) finished = true;
+            else offset = typeof d.received === "number" ? d.received : end;
+            uploadedBytes = files.slice(0, done).reduce((s, x) => s + x.size, 0) + (finished ? f.size : offset);
+            setProgress();
+            continue;
+          }
+          if (r.status === 409 && typeof d.have === "number") {
+            // server tells us how much it actually has — resume from there
+            if (++attempts > MAX_RETRIES) throw new Error(d.error || "upload out of sync");
+            offset = d.have;
+            continue;
+          }
+          if (r.status >= 500 || r.status === 429) {
+            if (++attempts > MAX_RETRIES) throw new Error(d.error || `upload failed (${r.status})`);
+            await sleep(1000 * attempts);
+            continue;
+          }
+          throw new Error(d.error || `upload failed (${r.status})`);
+        }
+        done++;
+      } catch (e) {
+        toast(`${f.name}: ${e.message}`, "error");
+      }
+    }
+    if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
+    updateFileExplorer({ uploading: false, uploadText: "⬆ Upload…" });
+    await loadFileExplorer(dir); // refresh the listing
+  });
+  inp.click();
+}
+
+async function editExplorerFile(path) {
+  const res = await fetch(`/file-content?path=${encodeURIComponent(path)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
+
+  fileExplorerState.editPath = path;
+  fileExplorerState.editContent = data.content;
+  updateModal({ title: `✎ ${path.split("/").pop()}` });
+  updateFileExplorer({
+    mode: "edit",
+    loading: false,
+    token,
+    editPath: path,
+    editContent: data.content,
+    saving: false,
+  });
+}
+
+async function saveExplorerFile() {
+  const path = fileExplorerState.editPath;
+  updateFileExplorer({ saving: true });
+  try {
+    const r = await fetch(`/file-save`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, content: fileExplorerState.editContent }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `save failed (${r.status})`);
+    toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    updateFileExplorer({ saving: false });
+  }
+}
+
+setFileExplorerHandlers({
+  browse: loadFileExplorer,
+  editFile: editExplorerFile,
+  setEditContent: (editContent) => {
+    fileExplorerState.editContent = editContent;
+    updateFileExplorer({ editContent });
+  },
+  saveFile: saveExplorerFile,
+  uploadFiles: uploadExplorerFiles,
+  backToList: () => loadFileExplorer(fileExplorerState.curPath),
+  backToHublots: () => showHublots().catch((e) => toast(e.message, "error")),
+  toggleHidden: () => {
+    fileExplorerState.showHidden = !fileExplorerState.showHidden;
+    updateFileExplorer({ showHidden: fileExplorerState.showHidden });
+  },
+});
 
 // Tunnels are bound to the session they were opened in; the modal and the
 // hublot sidebar show the current session's tunnels by default, with a
@@ -2260,163 +2152,97 @@ function tunnelVisible(t) {
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
 const tunnelForm = { desc: "" };
 
+async function refreshHublotManager({ loading = false } = {}) {
+  updateHublotManager({
+    loading,
+    scopeAll: tunnelScopeAll,
+    currentSessionId: state?.sessionId ?? null,
+    desc: tunnelForm.desc,
+  });
+  try {
+    const res = await fetch(`/tunnels`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    updateHublotManager({
+      loading: false,
+      tunnels: (data.tunnels ?? []).filter(tunnelVisible),
+      total: data.tunnels?.length ?? 0,
+      scopeAll: tunnelScopeAll,
+      currentSessionId: state?.sessionId ?? null,
+      desc: tunnelForm.desc,
+    });
+  } catch (e) {
+    updateHublotManager({ loading: false, tunnels: [], total: 0 });
+    toast(`failed to list hublots: ${e.message}`, "error");
+  }
+}
+
 async function showHublots() {
-  const body = $("mBody"), actions = $("mActions");
   // close the slide-over sidebars so they don't sit on top of the modal
   $("hublots").classList.remove("open");
   $("treebar").classList.remove("open");
+  carousel = 0;
+  localStorage.setItem("pi_carousel", "0");
+  setCarouselDots();
 
-  async function load() {
-    const res = await fetch(`/tunnels`);
-    const data = await res.json();
-    if (!res.ok) { toast(data.error || "failed to load tunnels", "error"); return; }
-    const visible = data.tunnels.filter(tunnelVisible);
-    updateModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session" });
-    body.innerHTML = "";
-
-    // ---- built-in hublots (always on top)
-    const fxRow = document.createElement("div");
-    fxRow.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 0 10px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;";
-    const fxBtn = document.createElement("button");
-    fxBtn.className = "btn";
-    fxBtn.textContent = "\u{1F4C1} File explorer";
-    const fxDesc = document.createElement("span");
-    fxDesc.className = "m-path";
-    fxDesc.style.cssText = "flex:1;min-width:0;";
-    fxDesc.textContent = "built-in — browse server files, download or edit any of them";
-    fxBtn.addEventListener("click", () => showFileExplorer().catch((e) => toast(e.message, "error")));
-    fxRow.append(fxBtn, fxDesc);
-    body.appendChild(fxRow);
-
-    // ---- active tunnels
-    if (!visible.length) {
-      const empty = document.createElement("div");
-      empty.className = "m-path";
-      empty.textContent = tunnelScopeAll
-        ? "(no active hublots)"
-        : data.tunnels.length
-          ? `(none for this session — ${data.tunnels.length} in other sessions)`
-          : "(no active hublots)";
-      body.appendChild(empty);
-    }
-    if (visible.length) {
-      const grid = document.createElement("div");
-      grid.className = "hublot-grid";
-      for (const t of visible) {
-        const block = document.createElement("div");
-        block.className = "hublot-block";
-
-        const preview = document.createElement("div");
-        preview.className = "preview";
-        const frame = document.createElement("iframe");
-        frame.src = t.url;
-        frame.loading = "lazy";
-        frame.sandbox = "allow-scripts allow-same-origin";
-        const hit = document.createElement("div");
-        hit.className = "hit";
-        hit.title = `open ${t.url}`;
-        hit.addEventListener("click", () => window.open(t.url, "_blank", "noopener"));
-        preview.append(frame, hit);
-
-        const cap = document.createElement("div");
-        cap.className = "cap";
-        const lbl = document.createElement("span");
-        lbl.className = "lbl";
-        const bits = [`:${t.port}`, t.label];
-        if (tunnelScopeAll && t.sessionId) {
-          bits.push(t.sessionId === state?.sessionId ? "this session" : `session ${String(t.sessionId).slice(0, 8)}`);
-        }
-        lbl.textContent = bits.filter(Boolean).join(" · ");
-        lbl.title = `${t.url}\n${t.label ?? ""}`;
-        const x = document.createElement("span");
-        x.className = "x";
-        x.textContent = "✕";
-        x.title = "close this hublot";
-        x.addEventListener("click", async () => {
-          await fetch(`/tunnels?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
-          await load();
-          loadHublots();
-        });
-        cap.append(lbl, x);
-
-        block.append(preview, cap);
-        grid.appendChild(block);
-      }
-      body.appendChild(grid);
-    }
-
-    // ---- new tunnel form
-    const form = document.createElement("div");
-    form.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--border,#333);padding-top:12px;";
-    const heading = document.createElement("div");
-    heading.style.cssText = "font-weight:600;font-size:13.5px;";
-    heading.textContent = "New hublot";
-    const descRow = document.createElement("div");
-    descRow.style.cssText = "display:flex;gap:6px;align-items:flex-start;";
-    const descInp = document.createElement("textarea");
-    descInp.rows = 3;
-    descInp.placeholder = "What should the agent expose through this hublot? (e.g. “the vite dev server for the dashboard, with hot reload”)";
-    descInp.style.cssText = "resize:vertical;flex:1;min-width:0;";
-    descInp.value = tunnelForm.desc;
-    descInp.addEventListener("input", () => { tunnelForm.desc = descInp.value; });
-    setupCommandPalette(descInp);
-    descRow.append(descInp);
-    const create = document.createElement("button");
-    create.className = "btn";
-    create.textContent = "Open hublot";
-    create.addEventListener("click", async () => {
-      const desc = descInp.value.trim();
-      if (!desc) { descInp.focus(); toast("describe what the hublot should expose", "warning"); return; }
-      create.disabled = true;
-      create.textContent = "Opening…";
-      try {
-        // no port sent: the server allocates the next free one from 3000 up;
-        // a `brief` makes the server hand the setup to a background pi agent
-        const res2 = await fetch(`/tunnels`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            label: desc || null,
-            sessionId: state?.sessionId ?? null,
-            brief: desc,
-          }),
-        });
-        const d2 = await res2.json().catch(() => ({}));
-        if (!res2.ok) { toast(d2.error || `failed (${res2.status})`, "error"); return; }
-        tunnelForm.desc = "";
-        closeModal();
-        toast(`hublot opening at ${d2.tunnel.url} — background agent is setting it up…`);
-      } catch (e) {
-        toast(`hublot failed: ${e.message}`, "error");
-      } finally {
-        create.disabled = false;
-        create.textContent = "Open hublot";
-      }
-    });
-    form.append(heading, descRow, create);
-    body.appendChild(form);
-
-    actions.innerHTML = "";
-    const scope = document.createElement("span");
-    scope.className = "chip";
-    scope.textContent = tunnelScopeAll ? "This session only" : "All sessions";
-    scope.title = "toggle between this session's tunnels and all of them";
-    scope.addEventListener("click", async () => {
-      tunnelScopeAll = !tunnelScopeAll;
-      await load();
-      loadHublots(); // keep the sidebar in the same scope
-      syncRoutinesStore(); // the routines section shares the scope toggle
-    });
-    const closeBtn = document.createElement("span");
-    closeBtn.className = "chip";
-    closeBtn.textContent = "Close";
-    closeBtn.addEventListener("click", closeModal);
-    actions.append(scope, closeBtn);
-  }
-
-  openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true });
-  await load();
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true, content: "hublotManager" });
+  await refreshHublotManager({ loading: true });
 }
+
+async function createManagedHublot(descText) {
+  const desc = (descText ?? "").trim();
+  tunnelForm.desc = descText ?? "";
+  updateHublotManager({ desc: tunnelForm.desc });
+  if (!desc) { toast("describe what the hublot should expose", "warning"); return; }
+  updateHublotManager({ creating: true });
+  try {
+    // no port sent: the server allocates the next free one from 3000 up;
+    // a `brief` makes the server hand the setup to a background pi agent
+    const res = await fetch(`/tunnels`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        label: desc || null,
+        sessionId: state?.sessionId ?? null,
+        brief: desc,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || `failed (${res.status})`, "error"); return; }
+    tunnelForm.desc = "";
+    updateHublotManager({ desc: "" });
+    closeModal();
+    toast(`hublot opening at ${data.tunnel.url} — background agent is setting it up…`);
+  } catch (e) {
+    toast(`hublot failed: ${e.message}`, "error");
+  } finally {
+    updateHublotManager({ creating: false });
+  }
+}
+
+async function closeManagedHublot(id) {
+  await fetch(`/tunnels?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  await refreshHublotManager({ loading: true });
+  loadHublots();
+}
+
+async function toggleManagedHublotScope() {
+  tunnelScopeAll = !tunnelScopeAll;
+  updateModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session" });
+  await refreshHublotManager({ loading: true });
+  loadHublots(); // keep the sidebar in the same scope
+  syncRoutinesStore(); // the routines section shares the scope toggle
+}
+
+setHublotManagerHandlers({
+  openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
+  closeHublot: closeManagedHublot,
+  createHublot: createManagedHublot,
+  toggleScope: toggleManagedHublotScope,
+  setupCommandPalette,
+});
 
 // ------------------------------------------------------------ hublot sidebar
 
@@ -3185,120 +3011,6 @@ async function focusEntryById(entryId) {
   } catch (e) {
     toast(`permalink: ${e.message}`, "warning");
   }
-}
-
-// ------------------------------------------------------------ conversation tree
-
-async function showConversationTree() {
-  // pick which session to visualise: default to the current one
-  const res = await fetch(`/sessions`);
-  if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
-  const { sessions } = await res.json();
-  if (!sessions.length) { toast("no saved sessions"); return; }
-  const currentId = state?.sessionId;
-  const session = sessions.find((s) => s.id === currentId) ?? sessions[0];
-  await renderTreeModal(session, sessions);
-}
-
-async function renderTreeModal(session, sessions) {
-  const res = await fetch(`/session-tree?path=${encodeURIComponent(session.path)}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { toast(data.error || `failed to load tree (${res.status})`, "error"); return; }
-
-  // build id -> children map; collapse runs of meta entries unless they branch
-  const byId = new Map(data.nodes.map((n) => [n.id, n]));
-  const children = new Map();
-  const roots = [];
-  for (const n of data.nodes) {
-    if (n.parentId && byId.has(n.parentId)) {
-      if (!children.has(n.parentId)) children.set(n.parentId, []);
-      children.get(n.parentId).push(n);
-    } else {
-      roots.push(n);
-    }
-  }
-
-  const showMeta = localStorage.getItem("pi_tree_meta") === "1";
-
-  function nodeEl(n, isBranch) {
-    const el = document.createElement("span");
-    const role = n.type === "message" ? (n.role ?? "message") : "meta";
-    el.className = `t-node ${role}` + (isBranch ? " branch" : "");
-    const badge = document.createElement("span");
-    badge.className = "t-badge";
-    badge.textContent = role === "meta" ? "⚙" : role === "user" ? "you" : role === "assistant" ? "ai" : role;
-    const label = document.createElement("span");
-    label.className = "t-label";
-    label.textContent = n.label || "(empty)";
-    el.title = (n.label || "") + (n.timestamp ? `\n${n.timestamp}` : "");
-    const time = document.createElement("span");
-    time.className = "t-time";
-    time.textContent = n.timestamp ? fmtSessionDate(n.timestamp) : "";
-    el.append(badge, label, time);
-    return el;
-  }
-
-  function renderList(nodes) {
-    const ul = document.createElement("ul");
-    for (let n of nodes) {
-      const li = document.createElement("li");
-      // collapse linear chains of hidden meta nodes
-      let kids = children.get(n.id) ?? [];
-      while (!showMeta && n.type !== "message" && kids.length === 1) {
-        n = kids[0];
-        kids = children.get(n.id) ?? [];
-      }
-      if (!showMeta && n.type !== "message" && kids.length === 0) continue;
-      const isBranch = kids.length > 1;
-      li.appendChild(nodeEl(n, isBranch));
-      if (kids.length) li.appendChild(renderList(kids));
-      ul.appendChild(li);
-    }
-    return ul;
-  }
-
-  const treeTitle = `Tree: ${session.name || session.preview || session.id?.slice(0, 8) || "session"}`;
-  updateModal({ title: treeTitle });
-  const body = $("mBody");
-  body.innerHTML = "";
-  const wrap = document.createElement("div");
-  wrap.className = "tree";
-  const tree = renderList(roots);
-  if (!tree.children.length) {
-    const empty = document.createElement("div");
-    empty.className = "m-path";
-    empty.textContent = "(no messages in this session)";
-    wrap.appendChild(empty);
-  } else {
-    wrap.appendChild(tree);
-  }
-  body.appendChild(wrap);
-
-  const actions = $("mActions");
-  actions.innerHTML = "";
-  const metaToggle = document.createElement("span");
-  metaToggle.className = "chip";
-  metaToggle.textContent = showMeta ? "Hide meta" : "Show meta";
-  metaToggle.addEventListener("click", () => {
-    localStorage.setItem("pi_tree_meta", showMeta ? "0" : "1");
-    renderTreeModal(session, sessions);
-  });
-  const other = document.createElement("span");
-  other.className = "chip";
-  other.textContent = "Other session…";
-  other.addEventListener("click", async () => {
-    const idx = await pickOption("Pick session", sessions.map((s) =>
-      `${s.name || s.preview || "(empty)"} — ${fmtSessionDate(s.modifiedAt)}`));
-    if (idx == null) return;
-    renderTreeModal(sessions[idx], sessions);
-  });
-  const close = document.createElement("button");
-  close.className = "btn";
-  close.textContent = "Close";
-  close.style.padding = "6px 16px";
-  close.addEventListener("click", closeModal);
-  actions.append(metaToggle, other, close);
-  openModal({ title: treeTitle, wide: true });
 }
 
 // ------------------------------------------------------------ modal helpers

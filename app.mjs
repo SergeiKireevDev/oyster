@@ -33,7 +33,6 @@
  *   POST /open-session -> get-or-spawn a runner { sessionPath?, dir? }
  *   GET  /sessions    -> saved pi sessions for the active workdir
  *   DELETE /session   -> delete a session file (?path=…)
- *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
  *   GET  /session-by-id -> locate a session file from its session id (?id=…)
  *   GET  /session-entries -> ordered user/assistant entries of the active
  *                          branch of one session (?path=…) — permalink anchors
@@ -94,7 +93,7 @@ const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, t
 
 const {
   SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions, listSessionFolders,
-  searchSessions, sessionTree, sessionEntries, sessionMessages, findSessionById, forkSessionAt,
+  searchSessions, sessionEntries, sessionMessages, findSessionById, forkSessionAt,
   readSessionHeaderInfo,
 } = await import(bust("sessions.mjs"));
 
@@ -537,18 +536,6 @@ export function init(state) {
       }
     },
 
-    "GET /session-tree": (req, res, url) => {
-      const target = sessionFileParam(url.searchParams.get("path"));
-      if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path")}` });
-        return;
-      }
-      try {
-        json(res, 200, sessionTree(target));
-      } catch (e) {
-        json(res, 500, { error: `failed to parse session: ${e.message}` });
-      }
-    },
 
     "GET /session-by-id": (req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
