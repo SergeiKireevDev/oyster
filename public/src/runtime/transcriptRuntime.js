@@ -75,6 +75,14 @@ export async function annotateTranscriptEntries({ fetchEntries, elements, findEn
   return entries;
 }
 
+/** Scroll to and briefly highlight a transcript element. */
+export function flashTranscriptElement(element, { setTimeoutImpl = setTimeout } = {}) {
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
+  element.classList.add("msg-flash");
+  setTimeoutImpl(() => element.classList.add("fading"), 1500);
+  setTimeoutImpl(() => element.classList.remove("msg-flash", "fading"), 3000);
+}
+
 /** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
 export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   return async () => {
