@@ -141,6 +141,12 @@
     pointer-events: none; /* the block itself handles clicks */
   }
   .iface-block .preview .hit { position: absolute; inset: 0; }
+  /* built-in interfaces (e.g. file explorer): icon instead of an iframe */
+  .iface-block .preview.builtin {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px;
+    background: var(--panel);
+  }
   .iface-block .cap {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 8px;
@@ -667,7 +673,6 @@
   <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
   <button data-action="tree">Conversation tree…</button>
-  <button data-action="tunnels">Interfaces…</button>
   <button data-action="compact">Compact context</button>
   <button data-action="restart">Restart pi process</button>
   <button data-action="logout">Forget token</button>
@@ -1667,8 +1672,6 @@ menu.addEventListener("click", async (e) => {
       await showSessionPicker();
     } else if (action === "tree") {
       await showConversationTree();
-    } else if (action === "tunnels") {
-      await showTunnels();
     } else if (action === "compact") {
       toast("compacting…");
       await rpc({ type: "compact" });
@@ -2275,6 +2278,27 @@ async function loadInterfaces() {
 function renderInterfaces(tunnels) {
   const list = $("ifaceList");
   list.innerHTML = "";
+
+  // built-in file explorer always comes first
+  {
+    const block = document.createElement("div");
+    block.className = "iface-block";
+    const preview = document.createElement("div");
+    preview.className = "preview builtin";
+    preview.textContent = "\u{1F4C1}";
+    preview.title = "browse server files, download or edit any of them";
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = "file explorer · built-in";
+    lbl.title = "browse server files, download or edit any of them";
+    cap.appendChild(lbl);
+    block.append(preview, cap);
+    block.addEventListener("click", () => showFileExplorer().catch((e) => toast(e.message, "error")));
+    list.appendChild(block);
+  }
+
   for (const t of tunnels) {
     const block = document.createElement("div");
     block.className = "iface-block";
