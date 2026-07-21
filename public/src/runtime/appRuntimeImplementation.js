@@ -1746,7 +1746,7 @@ const detachRuntimeEventAdapters = () => {
   commandPaletteInputController?.detach();
 };
 const runtimeTeardown = createRuntimeCleanup({
-  closeEventStream: () => eventStream.close(),
+  closeEventStream: () => connectionCoordinator.disconnect(),
   clearEventSource: () => { es = null; },
   disposeRpc: disposeRpcClient,
   stopWatchdog: teardownReconnectWatchdog,

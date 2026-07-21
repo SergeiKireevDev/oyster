@@ -299,7 +299,7 @@ lines. Complete the remaining migration in small verified commits:
   composition boundary.
 - [x] Move transcript controller assembly and transcript DOM adapters behind
   `features/transcript/`, replacing the current placeholder feature wrapper.
-- [ ] Move platform EventSource/RPC/reconnect construction behind
+- [x] Move platform EventSource/RPC/reconnect construction behind
   `platform/connectionCoordinator.js`; the root may only construct and wire
   the coordinator.
 - [ ] Split the remaining layout, hublot, routine, and settings construction
