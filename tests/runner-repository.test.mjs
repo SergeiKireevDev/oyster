@@ -41,12 +41,11 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
     config: state.config,
     spawnImpl() { const proc = fakeProcess(); processes.push(proc); return proc; },
   });
-  const timestamps = ["created", "started", "stopped"];
   const manager = createRunnerManager(state, {
     appStore: store,
     ensureSessionOwner: () => owner,
     createRunnerId: () => "12345678-1234-4123-8123-123456789abc",
-    now: () => timestamps.shift() ?? "later",
+    now: () => "time",
   });
   t.after(() => {
     clearInterval(state.runnerWatchdogTimer);
@@ -67,8 +66,10 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(persisted.desired_state, "running");
   assert.equal(persisted.last_status, "running");
   assert.equal(persisted.start_count, 1);
-  assert.equal(persisted.created_at, "created");
-  assert.equal(persisted.last_started_at, "started");
+  assert.equal(persisted.created_at, "time");
+  assert.equal(persisted.last_started_at, "time");
+  assert.equal("buffer" in runner, false, "durable replay must not retain a second in-memory copy");
+  assert.deepEqual(manager.replayRunnerEvents(runner), store.repositories.runnerEvents.list(runner.id).map((event) => event.payload));
 
   manager.defaultRunner();
   assert.equal(store.repositories.runners.find(runner.id).is_default, 1);
@@ -80,10 +81,33 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   persisted = store.repositories.runners.find(runner.id);
   assert.equal(persisted.desired_state, "stopped");
   assert.equal(persisted.last_status, "stopped");
-  assert.equal(persisted.last_stopped_at, "stopped");
+  assert.equal(persisted.last_stopped_at, "time");
 
   store.repositories.sessions.delete(owner.id);
   assert.equal(store.repositories.runners.find(runner.id), null, "session ownership cascades runner descriptors");
+});
+
+test("runner replay events persist exact payloads and enforce their configured cap", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-events-"));
+  const databasePath = join(root, "app.sqlite");
+  let store = openAppStore({ databasePath });
+  t.after(() => { try { store.close(); } catch {} rmSync(root, { recursive: true, force: true }); });
+  store.repositories.runners.create({ id: "r-events000", dir: "/workspace", desiredState: "stopped", lastStatus: "stopped", createdAt: "created" });
+  for (let index = 1; index <= 5; index++) {
+    store.repositories.runnerEvents.append({
+      runnerId: "r-events000", sseId: `event-${index}`, payload: JSON.stringify({ index }), createdAt: `time-${index}`, maxEntries: 3,
+    });
+  }
+  assert.deepEqual(store.repositories.runnerEvents.list("r-events000").map((event) => [event.sequence, event.sse_id, event.payload]), [
+    [3, "event-3", '{"index":3}'], [4, "event-4", '{"index":4}'], [5, "event-5", '{"index":5}'],
+  ]);
+  store.repositories.runnerEvents.append({ runnerId: "r-events000", sseId: "event-5", payload: "duplicate", createdAt: "later", maxEntries: 3 });
+  assert.equal(store.repositories.runnerEvents.list("r-events000").length, 3, "replayed SSE IDs are idempotent");
+  store.close();
+  store = openAppStore({ databasePath });
+  assert.deepEqual(store.repositories.runnerEvents.list("r-events000").map((event) => event.sequence), [3, 4, 5]);
+  store.repositories.runners.delete("r-events000");
+  assert.deepEqual(store.repositories.runnerEvents.list("r-events000"), []);
 });
 
 test("runner repository enforces one selected default", (t) => {

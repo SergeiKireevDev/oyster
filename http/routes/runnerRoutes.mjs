@@ -11,6 +11,7 @@ export function createRunnerRoutes({
   sendToRunner,
   stopRunner,
   runnerInfo,
+  replayRunnerEvents = () => [],
   openSessionRunner,
   sessionReferenceParam,
   lookupSessionReference = () => ({}),
@@ -58,7 +59,7 @@ export function createRunnerRoutes({
       });
 
       if (url.searchParams.get("replay") !== "0") {
-        for (const line of runner.buffer) res.write(`data: ${line}\n\n`);
+        for (const line of replayRunnerEvents(runner)) res.write(`data: ${line}\n\n`);
       }
       res.write(`data: ${JSON.stringify({
         type: "replay_done",

@@ -205,6 +205,21 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE UNIQUE INDEX runners_one_default_idx ON runners(is_default) WHERE is_default = 1;
     `,
   }),
+  Object.freeze({
+    version: 9,
+    name: "runner_replay_events",
+    sql: `
+      CREATE TABLE runner_events (
+        runner_id TEXT NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        sse_id TEXT,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (runner_id, sequence)
+      ) WITHOUT ROWID;
+      CREATE UNIQUE INDEX runner_events_sse_id_idx ON runner_events(runner_id, sse_id) WHERE sse_id IS NOT NULL;
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

@@ -12,7 +12,7 @@ function response() {
 }
 
 function setup() {
-  const runner = { id: "runner-1", dir: "/workspace", proc: null, buffer: ['{"type":"old"}'] };
+  const runner = { id: "runner-1", dir: "/workspace", proc: null };
   const state = {
     sseClients: new Set(),
     runners: new Map([[runner.id, runner]]),
@@ -28,6 +28,7 @@ function setup() {
     runnerFromReq: () => runner,
     startRunner: (selected) => { selected.proc = { pid: 42 }; },
     listRunnerInfo: () => [{ id: runner.id, alive: !!runner.proc }],
+    replayRunnerEvents: () => ['{"type":"old"}'],
     setIntervalImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
     clearIntervalImpl: (id) => cleared.push(id),
     requestContext: {

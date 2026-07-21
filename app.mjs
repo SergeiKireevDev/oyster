@@ -84,7 +84,7 @@ export async function init(state) {
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
   const {
-    srvId, runnerInfo, listRunnerInfo, runnersChanged,
+    srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner,
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
@@ -107,7 +107,7 @@ export async function init(state) {
   });
   const runnerRoutes = createRunnerRoutes({
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
-    sendToRunner, stopRunner, runnerInfo, openSessionRunner,
+    sendToRunner, stopRunner, runnerInfo, replayRunnerEvents, openSessionRunner,
     sessionReferenceParam,
     lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
       ? state.sessionCatalog.findById(reference.id)

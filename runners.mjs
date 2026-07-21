@@ -17,7 +17,6 @@
  *     sessionName: string?  – its session name (from get_state)
  *     busy:        boolean  – streaming/compacting right now
  *     proc:        ChildProcess|null
- *     buffer:      string[] – recent stdout lines, replayed to new clients
  *     resumeId / resumeQueue / resumeTimer – in-flight session resume state
  *     lastLineAt / probeSentAt / probeMisses / watchdogOk – health watchdog
  *   }
@@ -53,6 +52,7 @@ export function createRunnerManager(state, {
 } = {}) {
   const { config, serverEvent, sessionReferences } = state;
   const runnerRepository = appStore?.repositories?.runners ?? null;
+  const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
   const piProcesses = spawnImpl
     ? createPiProcessLauncher({ config, spawnImpl })
     : state.piProcesses;
@@ -103,6 +103,10 @@ export function createRunnerManager(state, {
     return [...state.runners.values()].map(runnerInfo);
   }
 
+  function replayRunnerEvents(runner) {
+    return runnerEventRepository?.list(runner.id).map((event) => event.payload) ?? [];
+  }
+
   /** global (all-clients) notification that some runner changed state */
   function runnersChanged() {
     serverEvent({ type: "runners_update", runners: listRunnerInfo() });
@@ -121,8 +125,11 @@ export function createRunnerManager(state, {
   /** deliver a line only to SSE clients subscribed to this runner */
   function runnerWrite(runner, line) {
     const eventLine = withSseId(line);
-    runner.buffer.push(eventLine);
-    if (runner.buffer.length > RUNNER_BUFFER_MAX) runner.buffer.shift();
+    let sseId = null;
+    try { sseId = JSON.parse(eventLine)._sseId ?? null; } catch {}
+    runnerEventRepository?.append({
+      runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
+    });
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
@@ -225,7 +232,6 @@ export function createRunnerManager(state, {
       sessionName: null,
       busy: false,
       proc: null,
-      buffer: [],
       startCount: 0,
       lastSpawnAt: 0,
     };
@@ -456,7 +462,7 @@ export function createRunnerManager(state, {
   function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
 
   return {
-    srvId, runnerInfo, listRunnerInfo, runnersChanged,
+    srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner,
     defaultRunner, runnerFromReq, openSessionRunner,
     startPi, stopPi,

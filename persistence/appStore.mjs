@@ -342,6 +342,35 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       delete: (id) => database.prepare("DELETE FROM runners WHERE id = ?").run(id).changes,
     }),
+    runnerEvents: Object.freeze({
+      list: (runnerId) => database.prepare(`
+        SELECT runner_id, sequence, sse_id, payload, created_at
+        FROM runner_events WHERE runner_id = ? ORDER BY sequence
+      `).all(runnerId).map((row) => ({ ...row })),
+      append: ({ runnerId, sseId = null, payload, createdAt, maxEntries = 400 }) => {
+        if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error("runner event cap must be a positive integer");
+        const append = () => {
+          if (sseId) {
+            const existing = database.prepare("SELECT runner_id, sequence, sse_id, payload, created_at FROM runner_events WHERE runner_id = ? AND sse_id = ?").get(runnerId, sseId);
+            if (existing) return { ...existing };
+          }
+          const sequence = Number(database.prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM runner_events WHERE runner_id = ?").get(runnerId).sequence);
+          database.prepare("INSERT INTO runner_events(runner_id, sequence, sse_id, payload, created_at) VALUES (?, ?, ?, ?, ?)")
+            .run(runnerId, sequence, sseId, payload, createdAt);
+          database.prepare(`
+            DELETE FROM runner_events WHERE runner_id = ? AND sequence <= (
+              SELECT COALESCE(MAX(sequence), 0) - ? FROM runner_events WHERE runner_id = ?
+            )
+          `).run(runnerId, maxEntries, runnerId);
+          return { ...database.prepare("SELECT runner_id, sequence, sse_id, payload, created_at FROM runner_events WHERE runner_id = ? AND sequence = ?").get(runnerId, sequence) };
+        };
+        if (database.isTransaction) return append();
+        database.exec("BEGIN IMMEDIATE");
+        try { const row = append(); database.exec("COMMIT"); return row; }
+        catch (error) { try { database.exec("ROLLBACK"); } catch {} throw error; }
+      },
+      deleteForRunner: (runnerId) => database.prepare("DELETE FROM runner_events WHERE runner_id = ?").run(runnerId).changes,
+    }),
     operations: Object.freeze({
       create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
         INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)
