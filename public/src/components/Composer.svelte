@@ -2,10 +2,7 @@
   import { appHeader } from "../stores/appSession.js";
   import { composerUi, setComposerTextValue } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
-
-  function runComposerAction(action, sourceEvent = null) {
-    document.dispatchEvent(new CustomEvent("pi:composer", { detail: { action, sourceEvent } }));
-  }
+  import { runComposerAction } from "../features/composer/composerActions.js";
 
   function handleInput(event) {
     setComposerTextValue(event.currentTarget.value);

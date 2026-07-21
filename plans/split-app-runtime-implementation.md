@@ -209,8 +209,7 @@ Move one feature per commit, in this order, because later features depend on
 session identity but not on each other:
 
 - [x] **Checkpoints** — marker, tree, freeze, rollback, and checkpoint event UI.
-- [ ] **Composer** — input state, send/abort action, prompt history, command
-  guard, and command palette.
+- [x] **Composer** — input state, send/abort action, prompt history, command guard, and command palette.
 - [ ] **Files** — file picker, folder browser, explorer, upload input, and editor.
 - [ ] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
 - [ ] **Routines** — sidebar, visibility, actions, and routine stream updates.

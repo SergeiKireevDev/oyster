@@ -58,7 +58,7 @@ import { promptCommand } from "../lib/promptActions.js";
 import { createPostSendTranscriptSyncController } from "../lib/postSendTranscriptSyncController.js";
 import { insertionAtCaret, insertionReplacing } from "../lib/textInsertion.js";
 import { createComposerHistoryController } from "../lib/composerHistoryController.js";
-import { createComposerEventController } from "../lib/composerController.js";
+import { configureComposerActions } from "../features/composer/composerActions.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "../lib/hublotController.js";
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
@@ -858,8 +858,7 @@ async function abort() {
   catch (e) { addToast(`abort failed: ${e.message}`, "error"); }
 }
 
-const composerEventController = createComposerEventController({
-  documentTarget: document,
+const detachComposerActions = configureComposerActions({
   inputChanged: composerInputChanged,
   keydown: composerKeydown,
   send,
@@ -1721,7 +1720,7 @@ const detachRuntimeEventAdapters = () => {
   headerEventController.detach();
   settingsChangeController.detach();
   menuEventController.detach();
-  composerEventController.detach();
+  detachComposerActions();
   commandPaletteKeyboardController.detach();
   commandPaletteRunController.detach();
   detachCheckpointTreeActions();
@@ -1754,7 +1753,7 @@ const runtimeStarter = createRuntimeStarter(createRuntimeStarterDependencies({
 
 const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
-    composerEventController, commandPaletteRunController,
+    commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController, filePickerEventController,
     folderBrowserEventController, fileExplorerEventController, managedHublotEventController,
     hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
