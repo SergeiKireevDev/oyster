@@ -406,6 +406,25 @@ function assistantModel(message) {
   };
 }
 
+function assistantPlainText(message) {
+  const parts = [];
+  for (const block of message?.content || []) {
+    if (block.type === "text" && block.text) parts.push(block.text);
+    else if (block.type === "thinking" && block.thinking) parts.push(block.thinking);
+    else if (block.type === "toolCall") parts.push(block.name || block.id || "tool call");
+  }
+  return parts.join("\n").replace(/\s+/g, " ").trim();
+}
+
+function assistantAlreadyRendered(message) {
+  const text = assistantPlainText(message);
+  if (!text) return false;
+  const needle = text.slice(0, 120);
+  return [...messagesEl.querySelectorAll('.msg.assistant')].some((el) =>
+    el.textContent.replace(/\s+/g, " ").includes(needle)
+  );
+}
+
 function mountSvelteAssistantMessage(message, role = "assistant") {
   const assistantStore = writable(assistantModel(message));
   mountTranscriptComponent(AssistantMessage, {
@@ -907,6 +926,8 @@ function connect() {
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
   replaying = true;
+  replayDoneSeen = false;
+  replayBufferedEvents = [];
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
   es.onopen = async () => {
     connected = true;
@@ -950,14 +971,43 @@ function connect() {
 // position. reloadTranscript() lifts the gate the moment the tail is in the
 // DOM (live events append below it just fine while history backfills above).
 let replaying = true;
+let replayDoneSeen = false;
+let replayBufferedEvents = [];
+const REPLAY_GATED_EVENTS = [
+  "message_start", "message_update", "message_end",
+  "tool_execution_start", "tool_execution_update", "tool_execution_end",
+  "agent_start", "agent_end",
+];
+
+function flushReplayBufferedEvents(events) {
+  // If get_messages completed after the live assistant already finished, the
+  // canonical render already contains that answer. In that case, dropping the
+  // buffered assistant/tool sequence avoids painting a duplicate while still
+  // preserving the normal in-progress case (no message_end yet) where buffered
+  // deltas are the only copy the user can see without a refresh.
+  const finishedAssistantAlreadyRendered = events.some((event) =>
+    event.type === "message_end" && event.message?.role === "assistant" && assistantAlreadyRendered(event.message)
+  );
+  for (const event of events) {
+    if (finishedAssistantAlreadyRendered && (
+      ["message_start", "message_update", "message_end"].includes(event.type) && event.message?.role === "assistant" ||
+      ["tool_execution_start", "tool_execution_update", "tool_execution_end"].includes(event.type)
+    )) continue;
+    handleEvent(event);
+  }
+}
 
 function handleEvent(msg) {
-  // While the SSE replay buffer is being re-delivered, drop transcript-
+  // While the SSE replay buffer is being re-delivered, ignore old transcript-
   // rendering events: reloadTranscript() rebuilds the canonical state, so
-  // rendering replayed copies would duplicate messages/tool cards.
-  if (replaying && ["message_start", "message_update", "message_end",
-       "tool_execution_start", "tool_execution_update", "tool_execution_end",
-       "agent_start", "agent_end"].includes(msg.type)) {
+  // rendering replayed copies would duplicate messages/tool cards. Once the
+  // server has sent replay_done, any further events are live events that can
+  // arrive while reloadTranscript() is still awaiting get_state/get_messages;
+  // buffer those and flush them after the canonical tail is on screen. Without
+  // this, a response that finishes during reconnect can be dropped until the
+  // user refreshes the page.
+  if (replaying && REPLAY_GATED_EVENTS.includes(msg.type)) {
+    if (replayDoneSeen) replayBufferedEvents.push(msg);
     return;
   }
   switch (msg.type) {
@@ -972,6 +1022,7 @@ function handleEvent(msg) {
       return;
 
     case "replay_done":
+      replayDoneSeen = true;
       // NOTE: `replaying` stays true here — only the canonical transcript
       // render (reloadTranscript) opens the live-event gate
       if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
@@ -1203,6 +1254,9 @@ async function reloadTranscript() {
   // the transcript now shows the right last messages: let live events through
   // (they append below the tail; backfill continues above the viewport)
   replaying = false;
+  const buffered = replayBufferedEvents;
+  replayBufferedEvents = [];
+  flushReplayBufferedEvents(buffered);
   const complete = await rendered;
   // markers and the permalink-focus callback need the FULL transcript in the
   // DOM (their targets may live in a backfilled chunk); skip both if this
