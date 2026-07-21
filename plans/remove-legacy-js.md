@@ -156,7 +156,7 @@ Remaining work, broken into atomic commits:
    adapters → debug hooks → boot, and that its disposer executes the current
    teardown sequence. This test must import only runtime modules, not
    `legacy.js`.
-2. **Create an application composition factory.** Add
+- [x] **Create an application composition factory.** Add
    `public/src/runtime/createAppRuntime.js`, exporting a factory that receives
    browser adapters (`window`, `document`, `location`, `history`, and DOM
    lookup) plus store actions. Do not import `legacy.js` from this factory.
