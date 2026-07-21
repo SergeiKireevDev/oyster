@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCheckpoint } from "../public/src/lib/checkpointActions.js";
 import { listRoutines, runRoutine } from "../public/src/lib/routineActions.js";
-import { removeHublot } from "../public/src/lib/hublotActions.js";
+import { createHublot, removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
 
 test("API actions normalize successful checkpoint and routine responses", async () => {
@@ -15,6 +15,12 @@ test("API actions normalize successful checkpoint and routine responses", async 
   await runRoutine(fetchImpl, { name: "job", action: "start", sessionId: "session" });
   assert.match(calls[0][0], /runner=runner%20one/);
   assert.deepEqual(JSON.parse(calls[1][1].body), { name: "job", action: "start", sessionId: "session" });
+});
+
+test("hublot create action preserves session payload", async () => {
+  let body;
+  await createHublot(async (_url, options) => { body = options.body; return { ok: true, status: 200, json: async () => ({ tunnel: {} }) }; }, { label: "demo", sessionId: "s", brief: "demo" });
+  assert.deepEqual(JSON.parse(body), { label: "demo", sessionId: "s", brief: "demo" });
 });
 
 test("routine actions normalize list responses", async () => {
