@@ -832,18 +832,25 @@ function renderAssistantInto(root, message) {
   root.replaceChildren(...els);
 }
 
+function userText(message) {
+  if (typeof message.content === "string") return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
+  }
+  return "";
+}
+
 function addUserMessage(message) {
   const div = document.createElement("div");
   div.className = "msg user";
-  let text = "";
-  if (typeof message.content === "string") text = message.content;
-  else if (Array.isArray(message.content)) {
-    text = message.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
-  }
-  div.textContent = text;
+  div.textContent = userText(message);
   messagesEl.appendChild(div);
   scrollToBottom(true);
 }
+
+// Texts we already rendered locally on send; pi echoes each prompt back as a
+// user message_start, which must not be rendered a second time.
+const localEchoes = [];
 
 function addAssistantContainer() {
   const div = document.createElement("div");
@@ -919,7 +926,6 @@ function updateUsage(message) {
 
 let connected = false;
 let es = null;
-let firstConnect = true;
 
 function connect() {
   if (!token) { requireToken(); return; }
@@ -931,13 +937,13 @@ function connect() {
     try {
       const s = await rpc({ type: "get_state" });
       applyState(s);
-      if (firstConnect || !messagesEl.childElementCount) {
-        firstConnect = false;
-        const { messages } = await rpc({ type: "get_messages" });
-        clearMessages();
-        for (const m of messages) renderFullMessage(m);
-        scrollToBottom(true);
-      }
+      // Always rebuild from the canonical transcript: the SSE replay buffer
+      // re-delivers recent events on reconnect, so rendering them onto the
+      // existing DOM would duplicate messages.
+      const { messages } = await rpc({ type: "get_messages" });
+      clearMessages();
+      for (const m of messages) renderFullMessage(m);
+      scrollToBottom(true);
     } catch (e) {
       if (String(e.message).includes("unauthorized")) return;
       toast(`init failed: ${e.message}`, "error");
@@ -984,8 +990,9 @@ function handleEvent(msg) {
         renderAssistantInto(liveAssistant.root, m);
         scrollToBottom(true);
       } else if (m.role === "user") {
-        // echoed user message (e.g. steering) — only add if we didn't render it locally
-        if (!m._localEcho) addUserMessage(m);
+        const idx = localEchoes.indexOf(userText(m));
+        if (idx !== -1) localEchoes.splice(idx, 1); // already rendered on send
+        else addUserMessage(m);
       }
       return;
     }
@@ -1094,10 +1101,13 @@ async function send() {
   if (!text) return;
   input.value = "";
   input.style.height = "auto";
-  addUserMessage({ role: "user", content: text, _localEcho: true });
+  addUserMessage({ role: "user", content: text });
+  localEchoes.push(text);
   try {
     await rpc({ type: "prompt", message: text }, { wait: false });
   } catch (e) {
+    const idx = localEchoes.indexOf(text);
+    if (idx !== -1) localEchoes.splice(idx, 1);
     toast(`send failed: ${e.message}`, "error");
   }
 }
