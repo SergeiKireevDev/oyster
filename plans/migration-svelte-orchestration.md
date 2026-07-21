@@ -136,7 +136,7 @@ Add unit tests for pure/action-module decisions where practical:
 
 - replay-needed decisions for new, existing, and switched sessions;
 - durable transcript versus optional reconciliation behavior;
-- ✅ API action success/error normalization (checkpoint, routine, hublot, and file-browser action contracts);
+- ✅ API action success/error normalization (checkpoint, routine list/lifecycle, hublot, and file-browser action contracts);
 - SSE event dispatch/deduplication helpers if extracted as pure functions.
 
 Keep existing browser e2e tests as the contract for transcript scrolling,
