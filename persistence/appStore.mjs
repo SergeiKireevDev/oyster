@@ -209,6 +209,86 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       listLogs: (runId) => database.prepare("SELECT sequence, stream, text, created_at FROM routine_log_lines WHERE run_id = ? ORDER BY sequence").all(runId).map((row) => ({ ...row })),
     }),
+    hublots: Object.freeze({
+      list: () => database.prepare(`
+        SELECT h.*, s.session_id FROM hublots h LEFT JOIN app_sessions s ON s.id = h.owner_id ORDER BY h.created_at, h.id
+      `).all().map((row) => ({ ...row })),
+      find: (id) => {
+        const row = database.prepare(`
+          SELECT h.*, s.session_id FROM hublots h LEFT JOIN app_sessions s ON s.id = h.owner_id WHERE h.id = ?
+        `).get(id);
+        return row ? { ...row } : null;
+      },
+      create: ({
+        id, ownerId = null, port, label = null, brief = null, workdir,
+        serviceKind, serviceStartScriptPath = null, serviceStartScript = null,
+        serviceStartScriptSha256 = null, publicUrl = null, status,
+        desiredState, restartCount = 0, nextRestartAt = null, createdAt,
+        openedAt = null, closedAt = null, lastError = null,
+      }) => {
+        database.prepare(`
+          INSERT INTO hublots(
+            id, owner_id, port, label, brief, workdir, service_kind,
+            service_start_script_path, service_start_script, service_start_script_sha256,
+            public_url, status, desired_state, restart_count, next_restart_at,
+            created_at, opened_at, closed_at, last_error
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, ownerId, port, label, brief, workdir, serviceKind,
+          serviceStartScriptPath, serviceStartScript, serviceStartScriptSha256,
+          publicUrl, status, desiredState, restartCount, nextRestartAt,
+          createdAt, openedAt, closedAt, lastError);
+        return repositories.hublots.find(id);
+      },
+      update: (id, changes) => {
+        const allowed = new Set([
+          "owner_id", "port", "label", "brief", "workdir", "service_kind",
+          "service_start_script_path", "service_start_script", "service_start_script_sha256",
+          "public_url", "status", "desired_state", "restart_count", "next_restart_at",
+          "opened_at", "closed_at", "last_error",
+        ]);
+        const entries = Object.entries(changes ?? {});
+        if (!entries.length) return 0;
+        for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported hublot field: ${column}`);
+        return database.prepare(`UPDATE hublots SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`)
+          .run(...entries.map(([, value]) => value), id).changes;
+      },
+      delete: (id) => database.prepare("DELETE FROM hublots WHERE id = ?").run(id).changes,
+      appendLifecycleEvent: ({ hublotId, status, desiredState, publicUrl = null, error = null, createdAt }) => {
+        database.prepare(`
+          INSERT INTO hublot_lifecycle_events(hublot_id, sequence, status, desired_state, public_url, error, created_at)
+          SELECT ?, COALESCE(MAX(sequence), 0) + 1, ?, ?, ?, ?, ?
+          FROM hublot_lifecycle_events WHERE hublot_id = ?
+        `).run(hublotId, status, desiredState, publicUrl, error, createdAt, hublotId);
+        return database.prepare("SELECT MAX(sequence) AS sequence FROM hublot_lifecycle_events WHERE hublot_id = ?").get(hublotId).sequence;
+      },
+      listLifecycleEvents: (hublotId) => database.prepare(`
+        SELECT hublot_id, sequence, status, desired_state, public_url, error, created_at
+        FROM hublot_lifecycle_events WHERE hublot_id = ? ORDER BY sequence
+      `).all(hublotId).map((row) => ({ ...row })),
+      upsertProcess: ({
+        id, hublotId, role, pid, processGroupId = null, bootId = null,
+        procStartTicks = null, executable = null, commandSha256 = null,
+        status, startedAt, observedAt = null, endedAt = null,
+        exitCode = null, signal = null,
+      }) => {
+        database.prepare(`
+          INSERT INTO hublot_processes(
+            id, hublot_id, role, pid, process_group_id, boot_id, proc_start_ticks,
+            executable, command_sha256, status, started_at, observed_at, ended_at, exit_code, signal
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            hublot_id = excluded.hublot_id, role = excluded.role, pid = excluded.pid,
+            process_group_id = excluded.process_group_id, boot_id = excluded.boot_id,
+            proc_start_ticks = excluded.proc_start_ticks, executable = excluded.executable,
+            command_sha256 = excluded.command_sha256, status = excluded.status,
+            started_at = excluded.started_at, observed_at = excluded.observed_at,
+            ended_at = excluded.ended_at, exit_code = excluded.exit_code, signal = excluded.signal
+        `).run(id, hublotId, role, pid, processGroupId, bootId, procStartTicks,
+          executable, commandSha256, status, startedAt, observedAt, endedAt, exitCode, signal);
+        return { ...database.prepare("SELECT * FROM hublot_processes WHERE id = ?").get(id) };
+      },
+      listProcesses: (hublotId) => database.prepare("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id").all(hublotId).map((row) => ({ ...row })),
+    }),
     operations: Object.freeze({
       create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
         INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)
@@ -259,6 +339,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     if (closed) throw new Error("application database is closed");
     return Object.freeze({
       settings: Object.freeze(repositories.settings.list()),
+      hublots: Object.freeze(repositories.hublots.list()),
       incompleteOperations: Object.freeze(repositories.operations.listIncomplete()),
     });
   }

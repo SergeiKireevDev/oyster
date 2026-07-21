@@ -111,6 +111,66 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX routine_runs_routine_started_idx ON routine_runs(routine_id, started_at);
     `,
   }),
+  Object.freeze({
+    version: 6,
+    name: "hublots",
+    sql: `
+      CREATE TABLE hublots (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+        label TEXT,
+        brief TEXT,
+        workdir TEXT NOT NULL,
+        service_kind TEXT NOT NULL CHECK (service_kind IN ('agent_managed', 'self_served')),
+        service_start_script_path TEXT,
+        service_start_script TEXT,
+        service_start_script_sha256 TEXT,
+        public_url TEXT,
+        status TEXT NOT NULL,
+        desired_state TEXT NOT NULL CHECK (desired_state IN ('open', 'closed')),
+        restart_count INTEGER NOT NULL DEFAULT 0 CHECK (restart_count >= 0),
+        next_restart_at TEXT,
+        created_at TEXT NOT NULL,
+        opened_at TEXT,
+        closed_at TEXT,
+        last_error TEXT
+      ) WITHOUT ROWID;
+
+      CREATE TABLE hublot_processes (
+        id TEXT PRIMARY KEY,
+        hublot_id TEXT NOT NULL REFERENCES hublots(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('service', 'tunnel', 'setup_agent')),
+        pid INTEGER NOT NULL CHECK (pid > 0),
+        process_group_id INTEGER,
+        boot_id TEXT,
+        proc_start_ticks TEXT,
+        executable TEXT,
+        command_sha256 TEXT,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        observed_at TEXT,
+        ended_at TEXT,
+        exit_code INTEGER,
+        signal TEXT
+      ) WITHOUT ROWID;
+
+      CREATE TABLE hublot_lifecycle_events (
+        hublot_id TEXT NOT NULL REFERENCES hublots(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        desired_state TEXT NOT NULL CHECK (desired_state IN ('open', 'closed')),
+        public_url TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (hublot_id, sequence)
+      ) WITHOUT ROWID;
+
+      CREATE INDEX hublots_owner_idx ON hublots(owner_id);
+      CREATE INDEX hublots_desired_status_idx ON hublots(desired_state, status);
+      CREATE INDEX hublot_processes_hublot_role_idx ON hublot_processes(hublot_id, role, status);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

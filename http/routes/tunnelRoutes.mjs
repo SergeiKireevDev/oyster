@@ -24,12 +24,14 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
           label: body?.label ? String(body.label).slice(0, 200) : null,
           sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
         };
-        if (options.sessionId) ensureSessionOwner(options.sessionId);
+        const owner = options.sessionId ? ensureSessionOwner(options.sessionId) : null;
+        options.ownerId = owner?.id ?? null;
+        options.brief = brief;
         // Agent-managed hublots are prepared locally first. Nothing is added
         // to state.tunnels (and therefore nothing reaches the UI) until the
         // requested service is actually listening on its allocated port.
         if (brief) prepared = await spawnHublotAgent(state, options, brief);
-        const tunnel = await openTunnel(state, options);
+        const tunnel = await openTunnel(state, { ...options, createdAt: prepared?.createdAt });
         if (prepared) {
           const live = state.tunnels.get(tunnel.id);
           if (live) {
@@ -37,8 +39,15 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
             live.servicePid = prepared.servicePid;
             live.createdAt = prepared.createdAt;
           }
+          if (prepared.servicePid && state.appStore?.repositories?.hublots) {
+            state.appStore.repositories.hublots.upsertProcess({
+              id: `${tunnel.id}:service:${prepared.servicePid}`, hublotId: tunnel.id,
+              role: "service", pid: prepared.servicePid, status: "running", startedAt: prepared.createdAt,
+            });
+          }
         }
-        json(res, 201, { tunnel: listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel, agent: !!brief });
+        const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
+        json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: !!brief });
       } catch (e) {
         if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
         if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}
@@ -57,7 +66,8 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         return;
       }
       const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-      if (sessionId) ensureSessionOwner(sessionId);
+      const owner = sessionId ? ensureSessionOwner(sessionId) : null;
+      if (state.appStore?.repositories?.hublots) state.appStore.repositories.hublots.update(t.id, { owner_id: owner?.id ?? null });
       t.sessionId = sessionId;
       state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
       json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });

@@ -124,7 +124,7 @@ test("deleting one app-session owner cascades only its checkpoint rows", (t) => 
   assert.equal(store.repositories.sessions.find({ backend: forkRef.backend, sessionId: forkRef.id, storagePath: forkRef.storagePath }).status, "active");
 });
 
-test("startup hydration rebuilds settings and incomplete operation snapshots only", (t) => {
+test("startup hydration rebuilds durable snapshots without starting resources", (t) => {
   const { path, databases, Database } = fixture(t);
   const store = openAppStore({ databasePath: path, Database });
   t.after(() => store.close());
@@ -137,6 +137,7 @@ test("startup hydration rebuilds settings and incomplete operation snapshots onl
 
   assert.deepEqual(store.hydrate(), {
     settings: [{ key: "workdir", value: '"/workspace"', updated_at: "2026-07-16T00:00:00.000Z" }],
+    hublots: [],
     incompleteOperations: [{
       id: "pending", owner_id: null, kind: "delete_session", status: "running", stage: "agent_delete",
       payload: null, error: null, created_at: "2026-07-16T00:00:00.000Z", updated_at: "2026-07-16T00:00:01.000Z",
@@ -168,9 +169,9 @@ test("closing and reopening the app store preserves data without rerunning migra
 
   const second = openAppStore({ databasePath: path, Database });
   t.after(() => second.close());
-  assert.deepEqual(second.migrationStatus, { currentVersion: 5, appliedVersions: [1, 2, 3, 4, 5] });
+  assert.deepEqual(second.migrationStatus, { currentVersion: 6, appliedVersions: [1, 2, 3, 4, 5, 6] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
-  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 5);
+  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 6);
 });
 
 test("WAL permits concurrent readers and committed cross-connection writes", (t) => {

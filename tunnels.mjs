@@ -68,15 +68,41 @@ function pidStartedAt(pid) {
   }
 }
 
+function hublotRepository(state) {
+  const repository = state.appStore?.repositories?.hublots;
+  if (!repository) throw new Error("hublot repository is required");
+  return repository;
+}
+
+function persistedTunnelInfo(state, row) {
+  const service = hublotRepository(state).listProcesses(row.id).find((process) => process.role === "service" && process.status === "running");
+  return {
+    id: row.id,
+    port: row.port,
+    label: row.label,
+    sessionId: row.session_id ?? null,
+    url: row.public_url,
+    workdir: row.workdir,
+    createdAt: row.created_at,
+    ...(service ? { servicePid: service.pid } : {}),
+  };
+}
+
 export function listTunnels(state) {
-  return [...(state.tunnels?.values() ?? [])].map(tunnelInfo);
+  return hublotRepository(state).list()
+    .filter((row) => row.status !== "closed")
+    .map((row) => persistedTunnelInfo(state, row));
 }
 
 /**
  * Spawn a tunnel for a local port. Resolves with the tunnel entry once the
  * public URL is known; rejects if the process dies or times out first.
  */
-export function openTunnel(state, { port, label = null, sessionId = null }) {
+export function openTunnel(state, {
+  port, label = null, sessionId = null, ownerId = null, brief = null,
+  serviceKind = brief ? "agent_managed" : "self_served",
+  createdAt = new Date().toISOString(),
+}) {
   return new Promise((resolvePromise, reject) => {
     port = Number(port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -84,9 +110,9 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
       return;
     }
     if (!state.tunnels) state.tunnels = new Map();
-    for (const t of state.tunnels.values()) {
-      if (t.port === port) {
-        reject(new Error(`port ${port} is already tunneled: ${t.url}`));
+    for (const t of hublotRepository(state).list()) {
+      if (t.port === port && t.status !== "closed") {
+        reject(new Error(`port ${port} is already tunneled: ${t.public_url}`));
         return;
       }
     }
@@ -99,14 +125,8 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
     const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
 
     const tunnel = {
-      id: randomBytes(6).toString("hex"),
-      port,
-      label,
-      sessionId,
-      url: null,
-      workdir: state.currentDir,
-      createdAt: new Date().toISOString(),
-      proc,
+      id: randomBytes(6).toString("hex"), port, label, sessionId, ownerId, brief,
+      serviceKind, url: null, workdir: state.currentDir, createdAt, proc,
     };
 
     let settled = false;
@@ -127,10 +147,19 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
         settled = true;
         clearTimeout(timer);
         tunnel.url = m[0];
+        const row = hublotRepository(state).create({
+          id: tunnel.id, ownerId, port, label, brief, workdir: tunnel.workdir,
+          serviceKind, publicUrl: tunnel.url, status: "open", desiredState: "open",
+          createdAt, openedAt: new Date().toISOString(),
+        });
+        hublotRepository(state).appendLifecycleEvent({
+          hublotId: tunnel.id, status: "open", desiredState: "open",
+          publicUrl: tunnel.url, createdAt: new Date().toISOString(),
+        });
         state.tunnels.set(tunnel.id, tunnel);
         console.log(`[pi-ui] tunnel up: ${tunnel.url} -> localhost:${port}`);
-        state.serverEvent({ type: "tunnel_opened", tunnel: tunnelInfo(tunnel) });
-        resolvePromise(tunnelInfo(tunnel));
+        state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
+        resolvePromise(persistedTunnelInfo(state, row));
       }
     };
     proc.stderr.on("data", onOutput);
@@ -155,8 +184,21 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
         return;
       }
       if (state.tunnels.delete(tunnel.id)) {
+        const current = hublotRepository(state).find(tunnel.id);
+        const manuallyClosed = current?.desired_state === "closed";
+        hublotRepository(state).update(tunnel.id, {
+          status: manuallyClosed ? "closed" : "interrupted",
+          public_url: null,
+          closed_at: new Date().toISOString(),
+          last_error: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`,
+        });
+        hublotRepository(state).appendLifecycleEvent({
+          hublotId: tunnel.id, status: manuallyClosed ? "closed" : "interrupted",
+          desiredState: current?.desired_state ?? "open", error: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`,
+          createdAt: new Date().toISOString(),
+        });
         console.log(`[pi-ui] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
-        state.serverEvent({ type: "tunnel_closed", tunnel: tunnelInfo(tunnel) });
+        state.serverEvent({ type: "tunnel_closed", tunnel: { ...tunnelInfo(tunnel), url: null } });
       }
     });
   });
@@ -166,8 +208,17 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
  *  agent (if still running), and whatever is serving the port. Returns its
  *  info, or null if unknown. */
 export function closeTunnel(state, id) {
+  const row = hublotRepository(state).find(id);
+  if (!row || row.status === "closed") return null;
+  const closedInfo = persistedTunnelInfo(state, row);
+  hublotRepository(state).update(id, { desired_state: "closed", status: "closing", public_url: null, last_error: null });
+  hublotRepository(state).appendLifecycleEvent({ hublotId: id, status: "closing", desiredState: "closed", createdAt: new Date().toISOString() });
   const t = state.tunnels?.get(id);
-  if (!t) return null;
+  if (!t) {
+    hublotRepository(state).update(id, { status: "closed", closed_at: new Date().toISOString() });
+    hublotRepository(state).appendLifecycleEvent({ hublotId: id, status: "closed", desiredState: "closed", createdAt: new Date().toISOString() });
+    return closedInfo;
+  }
 
   // 1. the service on the port: the tracked pid is killed unconditionally;
   //    the live port scan (service may have forked/respawned under another
@@ -200,12 +251,12 @@ export function closeTunnel(state, id) {
   setTimeout(() => {
     if (t.proc.exitCode === null && !t.proc.killed) t.proc.kill("SIGKILL");
   }, 3000).unref();
-  return tunnelInfo(t); // removal from the map happens in the exit handler
+  return closedInfo; // runtime removal and the final durable transition happen in the exit handler
 }
 
 /** Kill every tunnel (server shutdown). */
 export function closeAllTunnels(state) {
-  for (const id of [...(state.tunnels?.keys() ?? [])]) closeTunnel(state, id);
+  for (const row of hublotRepository(state).list()) if (row.status !== "closed") closeTunnel(state, row.id);
 }
 
 // ---------------------------------------------------------------- hublot agents
