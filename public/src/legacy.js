@@ -2264,18 +2264,10 @@ async function showSessionPicker() {
   }
 }
 
-const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast });
+const settingsController = createSettingsController({ rpc, pickOption, refreshState, toast, getState: () => state });
 const chooseModel = settingsController.chooseModel;
 const cycleThinking = settingsController.cycleThinking;
-
-async function openConfigPicker() {
-  const which = await pickOption("Settings", [
-    `Model: ${state?.model?.id ?? "?"} — change…`,
-    `Thinking: ${state?.thinkingLevel ?? "?"} — cycle`,
-  ]);
-  if (which === 0) await chooseModel();
-  else if (which === 1) await cycleThinking();
-}
+const openConfigPicker = settingsController.openConfig;
 
 // ------------------------------------------------------------ session search
 

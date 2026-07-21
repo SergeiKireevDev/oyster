@@ -1,4 +1,4 @@
-export function createSettingsController({ rpc, pickOption, refreshState, toast }) {
+export function createSettingsController({ rpc, pickOption, refreshState, toast, getState }) {
   async function chooseModel() {
     try {
       const { models } = await rpc({ type: "get_available_models" });
@@ -16,5 +16,14 @@ export function createSettingsController({ rpc, pickOption, refreshState, toast 
       refreshState();
     } catch (error) { toast(error.message, "error"); }
   }
-  return { chooseModel, cycleThinking };
+  async function openConfig() {
+    const state = getState?.() ?? {};
+    const choice = await pickOption("Settings", [
+      `Model: ${state.model?.id ?? "?"} — change…`,
+      `Thinking: ${state.thinkingLevel ?? "?"} — cycle`,
+    ]);
+    if (choice === 0) return chooseModel();
+    if (choice === 1) return cycleThinking();
+  }
+  return { chooseModel, cycleThinking, openConfig };
 }
