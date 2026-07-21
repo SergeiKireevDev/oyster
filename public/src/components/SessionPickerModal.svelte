@@ -208,7 +208,7 @@
   {@const current = session.id === $sessionPicker.currentId}
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
-  <button class={`m-option${current ? " current" : ""}`} onclick={() => choosePickedSession(session)}>
+  <button class={`m-option${current ? " current" : ""}`} onclick={() => choosePickedSession(session.path)}>
     <div class="s-title">
       <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
       <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>

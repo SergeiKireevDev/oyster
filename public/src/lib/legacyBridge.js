@@ -212,6 +212,10 @@ export function createManagedHublot(desc) {
   return hublotManagerHandlers.createHublot?.(desc);
 }
 
+export function setManagedHublotDesc(desc) {
+  return hublotManagerHandlers.setDesc?.(desc);
+}
+
 export function toggleManagedHublotScope() {
   return hublotManagerHandlers.toggleScope?.();
 }

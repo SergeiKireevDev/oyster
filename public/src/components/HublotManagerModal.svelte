@@ -3,6 +3,7 @@
     closeManagedHublot,
     createManagedHublot,
     openManagedFileExplorer,
+    setManagedHublotDesc,
     setupManagedCommandPalette,
   } from "../lib/legacyBridge.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
@@ -82,7 +83,7 @@
       placeholder="What should the agent expose through this hublot? (e.g. “the vite dev server for the dashboard, with hot reload”)"
       style="resize:vertical;flex:1;min-width:0;"
       value={$hublotManager.desc}
-      oninput={(event) => updateHublotManager({ desc: event.currentTarget.value })}
+      oninput={(event) => setManagedHublotDesc(event.currentTarget.value)}
     ></textarea>
   </div>
   <button class="btn" disabled={$hublotManager.creating} onclick={() => createManagedHublot($hublotManager.desc)}>

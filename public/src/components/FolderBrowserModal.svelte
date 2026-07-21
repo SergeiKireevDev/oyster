@@ -1,19 +1,13 @@
 <script>
+  import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
     browseFolder,
     createFolder,
     hideFolderCreateRow,
     setFolderNewName,
   } from "../lib/legacyBridge.js";
+  import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser } from "../stores/folderBrowser.js";
-
-  $: dirs = $folderBrowser.showHidden
-    ? $folderBrowser.dirs
-    : $folderBrowser.dirs.filter((dir) => !dir.hidden);
-
-  function pathFor(dir) {
-    return `${String($folderBrowser.path).replace(/\/$/, "")}/${dir.name}`;
-  }
 
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
@@ -42,16 +36,16 @@
     </div>
   {/if}
 
-  {#if $folderBrowser.path !== $folderBrowser.home}
-    <button class="m-option dir homeDir" onclick={() => browseFolder($folderBrowser.home)}>home</button>
-  {/if}
-  {#if $folderBrowser.parent}
-    <button class="m-option dir up" onclick={() => browseFolder($folderBrowser.parent)}>..</button>
-  {/if}
-  {#each dirs as dir (dir.name)}
-    <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => browseFolder(pathFor(dir))}>{dir.name}</button>
-  {/each}
-  {#if !$folderBrowser.dirs.length}
+  <BrowserDirectoryList
+    path={$folderBrowser.path}
+    home={$folderBrowser.home}
+    parent={$folderBrowser.parent}
+    dirs={$folderBrowser.dirs}
+    showHidden={$folderBrowser.showHidden}
+    showPath={false}
+    onBrowse={browseFolder}
+  />
+  {#if !visibleBrowserEntries($folderBrowser.dirs, $folderBrowser.showHidden).length}
     <div class="m-path">(no subfolders)</div>
   {/if}
 {/if}

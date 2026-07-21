@@ -91,7 +91,7 @@ Suggested phases:
 
 Initially keep session switching, deleting, stopping, and searching logic in `legacy.js`.
 
-### 6. Refactor Shared File-browser UI
+### 6. Refactor Shared File-browser UI ✅
 
 The folder browser, file picker, and file explorer now have similar Svelte structures.
 
@@ -104,17 +104,17 @@ After they remain stable, refactor duplicated rendering into reusable components
 
 Do this after behavior is already covered and green; avoid combining refactors with feature migrations.
 
-### 7. Migrate Extension UI Flows
+### 7. Migrate Extension UI Flows ✅
 
 The extension UI bridge currently maps extension requests to prompts, confirms, selects, and editors.
 
 For any remaining editor-specific UI:
 
-7.1. Add a dedicated Svelte modal/store if needed.
-7.2. Preserve the extension RPC response contracts exactly.
-7.3. Keep `handleExtensionUI()` as the orchestration layer until all UI pieces are store-driven.
+7.1. ✅ Add a dedicated Svelte modal/store if needed.
+7.2. ✅ Preserve the extension RPC response contracts exactly.
+7.3. ✅ Keep `handleExtensionUI()` as the orchestration layer until all UI pieces are store-driven.
 
-### 8. Prepare Transcript Migration
+### 8. Prepare Transcript Migration ✅
 
 Transcript rendering is high risk and should be prepared before extraction.
 

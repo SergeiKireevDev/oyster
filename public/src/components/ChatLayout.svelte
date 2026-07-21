@@ -1,11 +1,12 @@
 <script>
   import Composer from "./Composer.svelte";
   import Sidebars from "./Sidebars.svelte";
+  import Transcript from "./Transcript.svelte";
 </script>
 
 <div id="main">
   <div id="chatcol">
-    <div id="scroller"><div id="messages"></div></div>
+    <div id="scroller"><Transcript /></div>
     <Composer />
   </div>
 

@@ -1,5 +1,11 @@
 "use strict";
 
+import { mount, unmount } from "svelte";
+import { writable } from "svelte/store";
+import UserMessage from "./components/transcript/UserMessage.svelte";
+import AssistantMessage from "./components/transcript/AssistantMessage.svelte";
+import ToolCard from "./components/transcript/ToolCard.svelte";
+import CheckpointButton from "./components/transcript/CheckpointButton.svelte";
 import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHeaderHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -11,12 +17,14 @@ import { folderBrowser, updateFolderBrowser } from "./stores/folderBrowser.js";
 import { updateHeaderState } from "./stores/header.js";
 import { updateHublotManager } from "./stores/hublotManager.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
-import { openConfirmPrompt, openTextPrompt } from "./stores/dialogs.js";
+import { openConfirmPrompt, openEditorPrompt, openTextPrompt } from "./stores/dialogs.js";
 import { closeModalState, openModal, updateModal } from "./stores/modal.js";
 import { openOptionPicker } from "./stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "./stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
+import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
+import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 
 // ------------------------------------------------------------ token
 
@@ -335,34 +343,14 @@ function scrollToBottom(force) {
   if (force || nearBottom()) scroller.scrollTop = scroller.scrollHeight;
 }
 
-const toolCards = new Map(); // toolCallId -> {el, argsEl, resultEl, statusEl}
-
-function summarizeArgs(name, args) {
-  if (!args || typeof args !== "object") return "";
-  if (typeof args.command === "string") return args.command;
-  if (typeof args.path === "string") return args.path;
-  if (typeof args.file_path === "string") return args.file_path;
-  const first = Object.values(args).find((v) => typeof v === "string");
-  return first || "";
-}
+const toolCards = new Map(); // toolCallId -> {el, store}
 
 function createToolCard(tc) {
-  const details = document.createElement("details");
-  details.className = "block tool";
-  const argSummary = summarizeArgs(tc.name, tc.arguments);
-  details.innerHTML =
-    `<summary><span class="tname">${escapeHtml(tc.name)}</span>` +
-    `<span class="targ">${escapeHtml(argSummary)}</span>` +
-    `<span class="status running">⏳</span></summary>` +
-    `<div class="body"><pre class="args-pre"></pre><pre class="result-pre"></pre></div>`;
-  const card = {
-    el: details,
-    argsEl: details.querySelector(".args-pre"),
-    resultEl: details.querySelector(".result-pre"),
-    statusEl: details.querySelector(".status"),
-    summaryArgEl: details.querySelector(".targ"),
-  };
-  renderToolArgs(card, tc);
+  const target = document.createElement("span");
+  const store = writable({ toolCall: tc, status: "running", resultText: "" });
+  mount(ToolCard, { target, props: { cardStore: store } });
+  const details = target.firstElementChild;
+  const card = { el: details, store };
   toolCards.set(tc.id, card);
   return details;
 }
@@ -370,63 +358,38 @@ function createToolCard(tc) {
 function updateToolCard(tc) {
   const card = toolCards.get(tc.id);
   if (!card) return;
-  card.summaryArgEl.textContent = summarizeArgs(tc.name, tc.arguments);
-  renderToolArgs(card, tc);
-}
-
-function renderToolArgs(card, tc) {
-  const args = tc.arguments;
-  const name = (tc.name || "").toLowerCase();
-  if (name === "edit" && args && Array.isArray(args.edits)) {
-    card.argsEl.textContent = "";
-    let diff = card.el.querySelector(".diff");
-    if (!diff) {
-      diff = document.createElement("div");
-      diff.className = "diff";
-      card.argsEl.after(diff);
-    }
-    let html = "";
-    args.edits.forEach((e, i) => {
-      if (args.edits.length > 1) html += `<div class="diff-line diff-hdr">edit ${i + 1}:</div>`;
-      for (const line of String(e.oldText ?? "").split("\n"))
-        html += `<div class="diff-line diff-del">- ${escapeHtml(line)}</div>`;
-      for (const line of String(e.newText ?? "").split("\n"))
-        html += `<div class="diff-line diff-add">+ ${escapeHtml(line)}</div>`;
-    });
-    diff.innerHTML = html;
-    return;
-  }
-  card.argsEl.textContent = JSON.stringify(args, null, 2) ?? "";
-}
-
-function toolResultText(msg) {
-  if (!msg) return "";
-  const parts = [];
-  const content = msg.content;
-  if (typeof content === "string") parts.push(content);
-  else if (Array.isArray(content)) {
-    for (const c of content) {
-      if (c.type === "text") parts.push(c.text);
-      else if (c.type === "image") parts.push(`[image ${c.mimeType}]`);
-    }
-  }
-  return parts.join("\n");
+  card.store.update((state) => ({ ...state, toolCall: tc }));
 }
 
 function finishToolCard(toolCallId, resultMsgOrText, isError) {
   const card = toolCards.get(toolCallId);
   if (!card) return;
-  card.statusEl.textContent = isError ? "✗" : "✓";
-  card.statusEl.className = `status ${isError ? "err" : "ok"}`;
   const text = typeof resultMsgOrText === "string" ? resultMsgOrText : toolResultText(resultMsgOrText);
-  card.resultEl.textContent = text.length > 20000 ? text.slice(0, 20000) + "\n… (truncated)" : text;
+  card.store.update((state) => ({
+    ...state,
+    status: isError ? "error" : "ok",
+    resultText: text,
+  }));
 }
 
 let liveAssistant = null; // { root, msg }
+const mountedTranscriptComponents = [];
+
+function mountTranscriptComponent(component, props = {}) {
+  const instance = mount(component, { target: messagesEl, props });
+  mountedTranscriptComponents.push(instance);
+  return instance;
+}
+
+function unmountTranscriptComponents() {
+  for (const instance of mountedTranscriptComponents.splice(0)) {
+    try { unmount(instance); } catch {}
+  }
+}
 
 function renderBlockEl(block) {
   if (block.type === "thinking") {
-    const showThinking = localStorage.getItem("pi_show_thinking") !== "0";
+    const showThinking = shouldShowThinking(localStorage);
     if (!showThinking || !block.thinking?.trim()) return null;   // hidden, or empty/whitespace
     const d = document.createElement("details");
     d.className = "block thinking";
@@ -449,6 +412,51 @@ function renderBlockEl(block) {
  * block is re-rendered, which avoids flicker, keeps scroll positions inside
  * code/tool output, and preserves the open state of thinking blocks.
  */
+function canRenderAssistantWithSvelte(message) {
+  const blocks = message.content || [];
+  return blocks.length > 0 && blocks.every((block) => block.type === "text" || block.type === "thinking");
+}
+
+function assistantBlockModels(message) {
+  return (message.content || []).map((block) => {
+    if (block.type === "text") {
+      return { type: "text", html: renderMarkdown(block.text || ""), key: block.text || "" };
+    }
+    if (block.type === "thinking") {
+      if (!shouldShowThinking(localStorage) || !block.thinking?.trim()) return null;
+      return { type: "thinking", text: block.thinking, key: block.thinking };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+function assistantModel(message) {
+  return {
+    blocks: assistantBlockModels(message),
+    errorMessage: message.stopReason === "error" ? (message.errorMessage || "") : "",
+  };
+}
+
+function mountSvelteAssistantMessage(message) {
+  const assistantStore = writable(assistantModel(message));
+  mountTranscriptComponent(AssistantMessage, {
+    assistantStore,
+    onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+  });
+  const el = messagesEl.lastElementChild;
+  return { el, store: assistantStore, msg: message, svelte: true };
+}
+
+function updateSvelteAssistant(live, message) {
+  live.msg = message;
+  live.store.set(assistantModel(message));
+}
+
+function addSvelteAssistantMessage(message) {
+  mountSvelteAssistantMessage(message);
+  placeCheckpointBtn();
+}
+
 function renderAssistantInto(root, message) {
   const blocks = message.content || [];
   const prevKeys = root._blockKeys || [];
@@ -483,38 +491,16 @@ function renderAssistantInto(root, message) {
   root.replaceChildren(...els);
 }
 
-function userText(message) {
-  if (typeof message.content === "string") return message.content;
-  if (Array.isArray(message.content)) {
-    return message.content.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join("\n");
-  }
-  return "";
-}
-
 function addUserMessage(message) {
-  const text = userText(message);
-  // hublot briefings are rendered collapsed, like a tool call
-  const iface = text.match(/^Opening interface: (.*)\n/);
-  if (iface) {
-    const details = document.createElement("details");
-    details.className = "block tool";
-    details.dataset.role = "user"; // still a user message for permalink alignment
-    details.innerHTML =
-      `<summary><span class="tname">opening interface</span>` +
-      `<span class="targ"></span></summary>` +
-      `<div class="body"><pre></pre></div>`;
-    details.querySelector(".targ").textContent = iface[1];
-    details.querySelector("pre").textContent = text.slice(iface[0].length);
-    messagesEl.appendChild(details);
+  const text = userMessageText(message);
+  mountTranscriptComponent(UserMessage, {
+    text,
+    onPermalink: (el) => copyPermalink(el).catch((err) => toast(`permalink failed: ${err.message}`, "error")),
+  });
+  if (/^Opening interface: /.test(text)) {
     scrollToBottom(true);
     return;
   }
-  const div = document.createElement("div");
-  div.className = "msg user";
-  div.dataset.role = "user";
-  div.textContent = text;
-  addPermalinkBtn(div);
-  messagesEl.appendChild(div);
   placeCheckpointBtn();
   if (!backfilling) {
     scrollToBottom(true);
@@ -559,10 +545,12 @@ function addAssistantContainer() {
 // runner's workdir (server-side `git add -A && git commit`), freezing the
 // state the conversation reached at that point.
 
-const checkpointBtn = document.createElement("span");
-checkpointBtn.className = "checkpoint";
-checkpointBtn.textContent = "\u{1F9CA}";
-checkpointBtn.title = "checkpoint — commit all workdir changes";
+let checkpointBtn;
+function createCheckpointButton() {
+  const host = document.createElement("span");
+  mount(CheckpointButton, { target: host, props: { onCheckpoint: handleCheckpointClick } });
+  return host.firstElementChild;
+}
 /** Modal with a single model selector for the diff-summary sub-agent; the
  *  choice is remembered (localStorage) and preselected next time.
  *  Resolves { model } (null model = no summary) or { cancelled: true }. */
@@ -580,7 +568,7 @@ function pickCheckpointModel({
   return picker;
 }
 
-checkpointBtn.addEventListener("click", async (e) => {
+async function handleCheckpointClick(e) {
   e.stopPropagation();
   if (checkpointBtn.classList.contains("busy")) return;
   const pick = await pickCheckpointModel();
@@ -614,7 +602,8 @@ checkpointBtn.addEventListener("click", async (e) => {
   } finally {
     checkpointBtn.classList.remove("busy");
   }
-});
+}
+checkpointBtn = createCheckpointButton();
 
 /** keep the iceberg attached to the latest user/assistant message */
 function placeCheckpointBtn() {
@@ -746,6 +735,10 @@ function renderFullMessage(message) {
   const role = message.role;
   if (role === "user") { addUserMessage(message); return; }
   if (role === "assistant") {
+    if (canRenderAssistantWithSvelte(message)) {
+      addSvelteAssistantMessage(message);
+      return;
+    }
     const root = addAssistantContainer();
     renderAssistantInto(root, message);
     return;
@@ -771,6 +764,7 @@ function renderFullMessage(message) {
 function clearMessages() {
   renderJob++; // cancel any in-flight transcript backfill
   checkpointBtn.remove();
+  unmountTranscriptComponents();
   messagesEl.innerHTML = "";
   toolCards.clear();
   liveAssistant = null;
@@ -794,27 +788,6 @@ let backfilling = false; // suppresses per-message scroll/history side effects
 const TAIL_MSGS = 40;    // rendered synchronously (visible screenful + slack)
 const CHUNK_MSGS = 60;   // per backfill timeslice
 
-function splitTurns(messages) {
-  const turns = [];
-  let cur = [];
-  for (const m of messages) {
-    if (m.role === "user" && cur.length) { turns.push(cur); cur = []; }
-    cur.push(m);
-  }
-  if (cur.length) turns.push(cur);
-  return turns;
-}
-
-/** pop whole turns off the end of `turns` until ~max messages (≥ 1 turn) */
-function takeTailChunk(turns, max) {
-  const chunk = [];
-  while (turns.length && (chunk.length === 0 || chunk.length + turns[turns.length - 1].length <= max)) {
-    chunk.unshift(...turns.pop());
-    if (chunk.length >= max) break;
-  }
-  return chunk;
-}
-
 function renderChunk(chunk) {
   backfilling = true;
   try { for (const m of chunk) renderFullMessage(m); }
@@ -830,7 +803,7 @@ function renderTranscript(messages) {
   // tail-first: prefill it from the full list (same skip rule as addUserMessage)
   for (const m of messages) {
     if (m.role !== "user") continue;
-    const t = userText(m);
+    const t = userMessageText(m);
     if (t && !/^Opening interface: /.test(t)) rememberPrompt(t);
   }
   const turns = splitTurns(messages);
@@ -1126,11 +1099,14 @@ function handleEvent(msg) {
     case "message_start": {
       const m = msg.message;
       if (m.role === "assistant") {
-        liveAssistant = { root: addAssistantContainer(), msg: m };
-        renderAssistantInto(liveAssistant.root, m);
+        if (canRenderAssistantWithSvelte(m)) liveAssistant = mountSvelteAssistantMessage(m);
+        else {
+          liveAssistant = { root: addAssistantContainer(), msg: m, svelte: false };
+          renderAssistantInto(liveAssistant.root, m);
+        }
         scrollToBottom(true);
       } else if (m.role === "user") {
-        const idx = localEchoes.indexOf(userText(m));
+        const idx = localEchoes.indexOf(userMessageText(m));
         if (idx !== -1) localEchoes.splice(idx, 1); // already rendered on send
         else addUserMessage(m);
       }
@@ -1140,8 +1116,12 @@ function handleEvent(msg) {
     case "message_update": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (!liveAssistant) liveAssistant = { root: addAssistantContainer(), msg: m };
-        renderAssistantInto(liveAssistant.root, m);
+        if (!liveAssistant) {
+          if (canRenderAssistantWithSvelte(m)) liveAssistant = mountSvelteAssistantMessage(m);
+          else liveAssistant = { root: addAssistantContainer(), msg: m, svelte: false };
+        }
+        if (liveAssistant.svelte && canRenderAssistantWithSvelte(m)) updateSvelteAssistant(liveAssistant, m);
+        else if (!liveAssistant.svelte) renderAssistantInto(liveAssistant.root, m);
         scrollToBottom(false);
       }
       return;
@@ -1150,8 +1130,11 @@ function handleEvent(msg) {
     case "message_end": {
       const m = msg.message;
       if (m.role === "assistant") {
-        if (liveAssistant) { renderAssistantInto(liveAssistant.root, m); liveAssistant = null; }
+        if (liveAssistant?.svelte && canRenderAssistantWithSvelte(m)) updateSvelteAssistant(liveAssistant, m);
+        else if (liveAssistant) renderAssistantInto(liveAssistant.root, m);
+        else if (canRenderAssistantWithSvelte(m)) addSvelteAssistantMessage(m);
         else { const root = addAssistantContainer(); renderAssistantInto(root, m); }
+        liveAssistant = null;
         updateUsage(m);
       } else if (m.role === "toolResult") {
         finishToolCard(m.toolCallId, m, m.isError);
@@ -1162,7 +1145,7 @@ function handleEvent(msg) {
 
     case "tool_execution_start": {
       const card = toolCards.get(msg.toolCallId);
-      if (card) { card.statusEl.textContent = "⏳"; card.statusEl.className = "status running"; }
+      if (card) card.store.update((state) => ({ ...state, status: "running" }));
       return;
     }
 
@@ -1172,7 +1155,7 @@ function handleEvent(msg) {
         const text = typeof msg.partialResult === "string"
           ? msg.partialResult
           : toolResultText(msg.partialResult) || JSON.stringify(msg.partialResult);
-        card.resultEl.textContent = text.slice(-20000);
+        card.store.update((state) => ({ ...state, resultText: text.slice(-20000) }));
       }
       return;
     }
@@ -2241,6 +2224,10 @@ setHublotManagerHandlers({
   openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
   closeHublot: closeManagedHublot,
   createHublot: createManagedHublot,
+  setDesc: (desc) => {
+    tunnelForm.desc = desc;
+    updateHublotManager({ desc });
+  },
   toggleScope: toggleManagedHublotScope,
   setupCommandPalette,
 });
@@ -2470,7 +2457,11 @@ setSessionPickerHandlers({
   setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
   setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },
   runSearch: runSessionPickerSearch,
-  chooseSession: (session) => { closeModal(); sessionPickerResolve?.(session); },
+  chooseSession: (sessionPath) => {
+    const session = sessionPickerSessions.find((item) => item.path === sessionPath) ?? null;
+    closeModal();
+    sessionPickerResolve?.(session);
+  },
   stopSession: async (session) => {
     const runner = runnersNow.find((x) => x.sessionFile === session.path) ?? { id: session.runnerId };
     if (!runner.id) return;
@@ -2519,7 +2510,8 @@ async function showSessionPicker() {
   const { sessions } = await res.json();
   if (!sessions.length) { toast("no saved sessions"); return; }
   sessionPickerSessions = sessions;
-  const currentId = state?.sessionId;
+  const currentSessionFile = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+  const currentId = sessions.find((session) => session.path === currentSessionFile)?.id ?? state?.sessionId;
 
   // folders for the search scope selector and the "other folders" section
   let folders = [], currentFolder = null;
@@ -2561,14 +2553,16 @@ async function showSessionPicker() {
 
   onRunnersUpdate = null;
   sessionPickerResolve = null;
-  if (!chosen || chosen.id === currentId) return;
+  const currentPath = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
+  const fullChoice = chosen ? (sessionPickerSessions.find((session) => session.path === chosen.path || session.id === chosen.id) ?? chosen) : null;
+  if (!fullChoice) return;
   try {
     // attaches to the session's live runner if it has one (its work is
     // untouched), else spawns a fresh pi on that session in the background;
     // sessions from other folders spawn in their own recorded cwd
-    const runner = await openSessionRunner({ sessionPath: chosen.path, dir: chosen.cwd || workdir });
+    const runner = await openSessionRunner({ sessionPath: fullChoice.path, dir: fullChoice.cwd || workdir });
     switchToRunner(runner.id);
-    toast(`switched to: ${chosen.name || chosen.preview || chosen.id.slice(0, 8)}`);
+    toast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
   } catch (e) {
     toast(`switch failed: ${e.message}`, "error");
   }
@@ -2708,10 +2702,7 @@ const normText = (s) => s.replace(/\s+/g, " ").trim();
 /** does this entry plausibly describe this element? (labels like "[tool: …]"
  *  never appear verbatim in the DOM, so only verify real text) */
 function entryMatchesEl(entry, el) {
-  if (entry.role !== el.dataset.role) return false;
-  const t = normText(entry.text ?? "");
-  if (!t || t.startsWith("[")) return true;
-  return normText(el.textContent).includes(t.slice(0, 60));
+  return messageEntryMatchesElement(entry, el);
 }
 
 async function entryIdForElement(el) {
@@ -2815,6 +2806,12 @@ function confirmDialog(title, message) {
   return openConfirmPrompt(title, message);
 }
 
+function promptEditor(title, placeholder, prefill) {
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  return openEditorPrompt(title, placeholder, prefill);
+}
+
 // ------------------------------------------------------------ extension UI bridge
 
 async function handleExtensionUI(req) {
@@ -2842,7 +2839,7 @@ async function handleExtensionUI(req) {
       return;
     }
     case "editor": {
-      const v = await promptText(req.title, "", req.prefill);
+      const v = await promptEditor(req.title, "", req.prefill);
       if (v == null) respond({ cancelled: true });
       else respond({ value: v });
       return;

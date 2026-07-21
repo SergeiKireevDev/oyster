@@ -2,9 +2,11 @@ import { get, writable } from "svelte/store";
 import { closeModalState, openModal } from "./modal.js";
 
 const emptyPrompt = { title: "", placeholder: "", value: "", resolve: null };
+const emptyEditor = { title: "", placeholder: "", value: "", resolve: null };
 const emptyConfirm = { title: "", message: "", resolve: null };
 
 export const textPrompt = writable(emptyPrompt);
+export const editorPrompt = writable(emptyEditor);
 export const confirmPrompt = writable(emptyConfirm);
 
 export function openTextPrompt(title, placeholder = "", prefill = "") {
@@ -16,6 +18,31 @@ export function openTextPrompt(title, placeholder = "", prefill = "") {
 
 export function setTextPromptValue(value) {
   textPrompt.update((state) => ({ ...state, value }));
+}
+
+export function openEditorPrompt(title, placeholder = "", prefill = "") {
+  return new Promise((resolve) => {
+    editorPrompt.set({ title, placeholder: placeholder || "", value: prefill || "", resolve });
+    openModal({ title, content: "editorPrompt" });
+  });
+}
+
+export function setEditorPromptValue(value) {
+  editorPrompt.update((state) => ({ ...state, value }));
+}
+
+export function cancelEditorPrompt() {
+  const state = get(editorPrompt);
+  state.resolve?.(null);
+  editorPrompt.set(emptyEditor);
+  closeModalState();
+}
+
+export function submitEditorPrompt() {
+  const state = get(editorPrompt);
+  state.resolve?.(state.value);
+  editorPrompt.set(emptyEditor);
+  closeModalState();
 }
 
 export function cancelTextPrompt() {

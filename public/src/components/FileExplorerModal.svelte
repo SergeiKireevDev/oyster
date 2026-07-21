@@ -1,29 +1,15 @@
 <script>
+  import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
     browseExploredFolder,
     editExploredFile,
     saveExploredFile,
     setExploredFileContent,
   } from "../lib/legacyBridge.js";
+  import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
 
-  $: dirs = $fileExplorer.showHidden
-    ? $fileExplorer.dirs
-    : $fileExplorer.dirs.filter((dir) => !dir.hidden);
-  $: files = $fileExplorer.showHidden
-    ? $fileExplorer.files
-    : $fileExplorer.files.filter((file) => !file.hidden);
-
-  function pathFor(entry) {
-    return `${String($fileExplorer.path).replace(/\/$/, "")}/${entry.name}`;
-  }
-
-  function fmtSize(n) {
-    if (n == null) return "";
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
+  $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
 </script>
 
 {#if $fileExplorer.loading}
@@ -43,36 +29,33 @@
     }}
   ></textarea>
 {:else}
-  <div class="m-path">{$fileExplorer.path}</div>
-
-  {#if $fileExplorer.path !== $fileExplorer.home}
-    <button class="m-option dir homeDir" onclick={() => browseExploredFolder($fileExplorer.home)}>home</button>
-  {/if}
-  {#if $fileExplorer.workdir && $fileExplorer.path !== $fileExplorer.workdir}
-    <button class="m-option dir" onclick={() => browseExploredFolder($fileExplorer.workdir)}>workdir</button>
-  {/if}
-  {#if $fileExplorer.parent}
-    <button class="m-option dir up" onclick={() => browseExploredFolder($fileExplorer.parent)}>..</button>
-  {/if}
-  {#each dirs as dir (dir.name)}
-    <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => browseExploredFolder(pathFor(dir))}>{dir.name}</button>
-  {/each}
+  <BrowserDirectoryList
+    path={$fileExplorer.path}
+    home={$fileExplorer.home}
+    workdir={$fileExplorer.workdir}
+    parent={$fileExplorer.parent}
+    dirs={$fileExplorer.dirs}
+    showHidden={$fileExplorer.showHidden}
+    showWorkdir={true}
+    onBrowse={browseExploredFolder}
+  />
   {#each files as file (file.name)}
+    {@const fullPath = browserPathFor($fileExplorer.path, file)}
     <div style="display:flex;align-items:center;gap:6px;">
-      <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} style="flex:1;min-width:0;" title={pathFor(file)} onclick={() => editExploredFile(pathFor(file))}>
-        {file.name}<span class="f-size">{fmtSize(file.size)}</span>
+      <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} style="flex:1;min-width:0;" title={fullPath} onclick={() => editExploredFile(fullPath)}>
+        {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
       </button>
       <a
         class="chip"
-        href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent(pathFor(file))}`}
+        href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent(fullPath)}`}
         download={file.name}
         title={`download ${file.name}`}
         style="text-decoration:none"
       >⬇</a>
-      <span class="chip" role="button" tabindex="0" title={`edit ${file.name}`} onclick={() => editExploredFile(pathFor(file))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") editExploredFile(pathFor(file)); }}>✎</span>
+      <span class="chip" role="button" tabindex="0" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") editExploredFile(fullPath); }}>✎</span>
     </div>
   {/each}
-  {#if !dirs.length && !files.length}
+  {#if !visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden).length && !files.length}
     <div class="m-path">(empty folder)</div>
   {/if}
 {/if}
