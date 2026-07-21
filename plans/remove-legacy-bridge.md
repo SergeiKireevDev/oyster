@@ -111,7 +111,7 @@ Create checkpoint-tree actions for opening a selected runner and rollback.
 **Acceptance:** remove `setCheckpointTreeHandlers`,
 `openCheckpointTreeSession`, and `rollbackCheckpoint` bridge exports.
 
-## 6. Remove Menu and Command Palette Bridges
+## 6. Remove Menu and Command Palette Bridges (in progress)
 
 Replace registry dispatch with a typed command/action catalog.
 
