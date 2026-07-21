@@ -301,12 +301,12 @@ export function init(state) {
 
   function summarizeSessionFile(path) {
     const text = readFileSync(path, "utf8");
-    let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0;
+    let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0, cwd = null;
     for (const line of text.split("\n")) {
       if (!line.trim()) continue;
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
-      if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; }
+      if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; cwd = entry.cwd ?? null; }
       else if (entry.type === "session_info") { name = entry.name ?? name; }
       else if (entry.type === "message") {
         const m = entry.message;
@@ -319,11 +319,10 @@ export function init(state) {
         }
       }
     }
-    return { id, createdAt, name, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
+    return { id, createdAt, name, cwd, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
   }
 
-  function listSessions() {
-    const dir = sessionDirFor(state.currentDir);
+  function listSessions(dir = sessionDirFor(state.currentDir)) {
     if (!existsSync(dir)) return [];
     const sessions = [];
     for (const file of readdirSync(dir)) {
@@ -693,10 +692,19 @@ export function init(state) {
     }
 
     if (req.method === "GET" && url.pathname === "/sessions") {
+      // ?path= lists another sessions folder (must live under the sessions root)
+      let dir;
+      if (url.searchParams.get("path")) {
+        dir = resolve(String(url.searchParams.get("path")));
+        if (!dir.startsWith(SESSIONS_ROOT)) {
+          json(res, 400, { error: "folder must be under the sessions root" });
+          return;
+        }
+      }
       // annotate each session with its live runner (if any) so the picker
       // can show running/busy indicators
       const runners = [...state.runners.values()];
-      const sessions = listSessions().map((s) => {
+      const sessions = listSessions(dir).map((s) => {
         const r = runners.find((x) => x.sessionFile === s.path);
         return { ...s, runnerId: r?.id ?? null, alive: !!r?.proc, busy: !!r?.busy };
       });
