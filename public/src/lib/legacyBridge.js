@@ -152,7 +152,3 @@ export function toggleManagedHublotScope() {
   return hublotManagerHandlers.toggleScope?.();
 }
 
-export function setupManagedCommandPalette(node) {
-  return hublotManagerHandlers.setupCommandPalette?.(node);
-}
-

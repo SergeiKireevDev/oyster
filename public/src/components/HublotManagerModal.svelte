@@ -1,6 +1,5 @@
 <script>
   import {
-    setupManagedCommandPalette,
   } from "../lib/legacyBridge.js";
   import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
@@ -19,7 +18,7 @@
   const createManagedHublot = (desc) => window.dispatchEvent(new CustomEvent("pi-managed-hublot-create", { detail: desc }));
 
   function commandPalette(node) {
-    setupManagedCommandPalette(node);
+    window.dispatchEvent(new CustomEvent("pi-managed-command-palette", { detail: node }));
   }
 
   function keyActivate(event, fn) {

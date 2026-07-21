@@ -2290,8 +2290,8 @@ window.addEventListener("pi-managed-hublot-create", (event) => createManagedHubl
 
 setHublotManagerHandlers({
   toggleScope: toggleManagedHublotScope,
-  setupCommandPalette,
 });
+window.addEventListener("pi-managed-command-palette", (event) => setupCommandPalette(event.detail));
 
 // ------------------------------------------------------------ hublot sidebar
 
