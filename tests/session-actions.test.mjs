@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -13,6 +13,17 @@ test("session actions persist the current runner", () => {
 
 test("session actions use session-root-relative file queries", () => {
   assert.equal(sessionFileQuery("/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), "path=--workspace--%2Fa.jsonl");
+});
+
+test("session actions select adjacent active runners in the current workdir", () => {
+  const runners = [
+    { id: "one", alive: true, sessionId: "s1", sessionName: "one", dir: "/work" },
+    { id: "skip", alive: true, sessionId: null, sessionName: null, dir: "/work" },
+    { id: "two", alive: true, sessionId: "s2", sessionName: "two", dir: "/work" },
+  ];
+  const result = adjacentActiveRunner(runners, "one", "/work", 1);
+  assert.equal(result.target.id, "two");
+  assert.equal(adjacentActiveRunner(runners, "one", "/other", 1).target, null);
 });
 test("session actions fetch durable transcript previews", async () => {
   const requests = [];

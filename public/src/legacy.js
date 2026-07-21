@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
@@ -2768,18 +2768,11 @@ const swipeController = createCarouselSwipeController({
 // workdir. Runners with sessionName === null were spawned but never sent
 // a message to — they're background/orphan processes, skip them.
 function switchToAdjacentRunner(dir) {
-  const candidates = runnersNow.filter(
-    (r) => r.alive && r.sessionId && r.sessionName && r.dir === workdir
-  );
+  const { candidates, target } = adjacentActiveRunner(runnersNow, currentRunner, workdir, dir);
   if (candidates.length <= 1) {
     toast(candidates.length === 0 ? "no other active session" : "only one active session");
     return;
   }
-  // stable ordering by server id (matches the /runners list order)
-  const idx = alive.findIndex((r) => r.id === currentRunner);
-  const base = idx === -1 ? 0 : idx;
-  const next = (base + dir + alive.length) % alive.length;
-  const target = alive[next];
   if (!target || target.id === currentRunner) return;
   switchToRunner(target.id);
 }

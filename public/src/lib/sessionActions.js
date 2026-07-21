@@ -49,6 +49,17 @@ export function markRunnerStopped(runners, id) {
   return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
 }
 
+/** Select the next live, session-backed runner in the current workdir. */
+export function adjacentActiveRunner(runners, currentRunner, workdir, direction) {
+  const candidates = runners.filter((runner) =>
+    runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir
+  );
+  if (candidates.length <= 1) return { candidates, target: null };
+  const index = candidates.findIndex((runner) => runner.id === currentRunner);
+  const base = index === -1 ? 0 : index;
+  return { candidates, target: candidates[(base + direction + candidates.length) % candidates.length] };
+}
+
 export function usageInfo(usage) {
   if (!usage) return null;
   const cost = usage.cost?.total ?? 0;
