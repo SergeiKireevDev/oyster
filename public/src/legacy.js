@@ -52,7 +52,7 @@ import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./
 import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController, createFolderBrowserEventController } from "./lib/folderBrowserController.js";
-import { createFileExplorerController, createFileExplorerEventController, registerFileUploadInput, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
+import { createFileExplorerController, createFileExplorerEventController, createOpenFileExplorerEventController } from "./lib/fileExplorerController.js";
 import { createFilePickerController, createFilePickerEventController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "./lib/routineController.js";
@@ -1539,6 +1539,7 @@ const fileExplorerController = createFileExplorerController({
   readFile: (path) => readFile(fetch, path),
   saveFile: (options) => saveFile(fetch, options),
   uploadChunk: (options) => uploadFileChunk(fetch, options),
+  createUploadInput: () => document.createElement("input"),
   update: updateFileExplorer,
   updateTitle: (title) => updateModal({ title }),
   openModal,
@@ -1555,17 +1556,7 @@ const loadFileExplorer = fileExplorerController.load;
 // Always open in the current session's working directory.
 const showFileExplorer = () => fileExplorerController.show(sessionUi.workdir);
 
-function uploadExplorerFiles() {
-  const dir = fileExplorerState.curPath;
-  const input = document.createElement("input");
-  input.type = "file";
-  input.multiple = true;
-  registerFileUploadInput(input, () => {
-    const files = [...input.files];
-    if (files.length) return fileExplorerController.uploadFiles(dir, files);
-  });
-  input.click();
-}
+const uploadExplorerFiles = () => fileExplorerController.chooseFiles(fileExplorerState.curPath);
 
 const editExplorerFile = fileExplorerController.openEditor;
 

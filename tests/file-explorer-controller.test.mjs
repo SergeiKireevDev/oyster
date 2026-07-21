@@ -81,6 +81,23 @@ test("file explorer reports an editor load error", async () => {
   assert.deepEqual(calls, [["cannot open file", "error"]]);
 });
 
+test("file explorer owns the upload-input workflow", () => {
+  const input = { click: () => { input.clicked = true; }, files: [{ name: "a.txt" }] };
+  let listener;
+  const controller = createFileExplorerController({
+    createUploadInput: () => input,
+    registerUploadInput: (_input, callback) => { listener = callback; },
+    uploadChunk: async () => ({ res: { ok: true }, data: {} }),
+    browse: async (path) => ({ path, dirs: [], files: [] }), update: () => {}, updateTitle: () => {},
+    getShowHidden: () => true, getToken: () => "token", setPath: () => {}, toast: () => {},
+  });
+  controller.chooseFiles("/work");
+  assert.equal(input.type, "file");
+  assert.equal(input.multiple, true);
+  assert.equal(input.clicked, true);
+  assert.equal(typeof listener, "function");
+});
+
 test("file explorer uploads files, reports progress, and reloads the directory", async () => {
   const calls = [];
   const file = { name: "a.txt", size: 3, slice: (start, end) => `${start}-${end}` };

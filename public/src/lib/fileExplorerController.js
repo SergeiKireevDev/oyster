@@ -17,7 +17,7 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
+export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), createUploadInput, registerUploadInput = registerFileUploadInput, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });
     let data;
@@ -65,6 +65,17 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     setEditFile(path, data.content);
     updateTitle(`✎ ${path.split("/").pop()}`);
     update({ mode: "edit", loading: false, token: getToken(), editPath: path, editContent: data.content, saving: false });
+  }
+
+  function chooseFiles(dir) {
+    const input = createUploadInput();
+    input.type = "file";
+    input.multiple = true;
+    registerUploadInput(input, () => {
+      const files = [...input.files];
+      if (files.length) return uploadFiles(dir, files);
+    });
+    input.click();
   }
 
   async function uploadFiles(dir, files) {
@@ -131,5 +142,5 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     }
   }
 
-  return { load, show, openEditor, uploadFiles, saveEditor };
+  return { load, show, openEditor, chooseFiles, uploadFiles, saveEditor };
 }
