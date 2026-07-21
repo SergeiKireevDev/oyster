@@ -4,10 +4,10 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   closeSessionHublots, persistHublotProcessIdentity, recordHublotTransition, reserveHublot,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 test("session deletion stops service and tunnel before cascading hublot and startup records", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-delete-"));
@@ -27,7 +27,7 @@ test("session deletion stops service and tunnel before cascading hublot and star
 
   const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "delete-me", storagePath: "/agent.sqlite", createdAt: "created" });
   const hublot = reserveHublot(state, { port: 4250, brief: "managed preview", sessionId: "delete-me", ownerId: owner.id });
-  const source = "#!/bin/sh\nexec node server.mjs\n";
+  const source = "#!/bin/sh\nexec node server/server.mjs\n";
   store.repositories.hublots.update(hublot.id, { service_start_script: source, service_start_script_sha256: "hash" });
   mkdirSync(dirname(hublot.service_start_script_path), { recursive: true });
   writeFileSync(hublot.service_start_script_path, source, { mode: 0o700 });

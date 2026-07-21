@@ -13,13 +13,13 @@ esac
 test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
 test.afterEach(() => { teardownContainer(); });
 
-test("hublots and routines are restored from app SQLite after server.mjs restarts", async ({ page }) => {
+test("hublots and routines are restored from app SQLite after server/server.mjs restarts", async ({ page }) => {
   const suffix = `${Date.now()}`;
   const routineName = `sqlite-restart-${suffix}.sh`;
   const hublotLabel = `sqlite-restart-hublot-${suffix}`;
 
   // Seed only through public APIs. The browser is intentionally not loaded
-  // until after server.mjs has exited and a new process has started, so these
+  // until after server/server.mjs has exited and a new process has started, so these
   // UI assertions cannot be satisfied by pre-restart browser or server state.
   const routine = await api("POST", "/routines", {
     action: "create",

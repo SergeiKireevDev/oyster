@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SERVER = new URL("../server.mjs", import.meta.url);
+const SERVER = new URL("../server/server.mjs", import.meta.url);
 
 test("an application database migration failure exits before the HTTP server listens", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-invalid-app-store-"));

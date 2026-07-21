@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createCheckpointRollbackJournal } from "../persistence/checkpointRollbackJournal.mjs";
-import { checkpointTree } from "../checkpoints.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createCheckpointRollbackJournal } from "../server/persistence/checkpointRollbackJournal.mjs";
+import { checkpointTree } from "../server/checkpoints.mjs";
 
 test("checkpoint trees and in-progress rollback records survive stable server replacement", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-checkpoint-replacement-"));

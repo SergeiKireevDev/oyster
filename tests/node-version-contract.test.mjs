@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const packageLock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
-const server = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
+const server = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const agents = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
 const e2eReadme = readFileSync(new URL("./e2e/README.md", import.meta.url), "utf8");

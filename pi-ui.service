@@ -6,7 +6,7 @@ WorkingDirectory=__PI_UI_DIR__
 Environment=PI_BIN=/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js
 Environment=PERSISTENT_STORE=sqlite
 Environment=PI_CODING_AGENT_DIR=/home/ubuntu/.pi/agent
-ExecStart=/usr/bin/node __PI_UI_DIR__/server.mjs
+ExecStart=/usr/bin/node __PI_UI_DIR__/server/server.mjs
 # always: a stray SIGTERM/clean exit (e.g. an agent running pkill) must not
 # leave the UI down
 Restart=always

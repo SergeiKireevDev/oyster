@@ -4,8 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 test("SQLite and JSONL session identities safely own resources in the separate app database", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-dual-backend-app-refs-"));

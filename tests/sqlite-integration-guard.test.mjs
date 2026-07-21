@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".svelte"]);
@@ -29,8 +29,8 @@ const sources = sourceFiles().map((path) => ({
 }));
 
 const JSONL_COMPATIBILITY_BOUNDARIES = new Set([
-  "app.mjs",
-  "http/routes/sessionRoutes.mjs",
+  "server/app.mjs",
+  "server/http/routes/sessionRoutes.mjs",
   "public/src/components/SessionPickerModal.svelte",
   "public/src/features/sessions/createSessionPickerRuntime.js",
   "public/src/features/transcript/createTranscriptAssembly.js",
@@ -42,9 +42,9 @@ const JSONL_COMPATIBILITY_BOUNDARIES = new Set([
   "public/src/runtime/appCompositionRoot.js",
   "public/src/runtime/sessionRuntime.js",
   "public/src/runtime/transcriptRuntime.js",
-  "runners.mjs",
-  "session-references.mjs",
-  "sessions/jsonlCatalog.mjs",
+  "server/runners.mjs",
+  "server/session-references.mjs",
+  "server/sessions/jsonlCatalog.mjs",
 ]);
 
 test("session file identity assumptions stay inside explicit JSONL compatibility boundaries", () => {
@@ -58,10 +58,10 @@ test("session file identity assumptions stay inside explicit JSONL compatibility
 test("SQLite identity is never reduced to a bare database-path comparison", () => {
   const pathEquality = /(?:\b(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b\s*={2,3}|={2,3}\s*(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b)/;
   const offenders = sources
-    .filter(({ name }) => name !== "session-references.mjs")
+    .filter(({ name }) => name !== "server/session-references.mjs")
     .filter(({ text }) => text.split("\n").some((line) => pathEquality.test(line) && !/PI_UI_DB_PATH/.test(line) && !/backend\s*={2,3}\s*["']jsonl["']/.test(line)))
     .map(({ name }) => name);
-  assert.deepEqual(offenders, [], `compare full session references through session-references.mjs: ${offenders.join(", ")}`);
+  assert.deepEqual(offenders, [], `compare full session references through server/session-references.mjs: ${offenders.join(", ")}`);
 });
 
 test("SQLite mutations are isolated to the pi-lot-ui persistence boundary", () => {
@@ -69,14 +69,14 @@ test("SQLite mutations are isolated to the pi-lot-ui persistence boundary", () =
   const offenders = sources
     .filter(({ text }) => mutation.test(text))
     .map(({ name }) => name)
-    .filter((name) => !name.startsWith("persistence/"));
-  assert.deepEqual(offenders, [], `move application SQLite writes into persistence/: ${offenders.join(", ")}`);
+    .filter((name) => !name.startsWith("server/persistence/"));
+  assert.deepEqual(offenders, [], `move application SQLite writes into server/persistence/: ${offenders.join(", ")}`);
 
   const sqliteConstructors = sources
     .filter(({ text }) => /from\s+["']node:sqlite["']|new\s+DatabaseSync/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteConstructors, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
+  assert.deepEqual(sqliteConstructors, ["server/persistence/appStore.mjs", "server/sessions/sqliteCatalog.mjs"]);
 });
 
 test("only the app-store owner and read-only session catalog can construct SQLite connections", () => {
@@ -84,15 +84,15 @@ test("only the app-store owner and read-only session catalog can construct SQLit
     .filter(({ text }) => /(?:from\s+|import\s*\()\s*["']node:sqlite["']/.test(text) || /\bnew\s+DatabaseSync\s*\(/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteUsers, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
+  assert.deepEqual(sqliteUsers, ["server/persistence/appStore.mjs", "server/sessions/sqliteCatalog.mjs"]);
 
   const appStoreImports = sources
-    .filter(({ name }) => !["server.mjs", "scripts/migrate-app-data.mjs"].includes(name))
+    .filter(({ name }) => !["server/server.mjs", "scripts/migrate-app-data.mjs"].includes(name))
     .filter(({ text }) => /(?:from\s+|import\s*\()\s*["'][^"']*persistence\/appStore\.mjs/.test(text))
     .map(({ name }) => name);
   assert.deepEqual(appStoreImports, [], `only server.mjs or the stopped-service migration command may open the application store: ${appStoreImports.join(", ")}`);
 
-  const catalog = sources.find(({ name }) => name === "sessions/sqliteCatalog.mjs").text;
+  const catalog = sources.find(({ name }) => name === "server/sessions/sqliteCatalog.mjs").text;
   assert.match(catalog, /new DatabaseSync\(path, \{ readOnly: true,/);
   assert.doesNotMatch(catalog, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/);
 });
@@ -125,7 +125,7 @@ test("opening and migrating pi-lot-ui.sqlite leaves the coding-agent schema unch
 
 test("coding-agent processes can only be spawned by the centralized launcher", () => {
   const offenders = sources
-    .filter(({ name }) => name !== "pi-processes.mjs")
+    .filter(({ name }) => name !== "server/pi-processes.mjs")
     .filter(({ text }) => {
       const importsChildProcesses = /from\s+["']node:child_process["']/.test(text);
       const referencesConfiguredPi = /\bPI_BIN\b/.test(text);
@@ -133,5 +133,5 @@ test("coding-agent processes can only be spawned by the centralized launcher", (
       return (importsChildProcesses && referencesConfiguredPi) || directlySpawnsPi;
     })
     .map(({ name }) => name);
-  assert.deepEqual(offenders, [], `launch pi through pi-processes.mjs: ${offenders.join(", ")}`);
+  assert.deepEqual(offenders, [], `launch pi through server/pi-processes.mjs: ${offenders.join(", ")}`);
 });

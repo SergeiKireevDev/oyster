@@ -84,4 +84,4 @@ File routes accept only paths under the configured safe roots and deny known cre
 | `PATCH /tunnels` | Rebind a hublot to a session |
 | `DELETE /tunnels?id=…` | Close a hublot |
 
-See the route modules in `http/routes/` for exact request and response schemas. Clients should tolerate additive response fields.
+See the route modules in `server/http/routes/` for exact request and response schemas. Clients should tolerate additive response fields.

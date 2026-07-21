@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const readme = read("../README.md");
-const app = read("../app.mjs");
+const app = read("../server/app.mjs");
 const menu = read("../public/src/components/Menu.svelte");
 const overlays = read("../public/src/components/Overlays.svelte");
 const root = read("../public/src/runtime/appCompositionRoot.js");

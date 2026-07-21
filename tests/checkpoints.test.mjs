@@ -18,10 +18,10 @@ import { join } from "node:path";
 const FAKE_HOME = mkdtempSync(join(tmpdir(), "pi-ui-test-home-"));
 process.env.HOME = FAKE_HOME;
 
-const { SESSIONS_ROOT } = await import("../sessions.mjs");
+const { SESSIONS_ROOT } = await import("../server/sessions.mjs");
 const {
   recordCheckpoint: recordCheckpointCore, checkpointTree: checkpointTreeCore, git, checkpointWorkdir,
-} = await import("../checkpoints.mjs");
+} = await import("../server/checkpoints.mjs");
 
 let checkpointRows = {};
 const repository = {

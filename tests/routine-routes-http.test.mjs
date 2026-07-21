@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRoutineRoutes } from "../http/routes/routineRoutes.mjs";
+import { createRoutineRoutes } from "../server/http/routes/routineRoutes.mjs";
 
 const res = () => ({});
 test("routine routes validate and preserve every session-bound lifecycle action", async () => {

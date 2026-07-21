@@ -6,12 +6,12 @@ import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { readProcessIdentity } from "../persistence/processIdentity.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { readProcessIdentity } from "../server/persistence/processIdentity.mjs";
 import {
   currentHublotTunnelProcessIsHealthy, listTunnels, persistHublotProcessIdentity,
   rebindHublot, recordHublotTransition, reserveHublot, updateHublotProcessMetadata,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-process-"));
@@ -122,7 +122,7 @@ test("session rebinding and process metadata updates commit transactionally", as
 });
 
 test("tunnel manager records every spawned or discovered process role", () => {
-  const source = readFileSync(new URL("../tunnels.mjs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8");
   for (const role of ["tunnel", "setup_agent", "service"]) {
     assert.match(source, new RegExp(`persistHublotProcessIdentity\\(state, \\{[^}]*role: ["']${role}["']`, "s"));
   }

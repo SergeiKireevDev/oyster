@@ -4,12 +4,12 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createTunnelRoutes } from "../http/routes/tunnelRoutes.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createTunnelRoutes } from "../server/http/routes/tunnelRoutes.mjs";
 import {
   listTunnels, persistHublotProcessIdentity, rebindHublot,
   recordHublotTransition, reserveHublot,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 function response() {
   return { status: null, body: null };

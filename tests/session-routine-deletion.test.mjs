@@ -5,8 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const ROUTINES_MODULE = new URL("../routines.mjs", import.meta.url).href;
-const APP_STORE_MODULE = new URL("../persistence/appStore.mjs", import.meta.url).href;
+const ROUTINES_MODULE = new URL("../server/routines.mjs", import.meta.url).href;
+const APP_STORE_MODULE = new URL("../server/persistence/appStore.mjs", import.meta.url).href;
 
 test("deleting a session removes its owned routine definitions instead of releasing them", (t) => {
   const home = mkdtempSync(join(tmpdir(), "pi-ui-routine-owner-delete-"));

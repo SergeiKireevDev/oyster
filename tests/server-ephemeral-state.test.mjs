@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createAppSettings } from "../persistence/appSettings.mjs";
-import { createStableEphemeralState, STABLE_STATE_INVENTORY } from "../persistence/stateInventory.mjs";
-import { RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../runners.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createAppSettings } from "../server/persistence/appSettings.mjs";
+import { createStableEphemeralState, STABLE_STATE_INVENTORY } from "../server/persistence/stateInventory.mjs";
+import { RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../server/runners.mjs";
 
 const REQUIRED_EPHEMERAL = [
   "reloadCount", "sseClients", "authFails", "hublotProcessHandles",

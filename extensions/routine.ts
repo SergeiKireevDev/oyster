@@ -4,7 +4,7 @@
  *
  * A routine is a durable runnable script definition managed by pi-lot-ui,
  * bound to the session using it and driven by the pi-remote-ui server
- * (server.mjs) through a tiny protocol:
+ * (`server/server.mjs`) through a tiny protocol:
  *
  *   <script> run       – the main job (started via action=start)
  *   <script> teardown  – removes every byproduct the run created
@@ -21,7 +21,7 @@
  *
  * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
  * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
- * root (next to server.mjs).
+ * project root.
  */
 
 import { readFileSync } from "node:fs";

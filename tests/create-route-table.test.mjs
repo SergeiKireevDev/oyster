@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRouteTable } from "../http/createRouteTable.mjs";
+import { createRouteTable } from "../server/http/createRouteTable.mjs";
 
 test("createRouteTable merges named groups in group and route order", () => {
   const health = () => "healthy";

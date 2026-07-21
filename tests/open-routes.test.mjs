@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
-import { createRequestContext } from "../http/createRequestContext.mjs";
-import { createOpenRoutes } from "../http/routes/openRoutes.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
+import { createOpenRoutes } from "../server/http/routes/openRoutes.mjs";
 
 function response() {
   return {

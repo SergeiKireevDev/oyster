@@ -52,4 +52,4 @@ fi
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
-exec node server.mjs
+exec node server/server.mjs

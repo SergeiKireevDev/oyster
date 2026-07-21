@@ -4,9 +4,9 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createSessionOperations } from "../session-operations.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
-import { createSqliteSessionCatalog } from "../sessions/sqliteCatalog.mjs";
+import { createSessionOperations } from "../server/session-operations.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
+import { createSqliteSessionCatalog } from "../server/sessions/sqliteCatalog.mjs";
 
 const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 const SKIP_SQLITE_CONTRACT = process.env.PI_SQLITE_CONTRACT_TEST === "skip";

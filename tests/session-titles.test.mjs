@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { cleanSessionTitle, firstSessionMessages, sessionTitlePrompt, summarizeSessionTitle } from "../session-titles.mjs";
+import { cleanSessionTitle, firstSessionMessages, sessionTitlePrompt, summarizeSessionTitle } from "../server/session-titles.mjs";
 
 function fakeProcess() {
   const proc = new EventEmitter();

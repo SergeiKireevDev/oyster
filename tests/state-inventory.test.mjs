@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { assertStableStateInventory, STABLE_STATE_INVENTORY } from "../persistence/stateInventory.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { assertStableStateInventory, STABLE_STATE_INVENTORY } from "../server/persistence/stateInventory.mjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-const root = dirname(fileURLToPath(new URL("../server.mjs", import.meta.url)));
+const root = dirname(fileURLToPath(new URL("../server/server.mjs", import.meta.url)));
 
 function productionModules() {
   const files = [];

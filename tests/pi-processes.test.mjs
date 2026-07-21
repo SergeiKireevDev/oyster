@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { createPiProcessLauncher } from "../pi-processes.mjs";
+import { createPiProcessLauncher } from "../server/pi-processes.mjs";
 
 const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
@@ -38,13 +38,13 @@ test("ephemeral pi processes always receive --no-session exactly once", () => {
 });
 
 test("runner, checkpoint, and hublot code use the centralized pi launcher", () => {
-  for (const path of ["../runners.mjs", "../checkpoints.mjs", "../tunnels.mjs"]) {
+  for (const path of ["../server/runners.mjs", "../server/checkpoints.mjs", "../server/tunnels.mjs"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /spawn\([^\n]*(?:PI_BIN|piBin)/);
   }
-  assert.match(readFileSync(new URL("../runners.mjs", import.meta.url), "utf8"), /piProcesses\.launch/);
-  assert.match(readFileSync(new URL("../checkpoints.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
-  assert.match(readFileSync(new URL("../tunnels.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
+  assert.match(readFileSync(new URL("../server/runners.mjs", import.meta.url), "utf8"), /piProcesses\.launch/);
+  assert.match(readFileSync(new URL("../server/checkpoints.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
+  assert.match(readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
 });
 
 test("local pi --no-session RPC startup creates no SQLite rows or database", {

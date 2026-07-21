@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CREDENTIAL_BODY_LIMIT, CREDENTIAL_KEY_LIMIT, createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
-import { createRequestContext } from "../http/createRequestContext.mjs";
+import { CREDENTIAL_BODY_LIMIT, CREDENTIAL_KEY_LIMIT, createCredentialRoutes } from "../server/http/routes/credentialRoutes.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
 
 function response() {
   return { status: null, body: null };

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTunnelRoutes } from "../http/routes/tunnelRoutes.mjs";
+import { createTunnelRoutes } from "../server/http/routes/tunnelRoutes.mjs";
 
 const response = () => ({});
 

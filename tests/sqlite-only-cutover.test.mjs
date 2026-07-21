@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-const checkpointSource = readFileSync(new URL("../checkpoints.mjs", import.meta.url), "utf8");
-const routineSource = readFileSync(new URL("../routines.mjs", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+const checkpointSource = readFileSync(new URL("../server/checkpoints.mjs", import.meta.url), "utf8");
+const routineSource = readFileSync(new URL("../server/routines.mjs", import.meta.url), "utf8");
 
 test("runtime startup does not automatically read legacy application stores", () => {
   assert.doesNotMatch(appSource, /checkpointImporter|routineImporter|importLegacy/);

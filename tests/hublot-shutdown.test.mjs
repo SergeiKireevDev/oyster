@@ -4,10 +4,10 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   persistHublotProcessIdentity, recordHublotTransition, reserveHublot, shutdownHublots,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-shutdown-"));

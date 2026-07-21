@@ -5,8 +5,8 @@ import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { allocateHublot, isLocalPortAvailable, reserveHublot } from "../tunnels.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { allocateHublot, isLocalPortAvailable, reserveHublot } from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-port-"));
@@ -51,7 +51,7 @@ test("live port checks bind the candidate instead of trusting process-local stat
 });
 
 test("process-local next-port state is absent from the server and route", () => {
-  const source = ["../server.mjs", "../http/routes/tunnelRoutes.mjs"]
+  const source = ["../server/server.mjs", "../server/http/routes/tunnelRoutes.mjs"]
     .map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(source, /nextHublotPort/);
   assert.match(source, /allocateHublot/);

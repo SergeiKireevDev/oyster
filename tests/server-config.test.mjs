@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SERVER = new URL("../server.mjs", import.meta.url);
+const SERVER = new URL("../server/server.mjs", import.meta.url);
 const LOCAL_PI = "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
 function checkConfig({ args = [], env = {} } = {}) {

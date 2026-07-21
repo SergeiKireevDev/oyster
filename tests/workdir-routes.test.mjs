@@ -4,8 +4,8 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { createRequestContext } from "../http/createRequestContext.mjs";
-import { createWorkdirRoutes } from "../http/routes/workdirRoutes.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
+import { createWorkdirRoutes } from "../server/http/routes/workdirRoutes.mjs";
 
 function req(path) { const r = Readable.from([Buffer.from(JSON.stringify({ path }))]); r.headers = {}; return r; }
 function res() { return { writeHead(status) { this.status = status; }, end(body) { this.body = JSON.parse(body); } }; }

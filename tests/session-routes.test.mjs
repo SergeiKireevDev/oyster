@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionRoutes } from "../http/routes/sessionRoutes.mjs";
+import { createSessionRoutes } from "../server/http/routes/sessionRoutes.mjs";
 
 function setup() {
   const stopped = [];

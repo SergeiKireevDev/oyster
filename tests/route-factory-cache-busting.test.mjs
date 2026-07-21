@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const source = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
+const source = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
 
 test("app cache-busts every extracted route-factory import", () => {
   for (const name of ["openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes", "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes"]) {

@@ -20,12 +20,12 @@ git clone <repo-url> oyster
 cd oyster
 npm ci
 npm run build
-PI_BIN=/absolute/path/to/pi node server.mjs
+PI_BIN=/absolute/path/to/pi node server/server.mjs
 ```
 
 The development default for `PI_BIN` is `/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js`. Set `PI_BIN` explicitly on other machines.
 
-On first start the server prints an authentication token. Unless `PI_UI_TOKEN` or `--token` is set, the token is persisted in `.ui-token` next to `server.mjs`.
+On first start the server prints an authentication token. Unless `PI_UI_TOKEN` or `--token` is set, the token is persisted in the project-root `.ui-token` file.
 
 Open:
 
@@ -51,7 +51,7 @@ Run the frontend compiler in watch mode in one terminal and the stable server in
 
 ```bash
 npm run build -- --watch
-node server.mjs
+node server/server.mjs
 ```
 
 The server watches `dist/` and tells connected browsers to reload after Vite emits a complete build. Use `npm test` after every change. See [Contributing](/development/contributing/) for the repository's hot-reload constraints.

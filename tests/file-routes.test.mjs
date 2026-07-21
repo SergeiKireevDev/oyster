@@ -5,8 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { createRequestContext } from "../http/createRequestContext.mjs";
-import { createFileRoutes } from "../http/routes/fileRoutes.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
+import { createFileRoutes } from "../server/http/routes/fileRoutes.mjs";
 
 function res() { return { writeHead(status) { this.status = status; }, end(body) { this.body = JSON.parse(body); } }; }
 function req(body) {

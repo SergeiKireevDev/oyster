@@ -5,9 +5,9 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { importLegacyAppData } from "../persistence/legacyDataImport.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { importLegacyAppData } from "../server/persistence/legacyDataImport.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 test("migration command requires stopped-service confirmation and records dry runs", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-migrate-command-"));

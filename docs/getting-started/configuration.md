@@ -22,7 +22,7 @@ Flags take precedence over their corresponding environment variables.
 Check startup configuration without serving HTTP:
 
 ```bash
-PI_BIN=/absolute/path/to/pi node server.mjs --check-config
+PI_BIN=/absolute/path/to/pi node server/server.mjs --check-config
 ```
 
 ## Keep the databases separate

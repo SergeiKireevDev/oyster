@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAppSettings, APP_SETTING_KEYS } from "../persistence/appSettings.mjs";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { createAppSettings, APP_SETTING_KEYS } from "../server/persistence/appSettings.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 
 test("typed app settings persist mutable workdir and default runner with documented precedence", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-settings-"));

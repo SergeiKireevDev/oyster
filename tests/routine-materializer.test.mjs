@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeRoutineScript } from "../persistence/routineMaterializer.mjs";
+import { materializeRoutineScript } from "../server/persistence/routineMaterializer.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-materializer-"));

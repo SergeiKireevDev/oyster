@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { APP_SETTING_KEYS, BROWSER_PREFERENCE_SYNC_POLICY } from "../persistence/appSettings.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { APP_SETTING_KEYS, BROWSER_PREFERENCE_SYNC_POLICY } from "../server/persistence/appSettings.mjs";
 
 test("general app settings reject authentication and credential keys", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-auth-setting-"));
@@ -36,11 +36,11 @@ test("general app settings reject authentication and credential keys", (t) => {
 
 test("credential services and routes cannot cross into general settings or browser preferences", () => {
   const serverCredentialSources = [
-    "../pi-credential-service.mjs",
-    "../pi-oauth-flow-service.mjs",
-    "../http/routes/credentialRoutes.mjs",
-    "../http/routes/oauthRoutes.mjs",
-    "../runner-restart-service.mjs",
+    "../server/pi-credential-service.mjs",
+    "../server/pi-oauth-flow-service.mjs",
+    "../server/http/routes/credentialRoutes.mjs",
+    "../server/http/routes/oauthRoutes.mjs",
+    "../server/runner-restart-service.mjs",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(serverCredentialSources, /repositories\.settings|appSettings|app_settings/);
 
@@ -52,9 +52,9 @@ test("credential services and routes cannot cross into general settings or brows
   assert.doesNotMatch(browserCredentialSources, /localStorage|sessionStorage|settingsPreference|SettingsModal|pushState|replaceState/);
   assert.equal(BROWSER_PREFERENCE_SYNC_POLICY.keys.some((key) => /auth|oauth|token|secret|credential|api.?key|code|redirect|flow|prompt/i.test(key)), false);
 
-  const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-  const inventory = readFileSync(new URL("../persistence/stateInventory.mjs", import.meta.url), "utf8");
-  const flowService = readFileSync(new URL("../pi-oauth-flow-service.mjs", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+  const inventory = readFileSync(new URL("../server/persistence/stateInventory.mjs", import.meta.url), "utf8");
+  const flowService = readFileSync(new URL("../server/pi-oauth-flow-service.mjs", import.meta.url), "utf8");
   assert.match(app, /state\.oauthFlows \?\?= new Map\(\)/);
   assert.match(inventory, /oauthFlows: entry\("ephemeral"/);
   assert.match(flowService, /createPiOAuthFlowService\(\{[\s\S]*?registry/);
@@ -67,7 +67,7 @@ test("authentication storage remains outside preference and SQLite setting surfa
   const authClient = readFileSync(new URL("../public/src/runtime/authClient.js", import.meta.url), "utf8");
   const authBrowser = readFileSync(new URL("../public/src/runtime/authBrowserService.js", import.meta.url), "utf8");
   assert.match(`${authClient}\n${authBrowser}`, /pi_ui_token/);
-  const server = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
   assert.match(server, /argValue\("--token"\) \?\? process\.env\.PI_UI_TOKEN \?\? defaultToken\(\)/);
   assert.doesNotMatch(server, /repositories\.settings\.set\([^\n]*(?:TOKEN|token)/);
 });

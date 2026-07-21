@@ -5,8 +5,8 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
-import { createRequestContext } from "../http/createRequestContext.mjs";
-import { createStaticRoutes } from "../http/routes/staticRoutes.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
+import { createStaticRoutes } from "../server/http/routes/staticRoutes.mjs";
 
 class Response extends Writable {
   constructor() { super(); this.chunks = []; }

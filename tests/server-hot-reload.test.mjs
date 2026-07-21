@@ -8,13 +8,13 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 
 async function copyStableServer(root) {
-  await mkdir(join(root, "persistence"), { recursive: true });
+  await mkdir(join(root, "server", "persistence"), { recursive: true });
   await Promise.all([
-    copyFile(new URL("../server.mjs", import.meta.url), join(root, "server.mjs")),
-    copyFile(new URL("../persistence/appStore.mjs", import.meta.url), join(root, "persistence", "appStore.mjs")),
-    copyFile(new URL("../persistence/appSettings.mjs", import.meta.url), join(root, "persistence", "appSettings.mjs")),
-    copyFile(new URL("../persistence/stateInventory.mjs", import.meta.url), join(root, "persistence", "stateInventory.mjs")),
-    copyFile(new URL("../persistence/migrations.mjs", import.meta.url), join(root, "persistence", "migrations.mjs")),
+    copyFile(new URL("../server/server.mjs", import.meta.url), join(root, "server", "server.mjs")),
+    copyFile(new URL("../server/persistence/appStore.mjs", import.meta.url), join(root, "server", "persistence", "appStore.mjs")),
+    copyFile(new URL("../server/persistence/appSettings.mjs", import.meta.url), join(root, "server", "persistence", "appSettings.mjs")),
+    copyFile(new URL("../server/persistence/stateInventory.mjs", import.meta.url), join(root, "server", "persistence", "stateInventory.mjs")),
+    copyFile(new URL("../server/persistence/migrations.mjs", import.meta.url), join(root, "server", "persistence", "migrations.mjs")),
   ]);
 }
 
@@ -113,9 +113,9 @@ test("the stable server atomically replaces its active application handler", asy
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-"));
   const port = await availablePort();
   await copyStableServer(root);
-  await writeFile(join(root, "app.mjs"), fixture("before"));
+  await writeFile(join(root, "server", "app.mjs"), fixture("before"));
 
-  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
     env: serverEnv(root),
@@ -131,9 +131,9 @@ test("the stable server atomically replaces its active application handler", asy
   await waitForOutput(child, "listening on");
   assert.deepEqual(await readJson(port), { version: "before", reloadCount: 1, appStoreStable: true });
 
-  const replacement = join(root, "app.replacement.mjs");
+  const replacement = join(root, "server", "app.replacement.mjs");
   await writeFile(replacement, fixture("after"));
-  await rename(replacement, join(root, "app.mjs"));
+  await rename(replacement, join(root, "server", "app.mjs"));
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
@@ -144,7 +144,7 @@ test("full restart restores app-store data and shutdown awaits callbacks before 
   const port = await availablePort();
   const marker = join(root, "shutdown-marker.txt");
   await copyStableServer(root);
-  await writeFile(join(root, "app.mjs"), `
+  await writeFile(join(root, "server", "app.mjs"), `
 import { writeFile } from "node:fs/promises";
 export function init(state) {
   return {
@@ -169,7 +169,7 @@ export function init(state) {
   });
 
   const start = async () => {
-    const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
       cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
     });
     await waitForOutput(child, "listening on");
@@ -195,7 +195,7 @@ test("hublot identity, ownership, desired state, and history survive server repl
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hublot-server-restart-"));
   const port = await availablePort();
   await copyStableServer(root);
-  await writeFile(join(root, "app.mjs"), `
+  await writeFile(join(root, "server", "app.mjs"), `
 export function init(state) {
   const sessions = state.appStore.repositories.sessions;
   const hublots = state.appStore.repositories.hublots;
@@ -222,7 +222,7 @@ export function init(state) {
     await rm(root, { recursive: true, force: true });
   });
   const start = async () => {
-    const serverProcess = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    const serverProcess = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
       cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
     });
     await waitForOutput(serverProcess, "listening on");
@@ -250,9 +250,9 @@ test("an open SSE response survives an application reload and receives the state
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-sse-"));
   const port = await availablePort();
   await copyStableServer(root);
-  await writeFile(join(root, "app.mjs"), fixture("before"));
+  await writeFile(join(root, "server", "app.mjs"), fixture("before"));
 
-  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
     env: serverEnv(root),
@@ -272,9 +272,9 @@ test("an open SSE response survives an application reload and receives the state
   assert.equal(events.status, 200);
   const eventPromise = nextServerEvent(events.body.getReader());
 
-  const replacement = join(root, "app.replacement.mjs");
+  const replacement = join(root, "server", "app.replacement.mjs");
   await writeFile(replacement, fixture("after"));
-  await rename(replacement, join(root, "app.mjs"));
+  await rename(replacement, join(root, "server", "app.mjs"));
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
@@ -284,10 +284,10 @@ test("an open SSE response survives an application reload and receives the state
 test("editing a route factory reloads its response without disconnecting SSE", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-route-reload-"));
   const port = await availablePort();
-  await mkdir(join(root, "http", "routes"), { recursive: true });
+  await mkdir(join(root, "server", "http", "routes"), { recursive: true });
   await copyStableServer(root);
-  await writeFile(join(root, "http", "routes", "value.mjs"), 'export const value = "before";\n');
-  await writeFile(join(root, "app.mjs"), `
+  await writeFile(join(root, "server", "http", "routes", "value.mjs"), 'export const value = "before";\n');
+  await writeFile(join(root, "server", "app.mjs"), `
 import { statSync } from "node:fs";
 export async function init(state) {
   const path = new URL("./http/routes/value.mjs", import.meta.url);
@@ -306,7 +306,7 @@ export async function init(state) {
     startPi() {}, stopPi() {}, stopTunnels() {}, stopRoutines() {},
   };
 }`);
-  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root) });
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test"], { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root) });
   const abort = new AbortController();
   t.after(async () => { abort.abort(); if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); } await rm(root, { recursive: true, force: true }); });
   await waitForOutput(child, "listening on");
@@ -314,9 +314,9 @@ export async function init(state) {
   const reader = events.body.getReader(); await reader.read();
   const eventPromise = nextServerEvent(reader);
   await new Promise((resolve) => setTimeout(resolve, 20));
-  const replacement = join(root, "http", "routes", "replacement.mjs");
+  const replacement = join(root, "server", "http", "routes", "replacement.mjs");
   await writeFile(replacement, 'export const value = "after";\n');
-  await rename(replacement, join(root, "http", "routes", "value.mjs"));
+  await rename(replacement, join(root, "server", "http", "routes", "value.mjs"));
   await waitForOutput(child, "hot-reloaded app.mjs after http/routes/value.mjs");
   const response = await fetch(`http://127.0.0.1:${port}/`);
   assert.deepEqual(await response.json(), { value: "after" });
@@ -327,9 +327,9 @@ test("an invalid application replacement keeps the active handler and emits a fa
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-failure-"));
   const port = await availablePort();
   await copyStableServer(root);
-  await writeFile(join(root, "app.mjs"), fixture("working"));
+  await writeFile(join(root, "server", "app.mjs"), fixture("working"));
 
-  const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
     env: serverEnv(root),
@@ -349,9 +349,9 @@ test("an invalid application replacement keeps the active handler and emits a fa
   assert.equal(events.status, 200);
   const eventPromise = nextServerEvent(events.body.getReader());
 
-  const replacement = join(root, "app.invalid.mjs");
+  const replacement = join(root, "server", "app.invalid.mjs");
   await writeFile(replacement, "export function init( {");
-  await rename(replacement, join(root, "app.mjs"));
+  await rename(replacement, join(root, "server", "app.mjs"));
   await waitForOutput(child, "reload FAILED");
 
   assert.deepEqual(await readJson(port), { version: "working", reloadCount: 1, appStoreStable: true });

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const source = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-const stableSource = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
-const appStoreSource = readFileSync(new URL("../persistence/appStore.mjs", import.meta.url), "utf8");
+const source = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+const stableSource = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
+const appStoreSource = readFileSync(new URL("../server/persistence/appStore.mjs", import.meta.url), "utf8");
 
 test("app is a small disposable composition root", () => {
   assert.ok(source.split("\n").length < 200);

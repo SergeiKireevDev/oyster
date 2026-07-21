@@ -24,7 +24,7 @@ An HTTP hop is acceptable only when it is confined to loopback or an equivalentl
 Do not publish port `8080` directly. Bind to `127.0.0.1` when a same-host tunnel or reverse proxy is the only intended entry point:
 
 ```bash
-HOST=127.0.0.1 node server.mjs
+HOST=127.0.0.1 node server/server.mjs
 ```
 
 ## Protect the UI token

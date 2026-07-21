@@ -4,12 +4,12 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createHublotSupervisor } from "../persistence/hublotSupervisor.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createHublotSupervisor } from "../server/persistence/hublotSupervisor.mjs";
 import {
   persistHublotProcessIdentity, recordHublotTransition, recoverAnsweringHublotService,
   reserveHublot, restartHublotService,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-restart-"));

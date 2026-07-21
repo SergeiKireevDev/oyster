@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const extension = readFileSync(new URL("../extensions/routine.ts", import.meta.url), "utf8");
-const runtime = readFileSync(new URL("../routines.mjs", import.meta.url), "utf8");
+const runtime = readFileSync(new URL("../server/routines.mjs", import.meta.url), "utf8");
 
 test("routine authoring contract requires granular and live progression", () => {
   assert.match(extension, /before and after every meaningful step/);

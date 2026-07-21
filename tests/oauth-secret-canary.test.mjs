@@ -4,9 +4,9 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createOAuthRoutes } from "../http/routes/oauthRoutes.mjs";
-import { createPiOAuthFlowService } from "../pi-oauth-flow-service.mjs";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { createOAuthRoutes } from "../server/http/routes/oauthRoutes.mjs";
+import { createPiOAuthFlowService } from "../server/pi-oauth-flow-service.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 
 function filesBelow(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {

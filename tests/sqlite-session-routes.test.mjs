@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionRoutes } from "../http/routes/sessionRoutes.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { createSessionRoutes } from "../server/http/routes/sessionRoutes.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 function response() { return {}; }
 

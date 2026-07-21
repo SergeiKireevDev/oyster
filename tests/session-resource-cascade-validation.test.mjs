@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createSessionDeletionWorkflow } from "../persistence/sessionDeletion.mjs";
-import { reconcileSessionDeletions } from "../persistence/sessionDeletionReconciler.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createSessionDeletionWorkflow } from "../server/persistence/sessionDeletion.mjs";
+import { reconcileSessionDeletions } from "../server/persistence/sessionDeletionReconciler.mjs";
 
 test("deleting one session removes all and only its checkpoints, routines, runs, logs, hublots, lifecycle, and runners", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-complete-session-cascade-"));

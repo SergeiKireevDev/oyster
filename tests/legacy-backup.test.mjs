@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LEGACY_BACKUP_RETENTION_POLICY, retainLegacyFileAsReadOnlyBackup } from "../persistence/legacyBackup.mjs";
+import { LEGACY_BACKUP_RETENTION_POLICY, retainLegacyFileAsReadOnlyBackup } from "../server/persistence/legacyBackup.mjs";
 
 test("legacy backup policy retains read-only files through at least one release", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-legacy-backup-"));

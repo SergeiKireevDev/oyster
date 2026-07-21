@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { importLegacyCheckpoints } from "../persistence/checkpointImporter.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { importLegacyCheckpoints } from "../server/persistence/checkpointImporter.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 function setup(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-checkpoint-import-"));

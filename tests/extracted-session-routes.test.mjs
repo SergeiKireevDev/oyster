@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-const routeSource = readFileSync(new URL("../http/routes/sessionRoutes.mjs", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+const routeSource = readFileSync(new URL("../server/http/routes/sessionRoutes.mjs", import.meta.url), "utf8");
 
 test("app composes session routes with explicit domain dependencies", () => {
   assert.match(appSource, /createSessionRoutes\(\{[\s\S]*?sessions: \{[\s\S]*?catalog: state\.sessionCatalog,[\s\S]*?sessionTargetFromSearch,[\s\S]*?runners: \{ stopRunner, runnersChanged \},[\s\S]*?resources: \{ closeTunnel, closeSessionHublots, listTunnels, stopSessionRoutines, deleteSessionRoutines \},[\s\S]*?deleteOwnedSession,[\s\S]*?\}\)/);

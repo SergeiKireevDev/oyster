@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { createRunnerManager } from "../runners.mjs";
-import { createPiProcessLauncher } from "../pi-processes.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { createRunnerManager } from "../server/runners.mjs";
+import { createPiProcessLauncher } from "../server/pi-processes.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 function fakeProcess() {
   const proc = new EventEmitter();

@@ -3,7 +3,7 @@
  * as the "hublot" tool the LLM can call directly from the harness.
  *
  * A "hublot" (French for porthole) is a public web interface: a cloudflared
- * tunnel to a local port, managed by the pi-remote-ui server (server.mjs).
+ * tunnel to a local port, managed by the pi-remote-ui server (`server/server.mjs`).
  * Opening one through this tool:
  *   - lets the server allocate the next free port (3000+)
  *   - has a background pi agent bring up the local service first
@@ -14,7 +14,7 @@
  *
  * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
  * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
- * root (next to server.mjs).
+ * project root.
  */
 
 import { readFileSync } from "node:fs";

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "Web UI for interacting with the pi coding agent remotely through a tunnel",
   "type": "module",
-  "main": "server.mjs",
+  "main": "server/server.mjs",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node server/server.mjs",
     "dev": "vite --config vite.config.js",
     "build": "vite build --config vite.config.js",
     "docs:build": "node scripts/build-docs.mjs",

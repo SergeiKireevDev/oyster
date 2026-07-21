@@ -4,8 +4,8 @@ import { EventEmitter } from "node:events";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { invokeHublotStartupScript, reserveHublot, validateAndStoreHublotStartupScript } from "../tunnels.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { invokeHublotStartupScript, reserveHublot, validateAndStoreHublotStartupScript } from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-runtime-"));

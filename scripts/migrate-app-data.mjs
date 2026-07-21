@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { importLegacyAppData } from "../persistence/legacyDataImport.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { importLegacyAppData } from "../server/persistence/legacyDataImport.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 const args = new Set(process.argv.slice(2));
 if (args.has("--help")) {

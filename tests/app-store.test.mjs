@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 
 test("app store creates its database directory and closes idempotently", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-app-store-"));

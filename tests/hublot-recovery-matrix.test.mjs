@@ -23,8 +23,8 @@ test("hublot recovery validation matrix covers restart, crash, identity, orphan,
 });
 
 test("production hublot cleanup gates signaling and publication on full persisted identity", () => {
-  const tunnels = source("../tunnels.mjs");
-  const supervisor = source("../persistence/hublotSupervisor.mjs");
+  const tunnels = source("../server/tunnels.mjs");
+  const supervisor = source("../server/persistence/hublotSupervisor.mjs");
   assert.match(tunnels, /if \(!verifyIdentity\(processRow\)\) continue;\s+targets\.push\(processRow\)/);
   assert.match(tunnels, /const live = \(\) => targets\.filter\(\(processRow\) => verifyIdentity\(processRow\)\)/);
   assert.match(tunnels, /currentHublotTunnelProcessIsHealthy/);

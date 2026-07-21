@@ -6,7 +6,7 @@ import { runSessionCatalogContract } from "./helpers/session-catalog-contract.mj
 
 const home = mkdtempSync(join(tmpdir(), "pi-jsonl-catalog-"));
 process.env.HOME = home;
-const { createJsonlSessionCatalog } = await import("../sessions/jsonlCatalog.mjs");
+const { createJsonlSessionCatalog } = await import("../server/sessions/jsonlCatalog.mjs");
 const catalog = createJsonlSessionCatalog();
 const cwd = "/workspace/catalog";
 const directory = catalog.locationForCwd(cwd);

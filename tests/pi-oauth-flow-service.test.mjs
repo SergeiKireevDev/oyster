@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPiOAuthFlowService } from "../pi-oauth-flow-service.mjs";
+import { createPiOAuthFlowService } from "../server/pi-oauth-flow-service.mjs";
 
 function deterministicBytes() {
   let value = 0;

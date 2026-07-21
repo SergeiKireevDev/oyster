@@ -20,7 +20,7 @@ const {
   textOf, labelOf, summarizeSessionFile, listSessions, listSessionFolders,
   readSessionHeaderInfo, findSessionById, searchSessions, searchSessionFile,
   sessionTree, sessionEntries, sessionMessages, forkSessionAt,
-} = await import("../sessions.mjs");
+} = await import("../server/sessions.mjs");
 
 after(() => rmSync(FAKE_HOME, { recursive: true, force: true }));
 

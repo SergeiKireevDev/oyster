@@ -4,10 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createPiCredentialService } from "../pi-credential-service.mjs";
-import { createRestartActiveRunners } from "../runner-restart-service.mjs";
-import { createCredentialRoutes } from "../http/routes/credentialRoutes.mjs";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { createPiCredentialService } from "../server/pi-credential-service.mjs";
+import { createRestartActiveRunners } from "../server/runner-restart-service.mjs";
+import { createCredentialRoutes } from "../server/http/routes/credentialRoutes.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 
 const LOCAL_PI = process.env.PI_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 

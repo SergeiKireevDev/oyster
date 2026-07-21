@@ -4,11 +4,11 @@ import { createHash } from "node:crypto";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
   reserveHublot, validateAndStoreHublotStartupScript,
-} from "../tunnels.mjs";
+} from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-script-"));

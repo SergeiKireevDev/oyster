@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { importLegacyRoutines } from "../persistence/routineImporter.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { importLegacyRoutines } from "../server/persistence/routineImporter.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-import-"));

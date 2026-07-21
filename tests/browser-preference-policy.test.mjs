@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { BROWSER_PREFERENCE_SYNC_POLICY, APP_SETTING_KEYS, createAppSettings } from "../persistence/appSettings.mjs";
+import { BROWSER_PREFERENCE_SYNC_POLICY, APP_SETTING_KEYS, createAppSettings } from "../server/persistence/appSettings.mjs";
 
 const browserSources = [
   "../public/src/runtime/settingsPreferenceService.js",
@@ -33,9 +33,9 @@ test("typed app settings expose no browser-preference synchronization surface", 
     },
   });
   assert.deepEqual(Object.keys(settings), ["hydrate", "setCurrentWorkdir", "setDefaultRunnerId"]);
-  const routeSources = readdirSync(new URL("../http/routes", import.meta.url))
+  const routeSources = readdirSync(new URL("../server/http/routes", import.meta.url))
     .filter((name) => name.endsWith(".mjs"))
-    .map((name) => readFileSync(new URL(`../http/routes/${name}`, import.meta.url), "utf8"))
+    .map((name) => readFileSync(new URL(`../server/http/routes/${name}`, import.meta.url), "utf8"))
     .join("\n");
   assert.doesNotMatch(routeSources, /["'](?:GET|POST|PATCH) \/(?:preferences|settings)["']/);
 });

@@ -14,7 +14,7 @@ The application database is `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-u
 - `~/.pi/agent/checkpoints.json`
 - `~/.pi/routines/` executable definitions and `bindings.json`
 
-Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. Stop Oyster and keep it stopped for every backup, restore, downgrade, or apply operation below. Confirm that no `server.mjs` process or service unit is running; `--service-stopped` is an operator confirmation, not a command that stops the service.
+Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. Stop Oyster and keep it stopped for every backup, restore, downgrade, or apply operation below. Confirm that no `server/server.mjs` process or service unit is running; `--service-stopped` is an operator confirmation, not a command that stops the service.
 
 ## Back up before cutover
 

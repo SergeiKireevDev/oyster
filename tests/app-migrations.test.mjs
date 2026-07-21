@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { applyMigrations } from "../persistence/migrations.mjs";
+import { applyMigrations } from "../server/persistence/migrations.mjs";
 
 function databaseFixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-migrations-"));

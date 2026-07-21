@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRestartActiveRunners } from "../runner-restart-service.mjs";
+import { createRestartActiveRunners } from "../server/runner-restart-service.mjs";
 
 test("active-runner restart captures live runners once and leaves inactive runners stopped", async () => {
   const activeA = { id: "a", proc: {}, resumeQueue: [{ id: "queued-a" }] };

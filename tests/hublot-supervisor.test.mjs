@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createHublotSupervisor } from "../persistence/hublotSupervisor.mjs";
-import { processIdentityMatches } from "../persistence/processIdentity.mjs";
-import { recordHublotTransition, reserveHublot } from "../tunnels.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createHublotSupervisor } from "../server/persistence/hublotSupervisor.mjs";
+import { processIdentityMatches } from "../server/persistence/processIdentity.mjs";
+import { recordHublotTransition, reserveHublot } from "../server/tunnels.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-supervisor-"));
@@ -175,8 +175,8 @@ test("periodic supervisor starts and stops one unrefed timer", async (t) => {
 });
 
 test("application startup awaits one full reconciliation before periodic supervision", () => {
-  const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-  const server = readFileSync(new URL("../server.mjs", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
   assert.ok(app.indexOf("await state.hublotSupervisor.reconcile({ includeOpening: true })") < app.indexOf("state.hublotSupervisor.start()"));
   assert.match(app, /if \(!state\.hublotStartupReconciled\)/);
   assert.ok(server.indexOf("await loadApp()") < server.indexOf("server.listen("));

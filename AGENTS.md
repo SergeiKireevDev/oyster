@@ -23,7 +23,7 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 
 Restart pi afterwards. The `hublot` and `routine` tools discover the UI server
 from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
-`PI_UI_TOKEN` or the `.ui-token` file next to `server.mjs`.
+`PI_UI_TOKEN` or the project-root `.ui-token` file.
 
 ## Installation
 
@@ -39,7 +39,7 @@ This is a zero-dependency Node.js project — there is no install script, no bui
 
 ```bash
 git clone <repo-url> pi-lot-ui && cd pi-lot-ui
-node server.mjs
+node server/server.mjs
 ```
 
 The server starts on `0.0.0.0:8080` and prints a random auth token to the console. On first run it also writes that token to `.ui-token` (git-ignored) so subsequent restarts keep the same token.
@@ -75,7 +75,7 @@ Logs: `journalctl --user -u pi-ui -f`.
 For a backgrounded foreground process instead:
 
 ```bash
-nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
+nohup node server/server.mjs > /tmp/pi-ui.log 2>&1 &
 ```
 
 ## Run the tests after every feature or fix
@@ -88,7 +88,7 @@ npm test
 
 and make sure **all** tests pass before you consider the work done.
 
-Why this is non-negotiable in this repo: the server hot-reloads `app.mjs` and
+Why this is non-negotiable in this repo: the server hot-reloads `server/app.mjs` and
 `public/index.html` **the moment you save them** — every edit deploys
 instantly to live browser sessions. There is no build step or review gate to
 catch mistakes. A single stale reference in the UI's inline script (e.g. a
@@ -105,7 +105,7 @@ hot-reload footguns:
   behavior.
 
 When you add a feature, prefer adding a test alongside it — especially for
-anything in `app.mjs` request handling, where a regression silently breaks
+anything in `server/app.mjs` request handling, where a regression silently breaks
 remote clients.
 
 ## Editing `public/index.html`
@@ -117,11 +117,11 @@ remote clients.
 - Saving the file broadcasts `ui_reload` to connected browsers, which may
   refresh immediately. Don't save half-finished states; make edits atomic.
 
-## Editing `app.mjs`
+## Editing `server/app.mjs`
 
 - Hot-reloaded via `init(state)`. All state that must survive a reload
   (runners, SSE clients, buffers, tunnels) lives on the host-owned `state`
-  object from `server.mjs` — never in module-level variables.
+  object from `server/server.mjs` — never in module-level variables.
 - If a reload fails to parse, the server keeps the previous version running
   and broadcasts `code_reload_failed`; check the journal
   (`journalctl --user -u pi-ui`) if your change doesn't seem to apply.

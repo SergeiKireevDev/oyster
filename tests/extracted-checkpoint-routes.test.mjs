@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
-const factory = readFileSync(new URL("../http/routes/checkpointRoutes.mjs", import.meta.url), "utf8");
+const app = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
+const factory = readFileSync(new URL("../server/http/routes/checkpointRoutes.mjs", import.meta.url), "utf8");
 
 test("checkpoint factory receives explicit repository, git, session, and runner operations", () => {
   assert.match(app, /recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree/);

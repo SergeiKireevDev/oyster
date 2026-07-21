@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateUsageRecords } from "../sessions/usageAnalytics.mjs";
+import { aggregateUsageRecords } from "../server/sessions/usageAnalytics.mjs";
 
 const record = (entryId, timestamp, model, usage, responseId = entryId) => ({
   sessionId: "session", entryId, timestamp,

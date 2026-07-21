@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 import { mkdtemp, symlink, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequestContext } from "../http/createRequestContext.mjs";
+import { createRequestContext } from "../server/http/createRequestContext.mjs";
 
 function state(overrides = {}) {
   return {

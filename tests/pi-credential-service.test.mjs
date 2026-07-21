@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, syml
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createPiCredentialService, resolveConfiguredPiSdk } from "../pi-credential-service.mjs";
+import { createPiCredentialService, resolveConfiguredPiSdk } from "../server/pi-credential-service.mjs";
 
 const LOCAL_PI = process.env.PI_BIN ?? "/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js";
 
@@ -322,12 +322,12 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
 });
 
 test("OAuth adapter delegates provider discovery, login, persistence, refresh compatibility, and logout to Pi SDK storage", () => {
-  const source = readFileSync(new URL("../pi-credential-service.mjs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../server/pi-credential-service.mjs", import.meta.url), "utf8");
   assert.match(source, /authStorage\.getOAuthProviders\(\)/);
   assert.match(source, /await authStorage\.login\(providerId, safeCallbacks\)/);
   assert.match(source, /authStorage\.logout\(providerId\)/);
   assert.doesNotMatch(source, /fetch\(|token_endpoint|code_verifier|client_secret|grant_type/);
-  const coordinator = readFileSync(new URL("../pi-oauth-flow-service.mjs", import.meta.url), "utf8");
+  const coordinator = readFileSync(new URL("../server/pi-oauth-flow-service.mjs", import.meta.url), "utf8");
   assert.match(coordinator, /credentialService\.loginOAuth\(id, callbacksFor\(flow\)/);
   assert.doesNotMatch(coordinator, /auth\.json|access_token|refresh_token|token_endpoint/);
 });

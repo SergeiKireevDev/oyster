@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createRoutine, deleteSessionRoutines, startRoutine, stopRoutine, stopSessionRoutines } from "../routines.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createRoutine, deleteSessionRoutines, startRoutine, stopRoutine, stopSessionRoutines } from "../server/routines.mjs";
 
 const SCRIPT = "#!/bin/sh\necho live-output\nsleep 30\n";
 

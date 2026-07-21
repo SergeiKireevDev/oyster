@@ -5,11 +5,11 @@ import { PassThrough } from "node:stream";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openAppStore } from "../persistence/appStore.mjs";
-import { createAppSettings } from "../persistence/appSettings.mjs";
-import { createPiProcessLauncher } from "../pi-processes.mjs";
-import { createRunnerManager, RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../runners.mjs";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { openAppStore } from "../server/persistence/appStore.mjs";
+import { createAppSettings } from "../server/persistence/appSettings.mjs";
+import { createPiProcessLauncher } from "../server/pi-processes.mjs";
+import { createRunnerManager, RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../server/runners.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 function fakeProcess() {
   const proc = new EventEmitter();

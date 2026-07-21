@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCheckpointRoutes } from "../http/routes/checkpointRoutes.mjs";
+import { createCheckpointRoutes } from "../server/http/routes/checkpointRoutes.mjs";
 
 const response = () => ({});
 const rollbackJournal = (events = []) => ({

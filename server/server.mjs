@@ -27,7 +27,8 @@ import { openAppStore } from "./persistence/appStore.mjs";
 import { createAppSettings } from "./persistence/appSettings.mjs";
 import { assertStableStateInventory, createStableEphemeralState } from "./persistence/stateInventory.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(SERVER_DIR, "..");
 
 // ---------------------------------------------------------------- config
 
@@ -37,7 +38,7 @@ function argValue(name) {
 }
 
 function defaultToken() {
-  const tokenFile = join(__dirname, ".ui-token");
+  const tokenFile = join(PROJECT_ROOT, ".ui-token");
   if (existsSync(tokenFile)) {
     const t = readFileSync(tokenFile, "utf8").trim();
     if (t) return t;
@@ -125,7 +126,7 @@ const config = {
     : null,
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
-  DIRNAME: __dirname,
+  DIRNAME: PROJECT_ROOT,
 };
 validateConfig(config);
 // Child processes inherit the single validated selection, including when the
@@ -187,7 +188,7 @@ assertStableStateInventory(state);
 
 // ---------------------------------------------------------------- hot reload
 
-const APP_PATH = join(__dirname, "app.mjs");
+const APP_PATH = join(SERVER_DIR, "app.mjs");
 
 /** current request handler; swapped atomically on reload */
 let app = null;
@@ -223,11 +224,11 @@ function watchApp() {
     }, 150);
   };
 
-  watch(__dirname, (_event, filename) => {
-    if (filename === "app.mjs") scheduleReload("app.mjs");
+  watch(SERVER_DIR, (_event, filename) => {
+    if (filename === "app.mjs") scheduleReload("server/app.mjs");
   });
 
-  const httpDir = join(__dirname, "http");
+  const httpDir = join(SERVER_DIR, "http");
   const routeDir = join(httpDir, "routes");
   for (const directory of [httpDir, routeDir]) {
     if (!existsSync(directory)) continue;
@@ -239,7 +240,7 @@ function watchApp() {
   // Notify browsers only after Vite has emitted the UI they are actually
   // served. Watching public/ reloaded clients before dist/ had been rebuilt,
   // leaving them on stale hashed assets.
-  const distDir = join(__dirname, "dist");
+  const distDir = join(PROJECT_ROOT, "dist");
   const assetsDir = join(distDir, "assets");
   if (existsSync(distDir)) {
     let uiTimer = null;
@@ -285,7 +286,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
-  console.log(`[pi-ui] hot reload: watching app.mjs, http/, dist/`);
+  console.log(`[pi-ui] hot reload: watching server/app.mjs, server/http/, dist/`);
   app.startPi();
 });
 

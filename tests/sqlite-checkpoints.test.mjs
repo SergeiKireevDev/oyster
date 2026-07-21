@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSessionReferenceCodec } from "../session-references.mjs";
+import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 const home = mkdtempSync(join(tmpdir(), "pi-sqlite-checkpoints-"));
 process.env.HOME = home;
-const { checkpointTree, recordCheckpoint } = await import("../checkpoints.mjs");
+const { checkpointTree, recordCheckpoint } = await import("../server/checkpoints.mjs");
 let repositoryRecords = {};
 const repository = {
   record(reference, checkpoint) { (repositoryRecords[reference.id] ??= []).push(checkpoint); return checkpoint; },

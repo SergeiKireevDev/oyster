@@ -9,23 +9,23 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), the
 Oyster is available under the [MIT License](LICENSE).
 
 ```
-browser ──HTTP/SSE──> server.mjs ──stdin/stdout RPC──> pi --mode rpc (one per open session)
+browser ──HTTP/SSE──> server/server.mjs ──stdin/stdout RPC──> pi --mode rpc (one per open session)
                               │
                               └── session catalog ──> SQLite or JSONL
 ```
 
 ### Runtime and session architecture
 
-The stable core (`server.mjs`) validates the configured pi executable and
+The stable core (`server/server.mjs`) validates the configured pi executable and
 persistence store once, then owns everything that must survive a hot reload:
 the socket, SSE clients, catalog lifecycle, centralized pi process launcher,
-and child processes. `app.mjs` is the replaceable router and composes the HTTP
+and child processes. `server/app.mjs` is the replaceable router and composes the HTTP
 routes with the runner, session, tunnel, routine, credential, and file modules.
 
-`sessions.mjs` selects a backend-neutral catalog. SQLite discovery and
+`server/sessions.mjs` selects a backend-neutral catalog. SQLite discovery and
 transcript reads use request-scoped, read-only `node:sqlite` handles in
-`sessions/sqliteCatalog.mjs`; JSONL parsing and its mtime/LRU cache live only in
-`sessions/jsonlCatalog.mjs`. Workflow mutations are never issued as SQL by this
+`server/sessions/sqliteCatalog.mjs`; JSONL parsing and its mtime/LRU cache live only in
+`server/sessions/jsonlCatalog.mjs`. Workflow mutations are never issued as SQL by this
 server: SQLite delete and exact-entry fork delegate to repository operations
 shipped with the configured pi CLI.
 
@@ -37,7 +37,7 @@ JSONL compatibility fields for older links and clients.
 
 ### Hot reload scope
 
-The stable core watches `app.mjs` and the HTTP route modules under `http/`.
+The stable core watches `server/app.mjs` and the HTTP route modules under `server/http/`.
 During development or runtime recovery, changes are loaded with mtime query
 parameters and the complete route table is constructed before the active
 handler is swapped. A failed import or construction leaves the previous
@@ -72,7 +72,7 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 
 Restart pi afterwards. The `hublot` and `routine` tools discover the UI server
 from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
-`PI_UI_TOKEN` or the `.ui-token` file next to `server.mjs`.
+`PI_UI_TOKEN` or the project-root `.ui-token` file.
 
 ## Quick start
 
@@ -80,7 +80,7 @@ Build the SQLite-enabled development checkout once, then start the UI:
 
 ```sh
 cd /home/ubuntu/pi-coding-agent && npm run build
-cd /home/ubuntu/tree-pi-bak-sql && node server.mjs
+cd /home/ubuntu/tree-pi-bak-sql && node server/server.mjs
 ```
 
 Development defaults to
@@ -93,7 +93,7 @@ missing/stale, when Node is older than 22.19, or if the store value is invalid. 
 To use the JSONL rollback mode without migrating or modifying either store:
 
 ```sh
-PERSISTENT_STORE=jsonl PI_BIN=/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js node server.mjs
+PERSISTENT_STORE=jsonl PI_BIN=/home/ubuntu/pi-coding-agent/packages/coding-agent/dist/cli.js node server/server.mjs
 ```
 
 Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the browser's localStorage and stripped from the URL. Without a token in the URL the UI shows a token prompt.
@@ -113,7 +113,7 @@ Then open `http://<host>:8080/#token=<TOKEN>` — the token is stored in the bro
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc`; `--session-dir <dir>` relocates `sessions.sqlite` |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary used to open tunnels (must support `tunnel --url http://127.0.0.1:<port>`) |
 
-A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token stable across restarts. It is git-ignored.
+A project-root `.ui-token` file (one line, the token) keeps the token stable across restarts. It is git-ignored.
 
 ### Mutable-setting precedence
 
@@ -222,7 +222,7 @@ denied.
 ## Running it in the background
 
 ```sh
-PI_UI_TOKEN=$(cat .ui-token) nohup node server.mjs > /tmp/pi-ui.log 2>&1 &
+PI_UI_TOKEN=$(cat .ui-token) nohup node server/server.mjs > /tmp/pi-ui.log 2>&1 &
 ```
 
 or use the SQLite-configured systemd unit below.
@@ -326,4 +326,4 @@ curl -fsS http://127.0.0.1:8080/health | node -e 'let s=""; process.stdin.on("da
 
 After changing or rebuilding pi, use `systemctl --user restart pi-ui.service`
 and run the health check again. The token comes from `.ui-token` next to
-`server.mjs`. Logs: `journalctl --user -u pi-ui -f`.
+`server/server.mjs`. Logs: `journalctl --user -u pi-ui -f`.

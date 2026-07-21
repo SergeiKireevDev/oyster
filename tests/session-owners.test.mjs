@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionOwnerResolver } from "../persistence/sessionOwners.mjs";
+import { createSessionOwnerResolver } from "../server/persistence/sessionOwners.mjs";
 
 function setup({ runners = [], summary = null } = {}) {
   const upserts = [];

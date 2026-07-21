@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OAUTH_BODY_LIMIT, createOAuthRoutes } from "../http/routes/oauthRoutes.mjs";
+import { OAUTH_BODY_LIMIT, createOAuthRoutes } from "../server/http/routes/oauthRoutes.mjs";
 
 const FLOW_ID = "a".repeat(64);
 const REQUEST_ID = "b".repeat(64);

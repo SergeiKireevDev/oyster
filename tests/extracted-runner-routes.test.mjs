@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const appSource = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
 
 test("app composes the extracted runner factory with explicit operations", () => {
   assert.match(appSource, /createRunnerRoutes\(\{[\s\S]*?state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,[\s\S]*?sessionReferenceParam,[\s\S]*?lookupSessionReference:[\s\S]*?null,[\s\S]*?\}\)/);
