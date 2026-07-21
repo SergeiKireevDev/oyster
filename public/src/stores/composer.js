@@ -26,7 +26,7 @@ export function composerUiState(session, text) {
           ? "loading canonical transcript…"
           : gated
             ? "loading transcript…"
-            : "message (type : for commands)",
+            : "message (type / for pi commands, : for files)",
     sendText: busy ? "Steer" : "Send",
     sendHidden: busy && !hasText,
     stopHidden: !busy,
