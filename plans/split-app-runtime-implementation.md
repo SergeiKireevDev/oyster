@@ -369,7 +369,7 @@ verified goal loop can match it exactly.
 - [x] Extract settings extension UI and carousel construction blocks into feature factories and replace each with one factory call.
 - [x] Extract file picker folder browser and explorer construction blocks into `features/files/` and replace them with one factory call.
 - [x] Extract session picker and search construction blocks into `features/sessions/` and replace them with one factory call.
-- [ ] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.
+- [x] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.
 - [ ] Move remaining RPC and event-dispatch state into `platform/` and replace root event handling with injected coordinator callbacks.
 - [ ] Delete `appRuntimeImplementation.js` make `appComposition.js` the direct composition factory and update runtime entrypoint imports.
 - [ ] Add a composition-root size and import-boundary test that enforces fewer than 400 lines and forbids feature-local mutable state.

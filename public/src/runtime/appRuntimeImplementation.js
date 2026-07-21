@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { installAuthenticatedFetch } from "./authClient.js";
 import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
-import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./transcriptRuntime.js";
+import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./transcriptRuntime.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./eventControllers.js";
 import { createCodeReloadController, createPiErrorController, createResponseEventController, createPiStartedController, createReplayEventGate, createRunnerUnhealthyController, createRunnerExitController, eventLifecycleLogged, processEventMessage, stateRefreshRequired, runCanonicalReload } from "./eventStream.js";
 import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
@@ -21,7 +21,7 @@ import { createSessionBootDependencies } from "./sessionBootDependencies.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createLazySessionFeature } from "../features/sessions/createSessionFeature.js";
 import { createSessionPickerRuntime } from "../features/sessions/createSessionPickerRuntime.js";
-import { createTranscriptFeature } from "../features/transcript/createTranscriptFeature.js";
+import { createTranscriptRuntime } from "../features/transcript/createTranscriptRuntime.js";
 import { createExtensionUiAdapters } from "./extensionUiAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
 import { createRuntimeAttachments } from "./runtimeAttachments.js";
@@ -48,9 +48,9 @@ import { openOptionPicker } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
-import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "../lib/messageUtils.js";
+import { shouldShowThinking, toolResultText, userMessageText } from "../lib/messageUtils.js";
 import { renderMarkdown } from "../lib/markdownRenderer.js";
-import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "../lib/transcriptUtils.js";
+import { splitTurns, takeTailChunk } from "../lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "../lib/transcriptBackfill.js";
 import { createTranscriptActions } from "../lib/transcriptActions.js";
 import { openCheckpointModelPicker as openModelPicker } from "../lib/checkpointActions.js";
@@ -1424,10 +1424,6 @@ async function focusSearchHit(hit) {
   if (!focusMessageBySnippet(hit.snippet)) addToast("match not visible in transcript", "warning");
 }
 
-const focusMessageBySnippet = (snippet) => focusTranscriptSnippet([...messagesEl.children], snippet, { flash: flashEl });
-
-const flashEl = flashTranscriptElement;
-
 // ------------------------------------------------------------ message permalinks
 //
 // Every user/assistant message can be shared as /s/<sessionId>/m/<entryId>.
@@ -1436,24 +1432,22 @@ const flashEl = flashTranscriptElement;
 // ids, so elements and entries are zipped together by position, with a
 // text-match fallback when the two sides disagree (e.g. mid-stream).
 
-const transcriptPermalinkRuntime = createTranscriptPermalinkRuntime({
-  fetchEntries: async () => {
-    const path = state?.sessionFile ?? runnersNow.find((runner) => runner.id === currentRunner)?.sessionFile;
-    if (!path) throw new Error("session not saved yet");
-    return fetchPersistedSessionEntries(fetch, path);
-  },
-  elements: () => [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
-  matches: messageEntryMatchesElement,
+const transcriptRuntime = createTranscriptRuntime({
+  reloadTranscript,
+  handleStreamEvent: handleTranscriptStreamEvent,
+  domAdapter: transcriptScroll,
+  messageElements: () => [...messagesEl.children],
+  transcriptElements: () => [...messagesEl.children].filter((element) => element.dataset.role === "user" || element.dataset.role === "assistant"),
   findDirect: (entryId) => messagesEl.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`),
-  alignedIndex: alignedTranscriptIndex,
-  flash: flashEl,
+  fetchEntries: fetchSessionEntries,
   toast: addToast,
   getSessionId: () => state?.sessionId,
   getOrigin: () => location.origin,
   copy: copyTextToClipboard,
   prompt: extensionUiAdapters.input,
 });
-const { annotate: annotateTranscriptEntries, copyPermalink, focusEntryById } = transcriptPermalinkRuntime;
+const transcriptFeature = transcriptRuntime.feature;
+const { annotateTranscriptEntries, copyPermalink, focusEntryById, focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
 
 /** Rendered user/assistant elements are shared by checkpoint and permalink adapters. */
 function chatEls() {
@@ -1479,12 +1473,6 @@ function closeModal() {
 async function showSettingsModal() {
   openModal({ title: "Settings", content: "settings" });
 }
-
-const transcriptFeature = createTranscriptFeature({
-  createRuntime: () => ({ reloadForSession: reloadTranscript, handleStreamEvent: handleTranscriptStreamEvent }),
-  dependencies: {},
-  domAdapter: transcriptScroll,
-});
 
 // ------------------------------------------------------------ extension UI bridge
 
