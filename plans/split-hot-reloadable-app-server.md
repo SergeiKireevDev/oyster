@@ -181,7 +181,7 @@ swap without a manual `app.mjs` touch.
 - [x] Add a static architecture test that forbids method/path route literals
   and direct Node filesystem/process imports in `app.mjs`, except explicitly
   documented dynamic-loader dependencies.
-- [ ] Run stale-reference checks and the complete validation matrix, then mark
+- [x] Run stale-reference checks and the complete validation matrix, then mark
   this final item complete only after all checks pass.
 
 ```sh
