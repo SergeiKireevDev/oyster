@@ -9,6 +9,15 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerCommandPaletteInput(target, { onInput, onBlur }) {
+  target.addEventListener("input", onInput);
+  target.addEventListener("blur", onBlur);
+  return () => {
+    target.removeEventListener("input", onInput);
+    target.removeEventListener("blur", onBlur);
+  };
+}
+
 export function registerHublotSidebarEvents(target, { show }) {
   const onClick = () => show();
   target.addEventListener("click", onClick);

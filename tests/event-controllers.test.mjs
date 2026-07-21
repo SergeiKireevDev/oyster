@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+
+test("command palette input adapter registers and tears down local listeners", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (type, fn) => listeners.set(type, fn), removeEventListener: (type, fn) => assert.equal(listeners.get(type), fn) };
+  const calls = [];
+  const remove = registerCommandPaletteInput(target, { onInput: () => calls.push("input"), onBlur: () => calls.push("blur") });
+  listeners.get("input")();
+  listeners.get("blur")();
+  assert.deepEqual(calls, ["input", "blur"]);
+  remove();
+});
 
 test("hublot sidebar adapter invokes show and tears down", () => {
   let listener;

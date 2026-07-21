@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -1579,25 +1579,27 @@ function renderCmdPalette() {
 
 /** Wire a textarea/input to the shared command palette. */
 function setupCommandPalette(el) {
-  el.addEventListener("input", () => {
-    const trigger = getCommandTrigger(el);
-    if (trigger && trigger.text.length >= 1) {
-      const match = trigger.text.slice(1);
-      if (!cmdState || cmdState.target !== el || cmdState.trigger?.text !== trigger.text) {
-        openCmdPalette(el, match, trigger);
-      } else {
-        cmdState.match = match;
-        cmdState.active = 0;
-        positionCmdPalette(el);
-        renderCmdPalette();
+  registerCommandPaletteInput(el, {
+    onInput: () => {
+      const trigger = getCommandTrigger(el);
+      if (trigger && trigger.text.length >= 1) {
+        const match = trigger.text.slice(1);
+        if (!cmdState || cmdState.target !== el || cmdState.trigger?.text !== trigger.text) {
+          openCmdPalette(el, match, trigger);
+        } else {
+          cmdState.match = match;
+          cmdState.active = 0;
+          positionCmdPalette(el);
+          renderCmdPalette();
+        }
+      } else if (cmdState && cmdState.target === el) {
+        closeCmdPalette();
       }
-    } else if (cmdState && cmdState.target === el) {
-      closeCmdPalette();
-    }
+    },
+    onBlur: () => setTimeout(() => {
+      if (cmdState?.target === el) closeCmdPalette();
+    }, 150),
   });
-  el.addEventListener("blur", () => setTimeout(() => {
-    if (cmdState?.target === el) closeCmdPalette();
-  }, 150));
 }
 
 registerCommandPaletteEvents(window, { run: runCmdIndex });
