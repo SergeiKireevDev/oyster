@@ -56,6 +56,18 @@ export function usageInfo(usage) {
   return `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}`;
 }
 
+/** Debounce state RPC refreshes while preserving the latest request only. */
+export function createStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+  let timer = null;
+  return () => {
+    if (timer) clearTimeoutImpl(timer);
+    timer = setTimeoutImpl(async () => {
+      timer = null;
+      try { applyState(await rpc({ type: "get_state" })); } catch (error) { onError(error); }
+    }, delay);
+  };
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }

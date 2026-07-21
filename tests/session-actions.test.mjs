@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -53,6 +53,15 @@ test("session actions mark only the stopped runner inactive", () => {
 test("session actions format usage information", () => {
   assert.equal(usageInfo({ input: 1200, output: 34, cost: { total: 0.0042 } }), "↑1,200 ↓34 tok · $0.0042");
   assert.equal(usageInfo(null), null);
+});
+
+test("session actions debounce state refreshes", async () => {
+  let callback; let cleared = 0; let calls = 0;
+  const refresh = createStateRefresher({ rpc: async () => ({ id: "state" }), applyState: () => calls++, setTimeoutImpl: (fn) => { callback = fn; return 1; }, clearTimeoutImpl: () => cleared++ });
+  refresh(); refresh();
+  assert.equal(cleared, 1);
+  await callback();
+  assert.equal(calls, 1);
 });
 
 test("session actions skip transcript replay for empty runners", () => {

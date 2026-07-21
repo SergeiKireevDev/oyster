@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
+import { applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -1299,20 +1299,20 @@ function schedulePostSendFileTranscriptSync(expectedUserText) {
   postSendFileSyncTimer = setTimeout(tick, 750);
 }
 
-let stateRefreshTimer = null;
-function refreshState() {
-  clearTimeout(stateRefreshTimer);
-  lifecycleLog("refreshState:scheduled");
-  stateRefreshTimer = setTimeout(async () => {
+const refreshStateNow = createStateRefresher({
+  rpc: async (request) => {
     const started = performance.now();
     lifecycleLog("refreshState:start");
-    try {
-      applyState(await rpc({ type: "get_state" }));
-      lifecycleLog("refreshState:done", { ms: Math.round(performance.now() - started) });
-    } catch (e) {
-      lifecycleLog("refreshState:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - started) });
-    }
-  }, 150);
+    const value = await rpc(request);
+    lifecycleLog("refreshState:done", { ms: Math.round(performance.now() - started) });
+    return value;
+  },
+  applyState,
+  onError: (e) => lifecycleLog("refreshState:error", { error: e?.message ?? String(e) }),
+});
+function refreshState() {
+  lifecycleLog("refreshState:scheduled");
+  refreshStateNow();
 }
 
 // ------------------------------------------------------------ composer
