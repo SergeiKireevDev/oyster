@@ -5,7 +5,15 @@ import { createComposerEventController } from "../public/src/lib/composerControl
 import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
-import { createHublotEventController } from "../public/src/runtime/eventControllers.js";
+import { createExtensionUiEventController, createHublotEventController } from "../public/src/runtime/eventControllers.js";
+
+test("extension UI event controller delegates stream requests", () => {
+  const requests = [];
+  const controller = createExtensionUiEventController({ handleRequest: (message) => requests.push(message) });
+  const message = { type: "extension_ui_request", id: "request-1" };
+  assert.equal(controller(message), true);
+  assert.deepEqual(requests, [message]);
+});
 
 test("hublot stream controller refreshes previews and schedules ready retries", () => {
   const calls = []; const controller = createHublotEventController({ isReplaying: () => false, toast: (...args) => calls.push(["toast", ...args]), refreshHublots: () => calls.push("refresh"), scheduleRefresh: (ms) => calls.push(["schedule", ms]), openUrl: (url) => calls.push(["open", url]) });

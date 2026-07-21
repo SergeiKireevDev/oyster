@@ -50,6 +50,13 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
+export function createExtensionUiEventController({ handleRequest }) {
+  return (message) => {
+    handleRequest(message);
+    return true;
+  };
+}
+
 export function createRunnersUpdateController({ setRunners, onRunnersChanged, refreshTree }) {
   return (message) => {
     const runners = message.runners ?? [];
