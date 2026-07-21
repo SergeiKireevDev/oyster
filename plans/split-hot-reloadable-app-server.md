@@ -32,7 +32,7 @@ cd tests/e2e && npm test
 
 ## 1. Characterize the Existing Reload Boundary
 
-- [ ] Add an integration test that starts the stable server core with a
+- [x] Add an integration test that starts the stable server core with a
   temporary hot-reloadable application fixture, makes a request through the
   active handler, reloads successfully, and verifies the replacement handler
   serves the next request.
