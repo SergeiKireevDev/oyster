@@ -30,6 +30,7 @@ import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
+import { listHublots, removeHublot } from "./lib/hublotActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2350,16 +2351,14 @@ async function loadHublots() {
   hublotsLoading.set(true);
   let tunnels = [];
   try {
-    const res = await fetch(`/tunnels`);
-    const data = await res.json();
-    if (res.ok) tunnels = data.tunnels.filter(tunnelVisible);
+    tunnels = await listHublots(fetch, tunnelVisible);
   } catch { /* sidebar is best-effort */ }
   hublots.set(tunnels);
   hublotsLoading.set(false);
 }
 
 async function closeHublot(id) {
-  await fetch(`/tunnels?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  await removeHublot(fetch, id);
   loadHublots();
 }
 
