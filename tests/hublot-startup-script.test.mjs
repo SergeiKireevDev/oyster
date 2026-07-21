@@ -89,6 +89,41 @@ test("missing and mismatched startup artifacts are atomically restored before in
   assert.equal(materializeHublotStartupScript(state, hublot.id).rematerialized, false);
 });
 
+test("a missing startup script is rematerialized from SQLite contents and hash after restart", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-script-restart-"));
+  const databasePath = join(root, "app.sqlite");
+  const agentDir = join(root, "agent");
+  let store = openAppStore({ databasePath });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  let state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
+  const hublot = reserve(state);
+  const script = "#!/bin/sh\n# pi-lot-ui: idempotent\necho restored\n";
+  const sha256 = createHash("sha256").update(script).digest("hex");
+  writeScript(hublot.service_start_script_path, script);
+  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+  rmSync(hublot.service_start_script_path);
+  store.close();
+
+  store = openAppStore({ databasePath });
+  state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
+  let invokedContent = null;
+  const invoked = invokeHublotStartupScript(state, hublot.id, {
+    spawnProcess(path) {
+      invokedContent = readFileSync(path, "utf8");
+      return { pid: 4321 };
+    },
+  });
+
+  assert.equal(invoked.rematerialized, true);
+  assert.equal(invoked.sha256, sha256);
+  assert.equal(invokedContent, script);
+  assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
+  assert.equal(lstatSync(hublot.service_start_script_path).mode & 0o777, 0o700);
+  const persisted = store.repositories.hublots.find(hublot.id);
+  assert.equal(persisted.service_start_script, script);
+  assert.equal(persisted.service_start_script_sha256, sha256);
+});
+
 test("rematerialization replaces symlinks without changing their targets", (t) => {
   const { root, state } = fixture(t);
   const hublot = reserve(state);

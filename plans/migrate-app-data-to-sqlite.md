@@ -369,7 +369,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify hublot identity, ownership, desired state, and history survive `server.mjs` replacement.
 - [x] Verify planned restart, crash recovery, PID-reuse protection, orphan cleanup, replacement URLs, and self-served interruption behavior.
 - [x] Verify a dead desired-open service is restarted from its persisted script, receives a new persisted PID, and has its tunnel reopened.
-- [ ] Verify a missing startup-script file is rematerialized from its SQLite contents and hash.
+- [x] Verify a missing startup-script file is rematerialized from its SQLite contents and hash.
 - [ ] Verify repeated service failure triggers backoff and crash-loop protection rather than an unbounded spawn loop.
 - [ ] Verify runner replay and selected workdir survive restart.
 - [ ] Verify deleting a session removes all and only its checkpoints, routines, runs, logs, hublots, and lifecycle records.
