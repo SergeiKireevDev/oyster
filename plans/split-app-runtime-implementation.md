@@ -96,9 +96,7 @@ Before the first extraction:
   Svelte stores (20), and feature/controller/action modules (29). This is the
   baseline for measuring extraction; do not use line count alone as completion
   evidence.
-- [ ] Add a runtime lifecycle regression test covering two complete cycles:
-   `start → teardown → start → teardown`. Verify attachment ordering and that
-   a fresh transport/event-stream runtime is used after restart.
+- [x] Add a runtime lifecycle regression test covering two complete cycles: `start → teardown → start → teardown`. Verify attachment ordering and that a fresh transport/event-stream runtime is used after restart.
 - [ ] Add a test or static guard that the composition root does not grow new
    `document.getElementById`, `querySelector`, `classList`, or feature-specific
    custom-event registrations.
