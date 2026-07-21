@@ -450,6 +450,7 @@ function getSessionRuntime() {
     getCurrentRunner: () => currentRunner,
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
+    stopSession: (id) => stopSessionRunner(fetch, id),
     openSearchHit: (...args) => searchHitSessionController(...args),
     log: (details) => lifecycleLog("switchToRunner:start", details),
     resetPreview: () => previewController.clear(),
@@ -1575,7 +1576,7 @@ const refreshSessionPickerCurrentFolder = sessionPickerFolderController.refreshC
 const loadSessionPickerFolder = sessionPickerFolderController.loadFolder;
 
 const sessionPickerController = createSessionPickerController({
-  stopRunner: (id) => stopSessionRunner(fetch, id),
+  stopRunner: (id) => getSessionRuntime().stopSession(id),
   getRunners: () => runnersNow,
   markStopped: markRunnerStopped,
   setRunners: updateSessionPickerRunners,

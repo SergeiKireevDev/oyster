@@ -22,7 +22,7 @@ export function createSessionStateApplier({ applySessionState, getState, setStat
 }
 
 export function createSessionRuntime({
-  getCurrentRunner, switchSessionRunner, openSession, openSearchHit, log, resetPreview, refreshState,
+  getCurrentRunner, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
   connect,
 }) {
@@ -44,6 +44,7 @@ export function createSessionRuntime({
 
   return {
     openSession(options) { return openSession(options); },
+    stopSession(id) { return stopSession(id); },
     async openInitialSession(options) {
       const runner = await openSession(options);
       if (runner?.id) setRunner(runner.id);

@@ -8,15 +8,18 @@ test("session runtime delegates deliberate switches with the current runner and 
     getCurrentRunner: () => "current",
     switchSessionRunner: (options) => { calls.push(options); return true; },
     openSession: (options) => { calls.push(["open", options]); return "opened"; },
+    stopSession: (id) => { calls.push(["stop", id]); return "stopped"; },
     log: () => {}, resetPreview: () => {}, refreshState: () => {}, setRunner: () => {},
     clearTranscript: () => {}, resetSessionUi: () => {}, renderPreview: () => {}, resetCommands: () => {}, connect: () => {},
   });
   assert.equal(runtime.openSession({ dir: "/workspace" }), "opened");
+  assert.equal(runtime.stopSession("finished"), "stopped");
   assert.equal(runtime.switchRunner("next"), true);
   assert.deepEqual(calls[0], ["open", { dir: "/workspace" }]);
-  assert.equal(calls[1].id, "next");
-  assert.equal(calls[1].currentRunner, "current");
-  assert.equal(typeof calls[1].hooks.connect, "function");
+  assert.deepEqual(calls[1], ["stop", "finished"]);
+  assert.equal(calls[2].id, "next");
+  assert.equal(calls[2].currentRunner, "current");
+  assert.equal(typeof calls[2].hooks.connect, "function");
 });
 
 test("session runtime persists an initial route runner without connecting before boot", async () => {
