@@ -1,4 +1,4 @@
-export function createFolderBrowserController({ browse, update, updateTitle, getShowHidden, setPath, openSessionRunner, setWorkdir, switchToRunner, toast }) {
+export function createFolderBrowserController({ browse, mkdir, update, updateTitle, getShowHidden, setPath, openSessionRunner, setWorkdir, switchToRunner, toast }) {
   async function load(path) {
     update({ loading: true });
     try {
@@ -8,6 +8,21 @@ export function createFolderBrowserController({ browse, update, updateTitle, get
       update({ path: data.path, home: data.home, parent: data.parent, dirs: data.dirs ?? [], showHidden: getShowHidden(), loading: false });
     } catch (error) { update({ loading: false }); toast(error.message || "cannot open folder", "error"); }
   }
+  async function createFolder(path, name) {
+    const folderName = name.trim();
+    if (!folderName) return;
+    update({ creating: true });
+    try {
+      const data = await mkdir(path, folderName);
+      toast(`created ${data.path}`);
+      update({ creating: false, createOpen: false, newName: "" });
+      await load(data.path);
+    } catch (error) {
+      toast(`mkdir failed: ${error.message}`, "error");
+      update({ creating: false });
+    }
+  }
+
   async function createSessionInFolder(path) {
     try {
       const runner = await openSessionRunner({ dir: path });
@@ -19,5 +34,5 @@ export function createFolderBrowserController({ browse, update, updateTitle, get
     }
   }
 
-  return { load, createSessionInFolder };
+  return { load, createFolder, createSessionInFolder };
 }

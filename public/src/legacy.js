@@ -1619,6 +1619,12 @@ let folderBrowserState = {
 
 const folderBrowserController = createFolderBrowserController({
   async browse(path) { const q = path ? `?path=${encodeURIComponent(path)}` : ""; const res = await fetch(`/browse${q}`); const data = await res.json(); if (!res.ok) throw new Error(data.error || "cannot open folder"); return data; },
+  async mkdir(path, name) {
+    const res = await fetch(`/mkdir`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, name }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `mkdir failed (${res.status})`);
+    return data;
+  },
   update: updateFolderBrowser,
   updateTitle: (title) => updateModal({ title }),
   getShowHidden: () => get(folderBrowser).showHidden,
@@ -1657,32 +1663,9 @@ async function showFolderBrowser() {
   await folderBrowserController.createSessionInFolder(chosen);
 }
 
-const createFolderBrowser = async () => {
-    let snapshot;
-    const unsubscribe = folderBrowser.subscribe((s) => { snapshot = s; });
-    unsubscribe();
-    const name = (snapshot?.newName ?? "").trim();
-    if (!name) return;
-    updateFolderBrowser({ creating: true });
-    try {
-      const res = await fetch(`/mkdir`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: folderBrowserState.browsePath, name }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data.error || `mkdir failed (${res.status})`, "error");
-        updateFolderBrowser({ creating: false });
-        return;
-      }
-      toast(`created ${data.path}`);
-      updateFolderBrowser({ creating: false, createOpen: false, newName: "" });
-      await loadFolderBrowser(data.path); // descend into the new folder
-    } catch (e) {
-      toast(`mkdir failed: ${e.message}`, "error");
-      updateFolderBrowser({ creating: false });
-    }
+const createFolderBrowser = () => {
+  const snapshot = storeSnapshot(folderBrowser);
+  return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
 registerFolderBrowserEvents(window, {
