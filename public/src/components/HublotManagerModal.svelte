@@ -66,14 +66,11 @@
                 : null,
             ].filter(Boolean).join(" · ")}
           </span>
-          <span
+          <button
             class="x"
             title="close this hublot"
-            role="button"
-            tabindex="0"
             onclick={() => closeManagedHublot(tunnel.id)}
-            onkeydown={(event) => keyActivate(event, () => closeManagedHublot(tunnel.id))}
-          >✕</span>
+          >✕</button>
         </div>
       </div>
     {/each}
@@ -97,6 +94,6 @@
   </button>
 </div>
 <div class="m-actions" id="mActions">
-  <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope} onkeydown={(event) => keyActivate(event, toggleManagedHublotScope)}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
-  <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => keyActivate(event, closeModalState)}>Close</span>
+  <button class="chip" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</button>
+  <button class="chip" onclick={closeModalState}>Close</button>
 </div>

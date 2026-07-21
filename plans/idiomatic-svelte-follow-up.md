@@ -110,7 +110,7 @@ application; no global dialog store contains runtime callbacks.
 
 ## 4. Improve Interactive Semantics and Platform Boundaries
 
-- [ ] Replace clickable `span[role="button"]` controls in prompt, picker,
+- [x] Replace clickable `span[role="button"]` controls in prompt, picker,
   checkpoint, and hublot modal components with styled native `button` elements.
   Preserve labels, titles, disabled behavior, and keyboard behavior in a markup
   regression test.

@@ -156,7 +156,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--muted);
   }
-  .hublot-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; }
+  .hublot-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; background: transparent; border: 0; font: inherit; }
   .hublot-block .cap .x:hover { color: var(--red); }
   /* hublot blocks laid out as a grid inside the Hublots modal */
   .hublot-grid {

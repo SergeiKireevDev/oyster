@@ -31,6 +31,6 @@
   {/if}
 </div>
 <div class="m-actions">
-  <span class="chip" role="button" tabindex="0" onclick={cancelCheckpointModelPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelCheckpointModelPicker(); }}>Cancel</span>
+  <button class="chip" onclick={cancelCheckpointModelPicker}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
 </div>
