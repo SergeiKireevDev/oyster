@@ -8,6 +8,7 @@ export function createSessionRoutes({
   sessions,
   runners,
   resources,
+  sessionOperations = null,
   resolvePath = resolve,
   unlinkFile = unlinkSync,
   logger = console,
@@ -83,39 +84,61 @@ export function createSessionRoutes({
       json(res, 200, { sessions: result });
     },
 
-    "DELETE /session": (_req, res, url) => {
-      if (sqlite) {
-        json(res, 409, { error: "SQLite session deletion is unavailable until a supported pi delete operation is configured" });
+    "DELETE /session": async (_req, res, url) => {
+      let reference = null;
+      const key = url.searchParams.get("key");
+      if (key) {
+        try {
+          const parsed = state.sessionReferences.parse(key);
+          if (parsed.backend === catalog.backend) reference = parsed;
+        } catch {}
+      } else if (!sqlite) {
+        const target = sessionTargetFromSearch(url);
+        if (target) {
+          try {
+            const id = readSessionHeaderInfo(target)?.id;
+            if (id) reference = referenceFor({ id, path: target });
+          } catch {}
+        }
+      }
+      if (!reference) {
+        json(res, 400, { error: `not a session reference: ${url.searchParams.get("path") ?? key}` });
         return;
       }
-      const target = sessionTargetFromSearch(url);
-      if (!target) {
-        json(res, 400, { error: `not a session file: ${url.searchParams.get("path") ?? url.searchParams.get("key")}` });
+      const operations = sessionOperations ?? {
+        capabilities: { delete: { jsonl: true, sqlite: false } },
+        async deleteSession(sessionRef) {
+          unlinkFile(sessionRef.storagePath);
+          return { deleted: sessionRef.storagePath };
+        },
+      };
+      if (!operations.capabilities.delete[reference.backend]) {
+        json(res, 409, { error: `${reference.backend} session deletion is not supported by the configured pi` });
         return;
       }
+      const matchingRunners = [...state.runners.values()].filter((runner) => runner.sessionRef
+        ? state.sessionReferences.equals(runner.sessionRef, reference)
+        : reference.backend === "jsonl" && runner.sessionFile === reference.storagePath);
+      for (const runner of matchingRunners) stopRunner(runner);
       try {
-        for (const runner of [...state.runners.values()]) {
-          if (runner.sessionFile === target) {
-            stopRunner(runner);
-            state.runners.delete(runner.id);
-            if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
-          }
+        const result = await operations.deleteSession(reference);
+        for (const runner of matchingRunners) {
+          state.runners.delete(runner.id);
+          if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
         }
         runnersChanged();
-        let sessionId = null;
-        try { sessionId = readSessionHeaderInfo(target)?.id ?? null; } catch {}
         const closedHublots = [];
-        if (sessionId) for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
-          if (tunnel.sessionId !== sessionId) continue;
+        for (const tunnel of [...(state.tunnels?.values() ?? [])]) {
+          if (tunnel.sessionId !== reference.id) continue;
           closeTunnel(state, tunnel.id);
           closedHublots.push(tunnel.port);
-          logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${sessionId} deleted)`);
+          logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
         }
-        const releasedRoutines = sessionId ? releaseSessionRoutines(state, sessionId) : [];
-        unlinkFile(target);
-        json(res, 200, { deleted: target, closedHublots, releasedRoutines });
+        const releasedRoutines = releaseSessionRoutines(state, reference.id);
+        json(res, 200, { deleted: result.deleted, closedHublots, releasedRoutines });
       } catch (error) {
-        json(res, 500, { error: `failed to delete session: ${error.message}` });
+        const status = error.code === "capability_unavailable" ? 409 : 500;
+        json(res, status, { error: `failed to delete session: ${error.message}` });
       }
     },
 

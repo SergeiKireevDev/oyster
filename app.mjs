@@ -26,6 +26,7 @@ export async function init(state) {
   
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
+  const { createSessionOperations } = await import(bust("session-operations.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -71,6 +72,7 @@ export async function init(state) {
     jsonlRoot: SESSIONS_ROOT,
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
+  state.sessionOperations = createSessionOperations({ config, sessionReferences: state.sessionReferences });
   const runners = createRunnerManager(state);
   const {
     srvId, runnerInfo, listRunnerInfo, runnersChanged,
@@ -138,6 +140,7 @@ export async function init(state) {
     },
     runners: { stopRunner, runnersChanged },
     resources: { closeTunnel, releaseSessionRoutines },
+    sessionOperations: state.sessionOperations,
   });
 
   const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes });

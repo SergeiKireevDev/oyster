@@ -108,7 +108,7 @@ transcript hydration expose equivalent user-visible data for JSONL and SQLite.
   JSONL retains `switch_session`, while SQLite starts or reuses a runner with
   `--session <id>`. Add restart, concurrent-session, cwd-switch, and stale-ID
   tests.
-- [ ] Add a backend-neutral delete operation. JSONL keeps confined unlink;
+- [x] Add a backend-neutral delete operation. JSONL keeps confined unlink;
   SQLite must invoke a supported operation from the consumed local pi build,
   stop the matching runner first, and only then release hublots/routines and
   update clients. If that operation is unavailable, return a capability error

@@ -5,7 +5,7 @@ import { createSessionReferenceCodec } from "../session-references.mjs";
 
 function response() { return {}; }
 
-function setup() {
+function setup({ sessionOperations = null } = {}) {
   const storagePath = "/agent/sessions.sqlite";
   const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: storagePath });
   const sessions = [
@@ -25,6 +25,7 @@ function setup() {
     search: (options) => ({ results: [{ sessionId: options.path ?? "root", sessionCwd: "/work", snippet: {} }], filesSearched: 1, truncated: false }),
   };
   const runnerRef = { backend: "sqlite", id: "root", storagePath };
+  const lifecycle = [];
   const state = {
     currentDir: "/work",
     runners: new Map([["r1", { id: "r1", sessionRef: runnerRef, proc: {}, busy: true }]]),
@@ -35,11 +36,12 @@ function setup() {
     state,
     requestContext: { json(res, status, body) { res.status = status; res.body = body; } },
     sessions: { catalog, readSessionHeaderInfo() {}, sessionReferenceFor() {}, sessionTargetFromSearch() {} },
-    runners: { stopRunner() {}, runnersChanged() {} },
-    resources: { closeTunnel() {}, releaseSessionRoutines: () => [] },
+    runners: { stopRunner: (runner) => lifecycle.push(["stop", runner.id]), runnersChanged: () => lifecycle.push(["changed"]) },
+    resources: { closeTunnel() {}, releaseSessionRoutines: (_state, id) => { lifecycle.push(["release", id]); return ["routine"]; } },
+    sessionOperations,
     resolvePath: (path) => path,
   });
-  return { routes, codec, sessions };
+  return { routes, codec, sessions, state, lifecycle };
 }
 
 test("SQLite routes list distinct shared-database identities and parent keys", () => {
@@ -81,12 +83,44 @@ test("SQLite routes resolve lookup, entries, messages, folders, and search by ke
   assert.equal(search.body.results[0].sessionKey, key);
 });
 
-test("SQLite routes reject file identities and mutation before side effects", () => {
-  const { routes } = setup();
+test("SQLite deletion stops its runner, delegates mutation, then releases resources", async () => {
+  const calls = [];
+  const { routes, codec, state, lifecycle } = setup({ sessionOperations: {
+    capabilities: { delete: { sqlite: true } },
+    async deleteSession(reference) { calls.push(reference.id); return { deleted: codec.serialize(reference) }; },
+  } });
+  const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
+  const responseValue = response();
+  await routes["DELETE /session"]({}, responseValue, new URL(`http://localhost/session?key=${key}`));
+  assert.equal(responseValue.status, 200);
+  assert.deepEqual(calls, ["root"]);
+  assert.deepEqual(lifecycle, [["stop", "r1"], ["changed"], ["release", "root"]]);
+  assert.equal(state.runners.size, 0);
+});
+
+test("SQLite deletion failure preserves session resources and runner identity", async () => {
+  const { routes, codec, state, lifecycle } = setup({ sessionOperations: {
+    capabilities: { delete: { sqlite: true } },
+    async deleteSession() { throw new Error("database busy"); },
+  } });
+  const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
+  const responseValue = response();
+  await routes["DELETE /session"]({}, responseValue, new URL(`http://localhost/session?key=${key}`));
+  assert.equal(responseValue.status, 500);
+  assert.deepEqual(lifecycle, [["stop", "r1"]]);
+  assert.equal(state.runners.size, 1);
+});
+
+test("SQLite routes reject file identities and unsupported mutation before side effects", async () => {
+  const { routes, codec } = setup();
   const entries = response();
   routes["GET /session-entries"]({}, entries, new URL("http://localhost/session-entries?path=/agent/sessions.sqlite"));
   assert.equal(entries.status, 404);
+  const bareDatabase = response();
+  await routes["DELETE /session"]({}, bareDatabase, new URL("http://localhost/session?path=/agent/sessions.sqlite"));
+  assert.equal(bareDatabase.status, 400);
+  const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
   const deletion = response();
-  routes["DELETE /session"]({}, deletion, new URL("http://localhost/session?path=/agent/sessions.sqlite"));
+  await routes["DELETE /session"]({}, deletion, new URL(`http://localhost/session?key=${key}`));
   assert.equal(deletion.status, 409);
 });

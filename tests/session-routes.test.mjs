@@ -137,10 +137,10 @@ test("search validates scope and preserves filtering options, snippets, and resp
   }]);
 });
 
-test("deleting a session retires bound runners, hublots, and routines", () => {
+test("deleting a session retires bound runners, hublots, and routines", async () => {
   const { state, stopped, closed, unlinked, routes } = setup();
   const res = response();
-  routes["DELETE /session"]({}, res, new URL("http://localhost/session?path=folder/a.jsonl"));
+  await routes["DELETE /session"]({}, res, new URL("http://localhost/session?path=folder/a.jsonl"));
   assert.equal(res.status, 200);
   assert.deepEqual(res.body, {
     deleted: "/sessions/folder/a.jsonl",
