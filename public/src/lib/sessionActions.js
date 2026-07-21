@@ -1,6 +1,6 @@
-import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../runtime/sessionRuntime.js";
 
-export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo };
 
 /** Keep the selected runner persisted and mirrored into the UI session store. */
 export function createCurrentRunnerController({ storage, updateAppSession, key = "pi_runner" }) {
@@ -68,9 +68,5 @@ export function createSessionUiController({ updateAppSession, updateHeaderState 
       if (info) updateHeaderState({ usageInfo: info });
     },
   };
-}
-
-export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
-  return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }
 

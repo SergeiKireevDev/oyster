@@ -156,6 +156,10 @@ export function createSessionStateRefresher({ rpc, applyState, onError = () => {
   };
 }
 
+export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
+  return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
+}
+
 export function applySessionState({ incoming, previousState, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks }) {
   const sessionChanged = incoming?.sessionId !== previousState?.sessionId;
   hooks.log(sessionChanged);
@@ -163,7 +167,7 @@ export function applySessionState({ incoming, previousState, currentRunner, empt
   hooks.updateAppSession({ state: incoming, ...(sessionChanged ? { titleOverride: null } : {}) });
   if (sessionChanged) {
     if ((incoming?.messageCount ?? 0) > 0) emptySessionRunners.delete(currentRunner);
-    hooks.setTranscriptGateRequired(!emptySessionRunners.has(currentRunner) && (incoming?.messageCount ?? 0) > 0);
+    hooks.setTranscriptGateRequired(transcriptGateRequired({ runner: currentRunner, messageCount: incoming?.messageCount, emptySessionRunners }));
     hooks.setRoutines(routinesNow.filter(routineVisible));
     hooks.setRoutineScopeAll(tunnelScopeAll);
     hooks.setRoutineCurrentSessionId(incoming?.sessionId ?? null);
