@@ -26,13 +26,25 @@ export function pathCompletionRequest(text, workdir) {
     : { browsePath: typedDir, typedDir, prefix };
 }
 
+/** Whether the typed token is already one complete file or folder path. */
+export function pathCompletionIsExact(trigger, request, data) {
+  if (request.allowedRoots) {
+    return [data.path, data.home].filter(Boolean)
+      .some((path) => `${String(path).replace(/\/$/, "")}/` === trigger.text);
+  }
+  return [
+    ...(data.dirs ?? []).map((entry) => `${request.typedDir}${entry.name}/`),
+    ...(data.files ?? []).map((entry) => `${request.typedDir}${entry.name}`),
+  ].includes(trigger.text);
+}
+
 /** Build completion choices from one /browse response. */
-export function pathCompletionItems(_trigger, request, data) {
+export function pathCompletionItems(trigger, request, data) {
   const query = request.prefix.toLowerCase();
   if (request.allowedRoots) {
     return [...new Set([data.path, data.home].filter(Boolean))]
       .map((path) => ({ path: `${String(path).replace(/\/$/, "")}/`, name: String(path).split("/").filter(Boolean).at(-1) ?? "/", directory: true }))
-      .filter((entry) => entry.name.toLowerCase().startsWith(query));
+      .filter((entry) => entry.name.toLowerCase().startsWith(query) && entry.path !== trigger.text);
   }
 
   const entries = [
@@ -43,5 +55,5 @@ export function pathCompletionItems(_trigger, request, data) {
   return entries.map((entry) => {
     const suffix = entry.directory ? "/" : "";
     return { path: `${request.typedDir}${entry.name}${suffix}`, name: entry.name, directory: entry.directory };
-  });
+  }).filter((entry) => entry.path !== trigger.text);
 }

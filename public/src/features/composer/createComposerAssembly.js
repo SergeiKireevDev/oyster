@@ -1,7 +1,7 @@
 import { createCommandGuard, commandTrigger, filterCommands } from "../../lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
-import { pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
+import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
 import {
@@ -177,6 +177,7 @@ export function createComposerAssembly(deps) {
         const request = pathCompletionRequest(trigger.text, workdir);
         const data = await commandDeps.browseFiles(request.browsePath);
         if (version !== requestVersion || pathTrigger(element)?.text !== trigger.text) return;
+        if (pathCompletionIsExact(trigger, request, data)) { close(); return; }
         const matches = pathCompletionItems(trigger, request, data);
         if (matches.length > 10) {
           openPaths(element, trigger, [{

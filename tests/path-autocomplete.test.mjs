@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pathCompletionItems, pathCompletionRequest, pathTrigger } from "../public/src/lib/pathAutocomplete.js";
+import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../public/src/lib/pathAutocomplete.js";
 
 test("path trigger recognizes every slash-containing token at the caret", () => {
   assert.deepEqual(pathTrigger({ value: "read ./src/ap", selectionStart: 13 }), { text: "./src/ap", start: 5 });
@@ -22,6 +22,14 @@ test("path completion resolves relative directories and filters files and folder
     { path: "./src/components/", name: "components", directory: true },
     { path: "./src/Composer.svelte", name: "Composer.svelte", directory: false },
   ]);
+});
+
+test("a fully typed file is exact and is omitted from completion choices", () => {
+  const trigger = { text: "plans/done.md", start: 0 };
+  const request = pathCompletionRequest(trigger.text, "/work");
+  const data = { path: "/work/plans", dirs: [{ name: "drafts" }], files: [{ name: "done.md" }] };
+  assert.equal(pathCompletionIsExact(trigger, request, data), true);
+  assert.deepEqual(pathCompletionItems(trigger, request, data), []);
 });
 
 test("plain and parent-relative paths resolve from the workdir", () => {
