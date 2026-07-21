@@ -1166,8 +1166,7 @@ async function runMenuAction(action) {
   try {
     if (action === "newSession") {
       // a fresh runner, so the current session keeps running in the background
-      const r = await openSessionRunner({ dir: sessionUi.workdir });
-      switchToRunner(r.id);
+      await getSessionRuntime().openAndSwitchSession({ dir: sessionUi.workdir });
       addToast("new session");
     } else if (action === "newSessionIn") {
       await showFolderBrowser();
