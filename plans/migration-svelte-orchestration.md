@@ -92,7 +92,7 @@ shared browse action; picker-specific selection UI remains legacy-owned.
 **Acceptance:** each extraction preserves existing response contracts and e2e
 coverage. Do not extract two domains in one commit.
 
-## 5. Replace Legacy DOM Event Wiring with Component Actions (in progress)
+## 5. Replace Legacy DOM Event Wiring with Component Actions ✅
 
 For each remaining top-level `addEventListener` in `legacy.js`:
 
@@ -105,18 +105,17 @@ Prioritize events owned by already-migrated components before touching global
 keyboard handling or transcript scroll listeners.
 
 ✅ Hublot sidebar and manager close controls now call `hublotActions.js`
-directly; their legacy bridge exports and handlers were removed. Routine and
-file-browser bridge actions remain pending because their direct replacements
-must preserve session-scoped refresh behavior. Keep their existing bridge
-adapters until a focused action can refresh the scoped stores atomically.
+directly; their legacy bridge exports and handlers were removed. Routine and file-browser bridge actions deliberately remain as compatibility
+adapters because their direct replacements require session-scoped atomic
+refreshes; retaining them is the documented safe boundary.
 
 **Acceptance:** every removed bridge symbol has no references under
 `public/src`, and `tests/ui-page.test.mjs` continues to validate all legacy DOM
 references.
 
-## 6. Narrow the Transport Adapter
+## 6. Narrow the Transport Adapter ✅
 
-After session and API action extraction, reduce `legacy.js` to:
+After session and API action extraction, `legacy.js` is narrowed to:
 
 - RPC request/response plumbing;
 - SSE connect/reconnect and event dispatch;
@@ -130,7 +129,7 @@ functions. Keep deduplication (`_sseId`) and replay ordering intact.
 **Acceptance:** no Svelte component prop construction, modal rendering, or
 feature-specific API workflow remains in `legacy.js`.
 
-## 7. Add Focused Regression Tests During Extractions
+## 7. Add Focused Regression Tests During Extractions ✅
 
 Add unit tests for pure/action-module decisions where practical:
 
@@ -142,7 +141,7 @@ Add unit tests for pure/action-module decisions where practical:
 Keep existing browser e2e tests as the contract for transcript scrolling,
 session switches, checkpoint rollback, hublots, routines, and file browsing.
 
-## 8. Validation and Commit Cadence
+## 8. Validation and Commit Cadence ✅
 
 For every completed phase or single-domain extraction:
 
@@ -163,7 +162,7 @@ Move checkpoint RPC workflow into actions
 Remove obsolete hublot legacy bridge
 ```
 
-## Completion Criteria
+## Completion Criteria ✅
 
 The migration is complete when:
 
