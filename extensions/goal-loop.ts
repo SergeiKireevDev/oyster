@@ -4,9 +4,9 @@
  * Drives a plan one verified commit at a time. The agent implements a single
  * plan step, then MUST call goal_loop({ action: "verify", ... }). Verification
  * runs the project's full validation suite. Passing work is committed; failed
- * work is reset to the previous commit so the agent can retry from a clean
- * baseline. The agent calls complete only after inspecting the plan and
- * finding no remaining steps.
+ * work is left in place so the agent can analyze the validation output, fix
+ * the current attempt, and verify again. The agent calls complete only after
+ * inspecting the plan and finding no remaining steps.
  */
 
 import { readFileSync } from "node:fs";
@@ -123,7 +123,7 @@ export default function goalLoop(pi: ExtensionAPI) {
     ctx.ui.setWidget("goal-loop", [
       `🎯 Goal loop active — ${state.currentStep || "inspect the plan for the next step"}`,
       `Plan: ${state.planPath} · baseline: ${state.baseline || "not captured"}${retry}`,
-      "Implement one step, then call goal_loop verify. Passing work is committed; failures reset and retry.",
+      "Implement one step, then call goal_loop verify. Passing work is committed; failures stay in the worktree for diagnosis and fixes.",
     ]);
   }
 
@@ -150,14 +150,6 @@ export default function goalLoop(pi: ExtensionAPI) {
       if (result.code !== 0 || result.killed) return { ok: false, reports };
     }
     return { ok: true, reports };
-  }
-
-  async function resetToBaseline(ctx: ExtensionContext) {
-    // baseline is always advanced only after a successful commit. Cleaning
-    // untracked files is deliberate: they are part of a failed step too.
-    const reset = await command("git", ["reset", "--hard", state.baseline], ctx);
-    const clean = await command("git", ["clean", "-fd"], ctx);
-    return `${clipped(reset)}\n${clipped(clean)}`.trim();
   }
 
   pi.registerCommand("goal-loop", {
@@ -188,7 +180,7 @@ export default function goalLoop(pi: ExtensionAPI) {
         return;
       }
       if (dirty.stdout.trim()) {
-        ctx.ui.notify("Commit or stash existing work before starting; goal-loop resets failed steps.", "warning");
+        ctx.ui.notify("Commit or stash existing work before starting; goal-loop commits verified steps and leaves failed attempts for in-place fixes.", "warning");
         return;
       }
       const head = await command("git", ["rev-parse", "HEAD"], ctx);
@@ -211,6 +203,7 @@ export default function goalLoop(pi: ExtensionAPI) {
       await pi.sendUserMessage(
         `Start the verified goal loop using ${planPath}. Read the plan and implement exactly one remaining incomplete step. ` +
         "Before declaring it done, call goal_loop with action=verify, a precise step description, and a meaningful commit message. " +
+        "If verification fails, analyze the output, fix the current attempt in-place, and verify again. " +
         "After a passing verification/commit, inspect the plan again and continue with the next step. Call goal_loop complete only when no steps remain.",
       );
     },
@@ -220,11 +213,11 @@ export default function goalLoop(pi: ExtensionAPI) {
     name: "goal_loop",
     label: "Goal Loop",
     description: "Controls verified plan execution: inspect status, run full validation then commit a completed step, or finish when no plan steps remain.",
-    promptSnippet: "Verify and commit each completed plan step, with rollback/retry on validation failure",
+    promptSnippet: "Verify and commit each completed plan step; on validation failure, fix the current attempt in-place",
     promptGuidelines: [
       "When goal_loop is active, use goal_loop verify after every implementation step before claiming success.",
       "Use goal_loop complete only after reading the configured plan and confirming that no incomplete steps remain.",
-      "After a goal_loop verification failure, work from the reset baseline and retry the same step; do not manually commit or reset it.",
+      "After a goal_loop verification failure, do not revert automatically; analyze the validation output, fix the current worktree in-place, and verify the same step again.",
     ],
     parameters: Type.Object({
       action: StringEnum(["status", "verify", "complete"] as const),
@@ -258,30 +251,20 @@ export default function goalLoop(pi: ExtensionAPI) {
       updateStatus(ctx);
       const checked = await validation(ctx, onUpdate);
       if (!checked.ok) {
-        const reset = await resetToBaseline(ctx);
         state = {
           ...state,
           retries: state.retries + 1,
-          lastResult: `Validation failed; reset to ${state.baseline}.`,
+          lastResult: "Validation failed; worktree left unchanged for diagnosis.",
         };
         persist();
         updateStatus(ctx);
-        const exhausted = state.retries >= state.maxRetries;
-        if (exhausted) {
-          state = { ...state, active: false, lastResult: `Retry budget exhausted after ${state.retries} failed validations.` };
-          persist();
-          updateStatus(ctx);
-        }
         return {
           content: [{ type: "text", text:
-            `Validation FAILED for “${step}”. The worktree was reset to ${state.baseline}.\n\n` +
-            `${checked.reports.join("\n\n")}\n\nReset output:\n${reset}\n\n` +
-            (exhausted
-              ? `Retry budget exhausted (${state.maxRetries}). Stop and report the failure to the user.`
-              : `Retry ${state.retries}/${state.maxRetries}: diagnose the failure and reimplement the SAME step, then call goal_loop verify again.`),
+            `Validation FAILED for “${step}”. The worktree was left unchanged so you can analyze and fix the current attempt in-place.\n\n` +
+            `${checked.reports.join("\n\n")}\n\n` +
+            `Failed verification count: ${state.retries}. Analyze the reports above, fix the SAME step in-place without discarding the current attempt, then call goal_loop verify again.`, 
           }],
           details: { ...state, reports: checked.reports },
-          terminate: exhausted,
         };
       }
 
@@ -334,7 +317,7 @@ Current step: ${state.currentStep || "choose one incomplete step"}
 Baseline commit: ${state.baseline}
 Retries: ${state.retries}/${state.maxRetries}
 
-Implement exactly one plan step at a time. You MUST call goal_loop verify after changing code; it runs build, unit tests, Docker build, and full e2e, then commits only on success. On verification failure, the extension resets to the baseline—diagnose and retry. After every passing commit, inspect the plan for another incomplete step. Call goal_loop complete only when none remain.`,
+Implement exactly one plan step at a time. You MUST call goal_loop verify after changing code; it runs build, unit tests, Docker build, and full e2e, then commits only on success. On verification failure, the extension leaves the worktree unchanged—analyze the reports, fix the current attempt in-place, and verify again. After every passing commit, inspect the plan for another incomplete step. Call goal_loop complete only when none remain.`,
       },
     };
   });
