@@ -14,7 +14,7 @@ import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createLegacyRuntimeCleanup } from "./runtime/legacyRuntimeCleanup.js";
 import { createRuntimeStarter } from "./runtime/startController.js";
 import { createRuntimeStarterDependencies } from "./runtime/runtimeStarterDependencies.js";
-import { createLegacyRuntimeDependencies } from "./runtime/legacyRuntimeDependencies.js";
+import { createLegacyRuntimeLifecycleDependencies as assembleLegacyRuntimeLifecycleDependencies } from "./runtime/legacyRuntimeDependencies.js";
 import { createSessionBootController } from "./runtime/sessionBootController.js";
 import { createSessionBootDependencies } from "./runtime/sessionBootDependencies.js";
 import { createEventConnectionController } from "./runtime/eventConnectionController.js";
@@ -1824,7 +1824,7 @@ const runtimeEventAdapters = createLegacyRuntimeEventAdapters({
 });
 
 export function createLegacyRuntimeLifecycleDependencies() {
-  return createLegacyRuntimeDependencies({
+  return assembleLegacyRuntimeLifecycleDependencies({
     attachAuthenticatedFetch: runtimeAttachments.attachAuthenticatedFetch,
     attachEventAdapters: runtimeEventAdapters.attach,
     attachDebugHooks: runtimeAttachments.attachDebugHooks,

@@ -9,7 +9,7 @@
  * inspecting the plan and finding no remaining steps.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -53,9 +53,12 @@ function clipText(text: string, limit: number) {
   return text.length > limit ? `…${text.slice(-limit)}` : text;
 }
 
+function planFilePath(ctx: ExtensionContext, planPath: string) {
+  return isAbsolute(planPath) ? planPath : join(ctx.cwd, planPath);
+}
+
 function readPlan(ctx: ExtensionContext, planPath: string) {
-  const path = isAbsolute(planPath) ? planPath : join(ctx.cwd, planPath);
-  return readFileSync(path, "utf8");
+  return readFileSync(planFilePath(ctx, planPath), "utf8");
 }
 
 function findNextUncheckedStep(plan: string) {
@@ -75,6 +78,37 @@ function findNextUncheckedStep(plan: string) {
     }
   }
   return "";
+}
+
+function checkCompletedStep(ctx: ExtensionContext, planPath: string, step: string) {
+  const path = planFilePath(ctx, planPath);
+  const plan = readFileSync(path, "utf8");
+  const lines = plan.split(/\r?\n/);
+  const headings: string[] = [];
+  const matches: number[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      headings[heading[1].length - 1] = heading[2];
+      headings.length = heading[1].length;
+      continue;
+    }
+    const unchecked = line.match(/^\s*(?:[-*]|\d+[.)])\s+\[ \]\s+(.+?)\s*$/);
+    if (!unchecked) continue;
+    const section = headings.filter(Boolean).join(" > ");
+    const qualifiedStep = `${section ? `${section}: ` : ""}${unchecked[1]}`;
+    if (step === unchecked[1] || step === qualifiedStep) matches.push(index);
+  }
+
+  if (matches.length !== 1) {
+    throw new Error(matches.length
+      ? `Could not update plan: step “${step}” matches multiple unchecked items in ${planPath}.`
+      : `Could not update plan: no unchecked item exactly matches “${step}” in ${planPath}.`);
+  }
+  lines[matches[0]] = lines[matches[0]].replace("[ ]", "[x]");
+  writeFileSync(path, lines.join("\n"), "utf8");
 }
 
 function simpleContinuationPrompt(goal: GoalState) {
@@ -129,7 +163,7 @@ export default function goalLoop(pi: ExtensionAPI) {
     ctx.ui.setWidget("goal-loop", [
       `🎯 Goal loop active — ${state.currentStep || "inspect the plan for the next step"}`,
       `Plan: ${state.planPath} · baseline: ${state.baseline || "not captured"}${retry}`,
-      "Implement one step, then call goal_loop verify. Passing work is committed; failures stay in the worktree for diagnosis and fixes.",
+      "Implement one step, then call goal_loop verify. Passing work checks off that plan item and commits it; failures stay in the worktree for diagnosis and fixes.",
     ]);
   }
 
@@ -274,6 +308,7 @@ export default function goalLoop(pi: ExtensionAPI) {
         };
       }
 
+      checkCompletedStep(ctx, state.planPath, step);
       const changed = await command("git", ["status", "--porcelain"], ctx);
       if (changed.code !== 0) throw new Error(`Could not inspect Git state: ${clipped(changed)}`);
       if (!changed.stdout.trim()) {
@@ -303,7 +338,7 @@ export default function goalLoop(pi: ExtensionAPI) {
       updateStatus(ctx);
       return {
         content: [{ type: "text", text:
-          `Validation PASSED and committed ${state.lastCommit}: ${commitMessage}.\n\n` +
+          `Validation PASSED, checked off “${step}” in the plan, and committed ${state.lastCommit}: ${commitMessage}.\n\n` +
           "Now read the plan. If a step remains, implement exactly one next step and call goal_loop verify again. If no steps remain, call goal_loop complete with a concise result.",
         }],
         details: { ...state, reports: checked.reports },
