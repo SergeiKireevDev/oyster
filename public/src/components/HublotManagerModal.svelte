@@ -1,7 +1,6 @@
 <script>
   import {
     createManagedHublot,
-    openManagedFileExplorer,
     setupManagedCommandPalette,
   } from "../lib/legacyBridge.js";
   import { removeHublot } from "../lib/hublotActions.js";
@@ -16,6 +15,8 @@
       addToast(`close hublot failed: ${error.message}`, "error");
     }
   }
+
+  const openManagedFileExplorer = () => window.dispatchEvent(new Event("pi-open-file-explorer"));
 
   function commandPalette(node) {
     setupManagedCommandPalette(node);
