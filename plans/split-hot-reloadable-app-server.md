@@ -115,7 +115,7 @@ factory, not the composition root.
 - [x] Move file download, content, save, and chunked upload routes into the
   file route factory. Preserve token checks, atomic writes, upload offset
   idempotency, size limits, and path-confinement tests.
-- [ ] Move `POST /workdir` into `http/routes/workdirRoutes.mjs`, injecting only
+- [x] Move `POST /workdir` into `http/routes/workdirRoutes.mjs`, injecting only
   the runner manager/state operations it requires. Preserve runner switch and
   broadcast behavior with a contract test.
 - [ ] Remove extracted filesystem/workdir route bodies from `app.mjs` and run a

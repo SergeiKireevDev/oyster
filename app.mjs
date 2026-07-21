@@ -85,6 +85,7 @@ import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
 import { createRunnerRoutes } from "./http/routes/runnerRoutes.mjs";
 import { createSessionRoutes } from "./http/routes/sessionRoutes.mjs";
 import { createFileRoutes } from "./http/routes/fileRoutes.mjs";
+import { createWorkdirRoutes } from "./http/routes/workdirRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -207,6 +208,7 @@ export function init(state) {
     sessionFileParam, autoTitleFork,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });
+  const workdirRoutes = createWorkdirRoutes({ state, requestContext, spawnRunner, runnerInfo });
   const sessionRoutes = createSessionRoutes({
     state,
     requestContext,
@@ -222,25 +224,6 @@ export function init(state) {
   // ---------------------------------------------------------------- routes (auth required)
 
   const routes = {
-    // -------------------------------------------------- file explorer (confined)
-
-    "POST /workdir": async (req, res) => {
-      const body = await readJsonBody(req, res);
-      if (body === undefined) return;
-      const target = confinePath(resolve(String(body?.path ?? "")));
-      if (!target) { forbidden(res, body?.path); return; }
-      let ok = false;
-      try { ok = statSync(target).isDirectory(); } catch {}
-      if (!ok) {
-        json(res, 400, { error: `not a directory: ${target}` });
-        return;
-      }
-      state.currentDir = target;
-      console.log(`[pi-ui] workdir changed to ${state.currentDir}, spawning a runner there`);
-      const runner = spawnRunner({ dir: target });
-      json(res, 200, { workdir: state.currentDir, runner: runnerInfo(runner) });
-    },
-
     // -------------------------------------------------- tunnels / hublots
 
     "GET /tunnels": (req, res) => {
@@ -431,7 +414,7 @@ export function init(state) {
     },
   };
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, authenticated: routes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, authenticated: routes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch
