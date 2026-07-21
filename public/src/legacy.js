@@ -1,10 +1,13 @@
 "use strict";
 
-import { setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
+import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { updateHeaderState } from "./stores/header.js";
 import { hublots, hublotsLoading } from "./stores/hublots.js";
+import { closeModalState, openModal, updateModal } from "./stores/modal.js";
+import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "./stores/routines.js";
 import { addToast } from "./stores/toasts.js";
 
 // ------------------------------------------------------------ token
@@ -561,7 +564,7 @@ function pickCheckpointModel({
   okLabel = "Freeze \u{1F9CA}",
 } = {}) {
   return new Promise((resolve) => {
-    $("mTitle").textContent = title;
+    updateModal({ title });
     const body = $("mBody");
     body.innerHTML = "";
     const row = document.createElement("div");
@@ -613,7 +616,7 @@ function pickCheckpointModel({
       resolve({ model });
     });
     actions.append(cancel, ok);
-    overlay.classList.add("open");
+    openModal({ title });
   });
 }
 
@@ -735,90 +738,35 @@ async function rollbackToCheckpoint(cp, btn) {
 // checkpoints roll back on tap.
 
 function refreshTreeIfOpen() {
+  setCheckpointTreeState({ currentSessionId: state?.sessionId ?? null, runners: runnersNow });
   if ($("treebar").classList.contains("open")) loadCheckpointTree();
 }
 
 async function loadCheckpointTree() {
-  const view = $("treeView");
   const path = state?.sessionFile
     ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
-  if (!path) {
-    view.innerHTML = `<div class="t-empty">no session file yet — send a message first</div>`;
-    return;
-  }
+  setCheckpointTreeState({
+    loading: !!path,
+    error: "",
+    empty: path ? "" : "no session file yet — send a message first",
+    currentSessionId: state?.sessionId ?? null,
+    runners: runnersNow,
+  });
+  if (!path) return;
   // the session file is only written to disk once the first message has
   // been sent — until then the server 400s. Treat that as "no tree yet".
   try {
     const res = await fetch(`/checkpoint-tree?path=${encodeURIComponent(path)}`);
     const data = await res.json().catch(() => ({}));
     if (res.status === 400 && /not a session file|no such file/i.test(data.error || "")) {
-      view.innerHTML = `<div class="t-empty">no session file yet — send a message first</div>`;
+      setCheckpointTreeState({ loading: false, root: null, empty: "no session file yet — send a message first" });
       return;
     }
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
-    view.replaceChildren(renderTreeNode(data.root));
+    setCheckpointTreeState({ loading: false, root: data.root, empty: "", error: "" });
   } catch (e) {
-    view.innerHTML = `<div class="t-empty"></div>`;
-    view.firstChild.textContent = `tree unavailable: ${e.message}`;
+    setCheckpointTreeState({ loading: false, root: null, empty: "", error: `tree unavailable: ${e.message}` });
   }
-}
-
-function renderTreeNode(node) {
-  const box = document.createElement("div");
-
-  const row = document.createElement("div");
-  row.className = "t-session" + (node.id === state?.sessionId ? " current" : "");
-  row.title = node.path;
-  const ico = document.createElement("span");
-  ico.textContent = node.parentSession ? "\u{1F33F}" : "\u{1F331}"; // 🌿 fork · 🌱 root
-  const name = document.createElement("span");
-  name.className = "t-name";
-  name.textContent = node.name || node.id.slice(0, 8);
-  row.append(ico, name);
-  const live = runnersNow.find((r) => r.sessionFile === node.path && r.alive);
-  if (live) {
-    const dot = document.createElement("span");
-    dot.className = "t-dot" + (live.busy ? " busy" : "");
-    dot.title = live.busy ? "working" : "live";
-    row.appendChild(dot);
-  }
-  row.addEventListener("click", () => openTreeSession(node));
-  box.appendChild(row);
-
-  const kids = document.createElement("div");
-  kids.className = "t-kids";
-  // checkpoints in order; each gets a slot where its forks nest
-  const forkSlots = new Map();
-  for (const c of node.checkpoints ?? []) {
-    const cr = document.createElement("div");
-    cr.className = "t-ckpt";
-    const hash = document.createElement("span");
-    hash.className = "t-hash";
-    hash.textContent = c.hash;
-    // part of the commit message next to the hash (timestamp-fallback
-    // messages carry no information, so those stay hash-only)
-    const msgText = (c.message ?? "").replace(/^checkpoint:?\s*/, "");
-    const msg = document.createElement("span");
-    msg.className = "t-msg";
-    msg.textContent = /^\d{4}-\d{2}-\d{2}T/.test(msgText) ? "" : msgText;
-    const time = document.createElement("span");
-    time.className = "t-time";
-    const d = new Date(c.timestamp ?? NaN);
-    time.textContent = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    cr.append("\u{1F9CA}", hash, msg, time);
-    cr.title = `${c.message ?? "checkpoint"}\nroll the workdir back to ${c.hash} and fork the session there`;
-    cr.addEventListener("click", () => rollbackToCheckpoint({ hash: c.hash, sessionId: node.id }, cr));
-    kids.appendChild(cr);
-    const slot = document.createElement("div");
-    slot.className = "t-forks";
-    kids.appendChild(slot);
-    forkSlots.set(c.hash, slot);
-  }
-  for (const child of node.children ?? []) {
-    (forkSlots.get(child.forkedAtHash) ?? kids).appendChild(renderTreeNode(child));
-  }
-  if (kids.children.length) box.appendChild(kids);
-  return box;
 }
 
 async function openTreeSession(node) {
@@ -831,6 +779,8 @@ async function openTreeSession(node) {
     toast(`switch failed: ${e.message}`, "error");
   }
 }
+
+setCheckpointTreeHandlers({ openSession: openTreeSession, rollback: rollbackToCheckpoint });
 
 function renderFullMessage(message) {
   const role = message.role;
@@ -961,7 +911,12 @@ function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFi
 function applyState(s) {
   const sessionChanged = s?.sessionId !== state?.sessionId;
   state = s;
-  if (sessionChanged) { loadHublots(); loadRoutines(); } // sidebar tunnels are session-scoped; routines follow the workdir
+  if (sessionChanged) {
+    routines.set(routinesNow.filter(routineVisible));
+    routineScopeAll.set(tunnelScopeAll);
+    routineCurrentSessionId.set(s?.sessionId ?? null);
+    loadHublots(); loadRoutines();
+  } // sidebar tunnels are session-scoped; routines follow the workdir
   if (sessionChanged) syncUrlToSession(s?.sessionId); // keep /s/<sessionId> in the address bar
   updateHeaderState({
     sessionTitle: s.sessionName || "pi-lot",
@@ -1364,7 +1319,7 @@ function handleEvent(msg) {
         if (i !== -1) routinesNow.splice(i, 1);
       } else if (i === -1) routinesNow.push(r);
       else routinesNow[i] = r;
-      renderRoutines();
+      syncRoutinesStore();
       if (msg.reason === "created") { toast(`routine “${r.name}” created`); return; }
       if (msg.reason === "updated") { toast(`routine “${r.name}” updated`); return; }
       if (msg.reason === "deleted") { toast(`routine “${r.name}” deleted`, "warning"); return; }
@@ -1832,7 +1787,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
       return;
     }
     curDir = data.path;
-    $("mTitle").textContent = "Attach file";
+    updateModal({ title: "Attach file" });
     body.innerHTML = "";
     const pathEl = document.createElement("div");
     pathEl.className = "m-path";
@@ -1890,7 +1845,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
   cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => { onCancel?.(); done(); });
   actions.append(useFolder, cancel);
-  overlay.classList.add("open");
+  openModal({ title: "Attach file" });
   await load(startPath);
 }
 
@@ -1935,7 +1890,7 @@ async function showFolderBrowser() {
     const data = await res.json();
     if (!res.ok) { toast(data.error || "cannot open folder", "error"); return; }
     browsePath = data.path;
-    $("mTitle").textContent = "New session in folder";
+    updateModal({ title: "New session in folder" });
     body.innerHTML = "";
     const pathEl = document.createElement("div");
     pathEl.className = "m-path";
@@ -2017,7 +1972,7 @@ async function showFolderBrowser() {
   ok.style.padding = "6px 16px";
   ok.addEventListener("click", () => { closeModal(); done(browsePath); });
   actions.append(newFolder, cancel, ok);
-  overlay.classList.add("open");
+  openModal({ title: "New session in folder" });
   await load(browsePath);
 
   const chosen = await finished;
@@ -2080,7 +2035,7 @@ async function showFileExplorer() {
       return;
     }
     curPath = data.path;
-    $("mTitle").textContent = "\u{1F4C1} File explorer";
+    updateModal({ title: "\u{1F4C1} File explorer" });
     body.innerHTML = "";
     const pathEl = document.createElement("div");
     pathEl.className = "m-path";
@@ -2234,7 +2189,7 @@ async function showFileExplorer() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
 
-    $("mTitle").textContent = `\u270E ${path.split("/").pop()}`;
+    updateModal({ title: `\u270E ${path.split("/").pop()}` });
     body.innerHTML = "";
     const pathEl = document.createElement("div");
     pathEl.className = "m-path";
@@ -2286,7 +2241,7 @@ async function showFileExplorer() {
     actions.append(save, dl, back, closeBtn);
   }
 
-  overlay.classList.add("open");
+  openModal({ title: "\u{1F4C1} File explorer" });
   await load(startPath);
 }
 
@@ -2314,7 +2269,7 @@ async function showHublots() {
     const data = await res.json();
     if (!res.ok) { toast(data.error || "failed to load tunnels", "error"); return; }
     const visible = data.tunnels.filter(tunnelVisible);
-    $("mTitle").textContent = tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session";
+    updateModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session" });
     body.innerHTML = "";
 
     // ---- built-in hublots (always on top)
@@ -2448,7 +2403,7 @@ async function showHublots() {
       tunnelScopeAll = !tunnelScopeAll;
       await load();
       loadHublots(); // keep the sidebar in the same scope
-      renderRoutines(); // the routines section shares the scope toggle
+      syncRoutinesStore(); // the routines section shares the scope toggle
     });
     const closeBtn = document.createElement("span");
     closeBtn.className = "chip";
@@ -2457,8 +2412,7 @@ async function showHublots() {
     actions.append(scope, closeBtn);
   }
 
-  $("modal").classList.add("wide");
-  overlay.classList.add("open");
+  openModal({ title: tunnelScopeAll ? "Hublots — all sessions" : "Hublots — this session", wide: true });
   await load();
 }
 
@@ -2520,6 +2474,15 @@ setHublotHandlers({
 // progression by printing `::progress <0-100> <message>` lines on stdout.
 
 let routinesNow = [];
+let routinesLoadSeq = 0;
+
+function syncRoutinesStore({ loading = false } = {}) {
+  routines.set(routinesNow.filter(routineVisible));
+  routinesTotal.set(routinesNow.length);
+  routineScopeAll.set(tunnelScopeAll);
+  routineCurrentSessionId.set(state?.sessionId ?? null);
+  routinesLoading.set(loading);
+}
 
 function routineVisible(r) {
   return tunnelScopeAll || !r.sessionId || r.sessionId === state?.sessionId;
@@ -2527,14 +2490,21 @@ function routineVisible(r) {
 
 async function loadRoutines() {
   if (!token) return;
-  // show a lightweight loading hint so the wait doesn't read as a blank/stuck sidebar
-  $("routineList").innerHTML = '<div class="sidebar-loading"><span class="spin"></span> loading routines…</div>';
+  const seq = ++routinesLoadSeq;
+  const sessionAtStart = state?.sessionId ?? null;
+  routinesLoading.set(true);
+  routines.set([]);
+  routineScopeAll.set(tunnelScopeAll);
+  routineCurrentSessionId.set(sessionAtStart);
   try {
     const res = await fetch(`/routines`);
     const data = await res.json();
     if (res.ok) routinesNow = data.routines ?? [];
   } catch { /* sidebar is best-effort */ }
-  renderRoutines();
+  // Session switches can issue overlapping sidebar refreshes; ignore stale
+  // responses so the previous session's routines don't overwrite the current view.
+  if (seq !== routinesLoadSeq || sessionAtStart !== (state?.sessionId ?? null)) return;
+  syncRoutinesStore({ loading: false });
 }
 
 async function routineAction(name, action) {
@@ -2552,125 +2522,7 @@ async function routineAction(name, action) {
   }
   loadRoutines();
 }
-
-function renderRoutines() {
-  const list = $("routineList");
-  list.innerHTML = "";
-
-  const visible = routinesNow.filter(routineVisible);
-  if (!visible.length) {
-    const empty = document.createElement("div");
-    empty.className = "r-empty";
-    empty.textContent = routinesNow.length
-      ? `(none for this session — ${routinesNow.length} bound elsewhere)`
-      : "(none)";
-    empty.title = "put executable scripts in ~/.pi/routines/ \u2014 starting one binds it to the current session; it is run with \u201crun\u201d, torn down with \u201cteardown\u201d, and can print \u201c::progress <0-100> <message>\u201d lines to report progression";
-    list.appendChild(empty);
-    return;
-  }
-
-  for (const r of visible) {
-    const block = document.createElement("div");
-    block.className = "routine-block";
-
-    // head: status dot + name + percent
-    const head = document.createElement("div");
-    head.className = "r-head";
-    const dot = document.createElement("span");
-    const dotCls = { running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[r.status] ?? "";
-    dot.className = `r-dot ${dotCls}`;
-    dot.title = r.status;
-    const name = document.createElement("span");
-    name.className = "r-name";
-    name.textContent = r.name;
-    name.title = `${r.path}\nstatus: ${r.status}`
-      + (r.exitCode !== null ? ` (exit ${r.exitCode})` : "")
-      + (r.sessionId ? `\nbound to session ${r.sessionId}` : "\nnot bound to a session yet")
-      + (r.cwd ? `\nruns in ${r.cwd}` : "");
-    head.append(dot, name);
-    if (r.status === "running" && r.progress !== null) {
-      const pct = document.createElement("span");
-      pct.className = "r-pct";
-      pct.textContent = `${r.progress}%`;
-      head.appendChild(pct);
-    }
-    if (tunnelScopeAll && r.sessionId) {
-      const who = document.createElement("span");
-      who.className = "r-pct";
-      who.textContent = r.sessionId === state?.sessionId ? "this session" : String(r.sessionId).slice(0, 8);
-      who.title = `bound to session ${r.sessionId}`;
-      head.appendChild(who);
-    }
-    block.appendChild(head);
-
-    // progress bar while running / tearing down
-    if (["running", "stopping", "teardown"].includes(r.status)) {
-      const bar = document.createElement("div");
-      // no percent yet (or teardown): indeterminate sweep
-      bar.className = "r-bar" + (r.status === "teardown" || !r.progress ? " indet" : "");
-      const fill = document.createElement("div");
-      fill.style.width = `${r.progress ?? 0}%`;
-      bar.appendChild(fill);
-      block.appendChild(bar);
-    }
-
-    // last progression message (or last log line as fallback)
-    const msgText = r.message ?? r.log?.[r.log.length - 1] ?? null;
-    if (msgText) {
-      const m = document.createElement("div");
-      m.className = "r-msg";
-      m.textContent = msgText;
-      m.title = (r.log ?? []).slice(-15).join("\n") || msgText;
-      block.appendChild(m);
-    }
-
-    // actions: start | stop, teardown
-    const actions = document.createElement("div");
-    actions.className = "r-actions";
-    if (r.alive) {
-      const stop = document.createElement("button");
-      stop.className = "r-btn stop";
-      stop.textContent = "\u25A0 stop";
-      stop.title = r.status === "teardown" ? "kill the teardown script" : "stop this routine (SIGTERM its process group)";
-      stop.disabled = r.status === "stopping";
-      stop.addEventListener("click", () => routineAction(r.name, "stop"));
-      actions.appendChild(stop);
-    } else {
-      const start = document.createElement("button");
-      start.className = "r-btn";
-      start.textContent = "\u25B6 start";
-      start.title = "run this routine";
-      start.addEventListener("click", () => routineAction(r.name, "start"));
-      const td = document.createElement("button");
-      td.className = "r-btn";
-      td.textContent = "\u{1F9F9} teardown";
-      td.title = "remove this routine's byproducts" + (r.cwd ? ` (runs in ${r.cwd})` : "");
-      td.addEventListener("click", () => routineAction(r.name, "teardown"));
-      actions.append(start, td);
-      if (r.sessionId) {
-        const rel = document.createElement("button");
-        rel.className = "r-btn";
-        rel.textContent = "\u2715 release";
-        rel.title = "unbind this routine from its session (byproducts stay \u2014 teardown first if needed)";
-        rel.addEventListener("click", () => routineAction(r.name, "release"));
-        actions.appendChild(rel);
-      }
-      const del = document.createElement("button");
-      del.className = "r-btn stop";
-      del.textContent = "\u{1F5D1}";
-      del.title = "delete this routine's script (byproducts stay \u2014 teardown first if needed)";
-      del.addEventListener("click", () => {
-        if (confirm(`Delete routine “${r.name}”? Its script is removed from ~/.pi/routines/ (byproducts stay — teardown first if needed).`)) {
-          routineAction(r.name, "delete");
-        }
-      });
-      actions.appendChild(del);
-    }
-    block.appendChild(actions);
-
-    list.appendChild(block);
-  }
-}
+setRoutineHandlers({ runAction: routineAction });
 
 // ------------------------------------------------------------ session picker
 
@@ -2717,7 +2569,7 @@ async function showSessionPicker() {
   } catch {}
 
   const chosen = await new Promise((resolve) => {
-    $("mTitle").textContent = "Sessions";
+    updateModal({ title: "Sessions" });
     const body = $("mBody");
     body.innerHTML = "";
 
@@ -3112,7 +2964,7 @@ async function showSessionPicker() {
     cancel.textContent = "Cancel";
     cancel.addEventListener("click", () => { closeModal(); resolve(null); });
     actions.appendChild(cancel);
-    overlay.classList.add("open");
+    openModal({ title: "Sessions" });
   });
 
   onRunnersUpdate = null;
@@ -3407,7 +3259,8 @@ async function renderTreeModal(session, sessions) {
     return ul;
   }
 
-  $("mTitle").textContent = `Tree: ${session.name || session.preview || session.id?.slice(0, 8) || "session"}`;
+  const treeTitle = `Tree: ${session.name || session.preview || session.id?.slice(0, 8) || "session"}`;
+  updateModal({ title: treeTitle });
   const body = $("mBody");
   body.innerHTML = "";
   const wrap = document.createElement("div");
@@ -3445,10 +3298,9 @@ async function renderTreeModal(session, sessions) {
   close.className = "btn";
   close.textContent = "Close";
   close.style.padding = "6px 16px";
-  close.addEventListener("click", () => { $("modal").classList.remove("wide"); closeModal(); });
+  close.addEventListener("click", closeModal);
   actions.append(metaToggle, other, close);
-  $("modal").classList.add("wide");
-  overlay.classList.add("open");
+  openModal({ title: treeTitle, wide: true });
 }
 
 // ------------------------------------------------------------ modal helpers
@@ -3456,8 +3308,7 @@ async function renderTreeModal(session, sessions) {
 const overlay = $("overlay");
 
 function closeModal() {
-  overlay.classList.remove("open");
-  $("modal").classList.remove("wide");
+  closeModalState();
   $("mBody").innerHTML = "";
   $("mActions").innerHTML = "";
 }
@@ -3466,7 +3317,7 @@ function closeModal() {
  *  renders its own current value live, so toggles are always in sync. Returns
  *  when the user closes the modal. */
 async function showSettingsModal() {
-  $("mTitle").textContent = "Settings";
+  updateModal({ title: "Settings" });
   const body = $("mBody");
   body.innerHTML = "";
 
@@ -3510,12 +3361,12 @@ async function showSettingsModal() {
   done.textContent = "Done";
   done.addEventListener("click", () => closeModal());
   actions.appendChild(done);
-  overlay.classList.add("open");
+  openModal({ title: "Settings" });
 }
 
 function pickOption(title, options, { searchable = false } = {}) {
   return new Promise((resolve) => {
-    $("mTitle").textContent = title;
+    updateModal({ title });
     const body = $("mBody");
     body.innerHTML = "";
     const buttons = [];
@@ -3578,14 +3429,14 @@ function pickOption(title, options, { searchable = false } = {}) {
     cancel.textContent = "Cancel";
     cancel.addEventListener("click", () => done(null));
     actions.appendChild(cancel);
-    overlay.classList.add("open");
+    openModal({ title });
     search?.focus();
   });
 }
 
 function promptText(title, placeholder, prefill) {
   return new Promise((resolve) => {
-    $("mTitle").textContent = title;
+    updateModal({ title });
     const body = $("mBody");
     body.innerHTML = "";
     const inp = document.createElement("input");
@@ -3604,7 +3455,7 @@ function promptText(title, placeholder, prefill) {
     ok.style.padding = "6px 16px";
     ok.addEventListener("click", () => { const v = inp.value; closeModal(); resolve(v); });
     actions.append(cancel, ok);
-    overlay.classList.add("open");
+    openModal({ title });
     inp.focus();
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
   });
@@ -3612,7 +3463,7 @@ function promptText(title, placeholder, prefill) {
 
 function confirmDialog(title, message) {
   return new Promise((resolve) => {
-    $("mTitle").textContent = title;
+    updateModal({ title });
     $("mBody").textContent = message;
     const actions = $("mActions");
     const no = document.createElement("span");
@@ -3625,7 +3476,7 @@ function confirmDialog(title, message) {
     yes.style.padding = "6px 16px";
     yes.addEventListener("click", () => { closeModal(); resolve(true); });
     actions.append(no, yes);
-    overlay.classList.add("open");
+    openModal({ title });
   });
 }
 

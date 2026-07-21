@@ -1,5 +1,6 @@
 <script>
   import HublotList from "./HublotList.svelte";
+  import RoutineList from "./RoutineList.svelte";
 </script>
 
 <aside id="hublots">
@@ -7,5 +8,5 @@
   <HublotList />
   <div id="hublotAdd" title="Open a new hublot">+</div>
   <div class="side-head routines">Routines</div>
-  <div id="routineList" style="display:contents"></div>
+  <RoutineList />
 </aside>
