@@ -1,5 +1,5 @@
 /** Complete durable delete-session operations after an unplanned server stop. */
-export async function reconcileSessionDeletions({ appStore, sessionReferences, sessionCatalog, sessionOperations, deleteSessionRoutines = () => [], now = () => new Date().toISOString(), logger = console }) {
+export async function reconcileSessionDeletions({ appStore, sessionReferences, sessionCatalog, sessionOperations, closeSessionHublots = async () => [], deleteSessionRoutines = () => [], now = () => new Date().toISOString(), logger = console }) {
   const operations = appStore.repositories.operations.listIncomplete()
     .filter((operation) => operation.kind === "delete_session");
   const results = [];
@@ -27,6 +27,7 @@ export async function reconcileSessionDeletions({ appStore, sessionReferences, s
         await sessionOperations.deleteSession(reference);
       }
 
+      await closeSessionHublots(reference.id);
       await deleteSessionRoutines(reference.id);
       appStore.transaction((repositories) => {
         const owner = operation.owner_id

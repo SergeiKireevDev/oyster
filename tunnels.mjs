@@ -12,9 +12,9 @@
 
 import { spawn, execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { createConnection, createServer } from "node:net";
 import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
 import { readProcessIdentity, verifyPersistedProcessIdentity } from "./persistence/processIdentity.mjs";
@@ -492,6 +492,62 @@ export async function shutdownHublots(state, {
 }
 
 // ---------------------------------------------------------------- hublot agents
+
+/** Stop every process owned by a session's hublots before their owner row cascades. */
+export async function closeSessionHublots(state, sessionId, {
+  termTimeoutMs = 3_000,
+  killTimeoutMs = 1_000,
+  pollIntervalMs = 25,
+  verifyIdentity = verifyPersistedProcessIdentity,
+  signalProcess = (pid, signal) => process.kill(pid, signal),
+  removeFile = unlinkSync,
+  clock = () => Date.now(),
+  sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+} = {}) {
+  const repository = hublotRepository(state);
+  const rows = repository.list().filter((row) => row.session_id === sessionId);
+  const targets = [];
+  for (const row of rows) {
+    if (row.status !== "closed") recordHublotTransition(state, row.id, "closing", { desiredState: "closed", publicUrl: null, lastError: null });
+    for (const processRow of repository.listProcesses(row.id)) {
+      if (!processRow.ended_at && ["running", "starting"].includes(processRow.status) && verifyIdentity(processRow)) targets.push(processRow);
+    }
+  }
+  const live = () => targets.filter((processRow) => verifyIdentity(processRow));
+  const signalAll = (signal) => {
+    for (const processRow of live()) {
+      try { signalProcess(processRow.pid, signal); } catch (error) { if (error?.code !== "ESRCH") throw error; }
+    }
+  };
+  const awaitExit = async (timeoutMs) => {
+    const deadline = clock() + timeoutMs;
+    while (live().length && clock() < deadline) await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - clock())));
+  };
+  signalAll("SIGTERM");
+  await awaitExit(termTimeoutMs);
+  if (live().length) { signalAll("SIGKILL"); await awaitExit(killTimeoutMs); }
+  const remaining = live();
+  if (remaining.length) throw new Error(`could not stop ${remaining.length} hublot process(es) for session ${sessionId}`);
+  const stoppedAt = new Date().toISOString();
+  for (const processRow of targets) {
+    if (!repository.findProcess(processRow.id)?.ended_at) updateHublotProcessMetadata(state, processRow.id, {
+      status: "ended", observed_at: stoppedAt, ended_at: stoppedAt, signal: "session_deleted", exit_code: null,
+    });
+    hublotProcessHandles(state).delete(processRow.id);
+  }
+  for (const row of rows) {
+    if (repository.find(row.id)?.status !== "closed") recordHublotTransition(state, row.id, "closed", {
+      desiredState: "closed", publicUrl: null, lastError: null, closedAt: stoppedAt, at: stoppedAt,
+    });
+    if (row.service_start_script_path) {
+      const scriptRoot = resolve(state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "hublots");
+      const scriptPath = resolve(row.service_start_script_path);
+      if (!scriptPath.startsWith(`${scriptRoot}${sep}`)) throw new Error(`refusing to remove hublot startup script outside ${scriptRoot}`);
+      try { removeFile(scriptPath); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+    }
+  }
+  return rows.map((row) => row.port);
+}
 
 /** Restore the authoritative startup artifact before any app-owned invocation. */
 export function materializeHublotStartupScript(state, id) {

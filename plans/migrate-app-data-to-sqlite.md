@@ -334,7 +334,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Never publish a persisted URL until its current cloudflared process is confirmed healthy.
 - [x] Make graceful shutdown await bounded process cleanup while retaining desired state for restart recovery.
 - [x] Preserve current routes, SSE events, tool behavior, and stable hublot IDs across restarts.
-- [ ] Verify session deletion closes the service and tunnel before cascading its database and startup-script records.
+- [x] Verify session deletion closes the service and tunnel before cascading its database and startup-script records.
 
 ### 7. Persist runner descriptors and replay events
 

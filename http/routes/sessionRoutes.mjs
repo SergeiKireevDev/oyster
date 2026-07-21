@@ -19,6 +19,7 @@ export function createSessionRoutes({
   const { stopRunner, runnersChanged } = runners;
   const {
     closeTunnel,
+    closeSessionHublots = null,
     listTunnels = () => [],
     stopSessionRoutines = () => [],
     deleteSessionRoutines = resources.releaseSessionRoutines ?? (() => []),
@@ -138,7 +139,8 @@ export function createSessionRoutes({
         const outcome = await workflow({
           reference,
           stopRunners: () => { for (const runner of matchingRunners) stopRunner(runner); return matchingRunners; },
-          closeHublots: () => {
+          closeHublots: async () => {
+            if (closeSessionHublots) return closeSessionHublots(state, reference.id);
             const closed = [];
             for (const tunnel of listTunnels(state)) {
               if (tunnel.sessionId !== reference.id) continue;
