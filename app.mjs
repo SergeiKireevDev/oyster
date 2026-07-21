@@ -11,16 +11,19 @@
  *   GET  /            -> static UI (public/index.html)              (no auth)
  *   GET  /health      -> liveness probe                             (no auth)
  *   GET  /authcheck   -> which credentials arrived + validity       (no auth)
- *   GET  /events      -> SSE stream of pi's stdout JSON lines
- *   POST /rpc         -> JSON command forwarded to pi's stdin
+ *   GET  /events      -> SSE stream of one runner's stdout (?runner=id)
+ *   POST /rpc         -> JSON command forwarded to a runner (?runner=id)
+ *   GET  /runners     -> list live pi runners (one process per session)
+ *   DELETE /runners   -> stop a runner (?id=…)
+ *   POST /open-session -> get-or-spawn a runner { sessionPath?, dir? }
  *   GET  /sessions    -> saved pi sessions for the active workdir
  *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
  *   GET  /session-folders -> all folders under ~/.pi/agent/sessions
  *   GET  /search      -> full-text search (?q=…&scope=session|folder|all[&path=…])
  *   GET  /browse      -> list subdirectories for the folder picker
- *   POST /workdir     -> switch folder (respawns pi there)
+ *   POST /workdir     -> switch folder (spawns a new runner there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
- *   POST /restart     -> kill and respawn the pi process
+ *   POST /restart     -> kill and respawn one runner (?runner=id)
  *   GET  /tunnels     -> live tunnels spawned by this server
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
@@ -43,68 +46,204 @@ const { listTunnels, openTunnel, closeTunnel, closeAllTunnels } =
 export function init(state) {
   const { config, broadcast, serverEvent } = state;
 
-  // ---------------------------------------------------------------- pi process
+  // ---------------------------------------------------------------- pi runners
+  //
+  // One pi process per open session ("runner"). Runners keep working in the
+  // background when the browser looks at another session; each SSE client
+  // subscribes to exactly one runner, and runner status (busy/idle/dead) is
+  // broadcast to everyone so session lists can show live indicators.
 
-  function startPi() {
-    if (state.pi) return;
-    const now = Date.now();
-    // basic crash-loop guard: if pi died within 2s of spawning, wait before retry
-    if (now - state.lastSpawnAt < 2000 && state.piStartCount > 0) {
-      setTimeout(() => {
-        if (!state.pi) startPi();
-      }, 2000);
-      return;
-    }
-    state.lastSpawnAt = now;
-    state.piStartCount++;
-    const args = ["--mode", "rpc", ...config.PI_EXTRA_ARGS];
-    console.log(`[pi-ui] spawning: ${config.PI_BIN} ${args.join(" ")} (cwd: ${state.currentDir})`);
-    const pi = spawn(config.PI_BIN, args, { cwd: state.currentDir, stdio: ["pipe", "pipe", "pipe"] });
-    state.pi = pi;
+  const RUNNER_BUFFER_MAX = 400;
 
-    const rl = createInterface({ input: pi.stdout });
-    rl.on("line", (line) => {
-      line = line.trim();
-      if (line) broadcast(line);
-    });
+  if (!state.runners) state.runners = new Map(); // id -> runner
+  if (!state.runnerSeq) state.runnerSeq = 0;
 
-    pi.stderr.on("data", (chunk) => {
-      const text = String(chunk).trim();
-      if (text) console.error(`[pi stderr] ${text}`);
-    });
-
-    pi.on("error", (err) => {
-      console.error(`[pi-ui] failed to spawn pi: ${err.message}`);
-      serverEvent({ type: "pi_error", error: err.message });
-      if (state.pi === pi) state.pi = null;
-    });
-
-    pi.on("exit", (code, signal) => {
-      console.log(`[pi-ui] pi exited (code=${code}, signal=${signal})`);
-      serverEvent({ type: "pi_exit", code, signal });
-      if (state.pi === pi) state.pi = null;
-    });
-
-    serverEvent({ type: "pi_started", startCount: state.piStartCount });
+  function runnerInfo(r) {
+    return {
+      id: r.id, dir: r.dir, sessionFile: r.sessionFile, sessionId: r.sessionId,
+      sessionName: r.sessionName, busy: r.busy, alive: !!r.proc,
+    };
   }
 
-  function stopPi() {
-    const proc = state.pi;
+  /** global (all-clients) notification that some runner changed state */
+  function runnersChanged() {
+    serverEvent({ type: "runners_update", runners: [...state.runners.values()].map(runnerInfo) });
+  }
+
+  /** deliver a line only to SSE clients subscribed to this runner */
+  function runnerWrite(runner, line) {
+    runner.buffer.push(line);
+    if (runner.buffer.length > RUNNER_BUFFER_MAX) runner.buffer.shift();
+    for (const res of state.sseClients) {
+      if (res.runnerId === runner.id) res.write(`data: ${line}\n\n`);
+    }
+  }
+
+  function runnerEvent(runner, obj) {
+    runnerWrite(runner, JSON.stringify({ ...obj, _server: true, runner: runner.id }));
+  }
+
+  /** watch a runner's stdout to maintain busy/session metadata */
+  function trackRunner(runner, line) {
+    let msg;
+    try { msg = JSON.parse(line); } catch { return; }
+    if (msg.type === "agent_start") { runner.busy = true; runnersChanged(); }
+    else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(); requestState(runner); }
+    else if (msg.type === "response" && msg.success) {
+      if (msg.command === "get_state" && msg.data) {
+        const d = msg.data;
+        const changed = runner.sessionFile !== d.sessionFile ||
+          runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
+        runner.sessionFile = d.sessionFile ?? runner.sessionFile;
+        runner.sessionId = d.sessionId ?? runner.sessionId;
+        runner.sessionName = d.sessionName ?? null;
+        runner.busy = !!(d.isStreaming || d.isCompacting);
+        if (changed) runnersChanged();
+      } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
+        requestState(runner);
+      }
+    }
+  }
+
+  let srvSeq = 0;
+  function requestState(runner) {
+    sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "get_state" }, { autostart: false });
+  }
+
+  function spawnRunner({ dir, sessionPath = null }) {
+    const runner = {
+      id: `r${++state.runnerSeq}`,
+      dir,
+      sessionFile: sessionPath,
+      sessionId: null,
+      sessionName: null,
+      busy: false,
+      proc: null,
+      buffer: [],
+      startCount: 0,
+      lastSpawnAt: 0,
+    };
+    state.runners.set(runner.id, runner);
+    startRunner(runner);
+    return runner;
+  }
+
+  function startRunner(runner) {
+    if (runner.proc) return;
+    const now = Date.now();
+    // crash-loop guard: if this runner died within 2s of spawning, wait
+    if (now - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
+      setTimeout(() => { if (!runner.proc && state.runners.has(runner.id)) startRunner(runner); }, 2000);
+      return;
+    }
+    runner.lastSpawnAt = now;
+    runner.startCount++;
+    const args = ["--mode", "rpc", ...config.PI_EXTRA_ARGS];
+    console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
+    const proc = spawn(config.PI_BIN, args, { cwd: runner.dir, stdio: ["pipe", "pipe", "pipe"] });
+    runner.proc = proc;
+
+    const rl = createInterface({ input: proc.stdout });
+    rl.on("line", (line) => {
+      line = line.trim();
+      if (!line) return;
+      trackRunner(runner, line);
+      runnerWrite(runner, line);
+    });
+
+    proc.stderr.on("data", (chunk) => {
+      const text = String(chunk).trim();
+      if (text) console.error(`[pi ${runner.id} stderr] ${text}`);
+    });
+
+    proc.on("error", (err) => {
+      console.error(`[pi-ui] failed to spawn runner ${runner.id}: ${err.message}`);
+      runnerEvent(runner, { type: "pi_error", error: err.message });
+      if (runner.proc === proc) runner.proc = null;
+      runnersChanged();
+    });
+
+    proc.on("exit", (code, signal) => {
+      console.log(`[pi-ui] runner ${runner.id} exited (code=${code}, signal=${signal})`);
+      if (runner.proc === proc) {
+        runner.proc = null;
+        runner.busy = false;
+        runnerEvent(runner, { type: "pi_exit", code, signal });
+        runnersChanged();
+      }
+    });
+
+    // resume the runner's session after a restart (fresh runners with a
+    // requested sessionPath also land here)
+    if (runner.sessionFile) {
+      sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "switch_session", sessionPath: runner.sessionFile }, { autostart: false });
+    }
+    requestState(runner);
+    runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
+    runnersChanged();
+  }
+
+  function stopRunner(runner) {
+    const proc = runner.proc;
     if (!proc) return;
-    state.pi = null;
+    runner.proc = null;
+    runner.busy = false;
     proc.removeAllListeners("exit");
-    proc.on("exit", () => serverEvent({ type: "pi_exit", code: null, signal: "SIGTERM" }));
+    proc.on("exit", () => runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" }));
     proc.kill("SIGTERM");
     setTimeout(() => {
       if (proc.exitCode === null && !proc.killed) proc.kill("SIGKILL");
     }, 3000).unref();
+    runnersChanged();
   }
 
-  function sendToPi(obj) {
-    if (!state.pi) startPi();
-    if (!state.pi || !state.pi.stdin.writable) return false;
-    state.pi.stdin.write(JSON.stringify(obj) + "\n");
+  function sendToRunner(runner, obj, { autostart = true } = {}) {
+    if (!runner.proc && autostart) startRunner(runner);
+    if (!runner.proc || !runner.proc.stdin.writable) return false;
+    runner.proc.stdin.write(JSON.stringify(obj) + "\n");
     return true;
+  }
+
+  /** the runner new/unspecified clients get; created on demand */
+  function defaultRunner() {
+    let r = state.runners.get(state.defaultRunnerId);
+    if (!r) {
+      r = [...state.runners.values()].find((x) => x.proc) ?? [...state.runners.values()][0];
+      if (!r) r = spawnRunner({ dir: state.currentDir });
+      state.defaultRunnerId = r.id;
+    }
+    return r;
+  }
+
+  function runnerFromReq(url) {
+    const id = url.searchParams.get("runner");
+    return (id && state.runners.get(id)) || defaultRunner();
+  }
+
+  /** reuse the runner already attached to a session file, else spawn one */
+  function openSessionRunner({ sessionPath = null, dir = null }) {
+    if (sessionPath) {
+      for (const r of state.runners.values()) {
+        if (r.sessionFile === sessionPath) {
+          if (!r.proc) startRunner(r);
+          return r;
+        }
+      }
+    }
+    return spawnRunner({ dir: dir || state.currentDir, sessionPath });
+  }
+
+  // legacy entry points used by server.mjs
+  function startPi() { defaultRunner(); }
+  function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
+
+  // one-time migration from the single-process era: a pre-runner pi process
+  // may survive a hot reload as state.pi; its stdout listeners belong to old
+  // code, so retire it and let runners take over
+  if (state.pi) {
+    console.log("[pi-ui] retiring pre-runner pi process (multi-runner migration)");
+    try { state.pi.kill("SIGTERM"); } catch {}
+    state.pi = null;
   }
 
   // ---------------------------------------------------------------- auth
@@ -440,7 +579,7 @@ export function init(state) {
     if (req.method === "GET" && url.pathname === "/health") {
       json(res, 200, {
         ok: true,
-        piRunning: !!state.pi,
+        runners: [...state.runners.values()].map(runnerInfo),
         clients: state.sseClients.size,
         reloadCount: state.reloadCount,
       });
@@ -466,6 +605,8 @@ export function init(state) {
     }
 
     if (req.method === "GET" && url.pathname === "/events") {
+      const runner = runnerFromReq(url);
+      if (!runner.proc) startRunner(runner);
       res.writeHead(200, {
         "content-type": "text/event-stream",
         "cache-control": "no-cache, no-transform",
@@ -473,11 +614,17 @@ export function init(state) {
         "x-accel-buffering": "no",
       });
       res.write(`: connected\n\n`);
-      // replay buffered events so the client can reconstruct in-flight state
+      res.runnerId = runner.id; // this client sees only this runner's stream
+      // replay this runner's buffered events so the client can reconstruct
+      // in-flight state
       if (url.searchParams.get("replay") !== "0") {
-        for (const line of state.eventBuffer) res.write(`data: ${line}\n\n`);
+        for (const line of runner.buffer) res.write(`data: ${line}\n\n`);
       }
-      res.write(`data: ${JSON.stringify({ type: "replay_done", _server: true, piRunning: !!state.pi, workdir: state.currentDir })}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        type: "replay_done", _server: true,
+        runner: runner.id, piRunning: !!runner.proc, workdir: runner.dir,
+        runners: [...state.runners.values()].map(runnerInfo),
+      })}\n\n`);
       state.sseClients.add(res);
       // data pings (not SSE comments) so the client can detect a dead
       // connection: comments never reach onmessage, real events do
@@ -489,7 +636,6 @@ export function init(state) {
         clearInterval(ping);
         state.sseClients.delete(res);
       });
-      startPi();
       return;
     }
 
@@ -500,13 +646,61 @@ export function init(state) {
         json(res, 400, { error: "command must be an object with a string `type`" });
         return;
       }
-      const ok = sendToPi(cmd);
-      json(res, ok ? 202 : 503, ok ? { queued: true } : { error: "pi process unavailable" });
+      const runner = runnerFromReq(url);
+      const ok = sendToRunner(runner, cmd);
+      json(res, ok ? 202 : 503, ok ? { queued: true, runner: runner.id } : { error: "pi process unavailable" });
+      return;
+    }
+
+    if (url.pathname === "/runners") {
+      if (req.method === "GET") {
+        json(res, 200, { runners: [...state.runners.values()].map(runnerInfo) });
+        return;
+      }
+      if (req.method === "DELETE") {
+        const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
+        if (!runner) { json(res, 404, { error: "no such runner" }); return; }
+        stopRunner(runner);
+        state.runners.delete(runner.id);
+        if (state.defaultRunnerId === runner.id) state.defaultRunnerId = null;
+        runnersChanged();
+        json(res, 200, { stopped: runner.id });
+        return;
+      }
+      json(res, 405, { error: "method not allowed" });
+      return;
+    }
+
+    // get-or-spawn a runner for a session (or a fresh session in a folder)
+    if (req.method === "POST" && url.pathname === "/open-session") {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      let sessionPath = body?.sessionPath ? resolve(String(body.sessionPath)) : null;
+      if (sessionPath && (!sessionPath.startsWith(SESSIONS_ROOT + "/") || !sessionPath.endsWith(".jsonl") || !existsSync(sessionPath))) {
+        json(res, 400, { error: `not a session file: ${sessionPath}` });
+        return;
+      }
+      let dir = body?.dir ? resolve(String(body.dir)) : null;
+      if (dir) {
+        let ok = false;
+        try { ok = statSync(dir).isDirectory(); } catch {}
+        if (!ok) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
+        state.currentDir = dir; // keep /sessions and /browse in this folder
+      }
+      const runner = openSessionRunner({ sessionPath, dir });
+      json(res, 200, { runner: runnerInfo(runner) });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/sessions") {
-      json(res, 200, { sessions: listSessions() });
+      // annotate each session with its live runner (if any) so the picker
+      // can show running/busy indicators
+      const runners = [...state.runners.values()];
+      const sessions = listSessions().map((s) => {
+        const r = runners.find((x) => x.sessionFile === s.path);
+        return { ...s, runnerId: r?.id ?? null, alive: !!r?.proc, busy: !!r?.busy };
+      });
+      json(res, 200, { sessions });
       return;
     }
 
@@ -652,11 +846,9 @@ export function init(state) {
         return;
       }
       state.currentDir = target;
-      console.log(`[pi-ui] workdir changed to ${state.currentDir}, respawning pi`);
-      stopPi();
-      serverEvent({ type: "workdir_changed", workdir: state.currentDir });
-      setTimeout(startPi, 300);
-      json(res, 202, { workdir: state.currentDir });
+      console.log(`[pi-ui] workdir changed to ${state.currentDir}, spawning a runner there`);
+      const runner = spawnRunner({ dir: target });
+      json(res, 200, { workdir: state.currentDir, runner: runnerInfo(runner) });
       return;
     }
 
@@ -702,9 +894,10 @@ export function init(state) {
     }
 
     if (req.method === "POST" && url.pathname === "/restart") {
-      stopPi();
-      setTimeout(startPi, 300);
-      json(res, 202, { restarting: true });
+      const runner = runnerFromReq(url);
+      stopRunner(runner);
+      setTimeout(() => { if (state.runners.has(runner.id)) startRunner(runner); }, 300);
+      json(res, 202, { restarting: true, runner: runner.id });
       return;
     }
 

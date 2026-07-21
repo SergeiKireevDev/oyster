@@ -445,6 +445,20 @@
     word-break: break-all;
   }
   #modal .m-option.dir { padding: 6px 12px; margin-bottom: 4px; }
+  .s-dot {
+    flex-shrink: 0;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 7px;
+    background: var(--red);           /* no process */
+    opacity: .55;
+  }
+  .s-dot.on { background: var(--green); opacity: 1; }   /* runner idle */
+  .s-dot.busy {                                          /* runner working */
+    background: var(--yellow); opacity: 1;
+    animation: dotblink 1s ease-in-out infinite;
+  }
+  @keyframes dotblink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   #modal .m-option .s-del {
     flex-shrink: 0;
     margin-left: 6px;
@@ -761,7 +775,7 @@ async function rpc(cmd, { wait = true } = {}) {
   }
   // token goes in the query string + x-auth-token header: some tunnels/proxies
   // strip or overwrite the Authorization header, which showed up as 401s
-  const res = await fetch(`/rpc?token=${encodeURIComponent(token)}`, {
+  const res = await fetch(`/rpc?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-auth-token": token },
     body: JSON.stringify(cmd),
@@ -1178,9 +1192,46 @@ function applyState(s) {
 }
 
 let workdir = null;
-let awaitingRespawn = false;
-/** one-shot callback run after pi respawns following a workdir change */
-let afterRespawn = null;
+
+// ------------------------------------------------------------ runners
+// The server keeps one pi process ("runner") per open session; this client
+// is attached to exactly one at a time. Other runners keep working in the
+// background.
+
+let currentRunner = localStorage.getItem("pi_runner") || null;
+let runnersNow = []; // latest known runner list (for session indicators)
+/** one-shot callback run after the next transcript reload (e.g. focus a search hit) */
+let afterTranscript = null;
+
+function setRunner(id) {
+  currentRunner = id || null;
+  if (id) localStorage.setItem("pi_runner", id);
+  else localStorage.removeItem("pi_runner");
+}
+
+/** attach this client to another runner and rebuild the UI from its stream */
+function switchToRunner(id) {
+  if (id === currentRunner) { refreshState(); return; }
+  setRunner(id);
+  clearMessages();
+  knownCommands = null; // commands can differ per project
+  connect(); // reopen SSE on the new runner; onopen reloads the transcript
+}
+
+/** get-or-spawn a runner for a session file / folder */
+async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
+  const res = await fetch(`/open-session?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionPath, dir }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
+  return data.runner;
+}
+
+/** hook: session picker (when open) re-renders its indicators */
+let onRunnersUpdate = null;
 
 function setWorkdir(dir) {
   workdir = dir;
@@ -1232,7 +1283,7 @@ function connect() {
   if (es) { try { es.close(); } catch {} }
   lastEventAt = Date.now();
   replaying = true;
-  es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
+  es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
   es.onopen = async () => {
     connected = true;
     $("connDot").className = "dot ok";
@@ -1283,8 +1334,15 @@ function handleEvent(msg) {
 
     case "replay_done":
       replaying = false;
+      if (msg.runner) setRunner(msg.runner); // server may have fallen back to another runner
+      if (msg.runners) runnersNow = msg.runners;
       if (msg.workdir) setWorkdir(msg.workdir);
       loadInterfaces();
+      return;
+
+    case "runners_update":
+      runnersNow = msg.runners ?? [];
+      onRunnersUpdate?.(runnersNow);
       return;
 
     case "response":
@@ -1379,22 +1437,10 @@ function handleEvent(msg) {
       return;
 
     case "pi_started":
-      if (awaitingRespawn) {
-        awaitingRespawn = false;
-        const cb = afterRespawn;
-        afterRespawn = null;
-        setTimeout(() => (cb ? cb() : reloadTranscript()).catch(() => refreshState()), 400);
-      } else if (msg.startCount > 1) {
+      if (msg.startCount > 1) {
         toast("pi process restarted");
         refreshState();
       }
-      return;
-
-    case "workdir_changed":
-      setWorkdir(msg.workdir);
-      knownCommands = null; // commands can differ per project
-      toast(`folder: ${msg.workdir}`);
-      clearMessages();
       return;
 
     case "pi_error":
@@ -1441,6 +1487,9 @@ async function reloadTranscript() {
   clearMessages();
   for (const m of messages) renderFullMessage(m);
   scrollToBottom(true);
+  const cb = afterTranscript;
+  afterTranscript = null;
+  cb?.();
 }
 
 let stateRefreshTimer = null;
@@ -1537,8 +1586,9 @@ menu.addEventListener("click", async (e) => {
   menu.classList.remove("open");
   try {
     if (action === "newSession") {
-      await rpc({ type: "new_session" });
-      clearMessages();
+      // a fresh runner, so the current session keeps running in the background
+      const r = await openSessionRunner({ dir: workdir });
+      switchToRunner(r.id);
       toast("new session");
     } else if (action === "newSessionIn") {
       await showFolderBrowser();
@@ -1558,7 +1608,7 @@ menu.addEventListener("click", async (e) => {
       clearMessages();
       for (const m of messages) renderFullMessage(m);
     } else if (action === "restart") {
-      await fetch(`/restart?token=${encodeURIComponent(token)}`, { method: "POST" });
+      await fetch(`/restart?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`, { method: "POST" });
       clearMessages();
     } else if (action === "logout") {
       localStorage.removeItem("pi_ui_token");
@@ -1768,19 +1818,15 @@ async function showFolderBrowser() {
 
   const chosen = await finished;
   if (!chosen) return;
-  if (chosen === workdir) { toast("already in this folder"); return; }
-  awaitingRespawn = true;
-  const res = await fetch(`/workdir?token=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: chosen }),
-  });
-  if (!res.ok) {
-    awaitingRespawn = false;
-    const data = await res.json().catch(() => ({}));
-    toast(data.error || `failed (${res.status})`, "error");
+  try {
+    // spawns a NEW runner in that folder; the current session keeps running
+    const r = await openSessionRunner({ dir: chosen });
+    setWorkdir(chosen);
+    switchToRunner(r.id);
+    toast(`folder: ${chosen}`);
+  } catch (e) {
+    toast(e.message, "error");
   }
-  // on success the workdir_changed + pi_started events clear and reload the UI
 }
 
 // ------------------------------------------------------------ tunnels
@@ -2036,6 +2082,18 @@ async function showSessionPicker() {
   if (!sessions.length) { toast("no saved sessions"); return; }
   const currentId = state?.sessionId;
 
+  const dots = new Map(); // session path -> dot element (live indicator updates)
+  const applyDot = (dot, alive, busy) => {
+    dot.className = "s-dot" + (busy ? " busy" : alive ? " on" : "");
+    dot.title = busy ? "agent working" : alive ? "process running (idle)" : "no running process";
+  };
+  onRunnersUpdate = (runners) => {
+    for (const [path, dot] of dots) {
+      const r = runners.find((x) => x.sessionFile === path);
+      applyDot(dot, !!r?.alive, !!r?.busy);
+    }
+  };
+
   const chosen = await new Promise((resolve) => {
     $("mTitle").textContent = "Sessions";
     const body = $("mBody");
@@ -2046,6 +2104,10 @@ async function showSessionPicker() {
       b.className = "m-option" + (isCurrent ? " current" : "");
       const title = document.createElement("div");
       title.className = "s-title";
+      const dot = document.createElement("span");
+      applyDot(dot, s.alive, s.busy);
+      dots.set(s.path, dot);
+      title.appendChild(dot);
       const nameEl = document.createElement("span");
       nameEl.className = "s-name";
       nameEl.textContent = (s.name || s.preview || "(empty session)") + (isCurrent ? " · current" : "");
@@ -2092,11 +2154,17 @@ async function showSessionPicker() {
     overlay.classList.add("open");
   });
 
+  onRunnersUpdate = null;
   if (!chosen || chosen.id === currentId) return;
-  const data = await rpc({ type: "switch_session", sessionPath: chosen.path });
-  if (data?.cancelled) { toast("switch cancelled"); return; }
-  await reloadTranscript();
-  toast(`switched to: ${chosen.name || chosen.preview || chosen.id.slice(0, 8)}`);
+  try {
+    // attaches to the session's live runner if it has one (its work is
+    // untouched), else spawns a fresh pi on that session in the background
+    const r = await openSessionRunner({ sessionPath: chosen.path, dir: workdir });
+    switchToRunner(r.id);
+    toast(`switched to: ${chosen.name || chosen.preview || chosen.id.slice(0, 8)}`);
+  } catch (e) {
+    toast(`switch failed: ${e.message}`, "error");
+  }
 }
 
 $("modelChip").addEventListener("click", async () => {
@@ -2297,37 +2365,26 @@ async function openSearchHit(sessionPath, hit) {
     return;
   }
 
-  const switchAndFocus = async () => {
-    const d = await rpc({ type: "switch_session", sessionPath });
-    if (d?.cancelled) { toast("switch cancelled"); return; }
-    await reloadTranscript();
-    toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
+  const focus = () => {
     if (!focusMessageBySnippet(hit.snippet)) toast("match not visible in transcript", "warning");
   };
 
-  // session from another folder: move the workdir there first so pi runs in
-  // the right directory and the folder indicator updates, then switch
-  if (hit.sessionCwd && hit.sessionCwd !== workdir) {
-    awaitingRespawn = true;
-    afterRespawn = switchAndFocus;
-    const res = await fetch(`/workdir?token=${encodeURIComponent(token)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: hit.sessionCwd }),
-    });
-    if (!res.ok) {
-      awaitingRespawn = false;
-      afterRespawn = null;
-      const data = await res.json().catch(() => ({}));
-      // folder may have been deleted — fall back to opening it in place
-      toast(data.error || `cannot enter ${hit.sessionCwd}, opening here`, "warning");
-      try { await switchAndFocus(); } catch (e) { toast(`switch failed: ${e.message}`, "error"); }
+  try {
+    // attach to the session's runner (spawned in the session's own folder if
+    // it comes from elsewhere); other sessions keep running untouched
+    const r = await openSessionRunner({ sessionPath, dir: hit.sessionCwd || workdir });
+    if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
+    toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
+    if (r.id === currentRunner) {
+      await reloadTranscript();
+      focus();
+    } else {
+      afterTranscript = focus;
+      switchToRunner(r.id);
     }
-    return;
+  } catch (e) {
+    toast(`switch failed: ${e.message}`, "error");
   }
-
-  try { await switchAndFocus(); }
-  catch (e) { toast(`switch failed: ${e.message}`, "error"); }
 }
 
 function focusMessageBySnippet(snippet) {
