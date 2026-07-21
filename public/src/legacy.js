@@ -777,7 +777,11 @@ function applyState(s) {
   state = s;
   updateAppSession({ state: s, ...(sessionChanged ? { titleOverride: null } : {}) });
   if (sessionChanged) {
-    if ((s?.messageCount ?? 0) > 0 || s?.sessionFile) emptySessionRunners.delete(currentRunner);
+    // New sessions may have a sessionFile header before any messages exist.
+    // Keep them marked as empty until the first message is actually recorded;
+    // otherwise a reconnect can re-enable replay gating and drop the first
+    // prompt/response sequence from the SSE replay buffer.
+    if ((s?.messageCount ?? 0) > 0) emptySessionRunners.delete(currentRunner);
     setTranscriptGateRequired(!emptySessionRunners.has(currentRunner) && (s?.messageCount ?? 0) > 0);
     routines.set(routinesNow.filter(routineVisible));
     routineScopeAll.set(tunnelScopeAll);
@@ -930,7 +934,10 @@ function connect() {
   lastEventAt = Date.now();
   const skipTranscriptGate = currentRunner && emptySessionRunners.has(currentRunner);
   setTranscriptGateRequired(!skipTranscriptGate);
-  setReplaying(true, "replay");
+  // Brand-new empty runners have no transcript to replay. Do not enter the
+  // replay gate at all; otherwise a fast first response can be treated like
+  // replay and dropped even though the composer is intentionally enabled.
+  setReplaying(!skipTranscriptGate, skipTranscriptGate ? null : "replay");
   replayDoneSeen = false;
   replayBufferedEvents = [];
   es = new EventSource(`/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`);
@@ -938,6 +945,10 @@ function connect() {
     connected = true;
     updateAppSession({ connected });
     updateHeaderState({ stateInfo: "connected" });
+    if (skipTranscriptGate) {
+      refreshState();
+      return;
+    }
     if (replaying) setReplaying(true, "canonical");
     try {
       // Always rebuild from the canonical transcript: the SSE replay buffer
@@ -1026,7 +1037,7 @@ function handleEvent(msg) {
   // buffer those and flush them after the canonical tail is on screen. Without
   // this, a response that finishes during reconnect can be dropped until the
   // user refreshes the page.
-  if (replaying && REPLAY_GATED_EVENTS.includes(msg.type)) {
+  if (replaying && transcriptGateRequired && REPLAY_GATED_EVENTS.includes(msg.type)) {
     if (replayDoneSeen) replayBufferedEvents.push(msg);
     return;
   }
@@ -1297,6 +1308,7 @@ async function reloadTranscript() {
 }
 
 let postAgentTranscriptSyncTimer = null;
+let postSendFileSyncTimer = null;
 function syncTranscriptSoon(label, delay = 250) {
   return setTimeout(() => {
     if (replaying || !currentRunner) {
@@ -1314,20 +1326,39 @@ function schedulePostAgentTranscriptSync() {
   postAgentTranscriptSyncTimer = syncTranscriptSoon("post-agent", 250);
 }
 
-let postSendSyncGeneration = 0;
-function schedulePostSendTranscriptSync() {
-  const generation = ++postSendSyncGeneration;
-  for (const delay of [900, 2500, 6000]) {
-    setTimeout(() => {
-      if (generation !== postSendSyncGeneration || liveAssistant) return;
-      // This covers the very-new-session race where the prompt is sent while
-      // the initial EventSource replay/reload gate is still active. In that
-      // window, a fast response ("hello") can start and end before replay_done,
-      // so no live events and no agent_end fallback are observed. A few cheap
-      // canonical syncs converge the transcript without waiting for a refresh.
-      syncTranscriptSoon("post-send", 0);
-    }, delay);
-  }
+function schedulePostSendFileTranscriptSync(expectedUserText) {
+  clearTimeout(postSendFileSyncTimer);
+  const runnerId = currentRunner;
+  let sessionFile = state?.sessionFile || null;
+  const started = Date.now();
+  const tick = async () => {
+    try {
+      if (!sessionFile && runnerId) {
+        const runnersRes = await fetch(`/runners`);
+        if (runnersRes.ok) {
+          const runnersData = await runnersRes.json();
+          sessionFile = (runnersData.runners ?? []).find((r) => r.id === runnerId)?.sessionFile || null;
+        }
+      }
+      if (sessionFile && runnerId === currentRunner) {
+        const res = await fetch(`/session-messages?path=${encodeURIComponent(sessionFile)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const messages = Array.isArray(data.messages) ? data.messages : [];
+          const sawUser = messages.some((m) => m.role === "user" && userMessageText(m) === expectedUserText);
+          const sawAssistantAfterUser = sawUser && messages.some((m, i) =>
+            m.role === "assistant" && messages.slice(0, i).some((prev) => prev.role === "user" && userMessageText(prev) === expectedUserText)
+          );
+          if (sawAssistantAfterUser) {
+            renderTranscript(messages);
+            return;
+          }
+        }
+      }
+    } catch {}
+    if (Date.now() - started < 15000 && runnerId === currentRunner) postSendFileSyncTimer = setTimeout(tick, 750);
+  };
+  postSendFileSyncTimer = setTimeout(tick, 750);
 }
 
 let stateRefreshTimer = null;
@@ -1454,7 +1485,10 @@ async function send() {
   localEchoes.push(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
-    schedulePostSendTranscriptSync();
+    // Cloudflare/EventSource can occasionally stall live SSE delivery. Poll the
+    // canonical session file with ordinary fetch as a bounded fallback so a
+    // fast first response appears without a manual refresh.
+    schedulePostSendFileTranscriptSync(text);
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);
@@ -1940,7 +1974,6 @@ async function sendAgentMessage(text) {
   localEchoes.push(text);
   try {
     await rpc(promptRpcCommand(text), { wait: false });
-    schedulePostSendTranscriptSync();
   } catch (e) {
     const idx = localEchoes.indexOf(text);
     if (idx !== -1) localEchoes.splice(idx, 1);

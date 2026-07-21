@@ -386,7 +386,11 @@ export function init(state) {
         connection: "keep-alive",
         "x-accel-buffering": "no",
       });
-      res.write(`: connected\n\n`);
+      // Cloudflare tunnels can otherwise buffer the first tiny SSE chunks for
+      // long enough that EventSource appears open but no messages reach the UI.
+      // A harmless padded comment forces the stream through intermediary
+      // buffering without affecting onmessage handlers.
+      res.write(`: connected ${" ".repeat(2048)}\n\n`);
       res.runnerId = runner.id; // this client sees only this runner's stream
       // Register the client BEFORE replaying buffered events. Browser
       // EventSource may fire `open` as soon as headers/first bytes arrive, and
