@@ -1278,9 +1278,8 @@ const folderBrowserController = createFolderBrowserController({
   updateTitle: (title) => updateModal({ title }),
   getShowHidden: () => get(folderBrowser).showHidden,
   setPath: (path) => { folderBrowserState.browsePath = path; },
-  openSessionRunner,
+  openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
   setWorkdir,
-  switchToRunner,
   toast: addToast,
 });
 const loadFolderBrowser = folderBrowserController.load;

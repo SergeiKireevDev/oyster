@@ -45,9 +45,13 @@ test("folder browser keeps its creation form open when mkdir fails", async () =>
 test("folder browser creates and switches to a runner for the chosen folder", async () => {
   const calls = [];
   const controller = createFolderBrowserController({
-    openSessionRunner: async (options) => { calls.push(["open", options]); return { id: "runner-1" }; },
+    openAndSwitchSession: async (options, { onOpened }) => {
+      calls.push(["open", options]);
+      onOpened({ id: "runner-1" });
+      calls.push(["switch", "runner-1"]);
+      return { id: "runner-1" };
+    },
     setWorkdir: (path) => calls.push(["workdir", path]),
-    switchToRunner: (id) => calls.push(["switch", id]),
     toast: (message, level) => calls.push(["toast", message, level]),
   });
 
@@ -64,9 +68,8 @@ test("folder browser creates and switches to a runner for the chosen folder", as
 test("folder browser reports a failed chosen-folder session without switching", async () => {
   const calls = [];
   const controller = createFolderBrowserController({
-    openSessionRunner: async () => { throw new Error("runner unavailable"); },
+    openAndSwitchSession: async () => { throw new Error("runner unavailable"); },
     setWorkdir: () => calls.push("workdir"),
-    switchToRunner: () => calls.push("switch"),
     toast: (...args) => calls.push(args),
   });
 

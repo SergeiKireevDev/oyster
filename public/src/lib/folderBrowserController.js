@@ -5,7 +5,7 @@ export function createFolderBrowserEventController({ windowTarget, browse, creat
   return { attach, detach };
 }
 
-export function createFolderBrowserController({ browse, mkdir, update, updateTitle, getShowHidden, setPath, openSessionRunner, setWorkdir, switchToRunner, toast }) {
+export function createFolderBrowserController({ browse, mkdir, update, updateTitle, getShowHidden, setPath, openAndSwitchSession, setWorkdir, toast }) {
   async function load(path) {
     update({ loading: true });
     try {
@@ -32,9 +32,7 @@ export function createFolderBrowserController({ browse, mkdir, update, updateTit
 
   async function createSessionInFolder(path) {
     try {
-      const runner = await openSessionRunner({ dir: path });
-      setWorkdir(path);
-      switchToRunner(runner.id);
+      await openAndSwitchSession({ dir: path }, { onOpened: () => setWorkdir(path) });
       toast(`folder: ${path}`);
     } catch (error) {
       toast(error.message, "error");

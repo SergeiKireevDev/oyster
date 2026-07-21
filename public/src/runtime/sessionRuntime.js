@@ -44,8 +44,9 @@ export function createSessionRuntime({
 
   return {
     openSession(options) { return openSession(options); },
-    async openAndSwitchSession(options) {
+    async openAndSwitchSession(options, { onOpened = () => {} } = {}) {
       const runner = await openSession(options);
+      onOpened(runner);
       if (runner?.id) switchRunner(runner.id);
       return runner;
     },

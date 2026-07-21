@@ -30,9 +30,13 @@ test("session runtime opens a picker selection before deliberately switching to 
     clearTranscript: () => {}, resetSessionUi: () => {}, renderPreview: () => {}, resetCommands: () => {}, connect: () => {},
   });
 
-  const runner = await runtime.openAndSwitchSession({ sessionPath: "/sessions/picked.jsonl", dir: "/workspace" });
+  const runner = await runtime.openAndSwitchSession(
+    { sessionPath: "/sessions/picked.jsonl", dir: "/workspace" },
+    { onOpened: (opened) => calls.push(["opened", opened.id]) },
+  );
 
   assert.deepEqual(runner, { id: "selected" });
   assert.deepEqual(calls[0], ["open", { sessionPath: "/sessions/picked.jsonl", dir: "/workspace" }]);
-  assert.deepEqual(calls[1], ["switch", "selected"]);
+  assert.deepEqual(calls[1], ["opened", "selected"]);
+  assert.deepEqual(calls[2], ["switch", "selected"]);
 });
