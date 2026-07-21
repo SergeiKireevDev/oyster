@@ -100,7 +100,10 @@ const lifecycleLog = createLifecycleLogger({
 // Auth/token initialization is runtime-owned; legacy receives its current
 // token for transport and EventSource construction.
 const token = initializeAuth();
-const authenticatedFetchRegistration = installAuthenticatedFetch(token);
+let authenticatedFetchRegistration = null;
+function attachAuthenticatedFetch() {
+  if (!authenticatedFetchRegistration) authenticatedFetchRegistration = installAuthenticatedFetch(token);
+}
 
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
@@ -1789,7 +1792,7 @@ const runtimeTeardown = createRuntimeTeardown([
   () => filePickerEventController.detach(), () => folderBrowserEventController.detach(), () => fileExplorerEventController.detach(),
   () => managedHublotEventController.detach(), () => hublotSidebarEventController.detach(), () => routineEventController.detach(),
   () => sessionPickerEventController.detach(), () => openFileExplorerEventController.detach(), () => commandPaletteInputController?.detach(),
-  () => debugHookRegistration?.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration.detach(), () => connectionState.lost(),
+  () => debugHookRegistration?.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration?.detach(), () => connectionState.lost(),
 ]);
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
@@ -1820,6 +1823,7 @@ function attachRuntimeEventAdapters() {
 
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
 export function startLegacyRuntime() {
+  attachAuthenticatedFetch();
   attachRuntimeEventAdapters();
   attachDebugHooks();
   return runtimeStarter();

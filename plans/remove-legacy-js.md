@@ -36,8 +36,9 @@ Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 - [x] Added explicit teardown-capable runtime boundaries.
 - [x] Deferred global event-adapter registration and carousel initialization
   until runtime start.
-- [ ] Defer debug-hook registration until runtime start, then move the final
-  composition from `legacy.js` into this root.
+- [x] Deferred debug-hook registration until runtime start.
+- [ ] Defer authenticated-fetch registration until runtime start, then move
+  the final composition from `legacy.js` into this root.
 - [x] Kept feature logic out of the initial bootstrap extraction.
 
 **Acceptance:** application startup behavior is unchanged, with a small
