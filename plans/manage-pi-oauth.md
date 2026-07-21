@@ -117,7 +117,7 @@ and unrelated credentials survive concurrent writes.
   pending input callbacks, accept each response exactly once, cap all strings
   and option counts, and return terminal `succeeded`, `failed`, or `cancelled`
   states without exception stacks or credential material.
-- [ ] Implement cancellation, inactivity expiry, terminal-state expiry, and
+- [x] Implement cancellation, inactivity expiry, terminal-state expiry, and
   shutdown cleanup with `AbortController`. Ensure pending callback promises
   settle, provider reservations are released, callback-server/device polling is
   aborted, and expired transient URLs, codes, instructions, and submitted

@@ -39,6 +39,10 @@ export function createPiOAuthFlowService({
   randomBytes = nodeRandomBytes,
   now = Date.now,
   maxActiveFlows = 4,
+  inactivityMs = 15 * 60 * 1000,
+  terminalRetentionMs = 5 * 60 * 1000,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
 } = {}) {
   if (!(registry instanceof Map)) throw new TypeError("host-owned OAuth flow registry must be a Map");
   if (!credentialService || typeof credentialService.loginOAuth !== "function") {
@@ -49,6 +53,13 @@ export function createPiOAuthFlowService({
   if (!Number.isSafeInteger(maxActiveFlows) || maxActiveFlows < 1 || maxActiveFlows > 32) {
     throw new TypeError("maxActiveFlows must be an integer from 1 to 32");
   }
+  if (!Number.isSafeInteger(inactivityMs) || inactivityMs < 1000 || inactivityMs > 60 * 60 * 1000) {
+    throw new TypeError("inactivityMs must be an integer from 1000 to 3600000");
+  }
+  if (!Number.isSafeInteger(terminalRetentionMs) || terminalRetentionMs < 0 || terminalRetentionMs > 60 * 60 * 1000) {
+    throw new TypeError("terminalRetentionMs must be an integer from 0 to 3600000");
+  }
+  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("timer functions are required");
 
   function boundedText(value, label, limit = MAX_TEXT_LENGTH, { optional = false } = {}) {
     if (value === undefined && optional) return undefined;
@@ -111,10 +122,22 @@ export function createPiOAuthFlowService({
     throw flowError("credential_service_unavailable", "could not allocate an OAuth flow ID");
   }
 
+  function schedule(flow, callback, delay) {
+    const timer = setTimer(callback, delay);
+    timer?.unref?.();
+    return timer;
+  }
+
+  function scheduleInactivity(flow) {
+    if (flow.activeTimer) clearTimer(flow.activeTimer);
+    flow.activeTimer = schedule(flow, () => finish(flow, "cancelled", "oauth_flow_expired", { abort: true }), inactivityMs);
+  }
+
   function update(flow, phase) {
     if (flow.status !== ACTIVE_STATUS) throw flowError("oauth_flow_inactive", "OAuth flow is no longer active");
     flow.phase = phase;
     flow.updatedAt = now();
+    scheduleInactivity(flow);
   }
 
   function pendingRequest(flow, { kind, message, placeholder, options }) {
@@ -181,6 +204,7 @@ export function createPiOAuthFlowService({
       onManualCodeInput() {
         return pendingRequest(flow, { kind: "manual_code" });
       },
+      signal: flow.controller.signal,
     });
   }
 
@@ -193,6 +217,22 @@ export function createPiOAuthFlowService({
     delete flow.authorization;
     delete flow.deviceCode;
     delete flow.progress;
+  }
+
+  function finish(flow, status, failureCode, { abort = false } = {}) {
+    if (flow.status !== ACTIVE_STATUS) return false;
+    if (flow.activeTimer) clearTimer(flow.activeTimer);
+    delete flow.activeTimer;
+    if (abort) flow.controller.abort();
+    rejectPending(flow);
+    flow.status = status;
+    flow.phase = "complete";
+    flow.updatedAt = now();
+    if (failureCode) flow.failureCode = failureCode;
+    flow.terminalTimer = schedule(flow, () => {
+      if (registry.get(flow.flowId) === flow) registry.delete(flow.flowId);
+    }, terminalRetentionMs);
+    return true;
   }
 
   function start(provider) {
@@ -212,26 +252,15 @@ export function createPiOAuthFlowService({
       createdAt: timestamp,
       updatedAt: timestamp,
       requests: new Map(),
+      controller: new AbortController(),
     };
     registry.set(flow.flowId, flow);
+    scheduleInactivity(flow);
 
     flow.promise = Promise.resolve()
       .then(() => credentialService.loginOAuth(id, callbacksFor(flow)))
-      .then(() => {
-        if (flow.status !== ACTIVE_STATUS) return;
-        rejectPending(flow);
-        flow.status = "succeeded";
-        flow.phase = "complete";
-        flow.updatedAt = now();
-      })
-      .catch((error) => {
-        if (flow.status !== ACTIVE_STATUS) return;
-        rejectPending(flow);
-        flow.status = "failed";
-        flow.phase = "complete";
-        flow.failureCode = safeFailureCode(error);
-        flow.updatedAt = now();
-      });
+      .then(() => finish(flow, "succeeded"))
+      .catch((error) => finish(flow, "failed", safeFailureCode(error)));
 
     return snapshot(flow);
   }
@@ -256,7 +285,23 @@ export function createPiOAuthFlowService({
     return snapshot(flow);
   }
 
-  return Object.freeze({ start, getStatus, respond });
+  function cancel(flowId) {
+    const flow = registry.get(flowId);
+    if (!flow) throw flowError("oauth_flow_not_found", "OAuth flow not found");
+    if (!finish(flow, "cancelled", "oauth_cancelled", { abort: true })) return snapshot(flow);
+    return snapshot(flow);
+  }
+
+  function shutdown() {
+    for (const flow of registry.values()) {
+      if (flow?.status === ACTIVE_STATUS) finish(flow, "cancelled", "oauth_cancelled", { abort: true });
+      if (flow?.activeTimer) clearTimer(flow.activeTimer);
+      if (flow?.terminalTimer) clearTimer(flow.terminalTimer);
+    }
+    registry.clear();
+  }
+
+  return Object.freeze({ start, getStatus, respond, cancel, shutdown });
 }
 
 export const OAUTH_FLOW_DEFAULT_LIMIT = 4;

@@ -139,6 +139,63 @@ test("OAuth flow coordinator enforces provider and global active limits", async 
   pending[1].resolve({ credentialType: "oauth" });
 });
 
+test("OAuth flow coordinator cancels, expires, and shuts down flows with cleanup", async () => {
+  const registry = new Map();
+  const timers = new Map();
+  let timerId = 0;
+  const setTimer = (callback, delay) => {
+    const id = ++timerId;
+    const timer = { id, callback: () => { timers.delete(id); callback(); }, delay, unref() {} };
+    timers.set(timer.id, timer);
+    return timer;
+  };
+  const clearTimer = (timer) => timers.delete(timer.id);
+  let callbacks;
+  let providerActive = false;
+  const credentialService = {
+    loginOAuth(_provider, value) {
+      callbacks = value;
+      providerActive = true;
+      return new Promise((_resolve, reject) => value.signal.addEventListener("abort", () => {
+        providerActive = false;
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      }, { once: true }));
+    },
+  };
+  const service = createPiOAuthFlowService({
+    registry, credentialService, randomBytes: deterministicBytes(),
+    inactivityMs: 1000, terminalRetentionMs: 2000, setTimer, clearTimer,
+  });
+
+  const started = service.start("cancel-me");
+  await settle();
+  const prompt = callbacks.onPrompt({ message: "Secret response" });
+  const cancelled = service.cancel(started.flowId);
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(cancelled.failureCode, "oauth_cancelled");
+  assert.equal(callbacks.signal.aborted, true);
+  await assert.rejects(prompt, { code: "oauth_flow_inactive" });
+  await settle();
+  assert.equal(providerActive, false);
+  assert.equal(service.getStatus(started.flowId).requests, undefined);
+  const terminalTimer = [...timers.values()].find((timer) => timer.delay === 2000);
+  terminalTimer.callback();
+  assert.equal(service.getStatus(started.flowId), null);
+
+  const expiring = service.start("expire-me");
+  await settle();
+  const inactivityTimer = [...timers.values()].find((timer) => timer.delay === 1000);
+  inactivityTimer.callback();
+  assert.equal(service.getStatus(expiring.flowId).status, "cancelled");
+  assert.equal(service.getStatus(expiring.flowId).failureCode, "oauth_flow_expired");
+
+  service.start("shutdown-me");
+  await settle();
+  service.shutdown();
+  assert.equal(registry.size, 0);
+  assert.equal(timers.size, 0);
+});
+
 test("OAuth flow coordinator redacts provider failures and reuses supplied state", async () => {
   const registry = new Map();
   const first = createPiOAuthFlowService({
