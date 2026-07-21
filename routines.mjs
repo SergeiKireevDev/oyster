@@ -40,10 +40,11 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { materializeRoutineScript } from "./persistence/routineMaterializer.mjs";
 
 const ROUTINES_DIR = join(homedir(), ".pi", "routines");
 const LOG_MAX = 80;
@@ -57,7 +58,7 @@ export function routinesDir() {
 
 /** Client-safe view of a routine (no process handle). */
 export function routineInfo(r) {
-  const { proc, id: _id, revision: _revision, ...info } = r;
+  const { proc, executionPath: _executionPath, id: _id, revision: _revision, ...info } = r;
   return { ...info, alive: !!proc };
 }
 
@@ -108,7 +109,11 @@ function findRoutine(state, name) {
 
 function runScript(state, r, mode) {
   const cwd = r.cwd && existsSync(r.cwd) ? r.cwd : state.currentDir;
-  const proc = spawn(r.path, [mode], {
+  const definition = routineRepository(state).findByName(r.name);
+  if (!definition) throw new Error(`no such routine: ${r.name}`);
+  const executionPath = materializeRoutineScript(definition);
+  r.executionPath = executionPath;
+  const proc = spawn(executionPath, [mode], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true, // own process group, so stop can kill children too
@@ -121,7 +126,7 @@ function runScript(state, r, mode) {
   r.finishedAt = null;
   r.exitCode = null;
   r.log = [];
-  console.log(`[pi-ui] routine ${mode}: ${r.path} (pid ${proc.pid}, cwd ${cwd}, session ${r.sessionId ?? "-"})`);
+  console.log(`[pi-ui] routine ${mode}: ${executionPath} (pid ${proc.pid}, cwd ${cwd}, session ${r.sessionId ?? "-"})`);
   emit(state, r, mode === "run" ? "started" : "teardown_started");
 
   const onLine = (line) => {
@@ -185,10 +190,7 @@ export function createRoutine(state, { name, script, sessionId = null, ownerId =
   if (existing?.sessionId && sessionId && existing.sessionId !== sessionId) {
     throw new Error(`routine "${name}" exists and is bound to another session`);
   }
-  mkdirSync(ROUTINES_DIR, { recursive: true });
   const path = join(ROUTINES_DIR, name);
-  writeFileSync(path, script, { mode: 0o755 });
-  chmodSync(path, 0o755); // writeFileSync's mode is ignored when the file existed
   const row = routineRepository(state).upsert({
     id: existing?.id ?? randomUUID(), ownerId, name, script, cwd, now: new Date().toISOString(),
   });
@@ -207,7 +209,10 @@ export function deleteRoutine(state, name) {
   if (!r) throw new Error(`no such routine: ${name}`);
   if (r.proc) throw new Error(`routine "${name}" is ${r.status} — stop it first`);
   routineRepository(state).delete(r.id);
-  try { unlinkSync(r.path); } catch (e) { if (e.code !== "ENOENT") throw new Error(`failed to delete ${r.path}: ${e.message}`); }
+  for (const artifact of [r.path, r.executionPath]) {
+    if (!artifact) continue;
+    try { unlinkSync(artifact); } catch (e) { if (e.code !== "ENOENT") throw new Error(`failed to delete ${artifact}: ${e.message}`); }
+  }
   r.sessionId = null;
   r.cwd = null;
   routinesMap(state).delete(name);
@@ -299,7 +304,10 @@ export function deleteSessionRoutines(state, sessionId) {
       try { process.kill(-proc.pid, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch {} }
     }
     routineRepository(state).delete(r.id);
-    try { unlinkSync(r.path); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete ${r.path}: ${error.message}`); }
+    for (const artifact of [r.path, r.executionPath]) {
+      if (!artifact) continue;
+      try { unlinkSync(artifact); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete ${artifact}: ${error.message}`); }
+    }
     r.sessionId = null;
     r.cwd = null;
     routinesMap(state).delete(r.name);
