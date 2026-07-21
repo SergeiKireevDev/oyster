@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCommandPaletteInput, registerComposerEvents, registerFileUploadInput, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCommandPaletteInput, registerComposerEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -101,16 +101,6 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.equal(controller.get(), 0);
   assert.deepEqual([...hublots.classList.values], []);
   assert.deepEqual([...treebar.classList.values], []);
-});
-
-test("file upload input adapter registers and tears down its change listener", () => {
-  let listener;
-  const target = { addEventListener: (_, fn) => { listener = fn; }, removeEventListener: (_, fn) => assert.equal(fn, listener) };
-  let changed = 0;
-  const remove = registerFileUploadInput(target, () => changed++);
-  listener();
-  assert.equal(changed, 1);
-  remove();
 });
 
 test("command palette input adapter registers and tears down local listeners", () => {

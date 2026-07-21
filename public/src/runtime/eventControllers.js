@@ -8,7 +8,6 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   refreshRoutines();
 }
 
-/** Register the checkpoint tree's typed component events outside feature logic. */
 export function registerFileUploadInput(target, onChange) {
   target.addEventListener("change", onChange);
   return () => target.removeEventListener("change", onChange);

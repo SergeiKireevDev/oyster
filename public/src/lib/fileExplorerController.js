@@ -12,6 +12,11 @@ export function createFileExplorerEventController({ windowTarget, browse, edit, 
   return { attach, detach };
 }
 
+export function registerFileUploadInput(target, onChange) {
+  target.addEventListener("change", onChange);
+  return () => target.removeEventListener("change", onChange);
+}
+
 export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list" });
