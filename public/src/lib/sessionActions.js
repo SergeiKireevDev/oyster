@@ -16,6 +16,14 @@ export function sessionFileQuery(sessionPath) {
   return `path=${encodeURIComponent(relative)}`;
 }
 
+/** Read durable transcript history for an optimistic session-switch preview. */
+export async function fetchSessionPreview(fetchImpl, sessionPath) {
+  const res = await fetchImpl(`/session-messages?${sessionFileQuery(sessionPath)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.messages ?? [];
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
+import { fetchSessionPreview, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -14,6 +14,17 @@ test("session actions persist the current runner", () => {
 test("session actions use session-root-relative file queries", () => {
   assert.equal(sessionFileQuery("/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), "path=--workspace--%2Fa.jsonl");
 });
+test("session actions fetch durable transcript previews", async () => {
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    return { ok: true, json: async () => ({ messages: [{ role: "user", content: "saved" }] }) };
+  };
+  assert.deepEqual(await fetchSessionPreview(fetchImpl, "/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), [{ role: "user", content: "saved" }]);
+  assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl");
+  assert.equal(await fetchSessionPreview(async () => ({ ok: false }), "/other.jsonl"), null);
+});
+
 test("session actions skip transcript replay for empty runners", () => {
   const empty = new Set(["new"]);
   assert.equal(transcriptGateRequired({ runner: "new", messageCount: 1, emptySessionRunners: empty }), false);

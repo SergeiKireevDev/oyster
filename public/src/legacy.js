@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
+import { applySessionState, fetchSessionPreview, persistRunner, readPersistedRunner, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -760,15 +760,14 @@ async function fetchPreview(sessionPath) {
   const started = performance.now();
   lifecycleLog("preview:fetch:start", { sessionPath });
   try {
-    const res = await fetch(`/session-messages?${sessionFileQuery(sessionPath)}`);
-    if (!res.ok) {
-      lifecycleLog("preview:fetch:not-ok", { sessionPath, status: res.status, ms: Math.round(performance.now() - started) });
+    const messages = await fetchSessionPreview(fetch, sessionPath);
+    if (messages === null) {
+      lifecycleLog("preview:fetch:not-ok", { sessionPath, ms: Math.round(performance.now() - started) });
       return;
     }
-    const data = await res.json();
-    lifecycleLog("preview:fetch:done", { sessionPath, messages: data.messages?.length ?? 0, ms: Math.round(performance.now() - started), superseded: lastPreview?.sessionPath !== sessionPath });
+    lifecycleLog("preview:fetch:done", { sessionPath, messages: messages.length, ms: Math.round(performance.now() - started), superseded: lastPreview?.sessionPath !== sessionPath });
     if (lastPreview?.sessionPath !== sessionPath) return; // superseded meanwhile
-    lastPreview.messages = data.messages;
+    lastPreview.messages = messages;
     renderPreviewNow();
   } catch (e) {
     lifecycleLog("preview:fetch:error", { sessionPath, error: e?.message ?? String(e), ms: Math.round(performance.now() - started) });
