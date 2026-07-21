@@ -62,7 +62,7 @@ test("settings/layout runtime registers header and settings-change actions until
   assert.equal(registered.size, 0);
 });
 
-test("header and settings components route operations through scoped actions", () => {
+test("header routes scoped actions and settings delegates persistence to its preference service", () => {
   const header = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
   const settings = readFileSync(new URL("../public/src/components/SettingsModal.svelte", import.meta.url), "utf8");
   for (const name of [
@@ -74,7 +74,9 @@ test("header and settings components route operations through scoped actions", (
   ]) {
     assert.match(header, new RegExp(`uiActions\\.invoke\\(${name}`));
   }
-  assert.match(settings, /uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
+  assert.match(settings, /getSettingsPreferences\(\)/);
+  assert.match(settings, /preferences\.setThinkingVisible\(event\.currentTarget\.checked\)/);
+  assert.doesNotMatch(settings, /localStorage/);
   assert.doesNotMatch(header, /features\/settings\/headerActions\.js/);
   assert.doesNotMatch(settings, /features\/settings\/settingsActions\.js/);
 });

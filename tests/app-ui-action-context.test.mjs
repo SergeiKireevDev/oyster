@@ -34,6 +34,8 @@ test("CommandPalette routes mouse selection through the scoped registry", () => 
 test("App provides scoped dialog and browser action services", () => {
   assert.match(appSource, /provideDialogService\(createDialogService\(\)\)/);
   assert.match(appSource, /provideBrowserActions\(createBrowserActions\(\{ windowTarget: window \}\)\)/);
+  assert.match(appSource, /provideSettingsPreferences\(createSettingsPreferenceService\(/);
+  assert.match(appSource, /onThinkingVisibilityChanged: \(\) => uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
   assert.match(appSource, /dialogs\.teardown\(\)/);
 });
 

@@ -12,8 +12,15 @@
   import { provideDialogService } from "./runtime/dialogServiceContext.js";
   import { createBrowserActions } from "./platform/createBrowserActions.js";
   import { provideBrowserActions } from "./runtime/browserActionsContext.js";
+  import { SETTINGS_CHANGED_ACTION } from "./runtime/uiActionNames.js";
+  import { createSettingsPreferenceService } from "./runtime/settingsPreferenceService.js";
+  import { provideSettingsPreferences } from "./runtime/settingsPreferenceContext.js";
 
   const uiActions = provideUiActionRegistry(createUiActionRegistry());
+  const settingsPreferences = provideSettingsPreferences(createSettingsPreferenceService({
+    storage: localStorage,
+    onThinkingVisibilityChanged: () => uiActions.invoke(SETTINGS_CHANGED_ACTION),
+  }));
   const dialogs = provideDialogService(createDialogService());
   const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));
 

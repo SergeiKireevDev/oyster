@@ -1,21 +1,18 @@
 <script>
   import { closeModalState } from "../stores/modal.js";
-  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { SETTINGS_CHANGED_ACTION } from "../runtime/uiActionNames.js";
+  import { getSettingsPreferences } from "../runtime/settingsPreferenceContext.js";
 
-  const uiActions = getUiActionRegistry();
-  const settingsChanged = () => uiActions.invoke(SETTINGS_CHANGED_ACTION);
+  const preferences = getSettingsPreferences();
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
   ];
 
   function checked(key) {
-    return localStorage.getItem(key) !== "0";
+    return key === "pi_show_thinking" && preferences.isThinkingVisible();
   }
 
   function changed(key, event) {
-    localStorage.setItem(key, event.currentTarget.checked ? "1" : "0");
-    if (key === "pi_show_thinking") settingsChanged();
+    if (key === "pi_show_thinking") preferences.setThinkingVisible(event.currentTarget.checked);
   }
 </script>
 

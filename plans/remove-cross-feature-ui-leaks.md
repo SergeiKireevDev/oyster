@@ -109,7 +109,7 @@ module-global feature callback state.
 - [x] Change `Header.svelte` and `SettingsModal.svelte` to invoke scoped
   actions, then delete `features/settings/headerActions.js`,
   `features/settings/settingsActions.js`, and their configuration calls.
-- [ ] Move SettingsModal's `localStorage` read/write behind an injected settings
+- [x] Move SettingsModal's `localStorage` read/write behind an injected settings
   preference service. Test the persisted thinking-visibility value and runtime
   refresh behavior.
 
