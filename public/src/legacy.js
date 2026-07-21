@@ -23,6 +23,7 @@ import { createLegacyRuntimeEventAdapters } from "./runtime/legacyRuntimeEventAd
 import { createRuntimeAttachments } from "./runtime/runtimeAttachments.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
+import { createCarouselEventDependencies } from "./runtime/carouselEventDependencies.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -1710,7 +1711,7 @@ adjacentRunnerController = createAdjacentRunnerController({
   toast: addToast,
 });
 
-const carouselEventRegistration = createCarouselEventRegistration({
+const carouselEventRegistration = createCarouselEventRegistration(createCarouselEventDependencies({
   documentTarget: document,
   windowTarget: window,
   onTouchStart: swipeController.onTouchStart,
@@ -1718,7 +1719,7 @@ const carouselEventRegistration = createCarouselEventRegistration({
   onTouchEnd: swipeController.onTouchEnd,
   onTouchCancel: swipeController.onTouchCancel,
   onResize: () => carouselController.apply(),
-});
+}));
 
 const carouselHeaderController = createCarouselHeaderController({
   isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
