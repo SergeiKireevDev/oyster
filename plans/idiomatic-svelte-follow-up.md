@@ -133,7 +133,7 @@ browser effects and listeners have explicit, testable owners.
 
 ## 5. Prove the Final UI Boundary
 
-- [ ] Add a static boundary test that forbids global menu/command custom-event
+- [x] Add a static boundary test that forbids global menu/command custom-event
   dispatch, module-level dialog controllers, feature-action imports in
   `Overlays.svelte`, and clickable span role-buttons in modal/overlay components.
 - [ ] Run stale-reference checks and the complete validation matrix, then update
