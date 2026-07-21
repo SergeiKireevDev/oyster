@@ -15,6 +15,14 @@ test("API Keys modal is owned by the overlay and covers safe provider states", (
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only/);
 });
 
+test("API Keys modal exposes removal only for stored API keys with revocation and fallback warnings", () => {
+  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Read-only[\s\S]*?provider\.credentialType === "api_key"[\s\S]*?Remove from pi and restart/);
+  assert.match(modal, /uiActions\.invoke\(API_KEYS_REMOVE_ACTION, provider\)/);
+  assert.match(modal, /does not revoke it at the upstream provider/);
+  assert.match(modal, /environment or models\.json fallback remains/);
+  assert.match(modal, /pi may continue to authenticate after removal/);
+});
+
 test("API Keys modal form keeps submitted keys local and clears them on every exit", () => {
   assert.match(modal, /type="password"/);
   assert.match(modal, /autocomplete="off"/);

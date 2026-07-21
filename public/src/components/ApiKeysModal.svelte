@@ -3,7 +3,7 @@
   import { apiKeysState } from "../stores/apiKeys.js";
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { API_KEYS_SAVE_ACTION } from "../runtime/uiActionNames.js";
+  import { API_KEYS_REMOVE_ACTION, API_KEYS_SAVE_ACTION } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   let selectedProvider = "";
@@ -46,6 +46,10 @@
     }
   }
 
+  async function removeProvider(provider) {
+    await uiActions.invoke(API_KEYS_REMOVE_ACTION, provider);
+  }
+
   function close() {
     clearKey();
     closeModalState();
@@ -75,6 +79,10 @@
             <span class="api-key-source">{sourceLabel(provider.source)}</span>
             {#if provider.credentialType === "oauth"}
               <span class="api-key-readonly">Read-only</span>
+            {:else if provider.credentialType === "api_key"}
+              <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$apiKeysState.loading}>
+                Remove from pi and restart
+              </button>
             {/if}
           </div>
         </div>
@@ -91,6 +99,10 @@
       {/if}
     </p>
   {/if}
+
+  <p class="api-key-removal-note">
+    Removing a key from pi does not revoke it at the upstream provider. If an environment or models.json fallback remains, pi may continue to authenticate after removal.
+  </p>
 
   <form class="api-key-form" onsubmit={saveKey}>
     <label>

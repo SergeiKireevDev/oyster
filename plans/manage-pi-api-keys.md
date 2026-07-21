@@ -126,7 +126,7 @@ inactive, and serialized responses/errors contain no submitted or stored key.
   sourced from the server, and explicit **Save and restart pi** wording. Clear
   the input immediately on success, failure, cancellation, modal close, and
   component teardown.
-- [ ] Require a provider-specific confirmation before replacement or removal.
+- [x] Require a provider-specific confirmation before replacement or removal.
   Removal must be labeled **Remove from pi and restart** and state that it does
   not revoke the upstream key. If a fallback credential source remains, warn
   that pi may continue to authenticate from that source after removal.
