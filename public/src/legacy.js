@@ -1921,7 +1921,12 @@ carouselEventRegistration.attach();
 carouselController.apply();
 
 // Test/debug scripts use these hooks to seed and inspect session state.
-const debugHookRegistration = installDebugHooks(window, { rpc, refreshState, loadHublots, loadRoutines });
+const debugHookRegistration = installDebugHooks(window, {
+  rpc,
+  refreshState: () => getSessionRuntime().refreshState(),
+  loadHublots,
+  loadRoutines,
+});
 
 // ------------------------------------------------------------ go
 

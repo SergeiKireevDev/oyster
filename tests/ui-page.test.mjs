@@ -55,7 +55,7 @@ test("composer prompts delegate busy steering behavior to prompt actions", () =>
 
 test("legacy runtime delegates integration debug hooks to a runtime adapter", () => {
   assert.match(js, /import \{ installDebugHooks \} from "\.\/runtime\/debugHooks\.js";/);
-  assert.match(js, /installDebugHooks\(window, \{ rpc, refreshState, loadHublots, loadRoutines \}\);/);
+  assert.match(js, /installDebugHooks\(window, \{[\s\S]*refreshState: \(\) => getSessionRuntime\(\)\.refreshState\(\),[\s\S]*loadRoutines,[\s\S]*\}\);/);
   assert.doesNotMatch(js, /Object\.assign\(window,/);
 });
 
