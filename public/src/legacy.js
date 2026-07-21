@@ -1370,7 +1370,8 @@ async function runMenuAction(action) {
     addToast(err.message, "error");
   }
 }
-createMenuEventController({ windowTarget: window, run: runMenuAction }).attach();
+const menuEventController = createMenuEventController({ windowTarget: window, run: runMenuAction });
+menuEventController.attach();
 
 // ------------------------------------------------------------ attach file
 
@@ -2153,5 +2154,6 @@ export function teardownLegacyRuntime() {
   mobileDrawerDismissController.detach();
   headerEventController.detach();
   settingsChangeController.detach();
+  menuEventController.detach();
   connectionState.lost();
 }
