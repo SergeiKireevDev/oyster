@@ -16,6 +16,7 @@
   let keyInput;
   let hasKey = false;
   let oauthInputs = new Set();
+  let oauthInputReady = {};
   let requestSignature = "";
 
   const sourceLabels = {
@@ -55,6 +56,12 @@
 
   function clearOAuthInputs() {
     for (const input of oauthInputs) input.value = "";
+    oauthInputReady = {};
+  }
+
+  function updateOAuthInput(event, requestId) {
+    const ready = Boolean(event.currentTarget.value.trim());
+    oauthInputReady = { ...oauthInputReady, [requestId]: ready };
   }
 
   function trackOAuthInput(node) {
@@ -95,10 +102,12 @@
     event.preventDefault();
     const input = event.currentTarget.elements.namedItem("oauthResponse");
     const value = input?.value ?? "";
+    if (!value.trim()) return;
     try {
       await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
     } finally {
       if (input) input.value = "";
+      oauthInputReady = { ...oauthInputReady, [request.requestId]: false };
     }
   }
 
@@ -175,12 +184,13 @@
                   autocorrect="off"
                   spellcheck="false"
                   required
+                  oninput={(event) => updateOAuthInput(event, request.requestId)}
                 />
               </label>
               {#if request.kind === "manual_code"}
                 <p>If the provider redirects to an unreachable loopback page, paste the redirect URL or authorization code here.</p>
               {/if}
-              <button class="btn" type="submit">Continue</button>
+              <button class="btn" type="submit" disabled={!oauthInputReady[request.requestId]}>Continue</button>
             </form>
           {/if}
         {/each}
