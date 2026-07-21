@@ -32,7 +32,7 @@ function fixture(t) {
   return { store, state, child };
 }
 
-test("graceful hublot shutdown awaits bounded escalation and retains desired-open recovery state", async (t) => {
+test("graceful hublot shutdown awaits bounded escalation and retires ephemeral quick tunnels", async (t) => {
   const { store, state, child } = fixture(t);
   const managed = reserveHublot(state, { port: 4240, brief: "managed preview" });
   const selfServed = reserveHublot(state, { port: 4241, serviceKind: "self_served" });
@@ -68,10 +68,10 @@ test("graceful hublot shutdown awaits bounded escalation and retains desired-ope
   assert.deepEqual(signals.filter((value) => value.endsWith(":SIGKILL")), [`${managedService.id}:SIGKILL`]);
   for (const id of [managed.id, selfServed.id]) {
     const row = store.repositories.hublots.find(id);
-    assert.equal(row.status, "interrupted");
-    assert.equal(row.desired_state, "open");
+    assert.equal(row.status, "closed");
+    assert.equal(row.desired_state, "closed");
     assert.equal(row.public_url, null);
-    assert.match(row.last_error, /recovery will resume/);
+    assert.match(row.last_error, /ephemeral cloudflared tunnels are not recreated/);
   }
   assert.equal(store.repositories.hublots.findProcess(managedTunnel.id).status, "ended");
   assert.equal(store.repositories.hublots.findProcess(managedService.id).status, "ended");

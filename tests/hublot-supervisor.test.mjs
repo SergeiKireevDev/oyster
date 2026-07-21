@@ -61,7 +61,7 @@ test("supervisor reconciles every desired-open hublot against persisted identiti
   assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
 });
 
-test("startup reconciliation includes every persisted desired-open state", async (t) => {
+test("startup reconciliation retires stale quick tunnels instead of recreating their URLs", async (t) => {
   const { store, state } = fixture(t);
   const statuses = ["opening", "open", "recovering", "failed", "interrupted"];
   const rows = [];
@@ -72,20 +72,28 @@ test("startup reconciliation includes every persisted desired-open state", async
   }
   const closed = reserveHublot(state, { port: 4220 });
   recordHublotTransition(state, closed.id, "closed", { desiredState: "closed", closedAt: "closed" });
+  let recoveryAttempts = 0;
   const supervisor = createHublotSupervisor({
     appStore: store,
     recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    recoverTunnel: async () => { recoveryAttempts++; throw new Error("must not recreate cloudflared at startup"); },
+    restartService: async () => { recoveryAttempts++; throw new Error("must not restart a retired hublot"); },
     verifyIdentity: () => false,
     now: () => "startup",
   });
 
-  const result = await supervisor.reconcile({ includeOpening: true });
+  const result = await supervisor.reconcile({ includeOpening: true, recoverMissing: false });
+  assert.equal(recoveryAttempts, 0);
 
   assert.equal(result.checked, statuses.length);
-  assert.equal(result.recovering, statuses.length);
+  assert.equal(result.recovering, 0);
+  assert.equal(result.interrupted, statuses.length);
   for (const row of rows) {
-    assert.equal(store.repositories.hublots.find(row.id).status, "recovering");
-    assert.equal(store.repositories.hublots.find(row.id).public_url, null);
+    const retired = store.repositories.hublots.find(row.id);
+    assert.equal(retired.status, "closed");
+    assert.equal(retired.desired_state, "closed");
+    assert.equal(retired.public_url, null);
+    assert.match(retired.last_error, /ephemeral cloudflared tunnels are not recreated/);
   }
   assert.equal(store.repositories.hublots.find(closed.id).status, "closed");
 });
@@ -184,7 +192,7 @@ test("application startup supervises immediately while full hublot reconciliatio
     hublotStartupReconciliationTask: null,
   };
   const supervisor = {
-    reconcile(options) { calls.push(`reconcile:${options.includeOpening}`); return reconciliation; },
+    reconcile(options) { calls.push(`reconcile:${options.includeOpening}:${options.recoverMissing}`); return reconciliation; },
     start() { calls.push("start"); },
   };
 
@@ -193,7 +201,7 @@ test("application startup supervises immediately while full hublot reconciliatio
   assert.deepEqual(calls, ["start"], "scheduling must return before reconciliation starts");
   assert.equal(state.hublotStartupReconciled, false);
   await Promise.resolve();
-  assert.deepEqual(calls, ["start", "reconcile:true"]);
+  assert.deepEqual(calls, ["start", "reconcile:true:false"]);
 
   finishReconciliation(report);
   assert.equal(await task, report);

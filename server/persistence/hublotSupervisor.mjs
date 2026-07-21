@@ -10,7 +10,7 @@ export function scheduleHublotStartupReconciliation({ state, supervisor, logger 
 
   if (!state.hublotStartupReconciled && !state.hublotStartupReconciliationTask) {
     const task = Promise.resolve()
-      .then(() => supervisor.reconcile({ includeOpening: true }))
+      .then(() => supervisor.reconcile({ includeOpening: true, recoverMissing: false }))
       .then((report) => {
         state.hublotStartupReconciliation = report;
         state.hublotStartupReconciled = true;
@@ -53,7 +53,7 @@ export function createHublotSupervisor({
   let timer = null;
   let reconciling = false;
 
-  async function reconcile({ includeOpening = false } = {}) {
+  async function reconcile({ includeOpening = false, recoverMissing = true } = {}) {
     if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0, interrupted: 0 });
     reconciling = true;
     let checked = 0;
@@ -109,6 +109,19 @@ export function createHublotSupervisor({
         const needsSelfRecovery = hublot.service_kind === "self_served" && hublot.status === "interrupted" && !selfServiceMissing;
         const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy) || selfServiceMissing || needsSelfRecovery;
         if (criticalIdentityMissing) {
+          if (!recoverMissing) {
+            const closedAt = observedAt;
+            recordTransition(hublot.id, "closed", {
+              desiredState: "closed",
+              publicUrl: null,
+              lastError: "server restarted; ephemeral cloudflared tunnels are not recreated automatically",
+              closedAt,
+              at: closedAt,
+            });
+            resetRestartState(hublot.id);
+            interrupted++;
+            continue;
+          }
           const serviceDead = hublot.service_kind === "agent_managed" && !serviceHealthy;
           const selfServedMissing = selfServiceMissing && !hublot.service_start_script;
           const selfServedError = `self-served service is not answering on port ${hublot.port} and no startup script is available; restart it manually`;

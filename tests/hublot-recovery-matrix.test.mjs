@@ -11,8 +11,8 @@ test("hublot recovery validation matrix covers restart, crash, identity, orphan,
   const identity = source("./hublot-process-identity.test.mjs");
   const recovery = source("./hublot-service-restart.test.mjs");
 
-  assert.match(shutdown, /graceful hublot shutdown awaits bounded escalation and retains desired-open recovery state/);
-  assert.match(supervisor, /startup reconciliation includes every persisted desired-open state/);
+  assert.match(shutdown, /graceful hublot shutdown awaits bounded escalation and retires ephemeral quick tunnels/);
+  assert.match(supervisor, /startup reconciliation retires stale quick tunnels instead of recreating their URLs/);
   assert.match(supervisor, /stale-tunnel/);
   assert.match(supervisor, /status, "lost"/);
   assert.match(supervisor, /identity verification rejects PID-only, restarted, and fingerprint-mismatched processes/);

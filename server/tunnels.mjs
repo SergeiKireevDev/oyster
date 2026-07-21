@@ -432,7 +432,7 @@ export function closeAllTunnels(state) {
   for (const row of hublotRepository(state).list()) if (row.status !== "closed") closeTunnel(state, row.id);
 }
 
-/** Graceful server shutdown: stop owned processes but retain desired-open rows for recovery. */
+/** Graceful server shutdown: stop owned processes and retire ephemeral quick tunnels. */
 export async function shutdownHublots(state, {
   termTimeoutMs = 3_000,
   killTimeoutMs = 1_000,
@@ -445,10 +445,10 @@ export async function shutdownHublots(state, {
   const repository = hublotRepository(state);
   const targets = [];
   for (const row of repository.list().filter((entry) => entry.desired_state === "open")) {
-    const error = "server stopped; recovery will resume the desired-open hublot on restart";
-    if (row.status !== "interrupted" || row.public_url !== null || row.last_error !== error) {
-      recordHublotTransition(state, row.id, "interrupted", {
-        desiredState: "open", publicUrl: null, lastError: error,
+    const error = "server stopped; ephemeral cloudflared tunnels are not recreated automatically";
+    if (row.status !== "closing" || row.public_url !== null || row.last_error !== error) {
+      recordHublotTransition(state, row.id, "closing", {
+        desiredState: "closed", publicUrl: null, lastError: error,
       });
     }
     for (const processRow of repository.listProcesses(row.id)) {
@@ -487,6 +487,12 @@ export async function shutdownHublots(state, {
       signal: "shutdown", exit_code: null,
     });
     hublotProcessHandles(state).delete(processRow.id);
+  }
+  for (const row of repository.list().filter((entry) => entry.status === "closing" && entry.desired_state === "closed")) {
+    recordHublotTransition(state, row.id, remaining.some((processRow) => processRow.hublot_id === row.id) ? "interrupted" : "closed", {
+      desiredState: "closed", publicUrl: null, lastError: row.last_error,
+      closedAt: stoppedAt, at: stoppedAt,
+    });
   }
   return Object.freeze({ targeted: targets.length, escalated, remaining: remaining.length });
 }

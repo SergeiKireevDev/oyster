@@ -13,7 +13,7 @@ esac
 test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
 test.afterEach(() => { teardownContainer(); });
 
-test("hublots and routines are restored from app SQLite after server/server.mjs restarts", async ({ page }) => {
+test("routines persist while ephemeral hublots retire across server/server.mjs restarts", async ({ page }) => {
   const suffix = `${Date.now()}`;
   const routineName = `sqlite-restart-${suffix}.sh`;
   const hublotLabel = `sqlite-restart-hublot-${suffix}`;
@@ -43,12 +43,14 @@ test("hublots and routines are restored from app SQLite after server/server.mjs 
   await expect(page.locator("#routineList .routine-block", { hasText: routineName })).toBeVisible({
     timeout: 30000,
   });
-  const restoredHublot = page.locator("#hublotList .hublot-block:not(.builtin)", { hasText: hublotLabel });
-  await expect(restoredHublot).toBeVisible({ timeout: 30000 });
-  // The iframe can only be populated from the persisted hublots.public_url
-  // value (or the replacement URL persisted by startup reconciliation).
-  await expect(restoredHublot.locator("iframe")).toHaveAttribute(
-    "src",
-    /^https:\/\/[a-z0-9-]+\.trycloudflare\.com/,
-  );
+  const retiredHublot = page.locator("#hublotList .hublot-block:not(.builtin)", { hasText: hublotLabel });
+  await expect(retiredHublot).toHaveCount(0);
+
+  const reopened = await api("POST", "/tunnels", {
+    label: `${hublotLabel}-fresh`,
+    brief: `Create a minimal static page titled "${hublotLabel}" and keep its local server running.`,
+  });
+  expect(reopened.status).toBe(201);
+  expect(reopened.json.tunnel?.url).toMatch(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+  expect(reopened.json.tunnel?.url).not.toBe(hublot.json.tunnel.url);
 });

@@ -216,9 +216,9 @@ Every service, cloudflared tunnel, and setup-agent PID must be written to `hublo
 
 For agent-managed hublots, creation must allocate a durable startup-script path under an app-controlled hublot directory before asking the setup agent to prepare the service. The setup agent must create an idempotent executable at that exact path and use it to start the service. After creation, the app stores both the path and validated script contents/hash in SQLite; the file is a materialization and can be restored from SQLite if missing. Self-served hublots have no app-owned startup script unless the caller explicitly supplies one.
 
-Hublot rows and their desired state must survive `server.mjs` replacement. A manually closed hublot has `desired_state = 'closed'`; an open hublot retains `desired_state = 'open'` across planned restarts and crashes. Startup reconciliation must recover or accurately mark every such row instead of returning an empty hublot list.
+Hublot rows and lifecycle history survive `server.mjs` replacement, but cloudflared quick-tunnel URLs are ephemeral and cannot be resumed. Graceful shutdown retires open hublots with `desired_state = 'closed'`. Startup reconciliation adopts a still-healthy persisted tunnel identity, but retires any stale desired-open row instead of spawning cloudflared or trying to reuse its old URL. The user must explicitly open a new hublot to receive a fresh URL.
 
-For an open hublot after restart or during periodic supervision:
+During periodic supervision within one server lifetime:
 
 - reconcile every persisted process row against the OS using its full process identity;
 - discard the old public URL until cloudflared is confirmed or replaced;
@@ -229,7 +229,7 @@ For an open hublot after restart or during periodic supervision:
 - if a self-served service without a startup script is gone, mark the hublot `interrupted` with an actionable error rather than pretending it is open;
 - broadcast the reconciled state and URL to clients.
 
-Graceful shutdown must preserve the row and desired state, wait for managed processes to exit (with bounded SIGTERM/SIGKILL escalation), and must not rely on delayed timers after `process.exit()`.
+Graceful shutdown must retire the hublot, wait for managed processes to exit (with bounded SIGTERM/SIGKILL escalation), and must not rely on delayed timers after `process.exit()`.
 
 ### Runners and replay
 
@@ -326,14 +326,14 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Keep only `ChildProcess` handles in an in-memory registry keyed by persistent process/hublot ID.
 - [x] Replace `state.nextHublotPort` with transactional allocation plus a live port check.
 - [x] Add a supervisor that periodically reconciles desired-open hublots and their persisted process identities.
-- [x] On startup, load persisted hublots and reconcile every row whose desired state is open.
-- [x] Restart dead services from the persisted startup script, verify the port, and persist the replacement PID before reopening their tunnels.
-- [x] Recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
+- [x] On startup, verify persisted desired-open hublots and retire stale quick tunnels without recreating them.
+- [x] During same-process supervision, restart dead services from the persisted startup script, verify the port, and persist the replacement PID before reopening their tunnels.
+- [x] During same-process supervision, recover an answering local service by opening a replacement tunnel and persisting its process identity and new URL.
 - [x] Use bounded exponential backoff and crash-loop protection for automatic restarts.
 - [x] Mark a missing self-served service without a startup script interrupted.
 - [x] Never publish a persisted URL until its current cloudflared process is confirmed healthy.
-- [x] Make graceful shutdown await bounded process cleanup while retaining desired state for restart recovery.
-- [x] Preserve current routes, SSE events, tool behavior, and stable hublot IDs across restarts.
+- [x] Make graceful shutdown await bounded process cleanup while retiring ephemeral quick tunnels.
+- [x] Preserve current routes, SSE events, tool behavior, and durable hublot history across restarts.
 - [x] Verify session deletion closes the service and tunnel before cascading its database and startup-script records.
 
 ### 7. Persist runner descriptors and replay events
@@ -367,8 +367,8 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify checkpoint trees and rollback records survive server replacement.
 - [x] Verify routine definitions, bindings, progress, logs, and interrupted-run reconciliation survive restart.
 - [x] Verify hublot identity, ownership, desired state, and history survive `server.mjs` replacement.
-- [x] Verify planned restart, crash recovery, PID-reuse protection, orphan cleanup, replacement URLs, and self-served interruption behavior.
-- [x] Verify a dead desired-open service is restarted from its persisted script, receives a new persisted PID, and has its tunnel reopened.
+- [x] Verify planned restart retirement, PID-reuse protection, orphan cleanup, runtime replacement URLs, and self-served interruption behavior.
+- [x] Verify same-process supervision restarts a dead desired-open service from its persisted script, persists its new PID, and reopens its tunnel.
 - [x] Verify a missing startup-script file is rematerialized from its SQLite contents and hash.
 - [x] Verify repeated service failure triggers backoff and crash-loop protection rather than an unbounded spawn loop.
 - [x] Verify runner replay and selected workdir survive restart.

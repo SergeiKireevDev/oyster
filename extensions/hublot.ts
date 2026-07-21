@@ -10,7 +10,9 @@
  *   - opens cloudflared only after that service answers, then binds the
  *     interface to the CURRENT session so it appears ready in the UI, and
  *     is torn down (service + agent + tunnel) when closed or when the
- *     session is deleted
+ *     session is deleted. Quick-tunnel URLs are ephemeral: a verified tunnel
+ *     that survived a UI restart is retained, but a stale one is never
+ *     recreated automatically.
  *
  * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
  * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
@@ -63,7 +65,9 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "the public URL; a background agent is spawned to serve `description` on that " +
       "port before the tunnel opens. 'close' tears one " +
       "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
-      "session's hublots. Opened hublots appear automatically in the pi-remote-ui.",
+      "session's hublots. Opened hublots appear automatically in the pi-remote-ui. " +
+      "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
+      "are closed instead of recreated; use 'open' afterwards to obtain a fresh URL.",
     promptSnippet: "Open/close/list hublots (public web interfaces / tunnels) for this session",
     promptGuidelines: [
       "A 'hublot' is a public web interface. Use hublot with action=open and a clear " +
@@ -71,6 +75,8 @@ export default function hublotExtension(pi: ExtensionAPI) {
         "an idempotent startup script before the tunnel opens.",
       "Use hublot with action=close (id or port) instead of killing cloudflared processes manually.",
       "Do not start or serve the hublot port yourself; hublots are always agent-managed.",
+      "Cloudflared quick-tunnel URLs are not restartable. If a hublot is no longer listed " +
+        "after a UI server restart, open a new one for a fresh URL instead of reusing the old URL.",
     ],
     parameters: Type.Object({
       action: StringEnum(["open", "close", "list"] as const),
