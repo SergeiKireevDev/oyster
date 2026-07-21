@@ -8,3 +8,10 @@ test("hublot controller binds creation to current session", async () => {
   assert.deepEqual(request, { label: "demo", sessionId: "session", brief: "demo" });
   assert.deepEqual(states, [" demo ", ""]);
 });
+test("hublot controller refreshes filtered manager state", async () => {
+  const updates = [];
+  const controller = createHublotController({ getSessionId: () => "s", getScopeAll: () => false, getDescription: () => "", listHublots: async () => [{ id: 1 }, { id: 2 }], isVisible: (tunnel) => tunnel.id === 1, updateManager: (value) => updates.push(value), toast: () => {} });
+  await controller.refresh({ loading: true });
+  assert.equal(updates[1].total, 2);
+  assert.deepEqual(updates[1].tunnels, [{ id: 1 }]);
+});
