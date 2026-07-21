@@ -2076,10 +2076,6 @@ const carouselEventRegistration = createCarouselEventRegistration({
   onResize: applyCarousel,
 });
 
-function attachSwipeListeners() {
-  carouselEventRegistration.attach();
-}
-
 const carouselHeaderController = createCarouselHeaderController({
   isDesktop: () => window.matchMedia("(min-width: 761px)").matches,
   hublots: $("hublots"),
@@ -2099,7 +2095,7 @@ createHeaderEventController({
 }).attach();
 
 // apply initial page on load + whenever the page becomes mobile/desktop
-attachSwipeListeners();
+carouselEventRegistration.attach();
 applyCarousel();
 
 // Test/debug scripts use these hooks to seed and inspect session state.
