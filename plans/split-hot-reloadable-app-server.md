@@ -97,7 +97,7 @@ SSE state remains state-owned.
   folder-list routes into `http/routes/sessionRoutes.mjs`. Preserve workdir
   scoping, session-root traversal rules, and response shapes with existing or
   new API tests.
-- [ ] Move `GET /search` into the session route factory, preserving scope,
+- [x] Move `GET /search` into the session route factory, preserving scope,
   tool-output filtering, snippets, and error behavior with search contract
   tests.
 - [ ] Remove extracted session route bodies from `app.mjs` and verify route

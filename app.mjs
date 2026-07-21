@@ -210,7 +210,7 @@ export function init(state) {
     requestContext,
     sessions: {
       root: SESSIONS_ROOT, sessionDirFor, summarizeSessionFile, listSessions,
-      listSessionFolders, sessionEntries, sessionMessages, findSessionById,
+      listSessionFolders, searchSessions, sessionEntries, sessionMessages, findSessionById,
       readSessionHeaderInfo, sessionFileParam, sessionFileFromSearch,
     },
     runners: { stopRunner, runnersChanged },
@@ -220,36 +220,6 @@ export function init(state) {
   // ---------------------------------------------------------------- routes (auth required)
 
   const routes = {
-    // -------------------------------------------------- sessions
-
-    "GET /search": (req, res, url) => {
-      const q = String(url.searchParams.get("q") ?? "").trim();
-      const scope = String(url.searchParams.get("scope") ?? "folder");
-      const path = url.searchParams.get("path") ? resolve(String(url.searchParams.get("path"))) : null;
-      if (q.length < 2) {
-        json(res, 400, { error: "query must be at least 2 characters" });
-        return;
-      }
-      if (!["session", "folder", "all"].includes(scope)) {
-        json(res, 400, { error: `invalid scope: ${scope}` });
-        return;
-      }
-      if (scope === "session" && (!path || !path.startsWith(SESSIONS_ROOT + "/") || !path.endsWith(".jsonl"))) {
-        json(res, 400, { error: "scope=session requires a session file path" });
-        return;
-      }
-      if (scope === "folder" && path && !path.startsWith(SESSIONS_ROOT)) {
-        json(res, 400, { error: "folder must be under the sessions root" });
-        return;
-      }
-      const includeTools = url.searchParams.get("tools") === "1";
-      try {
-        json(res, 200, { q, scope, ...searchSessions({ q, scope, path, includeTools, defaultDir: sessionDirFor(state.currentDir) }) });
-      } catch (e) {
-        json(res, 500, { error: `search failed: ${e.message}` });
-      }
-    },
-
     // -------------------------------------------------- file explorer (confined)
 
     "GET /browse": (req, res, url) => {

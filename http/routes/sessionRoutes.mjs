@@ -19,6 +19,7 @@ export function createSessionRoutes({
     summarizeSessionFile,
     listSessions,
     listSessionFolders,
+    searchSessions,
     sessionEntries,
     sessionMessages,
     findSessionById,
@@ -133,6 +134,46 @@ export function createSessionRoutes({
         ? resolvePath(String(url.searchParams.get("dir")))
         : state.currentDir;
       json(res, 200, { folders: listSessionFolders(), current: sessionDirFor(forDir) });
+    },
+
+    "GET /search": (_req, res, url) => {
+      const query = String(url.searchParams.get("q") ?? "").trim();
+      const scope = String(url.searchParams.get("scope") ?? "folder");
+      const path = url.searchParams.get("path")
+        ? resolvePath(String(url.searchParams.get("path")))
+        : null;
+      if (query.length < 2) {
+        json(res, 400, { error: "query must be at least 2 characters" });
+        return;
+      }
+      if (!["session", "folder", "all"].includes(scope)) {
+        json(res, 400, { error: `invalid scope: ${scope}` });
+        return;
+      }
+      if (scope === "session" && (!path || !path.startsWith(`${root}/`) || !path.endsWith(".jsonl"))) {
+        json(res, 400, { error: "scope=session requires a session file path" });
+        return;
+      }
+      if (scope === "folder" && path && path !== root && !path.startsWith(`${root}/`)) {
+        json(res, 400, { error: "folder must be under the sessions root" });
+        return;
+      }
+      const includeTools = url.searchParams.get("tools") === "1";
+      try {
+        json(res, 200, {
+          q: query,
+          scope,
+          ...searchSessions({
+            q: query,
+            scope,
+            path,
+            includeTools,
+            defaultDir: sessionDirFor(state.currentDir),
+          }),
+        });
+      } catch (error) {
+        json(res, 500, { error: `search failed: ${error.message}` });
+      }
     },
   };
 }

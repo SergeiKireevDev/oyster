@@ -6,6 +6,7 @@ function setup() {
   const stopped = [];
   const closed = [];
   const unlinked = [];
+  const searches = [];
   const runner = { id: "r1", sessionFile: "/sessions/folder/a.jsonl", proc: {}, busy: true };
   const state = {
     currentDir: "/work",
@@ -22,6 +23,7 @@ function setup() {
       summarizeSessionFile: () => ({ id: "session-a", name: "A" }),
       listSessions: (dir) => [{ id: "session-a", path: "/sessions/folder/a.jsonl", dir }],
       listSessionFolders: () => ["/sessions/folder"],
+      searchSessions: (options) => { searches.push(options); return { hits: [{ snippet: "matching text" }] }; },
       sessionEntries: (path) => [{ id: "entry", path }],
       sessionMessages: (path) => [{ role: "user", path }],
       findSessionById: (id) => id === "session-a" ? "/sessions/folder/a.jsonl" : null,
@@ -41,7 +43,7 @@ function setup() {
     unlinkFile: (path) => unlinked.push(path),
     logger: { log() {} },
   };
-  return { state, stopped, closed, unlinked, routes: createSessionRoutes(dependencies) };
+  return { state, stopped, closed, unlinked, searches, routes: createSessionRoutes(dependencies) };
 }
 
 function response() { return {}; }
@@ -86,6 +88,33 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
   const folders = response();
   routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/other"));
   assert.deepEqual(folders.body, { folders: ["/sessions/folder"], current: "/sessions/-other" });
+});
+
+test("search validates scope and preserves filtering options, snippets, and response shape", () => {
+  const { searches, routes } = setup();
+  const short = response();
+  routes["GET /search"]({}, short, new URL("http://localhost/search?q=x"));
+  assert.equal(short.status, 400);
+
+  const escaped = response();
+  routes["GET /search"]({}, escaped, new URL("http://localhost/search?q=find&scope=folder&path=/sessions-escape"));
+  assert.equal(escaped.status, 400);
+
+  const found = response();
+  routes["GET /search"]({}, found, new URL("http://localhost/search?q=find&scope=session&path=/sessions/folder/a.jsonl&tools=1"));
+  assert.equal(found.status, 200);
+  assert.deepEqual(found.body, {
+    q: "find",
+    scope: "session",
+    hits: [{ snippet: "matching text" }],
+  });
+  assert.deepEqual(searches, [{
+    q: "find",
+    scope: "session",
+    path: "/sessions/folder/a.jsonl",
+    includeTools: true,
+    defaultDir: "/sessions/-work",
+  }]);
 });
 
 test("deleting a session retires bound runners, hublots, and routines", () => {
