@@ -39,7 +39,7 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
     if (msg.success) waiter.resolve(msg.data); else waiter.reject(new Error(msg.error || "command failed"));
   }
 
-  function dispose(reason = "rpc client stopped") {
+  function cancelPending(reason = "rpc commands cancelled") {
     for (const waiter of pending.values()) {
       clearTimeoutImpl(waiter.timer);
       waiter.reject(new Error(reason));
@@ -47,5 +47,9 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
     pending.clear();
   }
 
-  return { rpc, handleResponse, dispose };
+  function dispose(reason = "rpc client stopped") {
+    cancelPending(reason);
+  }
+
+  return { rpc, handleResponse, cancelPending, dispose };
 }

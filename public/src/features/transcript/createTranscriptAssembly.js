@@ -167,6 +167,7 @@ export function createTranscriptAssembly(deps) {
       fetchImpl: syncDeps.fetchImpl,
       sessionFileQuery: syncDeps.sessionFileQuery,
       getSessionIdentity: syncDeps.getSessionIdentity,
+      getGeneration: syncDeps.getGeneration,
       clearPreview: syncDeps.clearPreview,
       log: syncDeps.log,
       render: renderTranscript,
@@ -193,6 +194,7 @@ export function createTranscriptAssembly(deps) {
     });
     const postSendSync = createPostSendTranscriptSyncController({
       getRunner: syncDeps.getRunner,
+      getGeneration: syncDeps.getGeneration,
       getSessionFile: syncDeps.getSessionFile,
       fetchImpl: syncDeps.fetchImpl,
       sessionFileQuery: syncDeps.sessionFileQuery,

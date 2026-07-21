@@ -235,20 +235,42 @@ export function createTranscriptAfterRenderController({ annotate, refreshCheckpo
   };
 }
 
-export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, getGeneration = () => 0, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+  let latestJob = 0;
   return async () => {
+    const job = ++latestJob;
+    const generation = getGeneration();
+    const isCurrent = () => job === latestJob && generation === getGeneration();
     const started = now();
     log("reloadTranscript:start");
-    const { messages } = await loadDurableCanonicalTranscript({
-      rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity,
-      onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
-      onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
-      onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
-    });
+    let messages;
+    try {
+      ({ messages } = await loadDurableCanonicalTranscript({
+        rpc,
+        applyState: (state) => { if (isCurrent()) applyState(state); },
+        fetchImpl,
+        sessionFileQuery,
+        getSessionIdentity,
+        onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
+        onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+        onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+      }));
+    } catch (error) {
+      if (!isCurrent()) return false;
+      throw error;
+    }
+    if (!isCurrent()) return false;
     clearPreview();
-    const complete = await reconcileTranscriptReload({ messages, render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender });
-    log("reloadTranscript:render-complete", { complete, ms: Math.round(now() - started) });
-    return complete;
+    const complete = await reconcileTranscriptReload({
+      messages,
+      render: (items) => isCurrent() ? render(items) : false,
+      setReplaying: (value) => { if (isCurrent()) setReplaying(value); },
+      takeBufferedEvents: () => isCurrent() ? takeBufferedEvents() : [],
+      flushBufferedEvents: (events) => { if (isCurrent()) flushBufferedEvents(events); },
+      afterRender: () => isCurrent() ? afterRender() : undefined,
+    });
+    if (isCurrent()) log("reloadTranscript:render-complete", { complete, ms: Math.round(now() - started) });
+    return isCurrent() ? complete : false;
   };
 }
 

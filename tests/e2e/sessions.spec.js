@@ -28,9 +28,19 @@ const tag = (base) => `${base}-${RUN}`;
 async function newSession(page) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
+  const opened = page.waitForResponse((response) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname === "/open-session"
+  );
+  const connected = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/events" && url.searchParams.get("replay") === "0";
+  });
   await page.locator("#newSessionHere").click();
-  // the toast confirms the freshly spawned runner took over as current
-  await expect(page.locator(".toast", { hasText: "new session" })).toBeVisible({ timeout: 10000 });
+  const [response, eventRequest] = await Promise.all([opened, connected]);
+  expect(response.ok()).toBe(true);
+  const { runner } = await response.json();
+  expect(new URL(eventRequest.url()).searchParams.get("runner")).toBe(runner.id);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pi_runner"))).toBe(runner.id);
   if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
 }
 

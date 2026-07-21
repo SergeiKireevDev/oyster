@@ -14,21 +14,34 @@ export function persistRunner(storage, id, key = "pi_runner") {
 }
 
 /** Own current-runner persistence and runner-list publication for session composition. */
-export function createSessionRunnerState({ storage, updateAppSession, key = "pi_runner" }) {
+export function createSessionRunnerState({ storage, updateAppSession, onRunnerChange = () => {}, key = "pi_runner" }) {
   let currentRunner = storage.getItem(key) || null;
+  let generation = 0;
   let runners = [];
-  const setRunner = (id) => {
-    currentRunner = id || null;
+  const selectRunner = (id, invalidate) => {
+    const nextRunner = id || null;
+    if (nextRunner === currentRunner) return currentRunner;
+    const previousRunner = currentRunner;
+    currentRunner = nextRunner;
+    if (invalidate) {
+      generation += 1;
+      onRunnerChange({ previousRunner, currentRunner, generation });
+    }
     if (currentRunner) storage.setItem(key, currentRunner); else storage.removeItem(key);
     updateAppSession({ currentRunner });
     return currentRunner;
   };
+  const setRunner = (id) => selectRunner(id, true);
+  // The first replay connects without an explicit runner and then reports the
+  // server-selected fallback. Adopting it must not cancel that connection's
+  // in-flight canonical reload.
+  const adoptRunner = (id) => selectRunner(id, currentRunner !== null);
   const setRunners = (next) => {
     runners = next ?? [];
     updateAppSession({ runners });
     return runners;
   };
-  return { get currentRunner() { return currentRunner; }, get runners() { return runners; }, setRunner, setRunners };
+  return { get currentRunner() { return currentRunner; }, get generation() { return generation; }, get runners() { return runners; }, setRunner, adoptRunner, setRunners };
 }
 
 /** Compatibility-shaped runner selection controller backed by session runtime state. */
@@ -181,13 +194,20 @@ export function createSessionPreviewController({ fetchPreview, render, log = () 
 }
 
 /** Debounce authoritative state refresh requests. */
-export function createSessionStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+export function createSessionStateRefresher({ rpc, applyState, getGeneration = () => 0, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;
   return () => {
     if (timer) clearTimeoutImpl(timer);
+    const generation = getGeneration();
     timer = setTimeoutImpl(async () => {
       timer = null;
-      try { applyState(await rpc({ type: "get_state" })); } catch (error) { onError(error); }
+      if (generation !== getGeneration()) return;
+      try {
+        const incoming = await rpc({ type: "get_state" });
+        if (generation === getGeneration()) applyState(incoming);
+      } catch (error) {
+        if (generation === getGeneration()) onError(error);
+      }
     }, delay);
   };
 }

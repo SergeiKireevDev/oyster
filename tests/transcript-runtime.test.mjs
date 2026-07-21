@@ -160,6 +160,50 @@ test("canonical transcript controller clears previews after durable reload", asy
   assert.deepEqual(calls, ["clear", "after"]);
 });
 
+test("canonical transcript controller discards a reload superseded by a runner switch", async () => {
+  let generation = 1;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const controller = createCanonicalTranscriptController({
+    rpc: async ({ type }) => { await gate; return type === "get_state" ? { sessionFile: "/old" } : { messages: [{ role: "user" }] }; },
+    applyState: () => calls.push("state"),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [{ role: "user" }] }) }),
+    sessionFileQuery: () => "path=old",
+    getGeneration: () => generation,
+    clearPreview: () => calls.push("clear"),
+    render: async () => { calls.push("render"); return true; },
+    setReplaying: () => calls.push("replay"),
+    takeBufferedEvents: () => [],
+    flushBufferedEvents: () => calls.push("flush"),
+    afterRender: () => calls.push("after"),
+  });
+  const stale = controller();
+  generation += 1;
+  release();
+  assert.equal(await stale, false);
+  assert.deepEqual(calls, []);
+});
+
+test("canonical transcript controller lets only the newest reload render", async () => {
+  const releases = [];
+  const calls = [];
+  const controller = createCanonicalTranscriptController({
+    rpc: ({ type }) => new Promise((resolve) => releases.push(() => resolve(type === "get_state" ? { sessionFile: null } : { messages: [{ role: "user" }] }))),
+    applyState: () => calls.push("state"), fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [] }) }), sessionFileQuery: () => "",
+    clearPreview: () => calls.push("clear"), render: async () => { calls.push("render"); return true; }, setReplaying: () => {},
+    takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => {},
+  });
+  const first = controller();
+  const second = controller();
+  releases.splice(2).forEach((release) => release());
+  await new Promise((resolve) => setImmediate(resolve));
+  releases.splice(0).forEach((release) => release());
+  assert.equal(await second, true);
+  assert.equal(await first, false);
+  assert.deepEqual(calls, ["state", "clear", "render"]);
+});
+
 test("canonical reload delegates state and backend-neutral durable transcript identity", async () => {
   const applied = [];
   let requestedUrl;

@@ -93,7 +93,7 @@ const platformAssembly = createPlatformAssembly({
   },
 });
 const delayedTasks = createLifecycleDelayedTasks();
-const { token, requireToken, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = platformAssembly.transport;
+const { token, requireToken, probeTokenValidity, rpc, handleResponse, cancelPending: cancelPendingRpc, dispose: disposeRpcClient } = platformAssembly.transport;
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
@@ -203,6 +203,7 @@ const sessionAssembly = createSessionAssembly({
   storage: localStorage,
   updateAppSession,
   updateHeaderState,
+  onRunnerChange: () => cancelPendingRpc("runner switched"),
   stateApplier: {
     applySessionState,
     getEmptySessionRunners: () => sessionOperations.getEmptyRunners(),
@@ -256,8 +257,10 @@ const sessionOperations = sessionAssembly.operations;
 const applyState = sessionOperations.applyState;
 const getSessionState = sessionOperations.getState;
 const getCurrentRunner = sessionOperations.getCurrentRunner;
+const getRunnerGeneration = sessionOperations.getRunnerGeneration;
 const getRunners = sessionOperations.getRunners;
 const setRunner = sessionOperations.setRunner;
+const adoptRunner = sessionOperations.adoptRunner;
 const setRunnersNow = sessionOperations.setRunners;
 updateAppSession({ currentRunner: getCurrentRunner(), runners: getRunners() });
 function getSessionRuntime() { return sessionOperations.getRuntime(); }
@@ -311,7 +314,7 @@ const platformEvents = platformAssembly.configureEvents({
   reloadPage: () => location.reload(),
   featureEvents: {
     sessions: {
-      setRunner,
+      setRunner: adoptRunner,
       setRunners: setRunnersNow,
       setWorkdir,
       getRunners: () => getRunners(),
@@ -344,6 +347,7 @@ transcriptAssembly.configureSynchronization({
   fetchImpl: fetch,
   sessionFileQuery,
   getSessionIdentity: () => runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner())) ?? getSessionState()?.sessionFile,
+  getGeneration: () => getRunnerGeneration(),
   clearPreview: sessionOperations.clearPreview,
   log: lifecycleLog,
   setReplaying,
@@ -360,6 +364,7 @@ transcriptAssembly.configureSynchronization({
   setBusy,
   refreshState,
   getRunner: () => getCurrentRunner(),
+  getGeneration: () => getRunnerGeneration(),
   getSessionFile: () => runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner())) ?? getSessionState()?.sessionFile,
   logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
@@ -378,6 +383,7 @@ const refreshStateNow = sessionAssembly.configureRefresh({
     return value;
   },
   applyState,
+  getGeneration: () => getRunnerGeneration(),
   onError: (e) => lifecycleLog("refreshState:error", { error: e?.message ?? String(e) }),
 });
 function refreshState() {

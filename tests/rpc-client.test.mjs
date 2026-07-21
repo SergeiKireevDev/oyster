@@ -18,6 +18,34 @@ test("rpc client rejects and clears pending commands when its request fails", as
   }
 });
 
+test("rpc client cancellation rejects pending runner commands without disposing the client", async () => {
+  const originalFetch = globalThis.fetch;
+  const timers = [];
+  const commandIds = [];
+  globalThis.fetch = async (_url, options) => {
+    commandIds.push(JSON.parse(options.body).id);
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  try {
+    const client = createRpcClient({
+      getRunner: () => "runner", getToken: () => "token", onUnauthorized: () => {}, onPendingResume: () => {},
+      setTimeoutImpl: (callback) => { const timer = { callback }; timers.push(timer); return timer; }, clearTimeoutImpl: () => {},
+    });
+    const stale = client.rpc({ type: "get_state" });
+    await new Promise((resolve) => setImmediate(resolve));
+    client.cancelPending("runner switched");
+    await assert.rejects(stale, /runner switched/);
+
+    const current = client.rpc({ type: "get_state" });
+    await new Promise((resolve) => setImmediate(resolve));
+    client.handleResponse({ id: commandIds[1], success: true, data: "current state" });
+    assert.equal(await current, "current state");
+    assert.equal(timers.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("rpc client disposal rejects pending commands and clears their timers", async () => {
   const originalFetch = globalThis.fetch;
   const timers = [];

@@ -18,7 +18,7 @@ import {
 export function createSessionAssembly(deps) {
   const route = parseSessionRoute(deps.location.pathname);
   const syncUrlToSession = (sessionId) => syncSessionUrl({ location: deps.location, history: deps.history, sessionId });
-  const runnerState = createSessionRunnerState({ storage: deps.storage, updateAppSession: deps.updateAppSession });
+  const runnerState = createSessionRunnerState({ storage: deps.storage, updateAppSession: deps.updateAppSession, onRunnerChange: deps.onRunnerChange });
   let state = null;
   let currentRunner = runnerState.currentRunner;
   let runners = runnerState.runners;
@@ -50,10 +50,12 @@ export function createSessionAssembly(deps) {
     boot: (...args) => bootController(...args),
     getState: () => state,
     getCurrentRunner: () => currentRunner,
+    getRunnerGeneration: () => runnerState.generation,
     getRunners: () => runners,
     getWorkdir: () => sessionUi.workdir,
     getBusy: () => sessionUi.busy,
     setRunner: (id) => { currentRunner = runnerState.setRunner(id); return currentRunner; },
+    adoptRunner: (id) => { currentRunner = runnerState.adoptRunner(id); return currentRunner; },
     setRunners: (next) => { runners = runnerState.setRunners(next); return runners; },
     getRuntime: () => sessionFeature.get(),
     openSession: (...args) => sessionFeature.get().openSession(...args),

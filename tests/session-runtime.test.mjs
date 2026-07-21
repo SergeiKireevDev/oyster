@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCurrentRunnerController, createRunnerListController, createSessionRunnerState, createSessionRuntime, createSessionUiController, createSessionUiRuntime, formatSessionDate, groupSessionSearchResults } from "../public/src/runtime/sessionRuntime.js";
+import { createCurrentRunnerController, createRunnerListController, createSessionRunnerState, createSessionRuntime, createSessionStateRefresher, createSessionUiController, createSessionUiRuntime, formatSessionDate, groupSessionSearchResults } from "../public/src/runtime/sessionRuntime.js";
 
 test("session UI runtime publishes workdir, busy state, and usage", () => {
   const app = []; const header = [];
@@ -25,19 +25,63 @@ test("session runtime owns compatibility session UI and picker helpers", () => {
   assert.equal(createSessionUiController, createSessionUiRuntime);
 });
 
-test("session runner state persists selection and publishes runner lists", () => {
+test("session runner state persists selection, advances ownership, and publishes runner lists", () => {
   const persisted = new Map([["pi_runner", "saved"]]);
   const updates = [];
+  const changes = [];
   const state = createSessionRunnerState({
     storage: { getItem: (key) => persisted.get(key) ?? null, setItem: (key, value) => persisted.set(key, value), removeItem: (key) => persisted.delete(key) },
     updateAppSession: (update) => updates.push(update),
+    onRunnerChange: (change) => changes.push(change),
   });
   assert.equal(state.currentRunner, "saved");
+  assert.equal(state.generation, 0);
+  state.setRunner("next");
   state.setRunner("next");
   state.setRunners([{ id: "next" }]);
   state.setRunner(null);
+  assert.equal(state.generation, 2);
   assert.equal(persisted.has("pi_runner"), false);
+  assert.deepEqual(changes, [
+    { previousRunner: "saved", currentRunner: "next", generation: 1 },
+    { previousRunner: "next", currentRunner: null, generation: 2 },
+  ]);
   assert.deepEqual(updates, [{ currentRunner: "next" }, { runners: [{ id: "next" }] }, { currentRunner: null }]);
+});
+
+test("session runner state adopts the initial replay runner without invalidating its reload", () => {
+  const changes = [];
+  const updates = [];
+  const state = createSessionRunnerState({
+    storage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    updateAppSession: (update) => updates.push(update),
+    onRunnerChange: (change) => changes.push(change),
+  });
+  state.adoptRunner("server-fallback");
+  assert.equal(state.currentRunner, "server-fallback");
+  assert.equal(state.generation, 0);
+  assert.deepEqual(changes, []);
+  assert.deepEqual(updates, [{ currentRunner: "server-fallback" }]);
+});
+
+test("session state refresher discards an in-flight response after a runner switch", async () => {
+  let generation = 1;
+  let runTimer;
+  let release;
+  const applied = [];
+  const refresh = createSessionStateRefresher({
+    rpc: () => new Promise((resolve) => { release = resolve; }),
+    applyState: (state) => applied.push(state),
+    getGeneration: () => generation,
+    setTimeoutImpl: (callback) => { runTimer = callback; return callback; },
+    clearTimeoutImpl: () => {},
+  });
+  refresh();
+  const pending = runTimer();
+  generation += 1;
+  release({ sessionId: "stale" });
+  await pending;
+  assert.deepEqual(applied, []);
 });
 
 test("session runtime delegates deliberate switches with the current runner and adapters", () => {
