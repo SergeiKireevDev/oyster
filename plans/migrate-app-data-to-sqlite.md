@@ -368,7 +368,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify routine definitions, bindings, progress, logs, and interrupted-run reconciliation survive restart.
 - [x] Verify hublot identity, ownership, desired state, and history survive `server.mjs` replacement.
 - [x] Verify planned restart, crash recovery, PID-reuse protection, orphan cleanup, replacement URLs, and self-served interruption behavior.
-- [ ] Verify a dead desired-open service is restarted from its persisted script, receives a new persisted PID, and has its tunnel reopened.
+- [x] Verify a dead desired-open service is restarted from its persisted script, receives a new persisted PID, and has its tunnel reopened.
 - [ ] Verify a missing startup-script file is rematerialized from its SQLite contents and hash.
 - [ ] Verify repeated service failure triggers backoff and crash-loop protection rather than an unbounded spawn loop.
 - [ ] Verify runner replay and selected workdir survive restart.

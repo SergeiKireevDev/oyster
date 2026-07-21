@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../persistence/appStore.mjs";
@@ -48,6 +49,57 @@ test("dead services restart, pass a live port check, persist replacement PID, th
   assert.equal(result.servicePid, process.pid);
   assert.equal(result.serviceProcess.pid, process.pid);
   assert.equal(result.tunnel.id, hublot.id, "recovery must retain stable hublot identity");
+});
+
+test("dead desired-open service executes its persisted script, persists its new PID, then reopens its tunnel", async (t) => {
+  const { store, state } = fixture(t);
+  const id = "persisted-script-recovery";
+  const scriptPath = join(state.config.PI_AGENT_DIR, "hublots", id, "start.sh");
+  const pidPath = join(state.config.PI_AGENT_DIR, "hublots", id, "service.pid");
+  const port = 4238;
+  const script = `#!/bin/sh\n# pi-lot-ui: idempotent\n${JSON.stringify(process.execPath)} -e 'require("node:http").createServer((q,s)=>s.end("ok")).listen(${port},"127.0.0.1")' >/dev/null 2>&1 &\necho $! > ${JSON.stringify(pidPath)}\n`;
+  mkdirSync(join(state.config.PI_AGENT_DIR, "hublots", id), { recursive: true });
+  writeFileSync(scriptPath, script, { mode: 0o700 });
+  chmodSync(scriptPath, 0o700);
+  const hublot = store.repositories.hublots.create({
+    id, port, workdir: state.currentDir, serviceKind: "agent_managed",
+    serviceStartScriptPath: scriptPath, serviceStartScript: script,
+    serviceStartScriptSha256: createHash("sha256").update(script).digest("hex"),
+    status: "recovering", desiredState: "open", createdAt: "created",
+  });
+  store.repositories.hublots.upsertProcess({
+    id: "dead-service", hublotId: id, role: "service", pid: 999999,
+    processGroupId: 999999, bootId: "old-boot", procStartTicks: "1", executable: "/usr/bin/node",
+    commandSha256: "old-command", status: "lost", startedAt: "old", endedAt: "dead",
+  });
+  let servicePid = null;
+  t.after(() => { if (servicePid) try { process.kill(servicePid, "SIGKILL"); } catch {} });
+
+  const result = await restartHublotService(state, hublot, {
+    discoverPids() {
+      servicePid = Number(readFileSync(pidPath, "utf8"));
+      return [servicePid];
+    },
+    persistProcess: persistHublotProcessIdentity,
+    async reopenTunnel(targetState, options) {
+      const service = store.repositories.hublots.listProcesses(options.id)
+        .find((row) => row.role === "service" && row.pid === servicePid && row.status === "running");
+      assert.ok(service, "replacement PID is durable before tunnel reopening");
+      persistHublotProcessIdentity(targetState, { hublotId: options.id, role: "tunnel", pid: process.pid });
+      recordHublotTransition(targetState, options.id, "open", { publicUrl: "https://restarted.test", openedAt: "reopened" });
+      return { id: options.id, url: "https://restarted.test" };
+    },
+  });
+
+  assert.equal(result.servicePid, servicePid);
+  assert.notEqual(result.servicePid, 999999);
+  assert.equal(readFileSync(scriptPath, "utf8"), script);
+  const persistedService = store.repositories.hublots.findProcess(result.serviceProcess.id);
+  assert.equal(persistedService.pid, servicePid);
+  assert.ok(persistedService.boot_id);
+  assert.ok(persistedService.proc_start_ticks);
+  assert.equal(store.repositories.hublots.find(id).public_url, "https://restarted.test");
+  assert.ok(store.repositories.hublots.listProcesses(id).some((row) => row.role === "tunnel" && row.status === "running"));
 });
 
 test("an answering service receives a replacement tunnel identity and durable URL", async (t) => {
