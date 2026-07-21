@@ -10,6 +10,18 @@ test("debug hook adapter publishes the integration hooks", () => {
     loadHublots: () => {},
     loadRoutines: () => {},
   };
-  installDebugHooks(target, hooks);
+  const registration = installDebugHooks(target, hooks);
   assert.deepEqual(target, hooks);
+  registration.detach();
+  assert.deepEqual(target, {});
+});
+
+test("debug hook adapter restores existing hooks on detach", () => {
+  const originalRpc = () => {};
+  const target = { rpc: originalRpc };
+  const registration = installDebugHooks(target, {
+    rpc: () => {}, refreshState: () => {}, loadHublots: () => {}, loadRoutines: () => {},
+  });
+  registration.detach();
+  assert.deepEqual(target, { rpc: originalRpc });
 });

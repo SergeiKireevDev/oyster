@@ -2122,7 +2122,7 @@ carouselEventRegistration.attach();
 carouselController.apply();
 
 // Test/debug scripts use these hooks to seed and inspect session state.
-installDebugHooks(window, { rpc, refreshState, loadHublots, loadRoutines });
+const debugHookRegistration = installDebugHooks(window, { rpc, refreshState, loadHublots, loadRoutines });
 
 // ------------------------------------------------------------ go
 
@@ -2188,5 +2188,6 @@ export function teardownLegacyRuntime() {
   sessionPickerEventController.detach();
   openFileExplorerEventController.detach();
   commandPaletteInputController?.detach();
+  debugHookRegistration.detach();
   connectionState.lost();
 }
