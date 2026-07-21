@@ -30,12 +30,15 @@ RUN npm install -g @earendil-works/pi-coding-agent@0.80.3
 
 WORKDIR /app
 
-# Zero-dependency project: just copy sources (see .dockerignore)
-COPY package.json server.mjs app.mjs sessions.mjs runners.mjs tunnels.mjs \
+# Frontend build dependencies + app sources (see .dockerignore)
+COPY package.json package-lock.json vite.config.js ./
+RUN npm ci
+COPY server.mjs app.mjs sessions.mjs runners.mjs tunnels.mjs \
      routines.mjs checkpoints.mjs ./
 COPY public ./public
 COPY tests ./tests
 COPY extensions ./extensions
+RUN npm run build
 
 # Register the bundled pi extensions (hublot, routine, file-explorer)
 RUN mkdir -p /root/.pi/agent/extensions \

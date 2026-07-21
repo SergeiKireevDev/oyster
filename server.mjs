@@ -130,18 +130,26 @@ function watchApp() {
     }, 150);
   });
 
-  // notify browsers when the static UI changes so they can refresh themselves
+  // notify browsers when the Vite UI changes so they can refresh themselves
   const publicDir = join(__dirname, "public");
+  const srcDir = join(publicDir, "src");
   if (existsSync(publicDir)) {
     let uiTimer = null;
-    watch(publicDir, (_event, filename) => {
-      if (filename !== "index.html") return;
+    const notifyUiChanged = (label) => {
       clearTimeout(uiTimer);
       uiTimer = setTimeout(() => {
-        console.log(`[pi-ui] public/index.html changed, notifying browsers`);
+        console.log(`[pi-ui] ${label} changed, notifying browsers`);
         state.serverEvent({ type: "ui_reload" });
       }, 150);
+    };
+    watch(publicDir, (_event, filename) => {
+      if (filename === "index.html") notifyUiChanged("public/index.html");
     });
+    if (existsSync(srcDir)) {
+      watch(srcDir, (_event, filename) => {
+        if (filename) notifyUiChanged(`public/src/${filename}`);
+      });
+    }
   }
 }
 
@@ -166,7 +174,7 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
   console.log(`[pi-ui] auth token: ${config.TOKEN}`);
   console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
-  console.log(`[pi-ui] hot reload: watching app.mjs and public/index.html`);
+  console.log(`[pi-ui] hot reload: watching app.mjs and public/index.html + public/src`);
   app.startPi();
 });
 

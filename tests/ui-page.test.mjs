@@ -1,36 +1,39 @@
-// Guards against the page-killing class of bug where the inline script
-// references a DOM id that no longer exists in the markup: a top-level
-// `$("gone").addEventListener(...)` throws and aborts the whole script,
-// which presents as "cannot connect" (the SSE connect code never runs).
+// Guards against the page-killing class of bug where the browser controller
+// references a DOM id that no longer exists in the Svelte markup.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { writeFileSync, mkdtempSync } from "node:fs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const src = join(root, "public", "src");
 const html = readFileSync(join(root, "public", "index.html"), "utf8");
+const js = readFileSync(join(src, "legacy.js"), "utf8");
+const entry = readFileSync(join(src, "main.js"), "utf8");
+const svelteFiles = [
+  join(src, "App.svelte"),
+  ...readdirSync(join(src, "components")).filter((f) => f.endsWith(".svelte")).map((f) => join(src, "components", f)),
+];
+const svelteMarkup = svelteFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 
-function inlineScript() {
-  const start = html.indexOf("<script>");
-  const end = html.lastIndexOf("</script>");
-  assert.notEqual(start, -1, "index.html has an inline <script>");
-  return html.slice(start + "<script>".length, end);
-}
+test("Svelte entry module is wired from index.html", () => {
+  assert.match(html, /<script\s+type="module"\s+src="\/src\/main\.js"><\/script>/);
+  assert.match(entry, /import App from "\.\/App\.svelte";/);
+  assert.match(entry, /mount\(App, \{ target: document\.body \}\);/);
+});
 
-test("inline script parses (node --check)", () => {
+test("legacy UI module parses (node --check)", () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-ui-test-"));
   const file = join(dir, "ui.js");
-  writeFileSync(file, inlineScript());
-  execFileSync(process.execPath, ["--check", file]); // throws on syntax error
+  writeFileSync(file, js);
+  execFileSync(process.execPath, ["--check", file]);
 });
 
 test("composer prompts include steering behavior while busy", () => {
-  const js = inlineScript();
   assert.match(
     js,
     /function promptRpcCommand\(text\) \{\s*return \{ type: "prompt", message: text, \.\.\.\(busy \? \{ streamingBehavior: "steer" \} : \{\}\) \};\s*\}/,
@@ -39,9 +42,8 @@ test("composer prompts include steering behavior while busy", () => {
   assert.match(js, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });
 
-test("every DOM id referenced by the script exists in the markup", () => {
-  const js = inlineScript();
-  const defined = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+test("every DOM id referenced by the legacy module exists in Svelte markup", () => {
+  const defined = new Set([...svelteMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
   const used = new Set([
     ...[...js.matchAll(/\$\("([^"]+)"\)/g)].map((m) => m[1]),
     ...[...js.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]),
@@ -50,7 +52,6 @@ test("every DOM id referenced by the script exists in the markup", () => {
   assert.deepEqual(
     missing,
     [],
-    `script references DOM ids missing from the markup: ${missing.join(", ")} — ` +
-      `a top-level listener on a missing element aborts the whole page script`
+    `legacy module references DOM ids missing from Svelte markup: ${missing.join(", ")}`
   );
 });

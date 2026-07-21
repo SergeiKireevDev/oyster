@@ -78,7 +78,7 @@ import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdi
 
 const isHidden = (name) => name.startsWith(".");
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
@@ -252,7 +252,22 @@ export function init(state) {
 
   // ---------------------------------------------------------------- http helpers
 
-  const INDEX_PATH = join(config.DIRNAME, "public", "index.html");
+  const PUBLIC_DIR = join(config.DIRNAME, "public");
+  const DIST_DIR = join(config.DIRNAME, "dist");
+  const SERVE_DIR = existsSync(join(DIST_DIR, "index.html")) ? DIST_DIR : PUBLIC_DIR;
+  const INDEX_PATH = join(SERVE_DIR, "index.html");
+  const STATIC_TYPES = new Map([
+    [".js", "text/javascript; charset=utf-8"],
+    [".css", "text/css; charset=utf-8"],
+    [".html", "text/html; charset=utf-8"],
+    [".svg", "image/svg+xml"],
+    [".png", "image/png"],
+    [".jpg", "image/jpeg"],
+    [".jpeg", "image/jpeg"],
+    [".gif", "image/gif"],
+    [".webp", "image/webp"],
+    [".ico", "image/x-icon"],
+  ]);
 
   function readBody(req, limit = 5 * 1024 * 1024) {
     return new Promise((resolvePromise, reject) => {
@@ -1019,11 +1034,26 @@ export function init(state) {
     res.end(readFileSync(INDEX_PATH));
   }
 
+  function servePublicAsset(pathname, res) {
+    let decoded;
+    try { decoded = decodeURIComponent(pathname); } catch { return false; }
+    const rel = decoded.replace(/^\/+/, "");
+    const target = resolve(SERVE_DIR, rel);
+    if (!within(target, SERVE_DIR) || !existsSync(target) || statSync(target).isDirectory()) return false;
+    res.writeHead(200, {
+      "content-type": STATIC_TYPES.get(extname(target).toLowerCase()) ?? "application/octet-stream",
+      "cache-control": "no-cache",
+    });
+    createReadStream(target).pipe(res);
+    return true;
+  }
+
   async function handleRequest(req, res) {
     const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
     const key = `${req.method} ${url.pathname}`;
 
     if (req.method === "GET" && isAppRoute(url.pathname)) return serveApp(res);
+    if (req.method === "GET" && servePublicAsset(url.pathname, res)) return;
 
     const open = openRoutes[key];
     if (open) return open(req, res, url);

@@ -1,6 +1,7 @@
 .ui-token
 nohup.out
 node_modules/
+dist/
 castle/
 hello/
 mario/
