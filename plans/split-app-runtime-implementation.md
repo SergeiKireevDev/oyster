@@ -1,0 +1,270 @@
+# Split `appRuntimeImplementation` into Feature Runtimes
+
+## Goal
+
+Replace `public/src/runtime/appRuntimeImplementation.js` as the application-wide
+feature hub with a thin application composition root and independently
+constructible feature runtimes. Preserve the current Svelte UI, RPC/SSE
+behavior, transcript reconciliation, and browser interaction contracts.
+
+This is a **second-stage migration**. Deleting `legacy.js` succeeded, but its
+central orchestration responsibility is now concentrated in
+`appRuntimeImplementation.js` (currently 1,769 lines). Do not treat a rename
+or file move as progress: each step must reduce the composition root's owned
+state, browser access, and feature knowledge.
+
+## Target Ownership
+
+```text
+public/src/
+  app/
+    appRuntime.js                    # assembles feature runtimes; no feature logic
+    appLifecycle.js                  # start/teardown ordering only
+  platform/
+    rpcClient.js                     # existing transport/client pieces, normalized here
+    eventStream.js                   # EventSource/replay/reconnect primitives
+    browser.js                       # injected browser adapters
+  features/
+    transcript/                      # transcript runtime, store, components, DOM adapters
+    sessions/                        # runner/session lifecycle, picker, search, routing
+    checkpoints/                     # freeze/rollback/tree/marker
+    composer/                        # composer, history, command palette
+    files/                           # picker, folder browser, explorer
+    hublots/                         # manager and sidebar
+    routines/                        # sidebar and actions
+    settings/                        # settings and extension UI
+    layout/                          # carousel/mobile drawers/header interaction
+  shared/
+    stores/ components/ utils/
+```
+
+The final directory names may vary, but these ownership rules are required:
+
+- `app/appRuntime.js` may construct and start features, but may not query a
+  feature DOM ID, hold feature mutable state, or branch on a feature action.
+- A feature runtime receives explicit dependencies and exposes a small public
+  API (`start`, `teardown`, and named operations needed by another feature).
+- Svelte components own local interaction handlers. They call feature actions
+  through callback props, context, or feature stores—not global `window` or
+  `document` custom events.
+- `platform/` owns browser transport mechanics. It must not import Svelte
+  components or feature stores.
+- Direct DOM work is permitted only in a feature-local adapter where it is
+  inherently browser-specific (for example transcript scroll measurement,
+  focus, file-input selection, or global keyboard capture).
+
+## Guardrails
+
+- Preserve durable session-file transcript history as the authority for
+  completed messages; SSE is a best-effort live overlay.
+- Preserve `_sseId` deduplication, replay gating, canonical reload ordering,
+  tail-first rendering, cancelled render jobs, and scroll-position correction.
+- Preserve runner switching semantics, including deliberate switches without
+  unwanted replay and empty-session behavior.
+- Preserve visible IDs/classes and API request contracts until the owning
+  Svelte component contract is migrated and tests are updated in the same
+  commit.
+- Do not combine an extraction with behavior, styling, or API changes.
+- Do not introduce a replacement global event bus. New component-to-feature
+  calls must be explicit callbacks/context actions; existing custom events are
+  removed only when their receiver and sender move together.
+- Make dependencies injectable. Do not replace `document`/`window` globals
+  with hidden singleton wrappers.
+- Keep every feature teardown-capable. A mount → teardown → mount cycle must
+  create a fresh working runtime with no duplicate listeners or stale RPC/SSE
+  state.
+
+For every implementation commit, run:
+
+```sh
+npm run build
+npm test
+```
+
+Add focused unit tests for extracted factories/controllers. Run the existing
+browser/e2e suite as applicable before merging a domain that changes DOM,
+scroll, keyboard, or session-switch behavior.
+
+## [ ] Baseline and Characterization
+
+Before the first extraction:
+
+- [ ] Record the current line count and import list for
+   `public/src/runtime/appRuntimeImplementation.js`.
+- [ ] Add a runtime lifecycle regression test covering two complete cycles:
+   `start → teardown → start → teardown`. Verify attachment ordering and that
+   a fresh transport/event-stream runtime is used after restart.
+- [ ] Add a test or static guard that the composition root does not grow new
+   `document.getElementById`, `querySelector`, `classList`, or feature-specific
+   custom-event registrations.
+- [ ] Inventory every `pi-*`/`pi:*` custom event with its sender, receiver, and
+   replacement feature API. Keep this inventory in this plan while migration
+   is active.
+
+**Acceptance:** baseline behavior is characterized; no production behavior is
+changed.
+
+## [ ] 1. Make Runtime Construction Instance-Scoped
+
+Move module-level mutable construction in
+`appRuntimeImplementation.js` behind a factory, initially without moving
+features.
+
+- Create `createApplicationRuntimeDependencies(browser, stores)` (or move the
+  implementation behind an equivalent factory) so all state is per runtime
+  instance.
+- Pass browser adapters (`window`, `document`, `location`, `history`, fetch,
+  timers, storage) through the factory rather than reading globals during
+  construction.
+- Update `runtime/appRuntime.js` so teardown clears its cached runtime and a
+  subsequent start creates a new instance.
+- Handle startup rejection in `App.svelte` through a visible application error
+  state/toast rather than leaving an unhandled promise rejection.
+
+**Acceptance:** remount/restart tests pass; no module-level runtime state is
+reused after teardown.
+
+## [ ] 2. Extract Platform and Connection Coordination
+
+Keep transport mechanics below features and extract the remaining wiring from
+the root.
+
+- Consolidate RPC client, token/authenticated fetch, EventSource construction,
+  reconnect watchdog, response correlation, and debug hooks under
+  `platform/` (existing focused modules may move without rewriting them).
+- Create a small connection coordinator exposing: `connect`, `disconnect`,
+  `refreshState`, and a typed/event-map dispatch boundary.
+- The coordinator may receive callbacks for state refresh and feature event
+  handling, but must not import transcript/session/hublot components.
+- Preserve replay buffering and ordering tests before moving event consumers.
+
+**Acceptance:** the composition root only creates the platform coordinator; it
+contains no EventSource lifecycle state, watchdog state, or event `switch`.
+
+## [ ] 3. Extract the Sessions Feature Runtime
+
+Create `features/sessions/createSessionFeature.js` around the existing session
+runtime/controllers.
+
+Move ownership of:
+
+- current runner and runner list;
+- route parsing/history synchronization;
+- session bootstrap/open/switch/stop;
+- state hydration, workdir/busy/usage state;
+- session preview and canonical session reload requests;
+- session picker, folder list, search, deletion, and search-hit navigation.
+
+Expose only feature operations required elsewhere, such as `openSession`,
+`switchRunner`, `refresh`, `getCurrentSession`, and a narrow notification hook.
+Move session-picker component actions from global custom events to callbacks or
+a sessions feature context.
+
+**Acceptance:** session switching, previews, deep links, search hits, and
+picker cancellation pass focused and browser tests. The root no longer holds
+`currentRunner`, `runnersNow`, `state`, picker resolver state, or route state.
+
+## [ ] 4. Extract the Transcript Feature Runtime
+
+Create `features/transcript/createTranscriptFeature.js` around existing
+transcript stores, actions, and runtime helpers.
+
+Move ownership of:
+
+- transcript item lifecycle, streaming assistant/tool-card state, and local
+  echo suppression;
+- canonical rendering, tail-first backfill, cancellation, and scroll adapter;
+- replay-gate release/flush hooks in coordination with the platform layer;
+- transcript annotations, permalinks, checkpoint-marker integration, and
+  search-hit focus;
+- transcript-specific DOM references (`#messages`, `#scroller`) through a
+  component-provided binding/adapter, not root-level lookup.
+
+Keep the durable-history and SSE ordering contract intact. If sessions and
+transcript need each other, use narrow interfaces rather than circular imports:
+`sessionSource` provides active session metadata; transcript exposes
+`reloadForSession` and stream-event handlers.
+
+**Acceptance:** the root does not inspect transcript elements or construct
+transcript items. Existing replay, backfill, permalink, checkpoint placement,
+and scroll tests remain green.
+
+## [ ] 5. Extract Independent Feature Runtimes
+
+Move one feature per commit, in this order, because later features depend on
+session identity but not on each other:
+
+- [ ] **Checkpoints** — marker, tree, freeze, rollback, and checkpoint event UI.
+- [ ] **Composer** — input state, send/abort action, prompt history, command
+  guard, and command palette.
+- [ ] **Files** — file picker, folder browser, explorer, upload input, and editor.
+- [ ] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
+- [ ] **Routines** — sidebar, visibility, actions, and routine stream updates.
+- [ ] **Settings/extensions** — settings modal, extension UI prompt adapters, and
+  header model/thinking actions.
+- [ ] **Layout** — carousel, mobile drawer dismissal, swipes, and header/sidebar
+  toggles.
+
+For every feature:
+
+- place its components, store(s), controller(s), and feature factory together;
+- inject `fetch`/RPC/session APIs and toast/modal interfaces;
+- replace its component custom events with direct feature actions;
+- retain only feature-local DOM adapters with explicit attach/detach;
+- add a test for factory construction and teardown.
+
+**Acceptance per feature:** removing its construction block from the root does
+not change public UI/API behavior; its listeners are attached exactly once and
+removed on teardown.
+
+## [ ] 6. Replace the Global Event Bridge
+
+After the owning feature has moved, remove its `window.dispatchEvent` /
+`document.dispatchEvent` protocol and matching global listener.
+
+Suggested replacement mechanisms, in order:
+
+1. callback props for parent-owned actions;
+2. feature context exposing typed actions;
+3. direct imports of a feature store action for simple local UI state.
+
+Keep global browser listeners only for genuine browser-wide concerns, such as
+capture-phase keyboard navigation and swipe/resize handling; encapsulate those
+inside the owning feature's adapter.
+
+Update the event inventory after each removal. No new `pi-*` or `pi:*` event
+may be added during this plan without documenting why a local API is
+impossible.
+
+**Acceptance:** feature components have no global custom-event dispatches;
+remaining global listeners are documented browser integrations.
+
+## [ ] 7. Reduce and Rename the Composition Root
+
+Once the features own their state and actions:
+
+- reduce `appRuntimeImplementation.js` to a small factory, or replace it with
+  `app/appRuntime.js`;
+- limit it to adapter construction, feature construction order, cross-feature
+  interface wiring, `start`, and `teardown`;
+- remove dead compatibility exports, stale comments referring to “legacy”, and
+  obsolete tests only after a no-reference check;
+- avoid a line-count-only goal, but expect the composition root to be small
+  enough to review as a single wiring module (roughly a few hundred lines, not
+  thousands).
+
+**Acceptance:** the root has no feature business logic, direct feature DOM
+lookup, feature-local mutable state, or custom-event listener registration.
+
+## Completion Criteria
+
+- `appRuntimeImplementation.js` is removed or is a thin, instance-scoped
+  composition module.
+- Each listed domain has a feature-owned factory and teardown path.
+- Svelte components communicate through local callbacks/context/store actions,
+  not a global custom-event bridge.
+- Browser-specific DOM work is isolated in explicit feature adapters.
+- Start/teardown/remount does not retain stale runtime, RPC, EventSource, or
+  listener state.
+- `npm run build` and `npm test` pass after every extraction, with appropriate
+  browser/e2e coverage for interaction-changing domains.
