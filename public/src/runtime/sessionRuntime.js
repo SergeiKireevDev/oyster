@@ -39,6 +39,11 @@ export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) 
   };
 }
 
+/** Return runner metadata after a process has been stopped. */
+export function markRunnerStopped(runners, id) {
+  return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
+}
+
 /** Open or resume a runner, normalizing the server's response and errors. */
 export async function openSession(fetchImpl, { sessionPath = null, dir = null } = {}) {
   const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionPath, dir }) });

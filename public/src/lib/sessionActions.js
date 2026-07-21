@@ -1,6 +1,6 @@
-import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "../runtime/sessionRuntime.js";
+import { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "../runtime/sessionRuntime.js";
 
-export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner };
+export { adjacentActiveRunner, applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionStateRefresher, createSessionStateRefresher as createStateRefresher, fetchSessionEntries, fetchSessionPreview, markRunnerStopped, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner };
 
 /** Session lifecycle decisions that do not own RPC or EventSource transport. */
 export function parseSessionRoute(pathname) {
@@ -46,11 +46,6 @@ export function createRunnerListController({ updateAppSession }) {
       return runners;
     },
   };
-}
-
-/** Return runner metadata after a process has been stopped. */
-export function markRunnerStopped(runners, id) {
-  return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
 }
 
 /** Select the next live, session-backed runner in the current workdir. */
