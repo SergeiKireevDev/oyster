@@ -79,6 +79,24 @@ test("SQLite mutations are isolated to the pi-lot-ui persistence boundary", () =
   assert.deepEqual(sqliteConstructors, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
 });
 
+test("only the app-store owner and read-only session catalog can construct SQLite connections", () => {
+  const sqliteUsers = sources
+    .filter(({ text }) => /(?:from\s+|import\s*\()\s*["']node:sqlite["']/.test(text) || /\bnew\s+DatabaseSync\s*\(/.test(text))
+    .map(({ name }) => name)
+    .sort();
+  assert.deepEqual(sqliteUsers, ["persistence/appStore.mjs", "sessions/sqliteCatalog.mjs"]);
+
+  const appStoreImports = sources
+    .filter(({ name }) => name !== "server.mjs")
+    .filter(({ text }) => /(?:from\s+|import\s*\()\s*["'][^"']*persistence\/appStore\.mjs/.test(text))
+    .map(({ name }) => name);
+  assert.deepEqual(appStoreImports, [], `only server.mjs may open the application store: ${appStoreImports.join(", ")}`);
+
+  const catalog = sources.find(({ name }) => name === "sessions/sqliteCatalog.mjs").text;
+  assert.match(catalog, /new DatabaseSync\(path, \{ readOnly: true,/);
+  assert.doesNotMatch(catalog, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/);
+});
+
 test("opening and migrating pi-lot-ui.sqlite leaves the coding-agent schema unchanged", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-ui-schema-boundary-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
