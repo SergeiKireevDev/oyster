@@ -2500,7 +2500,7 @@ async function showFolderBrowser() {
   const finished = new Promise((resolve) => { done = resolve; });
 
   async function load(path) {
-    const q = path ? `&path=${encodeURIComponent(path)}` : "";
+    const q = path ? `?path=${encodeURIComponent(path)}` : "";
     const res = await fetch(`/browse${q}`);
     const data = await res.json();
     if (!res.ok) { toast(data.error || "cannot open folder", "error"); return; }
@@ -3307,7 +3307,7 @@ function fmtSessionDate(iso) {
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
   // last-set global workdir
-  const dirQ = workdir ? `&dir=${encodeURIComponent(workdir)}` : "";
+  const dirQ = workdir ? `?dir=${encodeURIComponent(workdir)}` : "";
   const res = await fetch(`/sessions${dirQ}`);
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
