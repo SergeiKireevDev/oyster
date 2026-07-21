@@ -40,8 +40,8 @@ test("session search opens the specific matching user message", async ({ page })
   await expect(secondHit.locator("mark")).toHaveText(marker);
 
   await secondHit.click();
-  await expect(page.locator(".msg.user", { hasText: second })).toHaveClass(/msg-flash/);
-  await expect(page.locator(".msg.user", { hasText: first })).not.toHaveClass(/msg-flash/);
+  await expect(page.locator('[data-role="user"]', { hasText: second })).toHaveClass(/msg-flash/);
+  await expect(page.locator('[data-role="user"]', { hasText: first })).not.toHaveClass(/msg-flash/);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await swipe(page, "right");

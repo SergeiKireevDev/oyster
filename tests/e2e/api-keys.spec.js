@@ -22,14 +22,18 @@ function installSecuredMockProvider() {
   dexec(`printf %s ${encoded} | base64 -d > /root/.pi/agent/models.json`);
 }
 
-async function openApiKeys(page) {
-  const row = page.locator(`.api-key-row[data-provider="${PROVIDER}"]`);
-  if (!(await row.isVisible().catch(() => false))) {
+async function openApiKeys(page, { expectActive = false } = {}) {
+  const credentials = page.getByRole("region", { name: "Pi credentials" });
+  if (!(await credentials.isVisible().catch(() => false))) {
     await page.locator("#menuBtn").click();
     await page.locator('#menu button[data-action="credentials"]').click();
     await expect(page.locator("#mTitle")).toHaveText("Credentials");
   }
-  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(credentials).toBeVisible({ timeout: 15000 });
+  await expect(credentials.locator(`option[value="${PROVIDER}"]`)).toHaveCount(1);
+  if (expectActive) {
+    await expect(credentials.locator(`.api-key-row[data-provider="${PROVIDER}"]`)).toBeVisible({ timeout: 15000 });
+  }
 }
 
 async function confirmYes(page) {
@@ -79,7 +83,7 @@ test("API Keys menu adds, replaces, and removes a mock provider key without expo
   await expectModelAvailability(page, true);
   expect(await page.locator("body").textContent()).not.toContain(firstKey);
 
-  await openApiKeys(page);
+  await openApiKeys(page, { expectActive: true });
   await page.locator(".api-key-form select").selectOption(PROVIDER);
   await page.locator('.api-key-form input[type="password"]').fill(replacementKey);
   await page.getByRole("button", { name: "Replace and restart pi" }).click();
@@ -89,7 +93,7 @@ test("API Keys menu adds, replaces, and removes a mock provider key without expo
   expect(await page.locator("body").textContent()).not.toContain(firstKey);
   expect(await page.locator("body").textContent()).not.toContain(replacementKey);
 
-  await openApiKeys(page);
+  await openApiKeys(page, { expectActive: true });
   await page.locator(`.api-key-row[data-provider="${PROVIDER}"] .api-key-remove`).click();
   await expect(page.locator("#mTitle")).toContainText(`Remove API key for ${PROVIDER}`);
   await expect(page.locator("#mBody")).toContainText("does not revoke the key at the provider");
