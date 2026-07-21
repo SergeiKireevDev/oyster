@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCommandPaletteInput, registerComposerEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
+import { registerComposerEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerSessionPickerEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -101,17 +101,6 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.equal(controller.get(), 0);
   assert.deepEqual([...hublots.classList.values], []);
   assert.deepEqual([...treebar.classList.values], []);
-});
-
-test("command palette input adapter registers and tears down local listeners", () => {
-  const listeners = new Map();
-  const target = { addEventListener: (type, fn) => listeners.set(type, fn), removeEventListener: (type, fn) => assert.equal(listeners.get(type), fn) };
-  const calls = [];
-  const remove = registerCommandPaletteInput(target, { onInput: () => calls.push("input"), onBlur: () => calls.push("blur") });
-  listeners.get("input")();
-  listeners.get("blur")();
-  assert.deepEqual(calls, ["input", "blur"]);
-  remove();
 });
 
 test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {

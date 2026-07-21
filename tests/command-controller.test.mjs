@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
 
 test("command palette navigation wraps active command selection", () => {
   assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
@@ -37,6 +37,27 @@ test("command palette run controller routes selected indexes", () => {
   controller.detach();
   assert.deepEqual(calls, [4]);
   assert.equal(removed, listener);
+});
+
+test("command palette input controller attaches and detaches input and blur listeners", () => {
+  const listeners = new Map();
+  const removed = [];
+  const target = {
+    addEventListener(name, listener) { listeners.set(name, listener); },
+    removeEventListener(name, listener) { removed.push([name, listener]); },
+  };
+  const calls = [];
+  const controller = createCommandPaletteInputController({
+    target,
+    onInput: () => calls.push("input"),
+    onBlur: () => calls.push("blur"),
+  });
+  controller.attach();
+  listeners.get("input")();
+  listeners.get("blur")();
+  controller.detach();
+  assert.deepEqual(calls, ["input", "blur"]);
+  assert.deepEqual(removed, [["input", listeners.get("input")], ["blur", listeners.get("blur")]]);
 });
 
 test("command palette keyboard controller handles palette keys only while open", () => {

@@ -36,6 +36,20 @@ export function createCommandPaletteRunController({ windowTarget, run }) {
   return { attach, detach };
 }
 
+/** Own command-trigger input and delayed blur dismissal for one composer input. */
+export function createCommandPaletteInputController({ target, onInput, onBlur }) {
+  function attach() {
+    target.addEventListener("input", onInput);
+    target.addEventListener("blur", onBlur);
+    return detach;
+  }
+  function detach() {
+    target.removeEventListener("input", onInput);
+    target.removeEventListener("blur", onBlur);
+  }
+  return { attach, detach };
+}
+
 export function createCommandPaletteKeyboardController({ documentTarget, isOpen, move, run, close }) {
   const onKeydown = (event) => {
     if (!isOpen()) return;

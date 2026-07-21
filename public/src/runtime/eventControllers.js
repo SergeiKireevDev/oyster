@@ -13,15 +13,6 @@ export function registerFileUploadInput(target, onChange) {
   return () => target.removeEventListener("change", onChange);
 }
 
-export function registerCommandPaletteInput(target, { onInput, onBlur }) {
-  target.addEventListener("input", onInput);
-  target.addEventListener("blur", onBlur);
-  return () => {
-    target.removeEventListener("input", onInput);
-    target.removeEventListener("blur", onBlur);
-  };
-}
-
 export function registerHeaderEvents(target, { chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
   const onHeader = (event) => {
     const { action, sourceEvent } = event.detail ?? {};
