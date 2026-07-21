@@ -68,12 +68,9 @@ import { createHublotController } from "../lib/hublotController.js";
 import { configureHublotActions } from "../features/hublots/hublotActions.js";
 import { createHublotFeature } from "../features/hublots/createHublotFeature.js";
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
-import { createFolderBrowserController } from "../lib/folderBrowserController.js";
 import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
-import { createFileExplorerController } from "../lib/fileExplorerController.js";
 import { configureFilesActions } from "../features/files/filesActions.js";
 import { configureFileExplorerActions } from "../features/files/fileExplorerActions.js";
-import { createFilePickerController } from "../lib/filePickerController.js";
 import { createFilesRuntime } from "../features/files/createFilesRuntime.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
@@ -1048,30 +1045,67 @@ const menuEventController = createMenuEventController({ windowTarget: window, ru
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
-let filePickerState = {
-  curDir: "",
-  showHidden: true,
-  onPick: insertIntoComposer,
-  onCancel: null,
-  returnToHublot: false,
-};
-
-const filePickerController = createFilePickerController({
-  browse: (path) => browseFiles(fetch, path),
-  update: updateFilePicker,
-  updateTitle: (title) => updateModal({ title }),
-  openModal,
-  closeModal,
-  showHublots: () => showHublots(),
-  getShowHidden: () => get(filePicker).showHidden,
-  getWorkdir: () => sessionUi.workdir,
-  setPath: (path) => { filePickerState.curDir = path; },
-  resetState: ({ path, onPick, onCancel, returnToHublot }) => {
-    filePickerState = { curDir: path, showHidden: true, onPick, onCancel, returnToHublot };
-  },
-  toast: addToast,
+const filesRuntime = createFilesRuntime({
+  pickerState: () => ({ curDir: "", showHidden: true, onPick: insertIntoComposer, onCancel: null, returnToHublot: false }),
+  folderState: () => ({ browsePath: "", showHidden: true, done: null }),
+  explorerState: () => ({ curPath: "", showHidden: true, editPath: "", editContent: "" }),
+  picker: ({ state }) => ({
+    browse: (path) => browseFiles(fetch, path),
+    update: updateFilePicker,
+    updateTitle: (title) => updateModal({ title }),
+    openModal,
+    closeModal,
+    showHublots: () => showHublots(),
+    getShowHidden: () => get(filePicker).showHidden,
+    getWorkdir: () => sessionUi.workdir,
+    setPath: (path) => { state.picker.curDir = path; },
+    resetState: ({ path, onPick, onCancel, returnToHublot }) => Object.assign(state.picker, { curDir: path, showHidden: true, onPick, onCancel, returnToHublot }),
+    toast: addToast,
+  }),
+  folderBrowser: ({ state }) => ({
+    async browse(path) { const q = path ? `?path=${encodeURIComponent(path)}` : ""; const res = await fetch(`/browse${q}`); const data = await res.json(); if (!res.ok) throw new Error(data.error || "cannot open folder"); return data; },
+    async mkdir(path, name) {
+      const res = await fetch(`/mkdir`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, name }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `mkdir failed (${res.status})`);
+      return data;
+    },
+    update: updateFolderBrowser,
+    updateTitle: (title) => updateModal({ title }),
+    getShowHidden: () => get(folderBrowser).showHidden,
+    setPath: (path) => { state.folder.browsePath = path; },
+    openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
+    setWorkdir,
+    toast: addToast,
+  }),
+  explorer: ({ state }) => ({
+    browse: (path) => browseFiles(fetch, path),
+    readFile: (path) => readFile(fetch, path),
+    saveFile: (options) => saveFile(fetch, options),
+    uploadChunk: (options) => uploadFileChunk(fetch, options),
+    createUploadInput: () => document.createElement("input"),
+    update: updateFileExplorer,
+    updateTitle: (title) => updateModal({ title }),
+    openModal,
+    getShowHidden: () => get(fileExplorer).showHidden,
+    getWorkdir: () => sessionUi.workdir,
+    getToken: () => token,
+    setPath: (path) => { state.explorer.curPath = path; },
+    setEditFile: (path, content) => Object.assign(state.explorer, { editPath: path, editContent: content }),
+    resetState: (path) => Object.assign(state.explorer, { curPath: path, showHidden: true, editPath: "", editContent: "" }),
+    toast: addToast,
+  }),
 });
+const filePickerController = filesRuntime.picker;
+const folderBrowserController = filesRuntime.folderBrowser;
+const fileExplorerController = filesRuntime.explorer;
+const filePickerState = filesRuntime.state.picker;
+const folderBrowserState = filesRuntime.state.folder;
+const fileExplorerState = filesRuntime.state.explorer;
 const loadFilePicker = filePickerController.load;
+const loadFolderBrowser = folderBrowserController.load;
+const loadFileExplorer = fileExplorerController.load;
+
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
@@ -1104,36 +1138,13 @@ function insertIntoComposer(text) {
 
 // ------------------------------------------------------------ folder browser
 
-let folderBrowserState = {
-  browsePath: "",
-  showHidden: true,
-  done: null,
-};
-
-const folderBrowserController = createFolderBrowserController({
-  async browse(path) { const q = path ? `?path=${encodeURIComponent(path)}` : ""; const res = await fetch(`/browse${q}`); const data = await res.json(); if (!res.ok) throw new Error(data.error || "cannot open folder"); return data; },
-  async mkdir(path, name) {
-    const res = await fetch(`/mkdir`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, name }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `mkdir failed (${res.status})`);
-    return data;
-  },
-  update: updateFolderBrowser,
-  updateTitle: (title) => updateModal({ title }),
-  getShowHidden: () => get(folderBrowser).showHidden,
-  setPath: (path) => { folderBrowserState.browsePath = path; },
-  openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
-  setWorkdir,
-  toast: addToast,
-});
-const loadFolderBrowser = folderBrowserController.load;
 
 async function showFolderBrowser() {
-  folderBrowserState = {
+  Object.assign(folderBrowserState, {
     browsePath: sessionUi.workdir,
     showHidden: true,
     done: null,
-  };
+  });
   const finished = new Promise((resolve) => { folderBrowserState.done = resolve; });
   updateFolderBrowser({
     path: "",
@@ -1186,31 +1197,6 @@ async function sendAgentMessage(text) {
 // Built-in "hublot": same modal style as the attach-file picker, but with
 // per-file actions — download the file, or edit it right in the modal.
 
-let fileExplorerState = {
-  curPath: "",
-  showHidden: true,
-  editPath: "",
-  editContent: "",
-};
-
-const fileExplorerController = createFileExplorerController({
-  browse: (path) => browseFiles(fetch, path),
-  readFile: (path) => readFile(fetch, path),
-  saveFile: (options) => saveFile(fetch, options),
-  uploadChunk: (options) => uploadFileChunk(fetch, options),
-  createUploadInput: () => document.createElement("input"),
-  update: updateFileExplorer,
-  updateTitle: (title) => updateModal({ title }),
-  openModal,
-  getShowHidden: () => get(fileExplorer).showHidden,
-  getWorkdir: () => sessionUi.workdir,
-  getToken: () => token,
-  setPath: (path) => { fileExplorerState.curPath = path; },
-  setEditFile: (path, content) => { fileExplorerState.editPath = path; fileExplorerState.editContent = content; },
-  resetState: (path) => { fileExplorerState = { curPath: path, showHidden: true, editPath: "", editContent: "" }; },
-  toast: addToast,
-});
-const loadFileExplorer = fileExplorerController.load;
 
 // Always open in the current session's working directory.
 const showFileExplorer = () => fileExplorerController.show(sessionUi.workdir);
