@@ -1570,14 +1570,15 @@ const saveExplorerFile = () => fileExplorerController.saveEditor(
   get(fileExplorer).editContent,
 );
 
-createFileExplorerEventController({ windowTarget: window,
+const fileExplorerEventController = createFileExplorerEventController({ windowTarget: window,
   browse: loadFileExplorer,
   edit: editExplorerFile,
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
-}).attach();
+});
+fileExplorerEventController.attach();
 
 
 // Tunnels are bound to the session they were opened in; the modal and the
@@ -2167,5 +2168,6 @@ export function teardownLegacyRuntime() {
   checkpointTreeEventController.detach();
   filePickerEventController.detach();
   folderBrowserEventController.detach();
+  fileExplorerEventController.detach();
   connectionState.lost();
 }
