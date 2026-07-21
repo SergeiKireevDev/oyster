@@ -28,7 +28,7 @@ cd tests/e2e && npm test
 
 ## 1. Replace Global Component Event Dispatch
 
-- [ ] Add `createUiActionRegistry()` with `register(name, handler)`,
+- [x] Add `createUiActionRegistry()` with `register(name, handler)`,
   `invoke(name, ...args)`, and idempotent `teardown()` operations. Add unit
   tests for replacement registration, missing actions, and teardown.
 - [ ] Have `App.svelte` create one UI action registry, provide it through
