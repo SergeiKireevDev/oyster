@@ -348,7 +348,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
   re-exports the large implementation. Do not check section 7 until these
   physical moves are complete:
 
-  - [ ] Move the first contiguous controller block (including its imports and
+  - [x] Move the first contiguous controller block (including its imports and
     tests) out of `appRuntimeImplementation.js`; prove the root line count
     decreases by at least 100 lines.
   - [ ] Repeat controller-block extraction commits until the implementation
