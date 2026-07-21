@@ -43,6 +43,7 @@ import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
+import { createRoutineController } from "./lib/routineController.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -2057,16 +2058,13 @@ async function loadRoutines() {
   syncRoutinesStore({ loading: false });
 }
 
-async function routineAction(name, action) {
-  try {
-    // start binds the routine to the current session (and its workdir)
-    await runRoutine(fetch, { name, action, sessionId: state?.sessionId ?? null });
-  } catch (e) {
-    toast(`routine ${action} failed: ${e.message}`, "error");
-  }
-  loadRoutines();
-}
-registerRoutineEvents(window, { run: routineAction });
+const routineController = createRoutineController({
+  runRoutine: (options) => runRoutine(fetch, options),
+  getSessionId: () => state?.sessionId ?? null,
+  refresh: loadRoutines,
+  toast,
+});
+registerRoutineEvents(window, { run: routineController.run });
 
 // ------------------------------------------------------------ session picker
 
