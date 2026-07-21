@@ -34,7 +34,7 @@ test("app runtime explicitly starts the application composition root", () => {
   assert.match(appRuntime, /runtime = null;/);
   assert.doesNotMatch(runtimeImplementation, /if \(!token\) requireToken\(\);\nelse boot\(\);/);
   assert.doesNotMatch(runtimeImplementation, /export function (start|teardown)LegacyRuntime\(/);
-  assert.match(runtimeImplementation, /export function createAppRuntimeDependencies\(\)/);
+  assert.doesNotMatch(runtimeImplementation, /export function createAppRuntimeDependencies\(\)/);
 });
 
 test("application runtime composition root does not grow browser DOM coupling", () => {

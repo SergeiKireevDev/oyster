@@ -1474,8 +1474,4 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   });
 }
 
-/** @deprecated Use createApplicationRuntimeDependencies with explicit adapters. */
-export function createAppRuntimeDependencies() {
-  return createApplicationRuntimeDependencies({ window, document, location, history });
-}
 

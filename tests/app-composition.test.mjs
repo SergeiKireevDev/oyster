@@ -17,4 +17,5 @@ test("composition entrypoint keeps feature-local mutable state out of the root",
   assert.doesNotMatch(source, /^\s*(let|var)\s/m);
   assert.doesNotMatch(source, /from\s+["']\.\.\/(features|stores|lib)\//);
   assert.doesNotMatch(source, /create(File|Session|Transcript|Hublot|Routine|Settings|Layout|Checkpoint|Composer)/);
+  assert.doesNotMatch(source, /createAppRuntimeDependencies|deprecated|legacy/i);
 });
