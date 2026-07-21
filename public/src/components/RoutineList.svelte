@@ -4,7 +4,11 @@
   const dotClass = (status) => ({ running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[status] ?? "");
   const msg = (routine) => routine.message ?? routine.log?.[routine.log.length - 1] ?? null;
   const title = (routine) => `${routine.path}\nstatus: ${routine.status}${routine.exitCode !== null ? ` (exit ${routine.exitCode})` : ""}${routine.sessionId ? `\nbound to session ${routine.sessionId}` : "\nnot bound to a session yet"}${routine.cwd ? `\nruns in ${routine.cwd}` : ""}`;
-  import { runRoutineAction } from "../features/routines/routineActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { ROUTINE_RUN_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const runRoutineAction = (name, action) => uiActions.invoke(ROUTINE_RUN_ACTION, name, action);
   const confirmDelete = (routine) => {
     if (confirm(`Delete routine “${routine.name}”? Its script is removed from ~/.pi/routines/ (byproducts stay — teardown first if needed).`)) runRoutineAction(routine.name, "delete");
   };

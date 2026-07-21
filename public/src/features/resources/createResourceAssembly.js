@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureRoutineActions } from "../routines/routineActions.js";
 import {
   FILE_PICKER_BROWSE_ACTION,
   FILE_PICKER_CANCEL_ACTION,
@@ -23,6 +22,7 @@ import {
   HUBLOT_REMOVE_ACTION,
   HUBLOT_SHOW_ACTION,
   HUBLOT_TOGGLE_SCOPE_ACTION,
+  ROUTINE_RUN_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
@@ -85,7 +85,7 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(HUBLOT_TOGGLE_SCOPE_ACTION, actions.hublots.toggleScope),
         deps.uiActions.register(HUBLOT_REMOVE_ACTION, actions.hublots.remove),
         deps.uiActions.register(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, actions.hublots.openCommandPalette),
-        configureRoutineActions(actions.routine),
+        deps.uiActions.register(ROUTINE_RUN_ACTION, actions.routine),
       );
     },
     teardown() {

@@ -23,6 +23,7 @@ import {
   HUBLOT_REMOVE_ACTION,
   HUBLOT_SHOW_ACTION,
   HUBLOT_TOGGLE_SCOPE_ACTION,
+  ROUTINE_RUN_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 test("resource assembly composes files hublots and routines with one teardown boundary", () => {
@@ -120,7 +121,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
       remove: (id) => calls.push(["hublot-remove", id]),
       openCommandPalette: (node) => calls.push(["hublot-palette", node]),
     },
-    routine() {},
+    routine: (name, action) => calls.push(["routine", name, action]),
   });
 
   uiActions.invoke(FILE_PICKER_BROWSE_ACTION, "/tmp");
@@ -143,6 +144,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   uiActions.invoke(HUBLOT_TOGGLE_SCOPE_ACTION);
   uiActions.invoke(HUBLOT_REMOVE_ACTION, "tunnel-1");
   uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, "textarea");
+  uiActions.invoke(ROUTINE_RUN_ACTION, "build.sh", "start");
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
@@ -164,6 +166,7 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
     ["hublot-scope"],
     ["hublot-remove", "tunnel-1"],
     ["hublot-palette", "textarea"],
+    ["routine", "build.sh", "start"],
   ]);
 
   assembly.teardown();
@@ -172,5 +175,6 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   assert.equal(uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FILE_EXPLORER_OPEN_ACTION), undefined);
   assert.equal(uiActions.invoke(HUBLOT_SHOW_ACTION), undefined);
-  assert.equal(calls.length, 20);
+  assert.equal(uiActions.invoke(ROUTINE_RUN_ACTION, "stale", "start"), undefined);
+  assert.equal(calls.length, 21);
 });

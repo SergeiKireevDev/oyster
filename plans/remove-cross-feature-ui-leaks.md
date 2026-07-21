@@ -67,7 +67,7 @@ cd tests/e2e && npm test
   through `createResourceAssembly()`. Change `HublotSidebar.svelte`,
   `HublotList.svelte`, and `HublotManagerModal.svelte` to invoke them; delete
   `features/hublots/hublotActions.js` and its configuration call.
-- [ ] Register routine-run actions through `createResourceAssembly()` and
+- [x] Register routine-run actions through `createResourceAssembly()` and
   change `RoutineList.svelte` to invoke them. Delete
   `features/routines/routineActions.js` and its configuration call; test run
   requests remain session-scoped.
