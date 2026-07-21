@@ -2,8 +2,8 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate } from "./runtime/authClient.js";
-import { createRpcClient } from "./runtime/rpcClient.js";
+import { installAuthenticatedFetch } from "./runtime/authClient.js";
+import { createTransportRuntime } from "./runtime/transportRuntime.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptAfterRenderController, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController, createRoutineStreamEventController, createRunnersUpdateController } from "./runtime/eventControllers.js";
@@ -104,9 +104,7 @@ const lifecycleLog = createLifecycleLogger({
 
 // ------------------------------------------------------------ token
 
-// Auth/token initialization is runtime-owned; legacy receives its current
-// token for transport and EventSource construction.
-const token = initializeAuth();
+// Auth/token and RPC construction live in the transport runtime.
 
 // ------------------------------------------------------------ url routes
 // /s/<sessionId>            -> open that session on load
@@ -122,38 +120,16 @@ const delayedTasks = createDelayedTaskRegistry();
 const gate = $("gate");
 
 
-const requireToken = () => showAuthGate({ gate, input: $("gateInput") });
-
-// SSE failures: distinguish "server unreachable" from "token rejected".
-// Only the server itself saying the token is invalid clears it.
-const probeTokenValidity = createAuthProbe({
-  getToken: () => token,
-  onUnauthorized: () => {
-    clearAuthToken({ storage: localStorage, documentTarget: document });
-    updateHeaderState({ stateInfo: "invalid token" });
-    requireToken();
-  },
-});
-
-// Only drop the stored token if the server itself rejects it on a direct
-// probe — a stripped header or transient proxy error must not log the user out.
-const handleUnauthorized = createUnauthorizedHandler({
-  storage: localStorage,
-  documentTarget: document,
-  requireToken,
+const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = createTransportRuntime({
+  browser: { document, storage: localStorage },
+  gate,
+  getRunner: () => currentRunner,
+  onInvalidToken: () => updateHeaderState({ stateInfo: "invalid token" }),
   toast: addToast,
 });
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
-
-const rpcClient = createRpcClient({
-  getRunner: () => currentRunner,
-  getToken: () => token,
-  onUnauthorized: handleUnauthorized,
-  onPendingResume: () => addToast("session is still resuming — message queued", "warning"),
-});
-const { rpc, handleResponse, dispose: disposeRpcClient } = rpcClient;
 
 // ------------------------------------------------------------ markdown (small, escape-first)
 

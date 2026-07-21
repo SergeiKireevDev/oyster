@@ -160,31 +160,31 @@ Remaining work, broken into atomic commits:
    `public/src/runtime/createAppRuntime.js`, exporting a factory that receives
    browser adapters (`window`, `document`, `location`, `history`, and DOM
    lookup) plus store actions. Do not import `legacy.js` from this factory.
-3. **Move transport/session/transcript construction.** Move the module-level
+3. [x] **Move transport/session/transcript construction.** Move the module-level
    auth, RPC, EventSource, session, and transcript runtime construction from
    `legacy.js` into the factory. Preserve the existing injected callbacks,
    replay gate, `_sseId` dedupe, durable transcript reload, and scroll
    adapters. Test the factory with fake browser adapters.
-4. **Move feature-controller construction.** Move construction and dependency
+4. [ ] **Move feature-controller construction.** Move construction and dependency
    wiring for checkpoint, composer/command, file/folder, hublot, routine,
    session-picker, settings, extension-UI, and carousel controllers into the
    factory. Keep each controller's event adapter as an explicit factory output
    rather than registering it while constructing the controller.
-5. **Move lifecycle composition.** In the factory, compose the explicit
+5. [ ] **Move lifecycle composition.** In the factory, compose the explicit
    `start`, `attachEventAdapters`, `attachAuthenticatedFetch`, debug-hook, and
    teardown functions using the existing lifecycle/attachment/cleanup modules.
    Export a `{ start, teardown }` runtime; no lifecycle dependency factory may
    remain in `legacy.js`.
-6. **Switch the application entry point.** Change `appRuntime.js` to construct
+6. [ ] **Switch the application entry point.** Change `appRuntime.js` to construct
    the new factory directly and delete `legacyRuntimeAdapter.js`,
    `legacyRuntimeDependencies.js`, `legacyRuntimeEventAdapters.js`, and
    `legacyRuntimeCleanup.js` only after their behavior is in a non-legacy
    runtime module. Verify no production module imports `legacy.js`.
-7. **Delete the legacy module and retarget guards.** Delete
+7. [ ] **Delete the legacy module and retarget guards.** Delete
    `public/src/legacy.js`; update `tests/ui-page.test.mjs` so syntax and DOM-ID
    checks cover the replacement composition/runtime modules. Remove or rename
    legacy-named tests and files that no longer describe a live boundary.
-8. **Prove completion.** Run the stale-reference check below (excluding only
+8. [ ] **Prove completion.** Run the stale-reference check below (excluding only
    historical fixture names such as `*_legacy.jsonl`), then run the complete
    validation matrix from the guardrails.
 
