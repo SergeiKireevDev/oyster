@@ -1,5 +1,5 @@
-import { createCommandGuard, commandTrigger, filterCommands } from "../../lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
+import { createCommandGuard } from "../../lib/commandActions.js";
+import { commandPalettePosition, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
@@ -141,32 +141,17 @@ export function createComposerAssembly(deps) {
     const guard = createCommandGuard({ rpc: deps.rpc, confirm: commandDeps.confirm });
     let state = null;
     let inputController = null;
-    const commands = [
-      {
-        name: "sessions",
-        desc: "Open the full sessions manager",
-        icon: "◫",
-        run() {
-          close();
-          commandDeps.dialogs.showSessionPicker();
-        },
-      },
-    ];
     let requestVersion = 0;
-    const visibleItems = () => state?.mode === "command" ? filterCommands(commands, state.match) : (state?.items ?? []);
+    const visibleItems = () => state?.items ?? [];
     const render = () => {
       if (!state) return;
-      const items = visibleItems();
-      commandDeps.setPaletteState(state.mode === "command"
-        ? commandPaletteView(items, state.match, state.active)
-        : pathPaletteView(items, state.trigger, state.active));
+      commandDeps.setPaletteState(pathPaletteView(visibleItems(), state.trigger, state.active));
     };
-    const position = (element, mode = state?.mode) => commandDeps.setPaletteState(commandPalettePosition(
+    const position = (element) => commandDeps.setPaletteState(commandPalettePosition(
       element.getBoundingClientRect(),
       commandDeps.windowTarget,
-      mode === "path" ? { maxWidth: 860, minWidth: 860, maxHeight: 480 } : undefined,
+      { maxWidth: 860, minWidth: 860, maxHeight: 480 },
     ));
-    const openCommand = (element, match, trigger) => { state = { mode: "command", target: element, match: match || "", active: 0, trigger }; position(element, "command"); render(); };
     const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "path"); render(); };
     function close() { requestVersion++; state = null; commandDeps.closePaletteState(); }
     const move = (direction) => {
@@ -234,19 +219,8 @@ export function createComposerAssembly(deps) {
         target: element,
         onInput() {
           const version = ++requestVersion;
-          const trigger = commandTrigger(element);
-          if (trigger && trigger.text.length >= 1) {
-            const match = trigger.text.slice(1);
-            if (!state || state.mode !== "command" || state.target !== element || state.trigger?.text !== trigger.text) openCommand(element, match, trigger);
-            else { state.match = match; state.active = 0; position(element); render(); }
-            return;
-          }
           const path = pathTrigger(element);
           if (path) {
-            if (state?.mode === "command") {
-              state = null;
-              commandDeps.closePaletteState();
-            }
             commandDeps.schedule(() => {
               if (version === requestVersion && pathTrigger(element)?.text === path.text) {
                 updatePathCompletions(element, path, version);

@@ -17,4 +17,7 @@ test("composer keeps drafting enabled during transient reconnects and transcript
   assert.equal(syncing.inputDisabled, false);
   assert.equal(syncing.sendDisabled, true);
   assert.equal(syncing.placeholder, "loading canonical transcript…");
+
+  const ready = composerUiState({ connected: true, replayingTranscript: false }, "");
+  assert.equal(ready.placeholder, "message");
 });

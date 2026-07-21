@@ -113,10 +113,11 @@ test("composer path autocomplete debounces refreshes and discards stale drafts",
   assert.match(source, /\}, 140\);/);
 });
 
-test("composer command palette retains access to the full sessions manager", () => {
+test("composer autocomplete is path-only and exposes no colon commands", () => {
   const source = readFileSync(new URL("../public/src/features/composer/createComposerAssembly.js", import.meta.url), "utf8");
-  assert.match(source, /name: "sessions"/);
-  assert.match(source, /commandDeps\.dialogs\.showSessionPicker\(\)/);
+  assert.doesNotMatch(source, /name: "sessions"/);
+  assert.doesNotMatch(source, /commandTrigger|commandPaletteView|openCommand/);
+  assert.match(source, /pathTrigger\(element\)/);
 });
 
 test("composer assembly owns command guard palette menu and listener construction", async () => {

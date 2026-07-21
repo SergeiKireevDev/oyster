@@ -116,13 +116,11 @@ async function main() {
 
   // ---- Scenario 3: two-finger swipe switches sessions ----
   console.log("Recording: two-finger swipe...");
-  // first, open the sessions picker to see what's available
-  await page.locator("#input").fill(":sessions");
-  await page.locator("#input").press("Enter");
-  await page.waitForSelector("#mTitle");
+  // open the mobile sessions sidebar directly; colon commands are intentionally unsupported
+  await swipe("right");
+  await page.waitForSelector("#sessions", { state: "visible" });
   await page.waitForTimeout(1500);
-  // close modal
-  await page.click("#overlay");
+  await swipe("left");
   await page.waitForTimeout(500);
 
   await context.close();

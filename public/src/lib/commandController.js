@@ -13,12 +13,6 @@ export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420
   return { left: `${left}px`, width: `${width}px`, top: `${top}px`, bottom: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - rect.bottom - gap * 2)}px` };
 }
 
-/** Create Svelte palette state from the active command match. */
-export function commandPaletteView(items, match, active) {
-  if (!items.length) return { open: true, mode: "command", match, emptyText: `no command matches ":${match}"`, items: [] };
-  return { open: true, mode: "command", match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, prefix: ":", highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
-}
-
 /** Create palette state for path matches or the file-explorer fallback. */
 export function pathPaletteView(items, trigger, active) {
   return {
