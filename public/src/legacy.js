@@ -37,7 +37,7 @@ import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSes
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
-import { createCommandGuard } from "./lib/commandActions.js";
+import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -1317,20 +1317,8 @@ const commands = [
 
 let cmdState = null; // { target, match, active, trigger } | null
 
-function getCommandTrigger(el) {
-  const val = el.value;
-  const caret = el.selectionStart;
-  const before = val.slice(0, caret);
-  const m = before.match(/(^|\s):([a-zA-Z0-9_]*)$/);
-  if (!m) return null;
-  return { text: ":" + m[2], start: caret - m[2].length };
-}
-
-function getFilteredCommands(match) {
-  const q = (match || "").toLowerCase();
-  if (!q) return commands;
-  return commands.filter((c) => c.name.startsWith(q));
-}
+const getCommandTrigger = commandTrigger;
+const getFilteredCommands = (match) => filterCommands(commands, match);
 
 function positionCmdPalette(el) {
   const rect = el.getBoundingClientRect();
