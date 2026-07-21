@@ -86,8 +86,8 @@ manager UI orchestration remain legacy-owned pending a concrete bridge reduction
 legacy-owned.
 
 4.4. ✅ `fileBrowserActions.js`: extracted File Explorer browse, read, save,
-download, and chunked-upload actions. Picker reuse remains legacy-owned until
-its response contracts can be extracted without combining UI changes.
+download, and chunked-upload actions. The attachment picker now reuses the
+shared browse action; picker-specific selection UI remains legacy-owned.
 
 **Acceptance:** each extraction preserves existing response contracts and e2e
 coverage. Do not extract two domains in one commit.
