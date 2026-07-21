@@ -275,7 +275,7 @@ Once the features own their state and actions:
 **Acceptance:** the root has no feature business logic, direct feature DOM
 lookup, feature-local mutable state, or custom-event listener registration.
 
-## [ ] 8. Continue Composition-Root Reduction
+## [x] 8. Continue Composition-Root Reduction
 
 The previous completion of section 7 was premature: as of 2026-07-14,
 `public/src/runtime/appRuntimeImplementation.js` still exists at roughly 1,786
