@@ -85,7 +85,7 @@ collisions fail during construction, before a handler swap.
 - [x] Move `POST /rpc`, `GET /runners`, `DELETE /runners`, `POST /restart`, and
   `POST /open-session` into the same factory. Preserve runner selection,
   authorization, error normalization, and state broadcasts in tests.
-- [ ] Remove the extracted runner route bodies from `app.mjs` and verify runner
+- [x] Remove the extracted runner route bodies from `app.mjs` and verify runner
   startup/shutdown functions remain exported by the composed application API.
 
 **Acceptance:** runner/SSE route code is isolated while all durable runner and
