@@ -1993,10 +1993,10 @@ const createFolderBrowser = async () => {
 
 setFolderBrowserHandlers({
   browse: loadFolderBrowser,
-  cancel: () => { closeModal(); folderBrowserState.done?.(null); },
-  submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
 });
 window.addEventListener("pi-folder-browser-create", () => createFolderBrowser());
+window.addEventListener("pi-folder-browser-cancel", () => { closeModal(); folderBrowserState.done?.(null); });
+window.addEventListener("pi-folder-browser-submit", () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); });
 
 // ------------------------------------------------------------ tunnels
 

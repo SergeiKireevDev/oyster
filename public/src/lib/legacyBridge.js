@@ -115,11 +115,3 @@ export function browseFolder(path) {
   return folderBrowserHandlers.browse?.(path);
 }
 
-export function cancelFolderBrowser() {
-  return folderBrowserHandlers.cancel?.();
-}
-
-export function submitFolderBrowser() {
-  return folderBrowserHandlers.submit?.();
-}
-
