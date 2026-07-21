@@ -40,7 +40,7 @@
       >
         <span class="cmd-ico">{cmd.icon}</span>
         <div class="cmd-body">
-          <div class="cmd-name">:<mark>{cmd.highlight}</mark>{cmd.rest}</div>
+          <div class="cmd-name">{cmd.prefix ?? ":"}<mark>{cmd.highlight}</mark>{cmd.rest}</div>
           <div class="cmd-desc">{cmd.desc}</div>
         </div>
         <span class="cmd-hint">{cmd.active ? "enter ↵" : ""}</span>

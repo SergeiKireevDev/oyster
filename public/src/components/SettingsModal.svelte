@@ -29,5 +29,5 @@
 {/each}
 
 <div class="m-actions" id="mActions">
-  <button class="btn" onclick={closeModalState}>Done</button>
+  <button class="btn" data-modal-cancel onclick={closeModalState}>Done</button>
 </div>

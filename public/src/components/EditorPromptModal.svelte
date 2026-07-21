@@ -26,6 +26,6 @@
 ></textarea>
 
 <div class="m-actions" id="mActions">
-  <button class="chip" onclick={dialogs.cancelEditor}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={dialogs.cancelEditor}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitEditor}>OK</button>
 </div>

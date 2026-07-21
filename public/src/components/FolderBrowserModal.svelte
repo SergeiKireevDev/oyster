@@ -60,6 +60,6 @@
 <div class="m-actions" id="mActions">
   <button class="chip" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })}>New folder</button>
   <button class="chip toggle-hidden" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
-  <button class="chip" onclick={cancelFolderBrowser}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={cancelFolderBrowser}>Cancel</button>
   <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
 </div>

@@ -3,7 +3,7 @@
 //   A. start sessions + stop a session's background process
 //   B. switch between sessions (and confirm the transcript follows)
 //   C. search across sessions and jump to a hit
-//   D. use a ":" prompt command (command palette)
+//   D. autocomplete file paths in the composer
 //
 // Distinct sessions are created by sending the mock a
 // "Reply with exactly the word <TOKEN>" prompt — the mock echoes the token and
@@ -384,25 +384,65 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     );
   });
 
-  test("use a ':' prompt command", async ({ page }) => {
+  test("autocomplete paths and offer the explorer for large result sets", async ({ page }) => {
+    const small = `path-completion-${RUN}`;
+    const large = `path-many-${RUN}`;
+    dexec(`mkdir -p /workspace/${small} /workspace/${large}; touch /workspace/${small}/alpha.txt /workspace/${small}/alpine.txt; for i in {01..11}; do touch /workspace/${large}/match-$i.txt; done`);
     await login(page);
 
-    // type ":" in the composer to open the command palette
-    await page.fill("#input", ":file");
     const palette = page.locator("#cmdPalette");
+    await page.fill("#input", `./${small}/al`);
     await expect(palette).toHaveClass(/open/);
-    await expect(palette.locator(".cmd-row", { hasText: "file explorer" })).toBeVisible();
+    await expect(palette.locator(".cmd-row")).toHaveCount(2);
+    await expect(palette.locator(".cmd-row", { hasText: "alpha.txt" })).toBeVisible();
+    await palette.locator(".cmd-row", { hasText: "alpha.txt" }).click();
+    await expect(page.locator("#input")).toHaveValue(`./${small}/alpha.txt`);
 
-    // the active command can be run with Enter — it opens the file picker modal
+    await page.fill("#input", `./${large}/match-`);
+    await expect(palette.locator(".cmd-row", { hasText: "Open file explorer" })).toBeVisible();
     await page.keyboard.press("Enter");
-    // palette closes and the app route overlay opens to pick a file
     await expect(palette).not.toHaveClass(/open/);
-    await page.waitForFunction(() => document.getElementById("overlay")?.classList.contains("open"), null, {
-      timeout: 10000,
-    });
-    // the file picker lists the workspace contents
-    await expect(page.locator("#modal", { hasText: "file" })).toBeVisible();
+    await expect(page.locator("#overlay")).toHaveClass(/open/);
+    const modal = page.locator("#modal", { hasText: "match-01.txt" });
+    await expect(modal).toBeVisible();
+
+    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowDown");
+    await expect(modal.locator(".m-option.keyboard-active")).toContainText("match-01.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+
+    if (mobile) {
+      // Mobile Return dismisses only; it must not activate the highlighted row.
+      await expect(page.locator("#input")).toHaveValue(`./${large}/match-`);
+    } else {
+      await expect(page.locator("#input")).toHaveValue(`/workspace/${large}/match-01.txt`);
+      await page.fill("#input", `./${large}/match-`);
+      await expect(palette.locator(".cmd-row", { hasText: "Open file explorer" })).toBeVisible();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).toHaveClass(/open/);
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+    }
   });
+
+  if (mobile) {
+    test("mobile Return dismisses settings and the built-in file explorer", async ({ page }) => {
+      await login(page);
+
+      await page.click("#menuBtn");
+      await page.click('#menu button[data-action="settings"]');
+      await expect(page.locator("#mTitle")).toHaveText("Settings");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+
+      await page.click("#hublotChip");
+      await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+      await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
+      await expect(page.locator("#mTitle")).toHaveText("📁 File explorer");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+    });
+  }
 
   test("switching sessions restores each session's model", async ({ page }) => {
     await installSecondMockModel();

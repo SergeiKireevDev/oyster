@@ -497,8 +497,8 @@ const loadFileExplorer = fileExplorerController.load;
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
-function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
-  return filePickerController.show({ path: getWorkdir(), onPick, onCancel, returnToHublot });
+function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false, path = getWorkdir()) {
+  return filePickerController.show({ path, onPick, onCancel, returnToHublot });
 }
 
 const filePickerActions = {
@@ -794,6 +794,8 @@ const commandRuntime = composerAssembly.configureCommands({
   setPaletteState: setCommandPaletteState,
   closePaletteState: closeCommandPaletteState,
   showFilePicker,
+  browseFiles: (path) => browseFiles(fetch, path),
+  getWorkdir,
   isOverlayOpen: dialogAdapters.modal.isOverlayOpen,
   schedule: (...args) => delayedTasks.schedule(...args),
   session: {

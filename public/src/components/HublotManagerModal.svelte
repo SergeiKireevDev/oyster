@@ -87,5 +87,5 @@
 </div>
 <div class="m-actions" id="mActions">
   <button class="chip" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</button>
-  <button class="chip" onclick={closeModalState}>Close</button>
+  <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>

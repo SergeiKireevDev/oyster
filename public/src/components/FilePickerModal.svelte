@@ -46,5 +46,5 @@
 <div class="m-actions" id="mActions">
   <button class="chip" title="Insert the current folder path" onclick={useFilePickerFolder}>📁 Use this folder</button>
   <button class="chip toggle-hidden" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
-  <button class="chip" onclick={cancelFilePicker}>Cancel</button>
+  <button class="chip" data-modal-cancel onclick={cancelFilePicker}>Cancel</button>
 </div>

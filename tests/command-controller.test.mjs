@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../public/src/lib/commandController.js";
 
 test("command palette navigation wraps active command selection", () => {
   assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
@@ -9,8 +9,13 @@ test("command palette navigation wraps active command selection", () => {
 
 test("command palette view marks the active filtered command", () => {
   const view = commandPaletteView([{ name: "file", icon: "📁", desc: "browse" }], "fi", 0);
-  assert.deepEqual(view.items[0], { icon: "📁", desc: "browse", highlight: "fi", rest: "le", active: true });
+  assert.deepEqual(view.items[0], { icon: "📁", desc: "browse", prefix: ":", highlight: "fi", rest: "le", active: true });
   assert.equal(commandPaletteView([], "x", 0).emptyText, 'no command matches ":x"');
+});
+
+test("path palette view labels files without a command colon", () => {
+  const view = pathPaletteView([{ path: "./src/app.js", directory: false }], { text: "./src/a" }, 0);
+  assert.deepEqual(view.items[0], { icon: "📄", desc: "file", prefix: "", highlight: "./src/a", rest: "pp.js", active: true });
 });
 
 test("command palette position stays within the viewport", () => {
