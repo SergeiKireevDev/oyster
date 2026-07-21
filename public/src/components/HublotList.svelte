@@ -1,23 +1,13 @@
 <script>
-  import { removeHublot } from "../lib/hublotActions.js";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
-  import { addToast } from "../stores/toasts.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { FILE_EXPLORER_OPEN_ACTION } from "../runtime/uiActionNames.js";
+  import { FILE_EXPLORER_OPEN_ACTION, HUBLOT_REMOVE_ACTION } from "../runtime/uiActionNames.js";
 
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
   const openFileExplorer = () => uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
-
-  async function closeHublot(id) {
-    try {
-      await removeHublot(fetch, id);
-      hublots.update((items) => items.filter((item) => item.id !== id));
-    } catch (error) {
-      addToast(`close hublot failed: ${error.message}`, "error");
-    }
-  }
+  const closeHublot = (id) => uiActions.invoke(HUBLOT_REMOVE_ACTION, id);
 </script>
 
 <div id="hublotList" style="display:contents">

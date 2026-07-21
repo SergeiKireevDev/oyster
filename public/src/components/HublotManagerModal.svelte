@@ -1,28 +1,23 @@
 <script>
-  import { removeHublot } from "../lib/hublotActions.js";
   import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
   import { closeModalState } from "../stores/modal.js";
-  import { addToast } from "../stores/toasts.js";
-  import { createManagedHublot, openManagedHublotCommandPalette, toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { FILE_EXPLORER_OPEN_ACTION } from "../runtime/uiActionNames.js";
+  import {
+    FILE_EXPLORER_OPEN_ACTION,
+    HUBLOT_CREATE_ACTION,
+    HUBLOT_OPEN_COMMAND_PALETTE_ACTION,
+    HUBLOT_REMOVE_ACTION,
+    HUBLOT_TOGGLE_SCOPE_ACTION,
+  } from "../runtime/uiActionNames.js";
 
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
   const openManagedFileExplorer = () => uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
-
-  async function closeManagedHublot(id) {
-    try {
-      await removeHublot(fetch, id);
-      updateHublotManager({ tunnels: $hublotManager.tunnels.filter((tunnel) => tunnel.id !== id) });
-    } catch (error) {
-      addToast(`close hublot failed: ${error.message}`, "error");
-    }
-  }
-
-
-  const commandPalette = openManagedHublotCommandPalette;
+  const closeManagedHublot = (id) => uiActions.invoke(HUBLOT_REMOVE_ACTION, id);
+  const createManagedHublot = (description) => uiActions.invoke(HUBLOT_CREATE_ACTION, description);
+  const toggleManagedHublotScope = () => uiActions.invoke(HUBLOT_TOGGLE_SCOPE_ACTION);
+  const commandPalette = (node) => uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node);
 
   function keyActivate(event, fn) {
     if (event.key === "Enter" || event.key === " ") {

@@ -18,6 +18,11 @@ import {
   FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
   FILE_EXPLORER_SAVE_ACTION,
   FILE_EXPLORER_UPLOAD_ACTION,
+  HUBLOT_CREATE_ACTION,
+  HUBLOT_OPEN_COMMAND_PALETTE_ACTION,
+  HUBLOT_REMOVE_ACTION,
+  HUBLOT_SHOW_ACTION,
+  HUBLOT_TOGGLE_SCOPE_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 test("resource assembly composes files hublots and routines with one teardown boundary", () => {
@@ -108,7 +113,13 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
       backToHublots: () => calls.push(["explorer-return"]),
     },
     files: { openExplorer: () => calls.push(["explorer-open"]) },
-    hublots: {},
+    hublots: {
+      show: () => calls.push(["hublot-show"]),
+      create: (description) => calls.push(["hublot-create", description]),
+      toggleScope: () => calls.push(["hublot-scope"]),
+      remove: (id) => calls.push(["hublot-remove", id]),
+      openCommandPalette: (node) => calls.push(["hublot-palette", node]),
+    },
     routine() {},
   });
 
@@ -127,6 +138,11 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
   uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
   uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
+  uiActions.invoke(HUBLOT_SHOW_ACTION);
+  uiActions.invoke(HUBLOT_CREATE_ACTION, "demo");
+  uiActions.invoke(HUBLOT_TOGGLE_SCOPE_ACTION);
+  uiActions.invoke(HUBLOT_REMOVE_ACTION, "tunnel-1");
+  uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, "textarea");
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
@@ -143,6 +159,11 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
     ["explorer-back"],
     ["explorer-return"],
     ["explorer-open"],
+    ["hublot-show"],
+    ["hublot-create", "demo"],
+    ["hublot-scope"],
+    ["hublot-remove", "tunnel-1"],
+    ["hublot-palette", "textarea"],
   ]);
 
   assembly.teardown();
@@ -150,5 +171,6 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   assert.equal(uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FILE_EXPLORER_BROWSE_ACTION, "/stale"), undefined);
   assert.equal(uiActions.invoke(FILE_EXPLORER_OPEN_ACTION), undefined);
-  assert.equal(calls.length, 15);
+  assert.equal(uiActions.invoke(HUBLOT_SHOW_ACTION), undefined);
+  assert.equal(calls.length, 20);
 });

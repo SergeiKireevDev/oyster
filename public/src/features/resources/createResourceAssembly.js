@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureHublotActions } from "../hublots/hublotActions.js";
 import { configureRoutineActions } from "../routines/routineActions.js";
 import {
   FILE_PICKER_BROWSE_ACTION,
@@ -19,6 +18,11 @@ import {
   FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
   FILE_EXPLORER_SAVE_ACTION,
   FILE_EXPLORER_UPLOAD_ACTION,
+  HUBLOT_CREATE_ACTION,
+  HUBLOT_OPEN_COMMAND_PALETTE_ACTION,
+  HUBLOT_REMOVE_ACTION,
+  HUBLOT_SHOW_ACTION,
+  HUBLOT_TOGGLE_SCOPE_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
@@ -76,7 +80,11 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(FILE_EXPLORER_BACK_ACTION, actions.fileExplorer.back),
         deps.uiActions.register(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION, actions.fileExplorer.backToHublots),
         deps.uiActions.register(FILE_EXPLORER_OPEN_ACTION, actions.files.openExplorer),
-        configureHublotActions(actions.hublots),
+        deps.uiActions.register(HUBLOT_SHOW_ACTION, actions.hublots.show),
+        deps.uiActions.register(HUBLOT_CREATE_ACTION, actions.hublots.create),
+        deps.uiActions.register(HUBLOT_TOGGLE_SCOPE_ACTION, actions.hublots.toggleScope),
+        deps.uiActions.register(HUBLOT_REMOVE_ACTION, actions.hublots.remove),
+        deps.uiActions.register(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, actions.hublots.openCommandPalette),
         configureRoutineActions(actions.routine),
       );
     },

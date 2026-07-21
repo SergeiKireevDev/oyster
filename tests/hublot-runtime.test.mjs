@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createHublotRuntime } from "../public/src/features/hublots/createHublotRuntime.js";
 
 test("hublot runtime exposes feature actions", () => {
@@ -59,4 +60,20 @@ test("hublot runtime removal preserves stores and reports network failures", asy
   await runtime.removeHublot("missing");
 
   assert.deepEqual(calls, [["toast", "close hublot failed: already closed", "error"]]);
+});
+
+test("hublot components route feature workflows through scoped actions", () => {
+  const sidebar = readFileSync(new URL("../public/src/components/HublotSidebar.svelte", import.meta.url), "utf8");
+  const list = readFileSync(new URL("../public/src/components/HublotList.svelte", import.meta.url), "utf8");
+  const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
+
+  assert.match(sidebar, /uiActions\.invoke\(HUBLOT_SHOW_ACTION\)/);
+  assert.match(list, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
+  assert.match(manager, /uiActions\.invoke\(HUBLOT_CREATE_ACTION, description\)/);
+  assert.match(manager, /uiActions\.invoke\(HUBLOT_TOGGLE_SCOPE_ACTION\)/);
+  assert.match(manager, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
+  assert.match(manager, /uiActions\.invoke\(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node\)/);
+  for (const source of [sidebar, list, manager]) {
+    assert.doesNotMatch(source, /features\/hublots\/hublotActions\.js|removeHublot\(fetch|addToast/);
+  }
 });

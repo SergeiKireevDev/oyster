@@ -1,7 +1,11 @@
 <script>
   import HublotList from "./HublotList.svelte";
   import RoutineList from "./RoutineList.svelte";
-  import { showHublots as showHublotManager } from "../features/hublots/hublotActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { HUBLOT_SHOW_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const showHublotManager = () => uiActions.invoke(HUBLOT_SHOW_ACTION);
 </script>
 
 <aside id="hublots">

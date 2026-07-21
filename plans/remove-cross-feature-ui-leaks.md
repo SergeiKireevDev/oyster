@@ -63,7 +63,7 @@ cd tests/e2e && npm test
 - [x] Add `removeHublot(id)` to the hublot runtime's public operations. It must
   perform the network request, update the relevant hublot store, and report
   failures through the injected toast policy; add success and failure tests.
-- [ ] Register hublot show/create/toggle-scope/remove/command-palette actions
+- [x] Register hublot show/create/toggle-scope/remove/command-palette actions
   through `createResourceAssembly()`. Change `HublotSidebar.svelte`,
   `HublotList.svelte`, and `HublotManagerModal.svelte` to invoke them; delete
   `features/hublots/hublotActions.js` and its configuration call.

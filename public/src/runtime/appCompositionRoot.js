@@ -593,6 +593,7 @@ const hublotActions = {
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
   create: createManagedHublot,
   toggleScope: toggleManagedHublotScope,
+  remove: hublotRuntime.removeHublot,
   openCommandPalette: setupCommandPalette,
 };
 
