@@ -292,7 +292,7 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     });
   }
 
-  async function loginOAuth(provider, callbacks) {
+  async function loginOAuth(provider, callbacks, { replace = false } = {}) {
     const providerId = normalizedProvider(provider);
     const safeCallbacks = normalizedOAuthCallbacks(callbacks);
     return withProviderReservation(providerId, async () => {
@@ -302,11 +302,11 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth in the configured pi installation`);
       }
       const current = authStorage.get(providerId);
-      if (current && current.type !== "oauth") {
-        if (current.type === "api_key") {
-          throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
-        }
+      if (current && current.type !== "oauth" && current.type !== "api_key") {
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+      }
+      if (current && replace !== true) {
+        throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
       }
       await authStorage.login(providerId, safeCallbacks);
       return Object.freeze({ provider: providerId, credentialType: "oauth" });

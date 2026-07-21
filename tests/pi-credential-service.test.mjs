@@ -233,7 +233,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     const callbacks = {
       onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},
     };
-    await assert.rejects(service.loginOAuth("mock-oauth", callbacks), { code: "credential_type_conflict" });
+    await assert.rejects(service.loginOAuth("mock-oauth", callbacks), { code: "credential_replace_required" });
     await service.removeApiKey("mock-oauth");
 
     const events = [];
@@ -261,7 +261,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
 
     await assert.rejects(service.loginOAuth("failed-oauth", {
       onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {}, onProgress() {},
-    }), /provider failed/);
+    }, { replace: true }), /provider failed/);
     let stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(stored["failed-oauth"].access, "old-access");
 
@@ -269,7 +269,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     const pending = service.loginOAuth("mock-oauth", {
       onAuth() {}, onDeviceCode() {}, onPrompt: () => new Promise((resolve) => { releasePrompt = resolve; }),
       async onSelect() { return "one"; }, async onManualCodeInput() { return "manual"; },
-    });
+    }, { replace: true });
     while (!releasePrompt) await new Promise((resolve) => setImmediate(resolve));
     await assert.rejects(service.loginOAuth("mock-oauth", {
       onAuth() {}, onDeviceCode() {}, async onPrompt() { return ""; }, async onSelect() {},

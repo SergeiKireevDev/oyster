@@ -31,6 +31,7 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
   broadcast: entry("ephemeral", "live SSE dispatch function"),
   serverEvent: entry("ephemeral", "live event serialization function"),
   authFails: entry("ephemeral", "short-lived authentication throttle buckets"),
+  oauthFlows: entry("ephemeral", "bounded transient OAuth callbacks, prompts, and timers"),
 
   hublotSupervisor: entry("ephemeral", "live supervisor and timer"),
   piProcesses: entry("ephemeral", "process launcher service"),

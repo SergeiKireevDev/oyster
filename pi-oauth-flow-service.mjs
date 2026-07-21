@@ -253,7 +253,7 @@ export function createPiOAuthFlowService({
     return true;
   }
 
-  function start(provider) {
+  function start(provider, { replace = false } = {}) {
     const id = providerId(provider);
     const active = activeFlows();
     if (active.some((flow) => flow.provider === id)) {
@@ -276,7 +276,7 @@ export function createPiOAuthFlowService({
     scheduleInactivity(flow);
 
     flow.promise = Promise.resolve()
-      .then(() => credentialService.loginOAuth(id, callbacksFor(flow)))
+      .then(() => credentialService.loginOAuth(id, callbacksFor(flow), { replace: replace === true }))
       .then(async () => {
         if (flow.status !== ACTIVE_STATUS) return;
         flow.credentialPersisted = true;

@@ -136,7 +136,7 @@ credentials.
 
 ## 3. Add Authenticated OAuth Routes
 
-- [ ] Add exact authenticated, bounded-JSON routes and compose them beside the
+- [x] Add exact authenticated, bounded-JSON routes and compose them beside the
   existing credential routes:
 
 ```text
