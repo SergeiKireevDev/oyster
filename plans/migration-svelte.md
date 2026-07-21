@@ -15,7 +15,7 @@ Continue migrating the frontend from the legacy imperative `legacy.js` controlle
 
 ## Step-by-step Plan
 
-### 1. Stabilize the Current Baseline
+### 1. Stabilize the Current Baseline ✅
 
 Before starting another extraction, confirm the current tree is green:
 
@@ -32,7 +32,7 @@ Expected baseline:
 - Docker image builds.
 - E2E suite passes with parallel workers.
 
-### 2. Audit Remaining Legacy UI Areas
+### 2. Audit Remaining Legacy UI Areas ✅
 
 Identify remaining sections in `public/src/legacy.js` that still build DOM directly.
 
@@ -48,7 +48,7 @@ Use searches like:
 rg "document\.createElement|innerHTML|appendChild|mBody|mActions" public/src/legacy.js
 ```
 
-### 3. Remove Dead or Unused Features First
+### 3. Remove Dead or Unused Features First ✅
 
 Before migrating a feature, check whether it is still used.
 
@@ -62,32 +62,32 @@ If unused, remove:
 
 Recent example: the unused Conversation Tree UI and `/session-tree` route were removed instead of migrated.
 
-### 4. Migrate Small Modal Flows Next
+### 4. Migrate Small Modal Flows Next ✅
 
 For each remaining small modal flow, follow the established pattern:
 
-4.1. Add a store in `public/src/stores/<feature>.js`.
-4.2. Add a component in `public/src/components/<Feature>Modal.svelte`.
-4.3. Add bridge handlers in `public/src/lib/legacyBridge.js` only where Svelte must call legacy logic.
-4.4. Update `Overlays.svelte` to render the modal by `modalState.content`.
-4.5. Change `legacy.js` so it opens the modal and updates the store instead of building DOM.
-4.6. Run validation.
+4.1. ✅ Add a store in `public/src/stores/<feature>.js`.
+4.2. ✅ Add a component in `public/src/components/<Feature>Modal.svelte`.
+4.3. ✅ Add bridge handlers in `public/src/lib/legacyBridge.js` only where Svelte must call legacy logic.
+4.4. ✅ Update `Overlays.svelte` to render the modal by `modalState.content`.
+4.5. ✅ Change `legacy.js` so it opens the modal and updates the store instead of building DOM.
+4.6. ✅ Run validation.
 
 Keep legacy fetch/RPC logic in `legacy.js` until the UI is stable.
 
-### 5. Migrate the Session Picker in Phases
+### 5. Migrate the Session Picker in Phases ✅
 
 The session picker is large and stateful, so do not migrate it in one pass.
 
 Suggested phases:
 
-5.1. Extract plain session list rendering.
-5.2. Extract active/inactive grouping.
-5.3. Extract fork family rendering/collapse.
-5.4. Extract stop/delete session row actions through bridge handlers.
-5.5. Extract search controls.
-5.6. Extract search results rendering.
-5.7. Move search state to a store.
+5.1. ✅ Extract plain session list rendering.
+5.2. ✅ Extract active/inactive grouping.
+5.3. ✅ Extract fork family rendering/collapse.
+5.4. ✅ Extract stop/delete session row actions through bridge handlers.
+5.5. ✅ Extract search controls.
+5.6. ✅ Extract search results rendering.
+5.7. ✅ Move search state to a store.
 
 Initially keep session switching, deleting, stopping, and searching logic in `legacy.js`.
 

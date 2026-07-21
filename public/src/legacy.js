@@ -1,6 +1,6 @@
 "use strict";
 
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHeaderHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setHeaderHandlers, setHublotHandlers, setHublotManagerHandlers, setMenuActionHandler, setRoutineHandlers, setSessionPickerHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
@@ -15,6 +15,7 @@ import { openConfirmPrompt, openTextPrompt } from "./stores/dialogs.js";
 import { closeModalState, openModal, updateModal } from "./stores/modal.js";
 import { openOptionPicker } from "./stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "./stores/routines.js";
+import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 
 // ------------------------------------------------------------ token
@@ -2365,6 +2366,150 @@ function fmtSessionDate(iso) {
       " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+let sessionPickerResolve = null;
+let sessionPickerFolders = [];
+let sessionPickerCurrentFolder = null;
+let sessionPickerSessions = [];
+
+function sessionPickerSnapshot() {
+  let snapshot;
+  const unsubscribe = sessionPicker.subscribe((state) => { snapshot = state; });
+  unsubscribe();
+  return snapshot;
+}
+
+function groupSearchResults(results) {
+  const groups = new Map();
+  for (const hit of results) {
+    if (!groups.has(hit.sessionPath)) groups.set(hit.sessionPath, []);
+    groups.get(hit.sessionPath).push(hit);
+  }
+  return [...groups.entries()].map(([sessionPath, hits]) => ({ sessionPath, hits, first: hits[0] }));
+}
+
+async function runSessionPickerSearch() {
+  const snap = sessionPickerSnapshot();
+  const q = snap.query.trim();
+  if (q.length < 2) {
+    updateSessionPicker({ searchStatus: "", searchResults: [], searching: false });
+    return;
+  }
+  const scope = snap.scope;
+  let path = "";
+  if (scope === "folder") path = snap.folderPath ?? "";
+  if (scope === "session") {
+    const cur = snap.sessions.find((s) => s.id === snap.currentId) ?? snap.sessions[0];
+    if (!cur) { updateSessionPicker({ searchStatus: "no saved session to search", searchResults: [] }); return; }
+    path = cur.path;
+  }
+  updateSessionPicker({ searchStatus: "searching…", searchResults: [], searching: true });
+  const params = new URLSearchParams({ token, q, scope });
+  if (path) params.set("path", path);
+  if (!snap.excludeTools) params.set("tools", "1"); // toggle off → include tool output
+  try {
+    const res = await fetch(`/search?${params}`);
+    const data = await res.json();
+    const latest = sessionPickerSnapshot();
+    if (latest.query.trim() !== q || latest.scope !== scope) return;
+    if (!res.ok) {
+      updateSessionPicker({ searchStatus: data.error || `search failed (${res.status})`, searchResults: [], searching: false });
+      return;
+    }
+    updateSessionPicker({
+      searchStatus: `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : ""),
+      searchResults: groupSearchResults(data.results),
+      searchFilesSearched: data.filesSearched,
+      searchTruncated: !!data.truncated,
+      searching: false,
+    });
+  } catch (e) {
+    updateSessionPicker({ searchStatus: `search failed: ${e.message}`, searchResults: [], searching: false });
+  }
+}
+
+function updateSessionPickerRunners(runners = runnersNow) {
+  updateSessionPicker({ runners });
+}
+
+async function refreshSessionPickerCurrentFolder() {
+  const dirQ = workdir ? `?dir=${encodeURIComponent(workdir)}` : "";
+  const res = await fetch(`/sessions${dirQ}`);
+  if (!res.ok) throw new Error(`failed to list sessions (${res.status})`);
+  const { sessions } = await res.json();
+  sessionPickerSessions = sessions;
+  updateSessionPicker({ sessions, runners: runnersNow });
+}
+
+async function loadSessionPickerFolder(folder) {
+  const snap = sessionPickerSnapshot();
+  if (snap.otherFolderSessions[folder.dir]) return;
+  updateSessionPicker({ loadingFolders: { ...snap.loadingFolders, [folder.dir]: true } });
+  try {
+    const res = await fetch(`/sessions?path=${encodeURIComponent(folder.dir)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    const latest = sessionPickerSnapshot();
+    updateSessionPicker({
+      otherFolderSessions: { ...latest.otherFolderSessions, [folder.dir]: data.sessions ?? [] },
+      loadingFolders: { ...latest.loadingFolders, [folder.dir]: false },
+      runners: runnersNow,
+    });
+  } catch (e) {
+    const latest = sessionPickerSnapshot();
+    updateSessionPicker({ loadingFolders: { ...latest.loadingFolders, [folder.dir]: false } });
+    toast(`failed to list ${folder.label}: ${e.message}`, "error");
+  }
+}
+
+setSessionPickerHandlers({
+  setQuery: (query) => {
+    updateSessionPicker({ query });
+    if (query.trim().length < 2) updateSessionPicker({ searchStatus: "", searchResults: [], searching: false });
+  },
+  setScope: (scope) => { updateSessionPicker({ scope }); runSessionPickerSearch(); },
+  setFolder: (folderPath) => { updateSessionPicker({ folderPath }); runSessionPickerSearch(); },
+  setExcludeTools: (excludeTools) => { updateSessionPicker({ excludeTools }); runSessionPickerSearch(); },
+  runSearch: runSessionPickerSearch,
+  chooseSession: (session) => { closeModal(); sessionPickerResolve?.(session); },
+  stopSession: async (session) => {
+    const runner = runnersNow.find((x) => x.sessionFile === session.path) ?? { id: session.runnerId };
+    if (!runner.id) return;
+    try {
+      const res = await fetch(`/runners?id=${encodeURIComponent(runner.id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error || `stop failed (${res.status})`, "error"); return; }
+      toast("process stopped");
+      updateSessionPickerRunners(runnersNow.map((r) => r.id === runner.id ? { ...r, alive: false, busy: false } : r));
+    } catch (err) {
+      toast(`stop failed: ${err.message}`, "error");
+    }
+  },
+  deleteSession: async (session) => {
+    if (!confirm(`Delete session "${session.name || session.preview || session.id?.slice(0, 8) || "?"}"?`)) return;
+    try {
+      const res = await fetch(`/session?path=${encodeURIComponent(session.path)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error || `delete failed (${res.status})`, "error"); return; }
+      sessionPickerSessions = sessionPickerSessions.filter((s) => s.path !== session.path);
+      updateSessionPicker({ sessions: sessionPickerSessions });
+      const bits = [];
+      if (data.closedHublots?.length) bits.push(`closed hublot${data.closedHublots.length > 1 ? "s" : ""} :${data.closedHublots.join(", :")}`);
+      if (data.releasedRoutines?.length) bits.push(`released routine${data.releasedRoutines.length > 1 ? "s" : ""} ${data.releasedRoutines.join(", ")}`);
+      toast(bits.length ? `session deleted · ${bits.join(" · ")}` : "session deleted");
+      if (data.closedHublots?.length) loadHublots();
+      if (data.releasedRoutines?.length) loadRoutines();
+    } catch (err) {
+      toast(`delete failed: ${err.message}`, "error");
+    }
+  },
+  openSearchHit: (sessionPath, hit) => {
+    sessionPickerResolve?.(null);
+    openSearchHit(sessionPath, hit);
+  },
+  loadFolder: loadSessionPickerFolder,
+  cancel: () => { closeModal(); sessionPickerResolve?.(null); },
+});
+
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
   // last-set global workdir
@@ -2373,20 +2518,8 @@ async function showSessionPicker() {
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
   if (!sessions.length) { toast("no saved sessions"); return; }
+  sessionPickerSessions = sessions;
   const currentId = state?.sessionId;
-
-  const dots = new Map(); // session path -> { dot, stop } (live indicator updates)
-  const applyDot = (entry, alive, busy) => {
-    entry.dot.className = "s-dot" + (busy ? " busy" : alive ? " on" : "");
-    entry.dot.title = busy ? "agent working" : alive ? "process running (idle)" : "no running process";
-    if (entry.stop) entry.stop.style.display = alive ? "" : "none";
-  };
-  onRunnersUpdate = (runners) => {
-    for (const [path, entry] of dots) {
-      const r = runners.find((x) => x.sessionFile === path);
-      applyDot(entry, !!r?.alive, !!r?.busy);
-    }
-  };
 
   // folders for the search scope selector and the "other folders" section
   let folders = [], currentFolder = null;
@@ -2395,414 +2528,46 @@ async function showSessionPicker() {
     const d = await r.json();
     if (r.ok) { folders = d.folders; currentFolder = d.current; }
   } catch {}
+  sessionPickerFolders = folders;
+  sessionPickerCurrentFolder = currentFolder;
+
+  onRunnersUpdate = (runners) => updateSessionPicker({ runners });
 
   const chosen = await new Promise((resolve) => {
-    updateModal({ title: "Sessions" });
-    const body = $("mBody");
-    body.innerHTML = "";
-
-    // ---- search bar (typing swaps the list for search results)
-    const row = document.createElement("div");
-    row.className = "search-row";
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.placeholder = "search sessions…";
-    const scopeSel = document.createElement("select");
-    scopeSel.innerHTML = `
-      <option value="session">This session</option>
-      <option value="folder">Folder…</option>
-      <option value="all" selected>All sessions</option>`;
-    row.append(inp, scopeSel);
-
-    const folderRow = document.createElement("div");
-    folderRow.className = "search-row";
-    const folderSel = document.createElement("select");
-    folderSel.style.maxWidth = "100%";
-    folderSel.style.flex = "1";
-    for (const f of folders) {
-      const o = document.createElement("option");
-      o.value = f.dir;
-      o.textContent = `${f.label} (${f.count})`;
-      if (f.dir === currentFolder) o.selected = true;
-      folderSel.appendChild(o);
-    }
-    folderRow.appendChild(folderSel);
-
-    // search only real text responses by default; tool output is opt-in
-    const optsRow = document.createElement("label");
-    optsRow.className = "search-opts";
-    const toolsCb = document.createElement("input");
-    toolsCb.type = "checkbox";
-    toolsCb.checked = true;
-    optsRow.append(toolsCb, "exclude tool output (search only user/ai text)");
-    toolsCb.addEventListener("change", () => { if (searching()) run(); });
-
-    const status = document.createElement("div");
-    status.className = "m-path";
-    const resultsEl = document.createElement("div");
-    const listEl = document.createElement("div"); // the plain sessions list
-
-    function searching() { return inp.value.trim().length >= 2; }
-    function updateView() {
-      listEl.style.display = searching() ? "none" : "";
-      status.style.display = searching() ? "" : "none";
-      resultsEl.style.display = searching() ? "" : "none";
-      folderRow.style.display = searching() && scopeSel.value === "folder" ? "" : "none";
-      optsRow.style.display = searching() ? "" : "none";
-      if (!searching()) resultsEl.innerHTML = "";
-    }
-
-    let runSeq = 0; // ignore out-of-order responses from stale keystrokes
-    async function run() {
-      const seq = ++runSeq;
-      updateView();
-      if (!searching()) return;
-      const q = inp.value.trim();
-      const scope = scopeSel.value;
-      let path = "";
-      if (scope === "folder") path = folderSel.value ?? "";
-      if (scope === "session") {
-        const cur = sessions.find((s) => s.id === currentId) ?? sessions[0];
-        if (!cur) { status.textContent = "no saved session to search"; return; }
-        path = cur.path;
-      }
-      status.textContent = "searching…";
-      resultsEl.innerHTML = "";
-      const params = new URLSearchParams({ token, q, scope });
-      if (path) params.set("path", path);
-      if (!toolsCb.checked) params.set("tools", "1"); // toggle off → include tool output
-      let data;
-      try {
-        const r = await fetch(`/search?${params}`);
-        data = await r.json();
-        if (seq !== runSeq) return; // a newer query superseded this one
-        if (!r.ok) { status.textContent = data.error || `search failed (${r.status})`; return; }
-      } catch (e) {
-        if (seq !== runSeq) return;
-        status.textContent = `search failed: ${e.message}`;
-        return;
-      }
-
-      status.textContent = `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : "");
-      if (!data.results.length) return;
-
-      // group hits by session file
-      const groups = new Map();
-      for (const h of data.results) {
-        if (!groups.has(h.sessionPath)) groups.set(h.sessionPath, []);
-        groups.get(h.sessionPath).push(h);
-      }
-      for (const [sessionPath, hits] of groups) {
-        const first = hits[0];
-        const b = document.createElement("button");
-        b.className = "m-option search-hit";
-        const title = document.createElement("div");
-        title.className = "s-title";
-        const nameEl = document.createElement("span");
-        nameEl.className = "s-name";
-        nameEl.textContent = first.sessionName || first.sessionPreview || "(unnamed session)";
-        const dateEl = document.createElement("span");
-        dateEl.className = "s-date";
-        dateEl.textContent = `${scope === "all" ? first.folderLabel + " · " : ""}${hits.length} hit${hits.length === 1 ? "" : "s"}`;
-        title.append(nameEl, dateEl);
-        b.appendChild(title);
-        hits.slice(0, 3).forEach((h, hi) => {
-          const sn = document.createElement("div");
-          sn.className = "s-snippet";
-          sn._hitIndex = hi;
-          const role = document.createElement("span");
-          role.className = "s-role";
-          role.textContent = h.role === "user" ? "you" : h.role === "assistant" ? "ai"
-            : h.role === "toolResult" ? "tool" : h.kind;
-          const mark = document.createElement("mark");
-          mark.textContent = h.snippet.match;
-          sn.append(role, " ", document.createTextNode(h.snippet.before), mark, document.createTextNode(h.snippet.after));
-          b.appendChild(sn);
-        });
-        if (hits.length > 3) {
-          const more = document.createElement("div");
-          more.className = "s-snippet";
-          more.textContent = `…and ${hits.length - 3} more in this session`;
-          b.appendChild(more);
-        }
-        b.title = sessionPath;
-        b.addEventListener("click", (e) => {
-          // clicking a specific snippet focuses that hit; the card itself uses the first hit
-          const idx = e.target.closest?.(".s-snippet")?._hitIndex;
-          resolve(null); // settle the picker promise; openSearchHit takes over
-          openSearchHit(sessionPath, hits[idx ?? 0] ?? first);
-        });
-        resultsEl.appendChild(b);
-      }
-    }
-
-    // live search: debounce keystrokes; Enter searches immediately
-    let debounce = null;
-    inp.addEventListener("input", () => {
-      clearTimeout(debounce);
-      updateView();
-      debounce = setTimeout(run, 250);
+    sessionPickerResolve = resolve;
+    $("mBody").innerHTML = "";
+    $("mActions").innerHTML = "";
+    updateSessionPicker({
+      sessions,
+      folders,
+      currentFolder,
+      currentId,
+      currentWorkdir: workdir,
+      runners: runnersNow,
+      query: "",
+      scope: "all",
+      folderPath: currentFolder ?? folders[0]?.dir ?? "",
+      excludeTools: true,
+      searchStatus: "",
+      searchResults: [],
+      searchFilesSearched: 0,
+      searchTruncated: false,
+      searching: false,
+      otherFolderSessions: {},
+      loadingFolders: {},
     });
-    inp.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { clearTimeout(debounce); run(); }
-    });
-    scopeSel.addEventListener("change", () => { updateView(); if (searching()) run(); });
-    folderSel.addEventListener("change", () => { if (searching()) run(); });
-
-    body.append(row, folderRow, optsRow, status, resultsEl, listEl);
-    updateView();
-    setTimeout(() => inp.focus(), 0);
-
-    function addSessionRow(s, container) {
-      const isCurrent = s.id === currentId;
-      const b = document.createElement("button");
-      b.className = "m-option" + (isCurrent ? " current" : "");
-      const title = document.createElement("div");
-      title.className = "s-title";
-      const dot = document.createElement("span");
-      title.appendChild(dot);
-      const nameEl = document.createElement("span");
-      nameEl.className = "s-name";
-      nameEl.textContent = (s.name || s.preview || "(empty session)") + (isCurrent ? " · current" : "");
-      const dateEl = document.createElement("span");
-      dateEl.className = "s-date";
-      dateEl.textContent = `${fmtSessionDate(s.modifiedAt)} · ${s.messageCount} msgs`;
-      title.append(nameEl, dateEl);
-      // stop (■): kill the session's background process; the session file
-      // and its work stay on disk
-      const stop = document.createElement("span");
-      stop.className = "s-del s-stop";
-      stop.textContent = "■";
-      stop.title = "Stop this session's process (keeps the session)";
-      stop.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const r = runnersNow.find((x) => x.sessionFile === s.path) ?? { id: s.runnerId };
-        if (!r.id) return;
-        try {
-          const res2 = await fetch(`/runners?id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
-          const d2 = await res2.json().catch(() => ({}));
-          if (!res2.ok) { toast(d2.error || `stop failed (${res2.status})`, "error"); return; }
-          toast("process stopped");
-        } catch (err) {
-          toast(`stop failed: ${err.message}`, "error");
-        }
-      });
-      title.appendChild(stop);
-      const entry = { dot, stop };
-      applyDot(entry, s.alive, s.busy);
-      dots.set(s.path, entry);
-
-      if (!isCurrent) {
-        const del = document.createElement("span");
-        del.className = "s-del";
-        del.textContent = "✕";
-        del.title = "Delete session";
-        del.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!confirm(`Delete session "${s.name || s.preview || s.id?.slice(0, 8) || "?"}"?`)) return;
-          try {
-            const r = await fetch(`/session?path=${encodeURIComponent(s.path)}`, { method: "DELETE" });
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) { toast(d.error || `delete failed (${r.status})`, "error"); return; }
-            b.remove();
-            const bits = [];
-            if (d.closedHublots?.length) bits.push(`closed hublot${d.closedHublots.length > 1 ? "s" : ""} :${d.closedHublots.join(", :")}`);
-            if (d.releasedRoutines?.length) bits.push(`released routine${d.releasedRoutines.length > 1 ? "s" : ""} ${d.releasedRoutines.join(", ")}`);
-            toast(bits.length ? `session deleted · ${bits.join(" · ")}` : "session deleted");
-            if (d.closedHublots?.length) loadHublots();
-            if (d.releasedRoutines?.length) loadRoutines();
-          } catch (err) {
-            toast(`delete failed: ${err.message}`, "error");
-          }
-        });
-        title.appendChild(del);
-      }
-      b.appendChild(title);
-      if (s.name && s.preview) {
-        const prev = document.createElement("div");
-        prev.className = "s-preview";
-        prev.textContent = s.preview;
-        b.appendChild(prev);
-      }
-      b.addEventListener("click", () => { closeModal(); resolve(s); });
-      container.appendChild(b);
-    }
-
-
-    // ---- active sessions first, then inactive ones (both sectioned by workdir)
-    const folderOf = (p) => p.slice(0, p.lastIndexOf("/"));
-    const labelFor = (dir) =>
-      folders.find((f) => f.dir === dir)?.label ?? (dir === currentFolder ? workdir : dir) ?? "?";
-
-    /** group a session list into fork families: forks (sessions whose
-     *  parentSession chain leads to another session IN the list) collapse
-     *  under their top-most ancestor present in the list */
-    function forkFamilies(list) {
-      const byPath = new Map(list.map((s) => [s.path, s]));
-      const rootOf = (s) => {
-        const seen = new Set();
-        while (s.parentSession && byPath.has(s.parentSession) && !seen.has(s.path)) {
-          seen.add(s.path);
-          s = byPath.get(s.parentSession);
-        }
-        return s;
-      };
-      const families = new Map(); // root path -> { session, forks }
-      for (const s of list) {
-        const root = rootOf(s);
-        if (!families.has(root.path)) families.set(root.path, { session: root, forks: [] });
-        if (s.path !== root.path) families.get(root.path).forks.push(s);
-      }
-      return [...families.values()];
-    }
-
-    /** render session rows with forks collapsed under their main session */
-    function addSessionRows(list, container) {
-      for (const fam of forkFamilies(list)) {
-        addSessionRow(fam.session, container);
-        if (!fam.forks.length) continue;
-        const det = document.createElement("details");
-        det.className = "s-forkgroup";
-        const sum = document.createElement("summary");
-        sum.textContent = `\u{1F33F} ${fam.forks.length} fork${fam.forks.length === 1 ? "" : "s"}`;
-        det.appendChild(sum);
-        for (const f of fam.forks) addSessionRow(f, det);
-        // never hide the session the user is currently in
-        if (fam.forks.some((f) => f.id === currentId)) det.open = true;
-        container.appendChild(det);
-      }
-    }
-    const addHeader = (text, container) => {
-      const h = document.createElement("div");
-      h.className = "s-section";
-      h.textContent = text;
-      container.appendChild(h);
-    };
-    const addFolderLabel = (dir, container) => {
-      const l = document.createElement("div");
-      l.className = "s-wd";
-      const ico = document.createElement("span");
-      ico.className = "s-ico";
-      ico.textContent = "\u{1F4C1}";
-      l.append(ico, ` ${labelFor(dir)}`);
-      container.appendChild(l);
-    };
-
-    // partition WHOLE fork families: a family is "active" if any member has a
-    // live process, so forks always stay collapsed under their main session
-    // instead of scattering across the two sections
-    const activeCur = [], inactiveCur = [];
-    for (const fam of forkFamilies(sessions)) {
-      const members = [fam.session, ...fam.forks];
-      (members.some((s) => s.alive) ? activeCur : inactiveCur).push(...members);
-    }
-
-    // active sessions living in OTHER folders, discovered via live runners
-    const activeOther = new Map(); // session folder dir -> Set(session paths)
-    for (const r of runnersNow) {
-      if (!r.alive || !r.sessionFile) continue;
-      const fd = folderOf(r.sessionFile);
-      if (fd === currentFolder) continue;
-      if (!activeOther.has(fd)) activeOther.set(fd, new Set());
-      activeOther.get(fd).add(r.sessionFile);
-    }
-
-    if (activeCur.length || activeOther.size) {
-      addHeader("Active sessions", listEl);
-      if (activeCur.length) {
-        addFolderLabel(currentFolder, listEl);
-        addSessionRows(activeCur, listEl);
-      }
-      for (const [fd, paths] of activeOther) {
-        const holder = document.createElement("div");
-        addFolderLabel(fd, holder);
-        listEl.appendChild(holder);
-        // fetch that folder's session summaries to render full rows
-        fetch(`/sessions?path=${encodeURIComponent(fd)}`)
-          .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-          .then(({ ok, d }) => {
-            if (!ok) throw new Error(d.error || "failed");
-            const rows = d.sessions.filter((x) => paths.has(x.path));
-            if (!rows.length) return holder.remove(); // no session -> hide the directory
-            addSessionRows(rows, holder);
-            onRunnersUpdate?.(runnersNow); // sync freshly added dots
-          })
-          .catch(() => holder.remove());
-      }
-    }
-
-    // ---- inactive sessions, sectioned by workdir
-    const others = folders.filter((f) => f.dir !== currentFolder);
-    if (inactiveCur.length || others.length) addHeader("Inactive sessions", listEl);
-    if (inactiveCur.length) {
-      addFolderLabel(currentFolder, listEl);
-      addSessionRows(inactiveCur, listEl);
-    }
-
-    // collapsed section: inactive sessions from other folders
-    (() => {
-      if (!others.length) return;
-
-      const section = document.createElement("details");
-      section.className = "s-folders";
-      const sum = document.createElement("summary");
-      sum.textContent = `Other folders (${others.length})`;
-      section.appendChild(sum);
-
-      for (const f of others) {
-        const fd = document.createElement("details");
-        fd.className = "s-folder";
-        const fsum = document.createElement("summary");
-        const fico = document.createElement("span");
-        fico.className = "s-ico";
-        fico.textContent = "📁";
-        fsum.append(fico, ` ${f.label} (${f.count})`);
-        fd.appendChild(fsum);
-        // lazy-load the folder's sessions on first expand
-        let loaded = false;
-        fd.addEventListener("toggle", async () => {
-          if (!fd.open || loaded) return;
-          loaded = true;
-          try {
-            const r = await fetch(`/sessions?path=${encodeURIComponent(f.dir)}`);
-            const d = await r.json();
-            if (!r.ok) throw new Error(d.error || `failed (${r.status})`);
-            const inactive = d.sessions.filter((s) => !s.alive); // active ones are shown above
-            if (!inactive.length) {
-              const empty = document.createElement("div");
-              empty.className = "m-path";
-              empty.textContent = "(no inactive sessions)";
-              fd.appendChild(empty);
-            }
-            addSessionRows(inactive, fd);
-            onRunnersUpdate?.(runnersNow); // sync freshly added dots
-          } catch (e) {
-            loaded = false;
-            toast(`failed to list ${f.label}: ${e.message}`, "error");
-          }
-        });
-        section.appendChild(fd);
-      }
-      listEl.appendChild(section);
-    })();
-
-    const actions = $("mActions");
-    const cancel = document.createElement("span");
-    cancel.className = "chip";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => { closeModal(); resolve(null); });
-    actions.appendChild(cancel);
-    openModal({ title: "Sessions" });
+    openModal({ title: "Sessions", content: "sessionPicker" });
   });
 
   onRunnersUpdate = null;
+  sessionPickerResolve = null;
   if (!chosen || chosen.id === currentId) return;
   try {
     // attaches to the session's live runner if it has one (its work is
     // untouched), else spawns a fresh pi on that session in the background;
     // sessions from other folders spawn in their own recorded cwd
-    const r = await openSessionRunner({ sessionPath: chosen.path, dir: chosen.cwd || workdir });
-    switchToRunner(r.id);
+    const runner = await openSessionRunner({ sessionPath: chosen.path, dir: chosen.cwd || workdir });
+    switchToRunner(runner.id);
     toast(`switched to: ${chosen.name || chosen.preview || chosen.id.slice(0, 8)}`);
   } catch (e) {
     toast(`switch failed: ${e.message}`, "error");

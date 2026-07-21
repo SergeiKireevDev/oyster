@@ -9,12 +9,13 @@
   import HublotManagerModal from "./HublotManagerModal.svelte";
   import OptionPickerModal from "./OptionPickerModal.svelte";
   import SettingsModal from "./SettingsModal.svelte";
+  import SessionPickerModal from "./SessionPickerModal.svelte";
   import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelTextPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, saveExploredFile, showFolderCreateRow, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, toggleFolderHidden, toggleManagedHublotScope, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, cancelSessionPicker, saveExploredFile, showFolderCreateRow, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, toggleFolderHidden, toggleManagedHublotScope, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { filePicker } from "../stores/filePicker.js";
   import { folderBrowser } from "../stores/folderBrowser.js";
@@ -50,6 +51,8 @@
         <FilePickerModal />
       {:else if $modalState.content === "fileExplorer"}
         <FileExplorerModal />
+      {:else if $modalState.content === "sessionPicker"}
+        <SessionPickerModal />
       {/if}
     </div>
 
@@ -95,6 +98,8 @@
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={toggleFileExplorerHidden} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleFileExplorerHidden(); }}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={backToHublotsFromExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backToHublotsFromExplorer(); }}>← Hublots</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
+      {:else if $modalState.content === "sessionPicker"}
+        <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelSessionPicker(); }}>Cancel</span>
       {/if}
     </div>
   {/if}
