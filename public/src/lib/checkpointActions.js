@@ -19,6 +19,17 @@ export function openCheckpointModelPicker({ openPicker, rpc, setOptions, options
   return picker;
 }
 
+export function checkpointResultMessage(data) {
+  if (data.committed) {
+    const what = data.summarized
+      ? `“${data.message.replace(/^checkpoint: /, "")}”`
+      : `${data.files} file${data.files === 1 ? "" : "s"} committed`;
+    return `🧊 checkpoint ${data.hash} — ${what}`;
+  }
+  if (data.recorded) return `🧊 workdir clean — checkpoint marked at ${data.hash}`;
+  return `🧊 nothing to commit — ${data.reason ?? "workdir is clean"}`;
+}
+
 export function createCheckpoint(fetchImpl, runner, model) {
   return jsonRequest(fetchImpl, `/checkpoint?runner=${encodeURIComponent(runner ?? "")}`, { model });
 }

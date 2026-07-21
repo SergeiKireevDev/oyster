@@ -34,7 +34,7 @@ import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
-import { createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
+import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -424,16 +424,7 @@ async function handleCheckpointClick(e) {
   if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
     const data = await createCheckpoint(fetch, currentRunner, model);
-    if (data.committed) {
-      const what = data.summarized
-        ? `“${data.message.replace(/^checkpoint: /, "")}”`
-        : `${data.files} file${data.files === 1 ? "" : "s"} committed`;
-      toast(`\u{1F9CA} checkpoint ${data.hash} — ${what}`);
-    } else if (data.recorded) {
-      toast(`\u{1F9CA} workdir clean — checkpoint marked at ${data.hash}`);
-    } else {
-      toast(`\u{1F9CA} nothing to commit — ${data.reason ?? "workdir is clean"}`);
-    }
+    toast(checkpointResultMessage(data));
     if (data.recorded) {
       refreshCheckpointMarkers().catch(() => {});
       refreshTreeIfOpen();

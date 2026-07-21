@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCheckpoint, openCheckpointModelPicker } from "../public/src/lib/checkpointActions.js";
+import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker } from "../public/src/lib/checkpointActions.js";
 import { listRoutines, runRoutine } from "../public/src/lib/routineActions.js";
 import { createHublot, refreshHublotScope, removeHublot } from "../public/src/lib/hublotActions.js";
 import { saveFile, uploadFileChunk } from "../public/src/lib/fileBrowserActions.js";
@@ -15,6 +15,11 @@ test("API actions normalize successful checkpoint and routine responses", async 
   await runRoutine(fetchImpl, { name: "job", action: "start", sessionId: "session" });
   assert.match(calls[0][0], /runner=runner%20one/);
   assert.deepEqual(JSON.parse(calls[1][1].body), { name: "job", action: "start", sessionId: "session" });
+});
+
+test("checkpoint result messages describe committed and clean states", () => {
+  assert.equal(checkpointResultMessage({ committed: true, summarized: false, files: 2, hash: "abc" }), "🧊 checkpoint abc — 2 files committed");
+  assert.equal(checkpointResultMessage({ recorded: true, hash: "abc" }), "🧊 workdir clean — checkpoint marked at abc");
 });
 
 test("checkpoint model picker loads normalized model options", async () => {
