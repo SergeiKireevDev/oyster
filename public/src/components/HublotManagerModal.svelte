@@ -5,6 +5,9 @@
   import { addToast } from "../stores/toasts.js";
   import { openFilesExplorer as openManagedFileExplorer } from "../features/files/filesActions.js";
   import { createManagedHublot, openManagedHublotCommandPalette, toggleManagedHublotScope } from "../features/hublots/hublotActions.js";
+  import { getBrowserActions } from "../runtime/browserActionsContext.js";
+
+  const browserActions = getBrowserActions();
 
   async function closeManagedHublot(id) {
     try {
@@ -52,8 +55,8 @@
             title={`open ${tunnel.url}`}
             role="button"
             tabindex="0"
-            onclick={() => window.open(tunnel.url, "_blank", "noopener")}
-            onkeydown={(event) => keyActivate(event, () => window.open(tunnel.url, "_blank", "noopener"))}
+            onclick={() => browserActions.openExternal(tunnel.url)}
+            onkeydown={(event) => keyActivate(event, () => browserActions.openExternal(tunnel.url))}
           ></div>
         </div>
         <div class="cap">

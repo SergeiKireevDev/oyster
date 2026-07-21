@@ -11,7 +11,7 @@ const commandPaletteSource = readFileSync(new URL("../public/src/components/Comm
 
 test("App provides its UI action registry and passes it to the runtime", () => {
   assert.match(appSource, /provideUiActionRegistry\(createUiActionRegistry\(\)\)/);
-  assert.match(appSource, /startAppRuntime\(\{ uiActions, dialogs \}\)/);
+  assert.match(appSource, /startAppRuntime\(\{ uiActions, dialogs, browserActions \}\)/);
   assert.match(appSource, /uiActions\.teardown\(\)/);
 });
 
@@ -31,8 +31,9 @@ test("CommandPalette routes mouse selection through the scoped registry", () => 
   assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|pi-command-palette-run/);
 });
 
-test("App provides one dialog service to components and the runtime", () => {
+test("App provides scoped dialog and browser action services", () => {
   assert.match(appSource, /provideDialogService\(createDialogService\(\)\)/);
+  assert.match(appSource, /provideBrowserActions\(createBrowserActions\(\{ windowTarget: window \}\)\)/);
   assert.match(appSource, /dialogs\.teardown\(\)/);
 });
 

@@ -49,7 +49,7 @@ import { resetTranscriptItems } from "../stores/transcriptItems.js";
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, find } = browser;
-  const { uiActions, dialogs: dialogService } = stores;
+  const { uiActions, dialogs: dialogService, browserActions } = stores;
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -289,7 +289,7 @@ const platformEvents = platformAssembly.configureEvents({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
   toast: addToast,
-  openUrl: (url) => window.open(url, "_blank"),
+  openUrl: browserActions.openExternal,
   handleResponse,
   refreshState,
   reloadPage: () => location.reload(),

@@ -10,14 +10,17 @@
   import { provideUiActionRegistry } from "./runtime/uiActionContext.js";
   import { createDialogService } from "./runtime/dialogService.js";
   import { provideDialogService } from "./runtime/dialogServiceContext.js";
+  import { createBrowserActions } from "./platform/createBrowserActions.js";
+  import { provideBrowserActions } from "./runtime/browserActionsContext.js";
 
   const uiActions = provideUiActionRegistry(createUiActionRegistry());
   const dialogs = provideDialogService(createDialogService());
+  const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));
 
   onMount(() => {
     let teardown;
     let disposed = false;
-    startAppRuntime({ uiActions, dialogs }).then((dispose) => {
+    startAppRuntime({ uiActions, dialogs, browserActions }).then((dispose) => {
       if (disposed) dispose();
       else teardown = dispose;
     });

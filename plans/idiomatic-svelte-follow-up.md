@@ -117,7 +117,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Replace clickable `span[role="button"]` controls in file, folder,
   session, and overlay-shell components with styled native `button` elements.
   Extend the markup regression test to cover every modal/overlay component.
-- [ ] Add a browser-action adapter with an `openExternal(url)` operation and
+- [x] Add a browser-action adapter with an `openExternal(url)` operation and
   inject it into hublot components/features. Remove direct `window.open` calls
   from Svelte components and test the adapter invocation.
 - [ ] Add a file-download URL builder to the browser-action adapter and inject
