@@ -14,7 +14,23 @@
       ? date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
       : date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   };
+  const chartColors = ["#7c8cff", "#39c6a3", "#f2ad4b", "#e26d8d", "#9b7de3", "#54a8e8", "#86b84b", "#dc7658"];
+  const chartColor = (model) => chartColors[Math.max(0, $analytics.models.findIndex((item) => item.model === model)) % chartColors.length];
+  const makeChart = (series) => {
+    const buckets = new Map();
+    for (const row of series) {
+      if (!buckets.has(row.bucket)) buckets.set(row.bucket, { bucket: row.bucket, cost: 0, rows: [] });
+      const item = buckets.get(row.bucket);
+      item.cost += row.cost;
+      item.rows.push(row);
+    }
+    return [...buckets.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
+  };
+  const chartTitle = (item) => [bucketLabel(item.bucket), `Total: ${money(item.cost)}`, ...item.rows.map((row) => `${row.model}: ${money(row.cost)}`)].join("\n");
   $: maxModelCost = Math.max(0, ...$analytics.models.map((model) => model.cost));
+  $: chartData = makeChart($analytics.series);
+  $: maxChartCost = Math.max(0, ...chartData.map((item) => item.cost));
+  $: chartLabelEvery = Math.max(1, Math.ceil(chartData.length / 6));
 </script>
 
 <div class="analytics-controls">
@@ -65,17 +81,31 @@
     </div>
   {/if}
 
-  <h3 class="analytics-heading">Timeline</h3>
-  <div class="analytics-timeline">
-    {#each $analytics.series as row (`${row.bucket}:${row.model}`)}
-      <div class="analytics-time-row">
-        <time>{bucketLabel(row.bucket)}</time>
-        <span class="analytics-time-model" title={row.model}>{row.model}</span>
-        <span>{money(row.cost)}</span>
-        <span>{number(row.totalTokens)} tok</span>
+  <h3 class="analytics-heading">Cost over time</h3>
+  {#if chartData.length}
+    <div class="analytics-chart" role="img" aria-label={`Cost by ${$analytics.bucket}`}>
+      <div class="analytics-chart-scale"><span>{money(maxChartCost)}</span><span>$0</span></div>
+      <div class="analytics-chart-scroll">
+        <div class="analytics-chart-bars">
+          {#each chartData as item, index (item.bucket)}
+            <div class="analytics-chart-column" title={chartTitle(item)}>
+              <div class="analytics-chart-bar" style:height={`${maxChartCost ? Math.max(1, item.cost / maxChartCost * 100) : 0}%`}>
+                {#each item.rows as row (`${row.bucket}:${row.model}`)}
+                  <i style:flex-basis={`${item.cost ? row.cost / item.cost * 100 : 0}%`} style:background={chartColor(row.model)}></i>
+                {/each}
+              </div>
+              <time class:visible={index % chartLabelEvery === 0 || index === chartData.length - 1}>{bucketLabel(item.bucket)}</time>
+            </div>
+          {/each}
+        </div>
       </div>
-    {/each}
-  </div>
+    </div>
+    <div class="analytics-chart-legend">
+      {#each $analytics.models as model (model.model)}
+        <span><i style:background={chartColor(model.model)}></i>{model.model}</span>
+      {/each}
+    </div>
+  {/if}
 {/if}
 
 <div class="m-actions" id="mActions">

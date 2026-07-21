@@ -1028,20 +1028,30 @@
   .analytics-summary strong { font-size: 17px; color: var(--accent); }
   .analytics-summary span { color: var(--muted); font-size: 11px; }
   .analytics-heading { margin: 16px 0 7px; font-size: 13px; }
-  .analytics-models, .analytics-timeline { display: grid; gap: 5px; }
+  .analytics-models { display: grid; gap: 5px; }
   .analytics-model-row { display: grid; grid-template-columns: minmax(130px, 1.4fr) minmax(70px, 1fr) auto auto auto; gap: 8px; align-items: center; font-size: 11.5px; }
-  .analytics-model-name, .analytics-time-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .analytics-model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .analytics-bar { height: 7px; overflow: hidden; border-radius: 999px; background: var(--panel); }
   .analytics-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
-  .analytics-time-row { display: grid; grid-template-columns: 125px minmax(140px, 1fr) 70px 100px; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11.5px; }
-  .analytics-time-row time { color: var(--muted); }
+  .analytics-chart { display: flex; height: 205px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); padding: 10px 10px 4px; }
+  .analytics-chart-scale { width: 48px; flex: none; display: flex; flex-direction: column; justify-content: space-between; height: 165px; color: var(--muted); font-size: 10px; }
+  .analytics-chart-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+  .analytics-chart-bars { display: flex; align-items: stretch; min-width: 100%; width: max-content; height: 190px; border-bottom: 1px solid var(--border); background: repeating-linear-gradient(to bottom, transparent 0, transparent 40px, color-mix(in srgb, var(--border) 45%, transparent) 41px); }
+  .analytics-chart-column { flex: 1 0 20px; min-width: 20px; height: 190px; display: grid; grid-template-rows: 165px 25px; align-items: end; padding: 0 2px; }
+  .analytics-chart-bar { width: 100%; min-height: 1px; display: flex; flex-direction: column-reverse; overflow: hidden; border-radius: 3px 3px 0 0; transition: opacity .15s; }
+  .analytics-chart-bar:hover { opacity: .78; }
+  .analytics-chart-bar i { display: block; min-height: 1px; }
+  .analytics-chart-column time { visibility: hidden; align-self: center; width: 72px; transform: rotate(-28deg); transform-origin: center; color: var(--muted); font-size: 9px; white-space: nowrap; }
+  .analytics-chart-column time.visible { visibility: visible; }
+  .analytics-chart-legend { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 7px; color: var(--muted); font-size: 10px; }
+  .analytics-chart-legend span { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .analytics-chart-legend i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
   .analytics-error { padding: 10px; border: 1px solid var(--red); border-radius: 8px; color: var(--red); }
   @media (max-width: 760px) {
     .analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .analytics-model-row { grid-template-columns: minmax(120px, 1fr) auto auto; }
     .analytics-model-row .analytics-bar, .analytics-model-row span:last-child { display: none; }
-    .analytics-time-row { grid-template-columns: 105px minmax(100px, 1fr) 60px; }
-    .analytics-time-row span:last-child { display: none; }
+    .analytics-chart-scale { width: 42px; }
   }
 
   #modal .m-path {
