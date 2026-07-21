@@ -56,6 +56,7 @@ import { createSessionPickerSearchController } from "./lib/sessionPickerSearchCo
 import { storeSnapshot } from "./lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
 import { copyTextToClipboard } from "./lib/clipboardController.js";
+import { createExtensionUiController } from "./lib/extensionUiController.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
 /*
@@ -2056,43 +2057,15 @@ function promptEditor(title, placeholder, prefill) {
 
 // ------------------------------------------------------------ extension UI bridge
 
-async function handleExtensionUI(req) {
-  const respond = (payload) =>
-    rpc({ type: "extension_ui_response", id: req.id, ...payload }, { wait: false }).catch(() => {});
-  switch (req.method) {
-    case "notify":
-      toast(req.message, req.notifyType);
-      return;
-    case "confirm": {
-      const ok = await confirmDialog(req.title, req.message);
-      respond({ confirmed: ok });
-      return;
-    }
-    case "select": {
-      const idx = await pickOption(req.title, req.options);
-      if (idx == null) respond({ cancelled: true });
-      else respond({ value: req.options[idx] });
-      return;
-    }
-    case "input": {
-      const v = await promptText(req.title, req.placeholder);
-      if (v == null) respond({ cancelled: true });
-      else respond({ value: v });
-      return;
-    }
-    case "editor": {
-      const v = await promptEditor(req.title, "", req.prefill);
-      if (v == null) respond({ cancelled: true });
-      else respond({ value: v });
-      return;
-    }
-    case "setTitle":
-      updateAppSession({ titleOverride: req.title });
-      return;
-    default:
-      return; // setStatus / setWidget / set_editor_text: no-op in web UI
-  }
-}
+const handleExtensionUI = createExtensionUiController({
+  respond: (id, payload) => rpc({ type: "extension_ui_response", id, ...payload }, { wait: false }).catch(() => {}),
+  toast,
+  confirm: confirmDialog,
+  select: pickOption,
+  input: promptText,
+  editor: promptEditor,
+  setTitle: (title) => updateAppSession({ titleOverride: title }),
+});
 
 // ------------------------------------------------------------ toasts
 
