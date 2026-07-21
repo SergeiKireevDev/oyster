@@ -11,7 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, processEven
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
-import { createSessionRuntime, createSessionStateApplier, createSessionRunnerState } from "./runtime/sessionRuntime.js";
+import { createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -38,7 +38,7 @@ import { renderMarkdown } from "./lib/markdownRenderer.js";
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
+import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionPreviewController, createStateRefresher, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -494,7 +494,7 @@ sessionOpenController = createSessionOpenController({
 /** hook: session picker (when open) re-renders its indicators */
 let onRunnersUpdate = null;
 
-const sessionUi = createSessionUiController({ updateAppSession, updateHeaderState });
+const sessionUi = createSessionUiRuntime({ updateAppSession, updateHeaderState });
 const setWorkdir = (dir) => sessionUi.setWorkdir(dir);
 const setBusy = (value) => sessionUi.setBusy(value);
 const updateUsage = (message) => sessionUi.updateUsage(message);

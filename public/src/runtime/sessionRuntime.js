@@ -21,6 +21,24 @@ export function createSessionRunnerState({ storage, updateAppSession, key = "pi_
   return { get currentRunner() { return currentRunner; }, get runners() { return runners; }, setRunner, setRunners };
 }
 
+/** Synchronize session-scoped workdir, busy state, and usage into UI adapters. */
+export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) {
+  let workdir = null;
+  let busy = false;
+  return {
+    get workdir() { return workdir; }, get busy() { return busy; },
+    setWorkdir(dir) { workdir = dir; updateAppSession({ workdir }); },
+    setBusy(value) { busy = value; updateAppSession({ busy }); },
+    updateUsage(message) {
+      const usage = message?.usage;
+      if (!usage) return;
+      const cost = usage.cost?.total ?? 0;
+      const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : cost > 0 ? `$${cost.toFixed(4)}` : "$0";
+      updateHeaderState({ usageInfo: `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}` });
+    },
+  };
+}
+
 /** Apply authoritative get_state responses through injectable session/store adapters. */
 export function createSessionStateApplier({ applySessionState, getState, setState, getCurrentRunner, getEmptySessionRunners, getRoutines, routineVisible, getTunnelScopeAll, hooks }) {
   return (incoming) => {
