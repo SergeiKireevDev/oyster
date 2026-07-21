@@ -127,13 +127,23 @@ test("credential operations preserve unrelated credentials, provider env, concur
     const providers = await service.listProviders();
     assert.deepEqual(providers.find((item) => item.provider === "alpha"), {
       provider: "alpha", displayName: "alpha", registered: false,
+      oauthCapable: false, oauthDisplayName: null,
       credentialType: "api_key", source: "stored_api_key", configured: true,
     });
     assert.deepEqual(providers.find((item) => item.provider === "custom-safe"), {
       provider: "custom-safe", displayName: "custom-safe", registered: true,
+      oauthCapable: false, oauthDisplayName: null,
       credentialType: null, source: "models_json", configured: true,
     });
+    assert.deepEqual(providers.find((item) => item.provider === "oauth"), {
+      provider: "oauth", displayName: "oauth", registered: false,
+      oauthCapable: false, oauthDisplayName: null,
+      credentialType: "oauth", source: "stored_oauth", configured: true,
+    });
     assert.equal(providers.find((item) => item.provider === "openai").displayName, "OpenAI");
+    const anthropic = providers.find((item) => item.provider === "anthropic");
+    assert.equal(anthropic.oauthCapable, true);
+    assert.equal(anthropic.oauthDisplayName, "Anthropic (Claude Pro/Max)");
     assert.doesNotMatch(JSON.stringify(providers), /canary|private|REGION/);
     await assert.rejects(service.setApiKey("not-registered", "must-not-write"), { code: "unknown_provider" });
     await service.setApiKey("custom-safe", "custom-stored-canary");

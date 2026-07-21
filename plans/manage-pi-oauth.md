@@ -79,7 +79,7 @@ Run build and full end-to-end validation only in the final checklist item.
 
 ## 1. Extend the Configured-Pi Credential Adapter
 
-- [ ] Extend `pi-credential-service.mjs` to discover safe OAuth provider
+- [x] Extend `pi-credential-service.mjs` to discover safe OAuth provider
   metadata through `AuthStorage.getOAuthProviders()` from the SDK owned by
   `PI_BIN`, and merge `oauthCapable`/OAuth display-name metadata into provider
   status without exposing credentials. Stored OAuth entries with no available

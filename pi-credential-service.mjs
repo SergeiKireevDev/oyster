@@ -124,6 +124,24 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return new Set(modelRegistry.getAll().map((model) => model.provider).filter(Boolean));
   }
 
+  function safeOAuthProviders(authStorage) {
+    if (typeof authStorage.getOAuthProviders !== "function") {
+      throw capabilityError("configured pi SDK does not expose OAuth provider discovery");
+    }
+    const discovered = authStorage.getOAuthProviders();
+    if (!Array.isArray(discovered)) {
+      throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+    }
+    const providers = new Map();
+    for (const item of discovered) {
+      const id = typeof item?.id === "string" ? item.id.trim() : "";
+      const name = typeof item?.name === "string" ? item.name.trim() : "";
+      if (!id || !name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      providers.set(id, Object.freeze({ id, name }));
+    }
+    return providers;
+  }
+
   function safeSource(status, credentialType) {
     if (credentialType === "api_key") return "stored_api_key";
     if (credentialType === "oauth") return "stored_oauth";
@@ -173,17 +191,21 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const { authStorage, modelRegistry } = await load();
     reloadOrFail(authStorage);
     const registered = refreshRegistry(modelRegistry);
-    const providers = new Set([...registered, ...authStorage.list()]);
+    const oauthProviders = safeOAuthProviders(authStorage);
+    const providers = new Set([...registered, ...authStorage.list(), ...oauthProviders.keys()]);
     return [...providers]
       .sort((left, right) => left.localeCompare(right))
       .map((provider) => {
         const credential = authStorage.get(provider);
         const credentialType = credential ? safeCredential(provider, credential).credentialType : null;
         const status = modelRegistry.getProviderAuthStatus(provider);
+        const oauth = oauthProviders.get(provider);
         return Object.freeze({
           provider,
           displayName: modelRegistry.getProviderDisplayName(provider),
           registered: registered.has(provider),
+          oauthCapable: Boolean(oauth),
+          oauthDisplayName: oauth?.name ?? null,
           credentialType,
           source: safeSource(status, credentialType),
           configured: credentialType !== null || status?.configured === true,
