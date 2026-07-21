@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, commandPaletteView } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
+
+test("command palette navigation wraps active command selection", () => {
+  assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
+  assert.equal(moveCommandPaletteActive(2, 3, 1), 0);
+});
 
 test("command palette view marks the active filtered command", () => {
   const view = commandPaletteView([{ name: "file", icon: "📁", desc: "browse" }], "fi", 0);

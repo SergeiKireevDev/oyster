@@ -5,26 +5,20 @@ export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420
   if (left + width > viewport.innerWidth - gap) left = viewport.innerWidth - width - gap;
   if (rect.top > maxHeight + gap) {
     const top = rect.top - gap;
-    return {
-      left: `${left}px`, width: `${width}px`, bottom: `${viewport.innerHeight - top}px`, top: "auto",
-      maxHeight: `${Math.min(maxHeight, viewport.innerHeight - top - gap * 2)}px`,
-    };
+    return { left: `${left}px`, width: `${width}px`, bottom: `${viewport.innerHeight - top}px`, top: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - top - gap * 2)}px` };
   }
   const top = rect.bottom + gap;
-  return {
-    left: `${left}px`, width: `${width}px`, top: `${top}px`, bottom: "auto",
-    maxHeight: `${Math.min(maxHeight, viewport.innerHeight - rect.bottom - gap * 2)}px`,
-  };
+  return { left: `${left}px`, width: `${width}px`, top: `${top}px`, bottom: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - rect.bottom - gap * 2)}px` };
 }
 
 /** Create Svelte palette state from the active command match. */
 export function commandPaletteView(items, match, active) {
   if (!items.length) return { open: true, match, emptyText: `no command matches ":${match}"`, items: [] };
-  return {
-    open: true, match, emptyText: "",
-    items: items.map((command, index) => ({
-      icon: command.icon, desc: command.desc,
-      highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active,
-    })),
-  };
+  return { open: true, match, emptyText: "", items: items.map((command, index) => ({ icon: command.icon, desc: command.desc, highlight: command.name.slice(0, match.length), rest: command.name.slice(match.length), active: index === active })) };
+}
+
+/** Wrap a command palette selection index across the visible command list. */
+export function moveCommandPaletteActive(active, count, direction) {
+  if (!count) return active;
+  return (active + direction + count) % count;
 }

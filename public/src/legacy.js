@@ -38,7 +38,7 @@ import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView } from "./lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, moveCommandPaletteActive } from "./lib/commandController.js";
 import { promptCommand } from "./lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
@@ -1287,7 +1287,7 @@ function moveCmd(dir) {
   if (!cmdState) return;
   const items = getFilteredCommands(cmdState.match);
   if (!items.length) return;
-  cmdState.active = (cmdState.active + dir + items.length) % items.length;
+  cmdState.active = moveCommandPaletteActive(cmdState.active, items.length, dir);
   renderCmdPalette();
 }
 
