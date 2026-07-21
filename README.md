@@ -3,10 +3,17 @@
 A small web UI for driving the [pi coding agent](https://github.com/badlogic/pi-mono) remotely — from a phone or any browser — through a tunnel.
 
 ```
-browser ──HTTP/SSE──> server.mjs ──stdin/stdout JSONL──> pi --mode rpc
+browser ──HTTP/SSE──> server.mjs ──stdin/stdout JSONL──> pi --mode rpc (one per open session)
 ```
 
-- **Zero dependencies** — plain Node ≥ 18, no `npm install`.
+The stable core (`server.mjs`) owns everything that must survive a hot
+reload (socket, SSE clients, child processes); `app.mjs` is the router and
+is re-imported on change, pulling in the domain modules with cache-busted
+imports: `runners.mjs` (pi processes), `sessions.mjs` (.jsonl parsing,
+mtime-cached), `checkpoints.mjs` (git checkpoints/rollback),
+`tunnels.mjs` (cloudflared + hublot agents), `routines.mjs` (scripts).
+
+- **Zero dependencies** — plain Node ≥ 18, no `npm install`. Tests: `npm test` (node --test).
 - **Tunnel-friendly** — uses Server-Sent Events + POST instead of WebSockets, so it works through any plain HTTP tunnel or reverse proxy (sends `X-Accel-Buffering: no` for nginx).
 - **Token auth** — every API request requires a bearer token; the static page itself carries no secrets.
 
@@ -47,7 +54,13 @@ A `.ui-token` file next to `server.mjs` (one line, the token) keeps the token st
 | `GET /routines` | yes | list runnable scripts in `~/.pi/routines/` with live run state and session bindings |
 | `POST /routines` | yes | drive a routine: `{ "name": "build.sh", "action": "start" \| "stop" \| "teardown" \| "release", "sessionId": "…" }` |
 
-Auth = `?token=…`, `Authorization: Bearer …`, or `X-Auth-Token` header.
+Auth = `Authorization: Bearer …`, `X-Auth-Token` header, or `pi_ui_token`
+cookie; `?token=…` is accepted on **GET requests only** (EventSource and
+download links can't send headers) — mutating requests must use a header or
+cookie. Repeated failures are rate-limited per client IP. File endpoints
+(`/browse`, `/file-*`, `/mkdir`, `/workdir`) are confined to `$HOME`, `/tmp`
+and the configured workdir, with credential stores (`~/.ssh`, `~/.aws`, …)
+denied.
 
 ## UI features
 
