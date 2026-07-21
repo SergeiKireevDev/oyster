@@ -2785,6 +2785,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
   // always open in the current session's working directory
   let startPath = workdir;
 
+  let curDir = startPath; // tracks the folder currently being viewed
   async function load(path) {
     const q = path ? `&path=${encodeURIComponent(path)}` : "";
     const res = await fetch(`/browse?files=1${q}`);
@@ -2795,6 +2796,7 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
       if (path !== workdir) return load(workdir);
       return;
     }
+    curDir = data.path;
     $("mTitle").textContent = "Attach file";
     body.innerHTML = "";
     const pathEl = document.createElement("div");
@@ -2840,11 +2842,16 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null) {
   }
 
   actions.innerHTML = "";
+  const useFolder = document.createElement("span");
+  useFolder.className = "chip";
+  useFolder.textContent = "\u{1F4C1} Use this folder";
+  useFolder.title = "Insert the current folder path";
+  useFolder.addEventListener("click", () => { closeModal(); onPick(curDir); });
   const cancel = document.createElement("span");
   cancel.className = "chip";
   cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => { closeModal(); onCancel?.(); });
-  actions.appendChild(cancel);
+  actions.append(useFolder, cancel);
   overlay.classList.add("open");
   await load(startPath);
 }
