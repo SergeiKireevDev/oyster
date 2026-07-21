@@ -741,6 +741,20 @@
   #modal .s-folders > summary:hover, #modal .s-folder > summary:hover { color: var(--text); }
   #modal .s-folder { margin-left: 10px; }
   #modal .s-folder > .m-option, #modal .s-folder > .m-path { margin-left: 12px; }
+  /* forks collapsed under their main session */
+  #modal .s-forkgroup { margin: 2px 0 4px 18px; }
+  #modal .s-forkgroup > summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 3px 6px;
+    user-select: none;
+    list-style: none;
+  }
+  #modal .s-forkgroup > summary::before { content: "▸ "; }
+  #modal .s-forkgroup[open] > summary::before { content: "▾ "; }
+  #modal .s-forkgroup > summary:hover { color: var(--text); }
+  #modal .s-forkgroup > .m-option { margin-left: 12px; }
   #modal .m-option .s-stop:hover { color: var(--yellow); background: var(--panel); }
   #modal .newdir-row { display: flex; gap: 6px; margin-bottom: 8px; }
   #modal .newdir-row input { flex: 1; min-width: 0; }
@@ -1606,7 +1620,7 @@ function renderTreeNode(node) {
   row.className = "t-session" + (node.id === state?.sessionId ? " current" : "");
   row.title = node.path;
   const ico = document.createElement("span");
-  ico.textContent = node.parentSession ? "\u{1F33F}" : "\u{1F331}";
+  ico.textContent = node.parentSession ? "\u{1F33F}" : "\u{1F331}"; // 🌿 fork · 🌱 root
   const name = document.createElement("span");
   name.className = "t-name";
   name.textContent = node.name || node.id.slice(0, 8);
@@ -3332,10 +3346,50 @@ async function showSessionPicker() {
       container.appendChild(b);
     }
 
+
     // ---- active sessions first, then inactive ones (both sectioned by workdir)
     const folderOf = (p) => p.slice(0, p.lastIndexOf("/"));
     const labelFor = (dir) =>
       folders.find((f) => f.dir === dir)?.label ?? (dir === currentFolder ? workdir : dir) ?? "?";
+
+    /** group a session list into fork families: forks (sessions whose
+     *  parentSession chain leads to another session IN the list) collapse
+     *  under their top-most ancestor present in the list */
+    function forkFamilies(list) {
+      const byPath = new Map(list.map((s) => [s.path, s]));
+      const rootOf = (s) => {
+        const seen = new Set();
+        while (s.parentSession && byPath.has(s.parentSession) && !seen.has(s.path)) {
+          seen.add(s.path);
+          s = byPath.get(s.parentSession);
+        }
+        return s;
+      };
+      const families = new Map(); // root path -> { session, forks }
+      for (const s of list) {
+        const root = rootOf(s);
+        if (!families.has(root.path)) families.set(root.path, { session: root, forks: [] });
+        if (s.path !== root.path) families.get(root.path).forks.push(s);
+      }
+      return [...families.values()];
+    }
+
+    /** render session rows with forks collapsed under their main session */
+    function addSessionRows(list, container) {
+      for (const fam of forkFamilies(list)) {
+        addSessionRow(fam.session, container);
+        if (!fam.forks.length) continue;
+        const det = document.createElement("details");
+        det.className = "s-forkgroup";
+        const sum = document.createElement("summary");
+        sum.textContent = `\u{1F33F} ${fam.forks.length} fork${fam.forks.length === 1 ? "" : "s"}`;
+        det.appendChild(sum);
+        for (const f of fam.forks) addSessionRow(f, det);
+        // never hide the session the user is currently in
+        if (fam.forks.some((f) => f.id === currentId)) det.open = true;
+        container.appendChild(det);
+      }
+    }
     const addHeader = (text, container) => {
       const h = document.createElement("div");
       h.className = "s-section";
@@ -3352,8 +3406,14 @@ async function showSessionPicker() {
       container.appendChild(l);
     };
 
-    const activeCur = sessions.filter((s) => s.alive);
-    const inactiveCur = sessions.filter((s) => !s.alive);
+    // partition WHOLE fork families: a family is "active" if any member has a
+    // live process, so forks always stay collapsed under their main session
+    // instead of scattering across the two sections
+    const activeCur = [], inactiveCur = [];
+    for (const fam of forkFamilies(sessions)) {
+      const members = [fam.session, ...fam.forks];
+      (members.some((s) => s.alive) ? activeCur : inactiveCur).push(...members);
+    }
 
     // active sessions living in OTHER folders, discovered via live runners
     const activeOther = new Map(); // session folder dir -> Set(session paths)
@@ -3369,7 +3429,7 @@ async function showSessionPicker() {
       addHeader("Active sessions", listEl);
       if (activeCur.length) {
         addFolderLabel(currentFolder, listEl);
-        for (const s of activeCur) addSessionRow(s, listEl);
+        addSessionRows(activeCur, listEl);
       }
       for (const [fd, paths] of activeOther) {
         const holder = document.createElement("div");
@@ -3380,7 +3440,7 @@ async function showSessionPicker() {
           .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
           .then(({ ok, d }) => {
             if (!ok) throw new Error(d.error || "failed");
-            for (const s of d.sessions.filter((x) => paths.has(x.path))) addSessionRow(s, holder);
+            addSessionRows(d.sessions.filter((x) => paths.has(x.path)), holder);
             onRunnersUpdate?.(runnersNow); // sync freshly added dots
           })
           .catch(() => holder.remove());
@@ -3392,7 +3452,7 @@ async function showSessionPicker() {
     if (inactiveCur.length || others.length) addHeader("Inactive sessions", listEl);
     if (inactiveCur.length) {
       addFolderLabel(currentFolder, listEl);
-      for (const s of inactiveCur) addSessionRow(s, listEl);
+      addSessionRows(inactiveCur, listEl);
     }
 
     // collapsed section: inactive sessions from other folders
@@ -3430,7 +3490,7 @@ async function showSessionPicker() {
               empty.textContent = "(no inactive sessions)";
               fd.appendChild(empty);
             }
-            for (const s of inactive) addSessionRow(s, fd);
+            addSessionRows(inactive, fd);
             onRunnersUpdate?.(runnersNow); // sync freshly added dots
           } catch (e) {
             loaded = false;

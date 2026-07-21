@@ -448,12 +448,12 @@ export function init(state) {
 
   function summarizeSessionFile(path) {
     const text = readFileSync(path, "utf8");
-    let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0, cwd = null;
+    let id = null, createdAt = null, name = null, firstUserText = null, messageCount = 0, cwd = null, parentSession = null;
     for (const line of text.split("\n")) {
       if (!line.trim()) continue;
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
-      if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; cwd = entry.cwd ?? null; }
+      if (entry.type === "session") { id = entry.id; createdAt = entry.timestamp; cwd = entry.cwd ?? null; parentSession = entry.parentSession ?? null; }
       else if (entry.type === "session_info") { name = entry.name ?? name; }
       else if (entry.type === "message") {
         const m = entry.message;
@@ -466,7 +466,7 @@ export function init(state) {
         }
       }
     }
-    return { id, createdAt, name, cwd, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
+    return { id, createdAt, name, cwd, parentSession, preview: firstUserText?.slice(0, 120) ?? null, messageCount };
   }
 
   function listSessions(dir = sessionDirFor(state.currentDir)) {
