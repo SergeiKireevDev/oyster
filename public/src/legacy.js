@@ -1561,7 +1561,6 @@ const sessionPickerFolderController = createSessionPickerFolderController({
   setSessions: (sessions) => { sessionPickerSessions = sessions; },
   toast: addToast,
 });
-const refreshSessionPickerCurrentFolder = sessionPickerFolderController.refreshCurrent;
 const loadSessionPickerFolder = sessionPickerFolderController.loadFolder;
 
 const sessionPickerController = createSessionPickerController({
