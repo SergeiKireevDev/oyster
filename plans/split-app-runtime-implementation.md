@@ -302,7 +302,7 @@ lines. Complete the remaining migration in small verified commits:
 - [x] Move platform EventSource/RPC/reconnect construction behind
   `platform/connectionCoordinator.js`; the root may only construct and wire
   the coordinator.
-- [ ] Split the remaining layout, hublot, routine, and settings construction
+- [x] Split the remaining layout, hublot, routine, and settings construction
   blocks into feature factories with teardown ownership.
 - [ ] Remove obsolete event-controller imports and compatibility adapters only
   after an `rg` no-reference check and focused regression coverage.
