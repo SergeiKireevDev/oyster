@@ -1749,12 +1749,16 @@ const headerEventController = createHeaderEventController({
 // runtime starts, after Svelte has mounted.
 
 // Test/debug scripts use these hooks to seed and inspect session state.
-const debugHookRegistration = installDebugHooks(window, {
-  rpc,
-  refreshState: () => getSessionRuntime().refreshState(),
-  loadHublots,
-  loadRoutines,
-});
+let debugHookRegistration = null;
+function attachDebugHooks() {
+  if (debugHookRegistration) return;
+  debugHookRegistration = installDebugHooks(window, {
+    rpc,
+    refreshState: () => getSessionRuntime().refreshState(),
+    loadHublots,
+    loadRoutines,
+  });
+}
 
 // ------------------------------------------------------------ go
 
@@ -1785,7 +1789,7 @@ const runtimeTeardown = createRuntimeTeardown([
   () => filePickerEventController.detach(), () => folderBrowserEventController.detach(), () => fileExplorerEventController.detach(),
   () => managedHublotEventController.detach(), () => hublotSidebarEventController.detach(), () => routineEventController.detach(),
   () => sessionPickerEventController.detach(), () => openFileExplorerEventController.detach(), () => commandPaletteInputController?.detach(),
-  () => debugHookRegistration.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration.detach(), () => connectionState.lost(),
+  () => debugHookRegistration?.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration.detach(), () => connectionState.lost(),
 ]);
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
@@ -1817,6 +1821,7 @@ function attachRuntimeEventAdapters() {
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
 export function startLegacyRuntime() {
   attachRuntimeEventAdapters();
+  attachDebugHooks();
   return runtimeStarter();
 }
 

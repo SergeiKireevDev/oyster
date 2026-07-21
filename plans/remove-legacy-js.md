@@ -34,8 +34,10 @@ Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 - [x] Moved app startup behind an explicit `startAppRuntime()` composition root;
   `App.svelte` no longer imports `legacy.js` directly.
 - [x] Added explicit teardown-capable runtime boundaries.
-- [ ] Defer remaining global event-adapter registration until runtime start,
-  then move the final composition from `legacy.js` into this root.
+- [x] Deferred global event-adapter registration and carousel initialization
+  until runtime start.
+- [ ] Defer debug-hook registration until runtime start, then move the final
+  composition from `legacy.js` into this root.
 - [x] Kept feature logic out of the initial bootstrap extraction.
 
 **Acceptance:** application startup behavior is unchanged, with a small
