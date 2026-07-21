@@ -1969,9 +1969,6 @@ setFolderBrowserHandlers({
     folderBrowserState.showHidden = !folderBrowserState.showHidden;
     updateFolderBrowser({ showHidden: folderBrowserState.showHidden });
   },
-  showCreateRow: () => updateFolderBrowser({ createOpen: true, newName: "" }),
-  hideCreateRow: () => updateFolderBrowser({ createOpen: false, newName: "" }),
-  setNewName: (newName) => updateFolderBrowser({ newName }),
   createFolder: async () => {
     let snapshot;
     const unsubscribe = folderBrowser.subscribe((s) => { snapshot = s; });

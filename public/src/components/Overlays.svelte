@@ -16,10 +16,10 @@
   import { closeModalState, modalState } from "../stores/modal.js";
   import { cancelCheckpointModelPicker, submitCheckpointModelPicker, checkpointModelPicker } from "../stores/checkpointModelPicker.js";
   import { answerConfirmPrompt, cancelEditorPrompt, cancelTextPrompt, submitEditorPrompt, submitTextPrompt } from "../stores/dialogs.js";
-  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, cancelSessionPicker, saveExploredFile, showFolderCreateRow, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, toggleFolderHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
+  import { backToExploredList, backToHublotsFromExplorer, cancelFilePicker, cancelFolderBrowser, cancelSessionPicker, saveExploredFile, submitFolderBrowser, toggleFileExplorerHidden, toggleFilePickerHidden, toggleFolderHidden, uploadExploredFiles, usePickedFolder } from "../lib/legacyBridge.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { filePicker } from "../stores/filePicker.js";
-  import { folderBrowser } from "../stores/folderBrowser.js";
+  import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
   import { hublotManager } from "../stores/hublotManager.js";
   import { cancelOptionPicker } from "../stores/optionPicker.js";
 </script>
@@ -86,7 +86,7 @@
         <span class="chip" role="button" tabindex="0" title="toggle between this session's tunnels and all of them" onclick={() => window.dispatchEvent(new Event("pi-managed-hublot-toggle-scope"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-managed-hublot-toggle-scope")); }}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</span>
         <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "folderBrowser"}
-        <span class="chip" role="button" tabindex="0" onclick={showFolderCreateRow} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") showFolderCreateRow(); }}>New folder</span>
+        <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={toggleFolderHidden} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") toggleFolderHidden(); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
         <span class="chip" role="button" tabindex="0" onclick={cancelFolderBrowser} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFolderBrowser(); }}>Cancel</span>
         <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>

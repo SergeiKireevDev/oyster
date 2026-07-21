@@ -3,11 +3,9 @@
   import {
     browseFolder,
     createFolder,
-    hideFolderCreateRow,
-    setFolderNewName,
   } from "../lib/legacyBridge.js";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
-  import { folderBrowser } from "../stores/folderBrowser.js";
+  import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
 
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
@@ -25,10 +23,10 @@
         type="text"
         placeholder="new folder name"
         value={$folderBrowser.newName}
-        oninput={(event) => setFolderNewName(event.currentTarget.value)}
+        oninput={(event) => updateFolderBrowser({ newName: event.currentTarget.value })}
         onkeydown={(event) => {
           if (event.key === "Enter") createFolder();
-          else if (event.key === "Escape") hideFolderCreateRow();
+          else if (event.key === "Escape") updateFolderBrowser({ createOpen: false, newName: "" });
         }}
         use:focusOnMount
       />

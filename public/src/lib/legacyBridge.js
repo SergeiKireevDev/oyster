@@ -119,18 +119,6 @@ export function toggleFolderHidden() {
   return folderBrowserHandlers.toggleHidden?.();
 }
 
-export function showFolderCreateRow() {
-  return folderBrowserHandlers.showCreateRow?.();
-}
-
-export function setFolderNewName(name) {
-  return folderBrowserHandlers.setNewName?.(name);
-}
-
-export function hideFolderCreateRow() {
-  return folderBrowserHandlers.hideCreateRow?.();
-}
-
 export function createFolder() {
   return folderBrowserHandlers.createFolder?.();
 }
