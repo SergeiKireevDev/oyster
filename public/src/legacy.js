@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper, watchdogExpired } from "./runtime/eventStreamUtils.js";
-import { closeEventStream, openEventStream } from "./runtime/eventStream.js";
+import { bindEventStreamHandlers, closeEventStream, openEventStream } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -866,7 +866,7 @@ function connect({ replay = true } = {}) {
   const replayParam = replay ? "1" : "0";
   lifecycleLog("connect:start", { replay, skipTranscriptGate, replayParam });
   es = openEventStream({ token, runner: currentRunner, replay });
-  es.onopen = async () => {
+  const eventHandlers = { onopen: async () => {
     connected = true;
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
     updateAppSession({ connected });
@@ -890,8 +890,8 @@ function connect({ replay = true } = {}) {
       if (String(e.message).includes("unauthorized")) return;
       toast(`init failed: ${e.message}`, "error");
     }
-  };
-  es.onerror = () => {
+  },
+  onerror: () => {
     lifecycleLog("connect:onerror", { ms: Math.round(performance.now() - connectStarted) });
     connected = false;
     updateAppSession({ connected });
@@ -900,8 +900,8 @@ function connect({ replay = true } = {}) {
     // looks identical to a network blip and would retry forever. Probe
     // /authcheck to tell them apart, at most once per 10s.
     probeTokenValidity();
-  };
-  es.onmessage = (ev) => {
+  },
+  onmessage: (ev) => {
     lastEventAt = Date.now();
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
@@ -909,7 +909,9 @@ function connect({ replay = true } = {}) {
     try { handleEvent(msg); } catch (e) {
       console.error("event handling failed", e, msg);
     }
+  },
   };
+  bindEventStreamHandlers(es, eventHandlers);
 }
 
 // True from (re)connect until the canonical transcript's tail is rendered.
