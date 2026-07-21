@@ -18,10 +18,18 @@ export function createResourceAssembly(deps) {
     isVisible: (routine) => deps.routines.isVisible(routine, hublots.getScopeAll()),
   });
   const files = buildFiles(deps.files);
+  const operations = Object.freeze({
+    getScopeAll: hublots.getScopeAll,
+    toggleScope: (...args) => hublots.toggleScope(...args),
+    refreshHublots: (...args) => hublots.load(...args),
+    refreshRoutines: (...args) => routines.load(...args),
+    syncRoutines: (...args) => routines.sync(...args),
+  });
   return {
     files,
     hublots,
     routines,
+    operations,
     teardown() {
       files.teardown?.();
       routines.teardown();
