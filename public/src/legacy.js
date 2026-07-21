@@ -1,5 +1,7 @@
 "use strict";
 
+import { setComposerHandlers, setMenuActionHandler } from "./lib/legacyBridge.js";
+
 // ------------------------------------------------------------ token
 
 let token = null;
@@ -1420,14 +1422,13 @@ function refreshState() {
 // ------------------------------------------------------------ composer
 
 const input = $("input");
-const sendBtn = $("sendBtn");
 
-input.addEventListener("input", () => {
+function composerInputChanged() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setBusy(busy); // refresh busy state UI
   histIdx = null; // typing exits history navigation
-});
+}
 
 function setComposerText(text) {
   input.value = text;
@@ -1469,7 +1470,7 @@ function navigateHistory(dir) {
   return true;
 }
 
-input.addEventListener("keydown", (e) => {
+function composerKeydown(e) {
   if (e.isComposing) return;
 
   // when the palette is open the global capture handler already consumed
@@ -1484,10 +1485,7 @@ input.addEventListener("keydown", (e) => {
   if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
     if (navigateHistory(e.key === "ArrowUp" ? -1 : 1)) e.preventDefault();
   }
-});
-
-sendBtn.addEventListener("click", () => send());
-$("stopBtn").addEventListener("click", () => abort());
+}
 
 // pi's slash commands (extensions, prompt templates, skills), cached until
 // the pi process or folder changes
@@ -1545,6 +1543,8 @@ async function abort() {
   try { await rpc({ type: "abort" }, { wait: false }); toast("aborted"); }
   catch (e) { toast(`abort failed: ${e.message}`, "error"); }
 }
+
+setComposerHandlers({ inputChanged: composerInputChanged, keydown: composerKeydown, send, abort });
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"
@@ -1744,15 +1744,7 @@ document.addEventListener("keydown", (e) => {
 
 // ------------------------------------------------------------ menu & actions
 
-const menu = $("menu");
-$("menuBtn").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("open");
-});
-document.addEventListener("click", () => menu.classList.remove("open"));
-
-menu.addEventListener("click", async (e) => {
-  const action = e.target.dataset?.action;
-  if (!action) return;
-  menu.classList.remove("open");
+async function runMenuAction(action) {
   try {
     if (action === "newSession") {
       // a fresh runner, so the current session keeps running in the background
@@ -1786,7 +1778,8 @@ menu.addEventListener("click", async (e) => {
   } catch (err) {
     toast(err.message, "error");
   }
-});
+}
+setMenuActionHandler(runMenuAction);
 
 // ------------------------------------------------------------ attach file
 
