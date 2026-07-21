@@ -3,13 +3,10 @@
 import { tick } from "svelte";
 import { get } from "svelte/store";
 import { installAuthenticatedFetch } from "./authClient.js";
-import { createTransportRuntime } from "./transportRuntime.js";
 import { createLoggedSseDeduper } from "./eventStreamUtils.js";
 import { processEventMessage, runCanonicalReload } from "./eventStream.js";
-import { createManagedEventConnection } from "../platform/createManagedEventConnection.js";
-import { createPlatformEventDispatch } from "../platform/createPlatformEventDispatch.js";
+import { createPlatformAssembly } from "../platform/createPlatformAssembly.js";
 import { installDebugHooks } from "./debugHooks.js";
-import { createDelayedTaskRegistry } from "./delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
 import { createRuntimeCleanup } from "./runtimeCleanup.js";
 import { createRuntimeStarter } from "./startController.js";
@@ -21,7 +18,6 @@ import { createTranscriptAssembly } from "../features/transcript/createTranscrip
 import { createDialogAdapters } from "../platform/createDialogAdapters.js";
 import { createLayoutDomAdapters } from "../platform/createLayoutDomAdapters.js";
 import { createRuntimeEventAdapters } from "./runtimeEventAdapters.js";
-import { createRuntimeAttachments } from "./runtimeAttachments.js";
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { createCarouselEventDependencies } from "./carouselEventDependencies.js";
 import { setCarouselPage } from "../stores/carousel.js";
@@ -106,17 +102,18 @@ const lifecycleLog = createLifecycleLogger({
 // so a reload or a shared link always lands on the same session.
 
 const $ = (id) => document.getElementById(id);
-const delayedTasks = createDelayedTaskRegistry();
 const gate = $("gate");
-
-
-const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = createTransportRuntime({
-  browser: { document, storage: localStorage },
-  gate,
-  getRunner: () => getCurrentRunner(),
-  onInvalidToken: () => updateHeaderState({ stateInfo: "invalid token" }),
-  toast: addToast,
+const platformAssembly = createPlatformAssembly({
+  transport: {
+    browser: { document, storage: localStorage },
+    gate,
+    getRunner: () => getCurrentRunner(),
+    onInvalidToken: () => updateHeaderState({ stateInfo: "invalid token" }),
+    toast: addToast,
+  },
 });
+const delayedTasks = platformAssembly.delayedTasks;
+const { token, requireToken, handleUnauthorized, probeTokenValidity, rpc, handleResponse, dispose: disposeRpcClient } = platformAssembly.transport;
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
@@ -283,7 +280,7 @@ const updateUsage = sessionOperations.updateUsage;
 // ------------------------------------------------------------ event stream
 
 let connected = false;
-const managedConnection = createManagedEventConnection({
+const managedConnection = platformAssembly.configureConnection({
   setConnected: (value) => { connected = value; updateAppSession({ connected }); },
   setStatus: (stateInfo) => updateHeaderState({ stateInfo }),
   getToken: () => token,
@@ -319,7 +316,7 @@ function setTranscriptGateRequired(value) {
 function setReplaying(value, phase = null) { platformEvents.setReplaying(value, phase); }
 function handleEvent(msg) { return platformEvents.dispatch(msg); }
 const composerReadyForSend = transcriptOperations.composerReadyForSend;
-platformEvents = createPlatformEventDispatch({
+platformEvents = platformAssembly.configureEvents({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
   assistantAlreadyRendered,
@@ -868,7 +865,7 @@ const menuEventController = commandRuntime.menuController;
 // runtime starts, after Svelte has mounted.
 
 // Test/debug scripts use these hooks to seed and inspect session state.
-const runtimeAttachments = createRuntimeAttachments({
+const runtimeAttachments = platformAssembly.configureAttachments({
   installAuthenticatedFetch: () => installAuthenticatedFetch(token),
   installDebugHooks: () => installDebugHooks(window, {
     rpc,
