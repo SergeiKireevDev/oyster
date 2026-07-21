@@ -203,7 +203,7 @@ transcript need each other, use narrow interfaces rather than circular imports:
 transcript items. Existing replay, backfill, permalink, checkpoint placement,
 and scroll tests remain green.
 
-## [ ] 5. Extract Independent Feature Runtimes
+## [x] 5. Extract Independent Feature Runtimes
 
 Move one feature per commit, in this order, because later features depend on
 session identity but not on each other:
