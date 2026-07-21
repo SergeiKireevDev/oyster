@@ -220,6 +220,24 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE UNIQUE INDEX runner_events_sse_id_idx ON runner_events(runner_id, sse_id) WHERE sse_id IS NOT NULL;
     `,
   }),
+  Object.freeze({
+    version: 10,
+    name: "legacy_migration_ledger",
+    sql: `
+      CREATE TABLE legacy_migration_ledger (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL CHECK (mode IN ('dry-run', 'apply')),
+        status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+        source_counts TEXT,
+        destination_counts TEXT,
+        conflicts TEXT,
+        error TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+      ) WITHOUT ROWID;
+      CREATE INDEX legacy_migration_ledger_started_idx ON legacy_migration_ledger(started_at, id);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

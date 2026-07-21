@@ -379,6 +379,22 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       deleteForRunner: (runnerId) => database.prepare("DELETE FROM runner_events WHERE runner_id = ?").run(runnerId).changes,
     }),
+    migrationLedger: Object.freeze({
+      list: () => database.prepare("SELECT * FROM legacy_migration_ledger ORDER BY started_at, id").all().map((row) => ({ ...row })),
+      find: (id) => {
+        const row = database.prepare("SELECT * FROM legacy_migration_ledger WHERE id = ?").get(id);
+        return row ? { ...row } : null;
+      },
+      start: ({ id, mode, startedAt }) => database.prepare(`
+        INSERT INTO legacy_migration_ledger(id, mode, status, started_at) VALUES (?, ?, 'running', ?)
+      `).run(id, mode, startedAt),
+      finish: ({ id, status, sourceCounts = null, destinationCounts = null, conflicts = null, error = null, finishedAt }) => database.prepare(`
+        UPDATE legacy_migration_ledger
+        SET status = ?, source_counts = ?, destination_counts = ?, conflicts = ?, error = ?, finished_at = ?
+        WHERE id = ?
+      `).run(status, sourceCounts == null ? null : JSON.stringify(sourceCounts), destinationCounts == null ? null : JSON.stringify(destinationCounts),
+        conflicts == null ? null : JSON.stringify(conflicts), error, finishedAt, id).changes,
+    }),
     operations: Object.freeze({
       create: ({ id, ownerId = null, kind, status, stage, payload = null, error = null, createdAt, updatedAt = createdAt }) => database.prepare(`
         INSERT INTO operations(id, owner_id, kind, status, stage, payload, error, created_at, updated_at)

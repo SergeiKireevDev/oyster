@@ -27,9 +27,9 @@ test("numbered migrations apply once and report stable status", (t) => {
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
-  assert.deepEqual(first, { currentVersion: 9, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9] });
+  assert.deepEqual(first, { currentVersion: 10, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] });
   assert.deepEqual(second, first);
-  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "operations", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
+  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
     { version: 1, name: "foundation", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 2, name: "session_ownership", applied_at: "2026-07-16T00:00:00.000Z" },
@@ -40,6 +40,7 @@ test("numbered migrations apply once and report stable status", (t) => {
     { version: 7, name: "hublot_port_allocation", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 8, name: "runner_descriptors", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 9, name: "runner_replay_events", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 10, name: "legacy_migration_ledger", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 
