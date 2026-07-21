@@ -15,6 +15,22 @@ export function assertGeneralAppSettingKey(key) {
   return key;
 }
 
+export function assertGeneralAppSettingValue(value) {
+  if (typeof value !== "string") throw new Error("app setting value must be serialized JSON");
+  let parsed;
+  try { parsed = JSON.parse(value); } catch { return value; }
+  const visit = (entry) => {
+    if (!entry || typeof entry !== "object") return;
+    if (Array.isArray(entry)) { entry.forEach(visit); return; }
+    for (const [key, child] of Object.entries(entry)) {
+      assertGeneralAppSettingKey(key);
+      visit(child);
+    }
+  };
+  visit(parsed);
+  return value;
+}
+
 export const BROWSER_PREFERENCE_SYNC_POLICY = Object.freeze({
   syncToSqlite: false,
   storage: "browser-localStorage",

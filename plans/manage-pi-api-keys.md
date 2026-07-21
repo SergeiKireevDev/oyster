@@ -138,7 +138,7 @@ modal behavior remain keyboard- and mobile-accessible.
 
 ## 4. Enforce the Secret Boundary
 
-- [ ] Extend static and persistence guards to prove credential routes/services
+- [x] Extend static and persistence guards to prove credential routes/services
   never call the general settings repository, API-key fields remain forbidden
   in `app_settings`, and browser preference policy still excludes auth data.
 - [ ] Add tests that seed recognizable canary keys and assert they are absent

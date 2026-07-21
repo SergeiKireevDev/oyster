@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { applyMigrations } from "./migrations.mjs";
-import { assertGeneralAppSettingKey } from "./appSettings.mjs";
+import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appSettings.mjs";
 
 /**
  * Open the single pi-lot-ui application database owned by the stable server.
@@ -34,6 +34,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       list: () => database.prepare("SELECT key, value, updated_at FROM app_settings ORDER BY key").all().map((row) => ({ ...row })),
       set: (key, value, updatedAt) => {
         assertGeneralAppSettingKey(key);
+        assertGeneralAppSettingValue(value);
         return database.prepare(`
           INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
