@@ -313,7 +313,7 @@ const checkpointController = createCheckpointController({
   setRestoreBusy: setCheckpointRestoreBusy,
   refreshMarkers: refreshCheckpointMarkers,
   refreshTree: refreshTreeIfOpen,
-  switchRunner: switchToRunner,
+  switchRunner: (id) => getSessionRuntime().switchRunner(id),
   toast: addToast,
 });
 function handleCheckpointClick(event) { return checkpointController.freeze(event); }
