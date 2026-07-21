@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   createDialogService,
   emptyConfirmPrompt,
@@ -37,6 +37,14 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.match(option, /event\.key === "Enter"/);
   assert.match(option, /event\.key === "Escape"/);
   assert.match(overlays, /onclick=\{dialogs\.cancelOption\}/);
+});
+
+test("dialog adapters use the scoped service without module-level controller bridges", () => {
+  const adapters = readFileSync(new URL("../public/src/platform/createDialogAdapters.js", import.meta.url), "utf8");
+  assert.match(adapters, /deps\.dialogService\.(?:openText|openEditor|openConfirm|openOption)/);
+  assert.doesNotMatch(adapters, /configureDialogController|configureOptionPickerController/);
+  assert.equal(existsSync(new URL("../public/src/stores/dialogs.js", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../public/src/stores/optionPicker.js", import.meta.url)), false);
 });
 
 test("dialog service instances own independent prompt presentation state", () => {

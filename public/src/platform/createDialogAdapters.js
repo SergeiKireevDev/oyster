@@ -8,8 +8,6 @@ export function createDialogAdapters(deps) {
   const openEditor = (...args) => deps.dialogService.openEditor(...args);
   const openConfirm = (...args) => deps.dialogService.openConfirm(...args);
   const openOption = (...args) => deps.dialogService.openOption(...args);
-  const detachDialogController = deps.configureDialogController({});
-  const detachOptionController = deps.configureOptionPickerController({});
   const extensionUi = createExtensionUiAdapters({
     openOptionPicker: openOption, openTextPrompt: openText, openConfirmPrompt: openConfirm,
     openEditorPrompt: openEditor, setTitle: deps.setTitle,
@@ -25,7 +23,7 @@ export function createDialogAdapters(deps) {
     teardown() {
       if (tornDown) return;
       tornDown = true;
-      detachDialogController(); detachOptionController(); detachModalShell();
+      detachModalShell();
     },
   };
 }

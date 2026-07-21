@@ -5,18 +5,15 @@ import { createDialogService } from "../public/src/runtime/dialogService.js";
 
 function harness() {
   const calls = [];
-  let dialogController, optionController;
   const dialogs = createDialogService();
   const adapters = createDialogAdapters({
     dialogService: dialogs,
-    configureDialogController: (next) => { dialogController = next; return () => { calls.push(["detachDialog"]); dialogController = {}; }; },
-    configureOptionPickerController: (next) => { optionController = next; return () => { calls.push(["detachOption"]); optionController = {}; }; },
     openModal: (options) => calls.push(["open", options]), closeModal: () => calls.push(["close"]),
     updateModal: (options) => calls.push(["update", options]),
     findElement: () => ({ classList: { contains: (name) => name === "open" } }),
     setTitle: (title) => calls.push(["title", title]),
   });
-  return { adapters, dialogs, calls, get dialogController() { return dialogController; }, get optionController() { return optionController; } };
+  return { adapters, dialogs, calls };
 }
 
 test("dialog adapters compose modal shell prompts option picker and extension UI", async () => {
@@ -40,9 +37,6 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   first.adapters.teardown();
   first.dialogs.teardown();
   assert.equal(await pending, false);
-  assert.equal(first.calls.filter(([name]) => name.startsWith("detach")).length, 2);
-  assert.equal(first.dialogController.openText, undefined);
-  assert.equal(first.optionController.open, undefined);
   const second = harness();
   const input = second.adapters.input("Input", "", "fresh");
   second.dialogs.cancelText();

@@ -74,7 +74,7 @@ event, and remounting cannot invoke a disposed runtime.
 - [x] Move option-picker open, cancel, and choose handling into the dialog
   service. Update `OptionPickerModal.svelte` and its footer to consume context;
   preserve searchable, keyboard, cancel, and selected-index behavior in tests.
-- [ ] Rewire `createDialogAdapters.js` to use the instance dialog service and
+- [x] Rewire `createDialogAdapters.js` to use the instance dialog service and
   remove `configureDialogController`, `configureOptionPickerController`, and
   their module-level controller variables after an `rg` no-reference check.
 

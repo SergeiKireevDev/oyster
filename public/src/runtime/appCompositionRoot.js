@@ -30,9 +30,7 @@ import { setComposerTextValue } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { updateHublotManager } from "../stores/hublotManager.js";
 import { hublots, hublotsLoading } from "../stores/hublots.js";
-import { configureDialogController } from "../stores/dialogs.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
-import { configureOptionPickerController } from "../stores/optionPicker.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
@@ -376,8 +374,6 @@ const input = composerOperations.input;
 
 const dialogAdapters = createDialogAdapters({
   dialogService,
-  configureDialogController,
-  configureOptionPickerController,
   openModal: openModalState,
   closeModal: closeModalState,
   updateModal: updateModalState,
