@@ -1022,22 +1022,13 @@ function handleEvent(msg) {
       return;
     }
 
-    case "tool_execution_start": {
-      const card = toolCards.get(msg.toolCallId);
-      if (card) card.store.update((state) => ({ ...state, status: "running" }));
+    case "tool_execution_start":
+      toolCards.start(msg.toolCallId);
       return;
-    }
 
-    case "tool_execution_update": {
-      const card = toolCards.get(msg.toolCallId);
-      if (card && msg.partialResult) {
-        const text = typeof msg.partialResult === "string"
-          ? msg.partialResult
-          : toolResultText(msg.partialResult) || JSON.stringify(msg.partialResult);
-        card.store.update((state) => ({ ...state, resultText: text.slice(-20000) }));
-      }
+    case "tool_execution_update":
+      toolCards.updateResult(msg.toolCallId, msg.partialResult);
       return;
-    }
 
     case "tool_execution_end":
       finishToolCard(

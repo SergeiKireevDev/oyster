@@ -67,6 +67,19 @@ export function createToolCardRegistry({ createStore, resultText }) {
       }
       return card.store;
     },
+    start(toolCallId) {
+      const card = cards.get(toolCallId);
+      if (!card) return false;
+      card.store.update((state) => ({ ...state, status: "running" }));
+      return true;
+    },
+    updateResult(toolCallId, resultOrText) {
+      const card = cards.get(toolCallId);
+      if (!card || !resultOrText) return false;
+      const text = typeof resultOrText === "string" ? resultOrText : resultText(resultOrText) || JSON.stringify(resultOrText);
+      card.store.update((state) => ({ ...state, resultText: text.slice(-20000) }));
+      return true;
+    },
     finish(toolCallId, resultOrText, isError) {
       const card = cards.get(toolCallId);
       if (!card) return false;

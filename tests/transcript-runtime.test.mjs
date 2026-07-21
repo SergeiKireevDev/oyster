@@ -84,6 +84,8 @@ test("tool card registry assembles and completes streamed tool cards", () => {
   registry.ensure({ id: "tool-1", name: "read-again" });
   assert.equal(registry.get("tool-1").store, store);
   assert.equal(registry.has("tool-1"), true);
+  assert.equal(registry.updateResult("tool-1", { text: "partial" }), true);
+  assert.equal(registry.start("tool-1"), true);
   assert.equal(registry.finish("tool-1", { text: "done" }, false), true);
   assert.deepEqual(state, { toolCall: { id: "tool-1", name: "read-again" }, status: "ok", resultText: "done" });
   assert.equal(registry.finish("unknown", "ignored", false), false);
