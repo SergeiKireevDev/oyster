@@ -48,5 +48,20 @@ test("dialog resolver state is instance scoped and teardown cancels pending prom
   const input = second.adapters.input("Input", "", "fresh");
   second.dialogController.cancelText();
   assert.equal(await input, null);
+  const editor = second.adapters.editor("Editor", "", "draft");
+  second.dialogController.cancelEditor();
+  assert.equal(await editor, null);
+  const option = second.adapters.select("Select", ["one"]);
+  second.optionController.cancel();
+  assert.equal(await option, null);
+  const confirmation = second.adapters.confirm("Confirm", "Proceed?");
+  second.dialogController.answerConfirm(true);
+  assert.equal(await confirmation, true);
   second.adapters.teardown();
+
+  const third = harness();
+  const remountedEditor = third.adapters.editor("Editor", "", "new instance");
+  third.dialogController.submitEditor();
+  assert.equal(await remountedEditor, "new instance");
+  third.adapters.teardown();
 });
