@@ -1412,13 +1412,14 @@ function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHu
   return filePickerController.show({ path: sessionUi.workdir, onPick, onCancel, returnToHublot });
 }
 
-createFilePickerEventController({
+const filePickerEventController = createFilePickerEventController({
   windowTarget: window,
   useFolder: () => filePickerController.complete({ ...filePickerState, path: filePickerState.curDir }),
   browse: loadFilePicker,
   pick: (path) => filePickerController.complete({ ...filePickerState, path }),
   cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
-}).attach();
+});
+filePickerEventController.attach();
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
 function insertIntoComposer(text) {
@@ -2163,5 +2164,6 @@ export function teardownLegacyRuntime() {
   commandPaletteKeyboardController.detach();
   commandPaletteRunController.detach();
   checkpointTreeEventController.detach();
+  filePickerEventController.detach();
   connectionState.lost();
 }
