@@ -7,7 +7,7 @@ import { createRpcClient } from "./runtime/rpcClient.js";
 import { createLoggedSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createReplayBufferFlusher, createTailFirstTranscriptRenderer, createToolCardRegistry, createTranscriptPermalinkRuntime, createTranscriptScrollAdapter, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, flashTranscriptElement, focusTranscriptSnippet, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, createReplayEventGate, eventLifecycleLogged, processEventMessage, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
@@ -582,7 +582,7 @@ const replayEventGate = createReplayEventGate({
 });
 
 function handleEvent(msg) {
-  if (["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"].includes(msg.type)) {
+  if (eventLifecycleLogged(msg.type)) {
     lifecycleLog("sse:event", { type: msg.type, command: msg.command, sseId: msg._sseId, role: msg.message?.role, runner: msg.runner });
   }
   // While the SSE replay buffer is being re-delivered, ignore old transcript-

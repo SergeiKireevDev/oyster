@@ -1,5 +1,12 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
 /** Decide whether a replay-gated transcript event should be buffered or dispatched. */
+const LIFECYCLE_LOGGED_EVENT_TYPES = new Set(["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"]);
+
+/** Whether a stream event is important enough for lifecycle diagnostics. */
+export function eventLifecycleLogged(type) {
+  return LIFECYCLE_LOGGED_EVENT_TYPES.has(type);
+}
+
 const STATE_REFRESHING_COMMANDS = new Set(["set_model", "set_thinking_level", "cycle_thinking_level", "new_session", "switch_session", "compact", "set_session_name"]);
 
 /** Whether an RPC response requires a cheap authoritative state refresh. */

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createReplayEventGate, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createReplayEventGate, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,11 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("event lifecycle logging classification excludes noisy updates", () => {
+  assert.equal(eventLifecycleLogged("agent_end"), true);
+  assert.equal(eventLifecycleLogged("message_update"), false);
 });
 
 test("state refresh command classification excludes ordinary responses", () => {
