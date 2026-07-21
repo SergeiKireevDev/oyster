@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, runReconnectWatchdog } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -875,25 +875,19 @@ function connect({ replay = true } = {}) {
   const eventHandlers = { onopen: async () => {
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - connectStarted) });
     connectionState.opened();
-    if (skipTranscriptGate) {
-      refreshState();
-      return;
-    }
-    if (replaying) setReplaying(true, "canonical");
-    try {
-      lifecycleLog("connect:onopen:reloadTranscript:start");
-      // Always rebuild from the canonical transcript: the SSE replay buffer
-      // re-delivers recent events on reconnect, so rendering them onto the
-      // existing DOM would duplicate messages.
-      await reloadTranscript();
-      lifecycleLog("connect:onopen:reloadTranscript:done", { ms: Math.round(performance.now() - connectStarted) });
-    } catch (e) {
-      lifecycleLog("connect:onopen:reloadTranscript:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - connectStarted) });
-      // a failed reload must not wedge the stream in replay mode forever
-      setReplaying(false);
-      if (String(e.message).includes("unauthorized")) return;
-      toast(`init failed: ${e.message}`, "error");
-    }
+    lifecycleLog("connect:onopen:reloadTranscript:start");
+    await runCanonicalReload({
+      skipTranscriptGate,
+      isReplaying: () => replaying,
+      setReplaying,
+      refreshState,
+      reloadTranscript,
+      onError: (e) => {
+        lifecycleLog("connect:onopen:reloadTranscript:error", { error: e?.message ?? String(e), ms: Math.round(performance.now() - connectStarted) });
+        if (!String(e.message).includes("unauthorized")) toast(`init failed: ${e.message}`, "error");
+      },
+    });
+    lifecycleLog("connect:onopen:reloadTranscript:done", { ms: Math.round(performance.now() - connectStarted) });
   },
   onerror: () => {
     lifecycleLog("connect:onerror", { ms: Math.round(performance.now() - connectStarted) });

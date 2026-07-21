@@ -1,4 +1,11 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+export async function runCanonicalReload({ skipTranscriptGate, isReplaying, setReplaying, refreshState, reloadTranscript, onError }) {
+  if (skipTranscriptGate) { refreshState(); return; }
+  if (isReplaying()) setReplaying(true, "canonical");
+  try { await reloadTranscript(); }
+  catch (error) { setReplaying(false); onError(error); }
+}
+
 export function createConnectionStateTransitions({ setConnected, setStatus }) {
   return {
     opened() { setConnected(true); setStatus("connected"); },
