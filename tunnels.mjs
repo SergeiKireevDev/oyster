@@ -17,19 +17,37 @@
  *     workdir:   string  – project active when the tunnel was created
  *     createdAt: string  – ISO timestamp
  *     proc:      ChildProcess (never serialized to clients)
+ *     agentProc: ChildProcess? – background pi agent setting the port up
+ *     servicePid: number? – pid listening on the port (killed on close)
  *   }
  */
 
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
 const URL_TIMEOUT_MS = 20_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
 
-/** Client-safe view of a tunnel (no process handle). */
+/** Client-safe view of a tunnel (no process handles). */
 export function tunnelInfo(t) {
-  const { proc, ...info } = t;
+  const { proc, agentProc, ...info } = t;
   return info;
+}
+
+/** PIDs listening on a local TCP port (excluding this server). */
+export function pidsOnPort(port) {
+  try {
+    const out = execFileSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+    return out.split("\n")
+      .map((s) => Number(s.trim()))
+      .filter((p) => Number.isInteger(p) && p > 1 && p !== process.pid);
+  } catch {
+    return []; // lsof exits 1 when nothing listens
+  }
+}
+
+function killPid(pid, signal = "SIGTERM") {
+  try { process.kill(pid, signal); return true; } catch { return false; }
 }
 
 export function listTunnels(state) {
@@ -126,10 +144,31 @@ export function openTunnel(state, { port, label = null, sessionId = null }) {
   });
 }
 
-/** Close one tunnel by id. Returns its info, or null if unknown. */
+/** Close one tunnel by id: kills the cloudflared process, the background
+ *  agent (if still running), and whatever is serving the port. Returns its
+ *  info, or null if unknown. */
 export function closeTunnel(state, id) {
   const t = state.tunnels?.get(id);
   if (!t) return null;
+
+  // 1. the service on the port: tracked pid first, plus a live lookup in case
+  //    it forked/respawned under a different pid
+  const pids = new Set(pidsOnPort(t.port));
+  if (t.servicePid) pids.add(t.servicePid);
+  for (const pid of pids) {
+    if (killPid(pid)) console.log(`[pi-ui] killed interface service pid ${pid} (port ${t.port})`);
+    setTimeout(() => killPid(pid, "SIGKILL"), 3000).unref();
+  }
+
+  // 2. the background agent, if it is still working
+  if (t.agentProc && t.agentProc.exitCode === null && !t.agentProc.killed) {
+    console.log(`[pi-ui] killing interface agent pid ${t.agentProc.pid} (port ${t.port})`);
+    t.agentProc.kill("SIGTERM");
+    const ap = t.agentProc;
+    setTimeout(() => { if (ap.exitCode === null && !ap.killed) ap.kill("SIGKILL"); }, 3000).unref();
+  }
+
+  // 3. the cloudflared tunnel itself
   t.proc.kill("SIGTERM");
   setTimeout(() => {
     if (t.proc.exitCode === null && !t.proc.killed) t.proc.kill("SIGKILL");

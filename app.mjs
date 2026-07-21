@@ -31,7 +31,8 @@
 
 import { spawn } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
-import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync } from "node:fs";
+import { createConnection } from "node:net";
+import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
@@ -40,7 +41,7 @@ import { fileURLToPath } from "node:url";
 // import tunnels.mjs with a cache-busting query so hot reloads of app.mjs
 // pick up the current version instead of a stale cached module
 const TUNNELS_PATH = join(dirname(fileURLToPath(import.meta.url)), "tunnels.mjs");
-const { listTunnels, openTunnel, closeTunnel, closeAllTunnels } =
+const { listTunnels, openTunnel, closeTunnel, closeAllTunnels, pidsOnPort } =
   await import(`./tunnels.mjs?v=${statSync(TUNNELS_PATH).mtimeMs}`);
 
 export function init(state) {
@@ -89,6 +90,11 @@ export function init(state) {
     try { msg = JSON.parse(line); } catch { return; }
     if (msg.type === "agent_start") { runner.busy = true; runnersChanged(); }
     else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(); requestState(runner); }
+    else if (msg.type === "response" && msg.id === runner.resumeId) {
+      // session resume finished (success or not): deliver held-back commands
+      finishResume(runner);
+      if (msg.success) requestState(runner);
+    }
     else if (msg.type === "response" && msg.success) {
       if (msg.command === "get_state" && msg.data) {
         const d = msg.data;
@@ -108,6 +114,18 @@ export function init(state) {
   let srvSeq = 0;
   function requestState(runner) {
     sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "get_state" }, { autostart: false });
+  }
+
+  /** flush commands that were held back while a session resume was in flight */
+  function finishResume(runner) {
+    if (!runner.resumeId) return;
+    runner.resumeId = null;
+    clearTimeout(runner.resumeTimer);
+    const queued = runner.resumeQueue ?? [];
+    runner.resumeQueue = [];
+    for (const obj of queued) {
+      if (runner.proc?.stdin.writable) runner.proc.stdin.write(JSON.stringify(obj) + "\n");
+    }
   }
 
   function spawnRunner({ dir, sessionPath = null }) {
@@ -174,11 +192,19 @@ export function init(state) {
     });
 
     // resume the runner's session after a restart (fresh runners with a
-    // requested sessionPath also land here)
+    // requested sessionPath also land here). pi handles a prompt arriving
+    // right behind switch_session concurrently, and the switch then discards
+    // the run — so hold every other command back until the resume completes.
     if (runner.sessionFile) {
-      sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "switch_session", sessionPath: runner.sessionFile }, { autostart: false });
+      runner.resumeId = `_srv-${++srvSeq}`;
+      proc.stdin.write(JSON.stringify({ id: runner.resumeId, type: "switch_session", sessionPath: runner.sessionFile }) + "\n");
+      // safety valve: never hold commands forever if the response goes missing
+      clearTimeout(runner.resumeTimer);
+      runner.resumeTimer = setTimeout(() => finishResume(runner), 15000);
+      runner.resumeTimer.unref?.();
+    } else {
+      requestState(runner);
     }
-    requestState(runner);
     runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
     runnersChanged();
   }
@@ -200,6 +226,11 @@ export function init(state) {
   function sendToRunner(runner, obj, { autostart = true } = {}) {
     if (!runner.proc && autostart) startRunner(runner);
     if (!runner.proc || !runner.proc.stdin.writable) return false;
+    if (runner.resumeId) {
+      // a session resume is in flight; deliver after it completes
+      (runner.resumeQueue ??= []).push(obj);
+      return true;
+    }
     runner.proc.stdin.write(JSON.stringify(obj) + "\n");
     return true;
   }
@@ -244,6 +275,97 @@ export function init(state) {
     console.log("[pi-ui] retiring pre-runner pi process (multi-runner migration)");
     try { state.pi.kill("SIGTERM"); } catch {}
     state.pi = null;
+  }
+
+  // ---------------------------------------------------------------- background interface agents
+
+  /** Spawn a one-shot background pi agent (`pi -p`) that sets up whatever the
+   *  interface should expose, and notify clients when the port answers. */
+  function spawnInterfaceAgent(tunnel, brief) {
+    const prompt =
+      `A public tunnel ${tunnel.url} forwards to http://localhost:${tunnel.port} on this machine.\n\n` +
+      `Make the following available on local port ${tunnel.port} so it is reachable through the tunnel:\n${brief}\n\n` +
+      `Whatever serves it must keep running after you exit: start it detached in the background ` +
+      `(e.g. nohup … & disown) and verify it responds on port ${tunnel.port} before finishing.`;
+    console.log(`[pi-ui] spawning background agent for interface :${tunnel.port} (${tunnel.url})`);
+    const proc = spawn(config.PI_BIN, ["-p", prompt], {
+      cwd: state.currentDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    tunnel.agentProc = proc; // so deleting the interface can kill it
+    let tail = "";
+    const onOut = (c) => { tail = (tail + String(c)).slice(-1500); };
+    proc.stdout.on("data", onOut);
+    proc.stderr.on("data", onOut);
+
+    let done = false;
+    let agentExited = false;
+    const started = Date.now();
+    const TIMEOUT_MS = 5 * 60 * 1000;
+
+    /** the local port answering is not enough: the cloudflare edge can keep
+     *  returning 502 for a few seconds after — wait until the PUBLIC url
+     *  responds so previews don't capture an error page */
+    async function publicUrlUp() {
+      for (let i = 0; i < 15; i++) {
+        try {
+          const r = await fetch(tunnel.url, { method: "HEAD", signal: AbortSignal.timeout(3000) });
+          if (r.status < 500) return true;
+        } catch {}
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      return false; // give up; report ready anyway (edge may just be slow)
+    }
+
+    const finish = (ok, error) => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      if (ok) {
+        // remember who serves the port so closing the interface can kill it
+        const pids = pidsOnPort(tunnel.port);
+        if (pids.length) {
+          tunnel.servicePid = pids[0];
+          console.log(`[pi-ui] interface :${tunnel.port} served by pid ${tunnel.servicePid}`);
+        }
+      }
+      serverEvent(ok
+        ? { type: "interface_ready", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label } }
+        : { type: "interface_failed", tunnel: { id: tunnel.id, port: tunnel.port, url: tunnel.url, label: tunnel.label }, error });
+    };
+
+    const checkPort = () => new Promise((resolvePromise) => {
+      const sock = createConnection({ host: "127.0.0.1", port: tunnel.port, timeout: 1500 });
+      sock.on("connect", () => { sock.destroy(); resolvePromise(true); });
+      sock.on("error", () => resolvePromise(false));
+      sock.on("timeout", () => { sock.destroy(); resolvePromise(false); });
+    });
+
+    let confirming = false;
+    const poll = setInterval(async () => {
+      if (done || confirming) return;
+      if (await checkPort()) {
+        confirming = true;
+        await publicUrlUp();
+        finish(true);
+        return;
+      }
+      // give a just-exited agent a short grace period before declaring failure
+      if (agentExited && Date.now() - agentExitAt > 10_000) {
+        finish(false, `agent finished but nothing answers on port ${tunnel.port}: ${tail.trim().split("\n").pop() ?? ""}`);
+      }
+      if (Date.now() - started > TIMEOUT_MS) finish(false, "timed out waiting for the interface to come up");
+    }, 2000);
+
+    let agentExitAt = 0;
+    proc.on("exit", (code) => {
+      agentExited = true;
+      agentExitAt = Date.now();
+      console.log(`[pi-ui] interface agent for :${tunnel.port} exited (code=${code})`);
+    });
+    proc.on("error", (err) => finish(false, `failed to spawn background agent: ${err.message}`));
+    proc.unref();
   }
 
   // ---------------------------------------------------------------- auth
@@ -728,8 +850,28 @@ export function init(state) {
           }
         }
         runnersChanged();
+        // close any interfaces bound to this session (kills service,
+        // background agent and cloudflared — see closeTunnel)
+        let sessionId = null;
+        try {
+          for (const line of readFileSync(target, "utf8").split("\n")) {
+            if (!line.trim()) continue;
+            const e = JSON.parse(line);
+            if (e.type === "session") { sessionId = e.id; break; }
+          }
+        } catch {}
+        const closedInterfaces = [];
+        if (sessionId) {
+          for (const t of [...(state.tunnels?.values() ?? [])]) {
+            if (t.sessionId === sessionId) {
+              closeTunnel(state, t.id);
+              closedInterfaces.push(t.port);
+              console.log(`[pi-ui] closed interface :${t.port} (session ${sessionId} deleted)`);
+            }
+          }
+        }
         unlinkSync(target);
-        json(res, 200, { deleted: target });
+        json(res, 200, { deleted: target, closedInterfaces });
       } catch (e) {
         json(res, 500, { error: `failed to delete session: ${e.message}` });
       }
@@ -820,6 +962,53 @@ export function init(state) {
       return;
     }
 
+    // ---- built-in file explorer: download / read / save arbitrary files
+
+    if (req.method === "GET" && url.pathname === "/file-download") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      let st;
+      try { st = statSync(target); } catch (e) { json(res, 404, { error: e.message }); return; }
+      if (!st.isFile()) { json(res, 400, { error: "not a file" }); return; }
+      res.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-length": st.size,
+        "content-disposition": `attachment; filename="${target.split("/").pop().replace(/"/g, "'")}"`,
+      });
+      createReadStream(target).pipe(res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/file-content") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      let st;
+      try { st = statSync(target); } catch (e) { json(res, 404, { error: e.message }); return; }
+      if (!st.isFile()) { json(res, 400, { error: "not a file" }); return; }
+      if (st.size > 2 * 1024 * 1024) { json(res, 413, { error: `file too large to edit in browser (${st.size} bytes)` }); return; }
+      const buf = readFileSync(target);
+      if (buf.includes(0)) { json(res, 415, { error: "binary file — download it instead" }); return; }
+      json(res, 200, { path: target, content: buf.toString("utf8") });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/file-save") {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const target = resolve(String(body?.path ?? ""));
+      if (typeof body?.content !== "string") { json(res, 400, { error: "content must be a string" }); return; }
+      let dirOk = false;
+      try { dirOk = statSync(dirname(target)).isDirectory(); } catch {}
+      if (!dirOk) { json(res, 400, { error: `no such directory: ${dirname(target)}` }); return; }
+      try {
+        writeFileSync(target, body.content, "utf8");
+      } catch (e) {
+        json(res, 500, { error: `save failed: ${e.message}` });
+        return;
+      }
+      console.log(`[pi-ui] file saved via explorer: ${target}`);
+      json(res, 200, { saved: target, bytes: Buffer.byteLength(body.content) });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/mkdir") {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
@@ -884,16 +1073,36 @@ export function init(state) {
           while (used.has(state.nextIfacePort)) state.nextIfacePort++;
           port = state.nextIfacePort++;
         }
+        const brief = body?.brief ? String(body.brief) : null;
         try {
           const tunnel = await openTunnel(state, {
             port,
             label: body?.label ? String(body.label).slice(0, 200) : null,
             sessionId: body?.sessionId ? String(body.sessionId).slice(0, 100) : null,
           });
-          json(res, 201, { tunnel });
+          if (brief) {
+            const live = state.tunnels.get(tunnel.id);
+            spawnInterfaceAgent(live ?? tunnel, brief);
+          }
+          json(res, 201, { tunnel, agent: !!brief });
         } catch (e) {
           json(res, 502, { error: e.message });
         }
+        return;
+      }
+      if (req.method === "PATCH") {
+        // rebind an interface to another session (e.g. opened by a one-shot
+        // agent on behalf of a UI session)
+        const body = await readJsonBody(req, res);
+        if (body === undefined) return;
+        const t = state.tunnels.get(String(body?.id ?? ""));
+        if (!t) {
+          json(res, 404, { error: "no such interface" });
+          return;
+        }
+        t.sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
+        state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
+        json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
         return;
       }
       if (req.method === "DELETE") {
@@ -908,6 +1117,8 @@ export function init(state) {
       json(res, 405, { error: "method not allowed" });
       return;
     }
+
+
 
     if (req.method === "POST" && url.pathname === "/restart") {
       const runner = runnerFromReq(url);

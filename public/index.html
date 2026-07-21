@@ -154,6 +154,13 @@
   }
   .iface-block .cap .x { cursor: pointer; color: var(--muted); padding: 0 3px; }
   .iface-block .cap .x:hover { color: var(--red); }
+  /* interface blocks laid out as a grid inside the Interfaces modal */
+  .iface-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 4px;
+  }
   #ifaceAdd {
     border: 2px dashed var(--border);
     border-radius: 10px;
@@ -166,7 +173,26 @@
     user-select: none;
   }
   #ifaceAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
-  @media (max-width: 760px) { #ifaces { display: none; } }
+  /* on small screens the sidebar becomes a slide-over drawer, toggled by a
+     header chip that only appears there */
+  #ifaceChip, #cfgChip { display: none; }
+  #cfgChip { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 760px) {
+    /* model + thinking collapse into one combined chip */
+    #modelChip, #thinkChip { display: none; }
+    #cfgChip { display: inline-block; }
+    #ifaces { display: none; }
+    #ifaces.open {
+      display: flex;
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: min(78vw, 320px);
+      z-index: 55;
+      box-shadow: -8px 0 30px rgba(0,0,0,.5);
+      border-left: 1px solid var(--border);
+    }
+    #ifaceChip { display: inline-flex; }
+  }
   #messages {
     max-width: 860px;
     margin: 0 auto;
@@ -404,15 +430,21 @@
   }
   #modal .m-title { padding: 14px 16px 6px; font-weight: 600; }
   #modal .m-body { padding: 6px 16px 14px; overflow-y: auto; }
-  #modal .m-body input[type=text] {
+  #modal .m-body input[type=text],
+  #modal .m-body input[type=number],
+  #modal .m-body textarea {
     width: 100%;
-    background: var(--panel);
+    box-sizing: border-box;
+    background: var(--panel-2);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 12px;
     color: var(--text);
     font: inherit;
-    padding: 8px 10px;
+    padding: 9px 12px;
+    outline: none;
   }
+  #modal .m-body input:focus,
+  #modal .m-body textarea:focus { border-color: var(--accent-dim); }
   #modal .m-option {
     display: block; width: 100%; text-align: left;
     background: var(--panel);
@@ -623,6 +655,8 @@
   <span class="dot" id="connDot"></span>
   <span class="title" id="sessionTitle">pi remote</span>
   <span class="spacer"></span>
+  <span class="chip" id="ifaceChip" title="Show interfaces">⧉</span>
+  <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
   <span class="chip" id="menuBtn">☰</span>
@@ -632,7 +666,6 @@
   <button data-action="newSession">New session</button>
   <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
-  <button data-action="search">Search sessions…</button>
   <button data-action="tree">Conversation tree…</button>
   <button data-action="tunnels">Interfaces…</button>
   <button data-action="compact">Compact context</button>
@@ -1200,6 +1233,7 @@ function applyState(s) {
   $("sessionTitle").textContent = s.sessionName || "pi remote";
   $("modelChip").textContent = s.model ? s.model.id : "no model";
   $("thinkChip").textContent = `think: ${s.thinkingLevel}`;
+  $("cfgChip").textContent = `${s.model ? s.model.id : "no model"} · ${s.thinkingLevel}`;
   setBusy(s.isStreaming || s.isCompacting);
   $("stateInfo").textContent =
     `${s.model ? s.model.provider : "?"} · ${s.messageCount} msgs` +
@@ -1447,11 +1481,14 @@ function handleEvent(msg) {
       return;
 
     case "pi_exit":
+      // replayed copies describe past restarts, not the current process
+      if (replaying) return;
       toast("pi process exited — it will restart on next message", "warning");
       setBusy(false);
       return;
 
     case "pi_started":
+      if (replaying) return;
       if (msg.startCount > 1) {
         toast("pi process restarted");
         refreshState();
@@ -1459,6 +1496,7 @@ function handleEvent(msg) {
       return;
 
     case "pi_error":
+      if (replaying) return;
       toast(`pi spawn error: ${msg.error}`, "error");
       return;
 
@@ -1484,6 +1522,24 @@ function handleEvent(msg) {
         });
         loadInterfaces();
       }
+      return;
+
+    case "interface_ready":
+      if (!replaying) {
+        toast(`interface ready: ${msg.tunnel?.url}`, "info", {
+          onClick: () => window.open(msg.tunnel?.url, "_blank"),
+        });
+        // rebuild previews now, then again shortly after: recreating the
+        // iframe is the only way to reload a possibly-captured error page,
+        // and the edge can lag a moment behind the ready signal
+        loadInterfaces();
+        setTimeout(loadInterfaces, 5000);
+        setTimeout(loadInterfaces, 15000);
+      }
+      return;
+
+    case "interface_failed":
+      if (!replaying) toast(`interface failed: ${msg.error ?? "unknown error"}`, "error");
       return;
 
     case "tunnel_closed":
@@ -1609,8 +1665,6 @@ menu.addEventListener("click", async (e) => {
       await showFolderBrowser();
     } else if (action === "sessions") {
       await showSessionPicker();
-    } else if (action === "search") {
-      await showSearch();
     } else if (action === "tree") {
       await showConversationTree();
     } else if (action === "tunnels") {
@@ -1859,6 +1913,155 @@ async function sendAgentMessage(text) {
   }
 }
 
+// ------------------------------------------------------------ file explorer
+// Built-in "interface": same modal style as the attach-file picker, but with
+// per-file actions — download the file, or edit it right in the modal.
+
+async function showFileExplorer() {
+  const body = $("mBody"), actions = $("mActions");
+  let startPath = localStorage.getItem("pi_fx_dir") || workdir;
+  let curPath = startPath;
+
+  async function load(path) {
+    const q = path ? `&path=${encodeURIComponent(path)}` : "";
+    const res = await fetch(`/browse?token=${encodeURIComponent(token)}&files=1${q}`);
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || "cannot open folder", "error");
+      if (path !== workdir) return load(workdir);
+      return;
+    }
+    curPath = data.path;
+    localStorage.setItem("pi_fx_dir", data.path);
+    $("mTitle").textContent = "\u{1F4C1} File explorer";
+    body.innerHTML = "";
+    const pathEl = document.createElement("div");
+    pathEl.className = "m-path";
+    pathEl.textContent = data.path;
+    body.appendChild(pathEl);
+
+    const addDir = (label, cls, target) => {
+      const b = document.createElement("button");
+      b.className = `m-option dir ${cls}`;
+      b.textContent = label;
+      b.addEventListener("click", () => load(target));
+      body.appendChild(b);
+    };
+    if (data.path !== data.home) addDir("home", "homeDir", data.home);
+    if (data.workdir && data.path !== data.workdir) addDir("workdir", "", data.workdir);
+    if (data.parent) addDir("..", "up", data.parent);
+    for (const name of data.dirs) {
+      addDir(name, "", data.path.replace(/\/$/, "") + "/" + name);
+    }
+    for (const f of data.files ?? []) {
+      const full = data.path.replace(/\/$/, "") + "/" + f.name;
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:6px;";
+      const b = document.createElement("button");
+      b.className = "m-option file";
+      b.style.cssText = "flex:1;min-width:0;";
+      b.textContent = f.name;
+      const size = document.createElement("span");
+      size.className = "f-size";
+      size.textContent = fmtSize(f.size);
+      b.appendChild(size);
+      b.title = full;
+      b.addEventListener("click", () => editFile(full));
+      const dl = document.createElement("a");
+      dl.className = "chip";
+      dl.textContent = "\u2B07";
+      dl.title = `download ${f.name}`;
+      dl.href = `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(full)}`;
+      dl.setAttribute("download", f.name);
+      dl.style.textDecoration = "none";
+      const ed = document.createElement("span");
+      ed.className = "chip";
+      ed.textContent = "\u270E";
+      ed.title = `edit ${f.name}`;
+      ed.addEventListener("click", () => editFile(full));
+      row.append(b, dl, ed);
+      body.appendChild(row);
+    }
+    if (!data.dirs.length && !(data.files ?? []).length) {
+      const empty = document.createElement("div");
+      empty.className = "m-path";
+      empty.textContent = "(empty folder)";
+      body.appendChild(empty);
+    }
+
+    actions.innerHTML = "";
+    const back = document.createElement("span");
+    back.className = "chip";
+    back.textContent = "\u2190 Interfaces";
+    back.addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
+    const closeBtn = document.createElement("span");
+    closeBtn.className = "chip";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeModal);
+    actions.append(back, closeBtn);
+  }
+
+  async function editFile(path) {
+    const res = await fetch(`/file-content?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || "cannot open file", "error"); return; }
+
+    $("mTitle").textContent = `\u270E ${path.split("/").pop()}`;
+    body.innerHTML = "";
+    const pathEl = document.createElement("div");
+    pathEl.className = "m-path";
+    pathEl.textContent = path;
+    const ta = document.createElement("textarea");
+    ta.value = data.content;
+    ta.spellcheck = false;
+    ta.style.cssText = "width:100%;height:50vh;resize:vertical;font:12.5px/1.5 ui-monospace,monospace;white-space:pre;tab-size:4;box-sizing:border-box;margin-top:6px;";
+    body.append(pathEl, ta);
+
+    actions.innerHTML = "";
+    const save = document.createElement("span");
+    save.className = "chip";
+    save.textContent = "Save";
+    save.addEventListener("click", async () => {
+      save.textContent = "Saving\u2026";
+      try {
+        const r = await fetch(`/file-save?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path, content: ta.value }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `save failed (${r.status})`);
+        toast(`saved ${path.split("/").pop()} (${d.bytes} bytes)`);
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        save.textContent = "Save";
+      }
+    });
+    ta.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save.click(); }
+    });
+    const dl = document.createElement("a");
+    dl.className = "chip";
+    dl.textContent = "Download";
+    dl.href = `/file-download?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`;
+    dl.setAttribute("download", path.split("/").pop());
+    dl.style.textDecoration = "none";
+    const back = document.createElement("span");
+    back.className = "chip";
+    back.textContent = "\u2190 Back";
+    back.addEventListener("click", () => load(curPath));
+    const closeBtn = document.createElement("span");
+    closeBtn.className = "chip";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeModal);
+    actions.append(save, dl, back, closeBtn);
+  }
+
+  overlay.classList.add("open");
+  await load(startPath);
+}
+
 // Tunnels are bound to the session they were opened in; the modal and the
 // interface sidebar show the current session's tunnels by default, with a
 // toggle to see every session's.
@@ -1870,7 +2073,7 @@ function tunnelVisible(t) {
 }
 
 // new-tunnel form values survive modal re-renders (e.g. attach-file detour)
-const tunnelForm = { desc: "", notify: true };
+const tunnelForm = { desc: "" };
 
 async function showTunnels() {
   const body = $("mBody"), actions = $("mActions");
@@ -1883,6 +2086,20 @@ async function showTunnels() {
     $("mTitle").textContent = tunnelScopeAll ? "Interfaces — all sessions" : "Interfaces — this session";
     body.innerHTML = "";
 
+    // ---- built-in interfaces (always on top)
+    const fxRow = document.createElement("div");
+    fxRow.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 0 10px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;";
+    const fxBtn = document.createElement("button");
+    fxBtn.className = "btn";
+    fxBtn.textContent = "\u{1F4C1} File explorer";
+    const fxDesc = document.createElement("span");
+    fxDesc.className = "m-path";
+    fxDesc.style.cssText = "flex:1;min-width:0;";
+    fxDesc.textContent = "built-in — browse server files, download or edit any of them";
+    fxBtn.addEventListener("click", () => showFileExplorer().catch((e) => toast(e.message, "error")));
+    fxRow.append(fxBtn, fxDesc);
+    body.appendChild(fxRow);
+
     // ---- active tunnels
     if (!visible.length) {
       const empty = document.createElement("div");
@@ -1894,33 +2111,50 @@ async function showTunnels() {
           : "(no active interfaces)";
       body.appendChild(empty);
     }
-    for (const t of visible) {
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 0;";
-      const link = document.createElement("a");
-      link.href = t.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = `${t.url} → :${t.port}`;
-      link.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-      const meta = document.createElement("span");
-      meta.className = "m-path";
-      meta.style.cssText = "font-size:11px;white-space:nowrap;max-width:35%;overflow:hidden;text-overflow:ellipsis;";
-      const bits = [t.label];
-      if (tunnelScopeAll && t.sessionId) {
-        bits.push(t.sessionId === state?.sessionId ? "this session" : `session ${String(t.sessionId).slice(0, 8)}`);
+    if (visible.length) {
+      const grid = document.createElement("div");
+      grid.className = "iface-grid";
+      for (const t of visible) {
+        const block = document.createElement("div");
+        block.className = "iface-block";
+
+        const preview = document.createElement("div");
+        preview.className = "preview";
+        const frame = document.createElement("iframe");
+        frame.src = t.url;
+        frame.loading = "lazy";
+        frame.sandbox = "allow-scripts allow-same-origin";
+        const hit = document.createElement("div");
+        hit.className = "hit";
+        hit.title = `open ${t.url}`;
+        hit.addEventListener("click", () => window.open(t.url, "_blank", "noopener"));
+        preview.append(frame, hit);
+
+        const cap = document.createElement("div");
+        cap.className = "cap";
+        const lbl = document.createElement("span");
+        lbl.className = "lbl";
+        const bits = [`:${t.port}`, t.label];
+        if (tunnelScopeAll && t.sessionId) {
+          bits.push(t.sessionId === state?.sessionId ? "this session" : `session ${String(t.sessionId).slice(0, 8)}`);
+        }
+        lbl.textContent = bits.filter(Boolean).join(" · ");
+        lbl.title = `${t.url}\n${t.label ?? ""}`;
+        const x = document.createElement("span");
+        x.className = "x";
+        x.textContent = "✕";
+        x.title = "close this interface";
+        x.addEventListener("click", async () => {
+          await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+          await load();
+          loadInterfaces();
+        });
+        cap.append(lbl, x);
+
+        block.append(preview, cap);
+        grid.appendChild(block);
       }
-      meta.textContent = bits.filter(Boolean).join(" · ");
-      const close = document.createElement("span");
-      close.className = "chip";
-      close.textContent = "✕";
-      close.title = "close this interface";
-      close.addEventListener("click", async () => {
-        await fetch(`/tunnels?token=${encodeURIComponent(token)}&id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
-        await load();
-      });
-      row.append(link, meta, close);
-      body.appendChild(row);
+      body.appendChild(grid);
     }
 
     // ---- new tunnel form
@@ -1952,45 +2186,31 @@ async function showTunnels() {
       }, reopen).catch((e) => toast(e.message, "error"));
     });
     descRow.append(descInp, attach);
-    const notifyRow = document.createElement("label");
-    notifyRow.style.cssText = "display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;";
-    const notify = document.createElement("input");
-    notify.type = "checkbox";
-    notify.checked = tunnelForm.notify;
-    notify.addEventListener("change", () => { tunnelForm.notify = notify.checked; });
-    notifyRow.append(notify, document.createTextNode("brief the agent (sends a message to the session)"));
     const create = document.createElement("button");
     create.className = "btn";
     create.textContent = "Open interface";
     create.addEventListener("click", async () => {
       const desc = descInp.value.trim();
-      if (notify.checked && !desc) { descInp.focus(); toast("describe what to expose, or untick the briefing", "warning"); return; }
+      if (!desc) { descInp.focus(); toast("describe what the interface should expose", "warning"); return; }
       create.disabled = true;
       create.textContent = "Opening…";
       try {
-        // no port sent: the server allocates the next free one from 3000 up
+        // no port sent: the server allocates the next free one from 3000 up;
+        // a `brief` makes the server hand the setup to a background pi agent
         const res2 = await fetch(`/tunnels?token=${encodeURIComponent(token)}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ label: desc || null, sessionId: state?.sessionId ?? null }),
+          body: JSON.stringify({
+            label: desc || null,
+            sessionId: state?.sessionId ?? null,
+            brief: desc,
+          }),
         });
         const d2 = await res2.json().catch(() => ({}));
         if (!res2.ok) { toast(d2.error || `failed (${res2.status})`, "error"); return; }
-        const port = d2.tunnel.port;
-        tunnelForm.desc = ""; tunnelForm.notify = true;
-        if (notify.checked) {
-          closeModal();
-          const title = desc.split("\n")[0].slice(0, 80);
-          await sendAgentMessage(
-            `Opening interface: ${title}\n` +
-            `I opened a public interface for this session: ${d2.tunnel.url} → http://localhost:${port}\n\n` +
-            `Please make the following available on local port ${port} so it is reachable through the interface:\n${desc}\n\n` +
-            `Keep whatever serves it running in the background. Tell me when ${d2.tunnel.url} is ready to open.`
-          );
-        } else {
-          toast(`interface up: ${d2.tunnel.url}`);
-          await load();
-        }
+        tunnelForm.desc = "";
+        closeModal();
+        toast(`interface opening at ${d2.tunnel.url} — background agent is setting it up…`);
       } catch (e) {
         toast(`interface failed: ${e.message}`, "error");
       } finally {
@@ -1998,7 +2218,7 @@ async function showTunnels() {
         create.textContent = "Open interface";
       }
     });
-    form.append(heading, descRow, notifyRow, create);
+    form.append(heading, descRow, create);
     body.appendChild(form);
 
     actions.innerHTML = "";
@@ -2018,6 +2238,7 @@ async function showTunnels() {
     actions.append(scope, closeBtn);
   }
 
+  $("modal").classList.add("wide");
   overlay.classList.add("open");
   await load();
 }
@@ -2025,6 +2246,20 @@ async function showTunnels() {
 // ------------------------------------------------------------ interface sidebar
 
 $("ifaceAdd").addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
+
+// mobile: toggle the interfaces sidebar as a slide-over drawer
+$("ifaceChip").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("ifaces").classList.toggle("open");
+  if (open) loadInterfaces(); // fresh previews when opening
+});
+// tap outside the drawer closes it
+document.addEventListener("click", (e) => {
+  const ifaces = $("ifaces");
+  if (ifaces.classList.contains("open") && !ifaces.contains(e.target)) {
+    ifaces.classList.remove("open");
+  }
+});
 
 async function loadInterfaces() {
   if (!token) return;
@@ -2110,10 +2345,158 @@ async function showSessionPicker() {
     }
   };
 
+  // folders for the search scope selector and the "other folders" section
+  let folders = [], currentFolder = null;
+  try {
+    const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}`);
+    const d = await r.json();
+    if (r.ok) { folders = d.folders; currentFolder = d.current; }
+  } catch {}
+
   const chosen = await new Promise((resolve) => {
     $("mTitle").textContent = "Sessions";
     const body = $("mBody");
     body.innerHTML = "";
+
+    // ---- search bar (typing swaps the list for search results)
+    const row = document.createElement("div");
+    row.className = "search-row";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.placeholder = "search sessions…";
+    const scopeSel = document.createElement("select");
+    scopeSel.innerHTML = `
+      <option value="session">This session</option>
+      <option value="folder">Folder…</option>
+      <option value="all" selected>All sessions</option>`;
+    row.append(inp, scopeSel);
+
+    const folderRow = document.createElement("div");
+    folderRow.className = "search-row";
+    const folderSel = document.createElement("select");
+    folderSel.style.maxWidth = "100%";
+    folderSel.style.flex = "1";
+    for (const f of folders) {
+      const o = document.createElement("option");
+      o.value = f.dir;
+      o.textContent = `${f.label} (${f.count})`;
+      if (f.dir === currentFolder) o.selected = true;
+      folderSel.appendChild(o);
+    }
+    folderRow.appendChild(folderSel);
+
+    const status = document.createElement("div");
+    status.className = "m-path";
+    const resultsEl = document.createElement("div");
+    const listEl = document.createElement("div"); // the plain sessions list
+
+    function searching() { return inp.value.trim().length >= 2; }
+    function updateView() {
+      listEl.style.display = searching() ? "none" : "";
+      status.style.display = searching() ? "" : "none";
+      resultsEl.style.display = searching() ? "" : "none";
+      folderRow.style.display = searching() && scopeSel.value === "folder" ? "" : "none";
+      if (!searching()) resultsEl.innerHTML = "";
+    }
+
+    let runSeq = 0; // ignore out-of-order responses from stale keystrokes
+    async function run() {
+      const seq = ++runSeq;
+      updateView();
+      if (!searching()) return;
+      const q = inp.value.trim();
+      const scope = scopeSel.value;
+      let path = "";
+      if (scope === "folder") path = folderSel.value ?? "";
+      if (scope === "session") {
+        const cur = sessions.find((s) => s.id === currentId) ?? sessions[0];
+        if (!cur) { status.textContent = "no saved session to search"; return; }
+        path = cur.path;
+      }
+      status.textContent = "searching…";
+      resultsEl.innerHTML = "";
+      const params = new URLSearchParams({ token, q, scope });
+      if (path) params.set("path", path);
+      let data;
+      try {
+        const r = await fetch(`/search?${params}`);
+        data = await r.json();
+        if (seq !== runSeq) return; // a newer query superseded this one
+        if (!r.ok) { status.textContent = data.error || `search failed (${r.status})`; return; }
+      } catch (e) {
+        if (seq !== runSeq) return;
+        status.textContent = `search failed: ${e.message}`;
+        return;
+      }
+
+      status.textContent = `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : "");
+      if (!data.results.length) return;
+
+      // group hits by session file
+      const groups = new Map();
+      for (const h of data.results) {
+        if (!groups.has(h.sessionPath)) groups.set(h.sessionPath, []);
+        groups.get(h.sessionPath).push(h);
+      }
+      for (const [sessionPath, hits] of groups) {
+        const first = hits[0];
+        const b = document.createElement("button");
+        b.className = "m-option search-hit";
+        const title = document.createElement("div");
+        title.className = "s-title";
+        const nameEl = document.createElement("span");
+        nameEl.className = "s-name";
+        nameEl.textContent = first.sessionName || first.sessionPreview || "(unnamed session)";
+        const dateEl = document.createElement("span");
+        dateEl.className = "s-date";
+        dateEl.textContent = `${scope === "all" ? first.folderLabel + " · " : ""}${hits.length} hit${hits.length === 1 ? "" : "s"}`;
+        title.append(nameEl, dateEl);
+        b.appendChild(title);
+        hits.slice(0, 3).forEach((h, hi) => {
+          const sn = document.createElement("div");
+          sn.className = "s-snippet";
+          sn._hitIndex = hi;
+          const role = document.createElement("span");
+          role.className = "s-role";
+          role.textContent = h.role === "user" ? "you" : h.role === "assistant" ? "ai" : h.kind;
+          const mark = document.createElement("mark");
+          mark.textContent = h.snippet.match;
+          sn.append(role, " ", document.createTextNode(h.snippet.before), mark, document.createTextNode(h.snippet.after));
+          b.appendChild(sn);
+        });
+        if (hits.length > 3) {
+          const more = document.createElement("div");
+          more.className = "s-snippet";
+          more.textContent = `…and ${hits.length - 3} more in this session`;
+          b.appendChild(more);
+        }
+        b.title = sessionPath;
+        b.addEventListener("click", (e) => {
+          // clicking a specific snippet focuses that hit; the card itself uses the first hit
+          const idx = e.target.closest?.(".s-snippet")?._hitIndex;
+          resolve(null); // settle the picker promise; openSearchHit takes over
+          openSearchHit(sessionPath, hits[idx ?? 0] ?? first);
+        });
+        resultsEl.appendChild(b);
+      }
+    }
+
+    // live search: debounce keystrokes; Enter searches immediately
+    let debounce = null;
+    inp.addEventListener("input", () => {
+      clearTimeout(debounce);
+      updateView();
+      debounce = setTimeout(run, 250);
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { clearTimeout(debounce); run(); }
+    });
+    scopeSel.addEventListener("change", () => { updateView(); if (searching()) run(); });
+    folderSel.addEventListener("change", () => { if (searching()) run(); });
+
+    body.append(row, folderRow, status, resultsEl, listEl);
+    updateView();
+    setTimeout(() => inp.focus(), 0);
 
     function addSessionRow(s, container) {
       const isCurrent = s.id === currentId;
@@ -2167,7 +2550,12 @@ async function showSessionPicker() {
             const d = await r.json().catch(() => ({}));
             if (!r.ok) { toast(d.error || `delete failed (${r.status})`, "error"); return; }
             b.remove();
-            toast("session deleted");
+            if (d.closedInterfaces?.length) {
+              toast(`session deleted · closed interface${d.closedInterfaces.length > 1 ? "s" : ""} :${d.closedInterfaces.join(", :")}`);
+              loadInterfaces();
+            } else {
+              toast("session deleted");
+            }
           } catch (err) {
             toast(`delete failed: ${err.message}`, "error");
           }
@@ -2185,17 +2573,11 @@ async function showSessionPicker() {
       container.appendChild(b);
     }
 
-    for (const s of sessions) addSessionRow(s, body);
+    for (const s of sessions) addSessionRow(s, listEl);
 
     // ---- collapsed section: sessions from other folders
-    (async () => {
-      let folders = [], current = null;
-      try {
-        const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}`);
-        const d = await r.json();
-        if (r.ok) { folders = d.folders; current = d.current; }
-      } catch { return; }
-      const others = folders.filter((f) => f.dir !== current);
+    (() => {
+      const others = folders.filter((f) => f.dir !== currentFolder);
       if (!others.length) return;
 
       const section = document.createElement("details");
@@ -2234,7 +2616,7 @@ async function showSessionPicker() {
         });
         section.appendChild(fd);
       }
-      body.appendChild(section);
+      listEl.appendChild(section);
     })();
 
     const actions = $("mActions");
@@ -2260,7 +2642,7 @@ async function showSessionPicker() {
   }
 }
 
-$("modelChip").addEventListener("click", async () => {
+async function chooseModel() {
   try {
     const { models } = await rpc({ type: "get_available_models" });
     const choice = await pickOption(
@@ -2272,181 +2654,30 @@ $("modelChip").addEventListener("click", async () => {
     await rpc({ type: "set_model", provider: m.provider, modelId: m.id });
     toast(`model: ${m.id}`);
   } catch (e) { toast(e.message, "error"); }
-});
+}
 
-$("thinkChip").addEventListener("click", async () => {
+async function cycleThinking() {
   try {
     const data = await rpc({ type: "cycle_thinking_level" });
     if (data) toast(`thinking: ${data.level}`);
     refreshState();
   } catch (e) { toast(e.message, "error"); }
+}
+
+$("modelChip").addEventListener("click", chooseModel);
+$("thinkChip").addEventListener("click", cycleThinking);
+
+// mobile: one combined chip — a tiny two-option picker
+$("cfgChip").addEventListener("click", async () => {
+  const which = await pickOption("Settings", [
+    `Model: ${state?.model?.id ?? "?"} — change…`,
+    `Thinking: ${state?.thinkingLevel ?? "?"} — cycle`,
+  ]);
+  if (which === 0) await chooseModel();
+  else if (which === 1) await cycleThinking();
 });
 
 // ------------------------------------------------------------ session search
-
-async function showSearch() {
-  const body = $("mBody"), actions = $("mActions");
-  $("mTitle").textContent = "Search sessions";
-  body.innerHTML = "";
-  actions.innerHTML = "";
-
-  // folders for the folder scope
-  let folders = [], currentFolder = null;
-  try {
-    const r = await fetch(`/session-folders?token=${encodeURIComponent(token)}`);
-    const d = await r.json();
-    if (r.ok) { folders = d.folders; currentFolder = d.current; }
-  } catch {}
-
-  const row = document.createElement("div");
-  row.className = "search-row";
-  const inp = document.createElement("input");
-  inp.type = "text";
-  inp.placeholder = "search text… (Enter)";
-  const scopeSel = document.createElement("select");
-  scopeSel.innerHTML = `
-    <option value="session">This session</option>
-    <option value="folder">Folder…</option>
-    <option value="all" selected>All sessions</option>`;
-  row.append(inp, scopeSel);
-
-  const folderRow = document.createElement("div");
-  folderRow.className = "search-row";
-  const folderSel = document.createElement("select");
-  folderSel.style.maxWidth = "100%";
-  folderSel.style.flex = "1";
-  for (const f of folders) {
-    const o = document.createElement("option");
-    o.value = f.dir;
-    o.textContent = `${f.label} (${f.count})`;
-    if (f.dir === currentFolder) o.selected = true;
-    folderSel.appendChild(o);
-  }
-  folderRow.appendChild(folderSel);
-
-  const resultsEl = document.createElement("div");
-  const status = document.createElement("div");
-  status.className = "m-path";
-  status.textContent = "type at least 2 characters to search";
-
-  function syncFolderRow() {
-    folderRow.style.display = scopeSel.value === "folder" ? "" : "none";
-  }
-  scopeSel.addEventListener("change", () => { syncFolderRow(); if (inp.value.trim().length >= 2) run(); });
-  folderSel.addEventListener("change", () => { if (inp.value.trim().length >= 2) run(); });
-  syncFolderRow();
-
-  let runSeq = 0; // ignore out-of-order responses from stale keystrokes
-  async function run() {
-    const seq = ++runSeq;
-    const q = inp.value.trim();
-    if (q.length < 2) {
-      status.textContent = "type at least 2 characters to search";
-      resultsEl.innerHTML = "";
-      return;
-    }
-    const scope = scopeSel.value;
-    let path = "";
-    if (scope === "folder") path = folderSel.value ?? "";
-    if (scope === "session") {
-      // resolve the current session's file from the session list
-      try {
-        const r = await fetch(`/sessions?token=${encodeURIComponent(token)}`);
-        const d = await r.json();
-        const cur = d.sessions?.find((s) => s.id === state?.sessionId) ?? d.sessions?.[0];
-        if (!cur) { status.textContent = "no saved session to search"; return; }
-        path = cur.path;
-      } catch (e) { status.textContent = e.message; return; }
-    }
-    status.textContent = "searching…";
-    resultsEl.innerHTML = "";
-    const params = new URLSearchParams({ token, q, scope });
-    if (path) params.set("path", path);
-    let data;
-    try {
-      const r = await fetch(`/search?${params}`);
-      data = await r.json();
-      if (seq !== runSeq) return; // a newer query superseded this one
-      if (!r.ok) { status.textContent = data.error || `search failed (${r.status})`; return; }
-    } catch (e) {
-      if (seq !== runSeq) return;
-      status.textContent = `search failed: ${e.message}`;
-      return;
-    }
-
-    status.textContent = `${data.results.length} hit${data.results.length === 1 ? "" : "s"} in ${data.filesSearched} file${data.filesSearched === 1 ? "" : "s"}` + (data.truncated ? " (truncated)" : "");
-    if (!data.results.length) return;
-
-    // group hits by session file
-    const groups = new Map();
-    for (const h of data.results) {
-      if (!groups.has(h.sessionPath)) groups.set(h.sessionPath, []);
-      groups.get(h.sessionPath).push(h);
-    }
-    for (const [sessionPath, hits] of groups) {
-      const first = hits[0];
-      const b = document.createElement("button");
-      b.className = "m-option search-hit";
-      const title = document.createElement("div");
-      title.className = "s-title";
-      const nameEl = document.createElement("span");
-      nameEl.className = "s-name";
-      nameEl.textContent = first.sessionName || first.sessionPreview || "(unnamed session)";
-      const dateEl = document.createElement("span");
-      dateEl.className = "s-date";
-      dateEl.textContent = `${scope === "all" ? first.folderLabel + " · " : ""}${hits.length} hit${hits.length === 1 ? "" : "s"}`;
-      title.append(nameEl, dateEl);
-      b.appendChild(title);
-      hits.slice(0, 3).forEach((h, hi) => {
-        const sn = document.createElement("div");
-        sn.className = "s-snippet";
-        sn._hitIndex = hi;
-        const role = document.createElement("span");
-        role.className = "s-role";
-        role.textContent = h.role === "user" ? "you" : h.role === "assistant" ? "ai" : h.kind;
-        const mark = document.createElement("mark");
-        mark.textContent = h.snippet.match;
-        sn.append(role, " ", document.createTextNode(h.snippet.before), mark, document.createTextNode(h.snippet.after));
-        b.appendChild(sn);
-      });
-      if (hits.length > 3) {
-        const more = document.createElement("div");
-        more.className = "s-snippet";
-        more.textContent = `…and ${hits.length - 3} more in this session`;
-        b.appendChild(more);
-      }
-      b.title = sessionPath;
-      b.addEventListener("click", (e) => {
-        // clicking a specific snippet focuses that hit; the card itself uses the first hit
-        const idx = e.target.closest?.(".s-snippet")?._hitIndex;
-        openSearchHit(sessionPath, hits[idx ?? 0] ?? first);
-      });
-      resultsEl.appendChild(b);
-    }
-  }
-
-  // live search: debounce keystrokes; Enter searches immediately
-  let debounce = null;
-  inp.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(run, 250);
-  });
-  inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { clearTimeout(debounce); run(); }
-  });
-
-  body.append(row, folderRow, status, resultsEl);
-
-  const close = document.createElement("span");
-  close.className = "chip";
-  close.textContent = "Close";
-  close.addEventListener("click", closeModal);
-  actions.appendChild(close);
-
-  $("modal").classList.add("wide");
-  overlay.classList.add("open");
-  inp.focus();
-}
 
 /** Switch to the hit's session (if needed) and scroll to / flash the message
  *  containing the matched text. Rendered messages carry no entry ids, so we
