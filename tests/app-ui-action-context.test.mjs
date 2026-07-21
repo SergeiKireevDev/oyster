@@ -5,11 +5,22 @@ import { createAppRuntimeStarter } from "../public/src/runtime/appRuntime.js";
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 
 const appSource = readFileSync(new URL("../public/src/App.svelte", import.meta.url), "utf8");
+const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
 
 test("App provides its UI action registry and passes it to the runtime", () => {
   assert.match(appSource, /provideUiActionRegistry\(createUiActionRegistry\(\)\)/);
   assert.match(appSource, /startAppRuntime\(\{ uiActions \}\)/);
   assert.match(appSource, /uiActions\.teardown\(\)/);
+});
+
+test("Menu routes every action through the scoped registry", () => {
+  assert.match(menuSource, /getUiActionRegistry\(\)/);
+  assert.match(menuSource, /uiActions\.invoke\(MENU_ACTION, action\)/);
+  assert.doesNotMatch(menuSource, /window\.dispatchEvent|pi-menu-action/);
+  assert.deepEqual(
+    [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
+    ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"],
+  );
 });
 
 test("application mount teardown remount passes a fresh UI action registry", async () => {

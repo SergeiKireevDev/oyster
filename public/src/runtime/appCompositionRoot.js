@@ -819,7 +819,6 @@ const commandRuntime = composerAssembly.configureCommands({
 });
 const commandPaletteRunController = commandRuntime.runController;
 const commandPaletteKeyboardController = commandRuntime.keyboardController;
-const menuEventController = commandRuntime.menuController;
 
 // ------------------------------------------------------------ toasts
 
@@ -877,7 +876,7 @@ const featureAssembly = createFeatureAssembly({
 void featureAssembly;
 return createLifecycleAssembly({
   attachments: runtimeAttachments,
-  eventAttachers: [commandPaletteRunController, commandPaletteKeyboardController, menuEventController, settingsLayoutEvents],
+  eventAttachers: [commandPaletteRunController, commandPaletteKeyboardController, settingsLayoutEvents],
   applyLayout: () => layoutOperations.apply(),
   start: { hasToken: () => Boolean(token), requireToken, boot },
   cancelDelayedTasks: () => delayedTasks.cancelAll(),

@@ -70,20 +70,28 @@ test("composer assembly owns command guard palette menu and listener constructio
     showFilePicker() {},
     isOverlayOpen: () => false,
     schedule() {},
-    session: { openNew: async () => {}, getCurrentRunner: () => "runner" },
+    session: { openNew: async () => calls.push(["newSession"]), getCurrentRunner: () => "runner" },
     transcript: { clear: () => calls.push(["clear"]), renderMessage: (message) => calls.push(["render", message]) },
     platform: {
       rpc: async ({ type }) => type === "get_messages" ? { messages: [{ role: "user", content: "hello" }] } : {},
-      restart: async () => {}, logout() {},
+      restart: async () => calls.push(["restart"]), logout: () => calls.push(["logout"]),
     },
-    dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {} },
+    dialogs: {
+      showFolderBrowser: async () => calls.push(["newSessionIn"]),
+      showSessionPicker: async () => calls.push(["sessions"]),
+      showSettings: async () => calls.push(["settings"]),
+    },
   });
   assert.equal(typeof commands.guard.confirmKnownCommand, "function");
   assert.equal(typeof commands.setup, "function");
   assert.equal(typeof commands.runController.attach, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
-  assert.equal(typeof commands.menuController.attach, "function");
-  await uiActions.invoke(MENU_ACTION, "compact");
+  for (const action of ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"]) {
+    await uiActions.invoke(MENU_ACTION, action);
+  }
+  for (const routed of ["newSession", "newSessionIn", "sessions", "settings", "restart", "logout"]) {
+    assert.ok(calls.some((call) => call[0] === routed), `${routed} was not routed`);
+  }
   assert.ok(calls.some((call) => call[0] === "clear"));
   assert.ok(calls.some((call) => call[0] === "render"));
   assert.equal(assembly.configureCommands({}), commands);
@@ -118,7 +126,6 @@ test("composer assembly remounts actions and command listeners without stale own
   const firstCommands = first.assembly.configureCommands(commandDependencies());
   firstCommands.runController.attach();
   firstCommands.keyboardController.attach();
-  firstCommands.menuController.attach();
   await runComposerAction("send");
   assert.ok(first.calls.some((call) => call[0] === "user"));
   first.assembly.teardown();
@@ -130,7 +137,6 @@ test("composer assembly remounts actions and command listeners without stale own
   const secondCommands = second.assembly.configureCommands(commandDependencies());
   secondCommands.runController.attach();
   secondCommands.keyboardController.attach();
-  secondCommands.menuController.attach();
   await runComposerAction("abort");
   assert.ok(second.calls.some((call) => call[0] === "rpc" && call[1]?.type === "abort"));
   second.assembly.teardown();

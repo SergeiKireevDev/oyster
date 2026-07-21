@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { createComposerEventController } from "../public/src/lib/composerController.js";
-import { createMenuEventController } from "../public/src/lib/commandController.js";
 import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
 import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController } from "../public/src/runtime/eventControllers.js";
@@ -230,17 +229,5 @@ test("session picker event adapter dispatches actions and cancellation", () => {
   listeners.get("pi-session-picker-action")({ detail: { type: "open", args: ["/a"] } });
   listeners.get("pi-session-picker-cancel")();
   assert.deepEqual(calls, [["open", ["/a"]], ["cancel"]]);
-});
-
-test("menu event adapter routes its action detail", () => {
-  let listener;
-  const target = {
-    addEventListener(_name, fn) { listener = fn; },
-    removeEventListener(_name, fn) { if (listener === fn) listener = null; },
-  };
-  const calls = [];
-  createMenuEventController({ windowTarget: target, run: (detail) => calls.push(detail) }).attach();
-  listener({ detail: { action: "settings" } });
-  assert.deepEqual(calls, [{ action: "settings" }]);
 });
 

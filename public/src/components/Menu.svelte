@@ -1,5 +1,9 @@
 <script>
   import { menuOpen } from "../stores/ui.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { MENU_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
 
   function close() {
     menuOpen.set(false);
@@ -7,7 +11,7 @@
 
   function run(action) {
     close();
-    window.dispatchEvent(new CustomEvent("pi-menu-action", { detail: action }));
+    uiActions.invoke(MENU_ACTION, action);
   }
 </script>
 

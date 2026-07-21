@@ -50,18 +50,6 @@ export function createCommandPaletteInputController({ target, onInput, onBlur })
   return { attach, detach };
 }
 
-export function createMenuEventController({ windowTarget, run }) {
-  const onAction = (event) => run(event.detail);
-  function attach() {
-    windowTarget.addEventListener("pi-menu-action", onAction);
-    return detach;
-  }
-  function detach() {
-    windowTarget.removeEventListener("pi-menu-action", onAction);
-  }
-  return { attach, detach };
-}
-
 export function createCommandPaletteKeyboardController({ documentTarget, isOpen, move, run, close }) {
   const onKeydown = (event) => {
     if (!isOpen()) return;

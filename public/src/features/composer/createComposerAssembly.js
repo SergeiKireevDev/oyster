@@ -1,5 +1,5 @@
 import { createCommandGuard, commandTrigger, filterCommands } from "../../lib/commandActions.js";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createCommandPaletteRunController, createMenuEventController, moveCommandPaletteActive } from "../../lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteInputController, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
@@ -188,17 +188,15 @@ export function createComposerAssembly(deps) {
         deps.toast(error.message, "error");
       }
     }
-    const menuController = createMenuEventController({ windowTarget: commandDeps.windowTarget, run: runMenuAction });
     const detachMenuAction = commandDeps.uiActions?.register(MENU_ACTION, runMenuAction) ?? (() => {});
     setup(input);
     commandRuntime = {
-      guard, setup, runController, keyboardController, menuController, runMenuAction,
+      guard, setup, runController, keyboardController, runMenuAction,
       isOpen: () => palette.classList.contains("open"),
       teardown() {
         inputController?.detach();
         keyboardController.detach();
         runController.detach();
-        menuController.detach();
         detachMenuAction();
         close();
         commandRuntime = null;
