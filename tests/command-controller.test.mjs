@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, commandPaletteView, createCommandPaletteKeyboardController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, createCommandPaletteKeyboardController, createCommandPaletteRunController, moveCommandPaletteActive } from "../public/src/lib/commandController.js";
 
 test("command palette navigation wraps active command selection", () => {
   assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
@@ -24,6 +24,19 @@ test("command palette position opens upward when there is room", () => {
   const patch = commandPalettePosition({ left: 10, width: 100, top: 500, bottom: 530 }, { innerWidth: 1000, innerHeight: 800 });
   assert.equal(patch.top, "auto");
   assert.equal(patch.bottom, "308px");
+});
+
+test("command palette run controller routes selected indexes", () => {
+  let listener;
+  let removed;
+  const windowTarget = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
+  const calls = [];
+  const controller = createCommandPaletteRunController({ windowTarget, run: (index) => calls.push(index) });
+  controller.attach();
+  listener({ detail: 4 });
+  controller.detach();
+  assert.deepEqual(calls, [4]);
+  assert.equal(removed, listener);
 });
 
 test("command palette keyboard controller handles palette keys only while open", () => {

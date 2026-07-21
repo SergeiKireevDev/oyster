@@ -24,6 +24,18 @@ export function moveCommandPaletteActive(active, count, direction) {
 }
 
 /** Own the palette's capture-phase keyboard lifecycle outside component markup. */
+export function createCommandPaletteRunController({ windowTarget, run }) {
+  const onRun = (event) => run(event.detail);
+  function attach() {
+    windowTarget.addEventListener("pi-command-palette-run", onRun);
+    return detach;
+  }
+  function detach() {
+    windowTarget.removeEventListener("pi-command-palette-run", onRun);
+  }
+  return { attach, detach };
+}
+
 export function createCommandPaletteKeyboardController({ documentTarget, isOpen, move, run, close }) {
   const onKeydown = (event) => {
     if (!isOpen()) return;
