@@ -1,6 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("file picker event adapter routes each picker action", () => {
+  const listeners = new Map();
+  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const calls = [];
+  const remove = registerFilePickerEvents(target, {
+    useFolder: () => calls.push("folder"), browse: (path) => calls.push(["browse", path]),
+    pick: (path) => calls.push(["pick", path]), cancel: () => calls.push("cancel"),
+  });
+  listeners.get("pi-file-picker-use-folder")();
+  listeners.get("pi-file-picker-browse")({ detail: "/tmp" });
+  listeners.get("pi-file-picker-pick")({ detail: "/tmp/a" });
+  listeners.get("pi-file-picker-cancel")();
+  assert.deepEqual(calls, ["folder", ["browse", "/tmp"], ["pick", "/tmp/a"], "cancel"]);
+  remove();
+  assert.equal(listeners.size, 0);
+});
 
 test("settings event adapter invokes the change callback", () => {
   let listener;

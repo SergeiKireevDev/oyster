@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerFilePickerEvents, registerMenuEvents, registerRoutineEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -1727,18 +1727,11 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
   await loadFilePicker(filePickerState.curDir);
 }
 
-window.addEventListener("pi-file-picker-use-folder", () => {
-  filePickerState.onPick?.(filePickerState.curDir);
-  finishFilePicker();
-});
-window.addEventListener("pi-file-picker-browse", (event) => loadFilePicker(event.detail));
-window.addEventListener("pi-file-picker-pick", (event) => {
-  filePickerState.onPick?.(event.detail);
-  finishFilePicker();
-});
-window.addEventListener("pi-file-picker-cancel", () => {
-  filePickerState.onCancel?.();
-  finishFilePicker();
+registerFilePickerEvents(window, {
+  useFolder: () => { filePickerState.onPick?.(filePickerState.curDir); finishFilePicker(); },
+  browse: loadFilePicker,
+  pick: (path) => { filePickerState.onPick?.(path); finishFilePicker(); },
+  cancel: () => { filePickerState.onCancel?.(); finishFilePicker(); },
 });
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
