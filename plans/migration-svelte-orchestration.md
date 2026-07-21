@@ -66,7 +66,7 @@ rendering stay in the transcript action modules.
 history even if live SSE is unavailable; live streaming does not duplicate a
 completed assistant message.
 
-## 4. Move API Operations into Focused Action Modules
+## 4. Move API Operations into Focused Action Modules ✅
 
 Extract API-facing orchestration one domain at a time. Each module receives an
 injected `rpc` function and store/UI callbacks, and returns promises with
