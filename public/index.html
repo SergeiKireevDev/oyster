@@ -374,6 +374,37 @@
     padding: 10px 16px 14px;
   }
   #modal .m-actions .chip { font-size: 13px; padding: 6px 14px; }
+  #modal.wide { max-width: 760px; }
+
+  /* ---------- conversation tree ---------- */
+  .tree ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px solid var(--border); }
+  .tree > ul { padding-left: 0; border-left: none; }
+  .tree li { margin: 3px 0; position: relative; }
+  .tree li::before {
+    content: ""; position: absolute; top: 11px; left: -18px; width: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .tree > ul > li::before { display: none; }
+  .t-node {
+    display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px 9px;
+    font-size: 12.5px;
+    cursor: default;
+  }
+  .t-node .t-label {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 420px;
+  }
+  .t-node .t-time { color: var(--muted); font-size: 10.5px; flex-shrink: 0; }
+  .t-node.user { border-color: var(--accent-dim); background: var(--user-bubble); }
+  .t-node.assistant {}
+  .t-node.meta { color: var(--muted); font-style: italic; border-style: dashed; }
+  .t-node.branch { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .t-node .t-badge { font-size: 10px; padding: 0 5px; border-radius: 6px; background: var(--accent-dim); flex-shrink: 0; }
+  .t-node.user .t-badge { background: var(--accent-dim); }
 
   /* toast */
   #toasts {
@@ -440,6 +471,7 @@
   <button data-action="newSession">New session</button>
   <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
+  <button data-action="tree">Conversation tree…</button>
   <button data-action="compact">Compact context</button>
   <button data-action="restart">Restart pi process</button>
   <button data-action="logout">Forget token</button>
@@ -966,8 +998,25 @@ function updateUsage(message) {
 let connected = false;
 let es = null;
 
+// Watchdog: the server sends a ping event every 25s. Through a tunnel, a
+// connection can die without the browser noticing (EventSource stays OPEN
+// forever on a half-dead socket) — if nothing arrives for 70s, force a
+// reconnect.
+let lastEventAt = Date.now();
+setInterval(() => {
+  if (es && Date.now() - lastEventAt > 70000) {
+    es.close();
+    connected = false;
+    $("connDot").className = "dot";
+    $("stateInfo").textContent = "connection lost — reconnecting…";
+    connect();
+  }
+}, 15000);
+
 function connect() {
   if (!token) { requireToken(); return; }
+  if (es) { try { es.close(); } catch {} }
+  lastEventAt = Date.now();
   es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
   es.onopen = async () => {
     connected = true;
@@ -990,14 +1039,20 @@ function connect() {
     // EventSource auto-reconnects; if the token is bad the fetch guard handles it
   };
   es.onmessage = (ev) => {
+    lastEventAt = Date.now();
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    handleEvent(msg);
+    try { handleEvent(msg); } catch (e) {
+      console.error("event handling failed", e, msg);
+    }
   };
 }
 
 function handleEvent(msg) {
   switch (msg.type) {
+    case "ping":
+      return;
+
     case "replay_done":
       if (msg.workdir) setWorkdir(msg.workdir);
       return;
@@ -1105,6 +1160,7 @@ function handleEvent(msg) {
 
     case "workdir_changed":
       setWorkdir(msg.workdir);
+      knownCommands = null; // commands can differ per project
       toast(`folder: ${msg.workdir}`);
       clearMessages();
       return;
@@ -1116,7 +1172,7 @@ function handleEvent(msg) {
     case "ui_reload":
       // the page on disk changed; refresh when it won't interrupt anything
       if (!busy && !input.value.trim()) location.reload();
-      else toast("UI updated — refresh when convenient", "warning");
+      else toast("UI updated — tap to refresh", "warning", { onClick: () => location.reload(), sticky: true });
       return;
 
     case "code_reloaded":
@@ -1169,9 +1225,40 @@ sendBtn.addEventListener("click", () => {
   else send();
 });
 
+// pi's slash commands (extensions, prompt templates, skills), cached until
+// the pi process or folder changes
+let knownCommands = null;
+async function getKnownCommands() {
+  if (knownCommands) return knownCommands;
+  try {
+    const { commands } = await rpc({ type: "get_commands" });
+    knownCommands = new Set(commands.map((c) => c.name));
+  } catch {
+    knownCommands = null; // retry next time
+    return new Set();
+  }
+  return knownCommands;
+}
+
 async function send() {
   const text = input.value.trim();
   if (!text) return;
+  // guard against typos like "/goal": an unknown slash command is not
+  // expanded by pi — it goes to the model as plain text, which can kick off
+  // a long unwanted agent run
+  if (text.startsWith("/")) {
+    const name = text.slice(1).split(/\s+/)[0];
+    if (name) {
+      const cmds = await getKnownCommands();
+      if (!cmds.has(name)) {
+        const proceed = await confirmDialog(
+          "Unknown command",
+          `"/${name}" is not a pi command. Send it to the model as plain text?`
+        );
+        if (!proceed) return; // text stays in the composer
+      }
+    }
+  }
   input.value = "";
   input.style.height = "auto";
   addUserMessage({ role: "user", content: text });
@@ -1209,6 +1296,8 @@ menu.addEventListener("click", async (e) => {
       await showFolderBrowser();
     } else if (action === "sessions") {
       await showSessionPicker();
+    } else if (action === "tree") {
+      await showConversationTree();
     } else if (action === "compact") {
       toast("compacting…");
       await rpc({ type: "compact" });
@@ -1429,12 +1518,127 @@ $("thinkChip").addEventListener("click", async () => {
   } catch (e) { toast(e.message, "error"); }
 });
 
+// ------------------------------------------------------------ conversation tree
+
+async function showConversationTree() {
+  // pick which session to visualise: default to the current one
+  const res = await fetch(`/sessions?token=${encodeURIComponent(token)}`);
+  if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
+  const { sessions } = await res.json();
+  if (!sessions.length) { toast("no saved sessions"); return; }
+  const currentId = state?.sessionId;
+  const session = sessions.find((s) => s.id === currentId) ?? sessions[0];
+  await renderTreeModal(session, sessions);
+}
+
+async function renderTreeModal(session, sessions) {
+  const res = await fetch(`/session-tree?token=${encodeURIComponent(token)}&path=${encodeURIComponent(session.path)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(data.error || `failed to load tree (${res.status})`, "error"); return; }
+
+  // build id -> children map; collapse runs of meta entries unless they branch
+  const byId = new Map(data.nodes.map((n) => [n.id, n]));
+  const children = new Map();
+  const roots = [];
+  for (const n of data.nodes) {
+    if (n.parentId && byId.has(n.parentId)) {
+      if (!children.has(n.parentId)) children.set(n.parentId, []);
+      children.get(n.parentId).push(n);
+    } else {
+      roots.push(n);
+    }
+  }
+
+  const showMeta = localStorage.getItem("pi_tree_meta") === "1";
+
+  function nodeEl(n, isBranch) {
+    const el = document.createElement("span");
+    const role = n.type === "message" ? (n.role ?? "message") : "meta";
+    el.className = `t-node ${role}` + (isBranch ? " branch" : "");
+    const badge = document.createElement("span");
+    badge.className = "t-badge";
+    badge.textContent = role === "meta" ? "⚙" : role === "user" ? "you" : role === "assistant" ? "ai" : role;
+    const label = document.createElement("span");
+    label.className = "t-label";
+    label.textContent = n.label || "(empty)";
+    el.title = (n.label || "") + (n.timestamp ? `\n${n.timestamp}` : "");
+    const time = document.createElement("span");
+    time.className = "t-time";
+    time.textContent = n.timestamp ? fmtSessionDate(n.timestamp) : "";
+    el.append(badge, label, time);
+    return el;
+  }
+
+  function renderList(nodes) {
+    const ul = document.createElement("ul");
+    for (let n of nodes) {
+      const li = document.createElement("li");
+      // collapse linear chains of hidden meta nodes
+      let kids = children.get(n.id) ?? [];
+      while (!showMeta && n.type !== "message" && kids.length === 1) {
+        n = kids[0];
+        kids = children.get(n.id) ?? [];
+      }
+      if (!showMeta && n.type !== "message" && kids.length === 0) continue;
+      const isBranch = kids.length > 1;
+      li.appendChild(nodeEl(n, isBranch));
+      if (kids.length) li.appendChild(renderList(kids));
+      ul.appendChild(li);
+    }
+    return ul;
+  }
+
+  $("mTitle").textContent = `Tree: ${session.name || session.preview || session.id?.slice(0, 8) || "session"}`;
+  const body = $("mBody");
+  body.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "tree";
+  const tree = renderList(roots);
+  if (!tree.children.length) {
+    const empty = document.createElement("div");
+    empty.className = "m-path";
+    empty.textContent = "(no messages in this session)";
+    wrap.appendChild(empty);
+  } else {
+    wrap.appendChild(tree);
+  }
+  body.appendChild(wrap);
+
+  const actions = $("mActions");
+  actions.innerHTML = "";
+  const metaToggle = document.createElement("span");
+  metaToggle.className = "chip";
+  metaToggle.textContent = showMeta ? "Hide meta" : "Show meta";
+  metaToggle.addEventListener("click", () => {
+    localStorage.setItem("pi_tree_meta", showMeta ? "0" : "1");
+    renderTreeModal(session, sessions);
+  });
+  const other = document.createElement("span");
+  other.className = "chip";
+  other.textContent = "Other session…";
+  other.addEventListener("click", async () => {
+    const idx = await pickOption("Pick session", sessions.map((s) =>
+      `${s.name || s.preview || "(empty)"} — ${fmtSessionDate(s.modifiedAt)}`));
+    if (idx == null) return;
+    renderTreeModal(sessions[idx], sessions);
+  });
+  const close = document.createElement("button");
+  close.className = "btn";
+  close.textContent = "Close";
+  close.style.padding = "6px 16px";
+  close.addEventListener("click", () => { $("modal").classList.remove("wide"); closeModal(); });
+  actions.append(metaToggle, other, close);
+  $("modal").classList.add("wide");
+  overlay.classList.add("open");
+}
+
 // ------------------------------------------------------------ modal helpers
 
 const overlay = $("overlay");
 
 function closeModal() {
   overlay.classList.remove("open");
+  $("modal").classList.remove("wide");
   $("mBody").innerHTML = "";
   $("mActions").innerHTML = "";
 }
@@ -1549,12 +1753,16 @@ async function handleExtensionUI(req) {
 
 // ------------------------------------------------------------ toasts
 
-function toast(text, kind) {
+function toast(text, kind, { onClick, sticky } = {}) {
   const t = document.createElement("div");
   t.className = "toast" + (kind ? ` ${kind}` : "");
   t.textContent = text;
+  if (onClick) {
+    t.style.cursor = "pointer";
+    t.addEventListener("click", () => { t.remove(); onClick(); });
+  }
   $("toasts").appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  if (!sticky) setTimeout(() => t.remove(), 4000);
 }
 
 // ------------------------------------------------------------ go

@@ -14,6 +14,7 @@
  *   GET  /events      -> SSE stream of pi's stdout JSON lines
  *   POST /rpc         -> JSON command forwarded to pi's stdin
  *   GET  /sessions    -> saved pi sessions for the active workdir
+ *   GET  /session-tree -> entries of one session as tree nodes (id/parentId)
  *   GET  /browse      -> list subdirectories for the folder picker
  *   POST /workdir     -> switch folder (respawns pi there)
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
@@ -188,6 +189,52 @@ export function init(state) {
     return sessions;
   }
 
+  /** Parse a session .jsonl into tree nodes. Every entry has id/parentId, so
+   *  forked conversations form real branches. */
+  function sessionTree(path) {
+    const text = readFileSync(path, "utf8");
+    const nodes = [];
+    let sessionMeta = null;
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === "session") { sessionMeta = { id: e.id, timestamp: e.timestamp, cwd: e.cwd }; continue; }
+      if (!e.id) continue;
+      const node = {
+        id: e.id,
+        parentId: e.parentId ?? null,
+        type: e.type,
+        timestamp: e.timestamp ?? null,
+        role: null,
+        label: null,
+      };
+      if (e.type === "message") {
+        const m = e.message ?? {};
+        node.role = m.role ?? null;
+        const c = m.content;
+        let textBlock = typeof c === "string" ? c : c?.find?.((b) => b.type === "text")?.text;
+        if (!textBlock && Array.isArray(c)) {
+          const tc = c.find((b) => b.type === "toolCall");
+          if (tc) textBlock = `[tool: ${tc.name}]`;
+          else if (c.find((b) => b.type === "toolResult" || m.role === "toolResult")) textBlock = "[tool result]";
+          else if (c.find((b) => b.type === "thinking")) textBlock = "[thinking]";
+        }
+        node.label = (textBlock ?? "").slice(0, 200);
+      } else if (e.type === "model_change") {
+        node.label = `model → ${e.modelId ?? "?"}`;
+      } else if (e.type === "thinking_level_change") {
+        node.label = `thinking → ${e.thinkingLevel ?? "?"}`;
+      } else if (e.type === "session_info") {
+        node.label = `named: ${e.name ?? ""}`;
+      } else {
+        node.label = e.type;
+      }
+      nodes.push(node);
+    }
+    return { session: sessionMeta, nodes };
+  }
+
   // ---------------------------------------------------------------- http helpers
 
   const INDEX_PATH = join(config.DIRNAME, "public", "index.html");
@@ -289,7 +336,12 @@ export function init(state) {
       }
       res.write(`data: ${JSON.stringify({ type: "replay_done", _server: true, piRunning: !!state.pi, workdir: state.currentDir })}\n\n`);
       state.sseClients.add(res);
-      const ping = setInterval(() => res.write(`: ping\n\n`), 25000);
+      // data pings (not SSE comments) so the client can detect a dead
+      // connection: comments never reach onmessage, real events do
+      const ping = setInterval(
+        () => res.write(`data: {"type":"ping","_server":true}\n\n`),
+        25000
+      );
       req.on("close", () => {
         clearInterval(ping);
         state.sseClients.delete(res);
@@ -312,6 +364,21 @@ export function init(state) {
 
     if (req.method === "GET" && url.pathname === "/sessions") {
       json(res, 200, { sessions: listSessions() });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/session-tree") {
+      const target = resolve(String(url.searchParams.get("path") ?? ""));
+      const sessionsRoot = join(homedir(), ".pi", "agent", "sessions");
+      if (!target.startsWith(sessionsRoot + "/") || !target.endsWith(".jsonl") || !existsSync(target)) {
+        json(res, 400, { error: `not a session file: ${target}` });
+        return;
+      }
+      try {
+        json(res, 200, sessionTree(target));
+      } catch (e) {
+        json(res, 500, { error: `failed to parse session: ${e.message}` });
+      }
       return;
     }
 
