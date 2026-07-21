@@ -35,6 +35,7 @@ import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { adjacentActiveRunner, applySessionState, createStateRefresher, fetchSessionPreview, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
+import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "./lib/fileBrowserActions.js";
@@ -504,51 +505,23 @@ async function rollbackToCheckpoint(cp, target = null) {
 // created from), and each session's checkpoints. Sessions switch on tap;
 // checkpoints roll back on tap.
 
-function refreshTreeIfOpen() {
-  setCheckpointTreeState({ currentSessionId: state?.sessionId ?? null, runners: runnersNow });
-  if ($("treebar").classList.contains("open")) loadCheckpointTree();
-}
-
-async function loadCheckpointTree() {
-  const path = state?.sessionFile
-    ?? runnersNow.find((r) => r.id === currentRunner)?.sessionFile;
-  setCheckpointTreeState({
-    loading: !!path,
-    error: "",
-    empty: path ? "" : "no session file yet — send a message first",
-    currentSessionId: state?.sessionId ?? null,
-    runners: runnersNow,
-  });
-  if (!path) return;
-  // the session file is only written to disk once the first message has
-  // been sent — until then the server 400s. Treat that as "no tree yet".
-  try {
-    const res = await fetch(`/checkpoint-tree?path=${encodeURIComponent(path)}`);
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 400 && /not a session file|no such file/i.test(data.error || "")) {
-      setCheckpointTreeState({ loading: false, root: null, empty: "no session file yet — send a message first" });
-      return;
-    }
-    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
-    setCheckpointTreeState({ loading: false, root: data.root, empty: "", error: "" });
-  } catch (e) {
-    setCheckpointTreeState({ loading: false, root: null, empty: "", error: `tree unavailable: ${e.message}` });
-  }
-}
-
-async function openTreeSession(node) {
-  if (node.id === state?.sessionId) return;
-  try {
-    const r = await openSessionRunner({ sessionPath: node.path, dir: node.cwd || workdir });
-    switchToRunner(r.id);
-    toast(`switched to: ${node.name || node.id.slice(0, 8)}`);
-  } catch (e) {
-    toast(`switch failed: ${e.message}`, "error");
-  }
-}
+const checkpointTreeController = createCheckpointTreeController({
+  fetchImpl: fetch,
+  getState: () => state,
+  getRunners: () => runnersNow,
+  getCurrentRunner: () => currentRunner,
+  getWorkdir: () => workdir,
+  setTreeState: setCheckpointTreeState,
+  isOpen: () => $("treebar").classList.contains("open"),
+  openSession: openSessionRunner,
+  switchRunner: switchToRunner,
+  toast,
+});
+const refreshTreeIfOpen = () => checkpointTreeController.refreshIfOpen();
+const loadCheckpointTree = () => checkpointTreeController.load();
 
 registerCheckpointTreeEvents(window, {
-  openSession: openTreeSession,
+  openSession: checkpointTreeController.openTreeSession,
   rollback: rollbackToCheckpoint,
 });
 
