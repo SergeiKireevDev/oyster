@@ -25,6 +25,7 @@ import { sessionPicker, updateSessionPicker } from "./stores/sessionPicker.js";
 import { addToast } from "./stores/toasts.js";
 import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMessageText } from "./lib/messageUtils.js";
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
+import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
 
@@ -706,20 +707,28 @@ async function renderTranscript(messages) {
   await tick();
   scrollToBottom(true);
 
-  while (turns.length) {
-    await new Promise((resolve) => setTimeout(resolve, 0)); // keep input/live events responsive
-    if (myJob !== renderJob) {
-      lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
-      return false;
-    }
-    const chunk = takeTailChunk(turns, CHUNK_MSGS);
-    const pinned = nearBottom();
-    const h0 = scroller.scrollHeight;
-    const t0 = scroller.scrollTop;
-    renderChunk(chunk, { prepend: true });
-    await tick();
-    if (pinned) scrollToBottom(true); // stay glued to the newest message
-    else scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // keep reading position
+  const complete = await backfillTranscriptTurns({
+    turns,
+    takeTailChunk,
+    chunkSize: CHUNK_MSGS,
+    isCurrent: () => myJob === renderJob,
+    beforePrepend: () => ({
+      pinned: nearBottom(),
+      height: scroller.scrollHeight,
+      top: scroller.scrollTop,
+    }),
+    renderPrepend: async (chunk) => {
+      renderChunk(chunk, { prepend: true });
+      await tick();
+    },
+    afterPrepend: ({ pinned, height, top }) => {
+      if (pinned) scrollToBottom(true); // stay glued to the newest message
+      else scroller.scrollTop = top + (scroller.scrollHeight - height); // keep reading position
+    },
+  });
+  if (!complete) {
+    lifecycleLog("renderTranscript:superseded", { job: myJob, activeJob: renderJob });
+    return false;
   }
   placeCheckpointBtn();
   lifecycleLog("renderTranscript:complete", { job: myJob, domMessages: messagesEl.children.length });
