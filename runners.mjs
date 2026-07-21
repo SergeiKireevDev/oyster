@@ -123,8 +123,11 @@ export function createRunnerManager(state, {
       startCount: persisted.start_count,
     }));
   }
-  const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1);
-  if (state.defaultRunnerId && !state.runners.has(state.defaultRunnerId)) {
+  const compatibleWithConfiguredBackend = (runner) => !runner?.sessionRef || runner.sessionRef.backend === config.PERSISTENT_STORE;
+  const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1
+    && (!runner.session_backend || runner.session_backend === config.PERSISTENT_STORE));
+  if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId)
+    || !compatibleWithConfiguredBackend(state.runners.get(state.defaultRunnerId)))) {
     state.defaultRunnerId = null;
     state.appSettings?.setDefaultRunnerId(null);
   }
@@ -433,7 +436,8 @@ export function createRunnerManager(state, {
   function defaultRunner() {
     let r = state.runners.get(state.defaultRunnerId);
     if (!r) {
-      r = [...state.runners.values()].find((x) => x.proc) ?? [...state.runners.values()][0];
+      const compatible = [...state.runners.values()].filter(compatibleWithConfiguredBackend);
+      r = compatible.find((x) => x.proc) ?? compatible[0];
       if (!r) r = spawnRunner({ dir: state.currentDir });
       state.defaultRunnerId = r.id;
       runnerRepository?.setDefault(r.id);
@@ -444,7 +448,8 @@ export function createRunnerManager(state, {
 
   function runnerFromReq(url) {
     const id = url.searchParams.get("runner");
-    return (id && state.runners.get(id)) || defaultRunner();
+    const requested = id ? state.runners.get(id) : null;
+    return (requested && compatibleWithConfiguredBackend(requested)) ? requested : defaultRunner();
   }
 
   /** Reuse the runner attached to the full session identity, else spawn one. */

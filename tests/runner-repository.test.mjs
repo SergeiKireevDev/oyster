@@ -212,3 +212,43 @@ test("runner repository enforces one selected default", (t) => {
   assert.equal(store.repositories.runners.find("r-bbbbbbbb").is_default, 1);
   assert.throws(() => store.repositories.runners.update("r-aaaaaaaa", { is_default: 1 }), /unique constraint/i);
 });
+
+test("backend rollback ignores an incompatible persisted default runner without deleting it", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-backend-toggle-"));
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const sqlitePath = join(root, "sessions.sqlite");
+  const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });
+  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "sqlite-session", storagePath: sqlitePath, createdAt: "owner" });
+  store.repositories.runners.create({
+    id: "r-12345678-1234-4123-8123-123456789abc", ownerId: owner.id, dir: "/workspace", sessionBackend: "sqlite", sessionId: "sqlite-session",
+    sessionStoragePath: sqlitePath, isDefault: true, desiredState: "stopped", lastStatus: "stopped", createdAt: "created",
+  });
+  const appSettings = createAppSettings({ repository: store.repositories.settings, startupWorkdir: "/workspace", now: () => "setting" });
+  appSettings.setDefaultRunnerId("r-12345678-1234-4123-8123-123456789abc");
+  let spawnCount = 0;
+  const state = {
+    appStore: store, appSettings,
+    config: { PI_BIN: "/pi", PI_EXTRA_ARGS: [], PERSISTENT_STORE: "jsonl" },
+    currentDir: "/workspace", sseClients: new Set(), sessionReferences, serverEvent() {},
+  };
+  state.piProcesses = createPiProcessLauncher({ config: state.config, spawnImpl() { spawnCount++; return fakeProcess(); } });
+  const manager = createRunnerManager(state, {
+    appStore: store, createRunnerId: () => "87654321-4321-4321-8321-cba987654321", now: () => "now",
+  });
+  t.after(() => {
+    clearInterval(state.runnerWatchdogTimer);
+    clearInterval(state.runnerReaperTimer);
+    manager.stopPi();
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  assert.equal(state.defaultRunnerId ?? null, null);
+  assert.equal(spawnCount, 0);
+  const selected = manager.runnerFromReq(new URL("http://localhost/events?runner=r-12345678-1234-4123-8123-123456789abc"));
+  assert.equal(selected.sessionRef, null);
+  assert.notEqual(selected.id, "r-12345678-1234-4123-8123-123456789abc");
+  assert.equal(spawnCount, 1);
+  assert.ok(store.repositories.runners.find("r-12345678-1234-4123-8123-123456789abc"), "dormant SQLite descriptor survives a JSONL rollback toggle");
+  assert.equal(store.repositories.runners.find(selected.id).session_backend, null);
+});

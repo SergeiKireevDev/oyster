@@ -55,6 +55,26 @@ export function dexec(cmd, { allowFail = false } = {}) {
   }
 }
 
+/** Stable logical snapshot of the coding-agent SQLite store (ignores WAL/header churn). */
+export function sqliteSessionManifest(path = "/root/.pi/agent/sessions.sqlite") {
+  const script = `
+    import { DatabaseSync } from "node:sqlite";
+    const db = new DatabaseSync(process.argv[1], { readOnly: true });
+    const tables = ["sessions", "session_entries", "session_materialized"];
+    const order = { sessions: "id", session_entries: "session_id, entry_seq, id", session_materialized: "session_id" };
+    const manifest = {};
+    for (const table of tables) {
+      const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+      manifest[table] = exists ? db.prepare("SELECT * FROM " + table + " ORDER BY " + order[table]).all() : [];
+    }
+    db.close();
+    console.log(JSON.stringify(manifest));
+  `;
+  return execFileSync("docker", ["exec", containerName(), "node", "--input-type=module", "-e", script, path], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
 /** HTTP call against the server with the bearer token. */
 export async function api(method, path, body) {
   const res = await fetch(`${baseUrl()}${path}`, {

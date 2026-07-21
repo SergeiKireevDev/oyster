@@ -377,7 +377,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Verify a crash after agent deletion completes the cascade on restart.
 - [x] Verify fork deletion does not delete ancestor-owned resources.
 - [x] Verify both SQLite and JSONL session backends can safely reference the app database.
-- [ ] Run `npm run build`, `npm test`, and the Docker/e2e matrix before cutover.
+- [x] Run `npm run build`, `npm test`, and the Docker/e2e matrix before cutover.
 
 ## Completion criteria
 

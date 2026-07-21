@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { api, currentSessionId, dexec, login, sendPrompt, waitFor } from "./lib/harness.js";
+import { api, currentSessionId, dexec, login, sendPrompt, sqliteSessionManifest, waitFor } from "./lib/harness.js";
 import { ensureContainer, replaceContainer, teardownContainer } from "./lib/reset.js";
 
 test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
@@ -21,7 +21,7 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
   expect(persisted.sessionKey).toBeTruthy();
   expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
   expect(dexec("test -s /root/.pi/agent/sessions.sqlite && echo present")).toBe("present");
-  const sqliteHash = dexec("sha256sum /root/.pi/agent/sessions.sqlite | cut -d' ' -f1");
+  const sqliteManifest = sqliteSessionManifest();
 
   await replaceContainer();
   await login(page);
@@ -49,7 +49,7 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
   await login(page);
   const jsonlToken = `JSONL-ROLLBACK-${Date.now()}`;
   await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${jsonlToken}.`);
-  expect(dexec("sha256sum /root/.pi/agent/sessions.sqlite | cut -d' ' -f1")).toBe(sqliteHash);
+  expect(sqliteSessionManifest()).toBe(sqliteManifest);
   const jsonlManifest = dexec("find /root/.pi/agent -type f -name '*.jsonl' -exec sha256sum {} + | sort");
   expect(jsonlManifest).toContain(".jsonl");
 

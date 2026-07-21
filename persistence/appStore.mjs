@@ -346,7 +346,15 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       setDefault: (id) => {
         if (id != null && !repositories.runners.find(id)) throw new Error(`no such runner: ${id}`);
-        database.prepare("UPDATE runners SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END").run(id);
+        database.exec("SAVEPOINT set_runner_default");
+        try {
+          database.prepare("UPDATE runners SET is_default = 0 WHERE is_default = 1").run();
+          if (id != null) database.prepare("UPDATE runners SET is_default = 1 WHERE id = ?").run(id);
+          database.exec("RELEASE set_runner_default");
+        } catch (error) {
+          database.exec("ROLLBACK TO set_runner_default; RELEASE set_runner_default");
+          throw error;
+        }
         return id == null ? null : repositories.runners.find(id);
       },
       delete: (id) => database.prepare("DELETE FROM runners WHERE id = ?").run(id).changes,
