@@ -179,9 +179,9 @@
     user-select: none;
   }
   #ifaceAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
-  /* on small screens the sidebar becomes a slide-over drawer, toggled by a
-     header chip that only appears there */
-  #ifaceChip, #cfgChip { display: none; }
+  /* on small screens the sidebar becomes a slide-over drawer, opened by
+     swiping left anywhere (swipe right or tap outside closes it) */
+  #cfgChip { display: none; }
   #cfgChip { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 760px) {
     /* model + thinking collapse into one combined chip */
@@ -197,7 +197,6 @@
       box-shadow: -8px 0 30px rgba(0,0,0,.5);
       border-left: 1px solid var(--border);
     }
-    #ifaceChip { display: inline-flex; }
   }
   #messages {
     max-width: 860px;
@@ -661,7 +660,6 @@
   <span class="dot" id="connDot"></span>
   <span class="title" id="sessionTitle">pi remote</span>
   <span class="spacer"></span>
-  <span class="chip" id="ifaceChip" title="Show interfaces">⧉</span>
   <span class="chip" id="cfgChip" title="Model & thinking level">model · think</span>
   <span class="chip" id="modelChip" title="Change model">model</span>
   <span class="chip" id="thinkChip" title="Cycle thinking level">think</span>
@@ -2250,12 +2248,31 @@ async function showTunnels() {
 
 $("ifaceAdd").addEventListener("click", () => showTunnels().catch((e) => toast(e.message, "error")));
 
-// mobile: toggle the interfaces sidebar as a slide-over drawer
-$("ifaceChip").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const open = $("ifaces").classList.toggle("open");
-  if (open) loadInterfaces(); // fresh previews when opening
-});
+// mobile: swipe left anywhere opens the interfaces drawer, swipe right closes it
+const mobileMq = window.matchMedia("(max-width: 760px)");
+let swipeStart = null;
+document.addEventListener("touchstart", (e) => {
+  swipeStart = null;
+  if (!mobileMq.matches || e.touches.length !== 1) return;
+  // don't hijack horizontal gestures inside inputs or scrollable code blocks
+  if (e.target.closest?.("textarea, input, pre")) return;
+  swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+document.addEventListener("touchend", (e) => {
+  if (!swipeStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStart.x;
+  const dy = t.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return; // not a horizontal swipe
+  const ifaces = $("ifaces");
+  if (dx < 0 && !ifaces.classList.contains("open")) {
+    ifaces.classList.add("open");
+    loadInterfaces(); // fresh previews when opening
+  } else if (dx > 0 && ifaces.classList.contains("open")) {
+    ifaces.classList.remove("open");
+  }
+}, { passive: true });
 // tap outside the drawer closes it
 document.addEventListener("click", (e) => {
   const ifaces = $("ifaces");
