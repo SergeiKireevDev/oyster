@@ -94,7 +94,3 @@ export function usePickedFolder() {
   return filePickerHandlers.useFolder?.();
 }
 
-export function toggleFilePickerHidden() {
-  return filePickerHandlers.toggleHidden?.();
-}
-

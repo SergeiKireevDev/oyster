@@ -11,7 +11,7 @@ import { setCheckpointRestoreBusy, setCheckpointRestores } from "./stores/checkp
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
 import { fileExplorer, updateFileExplorer } from "./stores/fileExplorer.js";
-import { updateFilePicker } from "./stores/filePicker.js";
+import { filePicker, updateFilePicker } from "./stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "./stores/folderBrowser.js";
 import { setComposerTextValue } from "./stores/composer.js";
 import { updateHeaderState } from "./stores/header.js";
@@ -1833,7 +1833,7 @@ async function loadFilePicker(path) {
     parent: data.parent,
     dirs: data.dirs ?? [],
     files: data.files ?? [],
-    showHidden: filePickerState.showHidden,
+    showHidden: get(filePicker).showHidden,
     loading: false,
   });
 }
@@ -1868,10 +1868,6 @@ setFilePickerHandlers({
   useFolder: () => {
     filePickerState.onPick?.(filePickerState.curDir);
     finishFilePicker();
-  },
-  toggleHidden: () => {
-    filePickerState.showHidden = !filePickerState.showHidden;
-    updateFilePicker({ showHidden: filePickerState.showHidden });
   },
 });
 window.addEventListener("pi-file-picker-pick", (event) => {
