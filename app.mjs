@@ -994,6 +994,25 @@ export function init(state) {
     });
   }
 
+  // binary-safe variant for file uploads
+  function readRawBody(req, limit = 100 * 1024 * 1024) {
+    return new Promise((resolvePromise, reject) => {
+      const chunks = [];
+      let size = 0;
+      req.on("data", (c) => {
+        size += c.length;
+        if (size > limit) {
+          reject(new Error("body too large"));
+          req.destroy();
+          return;
+        }
+        chunks.push(c);
+      });
+      req.on("end", () => resolvePromise(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+  }
+
   function json(res, status, obj) {
     const body = JSON.stringify(obj);
     res.writeHead(status, {
@@ -1379,6 +1398,31 @@ export function init(state) {
       }
       console.log(`[pi-ui] file saved via explorer: ${target}`);
       json(res, 200, { saved: target, bytes: Buffer.byteLength(body.content) });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/file-upload") {
+      // raw body upload: ?dir=<target folder>&name=<file name>
+      const dir = resolve(String(url.searchParams.get("dir") ?? ""));
+      const name = String(url.searchParams.get("name") ?? "").trim();
+      if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
+        json(res, 400, { error: "invalid file name" });
+        return;
+      }
+      let dirOk = false;
+      try { dirOk = statSync(dir).isDirectory(); } catch {}
+      if (!dirOk) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
+      let buf;
+      try { buf = await readRawBody(req); } catch (e) { json(res, 413, { error: e.message }); return; }
+      const target = join(dir, name);
+      try {
+        writeFileSync(target, buf);
+      } catch (e) {
+        json(res, 500, { error: `upload failed: ${e.message}` });
+        return;
+      }
+      console.log(`[pi-ui] file uploaded via explorer: ${target} (${buf.length} bytes)`);
+      json(res, 200, { saved: target, bytes: buf.length });
       return;
     }
 

@@ -2668,6 +2668,11 @@ async function showFileExplorer() {
     }
 
     actions.innerHTML = "";
+    const up = document.createElement("span");
+    up.className = "chip";
+    up.textContent = "\u2B06 Upload\u2026";
+    up.title = `upload local files to ${data.path}`;
+    up.addEventListener("click", () => uploadFiles(data.path));
     const back = document.createElement("span");
     back.className = "chip";
     back.textContent = "\u2190 Hublots";
@@ -2676,7 +2681,35 @@ async function showFileExplorer() {
     closeBtn.className = "chip";
     closeBtn.textContent = "Close";
     closeBtn.addEventListener("click", closeModal);
-    actions.append(back, closeBtn);
+    actions.append(up, back, closeBtn);
+  }
+
+  function uploadFiles(dir) {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.multiple = true;
+    inp.addEventListener("change", async () => {
+      const files = [...inp.files];
+      if (!files.length) return;
+      let done = 0;
+      for (const f of files) {
+        try {
+          toast(`uploading ${f.name}\u2026`);
+          const r = await fetch(
+            `/file-upload?token=${encodeURIComponent(token)}&dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(f.name)}`,
+            { method: "POST", body: f }
+          );
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `upload failed (${r.status})`);
+          done++;
+        } catch (e) {
+          toast(`${f.name}: ${e.message}`, "error");
+        }
+      }
+      if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
+      await load(dir); // refresh the listing
+    });
+    inp.click();
   }
 
   async function editFile(path) {
