@@ -77,15 +77,6 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequestContext } from "./http/createRequestContext.mjs";
 import { createRouteTable } from "./http/createRouteTable.mjs";
-import { createOpenRoutes } from "./http/routes/openRoutes.mjs";
-import { createStaticRoutes } from "./http/routes/staticRoutes.mjs";
-import { createRunnerRoutes } from "./http/routes/runnerRoutes.mjs";
-import { createSessionRoutes } from "./http/routes/sessionRoutes.mjs";
-import { createFileRoutes } from "./http/routes/fileRoutes.mjs";
-import { createWorkdirRoutes } from "./http/routes/workdirRoutes.mjs";
-import { createTunnelRoutes } from "./http/routes/tunnelRoutes.mjs";
-import { createRoutineRoutes } from "./http/routes/routineRoutes.mjs";
-import { createCheckpointRoutes } from "./http/routes/checkpointRoutes.mjs";
 
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
@@ -108,6 +99,15 @@ const { loadCheckpoints, saveCheckpoints, recordCheckpoint, checkpointTree, git,
   await import(bust("checkpoints.mjs"));
 
 const { createRunnerManager } = await import(bust("runners.mjs"));
+
+const [
+  { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
+  { createSessionRoutes }, { createFileRoutes }, { createWorkdirRoutes },
+  { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
+] = await Promise.all([
+  "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
+  "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes",
+].map((name) => import(bust(`http/routes/${name}.mjs`))));
 
 export function init(state) {
   const { config } = state;

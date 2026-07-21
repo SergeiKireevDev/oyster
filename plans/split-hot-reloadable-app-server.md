@@ -155,7 +155,7 @@ or session-fork semantics.
 
 ## 9. Make Every Route Module Hot-Reloadable
 
-- [ ] Replace `app.mjs` route-factory imports with cache-busted dynamic imports
+- [x] Replace `app.mjs` route-factory imports with cache-busted dynamic imports
   using the existing mtime strategy. Add a test proving a changed route factory
   is observed after an application reload rather than served from Node's ESM
   cache.
