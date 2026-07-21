@@ -321,6 +321,28 @@
   .checkpoint.busy { opacity: .3; cursor: wait; }
   .msg.user > .checkpoint { left: -62px; }
   .msg.assistant > .checkpoint { right: 28px; top: -8px; }
+  /* return arrow — shown on checkpointed messages; rolls the workdir back
+     to that checkpoint and opens a forked session there */
+  .ckpt-restore {
+    position: absolute;
+    top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 5px;
+    cursor: pointer;
+    user-select: none;
+    opacity: .6;
+    transition: opacity .15s;
+    z-index: 2;
+  }
+  .ckpt-restore:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1; }
+  .ckpt-restore.busy { opacity: .3; cursor: wait; }
+  .msg.user > .ckpt-restore { left: -90px; }
+  .msg.assistant > .ckpt-restore { right: 56px; top: -8px; }
   .msg.user {
     align-self: flex-end;
     max-width: 85%;
@@ -1393,9 +1415,12 @@ checkpointBtn.addEventListener("click", async (e) => {
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
     if (data.committed) {
       toast(`\u{1F9CA} checkpoint ${data.hash} — ${data.files} file${data.files === 1 ? "" : "s"} committed`);
+    } else if (data.recorded) {
+      toast(`\u{1F9CA} workdir clean — checkpoint marked at ${data.hash}`);
     } else {
       toast(`\u{1F9CA} nothing to commit — ${data.reason ?? "workdir is clean"}`);
     }
+    if (data.recorded) refreshCheckpointMarkers().catch(() => {});
   } catch (err) {
     toast(`checkpoint failed: ${err.message}`, "error");
   } finally {
@@ -1409,6 +1434,63 @@ function placeCheckpointBtn() {
   const last = els[els.length - 1];
   if (last) last.appendChild(checkpointBtn);
   else checkpointBtn.remove();
+}
+
+/** put a return arrow on every message a checkpoint is anchored to */
+async function refreshCheckpointMarkers() {
+  document.querySelectorAll(".ckpt-restore").forEach((b) => b.remove());
+  const sid = state?.sessionId;
+  if (!sid) return;
+  const res = await fetch(`/checkpoints?token=${encodeURIComponent(token)}&id=${encodeURIComponent(sid)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return;
+  const checkpoints = data.checkpoints ?? [];
+  if (!checkpoints.length) return;
+  const byAnchor = new Map(checkpoints.map((c) => [c.anchorId, c])); // latest per anchor wins
+  let entries;
+  try { entries = await fetchSessionEntries(); } catch { return; }
+  const els = chatEls();
+  for (let i = 0; i < entries.length; i++) {
+    const cp = byAnchor.get(entries[i].id);
+    if (!cp) continue;
+    // same zip-by-position logic as the permalinks (align from the end when
+    // the file and the rendered transcript briefly disagree)
+    const pos = entries.length === els.length ? i : els.length - (entries.length - i);
+    const el = els[pos];
+    if (!el || el.querySelector(":scope > .ckpt-restore")) continue;
+    const b = document.createElement("span");
+    b.className = "ckpt-restore";
+    b.textContent = "\u21A9";
+    b.title = `roll the workdir back to checkpoint ${cp.hash} and fork the session here`;
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      rollbackToCheckpoint(cp, b);
+    });
+    el.appendChild(b);
+  }
+}
+
+/** deterministic rollback: restore the checkpoint commit (pending changes are
+ *  auto-committed first) and jump into a session forked at that point */
+async function rollbackToCheckpoint(cp, btn) {
+  if (btn?.classList.contains("busy")) return;
+  if (!confirm(`Roll the workdir back to checkpoint ${cp.hash}?\n\nPending changes are committed first (nothing is lost), then a forked session opens at this message.`)) return;
+  btn?.classList.add("busy");
+  try {
+    const res = await fetch(`/rollback?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: state?.sessionId, hash: cp.hash }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
+    toast(`\u23EA rolled back to ${data.rolledBack}${data.safety ? ` (pending work saved as ${data.safety})` : ""} — forked session opened`);
+    if (data.runner?.id) switchToRunner(data.runner.id);
+  } catch (err) {
+    toast(`rollback failed: ${err.message}`, "error");
+  } finally {
+    btn?.classList.remove("busy");
+  }
 }
 
 function renderFullMessage(message) {
@@ -1822,6 +1904,7 @@ async function reloadTranscript() {
   clearMessages();
   for (const m of messages) renderFullMessage(m);
   scrollToBottom(true);
+  refreshCheckpointMarkers().catch(() => {});
   const cb = afterTranscript;
   afterTranscript = null;
   cb?.();

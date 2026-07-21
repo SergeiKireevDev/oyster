@@ -30,7 +30,14 @@
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn one runner (?runner=id)
  *   POST /checkpoint  -> commit all workdir changes of a runner (?runner=id)
- *                        { label? } — git add -A && git commit in runner.dir
+ *                        { label? } — git add -A && git commit in runner.dir;
+ *                        the commit is recorded as a checkpoint anchored to the
+ *                        session's latest message
+ *   GET  /checkpoints -> checkpoint records of one session (?id=<sessionId>)
+ *   POST /rollback    -> { sessionId, hash } — deterministically restore the
+ *                        workdir to that checkpoint (pending changes are
+ *                        auto-committed first, then git reset --hard) and
+ *                        open a forked session at the checkpointed entry
  *   GET  /tunnels     -> live tunnels spawned by this server
  *   POST /tunnels     -> open a tunnel { port, label?, sessionId? } (cloudflared quick tunnel)
  *   DELETE /tunnels   -> close a tunnel (?id=…)
@@ -40,7 +47,7 @@
  */
 
 import { spawn, execFile } from "node:child_process";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createConnection } from "node:net";
 import { createReadStream, readFileSync, existsSync, readdirSync, statSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -698,7 +705,7 @@ export function init(state) {
     const text = readFileSync(path, "utf8");
     const byId = new Map();
     let sessionId = null;
-    let leafId = null;
+    let leafId = null; // last entry of the file = tip of the active branch
     for (const line of text.split("\n")) {
       if (!line.trim()) continue;
       let e;
@@ -727,10 +734,71 @@ export function init(state) {
       }
       entries.push({ id: e.id, role: m.role, text: (t ?? "").slice(0, 200), timestamp: e.timestamp ?? null });
     }
-    return { sessionId, entries };
+    return { sessionId, leafId, entries };
   }
 
   // ---------------------------------------------------------------- checkpoints
+  //
+  // A checkpoint = one commit of every pending workdir change, anchored to the
+  // session message it was taken at. Records live in ~/.pi/agent/checkpoints.json
+  // ({ sessionId: [{ hash, anchorId, leafId, dir, sessionPath, … }] }) so they
+  // survive restarts. Rolling back restores the workdir to the commit
+  // (deterministically — no LLM involved) and opens a forked session whose
+  // history ends at the checkpointed entry.
+
+  const CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
+
+  function loadCheckpoints() {
+    try { return JSON.parse(readFileSync(CHECKPOINTS_PATH, "utf8")); } catch { return {}; }
+  }
+
+  function saveCheckpoints(db) {
+    try { writeFileSync(CHECKPOINTS_PATH, JSON.stringify(db, null, 2)); }
+    catch (e) { console.error(`[pi-ui] failed to save checkpoints: ${e.message}`); }
+  }
+
+  /** anchor a commit to the session's current tip; returns the record or null */
+  function recordCheckpoint(sessionPath, dir, { hash, message }) {
+    const { sessionId, leafId, entries } = sessionEntries(sessionPath);
+    const anchorId = entries[entries.length - 1]?.id ?? null; // last rendered message
+    if (!sessionId || !anchorId || !hash) return null;
+    const db = loadCheckpoints();
+    const list = (db[sessionId] ??= []);
+    let rec = list.find((c) => c.hash === hash && c.anchorId === anchorId);
+    if (!rec) {
+      rec = { hash, anchorId, leafId, dir, sessionPath, message: message ?? null, timestamp: new Date().toISOString() };
+      list.push(rec);
+      saveCheckpoints(db);
+    }
+    return rec;
+  }
+
+  /** Deterministic session fork: copy the active-branch chain up to `leafId`
+   *  into a new .jsonl (same entry ids, parentSession lineage) — the same
+   *  shape pi's own /fork produces, minus any LLM involvement. */
+  function forkSessionAt(sessionPath, leafId) {
+    const text = readFileSync(sessionPath, "utf8");
+    let header = null;
+    const byId = new Map();
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === "session") { header = e; continue; }
+      if (e.id) byId.set(e.id, e);
+    }
+    if (!header) throw new Error("session header missing");
+    if (!byId.has(leafId)) throw new Error(`entry ${leafId} not found in session`);
+    const chain = [];
+    for (let cur = byId.get(leafId); cur; cur = cur.parentId ? byId.get(cur.parentId) : null) chain.push(cur);
+    chain.reverse();
+    const id = randomUUID();
+    const now = new Date();
+    const newHeader = { ...header, id, timestamp: now.toISOString(), parentSession: sessionPath };
+    const path = join(dirname(sessionPath), `${now.toISOString().replace(/[:.]/g, "-")}_${id}.jsonl`);
+    writeFileSync(path, [newHeader, ...chain].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    return { path, id, entryIds: new Set(chain.map((e) => e.id)) };
+  }
 
   /** run git in a workdir; resolves with { code, stdout, stderr } (never rejects) */
   function git(dir, args) {
@@ -748,7 +816,11 @@ export function init(state) {
     const st = await git(dir, ["status", "--porcelain"]);
     if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
     const files = st.stdout.split("\n").filter(Boolean).length;
-    if (!files) return { status: 200, body: { committed: false, reason: "workdir is clean" } };
+    if (!files) {
+      // clean tree: nothing to commit, but HEAD still marks this exact state
+      const head = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
+      return { status: 200, body: { committed: false, reason: "workdir is clean", hash: head || undefined } };
+    }
     const add = await git(dir, ["add", "-A"]);
     if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
     const message = label ? `checkpoint: ${label}` : `checkpoint ${new Date().toISOString()}`;
@@ -1332,7 +1404,69 @@ export function init(state) {
       const runner = runnerFromReq(url);
       const label = body?.label ? String(body.label).slice(0, 200) : null;
       const { status, body: out } = await checkpointWorkdir(runner.dir, label);
+      // anchor the checkpoint to the session's latest message (also when the
+      // tree was already clean: HEAD marks that state just as well)
+      if (status === 200 && out.hash && runner.sessionFile && existsSync(runner.sessionFile)) {
+        try {
+          const rec = recordCheckpoint(runner.sessionFile, runner.dir, out);
+          if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
+        } catch (e) {
+          console.error(`[pi-ui] failed to record checkpoint: ${e.message}`);
+        }
+      }
       json(res, status, out);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/checkpoints") {
+      const id = String(url.searchParams.get("id") ?? "").trim();
+      if (!id) { json(res, 400, { error: "id required" }); return; }
+      json(res, 200, { checkpoints: loadCheckpoints()[id] ?? [] });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/rollback") {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const sessionId = String(body?.sessionId ?? "").trim();
+      const hash = String(body?.hash ?? "").trim();
+      const cp = (loadCheckpoints()[sessionId] ?? []).find((c) => c.hash === hash);
+      if (!cp) { json(res, 404, { error: "no such checkpoint" }); return; }
+      if (!existsSync(cp.sessionPath)) { json(res, 410, { error: "session file of this checkpoint is gone" }); return; }
+      try {
+        // 1. nothing may be lost: auto-commit pending changes and record them
+        //    as a checkpoint at the session's current tip (→ roll forward later)
+        let safety = null;
+        const st = await git(cp.dir, ["status", "--porcelain"]);
+        if (st.code === 0 && st.stdout.trim()) {
+          const saved = await checkpointWorkdir(cp.dir, `auto before rollback to ${hash}`);
+          if (saved.body.committed) {
+            safety = saved.body.hash;
+            try { recordCheckpoint(cp.sessionPath, cp.dir, saved.body); } catch {}
+          }
+        }
+        // 2. deterministic restore of the checkpointed state
+        const rs = await git(cp.dir, ["reset", "--hard", hash]);
+        if (rs.code !== 0) {
+          json(res, 500, { error: `git reset failed: ${(rs.stderr || rs.stdout).trim()}` });
+          return;
+        }
+        // 3. fork the session at the checkpointed entry — no LLM involved
+        const fork = forkSessionAt(cp.sessionPath, cp.leafId ?? cp.anchorId);
+        // the fork keeps its ancestors' entry ids: inherit their checkpoints
+        const db = loadCheckpoints();
+        db[fork.id] = (db[sessionId] ?? [])
+          .filter((c) => fork.entryIds.has(c.anchorId))
+          .map((c) => ({ ...c, sessionPath: fork.path }));
+        saveCheckpoints(db);
+        // 4. attach a runner to the fork and hand it to the client
+        const runner = openSessionRunner({ sessionPath: fork.path, dir: cp.dir });
+        sendToRunner(runner, { id: `_srv-${++srvSeq}`, type: "set_session_name", name: `\u23EA ${hash}` });
+        console.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
+        json(res, 200, { rolledBack: hash, safety, fork: { id: fork.id, path: fork.path }, runner: runnerInfo(runner) });
+      } catch (e) {
+        json(res, 500, { error: `rollback failed: ${e.message}` });
+      }
       return;
     }
 
