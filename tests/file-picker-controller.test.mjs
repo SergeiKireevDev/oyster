@@ -1,0 +1,45 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createFilePickerController } from "../public/src/lib/filePickerController.js";
+
+test("file picker loads a directory into picker state", async () => {
+  const calls = [];
+  const controller = createFilePickerController({
+    browse: async (path) => ({ path, home: "/home", workdir: "/work", parent: "/", dirs: [], files: [{ name: "a.txt" }] }),
+    update: (value) => calls.push(["update", value]),
+    updateTitle: (value) => calls.push(["title", value]),
+    getShowHidden: () => false,
+    setPath: (value) => calls.push(["path", value]),
+    toast: () => {},
+  });
+
+  await controller.load("/work");
+
+  assert.deepEqual(calls, [
+    ["update", { loading: true }],
+    ["path", "/work"],
+    ["title", "Attach file"],
+    ["update", { path: "/work", home: "/home", workdir: "/work", parent: "/", dirs: [], files: [{ name: "a.txt" }], showHidden: false, loading: false }],
+  ]);
+});
+
+test("file picker falls back to its workdir after a failed browse", async () => {
+  const calls = [];
+  const controller = createFilePickerController({
+    browse: async (path) => { calls.push(["browse", path]); if (path === "/gone") throw new Error("cannot open folder"); return { path, dirs: [], files: [] }; },
+    update: (value) => calls.push(["update", value]),
+    updateTitle: () => {},
+    getShowHidden: () => true,
+    getWorkdir: () => "/work",
+    setPath: () => {},
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  await controller.load("/gone");
+
+  assert.deepEqual(calls.slice(0, 5), [
+    ["update", { loading: true }], ["browse", "/gone"], ["update", { loading: false }],
+    ["toast", "cannot open folder", "error"], ["update", { loading: true }],
+  ]);
+  assert.equal(calls[5][1], "/work");
+});

@@ -46,6 +46,7 @@ import { createHublotController } from "./lib/hublotController.js";
 import { createHublotManagerController } from "./lib/hublotManagerController.js";
 import { createFolderBrowserController } from "./lib/folderBrowserController.js";
 import { createFileExplorerController } from "./lib/fileExplorerController.js";
+import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
 import { createRoutineController } from "./lib/routineController.js";
 import { createSettingsController } from "./lib/settingsController.js";
@@ -1537,30 +1538,16 @@ function finishFilePicker() {
   if (filePickerState.returnToHublot) showHublots().catch((e) => toast(e.message, "error"));
 }
 
-async function loadFilePicker(path) {
-  updateFilePicker({ loading: true });
-  let data;
-  try { data = await browseFiles(fetch, path); }
-  catch (error) {
-    updateFilePicker({ loading: false });
-    toast(error.message, "error");
-    // e.g. remembered folder was deleted — fall back to the workdir
-    if (path !== workdir) return loadFilePicker(workdir);
-    return;
-  }
-  filePickerState.curDir = data.path;
-  updateModal({ title: "Attach file" });
-  updateFilePicker({
-    path: data.path,
-    home: data.home,
-    workdir: data.workdir,
-    parent: data.parent,
-    dirs: data.dirs ?? [],
-    files: data.files ?? [],
-    showHidden: get(filePicker).showHidden,
-    loading: false,
-  });
-}
+const filePickerController = createFilePickerController({
+  browse: (path) => browseFiles(fetch, path),
+  update: updateFilePicker,
+  updateTitle: (title) => updateModal({ title }),
+  getShowHidden: () => get(filePicker).showHidden,
+  getWorkdir: () => workdir,
+  setPath: (path) => { filePickerState.curDir = path; },
+  toast,
+});
+const loadFilePicker = filePickerController.load;
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
