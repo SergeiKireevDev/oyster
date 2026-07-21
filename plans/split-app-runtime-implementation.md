@@ -372,7 +372,7 @@ verified goal loop can match it exactly.
 - [x] Move remaining transcript construction into `features/transcript/` and remove root-local transcript controller declarations.
 - [x] Move remaining RPC and event-dispatch state into `platform/` and replace root event handling with injected coordinator callbacks.
 - [x] Delete `appRuntimeImplementation.js` make `appComposition.js` the direct composition factory and update runtime entrypoint imports.
-- [ ] Add a composition-root size and import-boundary test that enforces fewer than 400 lines and forbids feature-local mutable state.
+- [x] Add a composition-root size and import-boundary test that enforces fewer than 400 lines and forbids feature-local mutable state.
 
 **Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
 reviewable wiring module (a few hundred lines), and every moved feature has a
