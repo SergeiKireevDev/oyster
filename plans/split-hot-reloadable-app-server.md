@@ -178,7 +178,7 @@ swap without a manual `app.mjs` touch.
   route-factory composition, auth dispatch, and the stable-core lifecycle API.
   Remove stale inline helpers, route comments, and imports after no-reference
   checks.
-- [ ] Add a static architecture test that forbids method/path route literals
+- [x] Add a static architecture test that forbids method/path route literals
   and direct Node filesystem/process imports in `app.mjs`, except explicitly
   documented dynamic-loader dependencies.
 - [ ] Run stale-reference checks and the complete validation matrix, then mark
