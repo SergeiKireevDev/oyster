@@ -123,7 +123,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Add a file-download URL builder to the browser-action adapter and inject
   it into the file-explorer feature. Remove tokenized download URL construction
   from Svelte markup and test URL encoding and download filename behavior.
-- [ ] Inventory every component `document`, `window`, and element listener.
+- [x] Inventory every component `document`, `window`, and element listener.
   For each listener, either retain it with an `onMount` cleanup/Svelte directive
   and a lifecycle test, or move it behind a feature/platform adapter. Record the
   final approved listener list in a regression test.

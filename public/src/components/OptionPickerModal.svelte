@@ -35,11 +35,11 @@
   }
 
   onMount(() => {
-    document.addEventListener("keydown", onKey, true);
     tick().then(() => searchEl?.focus());
-    return () => document.removeEventListener("keydown", onKey, true);
   });
 </script>
+
+<svelte:document onkeydowncapture={onKey} />
 
 {#if $optionPicker.searchable}
   <input
