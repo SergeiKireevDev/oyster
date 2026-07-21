@@ -71,7 +71,8 @@ import { configureFileExplorerActions } from "../features/files/fileExplorerActi
 import { createFilePickerController } from "../lib/filePickerController.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
-import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "../lib/routineController.js";
+import { createRoutineController, createRoutineSidebarController } from "../lib/routineController.js";
+import { configureRoutineActions } from "../features/routines/routineActions.js";
 import { createSettingsChangeController, createSettingsController } from "../lib/settingsController.js";
 import { createSessionPickerController, createSessionPickerEventController, createSessionPickerDeleteController, createSessionPickerFolderController } from "../lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "../lib/sessionPickerSearchController.js";
@@ -1359,7 +1360,7 @@ const routineController = createRoutineController({
   refresh: loadRoutines,
   toast: addToast,
 });
-const routineEventController = createRoutineEventController({ windowTarget: window, run: routineController.run });
+const detachRoutineActions = configureRoutineActions(routineController.run);
 
 // ------------------------------------------------------------ session picker
 
@@ -1726,7 +1727,7 @@ const detachRuntimeEventAdapters = () => {
   detachFolderBrowserActions();
   detachFileExplorerActions();
   detachHublotActions();
-  routineEventController.detach();
+  detachRoutineActions();
   sessionPickerEventController.detach();
   detachFilesActions();
   commandPaletteInputController?.detach();
@@ -1753,7 +1754,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
     mobileDrawerDismissController,
-    routineEventController, sessionPickerEventController, settingsChangeController,
+    sessionPickerEventController, settingsChangeController,
     headerEventController, carouselEventRegistration,
   ],
   applyCarousel: () => carouselController.apply(),

@@ -218,7 +218,7 @@ session identity but not on each other:
   - [x] Replace `pi-open-file-explorer` with the files feature’s `openExplorer` action and remove its global listener.
   - [x] Add feature construction/teardown tests and retain focused picker, folder-browser, explorer, upload, and editor regression coverage.
 - [x] **Hublots** — manager, sidebar, scoped visibility, and tunnel events.
-- [ ] **Routines** — sidebar, visibility, actions, and routine stream updates.
+- [x] **Routines** — sidebar, visibility, actions, and routine stream updates.
 - [ ] **Settings/extensions** — settings modal, extension UI prompt adapters, and
   header model/thinking actions.
 - [ ] **Layout** — carousel, mobile drawer dismissal, swipes, and header/sidebar
