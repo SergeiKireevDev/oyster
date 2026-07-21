@@ -221,7 +221,7 @@ session identity but not on each other:
 - [x] **Routines** — sidebar, visibility, actions, and routine stream updates.
 - [x] **Settings/extensions** — settings modal, extension UI prompt adapters, and
   header model/thinking actions.
-- [ ] **Layout** — carousel, mobile drawer dismissal, swipes, and header/sidebar
+- [x] **Layout** — carousel, mobile drawer dismissal, swipes, and header/sidebar
   toggles.
 
 For every feature:
