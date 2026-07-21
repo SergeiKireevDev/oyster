@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { createConnectionStateTransitions, createEventStreamRuntime, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
+import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -897,15 +897,12 @@ function connect({ replay = true } = {}) {
     // /authcheck to tell them apart, at most once per 10s.
     probeTokenValidity();
   },
-  onmessage: (ev) => {
-    lastEventAt = Date.now();
-    let msg;
-    try { msg = JSON.parse(ev.data); } catch { return; }
-    if (isDuplicateSseEvent(msg)) return;
-    try { handleEvent(msg); } catch (e) {
-      console.error("event handling failed", e, msg);
-    }
-  },
+  onmessage: (ev) => processEventMessage(ev.data, {
+    onReceived: () => { lastEventAt = Date.now(); },
+    dedupe: isDuplicateSseEvent,
+    dispatch: handleEvent,
+    onError: (error, message) => console.error("event handling failed", error, message),
+  }),
   };
   es = eventStream.connect({ token, runner: currentRunner, replay }, eventHandlers);
 }

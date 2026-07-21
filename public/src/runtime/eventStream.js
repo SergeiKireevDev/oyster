@@ -1,4 +1,12 @@
 /** Create the authenticated EventSource used by the live Pi event stream. */
+export function processEventMessage(raw, { dedupe, dispatch, onError, onReceived }) {
+  let message;
+  try { message = JSON.parse(raw); } catch { return; }
+  onReceived?.(message);
+  if (dedupe(message)) return;
+  try { dispatch(message); } catch (error) { onError(error, message); }
+}
+
 export async function runCanonicalReload({ skipTranscriptGate, isReplaying, setReplaying, refreshState, reloadTranscript, onError }) {
   if (skipTranscriptGate) { refreshState(); return; }
   if (isReplaying()) setReplaying(true, "canonical");
