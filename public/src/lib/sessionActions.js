@@ -49,6 +49,13 @@ export function markRunnerStopped(runners, id) {
   return runners.map((runner) => runner.id === id ? { ...runner, alive: false, busy: false } : runner);
 }
 
+export function usageInfo(usage) {
+  if (!usage) return null;
+  const cost = usage.cost?.total ?? 0;
+  const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : cost > 0 ? `$${cost.toFixed(4)}` : "$0";
+  return `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}`;
+}
+
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {
   return !emptySessionRunners.has(runner) && (messageCount ?? 0) > 0;
 }

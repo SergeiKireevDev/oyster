@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired } from "../public/src/lib/sessionActions.js";
+import { fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions persist the current runner", () => {
   const values = new Map();
@@ -48,6 +48,11 @@ test("session actions stop runners with normalized errors", async () => {
 
 test("session actions mark only the stopped runner inactive", () => {
   assert.deepEqual(markRunnerStopped([{ id: "a", alive: true, busy: true }, { id: "b", alive: true, busy: true }], "a"), [{ id: "a", alive: false, busy: false }, { id: "b", alive: true, busy: true }]);
+});
+
+test("session actions format usage information", () => {
+  assert.equal(usageInfo({ input: 1200, output: 34, cost: { total: 0.0042 } }), "↑1,200 ↓34 tok · $0.0042");
+  assert.equal(usageInfo(null), null);
 });
 
 test("session actions skip transcript replay for empty runners", () => {

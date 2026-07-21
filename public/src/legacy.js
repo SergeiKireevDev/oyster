@@ -31,7 +31,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { applySessionState, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./lib/sessionActions.js";
+import { applySessionState, fetchSessionPreview, markRunnerStopped, openSession, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, usageInfo } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createHublot, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
@@ -680,8 +680,6 @@ async function renderTranscript(messages) {
 
 let state = null;
 
-function fmtCost(n) { return n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : "$0"; }
-
 function applyState(s) {
   const result = applySessionState({ incoming: s, previousState: state, currentRunner, emptySessionRunners, routinesNow, routineVisible, tunnelScopeAll, hooks: {
     log: (sessionChanged) => lifecycleLog("applyState", { incomingSessionId: s?.sessionId ?? null, previousSessionId: state?.sessionId ?? null, sessionChanged, messageCount: s?.messageCount ?? null, pendingMessageCount: s?.pendingMessageCount ?? null, isStreaming: !!s?.isStreaming, isCompacting: !!s?.isCompacting, model: s?.model?.id ?? null, sessionFile: s?.sessionFile ?? null }),
@@ -806,11 +804,8 @@ function setBusy(b) {
 }
 
 function updateUsage(message) {
-  const u = message?.usage;
-  if (!u) return;
-  updateHeaderState({
-    usageInfo: `↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()} tok · ${fmtCost(u.cost?.total ?? 0)}`,
-  });
+  const info = usageInfo(message?.usage);
+  if (info) updateHeaderState({ usageInfo: info });
 }
 
 // ------------------------------------------------------------ event stream
