@@ -1492,16 +1492,35 @@ checkpointBtn.title = "checkpoint — commit all workdir changes";
 checkpointBtn.addEventListener("click", async (e) => {
   e.stopPropagation();
   if (checkpointBtn.classList.contains("busy")) return;
+  // ask which model should summarize the diff into the commit message
+  let model = null;
+  try {
+    const { models } = await rpc({ type: "get_available_models" });
+    const ids = models.map((m) => `${m.provider}/${m.id}`);
+    const last = localStorage.getItem("pi_ckpt_model");
+    if (last && ids.includes(last)) ids.unshift(...ids.splice(ids.indexOf(last), 1)); // last used first
+    const options = ["\u{1F4A8} No summary — timestamp message", ...ids];
+    const choice = await pickOption("Summarize the diff with…", options);
+    if (choice === null) return; // cancelled → no checkpoint
+    if (choice > 0) {
+      model = options[choice];
+      localStorage.setItem("pi_ckpt_model", model);
+    }
+  } catch {} // model list unavailable → checkpoint without a summary
   checkpointBtn.classList.add("busy");
+  if (model) toast(`\u{1F9CA} summarizing diff with ${model}…`);
   try {
     const res = await fetch(
       `/checkpoint?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(currentRunner ?? "")}`,
-      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model }) }
     );
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `failed (${res.status})`);
     if (data.committed) {
-      toast(`\u{1F9CA} checkpoint ${data.hash} — ${data.files} file${data.files === 1 ? "" : "s"} committed`);
+      const what = data.summarized
+        ? `“${data.message.replace(/^checkpoint: /, "")}”`
+        : `${data.files} file${data.files === 1 ? "" : "s"} committed`;
+      toast(`\u{1F9CA} checkpoint ${data.hash} — ${what}`);
     } else if (data.recorded) {
       toast(`\u{1F9CA} workdir clean — checkpoint marked at ${data.hash}`);
     } else {

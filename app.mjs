@@ -30,9 +30,11 @@
  *   POST /mkdir       -> create a subdirectory (folder picker "new folder")
  *   POST /restart     -> kill and respawn one runner (?runner=id)
  *   POST /checkpoint  -> commit all workdir changes of a runner (?runner=id)
- *                        { label? } — git add -A && git commit in runner.dir;
- *                        the commit is recorded as a checkpoint anchored to the
- *                        session's latest message
+ *                        { label?, model? } — git add -A && git commit in
+ *                        runner.dir; with `model`, a one-shot pi sub-agent
+ *                        summarizes the staged diff into the commit message.
+ *                        The commit is recorded as a checkpoint anchored to
+ *                        the session's latest message
  *   GET  /checkpoints -> checkpoint records of one session (?id=<sessionId>)
  *   GET  /checkpoint-tree -> the session family (root ancestor + all forks) of
  *                        one session as a tree, checkpoints attached (?path=…)
@@ -898,8 +900,43 @@ export function init(state) {
     });
   }
 
-  /** commit every pending change in `dir` as a checkpoint commit */
-  async function checkpointWorkdir(dir, label) {
+  /** Ask a one-shot pi sub-agent (no tools, no session) to summarize a staged
+   *  diff into a single commit-message line. Resolves null on any failure so
+   *  the caller can fall back to a timestamp message. */
+  function summarizeDiff(dir, model, diff) {
+    return new Promise((resolvePromise) => {
+      const prompt =
+        "You are writing a git commit message for a checkpoint commit.\n" +
+        "Summarize the following diff as ONE concise line: imperative mood, max 72 characters.\n" +
+        "Reply with ONLY that line — no quotes, no code fences, no explanation.\n\n" +
+        `<diff>\n${diff}\n</diff>`;
+      const args = ["--no-session", "--no-tools", "--thinking", "off", "--model", model, "-p", prompt];
+      console.log(`[pi-ui] checkpoint summary sub-agent (${model}) for ${dir}`);
+      const proc = spawn(config.PI_BIN, args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "", err = "";
+      proc.stdout.on("data", (c) => { out += c; });
+      proc.stderr.on("data", (c) => { err += c; });
+      const timer = setTimeout(() => { try { proc.kill("SIGKILL"); } catch {} }, 60_000);
+      timer.unref?.();
+      proc.on("error", () => { clearTimeout(timer); resolvePromise(null); });
+      proc.on("exit", (code) => {
+        clearTimeout(timer);
+        if (code !== 0) {
+          console.error(`[pi-ui] summary sub-agent failed (code=${code}): ${err.trim().split("\n").pop() ?? ""}`);
+          resolvePromise(null);
+          return;
+        }
+        // first meaningful line, stripped of quotes/fences, length-capped
+        const line = out.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("```"))[0] ?? "";
+        const clean = line.replace(/^["'`]+|["'`]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
+        resolvePromise(clean || null);
+      });
+    });
+  }
+
+  /** commit every pending change in `dir` as a checkpoint commit; with a
+   *  `model`, the staged diff is summarized into the commit message */
+  async function checkpointWorkdir(dir, label, model = null) {
     const top = await git(dir, ["rev-parse", "--show-toplevel"]);
     if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
     const st = await git(dir, ["status", "--porcelain"]);
@@ -912,14 +949,21 @@ export function init(state) {
     }
     const add = await git(dir, ["add", "-A"]);
     if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
-    const message = label ? `checkpoint: ${label}` : `checkpoint ${new Date().toISOString()}`;
+    let message = label ? `checkpoint: ${label}` : null;
+    let summarized = false;
+    if (!message && model) {
+      const diff = (await git(dir, ["diff", "--cached"])).stdout.slice(0, 40_000);
+      const summary = diff.trim() ? await summarizeDiff(dir, model, diff) : null;
+      if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
+    }
+    message ??= `checkpoint ${new Date().toISOString()}`;
     const ci = await git(dir, ["commit", "-m", message]);
     if (ci.code !== 0) {
       return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };
     }
     const hash = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-    console.log(`[pi-ui] checkpoint ${hash} in ${dir} (${files} files)`);
-    return { status: 200, body: { committed: true, hash, message, files, dir } };
+    console.log(`[pi-ui] checkpoint ${hash} in ${dir} (${files} files): ${message}`);
+    return { status: 200, body: { committed: true, hash, message, files, dir, summarized } };
   }
 
   // ---------------------------------------------------------------- http helpers
@@ -1493,7 +1537,8 @@ export function init(state) {
       if (body === undefined) return;
       const runner = runnerFromReq(url);
       const label = body?.label ? String(body.label).slice(0, 200) : null;
-      const { status, body: out } = await checkpointWorkdir(runner.dir, label);
+      const model = body?.model ? String(body.model).slice(0, 200) : null;
+      const { status, body: out } = await checkpointWorkdir(runner.dir, label, model);
       // anchor the checkpoint to the session's latest message (also when the
       // tree was already clean: HEAD marks that state just as well)
       if (status === 200 && out.hash && runner.sessionFile && existsSync(runner.sessionFile)) {
