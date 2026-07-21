@@ -258,7 +258,7 @@ impossible.
 **Acceptance:** feature components have no global custom-event dispatches;
 remaining global listeners are documented browser integrations.
 
-## [x] 7. Reduce and Rename the Composition Root
+## [ ] 7. Reduce and Rename the Composition Root
 
 Once the features own their state and actions:
 
@@ -274,6 +274,36 @@ Once the features own their state and actions:
 
 **Acceptance:** the root has no feature business logic, direct feature DOM
 lookup, feature-local mutable state, or custom-event listener registration.
+
+## [ ] 8. Continue Composition-Root Reduction
+
+The previous completion of section 7 was premature: as of 2026-07-14,
+`public/src/runtime/appRuntimeImplementation.js` still exists at roughly 1,786
+lines. Complete the remaining migration in small verified commits:
+
+- [ ] Inventory the remaining root-owned state, controller construction, event
+  registrations, and DOM access; record each owner feature/platform module.
+- [ ] Move session-owned runner, route, picker, and hydration wiring out of the
+  root into `features/sessions/`, leaving only injected interfaces at the
+  composition boundary.
+- [ ] Move transcript controller assembly and transcript DOM adapters behind
+  `features/transcript/`, replacing the current placeholder feature wrapper.
+- [ ] Move platform EventSource/RPC/reconnect construction behind
+  `platform/connectionCoordinator.js`; the root may only construct and wire
+  the coordinator.
+- [ ] Split the remaining layout, hublot, routine, and settings construction
+  blocks into feature factories with teardown ownership.
+- [ ] Remove obsolete event-controller imports and compatibility adapters only
+  after an `rg` no-reference check and focused regression coverage.
+- [ ] Rename or replace `appRuntimeImplementation.js` with a thin composition
+  module. Its responsibilities are limited to adapter creation, feature
+  construction order, cross-feature interfaces, `start`, and `teardown`.
+- [ ] Add a regression guard that the composition root has no feature-local
+  mutable state, feature custom-event registration, or feature DOM lookup.
+
+**Acceptance:** `appRuntimeImplementation.js` is removed or reduced to a
+reviewable wiring module (a few hundred lines), and every moved feature has a
+fresh mount → teardown → mount lifecycle test.
 
 ## Completion Criteria
 
