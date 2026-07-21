@@ -1,15 +1,13 @@
 ---
 title: Backup and recovery
-description: Back up pi session data and pi-lot-ui application data safely.
+description: Back up pi session data and Oyster application data safely.
 tags: backup, recovery, sqlite
 ---
 
-# Backup and recovery
-
-pi-lot-ui uses two separately owned data domains:
+Oyster uses two separately owned data domains:
 
 1. pi's session store, such as `~/.pi/agent/sessions.sqlite`
-2. pi-lot-ui's application database, normally `~/.pi/agent/pi-lot-ui.sqlite`
+2. Oyster's application database, normally `~/.pi/agent/pi-lot-ui.sqlite`
 
 Never replace one with the other.
 
@@ -43,10 +41,8 @@ Apply the same closed-database rule to `pi-lot-ui.sqlite`.
 
 ## Restore
 
-1. Stop pi-lot-ui and all pi writers.
+1. Stop Oyster and all pi writers.
 2. Preserve the failed database for diagnosis.
 3. Restore a compatible snapshot and its matching sidecars together.
 4. Start the same or a compatible newer application version.
-5. Check `/health`, sessions, checkpoint trees, routines, and hublots.
-
-For legacy checkpoint and routine cutover, downgrade, and conflict handling, use the [application-data migration runbook](/app-data-migration/).
+5. Check `/health`, sessions, routines, and hublots.

@@ -4,8 +4,6 @@ description: Install, verify, update, and troubleshoot the user service.
 tags: systemd, deployment
 ---
 
-# Systemd service
-
 The repository includes `pi-ui.service`. Render its checkout placeholder before installing it:
 
 ```bash

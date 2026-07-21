@@ -11,6 +11,8 @@
 
   const uiActions = getUiActionRegistry();
   let selectedProvider = "";
+  let authenticationMethod = "api_key";
+  let methodProvider = "";
   let keyInput;
   let hasKey = false;
   let oauthInputs = new Set();
@@ -28,12 +30,18 @@
     return sourceLabels[source] ?? "not configured";
   }
 
-  $: eligibleProviders = $credentialsState.providers.filter((provider) =>
-    provider.credentialType !== "oauth" && (provider.registered || provider.credentialType === "api_key"));
-  $: if (!eligibleProviders.some((provider) => provider.provider === selectedProvider)) {
-    selectedProvider = eligibleProviders[0]?.provider ?? "";
+  $: activeProviders = $credentialsState.providers.filter((provider) => provider.configured);
+  $: selectableProviders = $credentialsState.providers.filter((provider) =>
+    provider.credentialType !== "oauth" && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
+  $: if (!selectableProviders.some((provider) => provider.provider === selectedProvider)) {
+    selectedProvider = selectableProviders[0]?.provider ?? "";
   }
-  $: selected = eligibleProviders.find((provider) => provider.provider === selectedProvider);
+  $: selected = selectableProviders.find((provider) => provider.provider === selectedProvider);
+  $: if (selectedProvider !== methodProvider) {
+    methodProvider = selectedProvider;
+    authenticationMethod = selected?.oauthCapable ? "oauth" : "api_key";
+    clearKey();
+  }
   $: nextRequestSignature = `${$credentialsState.flow?.flowId ?? ""}:${$credentialsState.flow?.status ?? ""}:${($credentialsState.flow?.requests ?? []).map((request) => request.requestId).join(",")}`;
   $: if (nextRequestSignature !== requestSignature) {
     requestSignature = nextRequestSignature;
@@ -197,8 +205,9 @@
   {:else if !$credentialsState.providers.length}
     <p class="api-keys-state">No providers are available from the configured pi installation.</p>
   {:else}
-    <div class="api-key-list" role="list" aria-label="Provider credential status">
-      {#each $credentialsState.providers as provider (provider.provider)}
+    {#if activeProviders.length}
+    <div class="api-key-list" role="list" aria-label="Active provider credential status">
+      {#each activeProviders as provider (provider.provider)}
         <div class="api-key-row" role="listitem" data-provider={provider.provider}>
           <div class="api-key-provider">
             <strong>{provider.displayName}</strong>
@@ -231,6 +240,7 @@
         </div>
       {/each}
     </div>
+    {/if}
     {#if $credentialsState.error}<p class="api-keys-state error" role="alert">{$credentialsState.error}</p>{/if}
   {/if}
 
@@ -250,29 +260,52 @@
   <form class="api-key-form" onsubmit={saveKey}>
     <label>
       <span>Provider</span>
-      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !eligibleProviders.length}>
-        {#each eligibleProviders as provider (provider.provider)}
+      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !selectableProviders.length}>
+        {#each selectableProviders as provider (provider.provider)}
           <option value={provider.provider}>{provider.displayName}</option>
         {/each}
       </select>
     </label>
-    <label>
-      <span>API key</span>
-      <input
-        bind:this={keyInput}
-        type="password"
-        autocomplete="off"
-        autocapitalize="none"
-        autocorrect="off"
-        spellcheck="false"
-        placeholder="Enter a new API key"
+    {#if selected?.oauthCapable && authenticationMethod === "oauth"}
+      <div class="api-key-oauth-choice">
+        <span>OAuth</span>
+        <strong>{selected.oauthDisplayName || selected.displayName}</strong>
+      </div>
+      <button
+        class="btn"
+        type="button"
         disabled={$credentialsState.loading || !selectedProvider}
-        oninput={(event) => { hasKey = Boolean(event.currentTarget.value.trim()); }}
-      />
-    </label>
-    <button class="btn" type="submit" disabled={$credentialsState.loading || !selectedProvider || !hasKey}>
-      {selected?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi"}
-    </button>
+        onclick={() => startOAuth(selectedProvider)}
+      >
+        {selected?.credentialType === "oauth" ? "Re-authenticate" : "Sign in with OAuth"}
+      </button>
+      <button class="api-key-method-toggle" type="button" onclick={() => { authenticationMethod = "api_key"; }}>
+        Use an API key instead
+      </button>
+    {:else}
+      <label>
+        <span>API key</span>
+        <input
+          bind:this={keyInput}
+          type="password"
+          autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="Enter a new API key"
+          disabled={$credentialsState.loading || !selectedProvider}
+          oninput={(event) => { hasKey = Boolean(event.currentTarget.value.trim()); }}
+        />
+      </label>
+      <button class="btn" type="submit" disabled={$credentialsState.loading || !selectedProvider || !hasKey}>
+        {selected?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi"}
+      </button>
+      {#if selected?.oauthCapable}
+        <button class="api-key-method-toggle" type="button" onclick={() => { clearKey(); authenticationMethod = "oauth"; }}>
+          Use OAuth instead
+        </button>
+      {/if}
+    {/if}
   </form>
 </section>
 

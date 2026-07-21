@@ -421,6 +421,7 @@ export function createTailFirstTranscriptRenderer({
   }
 
   async function render(messages) {
+    const restoreTop = messagesElement.children.length > 0 && !nearBottom() ? scroller.scrollTop : null;
     clear();
     const job = jobs.begin();
     for (const message of messages) {
@@ -431,20 +432,25 @@ export function createTailFirstTranscriptRenderer({
     const turns = splitTurns(messages);
     renderChunk(takeTailChunk(turns, tailMessages));
     await tick();
-    scrollToBottom(true);
+    if (restoreTop === null) scrollToBottom(true);
+    else scroller.scrollTop = restoreTop;
     const complete = await backfillTurns({
       turns,
       takeTailChunk,
       chunkSize: chunkMessages,
       isCurrent: () => jobs.isCurrent(job),
-      beforePrepend: () => ({ pinned: nearBottom(), height: scroller.scrollHeight, top: scroller.scrollTop }),
+      beforePrepend: () => ({ pinned: restoreTop === null && nearBottom(), height: scroller.scrollHeight, top: scroller.scrollTop }),
       renderPrepend: async (chunk) => { renderChunk(chunk, { prepend: true }); await tick(); },
       afterPrepend: ({ pinned, height, top }) => {
-        if (pinned) scrollToBottom(true);
+        if (restoreTop !== null) scroller.scrollTop = restoreTop;
+        else if (pinned) scrollToBottom(true);
         else scroller.scrollTop = top + (scroller.scrollHeight - height);
       },
     });
-    if (complete) afterRender();
+    if (complete) {
+      if (restoreTop !== null) scroller.scrollTop = restoreTop;
+      afterRender();
+    }
     return complete;
   }
 

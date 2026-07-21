@@ -15,8 +15,6 @@ export function createRunnerRoutes({
   openSessionRunner,
   sessionReferenceParam,
   lookupSessionReference = () => ({}),
-  srvId,
-  runnersChanged,
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
@@ -26,17 +24,6 @@ export function createRunnerRoutes({
   const json = requestContext?.json;
   const readJsonBody = requestContext?.readJsonBody;
   const resolveSafePath = requestContext?.resolveSafePath;
-
-  function autoTitleFork(runner, command) {
-    if (command.type !== "prompt" || typeof command.message !== "string") return;
-    if (!/^\u23EA [0-9a-f]{4,12}$/.test(runner.sessionName ?? "")) return;
-    const title = command.message.replace(/\s+/g, " ").trim();
-    if (!title) return;
-    const short = title.length > 42 ? `${title.slice(0, 41).trimEnd()}…` : title;
-    sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `⏪ ${short}` }, { autostart: false });
-    runner.sessionName = `⏪ ${short}`;
-    runnersChanged();
-  }
 
   return {
     "GET /events": (req, res, url) => {
@@ -84,7 +71,6 @@ export function createRunnerRoutes({
       }
       const runner = runnerFromReq(url);
       const queued = sendToRunner(runner, command);
-      if (queued) autoTitleFork(runner, command);
       json(res, queued ? 202 : 503, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
         : { error: "pi process unavailable" });

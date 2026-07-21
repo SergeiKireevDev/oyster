@@ -1,0 +1,129 @@
+:root {
+  color-scheme: dark;
+  --oyster-bg: #0b0d12;
+  --oyster-panel: #11141b;
+  --oyster-panel-2: #181c25;
+  --oyster-border: #252a36;
+  --oyster-text: #f1f3f8;
+  --oyster-muted: #858da0;
+  --oyster-accent: #9da9ff;
+  --oyster-accent-dim: #30375e;
+  --oyster-green: #78dba9;
+  --oyster-red: #ff7d91;
+  --oyster-yellow: #f5c66f;
+}
+
+html,
+body,
+#gitdocs-app,
+#TIMBER_UI_ROOT {
+  background: var(--oyster-bg) !important;
+  color: var(--oyster-text) !important;
+}
+
+#gitdocs-app > div > div > nav {
+  background: linear-gradient(180deg, #11141b, #0e1117) !important;
+  border-color: var(--oyster-border) !important;
+  box-shadow: inset -1px 0 var(--oyster-border) !important;
+}
+
+#gitdocs-app header,
+#gitdocs-app nav > div:first-child,
+#gitdocs-app nav > a:last-child {
+  border-color: var(--oyster-border) !important;
+}
+
+#gitdocs-app header {
+  background: rgba(11, 13, 18, 0.92) !important;
+}
+
+#gitdocs-app a {
+  color: var(--oyster-accent) !important;
+}
+
+#gitdocs-app nav a {
+  color: #cbd0dc !important;
+}
+
+#gitdocs-app nav a:hover,
+#gitdocs-app nav a.active {
+  color: var(--oyster-accent) !important;
+}
+
+#gitdocs-app h1,
+#gitdocs-app h2,
+#gitdocs-app h3,
+#gitdocs-app h4,
+#gitdocs-app h5,
+#gitdocs-app strong,
+#gitdocs-app b {
+  color: var(--oyster-text) !important;
+}
+
+#gitdocs-app p,
+#gitdocs-app li,
+#gitdocs-app td,
+#gitdocs-app th {
+  color: #dfe2ea !important;
+}
+
+#gitdocs-app blockquote {
+  margin-left: 0;
+  border-left: 3px solid var(--oyster-accent) !important;
+  border-radius: 0 8px 8px 0;
+  background: rgba(157, 169, 255, 0.08);
+  color: var(--oyster-text) !important;
+  padding: 0.75rem 1rem !important;
+}
+
+#gitdocs-app code {
+  background: var(--oyster-accent-dim) !important;
+  color: #d8dcff !important;
+}
+
+#gitdocs-app pre,
+#gitdocs-app pre pre,
+#gitdocs-app pre code {
+  background: #12151c !important;
+  color: #dfe2ea !important;
+  border-color: var(--oyster-border) !important;
+}
+
+#gitdocs-app table tr,
+#gitdocs-app table tr:nth-child(2n) {
+  background: var(--oyster-panel) !important;
+}
+
+#gitdocs-app table tr:nth-child(2n) {
+  background: var(--oyster-panel-2) !important;
+}
+
+#gitdocs-app table th,
+#gitdocs-app table td {
+  border-color: var(--oyster-border) !important;
+}
+
+#gitdocs-app input {
+  border-color: var(--oyster-border) !important;
+  background: var(--oyster-panel) !important;
+  color: var(--oyster-text) !important;
+}
+
+#gitdocs-app img[src$="oyster.svg"] {
+  width: auto;
+  max-width: 150px;
+  height: 38px !important;
+}
+
+#gitdocs-app img[src$="oyster.svg"] + * {
+  color: var(--oyster-text) !important;
+}
+
+::selection {
+  background: var(--oyster-accent-dim);
+  color: var(--oyster-text);
+}
+
+* {
+  scrollbar-color: #343a49 transparent;
+}

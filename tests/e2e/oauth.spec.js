@@ -113,8 +113,9 @@ async function runOAuthFlow(page) {
   // Empty auth.json opens credential setup automatically, without navigating.
   await expect(page.locator("#mTitle")).toHaveText("Set up credentials");
   const row = page.locator(`.api-key-row[data-provider="${PROVIDER}"]`);
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await page.getByLabel("Provider").selectOption(PROVIDER);
+  await page.getByRole("button", { name: "Sign in with OAuth" }).click();
   await expect(page.locator("#mTitle")).toContainText("Sign in to Anthropic");
   await page.getByRole("button", { name: "Yes" }).click();
 

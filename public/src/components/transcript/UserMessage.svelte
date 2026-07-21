@@ -34,14 +34,16 @@
     {/if}
   </details>
 {:else}
-  <div class="msg user" class:ckpt-frozen={!!restore} data-role="user" tabindex="-1" onpointerdowncapture={selectOnFirstTouch} bind:this={root}>
-    {text}<PermalinkButton target={root} {onPermalink} />
-    <CopyMessageButton {text} {onCopy} />
-    {#if $checkpointMarker.target === root}
-      <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
-    {/if}
-    {#if restore}
-      <CheckpointRestoreButton {restore} {onRollback} />
-    {/if}
+  <div class="message-row user-message-row" data-role="user" bind:this={root}>
+    <div class="msg user" class:ckpt-frozen={!!restore} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
+      {text}<PermalinkButton target={root} {onPermalink} />
+      <CopyMessageButton {text} {onCopy} />
+      {#if $checkpointMarker.target === root}
+        <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
+      {/if}
+      {#if restore}
+        <CheckpointRestoreButton {restore} {onRollback} />
+      {/if}
+    </div>
   </div>
 {/if}

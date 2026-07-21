@@ -1,10 +1,8 @@
 ---
 title: HTTP API
-description: Authentication and route reference for pi-lot-ui clients.
+description: Authentication and route reference for Oyster clients.
 tags: api, http, sse
 ---
-
-# HTTP API
 
 Responses are JSON unless a route streams events, downloads a file, or serves static assets. Errors generally use:
 
@@ -32,7 +30,7 @@ The `token` query parameter is allowed only on `GET` requests. Auth failures are
 | `POST /rpc?runner=…` | Forward a pi RPC object verbatim |
 | `POST /workdir` | Set the workspace and spawn a runner there |
 
-## Sessions and checkpoints
+## Sessions
 
 Canonical session references are opaque `ps1_…` keys. JSONL path parameters remain compatibility inputs and should not be used by new clients.
 
@@ -46,10 +44,6 @@ Canonical session references are opaque `ps1_…` keys. JSONL path parameters re
 | `GET /search` | Search conversations by session, folder, or all sessions |
 | `DELETE /session?key=ps1_…` | Delete through the selected backend capability |
 | `GET /analytics/usage` | Aggregate SQLite session token and cost usage |
-| `GET /checkpoints` | List checkpoint markers |
-| `GET /checkpoint-tree` | Read a session family's checkpoint tree |
-| `POST /checkpoint` | Commit workspace state and anchor it to a conversation entry |
-| `POST /rollback` | Restore a checkpoint and fork conversation history |
 
 ## Credentials
 

@@ -1,6 +1,7 @@
 {
-  "name": "pi-lot-ui",
+  "name": "Oyster",
   "root": "docs",
+  "logo": "oyster.svg",
   "output": ".gitdocs_build",
   "baseURL": "/",
   "languages": ["bash", "javascript", "json"],

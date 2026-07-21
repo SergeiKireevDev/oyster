@@ -17,7 +17,7 @@ function fakeProcess() {
   return proc;
 }
 
-function setup(t) {
+function setup(t, managerOptions = {}) {
   const spawns = [];
   const owners = [];
   const sqlitePath = "/agent/sessions.sqlite";
@@ -47,7 +47,7 @@ function setup(t) {
       return proc;
     },
   });
-  const manager = createRunnerManager(state, { ensureSessionOwner: (reference) => owners.push(reference) });
+  const manager = createRunnerManager(state, { ensureSessionOwner: (reference) => owners.push(reference), ...managerOptions });
   t.after(() => {
     clearInterval(state.runnerWatchdogTimer);
     clearInterval(state.runnerReaperTimer);
@@ -115,6 +115,40 @@ test("runner deduplication compares the full reference, not the shared SQLite pa
   assert.notEqual(second, first);
   assert.equal(state.runners.size, 2);
   assert.deepEqual(owners, [firstRef, secondRef]);
+});
+
+test("unnamed sessions are titled by their configured model from catalog messages", async (t) => {
+  const titleCalls = [];
+  const { manager, spawns, state, sqlitePath } = setup(t, {
+    summarizeTitle: async (_piProcesses, options) => { titleCalls.push(options); return "Repair OAuth Redirects"; },
+  });
+  const messages = Array.from({ length: 11 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `message ${index + 1}` }));
+  state.sessionCatalog = { messages: () => ({ messages }) };
+  const runner = manager.spawnRunner({
+    dir: "/workspace",
+    sessionRef: { backend: "sqlite", id: "title-session", storagePath: sqlitePath },
+  });
+  spawns[0].proc.stdout.write(`${JSON.stringify({
+    type: "response", id: "state", success: true, command: "get_state",
+    data: { sessionId: "title-session", sessionName: null, messageCount: 11, model: { provider: "mock", id: "configured" } },
+  })}\n`);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+
+  assert.equal(titleCalls.length, 1);
+  assert.deepEqual(titleCalls[0].model, { provider: "mock", id: "configured" });
+  assert.equal(titleCalls[0].messages.length, 10);
+  assert.equal(titleCalls[0].messages.at(-1).content, "message 10");
+  assert.equal(runner.sessionName, "Repair OAuth Redirects");
+  const commands = spawns[0].proc.stdin.read().toString().trim().split("\n").map(JSON.parse);
+  assert.ok(commands.some((command) => command.type === "set_session_name" && command.name === "Repair OAuth Redirects"));
+
+  spawns[0].proc.stdout.write(`${JSON.stringify({
+    type: "response", id: "state-2", success: true, command: "get_state",
+    data: { sessionId: "title-session", sessionName: "Manual title", messageCount: 12, model: { provider: "mock", id: "configured" } },
+  })}\n`);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(titleCalls.length, 1, "named sessions are not retitled");
 });
 
 test("JSONL runners retain file compatibility and switch-session startup", (t) => {

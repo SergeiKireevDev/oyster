@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 64" role="img" aria-labelledby="title desc">
+  <title id="title">Oyster Aperture logo</title>
+  <desc id="desc">A symmetrical technical oyster aperture in two greys with an accent pearl.</desc>
+  <defs>
+    <path id="cap" d="M32 3 7 16l13 8 12-5Z"/>
+    <path id="side" d="M7 16 3 34l13 2 4-12Z"/>
+    <path id="base" d="M3 34 8 49l19 9-11-22Z"/>
+    <path id="iris" d="m16 36 11 22 5-14V31Z"/>
+  </defs>
+  <use href="#cap" fill="#C5C9CC"/><use href="#cap" transform="translate(64) scale(-1 1)" fill="#C5C9CC"/>
+  <use href="#side" fill="#555B61"/><use href="#side" transform="translate(64) scale(-1 1)" fill="#555B61"/>
+  <use href="#base" fill="#C5C9CC"/><use href="#base" transform="translate(64) scale(-1 1)" fill="#C5C9CC"/>
+  <use href="#iris" fill="#555B61"/><use href="#iris" transform="translate(64) scale(-1 1)" fill="#555B61"/>
+  <path fill="#9DA9FF" d="m32 28 9 8-3 12H26l-3-12Z"/>
+  <text x="76" y="43" fill="#F1F3F8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="31" font-weight="650" letter-spacing="-1">Oyster</text>
+</svg>

@@ -287,7 +287,7 @@ test("tool card registry reconciles durable results rendered before their calls"
   });
 });
 
-test("tail-first renderer preserves prompt history and scroll position during backfill", async () => {
+test("tail-first transcript refresh preserves a reader's scroll position during backfill", async () => {
   const rendered = []; const remembered = []; const scrolls = []; let cleared = 0; let complete = 0;
   const scroller = { scrollHeight: 100, scrollTop: 20 };
   const renderer = createTailFirstTranscriptRenderer({
@@ -305,9 +305,22 @@ test("tail-first renderer preserves prompt history and scroll position during ba
   assert.equal(cleared, 1);
   assert.deepEqual(remembered, ["older", "newer"]);
   assert.deepEqual(rendered, [["newer", false], ["older", true]]);
-  assert.equal(scroller.scrollTop, 80);
-  assert.deepEqual(scrolls, [true]);
+  assert.equal(scroller.scrollTop, 20);
+  assert.deepEqual(scrolls, []);
   assert.equal(complete, 1);
+});
+
+test("tail-first initial session render still starts at the latest message", async () => {
+  const scrolls = [];
+  const renderer = createTailFirstTranscriptRenderer({
+    messagesElement: { children: [] }, scroller: { scrollHeight: 100, scrollTop: 0 },
+    splitTurns: (messages) => [messages], takeTailChunk: (turns) => turns.flat(),
+    backfillTurns: async () => true, renderMessage() {}, clear() {}, rememberPrompt() {},
+    userMessageText: () => "", scrollToBottom: (force) => scrolls.push(force), nearBottom: () => false,
+    tick: async () => {}, afterRender() {},
+  });
+  await renderer.render([{ role: "assistant", content: "latest" }]);
+  assert.deepEqual(scrolls, [true]);
 });
 
 test("render jobs cancel stale backfills", () => {

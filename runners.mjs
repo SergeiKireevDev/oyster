@@ -32,6 +32,7 @@
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createPiProcessLauncher } from "./pi-processes.mjs";
+import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-titles.mjs";
 
 const RUNNER_BUFFER_MAX = 400;
 const WATCHDOG_INTERVAL_MS = 30000;
@@ -49,6 +50,7 @@ const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
+  "titleProcess", "titleSessionId",
 ]);
 export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
 
@@ -66,6 +68,8 @@ function initializeRunnerRuntime(descriptor) {
     probeSentAt: null,
     probeMisses: 0,
     watchdogOk: false,
+    titleProcess: null,
+    titleSessionId: null,
   };
 }
 
@@ -80,6 +84,7 @@ function ensureRunnerRuntimeFields(runner) {
 export function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = state.appStore, now = () => new Date().toISOString(),
+  summarizeTitle = summarizeSessionTitle,
 } = {}) {
   const { config, serverEvent, sessionReferences } = state;
   const runnerRepository = appStore?.repositories?.runners ?? null;
@@ -217,6 +222,48 @@ export function createRunnerManager(state, {
     runnerWrite(runner, JSON.stringify({ ...obj, _server: true, runner: runner.id }));
   }
 
+  function titleEligible(name) {
+    return !name || /^\u23EA [0-9a-f]{4,12}$/.test(name);
+  }
+
+  function maybeTitleSession(runner, sessionState) {
+    const reference = runner.sessionRef;
+    const sessionId = runner.sessionId;
+    if (!reference || !sessionId || !titleEligible(runner.sessionName)) return;
+    if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId) return;
+    const catalog = state.sessionCatalog;
+    if (!catalog?.messages) return;
+
+    const identity = reference.backend === "sqlite" ? reference.id : reference.storagePath;
+    let messages;
+    try { messages = catalog.messages(identity)?.messages ?? []; }
+    catch (error) {
+      console.error(`[pi-ui] cannot read session ${sessionId} for title: ${error.message}`);
+      return;
+    }
+    if (!messages.length) return;
+
+    const originalName = runner.sessionName ?? null;
+    runner.titleSessionId = sessionId;
+    Promise.resolve(summarizeTitle(state.piProcesses, {
+      cwd: runner.dir,
+      messages: messages.slice(0, SESSION_TITLE_MESSAGE_LIMIT),
+      model: sessionState.model ?? null,
+      onSpawn: (proc) => { runner.titleProcess = proc; },
+    })).then((title) => {
+      if (!title || runner.sessionId !== sessionId || (runner.sessionName ?? null) !== originalName) return;
+      const name = originalName ? `\u23EA ${title}` : title;
+      if (!sendToRunner(runner, { id: srvId(), type: "set_session_name", name }, { autostart: false })) return;
+      runner.sessionName = name;
+      runnerRepository?.update(runner.id, { session_name: name });
+      runnersChanged();
+    }).catch((error) => {
+      console.error(`[pi-ui] cannot title session ${sessionId}: ${error.message}`);
+    }).finally(() => {
+      if (runner.titleSessionId === sessionId) runner.titleProcess = null;
+    });
+  }
+
   /** watch a runner's stdout to maintain busy/session metadata */
   function trackRunner(runner, line) {
     let msg;
@@ -238,7 +285,13 @@ export function createRunnerManager(state, {
           nextReference = sessionReferences.validate({ backend: "sqlite", id: d.sessionId, storagePath: config.SQLITE_PATH });
         }
         const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
+        const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
         const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
+        if (sessionChanged) {
+          try { runner.titleProcess?.kill("SIGTERM"); } catch {}
+          runner.titleProcess = null;
+          runner.titleSessionId = null;
+        }
         runner.sessionRef = nextReference;
         runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
         runner.sessionId = d.sessionId ?? runner.sessionId;
@@ -255,6 +308,7 @@ export function createRunnerManager(state, {
         }
         runner.busy = !!(d.isStreaming || d.isCompacting);
         if (changed) runnersChanged();
+        maybeTitleSession(runner, d);
       } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
         requestState(runner);
       }
@@ -401,6 +455,8 @@ export function createRunnerManager(state, {
   function stopRunner(runner) {
     const proc = runner.proc;
     runnerRepository?.update(runner.id, { desired_state: "stopped", last_status: "stopped", last_stopped_at: now() });
+    try { runner.titleProcess?.kill("SIGTERM"); } catch {}
+    runner.titleProcess = null;
     if (!proc) return;
     runner.proc = null;
     runner.busy = false;

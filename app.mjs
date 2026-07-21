@@ -108,7 +108,6 @@ export async function init(state) {
     lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
       ? state.sessionCatalog.findById(reference.id)
       : null,
-    srvId, runnersChanged,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });

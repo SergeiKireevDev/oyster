@@ -4,8 +4,6 @@ description: Use the bundled pi extensions and browser integrations.
 tags: extensions, files, routines, tunnels
 ---
 
-# Files, routines, and hublots
-
 The repository bundles pi extensions in `extensions/`. Register them with the pi installation that launches the sessions:
 
 ```bash
@@ -39,4 +37,4 @@ Stop terminates the process group. Teardown should remove every byproduct create
 
 A hublot is a public `cloudflared` tunnel to a local port. Give the hublot a description of the interface to expose; the agent receives that brief and prepares the service while the server owns the tunnel lifecycle.
 
-Hublots survive application hot reloads but are stopped when the server shuts down. Public URLs provide no substitute for the tunneled application's own authentication.
+Hublots survive application hot reloads but are stopped when the server shuts down. Use only the tunnel's HTTPS URL: TLS is mandatory across the untrusted browser-to-edge network, even when the local edge-to-service hop uses loopback HTTP. Public URLs provide no substitute for the tunneled application's own authentication.

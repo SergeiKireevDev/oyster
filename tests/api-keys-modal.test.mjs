@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const modal = readFileSync(new URL("../public/src/components/CredentialsModal.svelte", import.meta.url), "utf8");
 const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
 const store = readFileSync(new URL("../public/src/stores/credentials.js", import.meta.url), "utf8");
+const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("Credentials modal is owned by the overlay and covers safe provider states", () => {
   assert.match(overlays, /import CredentialsModal from "\.\/CredentialsModal\.svelte"/);
@@ -24,6 +25,27 @@ test("Credentials modal exposes API-key and OAuth actions with revocation and fa
   assert.match(modal, /does not revoke it at the upstream provider/);
   assert.match(modal, /environment or models\.json fallback remains/);
   assert.match(modal, /pi may continue to authenticate after removal/);
+});
+
+test("OAuth credential actions use the application palette instead of browser-default controls", () => {
+  assert.match(styles, /\.api-key-oauth \{[^}]*border: 1px solid var\(--accent-dim\)[^}]*background: var\(--user-bubble\)[^}]*color: var\(--accent\)/);
+  assert.match(styles, /\.api-key-oauth:hover:not\(:disabled\) \{[^}]*border-color: var\(--accent\)[^}]*background: var\(--accent-dim\)[^}]*color: var\(--text\)/);
+  assert.match(styles, /\.api-key-oauth:focus-visible \{[^}]*outline: 2px solid var\(--accent\)/);
+});
+
+test("the status list shows only active providers while the selector includes inactive OAuth providers", () => {
+  assert.match(modal, /activeProviders = \$credentialsState\.providers\.filter\(\(provider\) => provider\.configured\)/);
+  assert.match(modal, /selectableProviders = \$credentialsState\.providers\.filter[\s\S]*?provider\.oauthCapable/);
+  assert.match(modal, /aria-label="Active provider credential status"[\s\S]*?each activeProviders as provider/);
+  assert.match(modal, /each selectableProviders as provider/);
+});
+
+test("selecting an OAuth-capable provider defaults to OAuth instead of requesting an API key", () => {
+  assert.match(modal, /selectedProvider !== methodProvider[\s\S]*?authenticationMethod = selected\?\.oauthCapable \? "oauth" : "api_key"/);
+  assert.match(modal, /selected\?\.oauthCapable && authenticationMethod === "oauth"[\s\S]*?Sign in with OAuth/);
+  assert.match(modal, /onclick=\{\(\) => startOAuth\(selectedProvider\)\}/);
+  assert.match(modal, /Use an API key instead/);
+  assert.match(modal, /Use OAuth instead/);
 });
 
 test("Credentials modal renders accessible browser, device, prompt, selection, cancellation, and terminal OAuth states", () => {

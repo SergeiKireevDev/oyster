@@ -1,12 +1,11 @@
 ---
 title: Application-data migration
-description: Migrate legacy checkpoints and routines into the pi-lot-ui application database.
+description: Migrate legacy checkpoints and routines into the Oyster application database.
 tags: migration, sqlite, recovery
+hidden: true
 ---
 
-# Application-data migration runbook
-
-This runbook applies only to pi-lot-ui's application database, `pi-lot-ui.sqlite`. The coding agent owns its session SQLite/JSONL stores separately; **never copy, replace, delete, or migrate those stores as part of this procedure**.
+This runbook applies only to Oyster's application database, `pi-lot-ui.sqlite`. The coding agent owns its session SQLite/JSONL stores separately; **never copy, replace, delete, or migrate those stores as part of this procedure**.
 
 ## Paths and prerequisites
 
@@ -15,7 +14,7 @@ The application database is `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/pi-lot-u
 - `~/.pi/agent/checkpoints.json`
 - `~/.pi/routines/` executable definitions and `bindings.json`
 
-Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. Stop pi-lot-ui and keep it stopped for every backup, restore, downgrade, or apply operation below. Confirm that no `server.mjs` process or service unit is running; `--service-stopped` is an operator confirmation, not a command that stops the service.
+Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. Stop Oyster and keep it stopped for every backup, restore, downgrade, or apply operation below. Confirm that no `server.mjs` process or service unit is running; `--service-stopped` is an operator confirmation, not a command that stops the service.
 
 ## Back up before cutover
 
@@ -44,17 +43,17 @@ Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. 
    npm run migrate-app-data -- --apply --service-stopped
    ```
 
-A successful apply validates destination rows before renaming each imported source to `*.legacy-backup-<UTC timestamp>`. These files have mode `0444`, are never automatically deleted, and must be retained through at least the next pi-lot-ui release. Keep the separate pre-cutover backup longer if local policy requires it.
+A successful apply validates destination rows before renaming each imported source to `*.legacy-backup-<UTC timestamp>`. These files have mode `0444`, are never automatically deleted, and must be retained through at least the next pi-lot-ui release (branded Oyster). Keep the separate pre-cutover backup longer if local policy requires it.
 
 ## Restore the application database
 
 Use this to return to a known-good SQLite snapshot on the same or a compatible newer application version.
 
-1. Stop pi-lot-ui.
+1. Stop Oyster.
 2. Preserve the failed database and its `-wal`/`-shm` sidecars for diagnosis; do not overwrite the backup.
 3. Remove the current database and sidecars from the configured path.
 4. Copy the backed-up database and any matching sidecars back together, preserving permissions and ownership. Never substitute a coding-agent session database.
-5. Start pi-lot-ui and check `/health`, startup migration status, checkpoint trees, routines, and hublots before reopening access.
+5. Start Oyster and check `/health`, startup migration status, checkpoint trees, routines, and hublots before reopening access.
 
 Do not merge SQLite files with filesystem tools. A snapshot taken while the service was running is not accepted unless the database and its sidecars were captured by a SQLite-aware backup operation.
 

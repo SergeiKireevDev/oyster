@@ -1,10 +1,8 @@
 ---
 title: Installation
-description: Run pi-lot-ui from a source checkout.
+description: Run Oyster from a source checkout.
 tags: install, node, pi
 ---
-
-# Installation
 
 ## Prerequisites
 
@@ -18,8 +16,8 @@ This repository has no separate install script. Its checked-in lockfile supplies
 ## Run from a checkout
 
 ```bash
-git clone <repo-url> pi-lot-ui
-cd pi-lot-ui
+git clone <repo-url> oyster
+cd oyster
 npm ci
 npm run build
 PI_BIN=/absolute/path/to/pi node server.mjs

@@ -4,8 +4,6 @@ description: Build, test, document, and safely change the hot-reloaded applicati
 tags: contributing, tests, gitdocs
 ---
 
-# Contributing
-
 ## Validate every change
 
 ```bash
@@ -39,13 +37,14 @@ The documentation uses [GitDocs](https://github.com/timberio/gitdocs) convention
 - YAML front matter supplies titles, descriptions, tags, and ordered `items`.
 - Internal links use generated absolute routes such as `/operations/service/`.
 
-Preview it without adding a project dependency:
+Build the branded static site, then preview it:
 
 ```bash
-npx gitdocs@2 serve
+npm run docs:build
+python3 -m http.server 8000 --directory .gitdocs_build
 ```
 
-The generated `.gitdocs_build/` directory is ignored. Keep operational commands and security claims synchronized with the implementation and the root `README.md`.
+Use the static production build for remote previews. GitDocs' development server embeds a loopback WebSocket, so tunnelling `gitdocs serve` leaves remote browsers on a loading skeleton. The generated `.gitdocs_build/` directory is ignored. Keep operational commands and security claims synchronized with the implementation and the root `README.md`.
 
 ## Pull-request checklist
 

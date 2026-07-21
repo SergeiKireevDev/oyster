@@ -1,17 +1,15 @@
 ---
 title: User guide
-description: Sessions, checkpoints, credentials, files, routines, and hublots.
+description: Sessions, credentials, files, routines, and hublots.
 items:
-  - path: sessions-and-checkpoints.md
+  - path: sessions.md
   - path: credentials.md
   - path: extensions.md
 ---
 
-# User guide
+Oyster exposes pi's conversation workflow in a browser and adds operational tools around it.
 
-pi-lot-ui exposes pi's conversation workflow in a browser and adds operational tools around it.
-
-- [Sessions and checkpoints](/user-guide/sessions-and-checkpoints/)
+- [Sessions](/user-guide/sessions/)
 - [Credentials and OAuth](/user-guide/credentials/)
 - [Files, routines, and hublots](/user-guide/extensions/)
 

@@ -4,15 +4,13 @@ description: Stable process ownership, hot-reload boundaries, persistence, and f
 tags: architecture, svelte, hot reload
 ---
 
-# Architecture
-
 ```text
 public/src ── Vite ──> dist
                          │
 browser <── HTTP/SSE ── server.mjs ── stable state and process ownership
                          │
                          ├── app.mjs + http/routes ── hot-reloadable requests
-                         ├── node:sqlite ── pi-lot-ui application data
+                         ├── node:sqlite ── Oyster application data
                          └── pi --mode rpc ── one process per active runner
 ```
 
@@ -39,7 +37,7 @@ Session mutations delegate to capabilities exposed by the configured pi CLI. The
 
 ## Application persistence
 
-`persistence/appStore.mjs` opens the separate `pi-lot-ui.sqlite` database and exposes repositories. Migrations, settings, checkpoint operations, routine and hublot state, and recovery journals live under `persistence/`.
+`persistence/appStore.mjs` opens the separate `pi-lot-ui.sqlite` database and exposes repositories. Migrations, settings, routine and hublot state, and recovery journals live under `persistence/`.
 
 ## Frontend
 
