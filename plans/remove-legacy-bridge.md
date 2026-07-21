@@ -116,6 +116,8 @@ Create checkpoint-tree actions for opening a selected runner and rollback.
 Replace registry dispatch with a typed command/action catalog.
 
 - Menu and command palette import the catalog directly.
+- ✅ Command Palette active selection now updates its Svelte store directly;
+  the selection bridge export and handler were removed.
 - Catalog entries call focused action modules or narrow injected session
   lifecycle callbacks.
 - Keep global keyboard/document listeners in `legacy.js` until moved safely.
