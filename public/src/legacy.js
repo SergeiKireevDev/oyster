@@ -327,7 +327,6 @@ const checkpointTreeEventController = createCheckpointTreeEventController({
   openSession: checkpointTreeController.openTreeSession,
   rollback: rollbackToCheckpoint,
 });
-checkpointTreeEventController.attach();
 
 function renderFullMessage(message, options = {}) {
   const role = message.role;
@@ -911,7 +910,6 @@ const composerEventController = createComposerEventController({
   send,
   abort,
 });
-composerEventController.attach();
 
 // ------------------------------------------------------------ command palette
 // Slack-style ":" command picker — works on any textarea/input. Type ":"
@@ -1044,7 +1042,6 @@ function setupCommandPalette(el) {
 }
 
 const commandPaletteRunController = createCommandPaletteRunController({ windowTarget: window, run: runCmdIndex });
-commandPaletteRunController.attach();
 
 setupCommandPalette(input);
 
@@ -1056,7 +1053,6 @@ const commandPaletteKeyboardController = createCommandPaletteKeyboardController(
   run: runActiveCmd,
   close: closeCmdPalette,
 });
-commandPaletteKeyboardController.attach();
 
 // ------------------------------------------------------------ menu & actions
 
@@ -1094,7 +1090,6 @@ async function runMenuAction(action) {
   }
 }
 const menuEventController = createMenuEventController({ windowTarget: window, run: runMenuAction });
-menuEventController.attach();
 
 // ------------------------------------------------------------ attach file
 
@@ -1138,7 +1133,6 @@ const filePickerEventController = createFilePickerEventController({
   pick: (path) => filePickerController.complete({ ...filePickerState, path }),
   cancel: () => filePickerController.complete({ ...filePickerState, cancel: true }),
 });
-filePickerEventController.attach();
 
 /** Insert text at the cursor position in the composer, padded with spaces. */
 function insertIntoComposer(text) {
@@ -1220,7 +1214,6 @@ const folderBrowserEventController = createFolderBrowserEventController({ window
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
   submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
 });
-folderBrowserEventController.attach();
 
 // ------------------------------------------------------------ tunnels
 
@@ -1287,7 +1280,6 @@ const fileExplorerEventController = createFileExplorerEventController({ windowTa
   backToList: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
 });
-fileExplorerEventController.attach();
 
 
 // Tunnels are bound to the session they were opened in; the modal and the
@@ -1347,7 +1339,6 @@ const managedHublotEventController = createManagedHublotEventController({
   openCommandPalette: setupCommandPalette,
   toggleScope: toggleManagedHublotScope,
 });
-managedHublotEventController.attach();
 
 // ------------------------------------------------------------ hublot sidebar
 
@@ -1355,7 +1346,6 @@ const hublotSidebarEventController = createHublotSidebarEventController({
   windowTarget: window,
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
 });
-hublotSidebarEventController.attach();
 
 // mobile: toggle the hublots sidebar as a slide-over drawer
 // tap outside the drawer closes it (mobile only — on desktop they're
@@ -1369,7 +1359,6 @@ const mobileDrawerDismissController = createMobileDrawerDismissController({
   getCarousel: () => carouselController,
   isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
 });
-mobileDrawerDismissController.attach();
 
 const loadHublots = hublotController.refreshSidebar;
 
@@ -1377,7 +1366,6 @@ const openFileExplorerEventController = createOpenFileExplorerEventController({
   windowTarget: window,
   open: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
 });
-openFileExplorerEventController.attach();
 
 // ------------------------------------------------------------ routines sidebar
 //
@@ -1420,7 +1408,6 @@ const routineController = createRoutineController({
   toast: addToast,
 });
 const routineEventController = createRoutineEventController({ windowTarget: window, run: routineController.run });
-routineEventController.attach();
 
 // ------------------------------------------------------------ session picker
 
@@ -1505,7 +1492,6 @@ const sessionPickerEventController = createSessionPickerEventController({
   dispatch: (type, ...args) => sessionPickerActions[type]?.(...args),
   cancel: () => { closeModal(); sessionPickerResolve?.(null); },
 });
-sessionPickerEventController.attach();
 
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
@@ -1659,7 +1645,6 @@ const settingsChangeController = createSettingsChangeController({
   windowTarget: window,
   changed: () => reloadTranscript().catch(() => {}),
 });
-settingsChangeController.attach();
 
 /** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {
@@ -1759,11 +1744,9 @@ const headerEventController = createHeaderEventController({
   toggleHublots: carouselHeaderController.toggleHublots,
   toggleTree: carouselHeaderController.toggleTree,
 });
-headerEventController.attach();
 
-// apply initial page on load + whenever the page becomes mobile/desktop
-carouselEventRegistration.attach();
-carouselController.apply();
+// Carousel event registration and initial layout are deferred until the
+// runtime starts, after Svelte has mounted.
 
 // Test/debug scripts use these hooks to seed and inspect session state.
 const debugHookRegistration = installDebugHooks(window, {
@@ -1807,8 +1790,33 @@ const runtimeTeardown = createRuntimeTeardown([
 
 const runtimeStarter = createRuntimeStarter({ hasToken: () => Boolean(token), requireToken, boot });
 
+let runtimeEventAdaptersAttached = false;
+function attachRuntimeEventAdapters() {
+  if (runtimeEventAdaptersAttached) return;
+  runtimeEventAdaptersAttached = true;
+  checkpointTreeEventController.attach();
+  composerEventController.attach();
+  commandPaletteRunController.attach();
+  commandPaletteKeyboardController.attach();
+  menuEventController.attach();
+  filePickerEventController.attach();
+  folderBrowserEventController.attach();
+  fileExplorerEventController.attach();
+  managedHublotEventController.attach();
+  hublotSidebarEventController.attach();
+  mobileDrawerDismissController.attach();
+  openFileExplorerEventController.attach();
+  routineEventController.attach();
+  sessionPickerEventController.attach();
+  settingsChangeController.attach();
+  headerEventController.attach();
+  carouselEventRegistration.attach();
+  carouselController.apply();
+}
+
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
 export function startLegacyRuntime() {
+  attachRuntimeEventAdapters();
   return runtimeStarter();
 }
 

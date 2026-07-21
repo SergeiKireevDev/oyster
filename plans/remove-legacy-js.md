@@ -34,8 +34,8 @@ Create `public/src/runtime/appRuntime.js` as the temporary composition root.
 - [x] Moved app startup behind an explicit `startAppRuntime()` composition root;
   `App.svelte` no longer imports `legacy.js` directly.
 - [x] Added explicit teardown-capable runtime boundaries.
-- [ ] Finish moving the remaining composition from `legacy.js` into this root
-  after the final event/global wiring extraction.
+- [ ] Defer remaining global event-adapter registration until runtime start,
+  then move the final composition from `legacy.js` into this root.
 - [x] Kept feature logic out of the initial bootstrap extraction.
 
 **Acceptance:** application startup behavior is unchanged, with a small
@@ -107,7 +107,7 @@ old `legacy.js` module.
 **Acceptance:** move event listeners from `legacy.js` to controllers/runtime
 registration one domain at a time; maintain RPC and extension UI contracts.
 
-## 6. Move Global DOM Events into Svelte or Runtime Adapters 🔄
+## 6. Move Global DOM Events into Svelte or Runtime Adapters ✅
 
 Classify each remaining `document`/`window` listener:
 
@@ -119,10 +119,11 @@ Classify each remaining `document`/`window` listener:
   `createExtensionUiEventController()`.
 - [x] Moved the `ping` runner-liveness SSE projection into
   `createRunnerPingEventController()`.
-- [ ] Move the `replay_done` state-refresh SSE projection into a focused event
-  controller.
-- [ ] Classify and move the remaining feature-specific document/window/custom
-  event listeners from `legacy.js`.
+- [x] Moved the `replay_done` state-refresh SSE projection into
+  `createReplayDoneEventController()`.
+- [x] Classified the remaining `legacy.js` DOM event usage: no direct
+  `document`/`window` listener registration remains; feature event adapters
+  own their registration.
 
 Avoid replacing one global imperative module with another untyped global event
 hub.
