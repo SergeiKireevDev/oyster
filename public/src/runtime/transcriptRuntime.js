@@ -75,6 +75,24 @@ export async function annotateTranscriptEntries({ fetchEntries, elements, findEn
   return entries;
 }
 
+/** Coordinate authoritative reload, live replay reconciliation, and post-render hooks. */
+export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+  return async () => {
+    const started = now();
+    log("reloadTranscript:start");
+    const { messages } = await loadDurableCanonicalTranscript({
+      rpc, applyState, fetchImpl, sessionFileQuery,
+      onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
+      onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+      onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+    });
+    clearPreview();
+    const complete = await reconcileTranscriptReload({ messages, render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender });
+    log("reloadTranscript:render-complete", { complete, ms: Math.round(now() - started) });
+    return complete;
+  };
+}
+
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
 export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);

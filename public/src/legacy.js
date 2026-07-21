@@ -5,7 +5,7 @@ import { get, writable } from "svelte/store";
 import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./runtime/authClient.js";
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
-import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, registerTranscriptLoadScroll, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
 import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { createCarouselController, createCarouselHeaderController, createCarouselSwipeController, registerCarouselEvents } from "./runtime/carouselController.js";
@@ -1028,44 +1028,30 @@ function handleEvent(msg) {
   }
 }
 
-async function reloadTranscript() {
-  const started = performance.now();
-  lifecycleLog("reloadTranscript:start");
-  // Kick off both requests in parallel, but apply get_state as soon as it is
-  // available. Existing sessions can have a slow transcript replay/resume;
-  // the header/composer/session-scoped sidebars should still converge without
-  // waiting for the full message list to render.
-  const { messages } = await loadDurableCanonicalTranscript({
-    rpc,
-    applyState,
-    fetchImpl: fetch,
-    sessionFileQuery,
-    onState: (s) => lifecycleLog("reloadTranscript:get_state:done", { ms: Math.round(performance.now() - started), messageCount: s?.messageCount ?? null, sessionFile: s?.sessionFile ?? null }),
-    onMessages: (result) => lifecycleLog("reloadTranscript:get_messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
-    onDurableMessages: (result) => lifecycleLog("reloadTranscript:session-messages:done", { ms: Math.round(performance.now() - started), messages: result?.messages?.length ?? 0 }),
-  });
-  previewController.clear(); // canonical content from pi supersedes the file preview
-  const complete = await reconcileTranscriptReload({
-    messages,
-    render: renderTranscript,
-    setReplaying,
-    takeBufferedEvents: () => {
-      const buffered = replayBufferedEvents;
-      replayBufferedEvents = [];
-      return buffered;
-    },
-    flushBufferedEvents: flushReplayBufferedEvents,
-    afterRender: async () => {
-      annotateTranscriptEntries().catch(() => {});
-      refreshCheckpointMarkers().catch(() => {});
-      refreshTreeIfOpen();
-      const cb = afterTranscript;
-      afterTranscript = null;
-      cb?.();
-    },
-  });
-  lifecycleLog("reloadTranscript:render-complete", { complete, ms: Math.round(performance.now() - started) });
-}
+const reloadTranscript = createCanonicalTranscriptController({
+  rpc,
+  applyState,
+  fetchImpl: fetch,
+  sessionFileQuery,
+  clearPreview: previewController.clear,
+  log: lifecycleLog,
+  render: renderTranscript,
+  setReplaying,
+  takeBufferedEvents: () => {
+    const buffered = replayBufferedEvents;
+    replayBufferedEvents = [];
+    return buffered;
+  },
+  flushBufferedEvents: flushReplayBufferedEvents,
+  afterRender: async () => {
+    annotateTranscriptEntries().catch(() => {});
+    refreshCheckpointMarkers().catch(() => {});
+    refreshTreeIfOpen();
+    const callback = afterTranscript;
+    afterTranscript = null;
+    callback?.();
+  },
+});
 
 const transcriptSyncScheduler = createTranscriptSyncScheduler({
   isReplaying: () => replaying,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAssistantStream, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAssistantStream, createCanonicalTranscriptController, createDebouncedTranscriptSyncController, createRenderJobs, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, registerTranscriptLoadScroll, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -55,6 +55,17 @@ test("reload reconciliation releases buffered events only after rendering begins
   });
   assert.equal(complete, true);
   assert.deepEqual(calls, [["render", [1]], ["replay", false], ["flush", ["event"]], ["after"]]);
+});
+
+test("canonical transcript controller clears previews after durable reload", async () => {
+  const calls = [];
+  const controller = createCanonicalTranscriptController({
+    rpc: async (request) => request.type === "get_state" ? { sessionFile: "/a" } : { messages: [{ role: "user" }] },
+    applyState: () => {}, fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [{ role: "user" }] }) }), sessionFileQuery: () => "path=a",
+    clearPreview: () => calls.push("clear"), render: async () => true, setReplaying: () => {}, takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => calls.push("after"),
+  });
+  await controller();
+  assert.deepEqual(calls, ["clear", "after"]);
 });
 
 test("canonical reload delegates state and durable transcript dependencies", async () => {
