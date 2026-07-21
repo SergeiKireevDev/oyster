@@ -1,7 +1,6 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import {
-    browseFolder,
   } from "../lib/legacyBridge.js";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
@@ -40,7 +39,7 @@
     dirs={$folderBrowser.dirs}
     showHidden={$folderBrowser.showHidden}
     showPath={false}
-    onBrowse={browseFolder}
+    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-folder-browser-browse", { detail: path }))}
   />
   {#if !visibleBrowserEntries($folderBrowser.dirs, $folderBrowser.showHidden).length}
     <div class="m-path">(no subfolders)</div>

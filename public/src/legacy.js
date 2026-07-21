@@ -2,7 +2,7 @@
 
 import { tick } from "svelte";
 import { get, writable } from "svelte/store";
-import { setFileExplorerHandlers, setFilePickerHandlers, setFolderBrowserHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
+import { setFileExplorerHandlers, setFilePickerHandlers, setSessionPickerHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
 import { openCheckpointModelPicker, updateCheckpointModelOptions } from "./stores/checkpointModelPicker.js";
@@ -1991,9 +1991,7 @@ const createFolderBrowser = async () => {
     }
 };
 
-setFolderBrowserHandlers({
-  browse: loadFolderBrowser,
-});
+window.addEventListener("pi-folder-browser-browse", (event) => loadFolderBrowser(event.detail));
 window.addEventListener("pi-folder-browser-create", () => createFolderBrowser());
 window.addEventListener("pi-folder-browser-cancel", () => { closeModal(); folderBrowserState.done?.(null); });
 window.addEventListener("pi-folder-browser-submit", () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); });

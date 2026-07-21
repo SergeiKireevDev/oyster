@@ -1,11 +1,6 @@
-let folderBrowserHandlers = {};
 let filePickerHandlers = {};
 let fileExplorerHandlers = {};
 let sessionPickerHandlers = {};
-
-export function setFolderBrowserHandlers(handlers) {
-  folderBrowserHandlers = handlers ?? {};
-}
 
 export function setFilePickerHandlers(handlers) {
   filePickerHandlers = handlers ?? {};
@@ -109,9 +104,5 @@ export function toggleFilePickerHidden() {
 
 export function cancelFilePicker() {
   return filePickerHandlers.cancel?.();
-}
-
-export function browseFolder(path) {
-  return folderBrowserHandlers.browse?.(path);
 }
 
