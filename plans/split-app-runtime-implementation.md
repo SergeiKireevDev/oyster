@@ -89,8 +89,13 @@ scroll, keyboard, or session-switch behavior.
 
 Before the first extraction:
 
-- [ ] Record the current line count and import list for
-   `public/src/runtime/appRuntimeImplementation.js`.
+- [x] Record the current line count and import list for `public/src/runtime/appRuntimeImplementation.js`.
+
+  **Snapshot (2026-07-14, `4e7eb17`):** 1,769 lines and 74 static import
+  declarations. Imports span Svelte (2), runtime/platform modules (23),
+  Svelte stores (20), and feature/controller/action modules (29). This is the
+  baseline for measuring extraction; do not use line count alone as completion
+  evidence.
 - [ ] Add a runtime lifecycle regression test covering two complete cycles:
    `start → teardown → start → teardown`. Verify attachment ordering and that
    a fresh transport/event-stream runtime is used after restart.
