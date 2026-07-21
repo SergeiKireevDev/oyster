@@ -21,5 +21,6 @@ test("stable core owns one app-store service across application reloads", () => 
   assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.PI_UI_DB_PATH \}\);/);
   assert.match(stableSource, /const state = \{[\s\S]*?appStore,/);
   assert.match(stableSource, /state\.appStore\.close\(\);/);
+  assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("await loadApp();"));
   assert.doesNotMatch(source, /openAppStore|node:sqlite/);
 });

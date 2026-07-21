@@ -33,6 +33,7 @@ async function availablePort() {
 function fixture(version) {
   return `
 export function init(state) {
+  state.fixtureAppStore ??= state.appStore;
   return {
     async handleRequest(req, res) {
       if (req.url === "/events") {
@@ -47,7 +48,7 @@ export function init(state) {
         return;
       }
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ version: ${JSON.stringify(version)}, reloadCount: state.reloadCount }));
+      res.end(JSON.stringify({ version: ${JSON.stringify(version)}, reloadCount: state.reloadCount, appStoreStable: state.appStore === state.fixtureAppStore }));
     },
     startPi() {},
     stopPi() {},
@@ -126,14 +127,14 @@ test("the stable server atomically replaces its active application handler", asy
   });
 
   await waitForOutput(child, "listening on");
-  assert.deepEqual(await readJson(port), { version: "before", reloadCount: 1 });
+  assert.deepEqual(await readJson(port), { version: "before", reloadCount: 1, appStoreStable: true });
 
   const replacement = join(root, "app.replacement.mjs");
   await writeFile(replacement, fixture("after"));
   await rename(replacement, join(root, "app.mjs"));
   await waitForOutput(child, "hot-reloaded app.mjs");
 
-  assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2 });
+  assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
 });
 
 test("an open SSE response survives an application reload and receives the state-owned broadcast", async (t) => {
@@ -167,7 +168,7 @@ test("an open SSE response survives an application reload and receives the state
   await rename(replacement, join(root, "app.mjs"));
   await waitForOutput(child, "hot-reloaded app.mjs");
 
-  assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2 });
+  assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
   assert.deepEqual(await eventPromise, { type: "code_reloaded", reloadCount: 2, _server: true });
 });
 
@@ -244,7 +245,7 @@ test("an invalid application replacement keeps the active handler and emits a fa
   await rename(replacement, join(root, "app.mjs"));
   await waitForOutput(child, "reload FAILED");
 
-  assert.deepEqual(await readJson(port), { version: "working", reloadCount: 1 });
+  assert.deepEqual(await readJson(port), { version: "working", reloadCount: 1, appStoreStable: true });
   const event = await eventPromise;
   assert.equal(event.type, "code_reload_failed");
   assert.equal(event._server, true);
