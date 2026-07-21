@@ -1883,7 +1883,7 @@ adjacentRunnerController = createAdjacentRunnerController({
   getRunners: () => runnersNow,
   getCurrentRunner: () => currentRunner,
   getWorkdir: () => sessionUi.workdir,
-  switchRunner: switchToRunner,
+  switchRunner: (id) => getSessionRuntime().switchRunner(id),
   toast: addToast,
 });
 
