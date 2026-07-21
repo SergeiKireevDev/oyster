@@ -10,6 +10,7 @@ import { handleReplayDone, handleRunnerPing } from "./runtime/eventControllers.j
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
+import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -78,19 +79,16 @@ import { resetTranscriptItems } from "./stores/transcriptItems.js";
  *   require legacy-owned transport or session lifecycle coordination.
  */
 
-const lifecycleStartedAt = performance.now();
-function lifecycleLog(label, data = {}) {
-  const elapsed = Math.round(performance.now() - lifecycleStartedAt);
-  console.log(`[pi-ui lifecycle +${elapsed}ms] ${label}`, {
+const lifecycleLog = createLifecycleLogger({
+  snapshot: () => ({
     runner: currentRunner,
     sessionId: state?.sessionId ?? null,
     replaying,
     transcriptGateRequired,
     replayDoneSeen,
     connected,
-    ...data,
-  });
-}
+  }),
+});
 
 // ------------------------------------------------------------ token
 
