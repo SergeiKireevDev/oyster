@@ -11,6 +11,7 @@ import { createConnectionStateTransitions, createEventStreamRuntime, processEven
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createDelayedTaskRegistry } from "./runtime/delayedTaskRegistry.js";
 import { createLifecycleLogger } from "./runtime/lifecycleLogger.js";
+import { createRuntimeTeardown } from "./runtime/teardownController.js";
 import { applySessionState, createAdjacentRunnerController, createSearchHitSessionController, createSessionOpenController, createSessionRuntime, createSessionStateApplier, createSessionRunnerState, createSessionUiRuntime, createSessionStateRefresher, createSessionPreviewController, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./runtime/sessionRuntime.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
 import { setCarouselPage } from "./stores/carousel.js";
@@ -1899,6 +1900,17 @@ async function boot() {
   connect();
 }
 
+const runtimeTeardown = createRuntimeTeardown([
+  () => eventStream.close(), () => { es = null; }, disposeRpcClient, teardownReconnectWatchdog,
+  () => carouselEventRegistration.detach(), () => mobileDrawerDismissController.detach(), () => headerEventController.detach(),
+  () => settingsChangeController.detach(), () => menuEventController.detach(), () => composerEventController.detach(),
+  () => commandPaletteKeyboardController.detach(), () => commandPaletteRunController.detach(), () => checkpointTreeEventController.detach(),
+  () => filePickerEventController.detach(), () => folderBrowserEventController.detach(), () => fileExplorerEventController.detach(),
+  () => managedHublotEventController.detach(), () => hublotSidebarEventController.detach(), () => routineEventController.detach(),
+  () => sessionPickerEventController.detach(), () => openFileExplorerEventController.detach(), () => commandPaletteInputController?.detach(),
+  () => debugHookRegistration.detach(), () => delayedTasks.cancelAll(), () => authenticatedFetchRegistration.detach(), () => connectionState.lost(),
+]);
+
 let started = false;
 
 /** Start legacy-owned transport and session boot only after Svelte has mounted. */
@@ -1911,30 +1923,5 @@ export function startLegacyRuntime() {
 
 /** Release runtime-owned long-lived transport resources on app unmount. */
 export function teardownLegacyRuntime() {
-  eventStream.close();
-  es = null;
-  disposeRpcClient();
-  teardownReconnectWatchdog();
-  carouselEventRegistration.detach();
-  mobileDrawerDismissController.detach();
-  headerEventController.detach();
-  settingsChangeController.detach();
-  menuEventController.detach();
-  composerEventController.detach();
-  commandPaletteKeyboardController.detach();
-  commandPaletteRunController.detach();
-  checkpointTreeEventController.detach();
-  filePickerEventController.detach();
-  folderBrowserEventController.detach();
-  fileExplorerEventController.detach();
-  managedHublotEventController.detach();
-  hublotSidebarEventController.detach();
-  routineEventController.detach();
-  sessionPickerEventController.detach();
-  openFileExplorerEventController.detach();
-  commandPaletteInputController?.detach();
-  debugHookRegistration.detach();
-  delayedTasks.cancelAll();
-  authenticatedFetchRegistration.detach();
-  connectionState.lost();
+  return runtimeTeardown();
 }
