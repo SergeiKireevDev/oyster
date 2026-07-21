@@ -47,7 +47,7 @@ cd tests/e2e && npm test
 - [x] Change `FilePickerModal.svelte` to invoke the scoped file-picker actions,
   then delete `features/files/filePickerActions.js` and its configuration call.
   Test browse, choose, use-folder, and cancel routing.
-- [ ] Register folder-browser handlers through `createResourceAssembly()` and
+- [x] Register folder-browser handlers through `createResourceAssembly()` and
   change `FolderBrowserModal.svelte` to invoke them. Delete
   `features/files/folderBrowserActions.js` and its configuration call; test
   browse, create, submit, and cancel routing.

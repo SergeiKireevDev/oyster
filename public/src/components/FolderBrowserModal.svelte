@@ -2,7 +2,19 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
-  import { browseFolderBrowser, cancelFolderBrowser, createFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import {
+    FOLDER_BROWSER_BROWSE_ACTION,
+    FOLDER_BROWSER_CANCEL_ACTION,
+    FOLDER_BROWSER_CREATE_ACTION,
+    FOLDER_BROWSER_SUBMIT_ACTION,
+  } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const browseFolderBrowser = (path) => uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, path);
+  const createFolderBrowser = () => uiActions.invoke(FOLDER_BROWSER_CREATE_ACTION);
+  const submitFolderBrowser = () => uiActions.invoke(FOLDER_BROWSER_SUBMIT_ACTION);
+  const cancelFolderBrowser = () => uiActions.invoke(FOLDER_BROWSER_CANCEL_ACTION);
 
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());

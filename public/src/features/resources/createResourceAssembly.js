@@ -1,7 +1,6 @@
 import { createFilesRuntime } from "../files/createFilesRuntime.js";
 import { createHublotRuntime } from "../hublots/createHublotRuntime.js";
 import { createRoutineRuntime } from "../routines/createRoutineRuntime.js";
-import { configureFolderBrowserActions } from "../files/folderBrowserActions.js";
 import { configureFileExplorerActions } from "../files/fileExplorerActions.js";
 import { configureFilesActions } from "../files/filesActions.js";
 import { configureHublotActions } from "../hublots/hublotActions.js";
@@ -11,6 +10,10 @@ import {
   FILE_PICKER_CANCEL_ACTION,
   FILE_PICKER_CHOOSE_ACTION,
   FILE_PICKER_USE_FOLDER_ACTION,
+  FOLDER_BROWSER_BROWSE_ACTION,
+  FOLDER_BROWSER_CANCEL_ACTION,
+  FOLDER_BROWSER_CREATE_ACTION,
+  FOLDER_BROWSER_SUBMIT_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 /** Composes file, hublot, and routine resources behind one lifecycle boundary. */
@@ -57,7 +60,10 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(FILE_PICKER_CHOOSE_ACTION, actions.filePicker.pick),
         deps.uiActions.register(FILE_PICKER_USE_FOLDER_ACTION, actions.filePicker.useFolder),
         deps.uiActions.register(FILE_PICKER_CANCEL_ACTION, actions.filePicker.cancel),
-        configureFolderBrowserActions(actions.folderBrowser),
+        deps.uiActions.register(FOLDER_BROWSER_BROWSE_ACTION, actions.folderBrowser.browse),
+        deps.uiActions.register(FOLDER_BROWSER_CREATE_ACTION, actions.folderBrowser.create),
+        deps.uiActions.register(FOLDER_BROWSER_SUBMIT_ACTION, actions.folderBrowser.submit),
+        deps.uiActions.register(FOLDER_BROWSER_CANCEL_ACTION, actions.folderBrowser.cancel),
         configureFileExplorerActions(actions.fileExplorer),
         configureFilesActions(actions.files),
         configureHublotActions(actions.hublots),

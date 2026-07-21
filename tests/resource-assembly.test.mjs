@@ -7,6 +7,10 @@ import {
   FILE_PICKER_CANCEL_ACTION,
   FILE_PICKER_CHOOSE_ACTION,
   FILE_PICKER_USE_FOLDER_ACTION,
+  FOLDER_BROWSER_BROWSE_ACTION,
+  FOLDER_BROWSER_CANCEL_ACTION,
+  FOLDER_BROWSER_CREATE_ACTION,
+  FOLDER_BROWSER_SUBMIT_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 test("resource assembly composes files hublots and routines with one teardown boundary", () => {
@@ -63,7 +67,7 @@ test("resource assemblies remount without retaining controllers or cross-refresh
   second.teardown();
 });
 
-test("resource assembly registers file-picker handlers in the scoped UI registry until teardown", () => {
+test("resource assembly registers file-picker and folder-browser handlers until teardown", () => {
   const calls = [];
   const uiActions = createUiActionRegistry();
   const assembly = createResourceAssembly({
@@ -82,7 +86,12 @@ test("resource assembly registers file-picker handlers in the scoped UI registry
       useFolder: () => calls.push(["use-folder"]),
       cancel: () => calls.push(["cancel"]),
     },
-    folderBrowser: {},
+    folderBrowser: {
+      browse: (path) => calls.push(["folder-browse", path]),
+      create: () => calls.push(["folder-create"]),
+      submit: () => calls.push(["folder-submit"]),
+      cancel: () => calls.push(["folder-cancel"]),
+    },
     fileExplorer: {},
     files: {},
     hublots: {},
@@ -93,14 +102,23 @@ test("resource assembly registers file-picker handlers in the scoped UI registry
   uiActions.invoke(FILE_PICKER_CHOOSE_ACTION, "/tmp/file.txt");
   uiActions.invoke(FILE_PICKER_USE_FOLDER_ACTION);
   uiActions.invoke(FILE_PICKER_CANCEL_ACTION);
+  uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, "/workspace");
+  uiActions.invoke(FOLDER_BROWSER_CREATE_ACTION);
+  uiActions.invoke(FOLDER_BROWSER_SUBMIT_ACTION);
+  uiActions.invoke(FOLDER_BROWSER_CANCEL_ACTION);
   assert.deepEqual(calls, [
     ["browse", "/tmp"],
     ["choose", "/tmp/file.txt"],
     ["use-folder"],
     ["cancel"],
+    ["folder-browse", "/workspace"],
+    ["folder-create"],
+    ["folder-submit"],
+    ["folder-cancel"],
   ]);
 
   assembly.teardown();
   assert.equal(uiActions.invoke(FILE_PICKER_BROWSE_ACTION, "/stale"), undefined);
-  assert.equal(calls.length, 4);
+  assert.equal(uiActions.invoke(FOLDER_BROWSER_BROWSE_ACTION, "/stale"), undefined);
+  assert.equal(calls.length, 8);
 });
