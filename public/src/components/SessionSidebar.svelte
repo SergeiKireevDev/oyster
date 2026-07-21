@@ -11,6 +11,8 @@
     SESSION_PICKER_SEARCH_ACTION,
     SESSION_PICKER_SET_SCOPE_ACTION,
     SESSION_PICKER_STOP_ACTION,
+    SESSION_SIDEBAR_CREATE_IN_CWD_ACTION,
+    SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
     SESSION_SIDEBAR_REFRESH_ACTION,
     SESSION_SWITCH_RUNNER_ACTION,
   } from "../runtime/uiActionNames.js";
@@ -18,6 +20,8 @@
   const uiActions = getUiActionRegistry();
   const switchRunner = (id) => uiActions.invoke(SESSION_SWITCH_RUNNER_ACTION, id);
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
+  const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, cwd);
+  const createSessionInFolder = () => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION);
   const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
   const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
   const deleteSession = (runner) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, savedSession(runner) ?? runner);
@@ -39,6 +43,7 @@
 
   $: searching = $sessionPicker.query.trim().length >= 2;
   $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
+  $: currentCwd = $appSession.runners.find((runner) => runner.id === $appSession.currentRunner)?.dir ?? null;
   $: runnerGroups = groupRunnersByCwd(sidebarRunners);
   let runnerSignature = "";
   $: {
@@ -88,6 +93,11 @@
       }
     }}
   />
+  {#if !searching}
+    <button type="button" class="session-sidebar-create" onclick={createSessionInFolder}>
+      <span aria-hidden="true">+</span> New session in folder
+    </button>
+  {/if}
   <div class="session-sidebar-list">
     {#if searching}
       {#if $sessionPicker.searchStatus}<div class="session-sidebar-status">{$sessionPicker.searchStatus}</div>{/if}
@@ -110,11 +120,18 @@
       {/each}
     {:else if sidebarRunners.length}
       {#each runnerGroups as group (group.cwd)}
-        <details class="session-sidebar-cwd" open>
+        <details class="session-sidebar-cwd" open={group.cwd === currentCwd}>
           <summary title={group.cwd}>
             <span>{cwdLabel(group.cwd)}</span>
             <span class="session-sidebar-count">{group.runners.length}</span>
           </summary>
+          <button
+            type="button"
+            class="session-sidebar-cwd-add"
+            title={`New session in ${group.cwd}`}
+            aria-label={`New session in ${group.cwd}`}
+            onclick={() => createSessionInCwd(group.cwd)}
+          >+</button>
           <div class="session-sidebar-cwd-list">
             {#each group.runners as runner (runner.id)}
               <div class="session-sidebar-entry" class:current={runner.id === $appSession.currentRunner}>

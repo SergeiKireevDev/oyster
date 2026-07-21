@@ -131,12 +131,28 @@
     outline: none;
   }
   .session-sidebar-search:focus { border-color: var(--accent); }
+  .session-sidebar-create {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 4px 5px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .session-sidebar-create:hover { color: var(--text); background: var(--panel-2); }
+  .session-sidebar-create > span { font-size: 17px; line-height: 1; }
   .session-sidebar-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-  .session-sidebar-cwd { min-width: 0; }
+  .session-sidebar-cwd { position: relative; min-width: 0; }
   .session-sidebar-cwd > summary {
     display: flex; align-items: center; gap: 6px;
     min-width: 0;
-    padding: 5px 4px;
+    padding: 5px 34px 5px 4px;
     color: var(--muted);
     font-size: 11px;
     font-weight: 600;
@@ -149,6 +165,22 @@
   .session-sidebar-cwd[open] > summary::before { transform: rotate(90deg); }
   .session-sidebar-cwd > summary > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-count { margin-left: auto; color: var(--muted); font-weight: 400; }
+  .session-sidebar-cwd-add {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .session-sidebar-cwd-add:hover { color: var(--accent); background: var(--panel-2); }
   .session-sidebar-cwd-list { display: flex; flex-direction: column; gap: 4px; }
   .session-sidebar-entry {
     display: flex; align-items: center; gap: 2px;
@@ -470,7 +502,7 @@
   .r-empty { color: var(--muted); font-size: 12px; flex-shrink: 0; }
   /* on small screens the sidebar becomes a slide-over drawer, toggled by a
      header chip that only appears there */
-  #hublotChip, #cfgChip { display: none; }
+  #hublotChip, #cfgChip, #carouselIndicator { display: none; }
   #cfgChip { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 760px) {
     /* model + thinking collapse into one combined chip */
@@ -507,33 +539,40 @@
     }
     #hublotChip { display: inline-flex; }
 
-    /* ---------- carousel dots (mobile swipe indicator) ---------- */
-    #carouselDots {
+    /* ---------- thin mobile carousel position indicator ---------- */
+    #carouselIndicator {
+      display: block;
       position: fixed;
-      bottom: 18px;
-      left: 0; right: 0;
-      display: flex;
-      justify-content: center;
-      gap: 8px;
+      bottom: max(2px, env(safe-area-inset-bottom));
+      left: 50%;
+      width: 72px;
+      height: 2px;
+      transform: translateX(-50%);
       z-index: 56;
       pointer-events: none;
-      transition: opacity .25s;
+      transition: opacity .2s;
     }
-    #carouselDots .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-      opacity: .45;
-      transition: transform .25s, opacity .25s, background .25s;
+    #carouselIndicator .carousel-track {
+      position: relative;
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--muted) 28%, transparent);
     }
-    #carouselDots .dot.active {
+    #carouselIndicator .carousel-position {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 25%;
+      border-radius: inherit;
       background: var(--accent);
-      opacity: 1;
-      transform: scale(1.35);
+      transform: translateX(calc(var(--carousel-index) * 100%));
+      transition: transform .25s ease;
     }
     /* hide when a modal/command palette is open */
-    #overlay.open ~ #carouselDots,
-    #cmdPalette.open ~ #carouselDots { opacity: 0; }
+    body:has(#overlay.open) #carouselIndicator,
+    body:has(#cmdPalette.open) #carouselIndicator { opacity: 0; }
   }
   #messages {
     max-width: 860px;

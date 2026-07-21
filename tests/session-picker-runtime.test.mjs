@@ -35,6 +35,7 @@ test("sidebar refreshes retain known titles without retaining removed sessions",
 
 test("session picker runtime owns picker actions and search-hit construction", async () => {
   const toasts = [];
+  const created = [];
   let runnersHandler = "unset";
   const registered = new Map();
   const detached = [];
@@ -52,6 +53,8 @@ test("session picker runtime owns picker actions and search-hit construction", a
     fetchSessions: async () => [],
     getRunners: () => [],
     toast: (message) => toasts.push(message),
+    createSessionInCwd: async (cwd) => created.push(["cwd", cwd]),
+    showFolderBrowser: async () => created.push(["folder"]),
     stopRunner: async () => {},
     removeSession: async () => ({}),
     refreshHublots() {},
@@ -91,14 +94,20 @@ test("session picker runtime owns picker actions and search-hit construction", a
     actionNames.SESSION_PICKER_CANCEL_ACTION,
     actionNames.SESSION_SWITCH_RUNNER_ACTION,
     actionNames.SESSION_SIDEBAR_REFRESH_ACTION,
+    actionNames.SESSION_SIDEBAR_CREATE_IN_CWD_ACTION,
+    actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
   ].sort());
+  await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_CWD_ACTION)("/workspace/project");
+  await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)();
+  assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder"]]);
+  assert.deepEqual(toasts, ["new session in: /workspace/project"]);
   await runtime.show();
-  assert.deepEqual(toasts, ["no saved sessions"]);
+  assert.deepEqual(toasts, ["new session in: /workspace/project", "no saved sessions"]);
   assert.equal(runnersHandler, "unset");
   runtime.detachActions();
   runtime.detachActions();
   assert.equal(registered.size, 0);
-  assert.equal(detached.length, 12);
+  assert.equal(detached.length, 14);
 });
 
 test("session picker component routes every workflow through scoped actions", () => {
@@ -136,7 +145,11 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_STOP_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_DELETE_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION/);
+  assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION/);
   assert.match(source, /session-sidebar-snippet/);
-  assert.match(source, /<details class="session-sidebar-cwd" open>/);
+  assert.match(source, /<details class="session-sidebar-cwd" open=\{group\.cwd === currentCwd\}>/);
+  assert.match(source, /class="session-sidebar-create"/);
+  assert.match(source, /class="session-sidebar-cwd-add"/);
   assert.match(source, /groupRunnersByCwd\(sidebarRunners\)/);
 });

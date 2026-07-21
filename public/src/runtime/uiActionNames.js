@@ -47,6 +47,8 @@ export const SESSION_PICKER_LOAD_FOLDER_ACTION = "sessionPicker.loadFolder";
 export const SESSION_PICKER_CANCEL_ACTION = "sessionPicker.cancel";
 export const SESSION_SWITCH_RUNNER_ACTION = "session.switchRunner";
 export const SESSION_SIDEBAR_REFRESH_ACTION = "sessionSidebar.refresh";
+export const SESSION_SIDEBAR_CREATE_IN_CWD_ACTION = "sessionSidebar.createInCwd";
+export const SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION = "sessionSidebar.createInFolder";
 
 export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
 export const HEADER_CYCLE_THINKING_ACTION = "header.cycleThinking";

@@ -656,6 +656,8 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   },
   getRunners: () => getRunners(),
   toast: addToast,
+  createSessionInCwd: (cwd) => getSessionRuntime().openAndSwitchSession({ dir: cwd }),
+  showFolderBrowser,
   stopRunner: (id) => getSessionRuntime().stopSession(id),
   async removeSession(sessionQuery) {
     const response = await fetch(`/session?${sessionQuery}`, { method: "DELETE" });

@@ -14,6 +14,8 @@ import {
   SESSION_PICKER_SET_SCOPE_ACTION,
   SESSION_PICKER_STOP_ACTION,
   SESSION_SWITCH_RUNNER_ACTION,
+  SESSION_SIDEBAR_CREATE_IN_CWD_ACTION,
+  SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
   SESSION_SIDEBAR_REFRESH_ACTION,
 } from "../../runtime/uiActionNames.js";
 
@@ -170,6 +172,22 @@ export function createSessionPickerRuntime(deps) {
       }
     }),
     deps.uiActions.register(SESSION_SIDEBAR_REFRESH_ACTION, refreshSidebar),
+    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, async (cwd) => {
+      if (!cwd) return;
+      try {
+        await deps.createSessionInCwd(cwd);
+        deps.toast(`new session in: ${cwd}`);
+      } catch (error) {
+        deps.toast(`new session failed: ${error.message}`, "error");
+      }
+    }),
+    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, async () => {
+      try {
+        await deps.showFolderBrowser();
+      } catch (error) {
+        deps.toast(`new session failed: ${error.message}`, "error");
+      }
+    }),
   ];
   let actionsDetached = false;
   const detachActions = () => {
