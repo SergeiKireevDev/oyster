@@ -12,6 +12,7 @@ export function createSessionRoutes({
   deleteOwnedSession = null,
   resolvePath = resolve,
   unlinkFile = unlinkSync,
+  now = () => Date.now(),
   logger = console,
 }) {
   const { json } = requestContext;
@@ -62,6 +63,26 @@ export function createSessionRoutes({
   }
 
   return {
+    "GET /analytics/usage": (_req, res, url) => {
+      if (!sqlite || typeof catalog.usageAnalytics !== "function") {
+        json(res, 400, { error: "usage analytics requires the SQLite session backend" });
+        return;
+      }
+      const range = url.searchParams.get("range") || "7d";
+      const bucket = url.searchParams.get("bucket") || "day";
+      const durations = { "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000, "30d": 30 * 24 * 60 * 60 * 1000, "90d": 90 * 24 * 60 * 60 * 1000, all: null };
+      if (!(range in durations) || !["hour", "day"].includes(bucket)) {
+        json(res, 400, { error: "invalid analytics range or bucket" });
+        return;
+      }
+      const since = durations[range] == null ? null : new Date(now() - durations[range]).toISOString();
+      try {
+        json(res, 200, { range, since, generatedAt: new Date(now()).toISOString(), ...catalog.usageAnalytics({ bucket, since }) });
+      } catch (error) {
+        json(res, 500, { error: `cannot aggregate usage: ${error.message}` });
+      }
+    },
+
     "GET /sessions": (_req, res, url) => {
       let cwd;
       let location;

@@ -23,6 +23,7 @@ function setup({ sessionOperations = null } = {}) {
     folders: () => [{ dir: "/work", label: "/work", count: 2 }],
     locationForCwd: (cwd) => cwd,
     search: (options) => ({ results: [{ sessionId: options.path ?? "root", sessionCwd: "/work", snippet: {} }], filesSearched: 1, truncated: false }),
+    usageAnalytics: (options) => ({ bucket: options.bucket, total: { requests: 3, cost: 1.25 }, models: [], series: [] }),
   };
   const runnerRef = { backend: "sqlite", id: "root", storagePath };
   const lifecycle = [];
@@ -40,9 +41,23 @@ function setup({ sessionOperations = null } = {}) {
     resources: { closeTunnel() {}, releaseSessionRoutines: (_state, id) => { lifecycle.push(["release", id]); return ["routine"]; } },
     sessionOperations,
     resolvePath: (path) => path,
+    now: () => Date.parse("2026-01-08T00:00:00Z"),
   });
   return { routes, codec, sessions, state, lifecycle };
 }
+
+test("SQLite usage analytics validates and forwards range aggregation", () => {
+  const { routes } = setup();
+  const res = response();
+  routes["GET /analytics/usage"]({}, res, new URL("http://localhost/analytics/usage?range=7d&bucket=hour"));
+  assert.equal(res.status, 200);
+  assert.equal(res.body.bucket, "hour");
+  assert.equal(res.body.since, "2026-01-01T00:00:00.000Z");
+  assert.equal(res.body.total.cost, 1.25);
+  const invalid = response();
+  routes["GET /analytics/usage"]({}, invalid, new URL("http://localhost/analytics/usage?bucket=minute"));
+  assert.equal(invalid.status, 400);
+});
 
 test("SQLite routes list distinct shared-database identities and parent keys", () => {
   const { routes, codec } = setup();

@@ -18,6 +18,7 @@ import { createBrowserDomAdapters } from "../platform/createBrowserDomAdapters.j
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { runnerSessionIdentity, sameSession, sessionOpenSelection } from "../lib/sessionIdentity.js";
 import { setCarouselPage } from "../stores/carousel.js";
+import { analytics, updateAnalytics } from "../stores/analytics.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
@@ -390,6 +391,23 @@ const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;
 const updateModal = dialogAdapters.modal.update;
 const showSettingsModal = dialogAdapters.modal.showSettings;
+
+async function loadAnalytics({ range = get(analytics).range, bucket = get(analytics).bucket } = {}) {
+  updateAnalytics({ range, bucket, loading: true, error: "" });
+  try {
+    const res = await fetch(`/analytics/usage?range=${encodeURIComponent(range)}&bucket=${encodeURIComponent(bucket)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `analytics failed (${res.status})`);
+    updateAnalytics({ ...data, range, bucket, loading: false, error: "" });
+  } catch (error) {
+    updateAnalytics({ loading: false, error: error.message });
+  }
+}
+
+function showAnalyticsModal() {
+  openModalState({ title: "Usage analytics", wide: true, content: "analytics" });
+  return loadAnalytics();
+}
 
 const setupCommandPalette = composerOperations.setupCommandPalette;
 const detachComposerActions = () => composerAssembly.teardown();
@@ -821,6 +839,8 @@ const commandRuntime = composerAssembly.configureCommands({
     showFolderBrowser,
     showSessionPicker,
     showSettings: showSettingsModal,
+    showAnalytics: showAnalyticsModal,
+    loadAnalytics,
   },
 });
 const commandPaletteKeyboardController = commandRuntime.keyboardController;

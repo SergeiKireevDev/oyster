@@ -5,6 +5,7 @@ import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, path
 import { promptCommand } from "../../lib/promptActions.js";
 import { insertionAtCaret, insertionReplacing } from "../../lib/textInsertion.js";
 import {
+  ANALYTICS_LOAD_ACTION,
   COMMAND_PALETTE_RUN_ACTION,
   COMPOSER_ABORT_ACTION,
   COMPOSER_INPUT_ACTION,
@@ -248,6 +249,8 @@ export function createComposerAssembly(deps) {
           await commandDeps.dialogs.showFolderBrowser();
         } else if (action === "sessions") {
           await commandDeps.dialogs.showSessionPicker();
+        } else if (action === "analytics") {
+          await commandDeps.dialogs.showAnalytics();
         } else if (action === "compact") {
           deps.toast("compacting…");
           await commandDeps.platform.rpc({ type: "compact" });
@@ -269,6 +272,7 @@ export function createComposerAssembly(deps) {
       }
     }
     const detachMenuAction = commandDeps.uiActions?.register(MENU_ACTION, runMenuAction) ?? (() => {});
+    const detachAnalyticsAction = commandDeps.uiActions?.register(ANALYTICS_LOAD_ACTION, commandDeps.dialogs.loadAnalytics) ?? (() => {});
     setup(input);
     commandRuntime = {
       guard, setup, keyboardController, runMenuAction,
@@ -278,6 +282,7 @@ export function createComposerAssembly(deps) {
         keyboardController.detach();
         detachPaletteRunAction();
         detachMenuAction();
+        detachAnalyticsAction();
         close();
         commandRuntime = null;
       },

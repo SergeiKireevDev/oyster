@@ -4,6 +4,7 @@ import test from "node:test";
 
 const read = (name) => readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
 const firstGroup = [
+  "AnalyticsModal.svelte",
   "TextPromptModal.svelte",
   "EditorPromptModal.svelte",
   "ConfirmPromptModal.svelte",
@@ -39,7 +40,7 @@ test("overlay provides shared keyboard navigation and cancellation", () => {
   assert.doesNotMatch(overlays, /clientWidth <= 760/);
   assert.match(overlays, /scrollIntoView\(\{ block: "nearest" \}\)/);
   for (const name of [
-    "TextPromptModal.svelte", "EditorPromptModal.svelte", "ConfirmPromptModal.svelte",
+    "AnalyticsModal.svelte", "TextPromptModal.svelte", "EditorPromptModal.svelte", "ConfirmPromptModal.svelte",
     "CheckpointModelPickerModal.svelte", "FileExplorerModal.svelte", "FilePickerModal.svelte",
     "FolderBrowserModal.svelte", "HublotManagerModal.svelte", "OptionPickerModal.svelte",
     "SessionPickerModal.svelte", "SettingsModal.svelte",

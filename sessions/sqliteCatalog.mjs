@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { labelOf, textOf } from "./jsonlCatalog.mjs";
+import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 
 function decodeEntry(row) {
   let payload;
@@ -229,6 +230,23 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     return { results, truncated, filesSearched: selected.length };
   }
 
+  function usageAnalytics({ bucket = "day", since = null } = {}) {
+    return withDatabase((database) => {
+      const rows = since
+        ? database.prepare(`SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' AND timestamp >= ? ORDER BY timestamp`).all(since)
+        : database.prepare("SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' ORDER BY timestamp").all();
+      const records = rows.flatMap((row) => {
+        try {
+          const payload = JSON.parse(row.payload);
+          return payload?.message?.role === "assistant"
+            ? [{ sessionId: row.session_id, entryId: row.id, timestamp: row.timestamp, message: payload.message }]
+            : [];
+        } catch { return []; }
+      });
+      return aggregateUsageRecords(records, { bucket });
+    }, { bucket, total: {}, models: [], series: [] });
+  }
+
   return Object.freeze({
     backend: "sqlite",
     root: dirname(storagePath),
@@ -243,6 +261,7 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     messages,
     tree,
     search,
+    usageAnalytics,
     close() {},
   });
 }

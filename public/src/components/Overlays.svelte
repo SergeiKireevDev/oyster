@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import AnalyticsModal from "./AnalyticsModal.svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
   import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
   import CommandPalette from "./CommandPalette.svelte";
@@ -106,7 +107,9 @@
     <div class="m-actions" id="mActions"></div>
   {:else}
     <div class="m-body" id="mBody">
-      {#if $modalState.content === "settings"}
+      {#if $modalState.content === "analytics"}
+        <AnalyticsModal />
+      {:else if $modalState.content === "settings"}
         <SettingsModal />
       {:else if $modalState.content === "optionPicker"}
         <OptionPickerModal />

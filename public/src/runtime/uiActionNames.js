@@ -1,5 +1,6 @@
 export const MENU_ACTION = "menu.run";
 export const COMMAND_PALETTE_RUN_ACTION = "commandPalette.run";
+export const ANALYTICS_LOAD_ACTION = "analytics.load";
 
 export const FILE_PICKER_BROWSE_ACTION = "filePicker.browse";
 export const FILE_PICKER_CHOOSE_ACTION = "filePicker.choose";

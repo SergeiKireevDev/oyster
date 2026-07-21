@@ -145,16 +145,18 @@ test("composer assembly owns command guard palette menu and listener constructio
       showFolderBrowser: async () => calls.push(["newSessionIn"]),
       showSessionPicker: async () => calls.push(["sessions"]),
       showSettings: async () => calls.push(["settings"]),
+      showAnalytics: async () => calls.push(["analytics"]),
+      loadAnalytics: async () => calls.push(["analytics-load"]),
     },
   });
   assert.equal(typeof commands.guard.confirmKnownCommand, "function");
   assert.equal(typeof commands.setup, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
   assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), false);
-  for (const action of ["newSession", "newSessionIn", "sessions", "compact", "settings", "restart", "logout"]) {
+  for (const action of ["newSession", "newSessionIn", "sessions", "compact", "analytics", "settings", "restart", "logout"]) {
     await uiActions.invoke(MENU_ACTION, action);
   }
-  for (const routed of ["newSession", "newSessionIn", "sessions", "settings", "restart", "logout"]) {
+  for (const routed of ["newSession", "newSessionIn", "sessions", "analytics", "settings", "restart", "logout"]) {
     assert.ok(calls.some((call) => call[0] === routed), `${routed} was not routed`);
   }
   assert.ok(calls.some((call) => call[0] === "clear"));
@@ -184,7 +186,7 @@ test("composer assembly remounts actions and command listeners without stale own
       session: { openNew: async () => {}, getCurrentRunner: () => null },
       transcript: { clear() {}, renderMessage() {} },
       platform: { rpc: async () => ({ messages: [] }), restart: async () => {}, logout() {} },
-      dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {} },
+      dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {}, showAnalytics: async () => {}, loadAnalytics: async () => {} },
     };
   };
 
