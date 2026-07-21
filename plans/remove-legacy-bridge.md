@@ -68,6 +68,8 @@ creation into store-backed action modules.
   bridge export and registration were removed.
 - ✅ Hublot creation request transport is isolated in `hublotActions.js` with
   request-contract regression coverage.
+- ✅ Scope transition and atomic hublot/routine refresh sequencing are isolated
+  in `hublotActions.js` with regression coverage.
 - Refresh manager and sidebar stores atomically after mutations, respecting
   current session scope.
 - Keep File Explorer opening as a store/modal action, not a bridge callback.
