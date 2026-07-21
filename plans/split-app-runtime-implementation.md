@@ -213,7 +213,7 @@ session identity but not on each other:
 - [ ] **Files** — file picker, folder browser, explorer, upload input, and editor.
   - [x] Create `features/files/createFilesFeature.js` to assemble picker, folder-browser, and explorer controllers with injected browser/API dependencies.
   - [x] Move file-picker state and actions (`browse`, `pick`, `use folder`, `cancel`) behind the files feature; replace its global custom events with feature actions.
-  - [ ] Move folder-browser state and actions (`browse`, `create`, `submit`, `cancel`) behind the files feature; replace its global custom events with feature actions.
+  - [x] Move folder-browser state and actions (`browse`, `create`, `submit`, `cancel`) behind the files feature; replace its global custom events with feature actions.
   - [ ] Move explorer state and actions (`browse`, `edit`, `save`, `upload`, `back`) behind the files feature; retain file-input creation only in an explicit browser adapter.
   - [ ] Replace `pi-open-file-explorer` with the files feature’s `openExplorer` action and remove its global listener.
   - [ ] Add feature construction/teardown tests and retain focused picker, folder-browser, explorer, upload, and editor regression coverage.

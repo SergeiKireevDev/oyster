@@ -2,6 +2,7 @@
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
+  import { browseFolderBrowser, createFolderBrowser } from "../features/files/folderBrowserActions.js";
 
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
@@ -21,12 +22,12 @@
         value={$folderBrowser.newName}
         oninput={(event) => updateFolderBrowser({ newName: event.currentTarget.value })}
         onkeydown={(event) => {
-          if (event.key === "Enter") window.dispatchEvent(new Event("pi-folder-browser-create"));
+          if (event.key === "Enter") createFolderBrowser();
           else if (event.key === "Escape") updateFolderBrowser({ createOpen: false, newName: "" });
         }}
         use:focusOnMount
       />
-      <button class="btn" disabled={$folderBrowser.creating} onclick={() => window.dispatchEvent(new Event("pi-folder-browser-create"))}>Create</button>
+      <button class="btn" disabled={$folderBrowser.creating} onclick={createFolderBrowser}>Create</button>
     </div>
   {/if}
 
@@ -37,7 +38,7 @@
     dirs={$folderBrowser.dirs}
     showHidden={$folderBrowser.showHidden}
     showPath={false}
-    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-folder-browser-browse", { detail: path }))}
+    onBrowse={browseFolderBrowser}
   />
   {#if !visibleBrowserEntries($folderBrowser.dirs, $folderBrowser.showHidden).length}
     <div class="m-path">(no subfolders)</div>

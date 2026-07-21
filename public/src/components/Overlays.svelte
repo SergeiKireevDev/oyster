@@ -20,6 +20,7 @@
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { cancelFilePicker, useFilePickerFolder } from "../features/files/filePickerActions.js";
   import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
+  import { cancelFolderBrowser, submitFolderBrowser } from "../features/files/folderBrowserActions.js";
   import { hublotManager } from "../stores/hublotManager.js";
   import { cancelOptionPicker } from "../stores/optionPicker.js";
 </script>
@@ -88,8 +89,8 @@
       {:else if $modalState.content === "folderBrowser"}
         <span class="chip" role="button" tabindex="0" onclick={() => updateFolderBrowser({ createOpen: true, newName: "" })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ createOpen: true, newName: "" }); }}>New folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFolderBrowser({ showHidden: !$folderBrowser.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFolderBrowser({ showHidden: !$folderBrowser.showHidden }); }}>{$folderBrowser.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-cancel"))} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") window.dispatchEvent(new Event("pi-folder-browser-cancel")); }}>Cancel</span>
-        <button class="btn" style="padding:6px 16px;" onclick={() => window.dispatchEvent(new Event("pi-folder-browser-submit"))}>Start session here</button>
+        <span class="chip" role="button" tabindex="0" onclick={cancelFolderBrowser} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelFolderBrowser(); }}>Cancel</span>
+        <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
       {:else if $modalState.content === "filePicker"}
         <span class="chip" role="button" tabindex="0" title="Insert the current folder path" onclick={useFilePickerFolder} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") useFilePickerFolder(); }}>📁 Use this folder</span>
         <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFilePicker({ showHidden: !$filePicker.showHidden }); }}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>

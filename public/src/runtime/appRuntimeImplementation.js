@@ -62,7 +62,8 @@ import { configureComposerActions } from "../features/composer/composerActions.j
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "../lib/hublotActions.js";
 import { createHublotController, createHublotSidebarEventController, createManagedHublotEventController } from "../lib/hublotController.js";
 import { createHublotManagerController } from "../lib/hublotManagerController.js";
-import { createFolderBrowserController, createFolderBrowserEventController } from "../lib/folderBrowserController.js";
+import { createFolderBrowserController } from "../lib/folderBrowserController.js";
+import { configureFolderBrowserActions } from "../features/files/folderBrowserActions.js";
 import { createFileExplorerController, createFileExplorerEventController, createOpenFileExplorerEventController } from "../lib/fileExplorerController.js";
 import { createFilePickerController } from "../lib/filePickerController.js";
 import { configureFilePickerActions } from "../features/files/filePickerActions.js";
@@ -1162,7 +1163,7 @@ const createFolderBrowser = () => {
   return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
-const folderBrowserEventController = createFolderBrowserEventController({ windowTarget: window,
+const detachFolderBrowserActions = configureFolderBrowserActions({
   browse: loadFolderBrowser,
   create: createFolderBrowser,
   cancel: () => { closeModal(); folderBrowserState.done?.(null); },
@@ -1725,7 +1726,7 @@ const detachRuntimeEventAdapters = () => {
   commandPaletteRunController.detach();
   detachCheckpointTreeActions();
   detachFilePickerActions();
-  folderBrowserEventController.detach();
+  detachFolderBrowserActions();
   fileExplorerEventController.detach();
   managedHublotEventController.detach();
   hublotSidebarEventController.detach();
@@ -1755,7 +1756,7 @@ const runtimeEventAdapters = createRuntimeEventAdapters({
   attachers: [
     commandPaletteRunController,
     commandPaletteKeyboardController, menuEventController,
-    folderBrowserEventController, fileExplorerEventController, managedHublotEventController,
+    fileExplorerEventController, managedHublotEventController,
     hublotSidebarEventController, mobileDrawerDismissController, openFileExplorerEventController,
     routineEventController, sessionPickerEventController, settingsChangeController,
     headerEventController, carouselEventRegistration,
