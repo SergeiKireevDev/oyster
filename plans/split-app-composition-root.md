@@ -17,7 +17,7 @@ wrapping the existing root as extraction.
 - Run `npm run build` and `npm test` after every extraction.
 - Perform an `rg` no-reference check before removing imports or modules.
 
-## [ ] 1. Inventory Current Root Ownership
+## [x] 1. Inventory Current Root Ownership
 
 - [x] Record all imports, mutable bindings, DOM lookups, controller constructors, action registrations, and teardown registrations in `appCompositionRoot.js`.
 - [x] Map every root block to one owner: platform, sessions, transcript, checkpoints, composer, files, hublots, routines, settings/layout, dialogs, or lifecycle.
