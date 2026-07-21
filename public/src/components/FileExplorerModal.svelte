@@ -1,10 +1,18 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import { updateFileExplorer } from "../stores/fileExplorer.js";
+  import { closeModalState } from "../stores/modal.js";
   import { downloadFileUrl } from "../lib/fileBrowserActions.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
-  import { browseFileExplorer, editFileExplorer, saveFileExplorer } from "../features/files/fileExplorerActions.js";
+  import {
+    backFileExplorer,
+    backFileExplorerToHublots,
+    browseFileExplorer,
+    editFileExplorer,
+    saveFileExplorer,
+    uploadFileExplorer,
+  } from "../features/files/fileExplorerActions.js";
 
   const editExploredFile = editFileExplorer;
   const saveExploredFile = saveFileExplorer;
@@ -59,3 +67,16 @@
     <div class="m-path">(empty folder)</div>
   {/if}
 {/if}
+
+<div class="m-actions" id="mActions">
+  {#if $fileExplorer.mode === "edit"}
+    <span class="chip" role="button" tabindex="0" onclick={saveFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveFileExplorer(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
+    <a class="chip" href={downloadFileUrl($fileExplorer.token, $fileExplorer.editPath)} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
+    <span class="chip" role="button" tabindex="0" onclick={backFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorer(); }}>← Back</span>
+  {:else}
+    <span class="chip" role="button" tabindex="0" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") uploadFileExplorer(); }}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</span>
+    <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFileExplorer({ showHidden: !$fileExplorer.showHidden }); }}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
+    <span class="chip" role="button" tabindex="0" onclick={backFileExplorerToHublots} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorerToHublots(); }}>← Hublots</span>
+  {/if}
+  <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
+</div>

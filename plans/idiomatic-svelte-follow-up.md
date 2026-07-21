@@ -95,7 +95,7 @@ application; no global dialog store contains runtime callbacks.
 - [x] Move file-picker footer controls from `Overlays.svelte` to
   `FilePickerModal.svelte`, preserving folder selection, hidden-files toggle,
   and cancellation behavior with a focused test.
-- [ ] Move file-explorer footer controls from `Overlays.svelte` to
+- [x] Move file-explorer footer controls from `Overlays.svelte` to
   `FileExplorerModal.svelte`, preserving save, download, upload, navigation,
   and close behavior with a focused test.
 - [ ] Move settings and session-picker footer controls from `Overlays.svelte`

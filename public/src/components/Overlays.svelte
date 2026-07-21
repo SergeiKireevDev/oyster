@@ -15,8 +15,6 @@
   import Toasts from "./Toasts.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
-  import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
-  import { backFileExplorer, backFileExplorerToHublots, saveFileExplorer, uploadFileExplorer } from "../features/files/fileExplorerActions.js";
   import { cancelSessionPicker } from "../features/sessions/sessionPickerActions.js";
 
   const dialogs = getDialogService();
@@ -77,16 +75,6 @@
       {:else if $modalState.content === "confirmPrompt"}
         <span class="chip" role="button" tabindex="0" onclick={() => dialogs.answerConfirm(false)} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") dialogs.answerConfirm(false); }}>No</span>
         <button class="btn" style="padding:6px 16px;" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
-      {:else if $modalState.content === "fileExplorer" && $fileExplorer.mode === "edit"}
-        <span class="chip" role="button" tabindex="0" onclick={saveFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") saveFileExplorer(); }}>{$fileExplorer.saving ? "Saving…" : "Save"}</span>
-        <a class="chip" href={`/file-download?token=${encodeURIComponent($fileExplorer.token)}&path=${encodeURIComponent($fileExplorer.editPath)}`} download={$fileExplorer.editPath.split("/").pop()} style="text-decoration:none">Download</a>
-        <span class="chip" role="button" tabindex="0" onclick={backFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorer(); }}>← Back</span>
-        <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
-      {:else if $modalState.content === "fileExplorer"}
-        <span class="chip" role="button" tabindex="0" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") uploadFileExplorer(); }}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</span>
-        <span class="chip toggle-hidden" role="button" tabindex="0" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") updateFileExplorer({ showHidden: !$fileExplorer.showHidden }); }}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</span>
-        <span class="chip" role="button" tabindex="0" onclick={backFileExplorerToHublots} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") backFileExplorerToHublots(); }}>← Hublots</span>
-        <span class="chip" role="button" tabindex="0" onclick={closeModalState} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") closeModalState(); }}>Close</span>
       {:else if $modalState.content === "sessionPicker"}
         <span class="chip" role="button" tabindex="0" onclick={cancelSessionPicker} onkeydown={(event) => { if (event.key === "Enter" || event.key === " ") cancelSessionPicker(); }}>Cancel</span>
       {/if}
