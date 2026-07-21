@@ -6,7 +6,7 @@ import { clearAuthToken, createAuthProbe, createUnauthorizedHandler, initializeA
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { annotateTranscriptEntries as annotateTranscriptEntryIds, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createDebouncedTranscriptSyncController, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, createTranscriptSyncScheduler, filterReplayEvents, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, registerTranscriptLoadScroll, isComposerReadyForSend, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload, resolveTranscriptEntryId } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteInput, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerSessionPickerEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, registerReconnectWatchdog, runCanonicalReload } from "./runtime/eventStream.js";
 import { installDebugHooks } from "./runtime/debugHooks.js";
 import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController } from "./runtime/carouselController.js";
@@ -52,7 +52,7 @@ import { createFolderBrowserController } from "./lib/folderBrowserController.js"
 import { createFileExplorerController } from "./lib/fileExplorerController.js";
 import { createFilePickerController } from "./lib/filePickerController.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
-import { createRoutineController, createRoutineSidebarController } from "./lib/routineController.js";
+import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "./lib/routineController.js";
 import { createSettingsChangeController, createSettingsController } from "./lib/settingsController.js";
 import { createSessionPickerController, createSessionPickerDeleteController, createSessionPickerFolderController } from "./lib/sessionPickerController.js";
 import { createSessionPickerSearchController } from "./lib/sessionPickerSearchController.js";
@@ -1693,7 +1693,7 @@ const routineController = createRoutineController({
   refresh: loadRoutines,
   toast: addToast,
 });
-registerRoutineEvents(window, { run: routineController.run });
+createRoutineEventController({ windowTarget: window, run: routineController.run }).attach();
 
 // ------------------------------------------------------------ session picker
 

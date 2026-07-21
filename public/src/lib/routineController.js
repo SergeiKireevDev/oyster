@@ -10,6 +10,21 @@ export function createRoutineController({ runRoutine, getSessionId, refresh, toa
   return { run };
 }
 
+export function createRoutineEventController({ windowTarget, run }) {
+  const onAction = (event) => {
+    const { name, action } = event.detail ?? {};
+    run(name, action);
+  };
+  function attach() {
+    windowTarget.addEventListener("pi-routine-action", onAction);
+    return detach;
+  }
+  function detach() {
+    windowTarget.removeEventListener("pi-routine-action", onAction);
+  }
+  return { attach, detach };
+}
+
 export function createRoutineSidebarController({
   listRoutines,
   isVisible,

@@ -118,15 +118,6 @@ export function registerFilePickerEvents(target, { useFolder, browse, pick, canc
   return () => listeners.forEach(([name, listener]) => target.removeEventListener(name, listener));
 }
 
-export function registerRoutineEvents(target, { run }) {
-  const onAction = (event) => {
-    const { name, action } = event.detail ?? {};
-    run(name, action);
-  };
-  target.addEventListener("pi-routine-action", onAction);
-  return () => target.removeEventListener("pi-routine-action", onAction);
-}
-
 export function registerMenuEvents(target, { run }) {
   const onAction = (event) => run(event.detail);
   target.addEventListener("pi-menu-action", onAction);

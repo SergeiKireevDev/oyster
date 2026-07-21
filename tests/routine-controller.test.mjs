@@ -1,12 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRoutineController, createRoutineSidebarController } from "../public/src/lib/routineController.js";
+import { createRoutineController, createRoutineEventController, createRoutineSidebarController } from "../public/src/lib/routineController.js";
 test("routine controller binds actions to the current session and refreshes", async () => {
   let request; let refreshes = 0;
   const controller = createRoutineController({ runRoutine: async (options) => { request = options; }, getSessionId: () => "session", refresh: () => refreshes++, toast: () => {} });
   await controller.run("job.sh", "start");
   assert.deepEqual(request, { name: "job.sh", action: "start", sessionId: "session" });
   assert.equal(refreshes, 1);
+});
+
+test("routine event controller unpacks typed action details", () => {
+  let listener;
+  let removed;
+  const windowTarget = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
+  const calls = [];
+  const controller = createRoutineEventController({ windowTarget, run: (...args) => calls.push(args) });
+  controller.attach();
+  listener({ detail: { name: "build", action: "run" } });
+  controller.detach();
+  assert.deepEqual(calls, [["build", "run"]]);
+  assert.equal(removed, listener);
 });
 
 test("routine sidebar discards stale session loads and syncs live updates", async () => {
