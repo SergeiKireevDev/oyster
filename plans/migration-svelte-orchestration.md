@@ -53,17 +53,14 @@ e2e coverage remains green.
 
 ## 3. Extract Transcript Reload/Reconciliation Actions
 
-Create `public/src/lib/transcriptReloadActions.js` for the non-transport parts
-of `reloadTranscript()`:
+✅ Created `public/src/lib/transcriptReloadActions.js` for canonical request
+coordination and durable-history reconciliation. It eagerly applies state,
+uses injected session-file reads as the primary completed history, and falls
+back to `get_messages` if durable history is unavailable.
 
-- reading/parsing durable transcript data through injected fetch/read helpers;
-- selecting the active branch/messages;
-- reconciling optional `get_messages` data without replacing durable history;
-- invoking transcript reset/render callbacks and reporting a structured result.
-
-Leave request issuance, SSE registration, lifecycle logging destination, and
-scroll DOM measurements in `legacy.js`. Preserve render-job cancellation tokens
-and tail-first rendering through the existing transcript action modules.
+Request issuance, SSE registration, lifecycle logging destination, and scroll
+DOM measurements remain in `legacy.js`. Render-job cancellation and tail-first
+rendering stay in the transcript action modules.
 
 **Acceptance:** a refresh and session switch show completed file transcript
 history even if live SSE is unavailable; live streaming does not duplicate a
