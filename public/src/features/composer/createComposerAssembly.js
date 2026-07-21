@@ -144,10 +144,39 @@ export function createComposerAssembly(deps) {
       documentTarget: commandDeps.documentTarget,
       isOpen: () => palette.classList.contains("open"), move, run: runActive, close,
     });
-    const menuController = createMenuEventController({ windowTarget: commandDeps.windowTarget, run: commandDeps.runMenuAction });
+    async function runMenuAction(action) {
+      try {
+        if (action === "newSession") {
+          await commandDeps.session.openNew();
+          deps.toast("new session");
+        } else if (action === "newSessionIn") {
+          await commandDeps.dialogs.showFolderBrowser();
+        } else if (action === "sessions") {
+          await commandDeps.dialogs.showSessionPicker();
+        } else if (action === "compact") {
+          deps.toast("compacting…");
+          await commandDeps.platform.rpc({ type: "compact" });
+          deps.toast("compacted");
+          const { messages } = await commandDeps.platform.rpc({ type: "get_messages" });
+          commandDeps.transcript.clear();
+          for (const message of messages) commandDeps.transcript.renderMessage(message);
+        } else if (action === "restart") {
+          await commandDeps.platform.restart(commandDeps.session.getCurrentRunner());
+          commandDeps.transcript.clear();
+          deps.toast("restarting pi…");
+        } else if (action === "logout") {
+          commandDeps.platform.logout();
+        } else if (action === "settings") {
+          await commandDeps.dialogs.showSettings();
+        }
+      } catch (error) {
+        deps.toast(error.message, "error");
+      }
+    }
+    const menuController = createMenuEventController({ windowTarget: commandDeps.windowTarget, run: runMenuAction });
     setup(input);
     commandRuntime = {
-      guard, setup, runController, keyboardController, menuController,
+      guard, setup, runController, keyboardController, menuController, runMenuAction,
       isOpen: () => palette.classList.contains("open"),
       teardown() {
         inputController?.detach();

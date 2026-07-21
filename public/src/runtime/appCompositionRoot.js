@@ -409,41 +409,6 @@ const promptRpcCommand = composerOperations.promptRpcCommand;
 const setupCommandPalette = composerOperations.setupCommandPalette;
 const detachComposerActions = () => composerAssembly.teardown();
 
-// ------------------------------------------------------------ menu & actions
-
-async function runMenuAction(action) {
-  try {
-    if (action === "newSession") {
-      // a fresh runner, so the current session keeps running in the background
-      await getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() });
-      addToast("new session");
-    } else if (action === "newSessionIn") {
-      await showFolderBrowser();
-    } else if (action === "sessions") {
-      await showSessionPicker();
-    } else if (action === "compact") {
-      addToast("compacting…");
-      await rpc({ type: "compact" });
-      addToast("compacted");
-      const { messages } = await rpc({ type: "get_messages" });
-      clearMessages();
-      for (const m of messages) renderFullMessage(m);
-    } else if (action === "restart") {
-      await fetch(`/restart?runner=${encodeURIComponent(getCurrentRunner() ?? "")}`, { method: "POST" });
-      // blank slate while pi respawns; the pi_started event reloads the
-      // resumed session's transcript
-      clearMessages();
-      addToast("restarting pi…");
-    } else if (action === "logout") {
-      clearAuthToken({ storage: localStorage, documentTarget: document });
-      location.reload();
-    } else if (action === "settings") {
-      await showSettingsModal();
-    }
-  } catch (err) {
-    addToast(err.message, "error");
-  }
-}
 // ------------------------------------------------------------ attach file
 
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
@@ -909,7 +874,27 @@ const commandRuntime = composerAssembly.configureCommands({
   showFilePicker,
   isOverlayOpen: () => overlay.classList.contains("open"),
   schedule: (...args) => delayedTasks.schedule(...args),
-  runMenuAction,
+  session: {
+    openNew: () => getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() }),
+    getCurrentRunner,
+  },
+  transcript: {
+    clear: clearMessages,
+    renderMessage: renderFullMessage,
+  },
+  platform: {
+    rpc,
+    restart: (runner) => fetch(`/restart?runner=${encodeURIComponent(runner ?? "")}`, { method: "POST" }),
+    logout: () => {
+      clearAuthToken({ storage: localStorage, documentTarget: document });
+      location.reload();
+    },
+  },
+  dialogs: {
+    showFolderBrowser,
+    showSessionPicker,
+    showSettings: showSettingsModal,
+  },
 });
 const commandPaletteRunController = commandRuntime.runController;
 const commandPaletteKeyboardController = commandRuntime.keyboardController;

@@ -51,8 +51,8 @@ test("composer assembly owns prompt history send and abort workflows", async () 
   assembly.teardown();
 });
 
-test("composer assembly owns command guard palette menu and listener construction", () => {
-  const { assembly } = createHarness();
+test("composer assembly owns command guard palette menu and listener construction", async () => {
+  const { assembly, calls } = createHarness();
   const target = { addEventListener() {}, removeEventListener() {} };
   const palette = { classList: { contains: () => false } };
   const commands = assembly.configureCommands({
@@ -65,13 +65,22 @@ test("composer assembly owns command guard palette menu and listener constructio
     showFilePicker() {},
     isOverlayOpen: () => false,
     schedule() {},
-    runMenuAction() {},
+    session: { openNew: async () => {}, getCurrentRunner: () => "runner" },
+    transcript: { clear: () => calls.push(["clear"]), renderMessage: (message) => calls.push(["render", message]) },
+    platform: {
+      rpc: async ({ type }) => type === "get_messages" ? { messages: [{ role: "user", content: "hello" }] } : {},
+      restart: async () => {}, logout() {},
+    },
+    dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {} },
   });
   assert.equal(typeof commands.guard.confirmKnownCommand, "function");
   assert.equal(typeof commands.setup, "function");
   assert.equal(typeof commands.runController.attach, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
   assert.equal(typeof commands.menuController.attach, "function");
+  await commands.runMenuAction("compact");
+  assert.ok(calls.some((call) => call[0] === "clear"));
+  assert.ok(calls.some((call) => call[0] === "render"));
   assert.equal(assembly.configureCommands({}), commands);
   assembly.teardown();
 });
@@ -79,7 +88,7 @@ test("composer assembly owns command guard palette menu and listener constructio
 test("composition root delegates command controller construction to composer assembly", () => {
   const source = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(source, /composerAssembly\.configureCommands\(/);
-  assert.doesNotMatch(source, /createCommandGuard|createCommandPalette|createMenuEventController|let cmdState/);
+  assert.doesNotMatch(source, /createCommandGuard|createCommandPalette|createMenuEventController|let cmdState|function runMenuAction/);
 });
 
 test("composer assembly removes a failed local echo", async () => {
