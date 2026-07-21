@@ -363,7 +363,7 @@ Complete these in order. Every checkbox is intentionally on one line so the
 verified goal loop can match it exactly.
 
 - [x] Integrate `createManagedEventConnection` into the root and delete the in-root EventSource watchdog and connection construction block.
-- [ ] Add focused managed-connection construction reconnect and teardown tests and verify the event-stream extraction.
+- [x] Add focused managed-connection construction reconnect and teardown tests and verify the event-stream extraction.
 - [ ] Extract the hublot manager and sidebar construction block into `features/hublots/` and replace it with one factory call.
 - [ ] Extract the routine sidebar construction block into `features/routines/` and replace it with one factory call.
 - [ ] Extract settings extension UI and carousel construction blocks into feature factories and replace each with one factory call.
