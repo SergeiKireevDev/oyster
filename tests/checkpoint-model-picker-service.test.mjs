@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { get } from "svelte/store";
 import {
   createCheckpointModelPickerService,
@@ -41,6 +42,17 @@ test("checkpoint picker service instances own independent state and preferences"
   assert.equal(second.getPreference(), "provider/new");
   assert.deepEqual(get(first.service.state), { ...emptyCheckpointModelPicker });
   assert.deepEqual(get(second.service.state), { ...emptyCheckpointModelPicker });
+});
+
+test("checkpoint picker modal consumes the scoped service and preserves controls", () => {
+  const source = readFileSync(new URL("../public/src/components/CheckpointModelPickerModal.svelte", import.meta.url), "utf8");
+  assert.match(source, /getCheckpointModelPicker\(\)/);
+  assert.match(source, /const checkpointModelPicker = picker\.state/);
+  assert.match(source, /picker\.setSelected\(value\)/);
+  assert.match(source, /picker\.cancel\(\)/);
+  assert.match(source, /picker\.submit\(\)/);
+  assert.match(source, /No summary — timestamp message/);
+  assert.doesNotMatch(source, /stores\/checkpointModelPicker\.js/);
 });
 
 test("opening a replacement settles the previous picker before owning the resolver", async () => {

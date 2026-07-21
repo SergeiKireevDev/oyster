@@ -9,7 +9,8 @@ function dependencies(switches = [], uiActions = createUiActionRegistry()) {
   return {
     uiActions,
     fetchImpl: async () => ({ ok: true, json: async () => ({}) }),
-    tick: async () => {}, rpc: async () => ({}), openModelPicker: async () => ({ cancelled: true }), setModelOptions() {},
+    tick: async () => {}, rpc: async () => ({}),
+    checkpointModelPicker: { open: async () => ({ cancelled: true }), setOptions() {} },
     setTarget() {}, setRestores() {}, setTreeState() {}, setBusy() {}, setRestoreBusy() {},
     transcript: { chatElements: () => [], fetchSessionEntries: async () => [] },
     session: {
@@ -77,6 +78,7 @@ test("checkpoint assembly receives session transcript fetch modal and toast inte
   assert.match(source, /fetchImpl: deps\.fetchImpl/);
   assert.match(source, /getSessionId: deps\.session\.getSessionId/);
   assert.match(source, /chatElements: deps\.transcript\.chatElements/);
-  assert.match(source, /openPicker: deps\.openModelPicker/);
+  assert.match(source, /deps\.checkpointModelPicker\.open\(pickerOptions\)/);
+  assert.match(source, /deps\.checkpointModelPicker\.setOptions\(models\)/);
   assert.match(source, /toast: deps\.toast/);
 });

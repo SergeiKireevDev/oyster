@@ -124,7 +124,7 @@ bridge or direct persistence policy.
 - [x] Provide the checkpoint picker service from `App.svelte` and pass it into
   the checkpoint assembly/runtime. Do not migrate the modal component in this
   step; prove fresh mount services are distinct.
-- [ ] Change `CheckpointModelPickerModal.svelte` and checkpoint feature calls
+- [x] Change `CheckpointModelPickerModal.svelte` and checkpoint feature calls
   to use the scoped picker service. Preserve model selection, cancellation,
   extension UI, and modal-title contracts.
 - [ ] Delete `stores/checkpointModelPicker.js` after a no-reference check and

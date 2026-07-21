@@ -18,7 +18,6 @@ import { createBrowserDomAdapters } from "../platform/createBrowserDomAdapters.j
 import { applySessionState, fetchSessionEntries as fetchPersistedSessionEntries, fetchSessionPreview, openSession, sessionFileQuery, stopSessionRunner, switchSessionRunner } from "./sessionRuntime.js";
 import { setCarouselPage } from "../stores/carousel.js";
 import { updateAppSession } from "../stores/appSession.js";
-import { openCheckpointModelPicker, updateCheckpointModelOptions } from "../stores/checkpointModelPicker.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
 import { setCheckpointTreeState } from "../stores/checkpointTree.js";
@@ -150,8 +149,6 @@ const checkpointAssembly = createCheckpointAssembly({
   fetchImpl: fetch,
   tick,
   rpc,
-  openModelPicker: openCheckpointModelPicker,
-  setModelOptions: updateCheckpointModelOptions,
   setTarget: setCheckpointTarget,
   setRestores: setCheckpointRestores,
   setTreeState: setCheckpointTreeState,

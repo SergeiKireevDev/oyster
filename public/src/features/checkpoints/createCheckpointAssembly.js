@@ -5,9 +5,9 @@ import { CHECKPOINT_TREE_OPEN_ACTION, CHECKPOINT_TREE_ROLLBACK_ACTION } from "..
 /** Owns checkpoint model selection, marker, tree, freeze, rollback, and actions. */
 export function createCheckpointAssembly(deps) {
   const pickModel = (options = {}) => openModelPicker({
-    openPicker: deps.openModelPicker,
+    openPicker: (pickerOptions) => deps.checkpointModelPicker.open(pickerOptions),
     rpc: deps.rpc,
-    setOptions: deps.setModelOptions,
+    setOptions: (models) => deps.checkpointModelPicker.setOptions(models),
     options,
   });
   const feature = createCheckpointFeature({

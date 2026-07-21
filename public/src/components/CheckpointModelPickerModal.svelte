@@ -1,10 +1,11 @@
 <script>
-  import {
-    cancelCheckpointModelPicker,
-    checkpointModelPicker,
-    setCheckpointModel,
-    submitCheckpointModelPicker,
-  } from "../stores/checkpointModelPicker.js";
+  import { getCheckpointModelPicker } from "../runtime/checkpointModelPickerContext.js";
+
+  const picker = getCheckpointModelPicker();
+  const checkpointModelPicker = picker.state;
+  const setCheckpointModel = (value) => picker.setSelected(value);
+  const cancelCheckpointModelPicker = () => picker.cancel();
+  const submitCheckpointModelPicker = () => picker.submit();
 
   $: selected = $checkpointModelPicker.selected;
   $: options = [
