@@ -23,7 +23,7 @@ export async function init(state) {
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
-  const { importLegacyCheckpoints } = await import(bust("persistence/checkpointImporter.mjs"));
+  const { importLegacyCheckpoints } = await import(bust("persistence/checkpointImporter.mjs")); const { importLegacyRoutines } = await import(bust("persistence/routineImporter.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs"));
 
   const [
@@ -79,6 +79,7 @@ export async function init(state) {
   }
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
+  if (!state.legacyRoutinesImported) { state.routineImport = importLegacyRoutines({ repository: appStore.repositories.routines, resolveOwner: ensureSessionOwner }); state.legacyRoutinesImported = true; }
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
