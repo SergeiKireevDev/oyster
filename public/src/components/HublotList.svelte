@@ -1,6 +1,17 @@
 <script>
-  import { closeHublot, openFileExplorer } from "../lib/legacyBridge.js";
+  import { openFileExplorer } from "../lib/legacyBridge.js";
+  import { removeHublot } from "../lib/hublotActions.js";
   import { hublots, hublotsLoading } from "../stores/hublots.js";
+  import { addToast } from "../stores/toasts.js";
+
+  async function closeHublot(id) {
+    try {
+      await removeHublot(fetch, id);
+      hublots.update((items) => items.filter((item) => item.id !== id));
+    } catch (error) {
+      addToast(`close hublot failed: ${error.message}`, "error");
+    }
+  }
 </script>
 
 <div id="hublotList" style="display:contents">

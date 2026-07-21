@@ -26,10 +26,6 @@ export function openFileExplorer() {
   return hublotHandlers.openFileExplorer?.();
 }
 
-export function closeHublot(id) {
-  return hublotHandlers.closeHublot?.(id);
-}
-
 export function setHublotManagerHandlers(handlers) {
   hublotManagerHandlers = handlers ?? {};
 }

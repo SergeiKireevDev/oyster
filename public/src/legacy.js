@@ -30,7 +30,7 @@ import { createTranscriptActions } from "./lib/transcriptActions.js";
 import { applySessionState, sessionFileQuery, switchSessionRunner } from "./lib/sessionActions.js";
 import { loadCanonicalTranscript } from "./lib/transcriptReloadActions.js";
 import { createCheckpoint, rollbackCheckpoint } from "./lib/checkpointActions.js";
-import { listHublots, removeHublot } from "./lib/hublotActions.js";
+import { listHublots } from "./lib/hublotActions.js";
 import { listRoutines, runRoutine } from "./lib/routineActions.js";
 import { browseFiles } from "./lib/fileBrowserActions.js";
 import { resetTranscriptItems } from "./stores/transcriptItems.js";
@@ -2359,14 +2359,8 @@ async function loadHublots() {
   hublotsLoading.set(false);
 }
 
-async function closeHublot(id) {
-  await removeHublot(fetch, id);
-  loadHublots();
-}
-
 setHublotHandlers({
   openFileExplorer: () => showFileExplorer().catch((e) => toast(e.message, "error")),
-  closeHublot,
 });
 
 // ------------------------------------------------------------ routines sidebar
