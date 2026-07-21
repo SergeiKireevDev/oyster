@@ -312,7 +312,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 - [x] Mark unfinished runs as interrupted during startup reconciliation.
 - [x] Import existing executable routine files and bindings idempotently.
 - [x] Preserve current routes, SSE events, extension behavior, and session scoping.
-- [ ] Verify definition, runs, logs, and runtime handles are removed on session deletion.
+- [x] Verify definition, runs, logs, and runtime handles are removed on session deletion.
 
 ### 6. Migrate and persist hublots
 
