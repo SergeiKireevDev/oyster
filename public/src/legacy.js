@@ -1864,12 +1864,12 @@ async function showFilePicker(onPick = insertIntoComposer, onCancel = null, retu
 }
 
 setFilePickerHandlers({
-  browse: loadFilePicker,
   useFolder: () => {
     filePickerState.onPick?.(filePickerState.curDir);
     finishFilePicker();
   },
 });
+window.addEventListener("pi-file-picker-browse", (event) => loadFilePicker(event.detail));
 window.addEventListener("pi-file-picker-pick", (event) => {
   filePickerState.onPick?.(event.detail);
   finishFilePicker();

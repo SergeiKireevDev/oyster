@@ -1,6 +1,5 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
-  import { browsePickedFileFolder } from "../lib/legacyBridge.js";
   import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker } from "../stores/filePicker.js";
 
@@ -18,7 +17,7 @@
     dirs={$filePicker.dirs}
     showHidden={$filePicker.showHidden}
     showWorkdir={true}
-    onBrowse={browsePickedFileFolder}
+    onBrowse={(path) => window.dispatchEvent(new CustomEvent("pi-file-picker-browse", { detail: path }))}
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($filePicker.path, file)}

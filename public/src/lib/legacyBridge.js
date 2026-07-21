@@ -86,10 +86,6 @@ export function toggleFileExplorerHidden() {
   return fileExplorerHandlers.toggleHidden?.();
 }
 
-export function browsePickedFileFolder(path) {
-  return filePickerHandlers.browse?.(path);
-}
-
 export function usePickedFolder() {
   return filePickerHandlers.useFolder?.();
 }
