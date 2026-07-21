@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "../public/src/runtime/eventControllers.js";
+
+test("mobile drawer adapter closes only an open drawer on outside mobile taps", () => {
+  let listener;
+  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  const hublots = { contains: () => false, classList: { contains: (name) => name === "open" } };
+  const treebar = { contains: () => false, classList: { contains: () => false } };
+  let closed = 0;
+  registerMobileDrawerDismiss(target, { isMobile: () => true, hublots, treebar, isToggleTarget: () => false, close: () => { closed++; } });
+  listener({ target: {} });
+  assert.equal(closed, 1);
+});
 
 test("header event adapter routes header actions", () => {
   let listener;

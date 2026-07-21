@@ -9,6 +9,15 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
 }
 
 /** Register the checkpoint tree's typed component events outside feature logic. */
+export function registerMobileDrawerDismiss(target, { isMobile, hublots, treebar, isToggleTarget, close }) {
+  const onClick = (event) => {
+    if (!isMobile() || hublots.contains(event.target) || treebar.contains(event.target) || isToggleTarget(event.target)) return;
+    if (hublots.classList.contains("open") || treebar.classList.contains("open")) close();
+  };
+  target.addEventListener("click", onClick);
+  return () => target.removeEventListener("click", onClick);
+}
+
 export function registerHeaderEvents(target, { chooseModel, cycleThinking, openConfig, toggleHublots, toggleTree }) {
   const onHeader = (event) => {
     const { action, sourceEvent } = event.detail ?? {};

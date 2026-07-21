@@ -6,7 +6,7 @@ import { createAuthProbe, initializeAuth, installAuthenticatedFetch } from "./ru
 import { createRpcClient } from "./runtime/rpcClient.js";
 import { createSseDeduper } from "./runtime/eventStreamUtils.js";
 import { createAssistantStream, createRenderJobs, createToolCardRegistry, createTranscriptScrollAdapter, filterReplayEvents, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "./runtime/transcriptRuntime.js";
-import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
+import { handleReplayDone, handleRunnerPing, registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFolderBrowserEvents, registerHeaderEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents } from "./runtime/eventControllers.js";
 import { createConnectionStateTransitions, createEventStreamRuntime, processEventMessage, runCanonicalReload, runReconnectWatchdog } from "./runtime/eventStream.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { updateAppSession } from "./stores/appSession.js";
@@ -2141,20 +2141,18 @@ $("hublotAdd").addEventListener("click", () => showHublots().catch((e) => toast(
 // tap outside the drawer closes it (mobile only — on desktop they're
 // docked, not overlays). Sync the carousel state so applyCarousel()
 // doesn't immediately re-open it.
-document.addEventListener("click", (e) => {
-  if (!window.matchMedia("(max-width: 760px)").matches) return;
-  const hublots = $("hublots");
-  const treebar = $("treebar");
-  if (!hublots.contains(e.target) && !treebar.contains(e.target) &&
-      !e.target.closest("#hublotChip") && !e.target.closest("#treeChip")) {
-    if (hublots.classList.contains("open") || treebar.classList.contains("open")) {
-      hublots.classList.remove("open");
-      treebar.classList.remove("open");
-      carousel = 0;
-      localStorage.setItem("pi_carousel", "0");
-      setCarouselDots();
-    }
-  }
+registerMobileDrawerDismiss(document, {
+  isMobile: () => window.matchMedia("(max-width: 760px)").matches,
+  hublots: $("hublots"),
+  treebar: $("treebar"),
+  isToggleTarget: (target) => target.closest("#hublotChip") || target.closest("#treeChip"),
+  close: () => {
+    $("hublots").classList.remove("open");
+    $("treebar").classList.remove("open");
+    carousel = 0;
+    localStorage.setItem("pi_carousel", "0");
+    setCarouselDots();
+  },
 });
 
 async function loadHublots() {
