@@ -1,6 +1,6 @@
 "use strict";
 
-import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers } from "./lib/legacyBridge.js";
+import { setCheckpointTreeHandlers, setCommandPaletteHandlers, setComposerHandlers, setHublotHandlers, setMenuActionHandler, setRoutineHandlers, setSettingsHandlers } from "./lib/legacyBridge.js";
 import { setCarouselPage } from "./stores/carousel.js";
 import { setCheckpointTreeState } from "./stores/checkpointTree.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "./stores/commandPalette.js";
@@ -3313,55 +3313,13 @@ function closeModal() {
   $("mActions").innerHTML = "";
 }
 
-/** Settings modal — a list of toggle rows backed by localStorage. Each row
- *  renders its own current value live, so toggles are always in sync. Returns
- *  when the user closes the modal. */
+setSettingsHandlers({ reload: () => reloadTranscript().catch(() => {}) });
+
+/** Settings modal — rendered by Svelte; legacy only opens the modal shell. */
 async function showSettingsModal() {
-  updateModal({ title: "Settings" });
-  const body = $("mBody");
-  body.innerHTML = "";
-
-  // key -> label. Add new toggles here.
-  const settings = [
-    ["pi_show_thinking", "Show thinking blocks"],
-  ];
-
-  function row(key, label) {
-    // a <label> wrapping a checkbox: clicking anywhere on the label toggles
-    // the natively-associated checkbox, which fires change — so we only
-    // listen on the checkbox and never touch checked state ourselves.
-    const rowEl = document.createElement("label");
-    rowEl.className = "m-option";
-    rowEl.style.cursor = "pointer";
-    rowEl.style.display = "flex";
-    rowEl.style.alignItems = "center";
-    rowEl.style.gap = "10px";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = localStorage.getItem(key) !== "0";
-    cb.style.accentColor = "var(--accent)";
-    cb.style.width = "16px";
-    cb.style.height = "16px";
-    cb.style.flexShrink = "0";
-    const span = document.createElement("span");
-    span.textContent = label;
-    rowEl.append(cb, span);
-    cb.addEventListener("change", () => {
-      localStorage.setItem(key, cb.checked ? "1" : "0");
-      if (key === "pi_show_thinking") reloadTranscript().catch(() => {});
-    });
-    return rowEl;
-  }
-
-  for (const [key, label] of settings) body.appendChild(row(key, label));
-
-  const actions = $("mActions");
-  const done = document.createElement("button");
-  done.className = "btn";
-  done.textContent = "Done";
-  done.addEventListener("click", () => closeModal());
-  actions.appendChild(done);
-  openModal({ title: "Settings" });
+  $("mBody").innerHTML = "";
+  $("mActions").innerHTML = "";
+  openModal({ title: "Settings", content: "settings" });
 }
 
 function pickOption(title, options, { searchable = false } = {}) {

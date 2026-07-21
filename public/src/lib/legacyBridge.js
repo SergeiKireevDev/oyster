@@ -4,6 +4,7 @@ let hublotHandlers = {};
 let routineHandlers = {};
 let commandPaletteHandlers = {};
 let checkpointTreeHandlers = {};
+let settingsHandlers = {};
 
 export function setMenuActionHandler(handler) {
   menuActionHandler = handler;
@@ -75,4 +76,12 @@ export function openCheckpointTreeSession(node) {
 
 export function rollbackCheckpoint(checkpoint, element) {
   return checkpointTreeHandlers.rollback?.(checkpoint, element);
+}
+
+export function setSettingsHandlers(handlers) {
+  settingsHandlers = handlers ?? {};
+}
+
+export function reloadAfterSettingsChange() {
+  return settingsHandlers.reload?.();
 }
