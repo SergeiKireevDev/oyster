@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerMobileDrawerDismiss, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
+import { registerCheckpointTreeEvents, registerCommandPaletteEvents, registerCommandPaletteInput, registerCommandPaletteKeyboard, registerComposerEvents, registerFileExplorerEvents, registerFilePickerEvents, registerFileUploadInput, registerFolderBrowserEvents, registerHeaderEvents, registerHublotSidebarEvents, registerManagedHublotEvents, registerMenuEvents, registerOpenFileExplorerEvent, registerRoutineEvents, registerSessionPickerEvents, registerSettingsEvents, registerSwipeAndResizeEvents } from "../public/src/runtime/eventControllers.js";
 
 test("carousel gesture classifier distinguishes taps and axes", () => {
   assert.equal(swipeAxis(20, 20), null);
@@ -143,15 +143,29 @@ test("swipe adapter installs capture touch handlers and resize callback", () => 
   assert.equal(calls.filter(([kind]) => kind === "remove").length, 5);
 });
 
-test("mobile drawer adapter closes only an open drawer on outside mobile taps", () => {
+test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {
   let listener;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener() {} };
+  let removed;
+  const documentTarget = {
+    addEventListener(_name, fn) { listener = fn; },
+    removeEventListener(_name, fn) { removed = fn; },
+  };
   const hublots = { contains: () => false, classList: { contains: (name) => name === "open" } };
   const treebar = { contains: () => false, classList: { contains: () => false } };
-  let closed = 0;
-  registerMobileDrawerDismiss(target, { isMobile: () => true, hublots, treebar, isToggleTarget: () => false, close: () => { closed++; } });
+  let resets = 0;
+  const controller = createMobileDrawerDismissController({
+    documentTarget,
+    windowTarget: { matchMedia: () => ({ matches: true }) },
+    hublots,
+    treebar,
+    getCarousel: () => ({ reset: () => { resets++; } }),
+    isToggleTarget: () => false,
+  });
+  controller.attach();
   listener({ target: {} });
-  assert.equal(closed, 1);
+  controller.detach();
+  assert.equal(resets, 1);
+  assert.equal(removed, listener);
 });
 
 test("header event adapter routes header actions", () => {

@@ -66,6 +66,32 @@ export function createCarouselController({
 /** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
 /** Coordinate header drawer chips with desktop sidebars and mobile carousel pages. */
 /** Own carousel global-listener registration and expose teardown. */
+/**
+ * Own the mobile outside-tap drawer behavior alongside carousel state.
+ * The DOM targets remain injected so this can be installed and torn down by
+ * the composition root without coupling the carousel to Svelte components.
+ */
+export function createMobileDrawerDismissController({ documentTarget, windowTarget, hublots, treebar, getCarousel, isToggleTarget }) {
+  const onClick = (event) => {
+    if (!windowTarget.matchMedia("(max-width: 760px)").matches
+      || hublots.contains(event.target)
+      || treebar.contains(event.target)
+      || isToggleTarget(event.target)) return;
+    if (hublots.classList.contains("open") || treebar.classList.contains("open")) getCarousel().reset();
+  };
+
+  function attach() {
+    documentTarget.addEventListener("click", onClick);
+    return detach;
+  }
+
+  function detach() {
+    documentTarget.removeEventListener("click", onClick);
+  }
+
+  return { attach, detach };
+}
+
 export function createCarouselEventRegistration({ register, handlers }) {
   let attached = false;
   let removeListeners = null;
