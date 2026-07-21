@@ -968,6 +968,7 @@
   <button data-action="newSessionIn">New session in folder…</button>
   <button data-action="sessions">Sessions…</button>
   <button data-action="compact">Compact context</button>
+  <button data-action="settings">Settings…</button>
   <button data-action="restart">Restart pi process</button>
   <button data-action="logout">Forget token</button>
 </div>
@@ -1440,10 +1441,12 @@ let liveAssistant = null; // { root, msg }
 
 function renderBlockEl(block) {
   if (block.type === "thinking") {
+    const showThinking = localStorage.getItem("pi_show_thinking") !== "0";
+    if (!showThinking || !block.thinking) return null;   // hidden preference, or empty
     const d = document.createElement("details");
     d.className = "block thinking";
     d.innerHTML = `<summary>thinking</summary><div class="body"></div>`;
-    d.querySelector(".body").textContent = block.thinking || "";
+    d.querySelector(".body").textContent = block.thinking;
     return d;
   }
   if (block.type === "text") {
@@ -2759,7 +2762,8 @@ document.addEventListener("keydown", (e) => {
 // ------------------------------------------------------------ menu & actions
 
 const menu = $("menu");
-$("menuBtn").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("open"); });
+$("menuBtn").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("open");
+});
 document.addEventListener("click", () => menu.classList.remove("open"));
 
 menu.addEventListener("click", async (e) => {
@@ -2793,6 +2797,8 @@ menu.addEventListener("click", async (e) => {
       localStorage.removeItem("pi_ui_token");
       document.cookie = "pi_ui_token=; path=/; max-age=0";
       location.reload();
+    } else if (action === "settings") {
+      await showSettingsModal();
     }
   } catch (err) {
     toast(err.message, "error");
@@ -4476,6 +4482,57 @@ function closeModal() {
   $("modal").classList.remove("wide");
   $("mBody").innerHTML = "";
   $("mActions").innerHTML = "";
+}
+
+/** Settings modal — a list of toggle rows backed by localStorage. Each row
+ *  renders its own current value live, so toggles are always in sync. Returns
+ *  when the user closes the modal. */
+async function showSettingsModal() {
+  $("mTitle").textContent = "Settings";
+  const body = $("mBody");
+  body.innerHTML = "";
+
+  // key -> label. Add new toggles here.
+  const settings = [
+    ["pi_show_thinking", "Show thinking blocks"],
+  ];
+
+  function row(key, label) {
+    // a <label> wrapping a checkbox: clicking anywhere on the label toggles
+    // the natively-associated checkbox, which fires change — so we only
+    // listen on the checkbox and never touch checked state ourselves.
+    const rowEl = document.createElement("label");
+    rowEl.className = "m-option";
+    rowEl.style.cursor = "pointer";
+    rowEl.style.display = "flex";
+    rowEl.style.alignItems = "center";
+    rowEl.style.gap = "10px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = localStorage.getItem(key) !== "0";
+    cb.style.accentColor = "var(--accent)";
+    cb.style.width = "16px";
+    cb.style.height = "16px";
+    cb.style.flexShrink = "0";
+    const span = document.createElement("span");
+    span.textContent = label;
+    rowEl.append(cb, span);
+    cb.addEventListener("change", () => {
+      localStorage.setItem(key, cb.checked ? "1" : "0");
+      if (key === "pi_show_thinking") reloadTranscript().catch(() => {});
+    });
+    return rowEl;
+  }
+
+  for (const [key, label] of settings) body.appendChild(row(key, label));
+
+  const actions = $("mActions");
+  const done = document.createElement("button");
+  done.className = "btn";
+  done.textContent = "Done";
+  done.addEventListener("click", () => closeModal());
+  actions.appendChild(done);
+  overlay.classList.add("open");
 }
 
 function pickOption(title, options, { searchable = false } = {}) {
