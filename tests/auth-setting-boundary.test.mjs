@@ -13,6 +13,7 @@ test("general app settings reject authentication and credential keys", (t) => {
   for (const key of [
     "token", "pi_ui_token", "authToken", "refresh-token", "client_secret",
     "passwordHash", "credential_store", "bearer", "apiKey", "private_key",
+    "oauthFlow", "authorization_code", "device-code", "redirectUrl", "flow_snapshot", "promptResponse",
   ]) {
     assert.throws(() => store.repositories.settings.set(key, '"sensitive"', "now"), /forbidden in general app settings/, key);
   }
@@ -20,6 +21,8 @@ test("general app settings reject authentication and credential keys", (t) => {
     JSON.stringify({ apiKey: "canary" }),
     JSON.stringify({ nested: { refresh_token: "canary" } }),
     JSON.stringify([{ clientSecret: "canary" }]),
+    JSON.stringify({ oauth: { authorizationCode: "canary", redirectUrl: "https://callback.invalid/?code=canary" } }),
+    JSON.stringify({ transient: { deviceCode: "canary", flowId: "canary", promptResponse: "canary" } }),
   ]) {
     assert.throws(
       () => store.repositories.settings.set("otherwise_safe", value, "now"),
@@ -34,7 +37,9 @@ test("general app settings reject authentication and credential keys", (t) => {
 test("credential services and routes cannot cross into general settings or browser preferences", () => {
   const serverCredentialSources = [
     "../pi-credential-service.mjs",
+    "../pi-oauth-flow-service.mjs",
     "../http/routes/credentialRoutes.mjs",
+    "../http/routes/oauthRoutes.mjs",
     "../runner-restart-service.mjs",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(serverCredentialSources, /repositories\.settings|appSettings|app_settings/);
@@ -44,8 +49,16 @@ test("credential services and routes cannot cross into general settings or brows
     "../public/src/features/credentials/createCredentialsAssembly.js",
     "../public/src/stores/credentials.js",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
-  assert.doesNotMatch(browserCredentialSources, /localStorage|sessionStorage|settingsPreference|SettingsModal/);
-  assert.equal(BROWSER_PREFERENCE_SYNC_POLICY.keys.some((key) => /auth|token|secret|credential|api.?key/i.test(key)), false);
+  assert.doesNotMatch(browserCredentialSources, /localStorage|sessionStorage|settingsPreference|SettingsModal|pushState|replaceState/);
+  assert.equal(BROWSER_PREFERENCE_SYNC_POLICY.keys.some((key) => /auth|oauth|token|secret|credential|api.?key|code|redirect|flow|prompt/i.test(key)), false);
+
+  const app = readFileSync(new URL("../app.mjs", import.meta.url), "utf8");
+  const inventory = readFileSync(new URL("../persistence/stateInventory.mjs", import.meta.url), "utf8");
+  const flowService = readFileSync(new URL("../pi-oauth-flow-service.mjs", import.meta.url), "utf8");
+  assert.match(app, /state\.oauthFlows \?\?= new Map\(\)/);
+  assert.match(inventory, /oauthFlows: entry\("ephemeral"/);
+  assert.match(flowService, /createPiOAuthFlowService\(\{[\s\S]*?registry/);
+  assert.doesNotMatch(flowService, /^(?:export )?const\s+\w*[Rr]egistry\w*\s*=\s*new Map/m);
 });
 
 test("authentication storage remains outside preference and SQLite setting surfaces", () => {

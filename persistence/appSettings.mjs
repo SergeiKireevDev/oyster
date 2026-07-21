@@ -6,7 +6,7 @@ export const APP_SETTING_KEYS = Object.freeze({
 });
 
 /** Deliberate migration policy: device-specific, non-secret UI choices stay browser-local. */
-const SENSITIVE_SETTING_KEY = /(^|[_-])(token|secret|password|credential|bearer|api[_-]?key|private[_-]?key)s?($|[_-])/i;
+const SENSITIVE_SETTING_KEY = /(^|[_-])(token|secret|password|credential|bearer|oauth|api[_-]?key|private[_-]?key|access[_-]?token|refresh[_-]?token|authorization[_-]?code|device[_-]?code|redirect[_-]?url|flow[_-]?(?:id|snapshot)|prompt[_-]?response)s?($|[_-])/i;
 
 export function assertGeneralAppSettingKey(key) {
   if (typeof key !== "string" || !key.trim()) throw new Error("app setting key is required");

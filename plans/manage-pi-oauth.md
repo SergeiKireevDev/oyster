@@ -207,7 +207,7 @@ layout, and remount teardown.
 
 ## 5. Enforce OAuth Secret and Lifecycle Boundaries
 
-- [ ] Extend static architecture and persistence guards so OAuth services/routes
+- [x] Extend static architecture and persistence guards so OAuth services/routes
   cannot use general settings or app-data repositories, flow state is
   host-owned/transient, and browser preference/history policies exclude OAuth
   fields, codes, URLs, tokens, prompts, and flow snapshots.
