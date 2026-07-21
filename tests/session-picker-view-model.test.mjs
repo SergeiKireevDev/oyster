@@ -6,7 +6,7 @@ import {
   partitionSessionFamilies,
 } from "../public/src/features/sessions/sessionPickerViewModel.js";
 
-test("session sidebar groups runners by cwd in input order", () => {
+test("session sidebar groups runners by cwd in stable activity order", () => {
   const runners = [
     { id: "a", dir: "/work/one" },
     { id: "b", dir: "/work/two" },
@@ -16,6 +16,19 @@ test("session sidebar groups runners by cwd in input order", () => {
     { cwd: "/work/one", runners: [runners[0], runners[2]] },
     { cwd: "/work/two", runners: [runners[1]] },
   ]);
+});
+
+test("session sidebar moves stopped processes below active processes on each update", () => {
+  const stopped = { id: "stopped", dir: "/work", alive: false };
+  const activeOne = { id: "active-one", dir: "/work", alive: true };
+  const activeTwo = { id: "active-two", dir: "/work", alive: true };
+
+  assert.deepEqual(groupRunnersByCwd([stopped, activeOne, activeTwo])[0].runners, [activeOne, activeTwo, stopped]);
+  assert.deepEqual(groupRunnersByCwd([
+    { ...stopped, alive: true },
+    { ...activeOne, alive: false },
+    activeTwo,
+  ])[0].runners.map((runner) => runner.id), ["stopped", "active-two", "active-one"]);
 });
 
 const sessions = [

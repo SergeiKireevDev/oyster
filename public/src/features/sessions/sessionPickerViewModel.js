@@ -1,12 +1,15 @@
 import { parentSessionIdentity, sessionIdentity } from "../../lib/sessionIdentity.js";
 
-/** Groups active runners by working directory while preserving runner order. */
+/** Groups runners by working directory, with live processes first in stable runner order. */
 export function groupRunnersByCwd(runners) {
   const groups = new Map();
   for (const runner of runners) {
     const cwd = runner.dir || "(unknown working directory)";
     if (!groups.has(cwd)) groups.set(cwd, { cwd, runners: [] });
     groups.get(cwd).runners.push(runner);
+  }
+  for (const group of groups.values()) {
+    group.runners.sort((left, right) => Number(Boolean(right.alive)) - Number(Boolean(left.alive)));
   }
   return [...groups.values()];
 }
