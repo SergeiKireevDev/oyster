@@ -357,7 +357,7 @@ The wrapper/factory work above does **not** by itself satisfy this section:
     than re-exporting from `appRuntimeImplementation.js`; delete the legacy
     implementation file and update no-reference tests.
 
-## [ ] 9. Physical Root Extraction Sequence
+## [x] 9. Physical Root Extraction Sequence
 
 Complete these in order. Every checkbox is intentionally on one line so the
 verified goal loop can match it exactly.
