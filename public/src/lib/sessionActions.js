@@ -130,6 +130,28 @@ export function usageInfo(usage) {
   return `↑${usage.input.toLocaleString()} ↓${usage.output.toLocaleString()} tok · ${price}`;
 }
 
+/** Synchronize session-scoped workdir, activity, and usage into Svelte stores. */
+export function createSessionUiController({ updateAppSession, updateHeaderState }) {
+  let workdir = null;
+  let busy = false;
+  return {
+    get workdir() { return workdir; },
+    get busy() { return busy; },
+    setWorkdir(dir) {
+      workdir = dir;
+      updateAppSession({ workdir });
+    },
+    setBusy(value) {
+      busy = value;
+      updateAppSession({ busy });
+    },
+    updateUsage(message) {
+      const info = usageInfo(message?.usage);
+      if (info) updateHeaderState({ usageInfo: info });
+    },
+  };
+}
+
 /** Debounce state RPC refreshes while preserving the latest request only. */
 export function createStateRefresher({ rpc, applyState, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;

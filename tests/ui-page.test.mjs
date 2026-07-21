@@ -35,7 +35,7 @@ test("legacy UI module parses (node --check)", () => {
 
 test("composer prompts delegate busy steering behavior to prompt actions", () => {
   assert.match(js, /import \{ promptCommand \} from "\.\/lib\/promptActions\.js";/);
-  assert.match(js, /const promptRpcCommand = \(text\) => promptCommand\(text, busy\);/);
+  assert.match(js, /const promptRpcCommand = \(text\) => promptCommand\(text, sessionUi\.busy\);/);
   assert.match(js, /await rpc\(promptRpcCommand\(text\), \{ wait: false \}\);/);
 });
 

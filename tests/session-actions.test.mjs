@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adjacentActiveRunner, createSessionPreviewController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
+import { adjacentActiveRunner, createSessionPreviewController, createSessionUiController, createStateRefresher, formatSessionDate, fetchSessionPreview, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, transcriptGateRequired, usageInfo } from "../public/src/lib/sessionActions.js";
 
 test("session actions group search hits by session", () => {
   const grouped = groupSessionSearchResults([{ sessionPath: "a", id: 1 }, { sessionPath: "a", id: 2 }, { sessionPath: "b", id: 3 }]);
@@ -108,6 +108,19 @@ test("session actions mark only the stopped runner inactive", () => {
 test("session actions format usage information", () => {
   assert.equal(usageInfo({ input: 1200, output: 34, cost: { total: 0.0042 } }), "↑1,200 ↓34 tok · $0.0042");
   assert.equal(usageInfo(null), null);
+});
+
+test("session UI controller synchronizes workdir, busy state, and usage", () => {
+  const appPatches = [];
+  const headerPatches = [];
+  const controller = createSessionUiController({ updateAppSession: (patch) => appPatches.push(patch), updateHeaderState: (patch) => headerPatches.push(patch) });
+  controller.setWorkdir("/workspace");
+  controller.setBusy(true);
+  controller.updateUsage({ usage: { input: 1200, output: 34, cost: { total: 0.0042 } } });
+  assert.equal(controller.workdir, "/workspace");
+  assert.equal(controller.busy, true);
+  assert.deepEqual(appPatches, [{ workdir: "/workspace" }, { busy: true }]);
+  assert.deepEqual(headerPatches, [{ usageInfo: "↑1,200 ↓34 tok · $0.0042" }]);
 });
 
 test("session actions debounce state refreshes", async () => {

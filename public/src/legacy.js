@@ -33,7 +33,7 @@ import { messageEntryMatchesElement, shouldShowThinking, toolResultText, userMes
 import { alignedTranscriptIndex, splitTurns, takeTailChunk } from "./lib/transcriptUtils.js";
 import { backfillTranscriptTurns } from "./lib/transcriptBackfill.js";
 import { createTranscriptActions } from "./lib/transcriptActions.js";
-import { adjacentActiveRunner, applySessionState, createSessionPreviewController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl, usageInfo } from "./lib/sessionActions.js";
+import { adjacentActiveRunner, applySessionState, createSessionPreviewController, createSessionUiController, createStateRefresher, fetchSessionPreview, formatSessionDate, groupSessionSearchResults, markRunnerStopped, openSession, parseSessionRoute, persistRunner, readPersistedRunner, sessionFileQuery, stopSessionRunner, switchSessionRunner, syncSessionUrl } from "./lib/sessionActions.js";
 import { checkpointResultMessage, createCheckpoint, openCheckpointModelPicker as openModelPicker, rollbackCheckpoint } from "./lib/checkpointActions.js";
 import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
@@ -448,7 +448,7 @@ const checkpointTreeController = createCheckpointTreeController({
   getState: () => state,
   getRunners: () => runnersNow,
   getCurrentRunner: () => currentRunner,
-  getWorkdir: () => workdir,
+  getWorkdir: () => sessionUi.workdir,
   setTreeState: setCheckpointTreeState,
   isOpen: () => $("treebar").classList.contains("open"),
   openSession: openSessionRunner,
@@ -594,8 +594,6 @@ function applyState(s) {
   state = result.state;
 }
 
-let workdir = null;
-
 // ------------------------------------------------------------ runners
 // The server keeps one pi process ("runner") per open session; this client
 // is attached to exactly one at a time. Other runners keep working in the
@@ -672,21 +670,10 @@ async function openSessionRunner({ sessionPath = null, dir = null } = {}) {
 /** hook: session picker (when open) re-renders its indicators */
 let onRunnersUpdate = null;
 
-function setWorkdir(dir) {
-  workdir = dir;
-  updateAppSession({ workdir });
-}
-
-let busy = false;
-function setBusy(b) {
-  busy = b;
-  updateAppSession({ busy });
-}
-
-function updateUsage(message) {
-  const info = usageInfo(message?.usage);
-  if (info) updateHeaderState({ usageInfo: info });
-}
+const sessionUi = createSessionUiController({ updateAppSession, updateHeaderState });
+const setWorkdir = (dir) => sessionUi.setWorkdir(dir);
+const setBusy = (value) => sessionUi.setBusy(value);
+const updateUsage = (message) => sessionUi.updateUsage(message);
 
 // ------------------------------------------------------------ event stream
 
@@ -1167,7 +1154,7 @@ function composerInputChanged() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
   setComposerTextValue(input.value);
-  setBusy(busy); // refresh busy state UI
+  setBusy(sessionUi.busy); // refresh busy state UI
   histIdx = null; // typing exits history navigation
 }
 
@@ -1233,7 +1220,7 @@ function composerKeydown(e) {
 // the pi process or folder changes
 let commandGuard = createCommandGuard({ rpc, confirm: confirmDialog });
 
-const promptRpcCommand = (text) => promptCommand(text, busy);
+const promptRpcCommand = (text) => promptCommand(text, sessionUi.busy);
 
 async function send() {
   const text = input.value.trim();
@@ -1245,7 +1232,7 @@ async function send() {
   input.value = "";
   setComposerTextValue("");
   input.style.height = "auto";
-  setBusy(busy); // hide the Steer button again
+  setBusy(sessionUi.busy); // hide the Steer button again
   addUserMessage({ role: "user", content: text });
   localEchoes.push(text);
   try {
@@ -1455,7 +1442,7 @@ async function runMenuAction(action) {
   try {
     if (action === "newSession") {
       // a fresh runner, so the current session keeps running in the background
-      const r = await openSessionRunner({ dir: workdir });
+      const r = await openSessionRunner({ dir: sessionUi.workdir });
       switchToRunner(r.id);
       toast("new session");
     } else if (action === "newSessionIn") {
@@ -1515,7 +1502,7 @@ const filePickerController = createFilePickerController({
   closeModal,
   showHublots: () => showHublots(),
   getShowHidden: () => get(filePicker).showHidden,
-  getWorkdir: () => workdir,
+  getWorkdir: () => sessionUi.workdir,
   setPath: (path) => { filePickerState.curDir = path; },
   resetState: ({ path, onPick, onCancel, returnToHublot }) => {
     filePickerState = { curDir: path, showHidden: true, onPick, onCancel, returnToHublot };
@@ -1527,7 +1514,7 @@ const loadFilePicker = filePickerController.load;
 /** Browse server files; onPick(path) gets the chosen file. Defaults to
  *  inserting the path into the composer. */
 function showFilePicker(onPick = insertIntoComposer, onCancel = null, returnToHublot = false) {
-  return filePickerController.show({ path: workdir, onPick, onCancel, returnToHublot });
+  return filePickerController.show({ path: sessionUi.workdir, onPick, onCancel, returnToHublot });
 }
 
 registerFilePickerEvents(window, {
@@ -1582,7 +1569,7 @@ const loadFolderBrowser = folderBrowserController.load;
 
 async function showFolderBrowser() {
   folderBrowserState = {
-    browsePath: workdir,
+    browsePath: sessionUi.workdir,
     showHidden: true,
     done: null,
   };
@@ -1654,7 +1641,7 @@ const fileExplorerController = createFileExplorerController({
   updateTitle: (title) => updateModal({ title }),
   openModal,
   getShowHidden: () => get(fileExplorer).showHidden,
-  getWorkdir: () => workdir,
+  getWorkdir: () => sessionUi.workdir,
   getToken: () => token,
   setPath: (path) => { fileExplorerState.curPath = path; },
   setEditFile: (path, content) => { fileExplorerState.editPath = path; fileExplorerState.editContent = content; },
@@ -1664,7 +1651,7 @@ const fileExplorerController = createFileExplorerController({
 const loadFileExplorer = fileExplorerController.load;
 
 // Always open in the current session's working directory.
-const showFileExplorer = () => fileExplorerController.show(workdir);
+const showFileExplorer = () => fileExplorerController.show(sessionUi.workdir);
 
 function uploadExplorerFiles() {
   const dir = fileExplorerState.curPath;
@@ -1853,7 +1840,7 @@ function updateSessionPickerRunners(runners = runnersNow) {
 
 const sessionPickerFolderController = createSessionPickerFolderController({
   async fetchSessions(folder) {
-    const dir = folder ?? workdir;
+    const dir = folder ?? sessionUi.workdir;
     const query = dir ? `${folder ? "path" : "dir"}=${encodeURIComponent(dir)}` : "";
     const response = await fetch(`/sessions${query ? `?${query}` : ""}`);
     const data = await response.json();
@@ -1917,7 +1904,7 @@ registerSessionPickerEvents(window, {
 async function showSessionPicker() {
   // list the sessions of the CURRENT session's directory, not the server's
   // last-set global workdir
-  const dirQ = workdir ? `?dir=${encodeURIComponent(workdir)}` : "";
+  const dirQ = sessionUi.workdir ? `?dir=${encodeURIComponent(sessionUi.workdir)}` : "";
   const res = await fetch(`/sessions${dirQ}`);
   if (!res.ok) { toast(`failed to list sessions (${res.status})`, "error"); return; }
   const { sessions } = await res.json();
@@ -1945,7 +1932,7 @@ async function showSessionPicker() {
       folders,
       currentFolder,
       currentId,
-      currentWorkdir: workdir,
+      currentWorkdir: sessionUi.workdir,
       runners: runnersNow,
       query: "",
       scope: "all",
@@ -1971,7 +1958,7 @@ async function showSessionPicker() {
     // attaches to the session's live runner if it has one (its work is
     // untouched), else spawns a fresh pi on that session in the background;
     // sessions from other folders spawn in their own recorded cwd
-    const runner = await openSessionRunner({ sessionPath: fullChoice.path, dir: fullChoice.cwd || workdir });
+    const runner = await openSessionRunner({ sessionPath: fullChoice.path, dir: fullChoice.cwd || sessionUi.workdir });
     switchToRunner(runner.id);
     toast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
   } catch (e) {
@@ -2001,7 +1988,7 @@ async function openSearchHit(sessionPath, hit) {
   try {
     // attach to the session's runner (spawned in the session's own folder if
     // it comes from elsewhere); other sessions keep running untouched
-    const r = await openSessionRunner({ sessionPath, dir: hit.sessionCwd || workdir });
+    const r = await openSessionRunner({ sessionPath, dir: hit.sessionCwd || sessionUi.workdir });
     if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
     toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
     if (r.id === currentRunner) {
@@ -2276,7 +2263,7 @@ const swipeController = createCarouselSwipeController({
 // workdir. Runners with sessionName === null were spawned but never sent
 // a message to — they're background/orphan processes, skip them.
 function switchToAdjacentRunner(dir) {
-  const { candidates, target } = adjacentActiveRunner(runnersNow, currentRunner, workdir, dir);
+  const { candidates, target } = adjacentActiveRunner(runnersNow, currentRunner, sessionUi.workdir, dir);
   if (candidates.length <= 1) {
     toast(candidates.length === 0 ? "no other active session" : "only one active session");
     return;
