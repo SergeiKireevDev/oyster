@@ -33,6 +33,7 @@ test("app runtime explicitly starts the deferred legacy bootstrap", () => {
   assert.match(appRuntime, /runtime\.start\(\);/);
   assert.match(appRuntime, /return runtime\.teardown;/);
   assert.doesNotMatch(js, /if \(!token\) requireToken\(\);\nelse boot\(\);/);
+  assert.doesNotMatch(js, /export function (start|teardown)LegacyRuntime\(/);
 });
 
 test("legacy UI module parses (node --check)", () => {
