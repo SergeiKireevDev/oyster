@@ -39,6 +39,7 @@ import { createCheckpointController } from "./lib/checkpointController.js";
 import { createCheckpointMarkerController } from "./lib/checkpointMarkerController.js";
 import { commandTrigger, createCommandGuard, filterCommands } from "./lib/commandActions.js";
 import { promptCommand } from "./lib/promptActions.js";
+import { insertionAtCaret, insertionReplacing } from "./lib/textInsertion.js";
 import { createCheckpointTreeController } from "./lib/checkpointTreeController.js";
 import { createHublot, hublotVisible, listHublots, refreshHublotScope } from "./lib/hublotActions.js";
 import { listRoutines, routineVisible as isRoutineVisible, runRoutine } from "./lib/routineActions.js";
@@ -1384,32 +1385,20 @@ function runCmdIndex(index) {
 }
 
 /** Insert text into a textarea, optionally replacing a placeholder token. */
-function insertAtTextarea(el, placeholder, result) {
-  const val = el.value;
-  let idx = placeholder ? val.lastIndexOf(placeholder) : -1;
-  if (idx === -1) { appendAtCaret(el, result); return; }
-  const before = val.slice(0, idx);
-  const after = val.slice(idx + placeholder.length);
-  const pad = before && !/\s$/.test(before) ? " " : "";
-  const padAfter = after && !/^\s/.test(after) ? " " : "";
-  el.value = before + pad + result + padAfter + after;
-  const pos = (before + pad + result).length;
-  el.setSelectionRange(pos, pos);
-  el.dispatchEvent(new Event("input"));
-  el.focus();
+function applyTextInsertion(element, insertion) {
+  element.value = insertion.value;
+  element.setSelectionRange(insertion.position, insertion.position);
+  element.dispatchEvent(new Event("input"));
+  element.focus();
 }
 
-function appendAtCaret(el, text) {
-  const start = el.selectionStart ?? el.value.length;
-  const before = el.value.slice(0, start);
-  const after = el.value.slice(el.selectionEnd ?? start);
-  const pad = before && !/\s$/.test(before) ? " " : "";
-  const padAfter = after && !/^\s/.test(after) ? " " : "";
-  el.value = before + pad + text + padAfter + after;
-  const pos = (before + pad + text).length;
-  el.setSelectionRange(pos, pos);
-  el.dispatchEvent(new Event("input"));
-  el.focus();
+function insertAtTextarea(element, placeholder, text) {
+  applyTextInsertion(element, insertionReplacing(element.value, placeholder, text)
+    ?? insertionAtCaret(element.value, element.selectionStart, element.selectionEnd, text));
+}
+
+function appendAtCaret(element, text) {
+  applyTextInsertion(element, insertionAtCaret(element.value, element.selectionStart, element.selectionEnd, text));
 }
 
 function renderCmdPalette() {
