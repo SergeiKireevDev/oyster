@@ -404,6 +404,16 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await login(page);
 
     const palette = page.locator("#cmdPalette");
+    const highlight = page.locator(".composer-highlight");
+    const partialDirectory = `./${small.slice(0, -1)}`;
+    await page.fill("#input", partialDirectory);
+    await expect(palette.locator(".cmd-row", { hasText: small })).toBeVisible();
+    await palette.locator(".cmd-row", { hasText: small }).click();
+    await expect(page.locator("#input")).toHaveValue(`./${small}/`);
+    // The textarea text is transparent so that the highlighting layer can
+    // render it. A completion must update that visible layer immediately too.
+    await expect(highlight).toHaveText(`./${small}/`);
+
     await page.fill("#input", `./${small}/al`);
     await expect(palette).toHaveClass(/open/);
     await expect(palette.locator(".cmd-row")).toHaveCount(2);

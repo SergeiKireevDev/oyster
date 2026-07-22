@@ -48,7 +48,7 @@ test("remaining dispatchEvent calls are native composer input synchronization", 
     [...source.matchAll(/^.*\.dispatchEvent\(.*$/gm)].map((match) => ({ path, call: match[0].trim() })),
   );
   assert.deepEqual(dispatches, [
-    { path: "features/composer/createComposerAssembly.js", call: 'input.dispatchEvent(new Event("input"));' },
-    { path: "features/composer/createComposerAssembly.js", call: 'element.dispatchEvent(new Event("input"));' },
+    { path: "features/composer/createComposerAssembly.js", call: 'input.dispatchEvent(new Event("input", { bubbles: true }));' },
+    { path: "features/composer/createComposerAssembly.js", call: 'element.dispatchEvent(new Event("input", { bubbles: true }));' },
   ]);
 });
