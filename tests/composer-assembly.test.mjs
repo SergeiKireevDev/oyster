@@ -62,6 +62,22 @@ test("composer assembly owns prompt history send and abort workflows", async () 
   assembly.teardown();
 });
 
+test("composer keeps drafts attached to the session where they were written", () => {
+  const { assembly, operations, input } = createHarness();
+  input.value = "draft for session a";
+
+  assert.equal(operations.switchDraft("session-a", "session-b"), "");
+  assert.equal(input.value, "");
+
+  input.value = "draft for session b";
+  assert.equal(operations.switchDraft("session-b", "session-a"), "draft for session a");
+  assert.equal(input.value, "draft for session a");
+  assert.equal(operations.switchDraft("session-a", "session-b"), "draft for session b");
+  assert.equal(input.value, "draft for session b");
+
+  assembly.teardown();
+});
+
 test("composer and checkpoint-tree actions have scoped names", async () => {
   const names = await import("../public/src/runtime/uiActionNames.js");
   assert.deepEqual({
@@ -214,6 +230,7 @@ test("composer assembly remounts actions and command listeners without stale own
 test("composition root delegates command controller construction to composer assembly", () => {
   const source = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(source, /composerAssembly\.configureCommands\(/);
+  assert.match(source, /switchComposerDraft: composerOperations\.switchDraft/);
   assert.doesNotMatch(source, /createCommandGuard|createCommandPalette|createMenuEventController|let cmdState|function runMenuAction/);
 });
 

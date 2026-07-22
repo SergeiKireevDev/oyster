@@ -250,6 +250,7 @@ const sessionAssembly = createSessionAssembly({
     resetSessionUi: () => layoutOperations.reset(),
     renderPreview: () => previewController.renderNow(),
     resetCommands: composerOperations.resetCommands,
+    switchComposerDraft: composerOperations.switchDraft,
     connect,
   }),
 });

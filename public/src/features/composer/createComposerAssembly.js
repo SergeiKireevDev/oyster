@@ -30,10 +30,25 @@ export function createComposerAssembly(deps) {
   }
 
   function setText(text) {
-    input.value = text;
-    deps.setTextValue(text);
-    input.setSelectionRange(text.length, text.length);
+    const value = String(text ?? "");
+    input.value = value;
+    deps.setTextValue(value);
+    input.setSelectionRange(value.length, value.length);
     resizeInput();
+  }
+
+  const drafts = new Map();
+  function switchDraft(previousSession, currentSession) {
+    const previousKey = previousSession == null ? null : String(previousSession);
+    const currentKey = currentSession == null ? null : String(currentSession);
+    if (previousKey === currentKey) return input.value;
+    if (previousKey) {
+      if (input.value) drafts.set(previousKey, input.value);
+      else drafts.delete(previousKey);
+    }
+    setText(currentKey ? drafts.get(currentKey) ?? "" : "");
+    history.reset();
+    return input.value;
   }
 
   const history = createComposerHistoryController({
@@ -305,6 +320,7 @@ export function createComposerAssembly(deps) {
       send,
       abort,
       setText,
+      switchDraft,
       insertText,
       rememberPrompt: (text) => history.remember(text),
       clearHistory: () => history.clear(),
@@ -320,6 +336,7 @@ export function createComposerAssembly(deps) {
       detachUiActions.splice(0).reverse().forEach((detach) => detach());
       voice.teardown();
       deps.setVoiceState?.({ available: false, listening: false, speaking: false });
+      drafts.clear();
       history.clear();
     },
   };

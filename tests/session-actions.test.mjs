@@ -208,11 +208,13 @@ test("session actions skip transcript replay for empty runners", () => {
   assert.equal(transcriptGateRequired({ runner: "old", messageCount: 1, emptySessionRunners: empty }), true);
 });
 
-test("session actions switch runners without SSE replay", () => {
+test("session actions switch runners without SSE replay and move the composer draft", () => {
   const calls = [];
-  const hooks = Object.fromEntries(["log", "resetPreview", "refreshState", "setRunner", "clearTranscript", "resetSessionUi", "renderPreview", "resetCommands"].map((name) => [name, (...args) => calls.push([name, ...args]) ]));
+  const hooks = Object.fromEntries(["log", "resetPreview", "refreshState", "switchComposerDraft", "setRunner", "clearTranscript", "resetSessionUi", "renderPreview", "resetCommands"].map((name) => [name, (...args) => calls.push([name, ...args]) ]));
   hooks.connect = (options) => calls.push(["connect", options]);
   assert.equal(switchSessionRunner({ id: "next", currentRunner: "current", hooks }), true);
+  assert.deepEqual(calls.find(([name]) => name === "switchComposerDraft"), ["switchComposerDraft", "current", "next"]);
+  assert.ok(calls.findIndex(([name]) => name === "switchComposerDraft") < calls.findIndex(([name]) => name === "setRunner"));
   assert.deepEqual(calls.at(-1), ["connect", { replay: false }]);
 });
 
