@@ -1499,6 +1499,12 @@
     font: inherit;
     padding: 9px 12px;
   }
+  #gate input[aria-invalid="true"] { border-color: var(--red); }
+  #gate .gate-error {
+    color: var(--red);
+    font-size: 13px;
+    line-height: 1.35;
+  }
 
 /* ========================================================================== */
 /* 2026 visual system — calm, spatial, and built for long coding sessions      */

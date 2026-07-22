@@ -69,9 +69,38 @@ test("auth browser service persists a token and reloads through injected operati
   assert.deepEqual(calls, [["save", AUTH_TOKEN_KEY, "secret-token"], ["reload"]]);
 });
 
-test("AuthGate delegates browser effects without direct browser globals", () => {
+test("auth browser service validates the submitted token rather than another browser credential", async () => {
+  const calls = [];
+  const reports = [
+    { authorized: true, credentials: { cookie: "valid", xAuthToken: "present-invalid(len=5)" } },
+    { authorized: true, credentials: { cookie: "absent", xAuthToken: "valid" } },
+  ];
+  const service = createAuthBrowserService({
+    storage: {},
+    reload() {},
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return { ok: true, async json() { return reports.shift(); } };
+    },
+  });
+
+  assert.equal(await service.validateToken("wrong"), false);
+  assert.equal(await service.validateToken("correct"), true);
+  assert.deepEqual(calls, [
+    ["/authcheck", { headers: { "x-auth-token": "wrong" } }],
+    ["/authcheck", { headers: { "x-auth-token": "correct" } }],
+  ]);
+});
+
+test("AuthGate retains failed authentication and exposes an inline error", () => {
   const source = readFileSync(new URL("../public/src/components/AuthGate.svelte", import.meta.url), "utf8");
+  const style = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
   assert.match(source, /getAuthBrowser\(\)/);
+  assert.match(source, /if \(!await authBrowser\.validateToken\(token\)\)/);
+  assert.ok(source.indexOf("validateToken(token)") < source.indexOf("saveToken(token)"));
+  assert.match(source, /class="gate-error"[^>]*role="alert"/);
+  assert.match(source, /Authentication failed/);
+  assert.match(style, /#gate \.gate-error\s*\{[^}]*color: var\(--red\)/s);
   assert.match(source, /authBrowser\.saveToken\(token\)/);
   assert.match(source, /authBrowser\.reload\(\)/);
   assert.doesNotMatch(source, /localStorage|location\.reload/);
