@@ -37,6 +37,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
   const toasts = [];
   const created = [];
   const archived = [];
+  const switched = [];
   let runnersHandler = "unset";
   const registered = new Map();
   const detached = [];
@@ -72,12 +73,12 @@ test("session picker runtime owns picker actions and search-hit construction", a
     openChosenSession: async () => {},
     getSessionId: () => null,
     openSearchSession: async () => {},
-    getCurrentRunner: () => null,
+    getCurrentRunner: () => "runner-current",
     setWorkdir() {},
     reloadTranscript: async () => {},
     focusSearchHit: async () => {},
     setAfterTranscript() {},
-    switchRunner: async () => {},
+    switchRunner: async (runnerId) => switched.push(runnerId),
   });
 
   assert.equal(typeof runtime.show, "function");
@@ -103,7 +104,9 @@ test("session picker runtime owns picker actions and search-hit construction", a
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_CWD_ACTION)("/workspace/project");
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)();
   await registered.get(actionNames.SESSION_PICKER_ARCHIVE_ACTION)({ sessionKey: "ps1_archive" });
+  await registered.get(actionNames.SESSION_SWITCH_RUNNER_ACTION)("runner-current");
   assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder"]]);
+  assert.deepEqual(switched, ["runner-current"]);
   assert.deepEqual(archived, [["ps1_archive", true]]);
   assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived"]);
   await runtime.show();

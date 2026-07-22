@@ -215,3 +215,12 @@ test("session actions switch runners without SSE replay", () => {
   assert.equal(switchSessionRunner({ id: "next", currentRunner: "current", hooks }), true);
   assert.deepEqual(calls.at(-1), ["connect", { replay: false }]);
 });
+
+test("reselecting the current runner returns the layout to the transcript", () => {
+  const calls = [];
+  const hooks = Object.fromEntries(["log", "resetPreview", "refreshState", "setRunner", "clearTranscript", "resetSessionUi", "renderPreview", "resetCommands"].map((name) => [name, (...args) => calls.push([name, ...args])]));
+  hooks.connect = () => calls.push(["connect"]);
+
+  assert.equal(switchSessionRunner({ id: "current", currentRunner: "current", hooks }), false);
+  assert.deepEqual(calls.map(([name]) => name), ["log", "resetPreview", "resetSessionUi", "refreshState"]);
+});
