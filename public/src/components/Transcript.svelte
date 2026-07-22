@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import AssistantMessage from "./transcript/AssistantMessage.svelte";
+  import CompactionMarker from "./transcript/CompactionMarker.svelte";
   import UserMessage from "./transcript/UserMessage.svelte";
   import { appSession } from "../stores/appSession.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
@@ -41,6 +42,8 @@
         onRollback={item.onRollback}
         onRoot={item.setRoot}
       />
+    {:else if item.kind === "compaction"}
+      <CompactionMarker tokensBefore={item.tokensBefore} />
     {:else}
       <AssistantMessage
         assistantStore={item.assistantStore}

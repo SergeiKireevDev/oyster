@@ -98,6 +98,30 @@ if (SKIP_LOCAL) {
   });
 }
 
+test("SQLite catalog keeps the full transcript and marks compaction in place", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-compacted-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  const writer = new DatabaseSync(path);
+  schema(writer);
+  writer.prepare(`INSERT INTO sessions
+    (id, created_at, cwd, active_leaf_id, updated_at, first_message, all_messages_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("compacted", "2026-01-01", "/work", "a2", "2026-01-01", "before", "before older answer after newer answer");
+  const insert = writer.prepare(`INSERT INTO session_entries
+    (session_id, id, entry_seq, parent_id, type, timestamp, payload) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  insert.run("compacted", "u1", 1, null, "message", "2026-01-01T00:00:01Z", JSON.stringify({ message: { role: "user", content: "before" } }));
+  insert.run("compacted", "a1", 2, "u1", "message", "2026-01-01T00:00:02Z", JSON.stringify({ message: { role: "assistant", content: "older answer" } }));
+  insert.run("compacted", "c1", 3, "a1", "compaction", "2026-01-01T00:00:03Z", JSON.stringify({ summary: "summary", firstKeptEntryId: "u1", tokensBefore: 1234 }));
+  insert.run("compacted", "u2", 4, "c1", "message", "2026-01-01T00:00:04Z", JSON.stringify({ message: { role: "user", content: "after" } }));
+  insert.run("compacted", "a2", 5, "u2", "message", "2026-01-01T00:00:05Z", JSON.stringify({ message: { role: "assistant", content: "newer answer" } }));
+  writer.close();
+
+  const messages = createSqliteSessionCatalog({ databasePath: path }).messages("compacted").messages;
+  assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "compactionSummary", "user", "assistant"]);
+  assert.equal(messages[2].tokensBefore, 1234);
+});
+
 test("SQLite catalog skips malformed entry payloads and closes every read handle", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-malformed-"));
   roots.push(root);

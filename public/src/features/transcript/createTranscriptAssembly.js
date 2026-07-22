@@ -102,6 +102,7 @@ export function createTranscriptAssembly(deps) {
     const role = message.role;
     if (role === "user") return addUserMessage(message, options);
     if (role === "assistant") return addAssistantMessage(message, role, options);
+    if (role === "compactionSummary") return transcriptActions.addCompaction(message, options);
     if (role === "toolResult") {
       toolCards.finish(message.toolCallId, message, message.isError);
       return;

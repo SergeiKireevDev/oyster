@@ -886,6 +886,7 @@ const commandRuntime = composerAssembly.configureCommands({
   },
   transcript: {
     clear: clearMessages,
+    reload: reloadTranscript,
     renderMessage: renderFullMessage,
   },
   platform: {

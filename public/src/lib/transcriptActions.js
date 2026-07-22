@@ -67,5 +67,11 @@ export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowT
     return item;
   }
 
-  return { addAssistant, addUser, assistantPlainText, updateAssistant };
+  function addCompaction(message, { prepend = false } = {}) {
+    const item = makeItem({ kind: "compaction", tokensBefore: message.tokensBefore ?? 0, timestamp: message.timestamp });
+    insert([item], prepend);
+    return item;
+  }
+
+  return { addAssistant, addCompaction, addUser, assistantPlainText, updateAssistant };
 }

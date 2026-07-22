@@ -153,9 +153,13 @@ test("composer assembly owns command guard palette menu and listener constructio
     isOverlayOpen: () => false,
     schedule() {},
     session: { openNew: async () => calls.push(["newSession"]), getCurrentRunner: () => "runner" },
-    transcript: { clear: () => calls.push(["clear"]), renderMessage: (message) => calls.push(["render", message]) },
+    transcript: {
+      clear: () => calls.push(["clear"]),
+      reload: async () => calls.push(["reload"]),
+      renderMessage: (message) => calls.push(["render", message]),
+    },
     platform: {
-      rpc: async ({ type }) => type === "get_messages" ? { messages: [{ role: "user", content: "hello" }] } : {},
+      rpc: async ({ type }) => { calls.push(["rpc", type]); return {}; },
       restart: async () => calls.push(["restart"]), logout: () => calls.push(["logout"]),
     },
     dialogs: {
@@ -177,7 +181,10 @@ test("composer assembly owns command guard palette menu and listener constructio
     assert.ok(calls.some((call) => call[0] === routed), `${routed} was not routed`);
   }
   assert.ok(calls.some((call) => call[0] === "clear"));
-  assert.ok(calls.some((call) => call[0] === "render"));
+  const compactIndex = calls.findIndex((call) => call[0] === "rpc" && call[1] === "compact");
+  const reloadIndex = calls.findIndex((call) => call[0] === "reload");
+  assert.ok(compactIndex >= 0 && reloadIndex > compactIndex);
+  assert.equal(calls.some((call) => call[0] === "rpc" && call[1] === "get_messages"), false);
   assert.equal(assembly.configureCommands({}), commands);
   assembly.teardown();
   const clearCount = calls.filter((call) => call[0] === "clear").length;
@@ -201,7 +208,7 @@ test("composer assembly remounts actions and command listeners without stale own
       documentTarget: target,
       setPaletteState() {}, closePaletteState() {}, showFilePicker() {}, isOverlayOpen: () => false, schedule() {},
       session: { openNew: async () => {}, getCurrentRunner: () => null },
-      transcript: { clear() {}, renderMessage() {} },
+      transcript: { clear() {}, reload: async () => {}, renderMessage() {} },
       platform: { rpc: async () => ({ messages: [] }), restart: async () => {}, logout() {} },
       dialogs: { showFolderBrowser: async () => {}, showSessionPicker: async () => {}, showSettings: async () => {}, showAnalytics: async () => {}, loadAnalytics: async () => {} },
     };

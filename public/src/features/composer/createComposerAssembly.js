@@ -267,10 +267,8 @@ export function createComposerAssembly(deps) {
         } else if (action === "compact") {
           deps.toast("compacting…");
           await commandDeps.platform.rpc({ type: "compact" });
+          await commandDeps.transcript.reload();
           deps.toast("compacted");
-          const { messages } = await commandDeps.platform.rpc({ type: "get_messages" });
-          commandDeps.transcript.clear();
-          for (const message of messages) commandDeps.transcript.renderMessage(message);
         } else if (action === "restart") {
           await commandDeps.platform.restart(commandDeps.session.getCurrentRunner());
           commandDeps.transcript.clear();
