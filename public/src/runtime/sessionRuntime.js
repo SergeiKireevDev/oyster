@@ -323,6 +323,7 @@ export function switchSessionRunner({ id, currentRunner, hooks }) {
     hooks.refreshState();
     return false;
   }
+  hooks.switchComposerDraft?.(currentRunner, id);
   hooks.setRunner(id);
   hooks.clearTranscript();
   hooks.resetSessionUi();
@@ -334,7 +335,7 @@ export function switchSessionRunner({ id, currentRunner, hooks }) {
 
 export function createSessionRuntime({
   getCurrentRunner, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
-  setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands,
+  setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands, switchComposerDraft,
   connect,
 }) {
   const switchRunner = (id) => switchSessionRunner({
@@ -349,6 +350,7 @@ export function createSessionRuntime({
       resetSessionUi,
       renderPreview,
       resetCommands,
+      switchComposerDraft,
       connect,
     },
   });
