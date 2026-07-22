@@ -319,6 +319,7 @@ export function switchSessionRunner({ id, currentRunner, hooks }) {
   hooks.log({ targetRunner: id, sameRunner: id === currentRunner });
   if (id === currentRunner) {
     hooks.resetPreview();
+    hooks.resetSessionUi();
     hooks.refreshState();
     return false;
   }
