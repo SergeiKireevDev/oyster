@@ -50,18 +50,19 @@ export function createTranscriptActions({ callbacks, renderMarkdown, shouldShowT
 
   function addAssistant(message, role = "assistant", { prepend = false } = {}) {
     const assistantStore = writable(assistantModel(message));
-    const item = makeItem({ kind: "assistant", assistantStore, role, ...callbacks });
+    const item = makeItem({ kind: "assistant", assistantStore, role, timestamp: message.entryTimestamp ?? message.timestamp, ...callbacks });
     insert([item], prepend);
     return { item, store: assistantStore, msg: message, svelte: true };
   }
 
   function updateAssistant(live, message) {
     live.msg = message;
+    live.item.timestamp = message.entryTimestamp ?? message.timestamp ?? live.item.timestamp;
     live.store.set(assistantModel(message));
   }
 
-  function addUser(text, { prepend = false } = {}) {
-    const item = makeItem({ kind: "user", text, ...callbacks });
+  function addUser(text, { prepend = false, timestamp = Date.now() } = {}) {
+    const item = makeItem({ kind: "user", text, timestamp, ...callbacks });
     insert([item], prepend);
     return item;
   }

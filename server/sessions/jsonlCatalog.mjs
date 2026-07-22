@@ -415,7 +415,8 @@ export function sessionMessages(path) {
   chain.reverse();
   return {
     sessionId: header?.id ?? null,
-    messages: chain.filter((e) => e.type === "message" && e.message).map((e) => e.message),
+    messages: chain.filter((e) => e.type === "message" && e.message)
+      .map((e) => ({ ...e.message, entryTimestamp: e.timestamp ?? null })),
   };
 }
 

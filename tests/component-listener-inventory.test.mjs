@@ -26,13 +26,13 @@ test("component browser and imperative listener inventory is explicit", () => {
     "App.svelte:38:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
     "components/Menu.svelte:23:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
-    "components/Transcript.svelte:18:messages.addEventListener(\"load\", onLoad, true);",
-    "components/Transcript.svelte:19:return () => messages.removeEventListener(\"load\", onLoad, true);",
+    "components/Transcript.svelte:25:messages.addEventListener(\"load\", onLoad, true);",
+    "components/Transcript.svelte:28:messages.removeEventListener(\"load\", onLoad, true);",
   ]);
 
   const transcript = source(new URL("components/Transcript.svelte", root));
   assert.match(transcript, /onMount\(\(\) => \{/);
-  assert.match(transcript, /return \(\) => messages\.removeEventListener\("load", onLoad, true\)/);
+  assert.match(transcript, /return \(\) => \{[\s\S]*messages\.removeEventListener\("load", onLoad, true\);[\s\S]*\};/);
   assert.doesNotMatch(source(new URL("components/OptionPickerModal.svelte", root)), /document\.(?:add|remove)EventListener/);
 });
 

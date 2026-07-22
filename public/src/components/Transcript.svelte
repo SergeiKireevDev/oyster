@@ -2,9 +2,15 @@
   import { onMount } from "svelte";
   import AssistantMessage from "./transcript/AssistantMessage.svelte";
   import UserMessage from "./transcript/UserMessage.svelte";
+  import { appSession } from "../stores/appSession.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
+  import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
 
   let messages;
+  let now = Date.now();
+  let workPeriod;
+
+  $: workPeriod = latestTranscriptWorkPeriod($transcriptItems);
 
   // Late-loading markdown content can grow the transcript after render. Keep
   // a reader who was already at the bottom pinned there.
@@ -15,8 +21,12 @@
         scroller.scrollTop = scroller.scrollHeight;
       }
     };
+    const timer = setInterval(() => { if ($appSession.busy) now = Date.now(); }, 1000);
     messages.addEventListener("load", onLoad, true);
-    return () => messages.removeEventListener("load", onLoad, true);
+    return () => {
+      clearInterval(timer);
+      messages.removeEventListener("load", onLoad, true);
+    };
   });
 </script>
 
@@ -43,4 +53,10 @@
       />
     {/if}
   {/each}
+  {#if workPeriod}
+    <div class="work-duration" aria-live="off">
+      {#if $appSession.busy}<span class="spin" aria-hidden="true"></span>{/if}
+      <span>worked for {formatWorkDuration(($appSession.busy ? now : workPeriod.endedAt) - workPeriod.startedAt)}</span>
+    </div>
+  {/if}
 </div>
