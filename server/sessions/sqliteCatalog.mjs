@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { labelOf, textOf } from "./jsonlCatalog.mjs";
+import { labelOf, textOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 
 function decodeEntry(row) {
@@ -157,8 +157,7 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     const { session, branch } = activeBranch(value);
     return {
       sessionId: session?.id ?? null,
-      messages: branch.filter((entry) => entry.type === "message" && entry.message)
-        .map((entry) => ({ ...entry.message, entryTimestamp: entry.timestamp ?? null })),
+      messages: branch.map(transcriptMessage).filter(Boolean),
     };
   }
 

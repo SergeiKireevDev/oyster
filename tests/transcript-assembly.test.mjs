@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { get } from "svelte/store";
 import { createTranscriptAssembly } from "../public/src/features/transcript/createTranscriptAssembly.js";
+import { resetTranscriptItems, transcriptItems } from "../public/src/stores/transcriptItems.js";
 
 function createDependencies() {
   const messagesElement = {
@@ -52,6 +54,17 @@ test("transcript assembly owns DOM, stream, action, tool-card, and renderer cons
   operations.addLocalEcho("hello");
   operations.removeLocalEcho("hello");
   assembly.teardown();
+});
+
+test("compaction summaries render as transcript markers", () => {
+  resetTranscriptItems();
+  const assembly = createTranscriptAssembly(createDependencies());
+  assembly.operations.renderFullMessage({ role: "compactionSummary", summary: "hidden summary", tokensBefore: 1234 });
+  assert.deepEqual(get(transcriptItems).map(({ kind, tokensBefore }) => ({ kind, tokensBefore })), [
+    { kind: "compaction", tokensBefore: 1234 },
+  ]);
+  assembly.teardown();
+  resetTranscriptItems();
 });
 
 test("new transcript content stays pinned near the bottom and only shows a notice when reading above", async () => {

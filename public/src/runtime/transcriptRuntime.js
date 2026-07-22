@@ -15,6 +15,7 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
     onState,
     onMessages,
     getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, getSessionIdentity(state), sessionFileQuery),
+    shouldGetDurableMessages: (state) => Boolean(getSessionIdentity(state)),
     onDurableMessages,
   });
 }

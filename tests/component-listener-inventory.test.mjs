@@ -26,8 +26,8 @@ test("component browser and imperative listener inventory is explicit", () => {
     "App.svelte:38:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
     "components/Menu.svelte:23:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
-    "components/Transcript.svelte:25:messages.addEventListener(\"load\", onLoad, true);",
-    "components/Transcript.svelte:28:messages.removeEventListener(\"load\", onLoad, true);",
+    "components/Transcript.svelte:26:messages.addEventListener(\"load\", onLoad, true);",
+    "components/Transcript.svelte:29:messages.removeEventListener(\"load\", onLoad, true);",
   ]);
 
   const transcript = source(new URL("components/Transcript.svelte", root));

@@ -208,13 +208,13 @@ test("canonical reload delegates state and backend-neutral durable transcript id
   const applied = [];
   let requestedUrl;
   const result = await loadDurableCanonicalTranscript({
-    rpc: async ({ type }) => type === "get_state" ? { sessionFile: "/a.jsonl" } : { messages: [{ role: "user", content: "fallback" }] },
+    rpc: async ({ type }) => type === "get_state" ? { sessionFile: null, sessionId: "sqlite-session" } : { messages: [{ role: "user", content: "fallback" }] },
     applyState: (state) => applied.push(state),
     fetchImpl: async (url) => { requestedUrl = url; return { ok: true, json: async () => ({ messages: [{ role: "user", content: "durable" }] }) }; },
     sessionFileQuery: (identity) => `key=${identity}`,
     getSessionIdentity: () => "ps1_sqlite",
   });
-  assert.deepEqual(applied, [{ sessionFile: "/a.jsonl" }]);
+  assert.deepEqual(applied, [{ sessionFile: null, sessionId: "sqlite-session" }]);
   assert.equal(requestedUrl, "/session-messages?key=ps1_sqlite");
   assert.deepEqual(result.messages, [{ role: "user", content: "durable" }]);
 });

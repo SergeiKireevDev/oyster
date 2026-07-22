@@ -404,6 +404,21 @@ export function sessionEntries(path) {
 /** Full message objects of the ACTIVE branch, in order — the same shape
  *  pi's get_messages returns. Lets the UI render a transcript straight from
  *  the (cached) file while the pi process is still spawning/resuming. */
+export function transcriptMessage(entry) {
+  if (entry.type === "message" && entry.message) {
+    return { ...entry.message, entryTimestamp: entry.timestamp ?? null };
+  }
+  if (entry.type === "compaction") {
+    return {
+      role: "compactionSummary",
+      summary: entry.summary ?? "",
+      tokensBefore: entry.tokensBefore ?? 0,
+      timestamp: new Date(entry.timestamp).getTime(),
+    };
+  }
+  return null;
+}
+
 export function sessionMessages(path) {
   const { header, entries, byId } = parseSessionFile(path);
   let leafId = null;
@@ -415,8 +430,7 @@ export function sessionMessages(path) {
   chain.reverse();
   return {
     sessionId: header?.id ?? null,
-    messages: chain.filter((e) => e.type === "message" && e.message)
-      .map((e) => ({ ...e.message, entryTimestamp: e.timestamp ?? null })),
+    messages: chain.map(transcriptMessage).filter(Boolean),
   };
 }
 

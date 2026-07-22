@@ -706,6 +706,28 @@
   .assistant-part[data-assistant-part="thinking"] + .assistant-part[data-assistant-part="toolGroup"] { margin-top: 2px; }
   #messages > [data-role="user"] + .assistant-entry,
   #messages > .assistant-entry + [data-role="user"] { margin-top: 2px; }
+  .compaction-marker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .compaction-marker::before, .compaction-marker::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--border);
+  }
+  .compaction-marker span {
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+  }
   /* message actions — revealed on hover; copy text or a shareable permalink */
   .permalink, .message-copy {
     position: absolute;
