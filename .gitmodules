@@ -2,3 +2,6 @@
 	path = pi
 	url = https://github.com/SergeiKireevDev/pi.git
 	branch = main
+[submodule "llmbox"]
+	path = llmbox
+	url = https://github.com/clems4ever/llmbox.git
