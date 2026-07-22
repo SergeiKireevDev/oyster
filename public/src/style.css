@@ -1850,9 +1850,33 @@ details.thinking[open] .thinking-preview { display: none; }
 }
 #composer .inner:focus-within { border-color: rgba(157,169,255,.52); box-shadow: 0 16px 42px rgba(0,0,0,.38), 0 0 0 3px rgba(157,169,255,.07); }
 .composer-prompt { flex: none; align-self: flex-start; margin-top: 8px; color: #7f8af0; font: 500 23px/1 var(--mono); }
-#input { min-height: 40px; padding: 9px 4px; border: 0; border-radius: 0; background: transparent; line-height: 1.45; }
+.composer-editor { position: relative; flex: 1; min-width: 0; }
+.composer-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 9px 4px;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.composer-highlight .code {
+  color: #d7ddff;
+  background: rgba(157,169,255,.11);
+  box-shadow: 0 0 0 2px rgba(157,169,255,.11);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.composer-highlight .fence { color: #8f9cf3; font-weight: 600; }
+#input { position: relative; z-index: 1; width: 100%; min-height: 40px; padding: 9px 4px; border: 0; border-radius: 0; background: transparent; color: transparent; caret-color: var(--text); line-height: 1.45; }
 #input:focus { border: 0; }
 #input::placeholder { color: #6f7789; }
+#input::selection { background: rgba(157,169,255,.3); }
 .btn { min-height: 40px; padding: 8px 17px; border-radius: 11px; background: linear-gradient(145deg, #b0b9ff, #8f9cf3); box-shadow: 0 5px 16px rgba(106,120,225,.2); color: #10131e; font-size: 13px; transition: transform .15s, filter .15s; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .btn.stop { background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
@@ -1922,7 +1946,7 @@ details.thinking[open] .thinking-preview { display: none; }
   #composer { padding: 8px 10px calc(11px + env(safe-area-inset-bottom)); }
   #composer .inner { min-height: 50px; padding-left: 11px; border-radius: 15px; }
   .composer-prompt { display: none; }
-  #input { padding-left: 3px; }
+  #input, .composer-highlight { padding-left: 3px; }
   .btn { min-height: 38px; padding-inline: 14px; }
   #statusbar { padding-inline: 4px; white-space: nowrap; overflow: hidden; }
   #workdirInfo { overflow: hidden; text-overflow: ellipsis; }

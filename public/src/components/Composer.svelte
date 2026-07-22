@@ -1,8 +1,9 @@
 <script>
   import FolderIcon from "./FolderIcon.svelte";
   import { appHeader } from "../stores/appSession.js";
-  import { composerUi, composerVoice } from "../stores/composer.js";
+  import { composerText, composerUi, composerVoice } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
+  import { composerHighlightSegments } from "../lib/composerHighlight.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     COMPOSER_ABORT_ACTION,
@@ -13,7 +14,17 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
-  const handleInput = () => uiActions.invoke(COMPOSER_INPUT_ACTION);
+  let highlight;
+  const syncHighlightScroll = (input) => {
+    if (!highlight) return;
+    highlight.scrollTop = input.scrollTop;
+    highlight.scrollLeft = input.scrollLeft;
+  };
+  const handleInput = (event) => {
+    uiActions.invoke(COMPOSER_INPUT_ACTION);
+    syncHighlightScroll(event.currentTarget);
+  };
+  const handleScroll = (event) => syncHighlightScroll(event.currentTarget);
   const handleKeydown = (event) => uiActions.invoke(COMPOSER_KEYDOWN_ACTION, event);
   const send = () => uiActions.invoke(COMPOSER_SEND_ACTION);
   const abort = () => uiActions.invoke(COMPOSER_ABORT_ACTION);
@@ -23,14 +34,18 @@
 <div id="composer">
   <div class="inner">
     <div class="composer-prompt" aria-hidden="true">›</div>
-    <textarea
-      id="input"
-      rows="1"
-      placeholder={$composerUi.placeholder}
-      disabled={$composerUi.inputDisabled}
-      oninput={handleInput}
-      onkeydown={handleKeydown}
-    ></textarea>
+    <div class="composer-editor">
+      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each composerHighlightSegments($composerText) as segment}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
+      <textarea
+        id="input"
+        rows="1"
+        placeholder={$composerUi.placeholder}
+        disabled={$composerUi.inputDisabled}
+        oninput={handleInput}
+        onscroll={handleScroll}
+        onkeydown={handleKeydown}
+      ></textarea>
+    </div>
     {#if $composerVoice.available}
       <button
         class:recording={$composerVoice.listening}

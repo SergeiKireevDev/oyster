@@ -74,7 +74,7 @@ export function createComposerAssembly(deps) {
     input.value = before + pad + text + padAfter + after;
     const position = (before + pad + text).length;
     input.setSelectionRange(position, position);
-    input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
     input.focus();
   }
 
@@ -306,7 +306,7 @@ export function createComposerAssembly(deps) {
       ?? insertionAtCaret(element.value, element.selectionStart, element.selectionEnd, text);
     element.value = insertion.value;
     element.setSelectionRange(insertion.position, insertion.position);
-    element.dispatchEvent(new Event("input"));
+    element.dispatchEvent(new Event("input", { bubbles: true }));
     element.focus();
   }
 
