@@ -60,7 +60,7 @@ export function createTranscriptAssembly(deps) {
 
   function addUserMessage(message, options = {}) {
     const text = userMessageText(message);
-    transcriptActions.addUser(text, options);
+    transcriptActions.addUser(text, { ...options, timestamp: message.entryTimestamp ?? message.timestamp ?? Date.now() });
     if (/^Opening interface: /.test(text)) {
       transcriptScroll.scrollToBottom(true);
       return;

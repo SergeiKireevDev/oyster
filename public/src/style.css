@@ -682,6 +682,24 @@
   }
   .message-row { display: flex; width: 100%; min-width: 0; }
   .user-message-row { justify-content: flex-end; }
+  .work-duration {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .work-duration .spin {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
   .msg { min-width: 0; position: relative; }
   .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .assistant-part[data-assistant-part="thinking"] + .assistant-part[data-assistant-part="toolCall"],

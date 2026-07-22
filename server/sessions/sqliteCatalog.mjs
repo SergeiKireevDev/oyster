@@ -157,7 +157,8 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     const { session, branch } = activeBranch(value);
     return {
       sessionId: session?.id ?? null,
-      messages: branch.filter((entry) => entry.type === "message" && entry.message).map((entry) => entry.message),
+      messages: branch.filter((entry) => entry.type === "message" && entry.message)
+        .map((entry) => ({ ...entry.message, entryTimestamp: entry.timestamp ?? null })),
     };
   }
 

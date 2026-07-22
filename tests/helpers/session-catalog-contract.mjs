@@ -21,6 +21,7 @@ export function runSessionCatalogContract(name, createFixture) {
     assert.deepEqual(active.entries.map((entry) => entry.role), ["user", "assistant"]);
     const transcript = await catalog.messages(rootIdentity);
     assert.deepEqual(transcript.messages.map((message) => message.role), ["user", "assistant"]);
+    assert.ok(transcript.messages.every((message) => message.entryTimestamp));
   });
 
   test(`${name} catalog supports folder discovery and text search`, async () => {
