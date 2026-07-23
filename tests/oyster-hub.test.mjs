@@ -142,6 +142,18 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.throws(() => validateConfig({ token: "x", driver: {
     type: "llmbox", endpoint: "http://localhost", token: "key", tokenSecret: "secret", workspacePort: 70000,
   } }, {}), /workspacePort/);
+  assert.throws(() => validateConfig({ token: "x", driver: {
+    type: "llmbox", transport: "pipe", tokenSecret: "secret",
+  } }, {}), /transport must be http or native/);
+  const native = validateConfig({ token: "x", driver: {
+    type: "llmbox", transport: "native", tokenSecret: "secret",
+    binding: { addonPath: "build/llmbox.node", configPath: "llmbox.yaml" },
+  } }, {});
+  assert.equal(native.driver.endpoint, "native://embedded-llmbox");
+  assert.equal(native.driver.transport, "native");
+  assert.match(native.driver.binding.addonPath, /build\/llmbox\.node$/);
+  assert.match(native.driver.binding.configPath, /llmbox\.yaml$/);
+  assert.equal("token" in native.driver, false);
 
   const mock = validateConfig({ token: "x", port: 8082, driver: { type: "mock" } }, {});
   assert.equal(mock.port, 8082);
