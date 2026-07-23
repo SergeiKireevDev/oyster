@@ -63,7 +63,7 @@ test("credentials assembly owns API-key action registration and teardown", () =>
   assembly.teardown();
 });
 
-test("credentials assembly auto-opens setup once only when auth.json has no entries", async () => {
+test("credentials assembly auto-opens setup only when no provider is configured", async () => {
   const make = ({ providers, modalOpen = false }) => {
     const opened = [];
     const states = [];
@@ -83,7 +83,7 @@ test("credentials assembly auto-opens setup once only when auth.json has no entr
     return { assembly, opened, states, get loads() { return loads; } };
   };
 
-  const empty = make({ providers: [{ provider: "mock", credentialType: null, source: "environment" }] });
+  const empty = make({ providers: [{ provider: "mock", credentialType: null, source: "not_configured", configured: false }] });
   assert.equal(await empty.assembly.operations.initialize(), true);
   assert.equal(await empty.assembly.operations.initialize(), false);
   assert.equal(empty.loads, 1);
@@ -91,7 +91,17 @@ test("credentials assembly auto-opens setup once only when auth.json has no entr
   assert.deepEqual(empty.states, [{ setupMode: true }]);
   empty.assembly.teardown();
 
-  const stored = make({ providers: [{ provider: "mock", credentialType: "api_key" }] });
+  const failed = make({ providers: null });
+  assert.equal(await failed.assembly.operations.initialize(), false);
+  assert.deepEqual(failed.opened, [], "a failed status request is not an empty credential store");
+  failed.assembly.teardown();
+
+  const environmentConfigured = make({ providers: [{ provider: "mock", credentialType: null, source: "environment", configured: true }] });
+  assert.equal(await environmentConfigured.assembly.operations.initialize(), false);
+  assert.deepEqual(environmentConfigured.opened, []);
+  environmentConfigured.assembly.teardown();
+
+  const stored = make({ providers: [{ provider: "mock", credentialType: "api_key", configured: true }] });
   assert.equal(await stored.assembly.operations.initialize(), false);
   assert.deepEqual(stored.opened, []);
   stored.assembly.teardown();

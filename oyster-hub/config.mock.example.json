@@ -1,0 +1,26 @@
+{
+  "host": "127.0.0.1",
+  "port": 8082,
+  "token": "replace-with-a-hub-bearer-token",
+  "sharedTokenFile": "/home/ubuntu/tree-pi/.ui-token",
+  "timeoutMs": 5000,
+  "driver": {
+    "type": "mock",
+    "workspaces": [
+      {
+        "endpoint": "http://localhost:8080",
+        "environmentId": "local",
+        "environmentName": "Local",
+        "id": "local",
+        "name": "Local Oyster"
+      },
+      {
+        "endpoint": "http://localhost:8083",
+        "environmentId": "local",
+        "environmentName": "Local",
+        "id": "pi-2",
+        "name": "Pi 2"
+      }
+    ]
+  }
+}

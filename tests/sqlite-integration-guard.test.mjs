@@ -29,6 +29,7 @@ const sources = sourceFiles().map((path) => ({
 }));
 
 const JSONL_COMPATIBILITY_BOUNDARIES = new Set([
+  "oyster-hub/ui-gateway.mjs",
   "server/app.mjs",
   "server/http/routes/sessionRoutes.mjs",
   "public/src/components/SessionPickerModal.svelte",

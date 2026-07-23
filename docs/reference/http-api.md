@@ -12,7 +12,7 @@ Responses are JSON unless a route streams events, downloads a file, or serves st
 
 ## Authentication
 
-`GET /health`, `GET /authcheck`, and static application assets are open. Every other API route requires the configured token via bearer header, `X-Auth-Token`, or the `pi_ui_token` cookie.
+`GET /health`, `GET /authcheck`, `GET /runtime-config.js`, and static application assets are open. By default, every other API route requires the configured token via bearer header, `X-Auth-Token`, or the `pi_ui_token` cookie. When the Oyster spoke is explicitly started with `--unauthenticated`, those routes accept requests without a token; this mode must be protected by an authenticated outer proxy such as llmbox.
 
 The `token` query parameter is allowed only on `GET` requests. Auth failures are rate-limited by client IP.
 
@@ -21,7 +21,8 @@ The `token` query parameter is allowed only on `GET` requests. Auth failures are
 | Route | Purpose |
 |---|---|
 | `GET /health` | Liveness and safe process, backend, and database diagnostics |
-| `GET /authcheck` | Report whether supplied token locations are valid without exposing the token |
+| `GET /authcheck` | Report whether supplied token locations are valid, or that authentication is disabled, without exposing the token |
+| `GET /runtime-config.js` | Tell the browser whether this Oyster instance requires its own token |
 | `GET /events` | SSE stream for runner output and server events |
 | `GET /runners` | List runner status |
 | `DELETE /runners?id=…` | Stop and remove a runner |

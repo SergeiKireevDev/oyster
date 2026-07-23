@@ -21,6 +21,10 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
   expect(persisted.sessionKey).toBeTruthy();
   expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
   expect(dexec("test -s /root/.pi/agent/sessions.sqlite && echo present")).toBe("present");
+  await waitFor(async () => {
+    const titled = await api("GET", "/sessions?dir=/workspace");
+    return titled.json.sessions.find((session) => session.id === sessionId)?.name === token;
+  }, { timeout: 30000, label: "generated SQLite session title" });
   const sqliteManifest = sqliteSessionManifest();
 
   await replaceContainer();

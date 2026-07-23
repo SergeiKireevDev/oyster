@@ -42,7 +42,7 @@ export function createCredentialsAssembly({
     if (tornDown || startupChecked) return false;
     startupChecked = true;
     const providers = await controller.load({ quiet: true });
-    if (tornDown || providers.some((provider) => provider.credentialType) || isModalOpen()) return false;
+    if (tornDown || !Array.isArray(providers) || providers.some((provider) => provider.configured || provider.credentialType) || isModalOpen()) return false;
     setState({ setupMode: true });
     controller.activate();
     openModal({ title: "Set up credentials", wide: true, content: "credentials" });

@@ -1,0 +1,126 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Oyster Hub API",
+    "version": "0.1.0",
+    "description": "Driver-backed workspace provisioning, aggregation, and scoped proxy API for Oyster servers. The prototype driver is llmbox."
+  },
+  "servers": [{ "url": "/api/v1" }],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/environments": {
+      "get": {
+        "summary": "List environments (llmbox spokes)",
+        "responses": { "200": { "description": "Environment list", "content": { "application/json": { "schema": { "type": "object", "required": ["environments"], "properties": { "environments": { "type": "array", "items": { "$ref": "#/components/schemas/Environment" } } } } } } } }
+      }
+    },
+    "/workspaces": {
+      "get": {
+        "summary": "Query the configured driver and list discovered workspaces",
+        "responses": { "200": { "description": "Workspace list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkspaceList" } } } } }
+      },
+      "post": {
+        "summary": "Create a workspace through the configured driver",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateWorkspace" } } } },
+        "responses": {
+          "201": { "description": "Workspace created", "content": { "application/json": { "schema": { "type": "object", "required": ["workspace"], "properties": { "workspace": { "$ref": "#/components/schemas/Workspace" } } } } } },
+          "400": { "description": "Invalid workspace request" },
+          "405": { "description": "Selected driver cannot create workspaces" },
+          "502": { "description": "Workspace driver failure" }
+        }
+      }
+    },
+    "/overview": {
+      "get": {
+        "summary": "Aggregate runners, sessions, routines, and hublots from every workspace",
+        "responses": { "200": { "description": "Cross-workspace overview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Overview" } } } } }
+      }
+    },
+    "/workspaces/{wid}": {
+      "get": {
+        "summary": "Get one workspace and its availability",
+        "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
+        "responses": {
+          "200": { "description": "Workspace status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Workspace" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "summary": "Remove a workspace when supported by the selected driver",
+        "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
+        "responses": { "405": { "description": "Selected driver cannot remove workspaces" } }
+      }
+    },
+    "/workspaces/{wid}/{path}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/WorkspaceId" },
+        { "name": "path", "in": "path", "required": true, "description": "An Oyster server path, including nested path segments (for example analytics/usage).", "schema": { "type": "string" } }
+      ],
+      "get": { "summary": "Proxy a GET to one Oyster workspace", "responses": { "200": { "description": "Upstream response" }, "default": { "description": "Upstream status and response" } } },
+      "post": { "summary": "Proxy a POST to one Oyster workspace", "responses": { "default": { "description": "Upstream status and response" } } },
+      "patch": { "summary": "Proxy a PATCH to one Oyster workspace", "responses": { "default": { "description": "Upstream status and response" } } },
+      "delete": { "summary": "Proxy a DELETE to one Oyster workspace", "responses": { "default": { "description": "Upstream status and response" } } }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer" }
+    },
+    "parameters": {
+      "WorkspaceId": { "name": "wid", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" } }
+    },
+    "responses": {
+      "NotFound": { "description": "Workspace not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
+      "Environment": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": { "type": "string", "description": "llmbox spoke name" },
+          "name": { "type": "string" },
+          "status": { "enum": ["online", "offline"] },
+          "default": { "type": "boolean" },
+          "local": { "type": "boolean" }
+        }
+      },
+      "Workspace": {
+        "type": "object",
+        "required": ["environmentId", "environmentName", "id", "name", "url"],
+        "properties": {
+          "environmentId": { "type": "string", "description": "Physical or cloud device ID" },
+          "environmentName": { "type": "string", "description": "Physical or cloud device label" },
+          "id": { "type": "string", "description": "Project microVM ID" },
+          "name": { "type": "string" },
+          "url": { "type": ["string", "null"], "format": "uri" },
+          "status": { "enum": ["online", "offline", "provisioning"] },
+          "latencyMs": { "type": ["integer", "null"] },
+          "provider": { "type": "object", "additionalProperties": true },
+          "results": { "type": "object", "additionalProperties": true },
+          "errors": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      },
+      "WorkspaceList": { "type": "object", "required": ["driver", "workspaces"], "properties": { "driver": { "type": "object", "required": ["type", "endpoint", "capabilities"], "properties": { "type": { "type": "string" }, "endpoint": { "type": "string", "format": "uri" }, "capabilities": { "type": "object", "required": ["list", "create", "remove"], "properties": { "list": { "type": "boolean" }, "create": { "type": "boolean" }, "remove": { "type": "boolean" } } } } }, "workspaces": { "type": "array", "items": { "$ref": "#/components/schemas/Workspace" } } } },
+      "CreateWorkspace": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" },
+          "name": { "type": "string", "maxLength": 500 },
+          "spoke": { "type": "string", "maxLength": 100 },
+          "diskBytes": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "required": ["generatedAt", "totals", "workspaces"],
+        "properties": {
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "totals": { "type": "object", "additionalProperties": { "type": "integer" } },
+          "workspaces": { "type": "array", "items": { "$ref": "#/components/schemas/Workspace" } }
+        }
+      }
+    }
+  }
+}

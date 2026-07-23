@@ -72,7 +72,7 @@ test("every modal keeps all buttons entirely visible on mobile", async ({ page }
       name: "folder browser",
       open: async () => {
         await page.evaluate(() => document.getElementById("sessions")?.classList.add("open"));
-        await page.locator("#sessions .session-sidebar-workspace-create").first().click();
+        await page.locator("#newSessionFolder").click();
         await expect(page.locator("#mTitle")).toHaveText("New session in folder");
       },
     },

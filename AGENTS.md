@@ -57,6 +57,7 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 | `--port` | `PORT` | `8080` | listen port |
 | `--host` | `HOST` | `0.0.0.0` | bind address |
 | `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
+| `--unauthenticated` | `PI_UI_UNAUTHENTICATED` | off | disable Oyster token auth behind an authenticated outer proxy |
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
 | `--pi` | `PI_BIN` | `pi/packages/coding-agent/dist/cli.js` | pi executable path |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |

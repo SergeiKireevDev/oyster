@@ -35,9 +35,7 @@ async function newSession(page) {
     const url = new URL(request.url());
     return url.pathname === "/events" && url.searchParams.get("replay") === "0";
   });
-  await page.locator("#sessions .session-sidebar-workspace-create").first().click();
-  await expect(page.locator("#mTitle")).toContainText("New session in");
-  await page.getByRole("button", { name: "Start session here" }).click();
+  await page.locator("#newSessionHere").click();
   const [response, eventRequest] = await Promise.all([opened, connected]);
   expect(response.ok()).toBe(true);
   const { runner } = await response.json();
@@ -78,7 +76,7 @@ async function revealSidebarEntry(page, token) {
 async function newSessionInFolder(page, folderName) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
-  await page.locator("#sessions .session-sidebar-workspace-create").first().click();
+  await page.locator("#newSessionFolder").click();
   await expect(page.locator("#mTitle")).toHaveText("New session in folder");
   await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
   await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);
@@ -192,9 +190,9 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await swipe(page, "right");
     }
     await expect(page.locator("#sessions")).toBeVisible();
-    const workspace = page.locator("#sessions .session-sidebar-workspace-container").first();
-    await expect(workspace.locator(".session-sidebar-workspace-heading")).toContainText("This workspace");
-    const cwdCategory = workspace.locator(".session-sidebar-cwd", { has: page.locator("summary", { hasText: "/workspace" }) });
+    await expect(page.locator("#sessions .session-sidebar-environment-selector")).toHaveCount(0);
+    await expect(page.locator("#sessions .session-sidebar-workspace-container")).toHaveCount(0);
+    const cwdCategory = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: "/workspace" }) });
     await expect(cwdCategory.locator(".session-sidebar-count")).toHaveText("2");
     await expect(cwdCategory.locator(".session-sidebar-entry")).toHaveCount(2);
     const first = page.locator("#sessions .session-sidebar-row", { hasText: A });

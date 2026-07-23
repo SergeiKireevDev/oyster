@@ -34,8 +34,10 @@ export function createFolderBrowserController({ browse, mkdir, update, updateTit
     try {
       await openAndSwitchSession({ dir: path }, { onOpened: () => setWorkdir(path) });
       toast(`folder: ${path}`);
+      return true;
     } catch (error) {
       toast(error.message, "error");
+      return false;
     }
   }
 

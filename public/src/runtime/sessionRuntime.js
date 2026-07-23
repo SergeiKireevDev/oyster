@@ -254,7 +254,7 @@ export function createSessionStateApplier({ applySessionState, getState, setStat
 }
 
 /** Orchestrate a runner open while retaining the durable-preview fast path. */
-export function createSessionOpenController({ open, getCurrentRunner, getRunners, preview, markEmpty, log = () => {}, now = () => performance.now() }) {
+export function createSessionOpenController({ open, onOpened = () => {}, getCurrentRunner, getRunners, preview, markEmpty, log = () => {}, now = () => performance.now() }) {
   return async ({ sessionKey = null, sessionPath = null, dir = null } = {}) => {
     const started = now();
     const identity = sessionKey ?? sessionPath;
@@ -262,6 +262,7 @@ export function createSessionOpenController({ open, getCurrentRunner, getRunners
     const current = getRunners().find((runner) => runner.id === getCurrentRunner());
     if (identity && identity !== runnerSessionIdentity(current)) preview.begin(identity);
     const runner = await open({ ...sessionOpenSelection(identity), dir });
+    onOpened(runner);
     if (!identity && runner?.id) markEmpty(runner.id);
     log("openSessionRunner:done", {
       runner: runner?.id, sessionIdentity: runnerSessionIdentity(runner), sessionId: runner?.sessionId,

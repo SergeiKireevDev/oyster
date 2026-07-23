@@ -11,11 +11,12 @@ function response() {
   };
 }
 
-function setup() {
+function setup(configOverrides = {}) {
   const state = {
     config: {
       TOKEN: "open-token", PI_DIR: tmpdir(), DIRNAME: tmpdir(),
       PI_BIN: "/configured/pi", PERSISTENT_STORE: "sqlite", SQLITE_PATH: "/agent/sessions.sqlite",
+      ...configOverrides,
     },
     piProcesses: { bin: "/running/pi", persistentStore: "sqlite" },
     appStore: { path: "/agent/oyster.sqlite", migrationStatus: { currentVersion: 1, appliedVersions: [1] } },
@@ -30,6 +31,18 @@ function setup() {
   });
   return { state, routes };
 }
+
+test("runtime config exposes spoke authentication mode without secrets", () => {
+  for (const unauthenticated of [false, true]) {
+    const { routes } = setup({ UNAUTHENTICATED: unauthenticated });
+    const res = response();
+    routes["GET /runtime-config.js"]({ headers: {} }, res);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["content-type"], "text/javascript; charset=utf-8");
+    assert.equal(res.body, `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze({"unauthenticated":${unauthenticated}});\n`);
+    assert.equal(res.body.includes("open-token"), false);
+  }
+});
 
 test("health route reports stable state including the reload count without auth", () => {
   const { routes } = setup();
@@ -54,6 +67,13 @@ test("health diagnostics follow the running launcher and cannot falsely claim SQ
   const health = JSON.parse(res.body);
   assert.deepEqual(health.pi, { bin: "/global/pi", persistentStore: "jsonl", sqlitePath: null });
   assert.equal(JSON.stringify(health).includes("open-token"), false);
+});
+
+test("authcheck reports that credentials are unnecessary in explicit unauthenticated mode", () => {
+  const { routes } = setup({ UNAUTHENTICATED: true });
+  const res = response();
+  routes["GET /authcheck"]({ method: "GET", headers: {}, socket: { remoteAddress: "192.0.2.3" } }, res, new URL("http://localhost/authcheck"));
+  assert.deepEqual(JSON.parse(res.body), { authorized: true, unauthenticated: true });
 });
 
 test("authcheck remains an open credential report without exposing token values", () => {

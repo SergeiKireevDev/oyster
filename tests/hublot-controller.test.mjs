@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHublotController, createHublotSidebarEventController } from "../public/src/lib/hublotController.js";
+import { listHublots } from "../public/src/lib/hublotActions.js";
 test("hublot sidebar event controller invokes show and tears down", () => {
   let listener;
   let removed;
@@ -12,6 +13,16 @@ test("hublot sidebar event controller invokes show and tears down", () => {
   controller.detach();
   assert.equal(shown, 1);
   assert.equal(removed, listener);
+});
+
+test("hublot listing requests the Hub-wide collection before applying session visibility", async () => {
+  let requested;
+  const tunnels = await listHublots(async (url) => {
+    requested = url;
+    return { ok: true, async json() { return { tunnels: [{ id: "alpha" }, { id: "beta" }] }; } };
+  }, (tunnel) => tunnel.id === "beta");
+  assert.equal(requested, "/tunnels?all=1");
+  assert.deepEqual(tunnels, [{ id: "beta" }]);
 });
 
 test("hublot controller binds creation to current session", async () => {

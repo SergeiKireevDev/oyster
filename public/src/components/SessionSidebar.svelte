@@ -5,6 +5,7 @@
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
+  import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { isHubRuntime, listEnvironments, listOnlineWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
@@ -15,6 +16,7 @@
     SESSION_PICKER_SEARCH_ACTION,
     SESSION_PICKER_SET_SCOPE_ACTION,
     SESSION_PICKER_STOP_ACTION,
+    SESSION_SIDEBAR_CREATE_IN_CWD_ACTION,
     SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
     SESSION_SIDEBAR_REFRESH_ACTION,
     SESSION_SWITCH_RUNNER_ACTION,
@@ -24,23 +26,28 @@
   const runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__ ?? {};
   const hubMode = isHubRuntime(runtimeConfig);
   const hierarchyDefaults = {
-    environmentId: runtimeConfig.environment?.id || "local-device",
-    environmentName: runtimeConfig.environment?.name || (hubMode ? "Hub environment" : "Local device"),
-    workspaceId: runtimeConfig.workspace?.id || "local-workspace",
-    workspaceName: runtimeConfig.workspace?.name || (hubMode ? "Workspace" : "This workspace"),
+    environmentId: runtimeConfig.environment?.id || "local",
+    environmentName: runtimeConfig.environment?.name || "Environment",
+    workspaceId: runtimeConfig.workspace?.id || "local",
+    workspaceName: runtimeConfig.workspace?.name || "Workspace",
   };
   const switchRunner = (id) => {
     const runner = $appSession.runners.find((candidate) => candidate.id === id);
-    if (runner?.environmentId) selectedEnvironmentId = runner.environmentId;
-    setActiveWorkspace(runner?.workspaceId);
+    if (hubMode) {
+      if (runner?.environmentId) selectedEnvironmentId = runner.environmentId;
+      setActiveWorkspace(runner?.workspaceId);
+    }
     return uiActions.invoke(SESSION_SWITCH_RUNNER_ACTION, id);
   };
   const openSavedSession = (session) => {
-    if (session?.environmentId) selectedEnvironmentId = session.environmentId;
-    setActiveWorkspace(session?.workspaceId);
+    if (hubMode) {
+      if (session?.environmentId) selectedEnvironmentId = session.environmentId;
+      setActiveWorkspace(session?.workspaceId);
+    }
     return uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, sessionIdentity(session));
   };
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
+  const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, cwd);
   const createSessionInFolder = (workspace = null) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, workspace);
   const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
   const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
@@ -85,31 +92,23 @@
 
   let selectedEnvironmentId = null;
   $: searching = $sessionPicker.query.trim().length >= 2;
-  $: searchEnvironments = groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults);
+  $: searchEnvironments = hubMode ? groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults) : [];
   $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
   $: currentRunner = $appSession.runners.find((runner) => runner.id === $appSession.currentRunner);
   $: currentCwd = currentRunner?.dir ?? null;
   $: sessionGroups = partitionSessionGroupsByArchive(
     groupSessionsByCwd($sessionPicker.allSessions, sidebarRunners),
   );
-  $: sessionEnvironments = groupSessionCwdsByHierarchy(sessionGroups, hierarchyDefaults);
-  $: sessionEnvironmentsForView = !hubMode && !sessionEnvironments.length
-    ? [{
-        environmentId: hierarchyDefaults.environmentId,
-        environmentName: hierarchyDefaults.environmentName,
-        workspaces: [{
-          workspaceId: hierarchyDefaults.workspaceId,
-          workspaceName: hierarchyDefaults.workspaceName,
-          recentGroups: [],
-          archivedGroups: [],
-          archivedCount: 0,
-        }],
-      }]
-    : sessionEnvironments;
+  $: spokeRecentGroups = hubMode ? [] : sessionGroups.filter((group) => !group.archived);
+  $: spokeArchivedGroups = hubMode ? [] : sessionGroups.filter((group) => group.archived);
+  $: spokeArchivedCount = spokeArchivedGroups.reduce((count, group) => count + group.entries.length, 0);
+  $: sessionEnvironments = hubMode ? groupSessionCwdsByHierarchy(sessionGroups, hierarchyDefaults) : [];
   $: discoveredEnvironmentOptions = environmentOptionsFromCatalog(availableEnvironments);
-  $: environmentOptions = hubMode && availableWorkspacesLoaded
-    ? discoveredEnvironmentOptions
-    : mergeEnvironmentOptions(sessionEnvironmentsForView, searchEnvironments);
+  $: environmentOptions = !hubMode
+    ? []
+    : availableWorkspacesLoaded
+      ? discoveredEnvironmentOptions
+      : mergeEnvironmentOptions(sessionEnvironments, searchEnvironments);
   $: if (environmentOptions.length && !environmentOptions.some((environment) => environment.environmentId === selectedEnvironmentId)) {
     selectedEnvironmentId = preferredEnvironmentId(environmentOptions);
   }
@@ -119,8 +118,8 @@
       .map((workspace) => workspace.id))
     : null;
   $: visibleSessionEnvironments = availableWorkspaceIds
-    ? availableEnvironmentView(sessionEnvironmentsForView, selectedEnvironmentId, availableWorkspaces)
-    : filterEnvironmentWorkspaces(sessionEnvironmentsForView, selectedEnvironmentId, null);
+    ? availableEnvironmentView(sessionEnvironments, selectedEnvironmentId, availableWorkspaces)
+    : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null);
   $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds);
   let expandedCwds = new Set();
   let initializedCwdExpansion = false;
@@ -195,11 +194,15 @@
   }
   function isCurrentCwd(group) {
     if (!currentRunner || group.cwd !== currentCwd) return false;
+    if (!hubMode) return true;
     return (group.environmentId || hierarchyDefaults.environmentId) === (currentRunner.environmentId || hierarchyDefaults.environmentId)
       && (group.workspaceId || hierarchyDefaults.workspaceId) === (currentRunner.workspaceId || hierarchyDefaults.workspaceId);
   }
   function cwdExpansionKey(group) {
-    return `${group.archived ? "archived" : "recent"}:${group.environmentId ?? hierarchyDefaults.environmentId}:${group.workspaceId ?? hierarchyDefaults.workspaceId}:${group.cwd}`;
+    const prefix = `${group.archived ? "archived" : "recent"}:`;
+    return hubMode
+      ? `${prefix}${group.environmentId ?? hierarchyDefaults.environmentId}:${group.workspaceId ?? hierarchyDefaults.workspaceId}:${group.cwd}`
+      : `${prefix}${group.cwd}`;
   }
   function setCwdExpanded(key, open) {
     const next = new Set(expandedCwds);
@@ -266,7 +269,7 @@
           type="button"
           class:busy={runner?.busy}
           class="session-sidebar-row"
-          title={`${label(session, runner)}\n${cwd}`}
+          title={`${label(session, runner)}\n${abbreviateHomePath(cwd)}`}
           onclick={() => runner ? switchRunner(runner.id) : openSavedSession(session)}
         >
           <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
@@ -304,11 +307,40 @@
   >
     <summary title={group.cwd}>
       <span class="session-sidebar-cwd-icon" aria-hidden="true"></span>
-      <span class="session-sidebar-cwd-label">{group.cwd}</span>
+      <span class="session-sidebar-cwd-label">{abbreviateHomePath(group.cwd)}</span>
       <span class="session-sidebar-count">{group.entries.length}</span>
     </summary>
     {@render SessionRows({ entries: group.entries, archived, cwd: group.cwd })}
   </details>
+{/snippet}
+
+{#snippet SearchGroups(groups)}
+  {#each groups as group (group.sessionKey)}
+    <section class="session-sidebar-hit-group" title={group.sessionKey}>
+      <div class="session-sidebar-hit-heading">
+        <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
+        <span class="session-sidebar-hit-count">{group.hits.length}</span>
+      </div>
+      <span
+        class="session-sidebar-folder"
+        title={group.first.sessionCwd || group.first.folderLabel || ""}
+      >{abbreviateHomePath(group.first.sessionCwd || group.first.folderLabel) || "Unknown working directory"}</span>
+      <div class="session-sidebar-hit-list">
+        {#each group.hits as hit (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
+          <button
+            type="button"
+            class="session-sidebar-hit"
+            onclick={() => openSearchHit(group, hit)}
+          >
+            <span class="session-sidebar-snippet">
+              <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
+              <span class="session-sidebar-snippet-copy">{snippetBefore(hit.snippet.before)}<mark>{hit.snippet.match}</mark>{snippetAfter(hit.snippet.after)}</span>
+            </span>
+          </button>
+        {/each}
+      </div>
+    </section>
+  {/each}
 {/snippet}
 
 {#snippet WorkspaceHeading(workspace)}
@@ -324,7 +356,7 @@
       class="session-sidebar-workspace-create"
       title={`New session in ${workspace.workspaceName}`}
       aria-label={`New session in ${workspace.workspaceName}`}
-      onclick={() => createSessionInFolder(hubMode ? { id: workspace.workspaceId, name: workspace.workspaceName } : null)}
+      onclick={() => createSessionInFolder({ id: workspace.workspaceId, name: workspace.workspaceName })}
     >+</button>
   </div>
 {/snippet}
@@ -345,7 +377,32 @@
       }
     }}
   />
-  {#if environmentOptions.length}
+  {#if !hubMode && !searching}
+    <div class="session-sidebar-new">
+      <button
+        type="button"
+        class="session-sidebar-create"
+        id="newSessionHere"
+        disabled={!currentCwd}
+        onclick={() => currentCwd && createSessionInCwd(currentCwd)}
+      >
+        <span class="session-sidebar-create-icon" aria-hidden="true">+</span>
+        <span class="session-sidebar-create-copy">
+          <strong>New session</strong>
+          <small>{currentCwd ? `Current folder: ${abbreviateHomePath(currentCwd)}` : "Current folder unavailable"}</small>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="session-sidebar-create-folder"
+        id="newSessionFolder"
+        title="Choose another folder"
+        aria-label="Choose another folder for a new session"
+        onclick={() => createSessionInFolder()}
+      ><span class="session-sidebar-create-chevron" aria-hidden="true"></span></button>
+    </div>
+  {/if}
+  {#if hubMode && environmentOptions.length}
     <label class="session-sidebar-environment-selector">
       <span class="session-sidebar-environment-tab-icon" aria-hidden="true"></span>
       <span class="session-sidebar-environment-label">Environment</span>
@@ -367,45 +424,24 @@
       <div class="r-empty">(no available environments)</div>
     {:else if searching}
       {#if $sessionPicker.searchStatus}<div class="session-sidebar-status">{$sessionPicker.searchStatus}</div>{/if}
-      {#each visibleSearchEnvironments as environment (environment.environmentId)}
-        <section class="session-sidebar-environment-view">
-          {#each environment.workspaces as workspace (workspace.workspaceId)}
-            <section
-              class="session-sidebar-workspace-container"
-              class:current-workspace={isCurrentWorkspace(environment, workspace)}
-            >
-              {@render WorkspaceHeading(workspace)}
-              {#each workspace.groups as group (group.sessionKey)}
-                <section class="session-sidebar-hit-group" title={group.sessionKey}>
-                  <div class="session-sidebar-hit-heading">
-                    <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
-                    <span class="session-sidebar-hit-count">{group.hits.length}</span>
-                  </div>
-                  <span
-                    class="session-sidebar-folder"
-                    title={group.first.sessionCwd || group.first.folderLabel || ""}
-                  >{group.first.sessionCwd || group.first.folderLabel || "Unknown working directory"}</span>
-                  <div class="session-sidebar-hit-list">
-                    {#each group.hits as hit (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
-                      <button
-                        type="button"
-                        class="session-sidebar-hit"
-                        onclick={() => openSearchHit(group, hit)}
-                      >
-                        <span class="session-sidebar-snippet">
-                          <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
-                          <span class="session-sidebar-snippet-copy">{snippetBefore(hit.snippet.before)}<mark>{hit.snippet.match}</mark>{snippetAfter(hit.snippet.after)}</span>
-                        </span>
-                      </button>
-                    {/each}
-                  </div>
-                </section>
-              {/each}
-            </section>
-          {/each}
-        </section>
-      {/each}
-    {:else if visibleSessionEnvironments.length}
+      {#if hubMode}
+        {#each visibleSearchEnvironments as environment (environment.environmentId)}
+          <section class="session-sidebar-environment-view">
+            {#each environment.workspaces as workspace (workspace.workspaceId)}
+              <section
+                class="session-sidebar-workspace-container"
+                class:current-workspace={isCurrentWorkspace(environment, workspace)}
+              >
+                {@render WorkspaceHeading(workspace)}
+                {@render SearchGroups(workspace.groups)}
+              </section>
+            {/each}
+          </section>
+        {/each}
+      {:else}
+        {@render SearchGroups($sessionPicker.searchResults)}
+      {/if}
+    {:else if hubMode && visibleSessionEnvironments.length}
       {#each visibleSessionEnvironments as environment (environment.environmentId)}
         <section class="session-sidebar-environment-view">
           {#each environment.workspaces as workspace (workspace.workspaceId)}
@@ -437,6 +473,23 @@
           {/each}
         </section>
       {/each}
+    {:else if !hubMode && sessionGroups.length}
+      {#each spokeRecentGroups as group (`recent:${group.cwd}`)}
+        {@render CwdCategory({ group })}
+      {/each}
+      {#if spokeArchivedGroups.length}
+        <details class="session-sidebar-archive">
+          <summary class="session-archive-divider" title="Manually archived or head older than 2 days">
+            <span>Archived</span>
+            <small>{spokeArchivedCount} session{spokeArchivedCount === 1 ? "" : "s"}</small>
+          </summary>
+          <div class="session-sidebar-archive-groups">
+            {#each spokeArchivedGroups as group (`archived:${group.cwd}`)}
+              {@render CwdCategory({ group, archived: true })}
+            {/each}
+          </div>
+        </details>
+      {/if}
     {:else}
       <div class="r-empty">(no active sessions)</div>
     {/if}

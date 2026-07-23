@@ -16,8 +16,12 @@ export function createRpcClient({ getRunner, getToken, onUnauthorized, onPending
       const res = await fetch(`/rpc?runner=${encodeURIComponent(getRunner() ?? "")}`, {
         method: "POST", headers: { "content-type": "application/json", "x-auth-token": getToken() }, body: JSON.stringify(cmd),
       });
-      if (res.status === 401) { onUnauthorized(); throw new Error("unauthorized"); }
-      if (!res.ok) throw new Error(`rpc failed: ${res.status}`);
+      if (res.status === 401) {
+        const data = await res.json().catch(() => ({}));
+        onUnauthorized();
+        throw new Error(`${cmd.type} via POST /rpc: ${data.error || "unauthorized"}`);
+      }
+      if (!res.ok) throw new Error(`${cmd.type} via POST /rpc failed (${res.status})`);
       const ack = await res.json().catch(() => null);
       if (ack?.pendingResume && cmd.type === "prompt") onPendingResume();
       return waiter;

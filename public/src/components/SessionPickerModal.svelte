@@ -17,8 +17,11 @@
   import { groupSessionFamilies, partitionSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
   import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
+  import { abbreviateHomePath } from "../lib/pathDisplay.js";
+  import { isHubRuntime } from "../runtime/workspaceScope.js";
 
   const uiActions = getUiActionRegistry();
+  const hubMode = isHubRuntime();
   const choosePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, ...args);
   const deletePickedSession = (...args) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, ...args);
   const loadPickedSessionFolder = (...args) => uiActions.invoke(SESSION_PICKER_LOAD_FOLDER_ACTION, ...args);
@@ -41,7 +44,8 @@
   }
 
   function labelFor(dir) {
-    return $sessionPicker.folders.find((folder) => folder.dir === dir)?.label ?? (dir === $sessionPicker.currentFolder ? $sessionPicker.currentWorkdir : dir) ?? "?";
+    const label = $sessionPicker.folders.find((folder) => folder.dir === dir)?.label ?? (dir === $sessionPicker.currentFolder ? $sessionPicker.currentWorkdir : dir) ?? "?";
+    return abbreviateHomePath(label);
   }
 
   function runnerFor(session) {
@@ -106,7 +110,7 @@
   <div class="search-row">
     <select style="max-width:100%;flex:1;" bind:value={$sessionPicker.folderPath} onchange={(event) => setSessionPickerFolder(event.currentTarget.value)}>
       {#each $sessionPicker.folders as folder (folder.dir)}
-        <option value={folder.dir}>{folder.label} ({folder.count})</option>
+        <option value={folder.dir}>{abbreviateHomePath(folder.label)} ({folder.count})</option>
       {/each}
     </select>
   </div>
@@ -126,7 +130,7 @@
     }}>
       <div class="s-title">
         <span class="s-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
-        <span class="s-date">{group.first.workspaceName ? `${group.first.workspaceName} · ` : ""}{$sessionPicker.scope === "all" ? `${group.first.folderLabel} · ` : ""}{group.hits.length} hit{group.hits.length === 1 ? "" : "s"}</span>
+        <span class="s-date">{hubMode && group.first.workspaceName ? `${group.first.workspaceName} · ` : ""}{$sessionPicker.scope === "all" ? `${abbreviateHomePath(group.first.folderLabel)} · ` : ""}{group.hits.length} hit{group.hits.length === 1 ? "" : "s"}</span>
       </div>
       {#each group.hits.slice(0, 3) as hit, index}
         <div class="s-snippet" data-hit-index={index}>
@@ -164,7 +168,7 @@
       <summary>Other folders ({otherFolders.length})</summary>
       {#each otherFolders as folder (folder.dir)}
         <details class="s-folder" ontoggle={(event) => { if (event.currentTarget.open) loadPickedSessionFolder(folder); }}>
-          <summary><FolderIcon size={13} /> {folder.label} ({folder.count})</summary>
+          <summary><FolderIcon size={13} /> {abbreviateHomePath(folder.label)} ({folder.count})</summary>
           {#if $sessionPicker.loadingFolders[folder.dir]}
             <div class="m-path"><span class="spin"></span> loading…</div>
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
@@ -190,7 +194,7 @@
       <div class="s-title">
         <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
         <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
-        <span class="s-date">{session.workspaceName ? `${session.workspaceName} · ` : ""}{fmtSessionDate(session.modifiedAt)} · {session.messageCount} msgs</span>
+        <span class="s-date">{hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}{fmtSessionDate(session.modifiedAt)} · {session.messageCount} msgs</span>
       </div>
       {#if session.name && session.preview}
         <div class="s-preview">{session.preview}</div>

@@ -39,6 +39,13 @@ test("API-key controller owns loading and safe provider state", async () => {
   assert.equal(item.calls[0].path, "/api-keys");
 });
 
+test("quiet credential loading distinguishes a scoped request failure from an empty store", async () => {
+  const item = harness([response(400, { error: "workspace is required" })]);
+  assert.equal(await item.controller.load({ quiet: true }), null);
+  assert.deepEqual(item.states, [{ loading: false, error: "workspace is required" }]);
+  assert.deepEqual(item.toasts, []);
+});
+
 test("API-key controller confirms replacement, restarts, refreshes, and never publishes the key", async () => {
   const stored = [{ provider: "openai", displayName: "OpenAI", credentialType: "api_key", source: "stored_api_key" }];
   const item = harness([
