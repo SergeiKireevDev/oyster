@@ -27,7 +27,7 @@ export function composerUiState(session, text) {
           ? "loading canonical transcript…"
           : gated
             ? "loading transcript…"
-            : "message",
+            : "Message Agent",
     sendText: busy ? "Steer" : "Send",
     sendHidden: busy && !hasText,
     stopHidden: !busy,
