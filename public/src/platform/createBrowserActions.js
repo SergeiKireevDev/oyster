@@ -1,3 +1,5 @@
+import { getActiveWorkspace, isHubRuntime } from "../runtime/workspaceScope.js";
+
 /** Browser effects shared by UI components and runtime features. */
 export function createBrowserActions({ windowTarget }) {
   if (!windowTarget?.open) throw new TypeError("windowTarget.open is required");
@@ -8,8 +10,10 @@ export function createBrowserActions({ windowTarget }) {
     },
     fileDownload(token, path) {
       const normalizedPath = String(path ?? "");
+      const workspace = isHubRuntime() ? getActiveWorkspace(windowTarget.localStorage) : null;
+      const workspaceQuery = workspace ? `&workspace=${encodeURIComponent(workspace)}` : "";
       return Object.freeze({
-        href: `/file-download?token=${encodeURIComponent(token ?? "")}&path=${encodeURIComponent(normalizedPath)}`,
+        href: `/file-download?token=${encodeURIComponent(token ?? "")}&path=${encodeURIComponent(normalizedPath)}${workspaceQuery}`,
         filename: normalizedPath.split("/").pop() || "download",
       });
     },

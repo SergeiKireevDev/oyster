@@ -37,6 +37,14 @@ function argValue(name) {
   return i !== -1 && i + 1 < process.argv.length ? process.argv[i + 1] : undefined;
 }
 
+function envFlag(name) {
+  const value = process.env[name];
+  if (value == null || value === "") return false;
+  if (["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase())) return true;
+  if (["0", "false", "no", "off"].includes(String(value).trim().toLowerCase())) return false;
+  throw new Error(`${name} must be one of: 1, true, yes, on, 0, false, no, off`);
+}
+
 function defaultToken() {
   const tokenFile = join(PROJECT_ROOT, ".ui-token");
   if (existsSync(tokenFile)) {
@@ -125,6 +133,7 @@ const config = {
     ? join(resolve(sessionDirIndex >= 0 && piExtraArgs[sessionDirIndex + 1] ? piExtraArgs[sessionDirIndex + 1] : agentDir), "sessions.sqlite")
     : null,
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
+  UNAUTHENTICATED: process.argv.includes("--unauthenticated") || envFlag("PI_UI_UNAUTHENTICATED"),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
   DIRNAME: PROJECT_ROOT,
 };
@@ -139,6 +148,7 @@ if (process.argv.includes("--check-config")) {
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.PI_UI_DB_PATH,
+    unauthenticated: config.UNAUTHENTICATED,
     node: process.versions.node,
   }));
   process.exit(0);
@@ -284,8 +294,13 @@ server.listen(config.PORT, config.HOST, () => {
   console.log(`[pi-ui] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);
   if (interruptedRoutineRunCount) console.log(`[pi-ui] reconciled ${interruptedRoutineRunCount} interrupted routine run(s)`);
   console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
-  console.log(`[pi-ui] auth token: ${config.TOKEN}`);
-  console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
+  if (config.UNAUTHENTICATED) {
+    console.warn("[pi-ui] WARNING: authentication is DISABLED; every client that can reach Oyster has full workspace and agent access");
+    console.log(`[pi-ui] open: http://localhost:${config.PORT}/`);
+  } else {
+    console.log(`[pi-ui] auth token: ${config.TOKEN}`);
+    console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
+  }
   console.log(`[pi-ui] hot reload: watching server/app.mjs, server/http/, dist/`);
   app.startPi();
 });

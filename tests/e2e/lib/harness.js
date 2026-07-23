@@ -204,8 +204,7 @@ export async function forceNewSession(page) {
   if (mobile) {
     for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) await swipe(page, "right");
   }
-  await page.locator("#sessions .session-sidebar-workspace-create").first().click();
-  await page.getByRole("button", { name: "Start session here" }).click();
+  await page.locator("#newSessionHere").click();
   // wait for the id to flip to something new (or null on a truly fresh one)
   await page.waitForFunction(
     (b) => {

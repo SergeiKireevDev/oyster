@@ -16,6 +16,7 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.PI_BIN;
   delete childEnv.PI_CODING_AGENT_DIR;
   delete childEnv.PI_UI_DB_PATH;
+  delete childEnv.PI_UI_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
   Object.assign(childEnv, env);
   const result = spawnSync(process.execPath, [SERVER.pathname, "--check-config", ...args], {
@@ -65,6 +66,20 @@ test("SQLite database follows the configured agent or session directory", () => 
   assert.equal(JSON.parse(result.stdout).sqlitePath, join(sessionDir, "sessions.sqlite"));
 });
 
+test("configuration keeps auth enabled by default and accepts explicit unauthenticated spoke mode", () => {
+  let result = checkConfig({ args: ["--pi", process.execPath] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).unauthenticated, false);
+
+  result = checkConfig({ args: ["--pi", process.execPath, "--unauthenticated"] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).unauthenticated, true);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_UNAUTHENTICATED: "true" } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).unauthenticated, true);
+});
+
 test("application database accepts an independent PI_UI_DB_PATH", () => {
   const appDbPath = join(tmpdir(), "custom-oyster", "app.sqlite");
   const result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_DB_PATH: appDbPath } });
@@ -76,6 +91,10 @@ test("configuration rejects invalid stores and missing executables", () => {
   let result = checkConfig({ args: ["--pi", process.execPath], env: { PERSISTENT_STORE: "memory" } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Invalid PERSISTENT_STORE.*jsonl.*sqlite/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_UNAUTHENTICATED: "sometimes" } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PI_UI_UNAUTHENTICATED must be one of/);
 
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);

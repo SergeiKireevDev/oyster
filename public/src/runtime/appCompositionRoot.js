@@ -234,6 +234,7 @@ const sessionAssembly = createSessionAssembly({
   },
   open: {
     open: (options) => openSession(fetch, options),
+    onOpened: (runner) => setActiveWorkspace(runner?.workspaceId, localStorage),
     getCurrentRunner: () => getCurrentRunner(),
     getRunners: () => getRunners(),
     preview: null,
@@ -530,7 +531,7 @@ const resourceAssembly = createResourceAssembly({
     setCreating: (creating) => updateHublotManager({ creating }),
     close: closeModal,
     toast: addToast,
-    listHublots: async () => { const res = await fetch("/tunnels"); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.error || `failed (${res.status})`); return data.tunnels ?? []; },
+    listHublots: () => listHublots(fetch),
     listSidebarHublots: (visible) => listHublots(fetch, visible),
     isAuthenticated: () => Boolean(token),
     setSidebarLoading: hublotsLoading.set,

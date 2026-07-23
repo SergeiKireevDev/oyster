@@ -1,3 +1,5 @@
+import { getActiveWorkspace, isHubRuntime } from "./workspaceScope.js";
+
 /** Create the authenticated EventSource used by the live Pi event stream. */
 /** Decide whether a replay-gated transcript event should be buffered or dispatched. */
 const LIFECYCLE_LOGGED_EVENT_TYPES = new Set(["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"]);
@@ -136,6 +138,8 @@ export function closeEventStream(source) {
 }
 
 export function openEventStream({ token, runner, replay, EventSourceImpl = EventSource }) {
-  const url = `/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}`;
+  const workspace = isHubRuntime() ? getActiveWorkspace() : null;
+  const workspaceQuery = workspace ? `&workspace=${encodeURIComponent(workspace)}` : "";
+  const url = `/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}${workspaceQuery}`;
   return new EventSourceImpl(url);
 }

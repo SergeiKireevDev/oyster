@@ -142,6 +142,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
   }
 
   function checkAuth(req, url) {
+    if (config.UNAUTHENTICATED) return "ok";
     const ip = clientIp(req);
     if (recentAuthFailures(ip).length >= AUTH_FAIL_MAX) return "throttled";
     const candidates = authCandidates(req, url);

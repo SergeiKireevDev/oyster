@@ -3,6 +3,7 @@
   import { appHeader } from "../stores/appSession.js";
   import { menuOpen } from "../stores/ui.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { isHubRuntime } from "../runtime/workspaceScope.js";
   import {
     HEADER_CHOOSE_MODEL_ACTION,
     HEADER_CYCLE_THINKING_ACTION,
@@ -11,6 +12,7 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
+  const hubMode = isHubRuntime();
 
   function toggleMenu(event) {
     event.stopPropagation();
@@ -19,7 +21,7 @@
 </script>
 
 <header>
-  <div class="brand-mark" aria-hidden="true"><img src={oysterIcon} alt="" /></div>
+  <div class="brand-mark" class:hub-mode={hubMode} aria-hidden="true"><img src={oysterIcon} alt="" /></div>
   <div class="header-context">
     <span class="title" id="sessionTitle">{$appHeader.sessionTitle}</span>
   </div>

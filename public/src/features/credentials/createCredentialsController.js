@@ -89,10 +89,10 @@ export function createCredentialsController({
       publish({ providers, loading: false, error: "" });
       return providers;
     } catch (error) {
-      if (error.name === "AbortError" || tornDown) return providers;
+      if (error.name === "AbortError" || tornDown) return quiet ? null : providers;
       publish({ loading: false, error: error.message });
       if (!quiet) notify("Could not load credential status", "error");
-      return providers;
+      return quiet ? null : providers;
     }
   }
 
@@ -148,7 +148,7 @@ export function createCredentialsController({
       publish({ loading: false, error: "", lastRestart: data.restart ?? null });
       notify(data.restart?.status === "restarted" ? "API key removed from pi; pi restarted" : "API key removed; check pi restart status");
       const refreshed = await load({ quiet: true });
-      const fallback = refreshed.find((item) => item.provider === provider)?.source;
+      const fallback = refreshed?.find((item) => item.provider === provider)?.source;
       if (fallback && fallback !== "not_configured") notify(`pi may still authenticate ${name} using ${fallback === "models_json" ? "models.json" : fallback}`);
       return { ok: true, restart: data.restart ?? null };
     } catch (error) {

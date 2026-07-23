@@ -14,6 +14,7 @@ no network model calls, fully deterministic**.
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; autocomplete composer paths and fall back to the file explorer for large result sets. |
 | `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container on its isolated agent volume, verify picker/search/transcript resume and no JSONL files, then toggle SQLite → JSONL → SQLite and prove both stores remain intact. |
 | `transcript-rendering.spec.js` | Verify agent display math renders through KaTeX and completed historical SQLite tool calls remain completed after tail-first transcript reload. |
+| `hub.spec.js` | Start the ordinary isolated Docker spoke plus a temporary Hub process, connect through the Hub interface with one shared token file, and verify workspace-scoped mobile session creation. |
 
 ## Prerequisites
 
@@ -53,7 +54,9 @@ npm test
 ```
 
 Each test starts a throwaway container and isolated agent volume on an allocated
-port. Both are removed on teardown.
+port. Both are removed on teardown. The Hub spec additionally starts a temporary
+Hub on a free host port; its mock driver points at that test's real Docker spoke,
+and both interfaces read the same test token.
 
 ### Config (env)
 

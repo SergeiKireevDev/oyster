@@ -11,6 +11,7 @@ Flags take precedence over their corresponding environment variables.
 | `--port` | `PORT` | `8080` | HTTP port |
 | `--host` | `HOST` | `0.0.0.0` | Bind address |
 | `--token` | `PI_UI_TOKEN` | `.ui-token`, then random | API bearer token |
+| `--unauthenticated` | `PI_UI_UNAUTHENTICATED` | disabled | Disable Oyster's token check when an authenticated outer proxy is the security boundary |
 | `--dir` | `PI_DIR` | current directory | Initial agent workspace |
 | `--pi` | `PI_BIN` | local development CLI | pi executable |
 | `--pi-args` | `PI_ARGS` | empty | Extra `pi --mode rpc` arguments |
@@ -18,6 +19,8 @@ Flags take precedence over their corresponding environment variables.
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
 | — | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi-owned data directory |
 | — | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | Oyster application database |
+
+Environment and workspace selection belong to Oyster Hub. A direct spoke runs inside one llmbox microVM, so its session sidebar begins at working-directory categories.
 
 Check startup configuration without serving HTTP:
 
@@ -38,6 +41,15 @@ Changing `PERSISTENT_STORE` selects a session backend; it does not migrate or de
 Browser presentation settings—such as thinking visibility and carousel position—remain device-local. Authentication values are never stored as general application settings.
 
 ## Authentication
+
+Authentication is required by default. For an Oyster instance running exclusively behind an authenticated llmbox workspace proxy, it can be explicitly disabled:
+
+```bash
+node server/server.mjs --unauthenticated
+# or: PI_UI_UNAUTHENTICATED=true node server/server.mjs
+```
+
+This affects only that Oyster instance; it does not disable authentication on Oyster Hub or llmbox. Startup prints a prominent warning. Never expose an unauthenticated Oyster listener directly: any reachable client can control the agent, credentials, files, routines, and hublots.
 
 Authentication does not replace transport security. Remote clients must connect over HTTPS with valid TLS; see [Security](/getting-started/security/). Bind the Node server to loopback when a same-host TLS proxy or tunnel is the only entry point.
 

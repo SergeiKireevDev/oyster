@@ -1,5 +1,7 @@
-export async function listHublots(fetchImpl, visible) {
-  const res = await fetchImpl("/tunnels");
+export async function listHublots(fetchImpl, visible = () => true) {
+  // The Hub aggregates this request across workspaces; a standalone Oyster
+  // ignores the routing hint and returns its local hublots as before.
+  const res = await fetchImpl("/tunnels?all=1");
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `tunnels failed (${res.status})`);
   return (data.tunnels ?? []).filter(visible);

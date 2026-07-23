@@ -138,8 +138,10 @@ test("session actions open a runner with normalized server errors", async () => 
 test("session open controller previews resumed sessions and marks new runners empty", async () => {
   const previews = [];
   const empty = [];
+  const opened = [];
   const open = createSessionOpenController({
-    open: async (options) => ({ id: options.sessionPath ? "resumed" : "new" }),
+    open: async (options) => ({ id: options.sessionPath ? "resumed" : "new", workspaceId: "workspace-a" }),
+    onOpened: (runner) => opened.push(runner),
     getCurrentRunner: () => "current",
     getRunners: () => [{ id: "current", sessionFile: "/current.jsonl" }],
     preview: { begin: (path) => previews.push(path) },
@@ -149,6 +151,7 @@ test("session open controller previews resumed sessions and marks new runners em
   await open({});
   assert.deepEqual(previews, ["/other.jsonl"]);
   assert.deepEqual(empty, ["new"]);
+  assert.deepEqual(opened.map(({ id, workspaceId }) => [id, workspaceId]), [["resumed", "workspace-a"], ["new", "workspace-a"]]);
 });
 
 test("search hit controller reloads a runner already selected before focusing", async () => {

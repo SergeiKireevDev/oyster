@@ -1,0 +1,20 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "token": "replace-with-a-hub-bearer-token",
+  "timeoutMs": 5000,
+  "driver": {
+    "type": "llmbox",
+    "endpoint": "http://127.0.0.1:8080",
+    "token": "lbx_replace-with-an-llmbox-api-key",
+    "tokenSecret": "replace-with-a-stable-random-workspace-token-secret",
+    "workspacePort": 8080,
+    "createProxy": true,
+    "tokenFile": {
+      "path": "/run/secrets/oyster-ui-token",
+      "mode": 384,
+      "uid": 0,
+      "gid": 0
+    }
+  }
+}

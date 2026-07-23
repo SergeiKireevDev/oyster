@@ -5,6 +5,7 @@
 
 import { execSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -55,7 +56,22 @@ async function reachable() {
 
 function imageExists(image) { try { return !!sh(`docker images -q ${image}`); } catch { return false; } }
 
-function allocatePort() {
+function claimLock(file) {
+  const fd = openSync(file, "wx");
+  try { writeFileSync(fd, `${process.pid}\n`); }
+  finally { closeSync(fd); }
+}
+
+function portAvailable(port) {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.unref();
+    probe.once("error", () => resolve(false));
+    probe.listen(port, "0.0.0.0", () => probe.close(() => resolve(true)));
+  });
+}
+
+async function allocatePort() {
   mkdirSync(LOCK_DIR, { recursive: true });
   const preferred = Number(process.env.TEST_PARALLEL_INDEX ?? process.env.TEST_WORKER_INDEX ?? 0);
   const ports = [];
@@ -64,41 +80,33 @@ function allocatePort() {
 
   for (const port of ports) {
     const file = join(LOCK_DIR, `${port}.lock`);
+    const staleContainer = `oyster-e2e-${port}`;
+    let claimed = false;
     try {
-      const fd = openSync(file, "wx");
-      closeSync(fd);
-      writeFileSync(file, `${process.pid}\n`);
-      allocatedPort = port;
-      lockFile = file;
-      container = `oyster-e2e-${port}`;
-      agentVolume = `oyster-e2e-agent-${port}`;
-      base = `http://localhost:${port}`;
-      process.env.PI_UI_URL = base;
-      process.env.PI_UI_CONTAINER = container;
-      process.env.PI_UI_TOKEN = TOKEN;
-      return;
+      claimLock(file);
+      claimed = true;
     } catch {
       // If a previous crashed run left a lock behind but no matching container
       // exists, reclaim it. Otherwise leave it for the active parallel test.
-      const staleContainer = `oyster-e2e-${port}`;
       if (!lockOwnerAlive(file) && !running(staleContainer)) {
         try { rmSync(file, { force: true }); } catch {}
-        try {
-          const fd = openSync(file, "wx");
-          closeSync(fd);
-          writeFileSync(file, `${process.pid}\n`);
-          allocatedPort = port;
-          lockFile = file;
-          container = staleContainer;
-          agentVolume = `oyster-e2e-agent-${port}`;
-          base = `http://localhost:${port}`;
-          process.env.PI_UI_URL = base;
-          process.env.PI_UI_CONTAINER = container;
-          process.env.PI_UI_TOKEN = TOKEN;
-          return;
-        } catch {}
+        try { claimLock(file); claimed = true; } catch {}
       }
     }
+    if (!claimed) continue;
+    if (!(await portAvailable(port))) {
+      rmSync(file, { force: true });
+      continue;
+    }
+    allocatedPort = port;
+    lockFile = file;
+    container = staleContainer;
+    agentVolume = `oyster-e2e-agent-${port}`;
+    base = `http://localhost:${port}`;
+    process.env.PI_UI_URL = base;
+    process.env.PI_UI_CONTAINER = container;
+    process.env.PI_UI_TOKEN = TOKEN;
+    return;
   }
   throw new Error(`no free e2e ports in ${PORT_MIN}..${PORT_MAX}`);
 }
@@ -127,7 +135,7 @@ function startContainer() {
 export async function ensureContainer({ sqlite = false } = {}) {
   selectedImage = sqlite ? SQLITE_IMAGE : DEFAULT_IMAGE;
   selectedStore = sqlite ? "sqlite" : "jsonl";
-  if (allocatedPort == null) allocatePort();
+  if (allocatedPort == null) await allocatePort();
   if (running(container) && (await reachable())) return;
 
   try { sh(`docker rm -f ${container}`); } catch {}

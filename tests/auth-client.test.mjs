@@ -1,8 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { clearAuthToken, createUnauthorizedHandler, installAuthenticatedFetch, showAuthGate } from "../public/src/runtime/authClient.js";
+import { clearAuthToken, createUnauthorizedHandler, initializeAuth, installAuthenticatedFetch, showAuthGate, UNAUTHENTICATED_CLIENT_TOKEN } from "../public/src/runtime/authClient.js";
 import { AUTH_TOKEN_KEY, createAuthBrowserService } from "../public/src/runtime/authBrowserService.js";
+
+test("explicit server runtime config boots the client without persisting an authentication token", () => {
+  const storage = {
+    getItem: () => assert.fail("must not read token storage"),
+    setItem: () => assert.fail("must not write token storage"),
+  };
+  const token = initializeAuth({
+    runtimeConfig: { unauthenticated: true },
+    locationTarget: { hash: "", search: "", pathname: "/" },
+    historyTarget: { replaceState: () => assert.fail("must not rewrite history") },
+    storage,
+    documentTarget: {},
+  });
+  assert.equal(token, UNAUTHENTICATED_CLIENT_TOKEN);
+});
 
 test("authenticated fetch adapter restores the original fetch on detach", async () => {
   const calls = [];

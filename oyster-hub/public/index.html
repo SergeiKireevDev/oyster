@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Oyster Hub</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #edf7f4; background: #071311; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 10% -10%, #17483f 0, transparent 34rem), #071311; }
+    header, main { width: min(1120px, calc(100% - 32px)); margin: auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 34px 0 28px; }
+    h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); margin: 0; letter-spacing: -.04em; }
+    h1 span { color: #78e6c3; }
+    .eyebrow { color: #78e6c3; letter-spacing: .16em; text-transform: uppercase; font-size: .72rem; font-weight: 800; margin-bottom: 7px; }
+    button { border: 1px solid #397165; color: #eafff8; background: #10251f; border-radius: 10px; padding: 10px 15px; font: inherit; font-weight: 700; cursor: pointer; }
+    button:hover { background: #18362e; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .actions { display: flex; gap: 8px; }
+    .primary { background: #61d9b3; border-color: #61d9b3; color: #062019; }
+    .primary:hover { background: #83e5c7; }
+    .notice { border: 1px solid #694947; background: #251716; color: #ffc9c3; padding: 14px 16px; border-radius: 12px; margin-bottom: 20px; }
+    .hidden { display: none; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .metric { background: #0d201b; border: 1px solid #1f4038; border-radius: 14px; padding: 15px; }
+    .metric strong { display: block; font-size: 1.75rem; letter-spacing: -.05em; }
+    .metric span { display: block; margin-top: 4px; color: #8dafaa; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+    .section-title { display: flex; justify-content: space-between; align-items: baseline; margin: 24px 0 12px; }
+    .section-title h2 { margin: 0; font-size: 1.1rem; }
+    #updated { color: #718e88; font-size: .8rem; }
+    .workspaces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding-bottom: 40px; }
+    .workspace { background: linear-gradient(145deg, #10241f, #0b1b17); border: 1px solid #234a40; border-radius: 16px; padding: 18px; }
+    .workspace-head { display: flex; align-items: start; justify-content: space-between; gap: 15px; }
+    .workspace h3 { margin: 0; font-size: 1.05rem; }
+    .workspace .url { margin-top: 4px; color: #73978f; font: .75rem ui-monospace, monospace; overflow-wrap: anywhere; }
+    .status { display: inline-flex; align-items: center; gap: 6px; color: #9ab8b1; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+    .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #ff786d; box-shadow: 0 0 10px #ff786d66; }
+    .status.online::before { background: #5be3ae; box-shadow: 0 0 10px #5be3ae66; }
+    .status.provisioning::before { background: #ffc65c; box-shadow: 0 0 10px #ffc65c66; }
+    .resource-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
+    .resource { border-top: 1px solid #23433b; padding-top: 11px; }
+    .resource strong { display: block; font-size: 1.05rem; }
+    .resource span { color: #73978f; font-size: .7rem; text-transform: uppercase; }
+    .errors { margin: 14px 0 0; color: #ff9f96; font-size: .78rem; }
+    footer { color: #58736d; font-size: .75rem; padding: 0 0 30px; }
+    dialog { width: min(460px, calc(100% - 28px)); color: #edf7f4; background: #0d201b; border: 1px solid #397165; border-radius: 16px; padding: 22px; box-shadow: 0 24px 80px #000a; }
+    dialog::backdrop { background: #020907cc; backdrop-filter: blur(4px); }
+    dialog h2 { margin: 0 0 18px; }
+    form { display: grid; gap: 13px; }
+    label { display: grid; gap: 6px; color: #9ab8b1; font-size: .78rem; font-weight: 700; }
+    input { width: 100%; border: 1px solid #31594f; border-radius: 9px; padding: 10px 11px; color: #edf7f4; background: #071612; font: inherit; }
+    .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+    .form-error { color: #ff9f96; font-size: .8rem; min-height: 1em; }
+    code { color: #91d8c3; }
+    @media (max-width: 800px) { .metrics { grid-template-columns: repeat(3, 1fr); } .workspaces { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { header { align-items: end; } .metrics { grid-template-columns: repeat(2, 1fr); } .resource-grid { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><div class="eyebrow">Fleet overview</div><h1>Oyster <span>Hub</span></h1></div>
+    <div class="actions"><button id="refresh" type="button">Refresh</button><button id="new-workspace" class="primary" type="button" hidden>New workspace</button></div>
+  </header>
+  <main>
+    <div id="notice" class="notice hidden"></div>
+    <section id="metrics" class="metrics" aria-label="Fleet totals"></section>
+    <div class="section-title"><h2>Workspaces</h2><span id="updated"></span></div>
+    <section id="workspaces" class="workspaces"></section>
+    <footer>Workspaces are discovered and created through the configured driver. API: <code>/api/v1/workspaces/{wid}/…</code></footer>
+  </main>
+  <dialog id="create-dialog">
+    <h2>New workspace</h2>
+    <form id="create-form">
+      <label>Workspace ID<input name="id" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" placeholder="refactor-auth"></label>
+      <label>Name<input name="name" maxlength="500" placeholder="Optional description"></label>
+      <label>llmbox spoke<input name="spoke" maxlength="100" placeholder="Default spoke"></label>
+      <label>Disk size (GiB)<input name="diskGiB" type="number" min="1" step="1" placeholder="Spoke default"></label>
+      <div id="form-error" class="form-error"></div>
+      <div class="form-actions"><button id="cancel-create" type="button">Cancel</button><button id="submit-create" class="primary" type="submit">Create</button></div>
+    </form>
+  </dialog>
+  <script type="module">
+    const token = new URLSearchParams(location.hash.slice(1)).get("token") || sessionStorage.getItem("oyster-hub-token") || "";
+    if (token) sessionStorage.setItem("oyster-hub-token", token);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    const $ = (id) => document.getElementById(id);
+    const labels = [
+      ["online", "online"], ["provisioning", "provisioning"], ["offline", "offline"],
+      ["runningRunners", "running agents"], ["busyRunners", "busy agents"],
+      ["sessions", "sessions"], ["openHublots", "open hublots"],
+    ];
+    const resourceCount = (workspace, resource, key) => workspace.results?.[resource]?.[key]?.length ?? "—";
+    function element(name, className, text) {
+      const node = document.createElement(name); if (className) node.className = className; if (text != null) node.textContent = text; return node;
+    }
+    function render(data) {
+      $("new-workspace").hidden = data.driver?.capabilities?.create !== true;
+      $("metrics").replaceChildren(...labels.map(([key, label]) => {
+        const card = element("div", "metric"); card.append(element("strong", "", data.totals[key] ?? 0), element("span", "", label)); return card;
+      }));
+      const cards = data.workspaces.map((workspace) => {
+        const card = element("article", "workspace");
+        const head = element("div", "workspace-head");
+        const identity = element("div"); identity.append(element("h3", "", workspace.name), element("div", "url", workspace.url || "Awaiting Oyster endpoint"));
+        const latency = workspace.latencyMs == null ? "" : ` · ${workspace.latencyMs}ms`;
+        head.append(identity, element("div", `status ${workspace.status}`, `${workspace.status}${latency}`));
+        const resources = element("div", "resource-grid");
+        [["runners", "runners", "agents"], ["sessions", "sessions", "sessions"], ["routines", "routines", "routines"], ["tunnels", "tunnels", "hublots"]].forEach(([resource, key, label]) => {
+          const item = element("div", "resource"); item.append(element("strong", "", resourceCount(workspace, resource, key)), element("span", "", label)); resources.append(item);
+        });
+        card.append(head, resources);
+        if (workspace.errors) card.append(element("p", "errors", Object.entries(workspace.errors).map(([key, value]) => `${key}: ${value}`).join(" · ")));
+        return card;
+      });
+      $("workspaces").replaceChildren(...cards);
+      $("updated").textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString()}`;
+    }
+    async function refresh() {
+      $("refresh").disabled = true; $("notice").classList.add("hidden");
+      try {
+        if (!token) throw new Error("Missing hub token. Open this page with #token=YOUR_HUB_TOKEN once.");
+        const response = await fetch("/api/v1/overview", { headers: { authorization: `Bearer ${token}` } });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`); render(data);
+      } catch (error) { $("notice").textContent = error.message; $("notice").classList.remove("hidden"); }
+      finally { $("refresh").disabled = false; }
+    }
+    $("refresh").addEventListener("click", refresh);
+    $("new-workspace").addEventListener("click", () => $("create-dialog").showModal());
+    $("cancel-create").addEventListener("click", () => $("create-dialog").close());
+    $("create-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const diskGiB = Number(form.get("diskGiB") || 0);
+      const payload = { id: form.get("id"), name: form.get("name"), spoke: form.get("spoke") };
+      if (diskGiB > 0) payload.diskBytes = diskGiB * 1024 * 1024 * 1024;
+      $("submit-create").disabled = true; $("form-error").textContent = "";
+      try {
+        const response = await fetch("/api/v1/workspaces", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Creation failed (${response.status})`);
+        event.currentTarget.reset(); $("create-dialog").close(); await refresh();
+        if (data.workspace?.warning) { $("notice").textContent = data.workspace.warning; $("notice").classList.remove("hidden"); }
+      } catch (error) { $("form-error").textContent = error.message; }
+      finally { $("submit-create").disabled = false; }
+    });
+    refresh();
+  </script>
+</body>
+</html>

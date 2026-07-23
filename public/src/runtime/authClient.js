@@ -1,13 +1,28 @@
-export function initializeAuth() {
-  const hash = new URLSearchParams(location.hash.slice(1));
-  const query = new URLSearchParams(location.search);
+import { getActiveWorkspace, isHubRuntime } from "./workspaceScope.js";
+
+export const UNAUTHENTICATED_CLIENT_TOKEN = "__oyster_unauthenticated__";
+
+export function initializeAuth({
+  runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__,
+  locationTarget = location,
+  historyTarget = history,
+  storage = localStorage,
+  documentTarget = document,
+} = {}) {
+  // The marker is deliberately not persisted or sent as a cookie. It only lets
+  // token-oriented browser transports boot; the server remains authoritative
+  // about whether authentication is disabled.
+  if (runtimeConfig?.unauthenticated === true) return UNAUTHENTICATED_CLIENT_TOKEN;
+
+  const hash = new URLSearchParams(locationTarget.hash.slice(1));
+  const query = new URLSearchParams(locationTarget.search);
   const fromUrl = hash.get("token") || query.get("token");
   if (fromUrl) {
-    localStorage.setItem("pi_ui_token", fromUrl.trim());
-    history.replaceState(null, "", location.pathname);
+    storage.setItem("pi_ui_token", fromUrl.trim());
+    historyTarget.replaceState(null, "", locationTarget.pathname);
   }
-  const token = (localStorage.getItem("pi_ui_token") || "").trim() || null;
-  if (token) document.cookie = `pi_ui_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
+  const token = (storage.getItem("pi_ui_token") || "").trim() || null;
+  if (token) documentTarget.cookie = `pi_ui_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
   return token;
 }
 
@@ -72,7 +87,15 @@ export function installAuthenticatedFetch(token, { windowTarget = window } = {})
   const rawFetch = originalFetch.bind(windowTarget);
   const authenticatedFetch = (input, opts = {}) => {
     if (typeof input === "string" && input.startsWith("/") && token) {
-      opts = { ...opts, headers: { "x-auth-token": token, ...(opts.headers || {}) } };
+      const workspace = isHubRuntime() ? getActiveWorkspace(windowTarget.localStorage) : null;
+      opts = {
+        ...opts,
+        headers: {
+          "x-auth-token": token,
+          ...(workspace ? { "x-oyster-workspace": workspace } : {}),
+          ...(opts.headers || {}),
+        },
+      };
     }
     return rawFetch(input, opts);
   };

@@ -11,8 +11,28 @@ test("rpc client rejects and clears pending commands when its request fails", as
       getRunner: () => "runner", getToken: () => "token", onUnauthorized: () => {}, onPendingResume: () => {},
       setTimeoutImpl: () => "timer", clearTimeoutImpl: (timer) => cleared.push(timer),
     });
-    await assert.rejects(client.rpc({ type: "get_state" }), /rpc failed: 500/);
+    await assert.rejects(client.rpc({ type: "get_state" }), /get_state via POST \/rpc failed \(500\)/);
     assert.deepEqual(cleared, ["timer"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rpc client identifies the command and endpoint in unauthorized errors", async () => {
+  const originalFetch = globalThis.fetch;
+  let unauthorized = 0;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: "unauthorized for POST /rpc" }),
+  });
+  try {
+    const client = createRpcClient({
+      getRunner: () => "runner", getToken: () => "token", onUnauthorized: () => unauthorized++, onPendingResume: () => {},
+      setTimeoutImpl: () => "timer", clearTimeoutImpl: () => {},
+    });
+    await assert.rejects(client.rpc({ type: "get_state" }), /get_state via POST \/rpc: unauthorized for POST \/rpc/);
+    assert.equal(unauthorized, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

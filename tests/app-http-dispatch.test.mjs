@@ -85,3 +85,18 @@ test("composed dispatch keeps open routes public and authenticated routes protec
   assert.equal(authorized.status, 200);
   assert.deepEqual(JSON.parse(authorized.body), { runners: [] });
 });
+
+test("composed dispatch bypasses token checks only when the Oyster instance is explicitly unauthenticated", async () => {
+  const state = stableState();
+  state.config.UNAUTHENTICATED = true;
+  const application = await init(state);
+
+  const runners = response();
+  await application.handleRequest(request("/runners"), runners);
+  assert.equal(runners.status, 200);
+  assert.deepEqual(JSON.parse(runners.body), { runners: [] });
+
+  const credentials = response();
+  await application.handleRequest(request("/api-keys"), credentials);
+  assert.notEqual(credentials.status, 401);
+});

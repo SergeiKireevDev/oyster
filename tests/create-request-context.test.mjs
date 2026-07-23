@@ -85,6 +85,13 @@ test("token comparison and auth accept supported credentials while query auth st
   assert.equal(context.checkAuth(postBearer, new URL("http://localhost/path")), "ok");
 });
 
+test("unauthenticated mode accepts requests without credentials or auth-failure state", () => {
+  const stableState = state({ UNAUTHENTICATED: true });
+  const context = createRequestContext(stableState, { logger: { log: () => assert.fail("must not log an auth failure") } });
+  assert.equal(context.checkAuth(request("", { method: "POST", ip: "192.0.2.10" }), new URL("http://localhost/rpc")), "ok");
+  assert.equal(stableState.authFails, undefined);
+});
+
 test("auth failures are state-owned, expire by window, and throttle at the existing limit", () => {
   let currentTime = 1_000;
   const stableState = state();

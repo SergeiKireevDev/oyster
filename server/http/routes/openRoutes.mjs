@@ -12,6 +12,7 @@ function piDiagnostics(state) {
 export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFailMax = 20 }) {
   const {
     json,
+    text,
     tokenMatches,
     authCandidates,
     clientIp,
@@ -20,6 +21,17 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
   } = requestContext;
 
   return {
+    "GET /runtime-config.js": (_req, res) => {
+      text(
+        res,
+        200,
+        `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze(${JSON.stringify({
+          unauthenticated: Boolean(state.config.UNAUTHENTICATED),
+        })});\n`,
+        "text/javascript; charset=utf-8",
+      );
+    },
+
     "GET /health": (_req, res) => {
       json(res, 200, {
         ok: true,
@@ -35,6 +47,10 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
     },
 
     "GET /authcheck": (req, res, url) => {
+      if (state.config.UNAUTHENTICATED) {
+        json(res, 200, { authorized: true, unauthenticated: true });
+        return;
+      }
       const ip = clientIp(req);
       if (recentAuthFailures(ip).length >= authFailMax) {
         json(res, 429, { error: "too many auth failures — try again later" });
