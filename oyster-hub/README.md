@@ -15,10 +15,11 @@ browser / automation
         v
  Oyster Hub API  /api/v1/workspaces/{wid}/...
         |
-        +-- llmbox driver -- POST /api/v1/list-boxes
-        |                    POST /api/v1/list-proxies
-        |                    POST /api/v1/create-box
-        |                    POST /api/v1/create-proxy
+        +-- llmbox JS facade -- N-API async work
+        |                       |
+        |                    C ABI
+        |                       |
+        |                 embedded Go hub -- WebSocket --> spokes
         |
         +-- scoped proxy ----------------------> Oyster inside the box
 ```
@@ -66,19 +67,25 @@ cd /workspace/oyster
 exec node server/server.mjs --host 0.0.0.0 --port 8080 --unauthenticated
 ```
 
-Configure llmbox HTTP proxying, and mint an API key on the llmbox hub. The prototype calls workspace proxy URLs as a headless service, so llmbox's OIDC gate for proxy subdomains must be disabled or bypassed on a trusted internal route; llmbox API-key authentication still protects the box-control API. Service authentication for OIDC-gated proxy URLs is future work.
+Build the native binding once per target platform:
 
 ```sh
-llmbox-server apikey add --name oyster-hub
+npm run build:llmbox-bindings
 ```
 
-`createProxy: true` makes Oyster Hub call llmbox's idempotent `create-proxy` operation after box creation. A spoke may also publish the Oyster port itself with `--publish-port`.
+The build produces `llmbox.node` and its colocated `libllmbox.so` under `llmbox/bindings/build/`. It requires a CGo toolchain, a C++17 compiler, and Node's `node_api.h`. The addon uses N-API, while the Go shared library remains platform- and architecture-specific.
+
+The embedded Go hub still binds the `http_addr` from `llmbox.yaml`: spokes need `/spoke/connect`, and box proxy subdomains need a listener. Oyster Hub does **not** call the box-control HTTP API; list/create/proxy operations cross the async N-API → C ABI boundary in-process. The llmbox SQLite store, Go runtime, and spoke registry are opened once by `oyster-hub/server.mjs` and survive every request.
+
+The Hub calls workspace proxy URLs as a headless service, so llmbox's OIDC gate for proxy subdomains must be disabled or bypassed on a trusted internal route. Service authentication for OIDC-gated proxy URLs is future work. `createProxy: true` creates the Oyster proxy after box creation. A spoke may also publish the Oyster port itself with `--publish-port`.
 
 ## Run
 
 ```sh
+cp llmbox/llmbox.example.yaml llmbox.yaml
 cp oyster-hub/config.example.json oyster-hub/config.json
-# Fill in the hub token, llmbox endpoint/API key, and a stable random tokenSecret.
+# Set public_url/proxy settings, the Hub token, and a stable random tokenSecret.
+npm run build:llmbox-bindings
 npm run hub
 ```
 
@@ -110,8 +117,12 @@ Every non-aggregate workspace request must be explicit through a scoped identity
 {
   "driver": {
     "type": "llmbox",
-    "endpoint": "https://llmbox.example.com",
-    "token": "lbx_...",
+    "transport": "native",
+    "binding": {
+      "addonPath": "llmbox/bindings/build/llmbox.node",
+      "configPath": "llmbox.yaml",
+      "closeTimeoutMs": 5000
+    },
     "tokenSecret": "stable-random-secret",
     "workspacePort": 8080,
     "createProxy": true,
@@ -132,8 +143,8 @@ Environment overrides are available for deployment:
 | Variable | Configuration |
 |---|---|
 | `OYSTER_HUB_TOKEN` | Hub API bearer token |
-| `OYSTER_HUB_DRIVER_ENDPOINT` | llmbox API endpoint |
-| `OYSTER_HUB_DRIVER_TOKEN` | llmbox API key |
+| `OYSTER_HUB_LLMBOX_ADDON` | native `llmbox.node` path |
+| `OYSTER_HUB_LLMBOX_CONFIG` | embedded llmbox YAML config path |
 | `OYSTER_HUB_WORKSPACE_TOKEN_SECRET` | HMAC secret used to derive Oyster tokens |
 | `OYSTER_HUB_CLOUD_STATE_FILE` | Owner-only file containing cloud credentials and provision records |
 | `HOST`, `PORT` | Listener |
@@ -177,7 +188,7 @@ The hub replaces its credential with the workspace-specific derived credential b
 
 ## Prototype boundaries
 
-- The `llmbox` and read-only local `mock` drivers are implemented; `drivers/index.mjs` is the extension point.
+- The native `llmbox` and read-only local `mock` drivers are implemented; `drivers/index.mjs` is the extension point. The older llmbox HTTP transport remains available by omitting `transport: "native"` for compatibility.
 - Workspace discovery and aggregation are request-time queries with no persistent cache; optional cloud credentials and provision records use `cloud.stateFile`.
 - Cloud provisioning creates provider instances only. Bootstrap, cloud-init, Oyster installation, registration, status polling, and instance deletion are future work.
 - A newly created box is `provisioning` until llmbox exposes its configured Oyster port.

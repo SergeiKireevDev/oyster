@@ -53,6 +53,8 @@ function validateMockDriver(input, env) {
 }
 
 function validateLlmboxDriver(input, env, timeoutMs) {
+  const transport = String(input.transport || "http").trim().toLowerCase();
+  if (!["http", "native"].includes(transport)) throw new Error("driver.transport must be http or native");
   const workspacePort = Number(input.workspacePort ?? 8080);
   if (!Number.isInteger(workspacePort) || workspacePort < 1 || workspacePort > 65535) {
     throw new Error("driver.workspacePort must be between 1 and 65535");
@@ -63,10 +65,8 @@ function validateLlmboxDriver(input, env, timeoutMs) {
   const mode = nonNegativeInteger(tokenFile.mode, "driver.tokenFile.mode", 0o600);
   if (mode > 0o777) throw new Error("driver.tokenFile.mode must be at most 511 (0777)");
 
-  return Object.freeze({
+  const shared = {
     type: "llmbox",
-    endpoint: httpUrl(env.OYSTER_HUB_DRIVER_ENDPOINT || input.endpoint, "driver.endpoint"),
-    token: requireString(env.OYSTER_HUB_DRIVER_TOKEN || input.token, "driver.token"),
     tokenSecret: requireString(env.OYSTER_HUB_WORKSPACE_TOKEN_SECRET || input.tokenSecret, "driver.tokenSecret"),
     timeoutMs,
     workspacePort,
@@ -76,6 +76,29 @@ function validateLlmboxDriver(input, env, timeoutMs) {
       mode,
       uid: nonNegativeInteger(tokenFile.uid, "driver.tokenFile.uid", 0),
       gid: nonNegativeInteger(tokenFile.gid, "driver.tokenFile.gid", 0),
+    }),
+  };
+  if (transport === "http") {
+    return Object.freeze({
+      ...shared,
+      endpoint: httpUrl(env.OYSTER_HUB_DRIVER_ENDPOINT || input.endpoint, "driver.endpoint"),
+      token: requireString(env.OYSTER_HUB_DRIVER_TOKEN || input.token, "driver.token"),
+    });
+  }
+  const binding = input.binding || {};
+  const closeTimeoutMs = Number(binding.closeTimeoutMs ?? 5000);
+  if (!Number.isInteger(closeTimeoutMs) || closeTimeoutMs < 100 || closeTimeoutMs > 120000) {
+    throw new Error("driver.binding.closeTimeoutMs must be between 100 and 120000");
+  }
+  return Object.freeze({
+    ...shared,
+    transport: "native",
+    endpoint: "native://embedded-llmbox",
+    binding: Object.freeze({
+      addonPath: resolve(env.OYSTER_HUB_LLMBOX_ADDON || binding.addonPath || "llmbox/bindings/build/llmbox.node"),
+      configPath: resolve(env.OYSTER_HUB_LLMBOX_CONFIG || binding.configPath || "llmbox.yaml"),
+      timeoutMs,
+      closeTimeoutMs,
     }),
   });
 }
