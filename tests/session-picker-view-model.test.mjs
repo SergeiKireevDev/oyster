@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   groupRunnersByCwd,
+  groupSessionCwdsByHierarchy,
+  groupSessionSearchByHierarchy,
   groupSessionsByCwd,
   groupSessionFamilies,
   isSessionEntryArchived,
@@ -77,6 +79,62 @@ const sessions = [
   { path: "/nested.jsonl", parentSession: "/fork.jsonl", name: "nested" },
   { path: "/standalone.jsonl", name: "standalone" },
 ];
+
+test("session sidebar keeps identical working directories scoped by workspace", () => {
+  const sessions = [
+    { sessionKey: "ps1_alpha", cwd: "/work", workspaceId: "alpha", workspaceName: "Alpha" },
+    { sessionKey: "ps1_beta", cwd: "/work", workspaceId: "beta", workspaceName: "Beta" },
+  ];
+  assert.deepEqual(groupSessionsByCwd(sessions, []), [
+    { cwd: "/work", workspaceId: "alpha", workspaceName: "Alpha", entries: [{ session: sessions[0], runner: null }] },
+    { cwd: "/work", workspaceId: "beta", workspaceName: "Beta", entries: [{ session: sessions[1], runner: null }] },
+  ]);
+});
+
+test("Hub session search nests results by environment and microVM workspace", () => {
+  const groups = [
+    { sessionKey: "alpha-1", first: { environmentId: "edge-1", environmentName: "Edge 1", workspaceId: "alpha", workspaceName: "Alpha" } },
+    { sessionKey: "beta-1", first: { environmentId: "edge-2", environmentName: "Edge 2", workspaceId: "beta", workspaceName: "Beta" } },
+    { sessionKey: "alpha-2", first: { environmentId: "edge-1", environmentName: "Edge 1", workspaceId: "alpha", workspaceName: "Alpha" } },
+  ];
+  assert.deepEqual(groupSessionSearchByHierarchy(groups), [
+    { environmentId: "edge-1", environmentName: "Edge 1", workspaces: [
+      { workspaceId: "alpha", workspaceName: "Alpha", groups: [groups[0], groups[2]] },
+    ] },
+    { environmentId: "edge-2", environmentName: "Edge 2", workspaces: [
+      { workspaceId: "beta", workspaceName: "Beta", groups: [groups[1]] },
+    ] },
+  ]);
+});
+
+test("Hub session sidebar keeps cwd categories below environment and workspace", () => {
+  const recentAlpha = { session: { id: "a" }, runner: null };
+  const recentBeta = { session: { id: "b" }, runner: null };
+  const oldAlpha = { session: { id: "old-a" }, runner: null };
+  const groups = [
+    { cwd: "/srv/alpha/project", environmentId: "edge-1", environmentName: "Edge 1", workspaceId: "alpha", workspaceName: "Alpha", entries: [recentAlpha], archived: false },
+    { cwd: "/srv/beta/project", environmentId: "edge-1", environmentName: "Edge 1", workspaceId: "beta", workspaceName: "Beta", entries: [recentBeta], archived: false },
+    { cwd: "/srv/alpha/archive", environmentId: "edge-1", environmentName: "Edge 1", workspaceId: "alpha", workspaceName: "Alpha", entries: [oldAlpha], archived: true },
+  ];
+  assert.deepEqual(groupSessionCwdsByHierarchy(groups), [{
+    environmentId: "edge-1",
+    environmentName: "Edge 1",
+    workspaces: [
+      {
+        workspaceId: "alpha", workspaceName: "Alpha",
+        recentGroups: [groups[0]],
+        archivedGroups: [groups[2]],
+        archivedCount: 1,
+      },
+      {
+        workspaceId: "beta", workspaceName: "Beta",
+        recentGroups: [groups[1]],
+        archivedGroups: [],
+        archivedCount: 0,
+      },
+    ],
+  }]);
+});
 
 test("session picker groups nested forks under their root in input order", () => {
   assert.deepEqual(groupSessionFamilies(sessions), [

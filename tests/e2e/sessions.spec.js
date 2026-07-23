@@ -35,7 +35,9 @@ async function newSession(page) {
     const url = new URL(request.url());
     return url.pathname === "/events" && url.searchParams.get("replay") === "0";
   });
-  await page.locator("#newSessionHere").click();
+  await page.locator("#sessions .session-sidebar-workspace-create").first().click();
+  await expect(page.locator("#mTitle")).toContainText("New session in");
+  await page.getByRole("button", { name: "Start session here" }).click();
   const [response, eventRequest] = await Promise.all([opened, connected]);
   expect(response.ok()).toBe(true);
   const { runner } = await response.json();
@@ -58,15 +60,17 @@ function sidebarEntry(page, token) {
   return page.locator("#sessions .session-sidebar-entry", { hasText: token });
 }
 
-async function openCwdSection(section) {
-  await expect(section).toHaveCount(1, { timeout: 10000 });
-  if ((await section.getAttribute("open")) === null) await section.locator(":scope > summary").click();
+async function openDetails(details) {
+  if (await details.count() && (await details.getAttribute("open")) === null) {
+    await details.locator(":scope > summary").click();
+  }
 }
 
 async function revealSidebarEntry(page, token) {
   const row = sidebarEntry(page, token);
   await expect(row).toHaveCount(1, { timeout: 10000 });
-  await openCwdSection(row.locator("xpath=ancestor::details[1]"));
+  await openDetails(row.locator("xpath=ancestor::details[contains(@class, 'session-sidebar-archive')][1]"));
+  await openDetails(row.locator("xpath=ancestor::details[contains(@class, 'session-sidebar-cwd')][1]"));
   await expect(row).toBeVisible({ timeout: 10000 });
   return row;
 }
@@ -74,7 +78,7 @@ async function revealSidebarEntry(page, token) {
 async function newSessionInFolder(page, folderName) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
-  await page.locator("#newSessionFolder").click();
+  await page.locator("#sessions .session-sidebar-workspace-create").first().click();
   await expect(page.locator("#mTitle")).toHaveText("New session in folder");
   await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
   await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);
@@ -188,11 +192,11 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await swipe(page, "right");
     }
     await expect(page.locator("#sessions")).toBeVisible();
-    const cwdGroup = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: "workspace" }) });
-    await expect(cwdGroup.locator(".session-sidebar-count")).toHaveText("2");
-    await cwdGroup.locator("summary").click();
-    await expect(cwdGroup.locator(".session-sidebar-row").first()).toBeHidden();
-    await cwdGroup.locator("summary").click();
+    const workspace = page.locator("#sessions .session-sidebar-workspace-container").first();
+    await expect(workspace.locator(".session-sidebar-workspace-heading")).toContainText("This workspace");
+    const cwdCategory = workspace.locator(".session-sidebar-cwd", { has: page.locator("summary", { hasText: "/workspace" }) });
+    await expect(cwdCategory.locator(".session-sidebar-count")).toHaveText("2");
+    await expect(cwdCategory.locator(".session-sidebar-entry")).toHaveCount(2);
     const first = page.locator("#sessions .session-sidebar-row", { hasText: A });
     await expect(first).toBeVisible({ timeout: 15000 });
     await page.locator("#sessions .session-sidebar-search").fill(A);
@@ -326,9 +330,12 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       message: `Do not use any tools. Reply with exactly the word ${C}.`,
     });
     expect(prompted.status, prompted.json.error).toBe(202);
-    const cGroup = page.locator("#sessions .session-sidebar-cwd", { has: page.locator("summary", { hasText: folderC }) });
+    const cGroup = page.locator("#sessions .session-sidebar-cwd", {
+      has: page.locator("summary", { hasText: `/workspace/${folderC}` }),
+    });
+    await expect(cGroup).toHaveCount(1, { timeout: 15000 });
+    await openDetails(cGroup);
     const cEntry = cGroup.locator(".session-sidebar-entry");
-    await openCwdSection(cGroup);
     await expect(cEntry).toBeVisible({ timeout: 15000 });
 
     // Stopped sessions wait for the archive retention window while unrelated
