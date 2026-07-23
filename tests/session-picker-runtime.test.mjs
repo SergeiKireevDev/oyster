@@ -56,7 +56,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
     getRunners: () => [],
     toast: (message) => toasts.push(message),
     createSessionInCwd: async (cwd) => created.push(["cwd", cwd]),
-    showFolderBrowser: async () => created.push(["folder"]),
+    showFolderBrowser: async (workspace) => created.push(["folder", workspace]),
     stopRunner: async () => {},
     archiveSession: async (sessionKey, value) => { archived.push([sessionKey, value]); },
     removeSession: async () => ({}),
@@ -102,10 +102,11 @@ test("session picker runtime owns picker actions and search-hit construction", a
     actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
   ].sort());
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_CWD_ACTION)("/workspace/project");
-  await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)();
+  const workspace = { id: "workspace-one", name: "Workspace one" };
+  await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)(workspace);
   await registered.get(actionNames.SESSION_PICKER_ARCHIVE_ACTION)({ sessionKey: "ps1_archive" });
   await registered.get(actionNames.SESSION_SWITCH_RUNNER_ACTION)("runner-current");
-  assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder"]]);
+  assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder", workspace]]);
   assert.deepEqual(switched, ["runner-current"]);
   assert.deepEqual(archived, [["ps1_archive", true]]);
   assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived"]);
@@ -154,17 +155,39 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_STOP_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_ARCHIVE_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_DELETE_ACTION/);
-  assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION/);
   assert.match(source, /uiActions\.invoke\(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION/);
   assert.match(source, /session-sidebar-snippet/);
-  assert.match(source, /if \(!initializedCwdExpansion && currentCwd\)/);
-  assert.match(source, /open=\{expandedCwds\.has\(cwdExpansionKey\(group\)\)\}/);
-  assert.doesNotMatch(source, /group\.cwd === currentCwd \|\| expandedCwds/);
-  assert.match(source, /ontoggle=\{\(event\) => setCwdExpanded\(cwdExpansionKey\(group\), event\.currentTarget\.open\)\}/);
   assert.match(source, /partitionSessionGroupsByArchive/);
+  assert.match(source, /groupSessionCwdsByHierarchy\(sessionGroups, hierarchyDefaults\)/);
+  assert.match(source, /groupSessionSearchByHierarchy\(\$sessionPicker\.searchResults, hierarchyDefaults\)/);
+  assert.match(source, /session-sidebar-environment-selector/);
+  assert.doesNotMatch(source, /id="newSessionHere"|id="newSessionFolder"/);
+  assert.match(source, /listEnvironments\(\)/);
+  assert.match(source, /listOnlineWorkspaces\(\)/);
+  assert.match(source, /<select\s+aria-label="Environment"/);
+  assert.match(source, /preferredEnvironmentId\(environmentOptions\)/);
+  assert.match(source, /options\.find\(\(environment\) => isLocalEnvironment/);
+  assert.match(source, /options\.find\(\(environment\) => environment\.local\)/);
+  assert.match(source, /availableWorkspaceIds/);
+  assert.match(source, /visibleSessionEnvironments = availableWorkspaceIds/);
+  assert.match(source, /availableEnvironmentView\(sessionEnvironmentsForView, selectedEnvironmentId, availableWorkspaces\)/);
+  assert.match(source, /session-sidebar-workspace-empty/);
+  assert.match(source, /visibleSearchEnvironments = filterEnvironmentWorkspaces/);
+  assert.match(source, /session-sidebar-workspace-container/);
+  assert.match(source, /session-sidebar-cwd-label/);
+  assert.match(source, /workspace\.recentGroups/);
+  assert.match(source, /<details class="session-sidebar-archive">/);
+  assert.match(source, /workspace\.archivedGroups/);
+  assert.doesNotMatch(source, /<details class="session-sidebar-archive"\s+open/);
   assert.match(source, /session-archive-divider/);
-  assert.match(source, /id="newSessionHere"/);
-  assert.match(source, /id="newSessionFolder"/);
+  assert.match(source, /session-sidebar-workspace-create/);
+  assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);
+  assert.match(source, /class:current-cwd=\{isCurrentCwd\(group\)\}/);
+  assert.match(source, /sessionEnvironmentsForView = !hubMode && !sessionEnvironments\.length/);
+  assert.match(source, /createSessionInFolder\(hubMode \? \{ id: workspace\.workspaceId, name: workspace\.workspaceName \} : null\)/);
+  const compositionRoot = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
+  assert.match(compositionRoot, /async function showFolderBrowser\(requestedWorkspace = null\)/);
+  assert.match(compositionRoot, /const workspace = requestedWorkspace \|\| await chooseNewSessionWorkspace\(\)/);
   assert.doesNotMatch(source, /class="session-sidebar-cwd-add"/);
   assert.match(source, /groupSessionsByCwd\(\$sessionPicker\.allSessions, sidebarRunners\)/);
   assert.match(source, /uiActions\.invoke\(SESSION_PICKER_CHOOSE_ACTION/);

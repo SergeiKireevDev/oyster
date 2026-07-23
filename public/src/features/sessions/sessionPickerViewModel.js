@@ -32,8 +32,18 @@ export function groupSessionsByCwd(sessions, runners) {
   const groups = new Map();
   for (const entry of entries) {
     const cwd = entry.session?.cwd || entry.runner?.dir || "(unknown working directory)";
-    if (!groups.has(cwd)) groups.set(cwd, { cwd, entries: [] });
-    groups.get(cwd).entries.push(entry);
+    const environmentId = entry.session?.environmentId || entry.runner?.environmentId || null;
+    const environmentName = entry.session?.environmentName || entry.runner?.environmentName || environmentId;
+    const workspaceId = entry.session?.workspaceId || entry.runner?.workspaceId || null;
+    const workspaceName = entry.session?.workspaceName || entry.runner?.workspaceName || workspaceId;
+    const key = `${environmentId ?? ""}\u0000${workspaceId ?? ""}\u0000${cwd}`;
+    if (!groups.has(key)) groups.set(key, {
+      cwd,
+      ...(environmentId ? { environmentId, environmentName } : {}),
+      ...(workspaceId ? { workspaceId, workspaceName } : {}),
+      entries: [],
+    });
+    groups.get(key).entries.push(entry);
   }
   for (const group of groups.values()) {
     group.entries.sort((left, right) => {
@@ -67,6 +77,66 @@ export function partitionSessionGroupsByArchive(groups, now = Date.now()) {
     ...recent,
     ...archived.map((group, index) => ({ ...group, firstArchived: index === 0 })),
   ];
+}
+
+/** Nests search results under physical/cloud environments and their microVM workspaces. */
+export function groupSessionSearchByHierarchy(groups, defaults = {}) {
+  const environments = new Map();
+  for (const group of groups) {
+    const first = group.first ?? {};
+    const environmentId = first.environmentId || defaults.environmentId || "local";
+    const environmentName = first.environmentName || defaults.environmentName || environmentId;
+    const workspaceId = first.workspaceId || defaults.workspaceId || "local";
+    const workspaceName = first.workspaceName || defaults.workspaceName || workspaceId;
+    if (!environments.has(environmentId)) environments.set(environmentId, {
+      environmentId,
+      environmentName,
+      workspaces: new Map(),
+    });
+    const environment = environments.get(environmentId);
+    if (!environment.workspaces.has(workspaceId)) environment.workspaces.set(workspaceId, {
+      workspaceId,
+      workspaceName,
+      groups: [],
+    });
+    environment.workspaces.get(workspaceId).groups.push(group);
+  }
+  return [...environments.values()].map((environment) => ({
+    ...environment,
+    workspaces: [...environment.workspaces.values()],
+  }));
+}
+
+/** Nests cwd categories under physical/cloud environments and microVM workspaces. */
+export function groupSessionCwdsByHierarchy(groups, defaults = {}) {
+  const environments = new Map();
+  for (const group of groups) {
+    const environmentId = group.environmentId || defaults.environmentId || "local";
+    const environmentName = group.environmentName || defaults.environmentName || environmentId;
+    const workspaceId = group.workspaceId || defaults.workspaceId || "local";
+    const workspaceName = group.workspaceName || defaults.workspaceName || workspaceId;
+    if (!environments.has(environmentId)) environments.set(environmentId, {
+      environmentId,
+      environmentName,
+      workspaces: new Map(),
+    });
+    const environment = environments.get(environmentId);
+    if (!environment.workspaces.has(workspaceId)) environment.workspaces.set(workspaceId, {
+      workspaceId,
+      workspaceName,
+      recentGroups: [],
+      archivedGroups: [],
+    });
+    const workspace = environment.workspaces.get(workspaceId);
+    (group.archived ? workspace.archivedGroups : workspace.recentGroups).push(group);
+  }
+  return [...environments.values()].map((environment) => ({
+    ...environment,
+    workspaces: [...environment.workspaces.values()].map((workspace) => ({
+      ...workspace,
+      archivedCount: workspace.archivedGroups.reduce((count, group) => count + group.entries.length, 0),
+    })),
+  }));
 }
 
 /** Groups a flat session list into root sessions and their forks without mutating input. */

@@ -49,6 +49,7 @@ import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBro
 import { copyTextToClipboard } from "../lib/clipboardController.js";
 import { resetTranscriptItems } from "../stores/transcriptItems.js";
 import { clearTranscriptNotice, showTranscriptNotice } from "../stores/transcriptNotice.js";
+import { chooseOnlineWorkspace, ensureActiveWorkspace, getActiveWorkspace, isHubRuntime, setActiveWorkspace } from "./workspaceScope.js";
 
 /** Application assembly graph: browser adapters, feature interfaces, and lifecycle wiring. */
 
@@ -203,7 +204,10 @@ const sessionAssembly = createSessionAssembly({
   storage: localStorage,
   updateAppSession,
   updateHeaderState,
-  onRunnerChange: () => cancelPendingRpc("runner switched"),
+  onRunnerChange: ({ currentRunner }) => {
+    cancelPendingRpc("runner switched");
+    setActiveWorkspace(getRunners().find((runner) => runner.id === currentRunner)?.workspaceId);
+  },
   stateApplier: {
     applySessionState,
     getEmptySessionRunners: () => sessionOperations.getEmptyRunners(),
@@ -447,7 +451,7 @@ const resourceAssembly = createResourceAssembly({
   uiActions,
   files: {
   pickerState: () => ({ curDir: "", showHidden: true, onPick: composerOperations.insertText, onCancel: null, returnToHublot: false }),
-  folderState: () => ({ browsePath: "", showHidden: true, done: null }),
+  folderState: () => ({ browsePath: "", showHidden: true, done: null, workspaceId: null, workspaceName: "" }),
   explorerState: () => ({ curPath: "", showHidden: true, editPath: "", editContent: "" }),
   picker: ({ state }) => ({
     browse: (path) => browseFiles(fetch, path),
@@ -463,18 +467,38 @@ const resourceAssembly = createResourceAssembly({
     toast: addToast,
   }),
   folderBrowser: ({ state }) => ({
-    async browse(path) { const q = path ? `?path=${encodeURIComponent(path)}` : ""; const res = await fetch(`/browse${q}`); const data = await res.json(); if (!res.ok) throw new Error(data.error || "cannot open folder"); return data; },
+    async browse(path) {
+      const q = path ? `?path=${encodeURIComponent(path)}` : "";
+      const headers = state.folder.workspaceId ? { "x-oyster-workspace": state.folder.workspaceId } : {};
+      const res = await fetch(`/browse${q}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "cannot open folder");
+      return data;
+    },
     async mkdir(path, name) {
-      const res = await fetch(`/mkdir`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, name }) });
+      const headers = {
+        "content-type": "application/json",
+        ...(state.folder.workspaceId ? { "x-oyster-workspace": state.folder.workspaceId } : {}),
+      };
+      const res = await fetch(`/mkdir`, { method: "POST", headers, body: JSON.stringify({ path, name }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `mkdir failed (${res.status})`);
       return data;
     },
     update: updateFolderBrowser,
-    updateTitle: (title) => updateModal({ title }),
+    updateTitle: (title) => updateModal({ title: state.folder.workspaceName ? `New session in ${state.folder.workspaceName}` : title }),
     getShowHidden: () => get(folderBrowser).showHidden,
     setPath: (path) => { state.folder.browsePath = path; },
-    openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
+    async openAndSwitchSession(...args) {
+      const previousWorkspace = getActiveWorkspace(localStorage);
+      if (state.folder.workspaceId) setActiveWorkspace(state.folder.workspaceId, localStorage);
+      try {
+        return await getSessionRuntime().openAndSwitchSession(...args);
+      } catch (error) {
+        if (previousWorkspace) setActiveWorkspace(previousWorkspace, localStorage);
+        throw error;
+      }
+    },
     setWorkdir,
     toast: addToast,
   }),
@@ -561,11 +585,29 @@ const insertIntoComposer = composerOperations.insertText;
 // ------------------------------------------------------------ folder browser
 
 
-async function showFolderBrowser() {
+async function chooseNewSessionWorkspace() {
+  if (!isHubRuntime()) return null;
+  const selected = await chooseOnlineWorkspace({
+    fetchImpl: fetch,
+    choose(workspaces) {
+      const labels = workspaces.map((workspace) => workspace.name && workspace.name !== workspace.id
+        ? `${workspace.name} — ${workspace.id}`
+        : workspace.id);
+      return dialogService.openOption("Choose workspace", labels, { searchable: workspaces.length > 8 });
+    },
+  });
+  return selected ?? false;
+}
+
+async function showFolderBrowser(requestedWorkspace = null) {
+  const workspace = requestedWorkspace || await chooseNewSessionWorkspace();
+  if (workspace === false) return false;
   Object.assign(folderBrowserState, {
-    browsePath: getWorkdir(),
+    browsePath: workspace ? "" : getWorkdir(),
     showHidden: true,
     done: null,
+    workspaceId: workspace?.id ?? null,
+    workspaceName: workspace?.name || workspace?.id || "",
   });
   const finished = new Promise((resolve) => { folderBrowserState.done = resolve; });
   updateFolderBrowser({
@@ -579,13 +621,13 @@ async function showFolderBrowser() {
     createOpen: false,
     newName: "",
   });
-  openModal({ title: "New session in folder", content: "folderBrowser" });
+  openModal({ title: workspace ? `New session in ${folderBrowserState.workspaceName}` : "New session in folder", content: "folderBrowser" });
   await loadFolderBrowser(folderBrowserState.browsePath);
 
   const chosen = await finished;
-  if (!chosen) return;
-  // Spawns a new runner in that folder; the current session keeps running.
-  await folderBrowserController.createSessionInFolder(chosen);
+  if (!chosen) return false;
+  // Spawns a new runner in the selected workspace and folder; the current session keeps running.
+  return folderBrowserController.createSessionInFolder(chosen);
 }
 
 const createFolderBrowser = () => {
@@ -778,6 +820,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
   async openChosenSession(fullChoice) {
     try {
+      setActiveWorkspace(fullChoice.workspaceId);
       await getSessionRuntime().openAndSwitchSession({ ...sessionOpenSelection(fullChoice), dir: fullChoice.cwd || getWorkdir() });
       addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
     } catch (e) {
@@ -785,7 +828,10 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     }
   },
   getSessionId: () => getSessionState()?.sessionId,
-  openSearchSession: ({ sessionKey, sessionPath, dir }) => getSessionRuntime().openSession({ sessionKey, sessionPath, dir: dir || getWorkdir() }),
+  openSearchSession: ({ sessionKey, sessionPath, dir, workspaceId }) => {
+    setActiveWorkspace(workspaceId);
+    return getSessionRuntime().openSession({ sessionKey, sessionPath, dir: dir || getWorkdir() });
+  },
   getCurrentRunner: () => getCurrentRunner(),
   setWorkdir,
   reloadTranscript,
@@ -881,7 +927,7 @@ const commandRuntime = composerAssembly.configureCommands({
   isOverlayOpen: dialogAdapters.modal.isOverlayOpen,
   schedule: (...args) => delayedTasks.schedule(...args),
   session: {
-    openNew: () => getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() }),
+    openNew: () => isHubRuntime() ? showFolderBrowser() : getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() }),
     getCurrentRunner,
   },
   transcript: {
@@ -929,6 +975,7 @@ const runtimeAttachments = platformAssembly.configureAttachments({
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
 sessionAssembly.configureBoot({
+  prepare: () => ensureActiveWorkspace({ storage: localStorage, fetchImpl: fetch }),
   lookupSession: async (sessionId) => {
     const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
     const data = await res.json().catch(() => ({}));

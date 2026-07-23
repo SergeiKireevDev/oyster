@@ -204,9 +204,9 @@ export function createSessionPickerRuntime(deps) {
         deps.toast(`new session failed: ${error.message}`, "error");
       }
     }),
-    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, async () => {
+    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, async (workspace = null) => {
       try {
-        await deps.showFolderBrowser();
+        await deps.showFolderBrowser(workspace);
       } catch (error) {
         deps.toast(`new session failed: ${error.message}`, "error");
       }
