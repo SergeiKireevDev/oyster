@@ -8,8 +8,12 @@
   },
   "driver": {
     "type": "llmbox",
-    "endpoint": "http://127.0.0.1:8080",
-    "token": "lbx_replace-with-an-llmbox-api-key",
+    "transport": "native",
+    "binding": {
+      "addonPath": "llmbox/bindings/build/llmbox.node",
+      "configPath": "llmbox.yaml",
+      "closeTimeoutMs": 5000
+    },
     "tokenSecret": "replace-with-a-stable-random-workspace-token-secret",
     "workspacePort": 8080,
     "createProxy": true,

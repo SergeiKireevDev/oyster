@@ -24,10 +24,20 @@ function publicProviderState(box) {
   };
 }
 
-export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch } = {}) {
+export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, binding = null } = {}) {
   const endpoint = config.endpoint.replace(/\/$/, "");
+  if (config.transport === "native" && typeof binding?.invoke !== "function") {
+    throw new Error("native llmbox driver requires an open binding");
+  }
 
   async function call(path, body = {}) {
+    if (config.transport === "native") {
+      try {
+        return await binding.invoke(path, body);
+      } catch (error) {
+        throw new WorkspaceDriverError(`llmbox ${path} native call failed: ${error.message}`, { cause: error });
+      }
+    }
     let response;
     try {
       response = await fetchImpl(`${endpoint}/api/v1/${path}`, {
