@@ -2,6 +2,8 @@
 oyster-hub/config.json
 oyster-hub/cloud-state.json
 oyster-hub/cloud-state.json.*.tmp
+oyster-hub/box-registry.json
+oyster-hub/box-registry.json.*.tmp
 nohup.out
 .routine*
 node_modules/

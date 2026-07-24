@@ -7,7 +7,11 @@
   "uploadResponseTimeoutMs": 30000,
   "maxConcurrentUploads": 16,
   "cloud": {
-    "stateFile": "./cloud-state.json"
+    "stateFile": "./cloud-state.json",
+    "registryStateFile": "./box-registry.json",
+    "boxConnectUrl": "wss://hub.get-oyster.dev/box/connect",
+    "repository": "https://github.com/SergeiKireevDev/oyster.git",
+    "ref": "main"
   },
   "driver": {
     "type": "llmbox",

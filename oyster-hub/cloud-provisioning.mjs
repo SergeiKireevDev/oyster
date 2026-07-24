@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomUUID, sign as signValue } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { createOysterCloudInit, oysterCloudInitDefaults } from "./cloud-init.mjs";
+import { createBoxConnectionRegistry } from "./box-registry.mjs";
 
 const PROVIDERS = Object.freeze({
   digitalocean: Object.freeze({
@@ -133,7 +135,7 @@ async function digitalOceanOptions(credential, fetchImpl) {
     description: `${item.vcpus} vCPU · ${Math.round(item.memory / 1024 * 10) / 10} GB RAM · $${item.price_monthly}/mo`,
     regions: item.regions || [],
   }));
-  const images = (imageResult.images || []).filter((item) => item.status === "available" && item.slug).map((item) => ({
+  const images = (imageResult.images || []).filter((item) => item.status === "available" && item.slug && /ubuntu/i.test(`${item.distribution || ""} ${item.slug}`)).map((item) => ({
     id: item.slug,
     name: item.description || item.name || item.slug,
     description: item.distribution || "Distribution image",
@@ -145,7 +147,14 @@ async function digitalOceanOptions(credential, fetchImpl) {
 async function digitalOceanProvision(input, credential, fetchImpl) {
   const value = await digitalOceanRequest("/droplets", credential, fetchImpl, {
     method: "POST",
-    body: JSON.stringify({ name: input.name, region: input.region, size: input.size, image: input.image }),
+    body: JSON.stringify({
+      name: input.name,
+      region: input.region,
+      size: input.size,
+      image: input.image,
+      user_data: input.userData,
+      tags: ["oyster-hub", `oyster-box-${input.boxId}`, `oyster-generation-${input.generation}`],
+    }),
   });
   return { instanceId: String(value.droplet?.id || ""), state: value.droplet?.status || "new", consoleUrl: value.links?.actions?.[0]?.href || null };
 }
@@ -219,8 +228,8 @@ async function awsOptions(credential, fetchImpl, requestedRegion) {
   const [typeXml, imageXml] = await Promise.all([
     awsRequest("DescribeInstanceTypeOfferings", { LocationType: "region", "Filter.1.Name": "location", "Filter.1.Value.1": region, MaxResults: 1000 }, region, credential, fetchImpl),
     awsRequest("DescribeImages", {
-      "Owners.1": "amazon",
-      "Filter.1.Name": "name", "Filter.1.Value.1": "al2023-ami-2023.*-x86_64",
+      "Owners.1": "099720109477",
+      "Filter.1.Name": "name", "Filter.1.Value.1": "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*",
       "Filter.2.Name": "state", "Filter.2.Value.1": "available",
       "Filter.3.Name": "root-device-type", "Filter.3.Value.1": "ebs",
       MaxResults: 100,
@@ -242,9 +251,16 @@ async function awsProvision(input, credential, fetchImpl) {
     InstanceType: input.size,
     MinCount: 1,
     MaxCount: 1,
+    UserData: Buffer.from(input.userData, "utf8").toString("base64"),
     "TagSpecification.1.ResourceType": "instance",
     "TagSpecification.1.Tag.1.Key": "Name",
     "TagSpecification.1.Tag.1.Value": input.name,
+    "TagSpecification.1.Tag.2.Key": "oyster:managed-by",
+    "TagSpecification.1.Tag.2.Value": "oyster-hub",
+    "TagSpecification.1.Tag.3.Key": "oyster:box-id",
+    "TagSpecification.1.Tag.3.Value": input.boxId,
+    "TagSpecification.1.Tag.4.Key": "oyster:generation",
+    "TagSpecification.1.Tag.4.Value": input.generation,
   }, input.region, credential, fetchImpl);
   const instanceId = xmlFirst(xml, "instanceId");
   if (!instanceId) throw new CloudProvisioningError("AWS did not return an instance ID");
@@ -296,7 +312,7 @@ async function gcpOptions(credential, fetchImpl, requestedZone) {
     gcpRequest("/zones?maxResults=500", credential, fetchImpl),
     (async () => {
       const token = await gcpAccessToken(credential, fetchImpl);
-      const response = await fetchImpl("https://compute.googleapis.com/compute/v1/projects/debian-cloud/global/images?maxResults=100&orderBy=creationTimestamp%20desc&filter=status%3DREADY", {
+      const response = await fetchImpl("https://compute.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images?maxResults=100&orderBy=creationTimestamp%20desc&filter=status%3DREADY%20AND%20family%3Dubuntu-2404-lts-amd64", {
         headers: { accept: "application/json", authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000),
       });
       return responseValue(response, "GCP");
@@ -306,12 +322,12 @@ async function gcpOptions(credential, fetchImpl, requestedZone) {
   const region = regions.some((item) => item.id === requestedZone) ? requestedZone : regions[0]?.id;
   const typeResult = region ? await gcpRequest(`/zones/${encodeURIComponent(region)}/machineTypes?maxResults=500`, credential, fetchImpl) : { items: [] };
   const sizes = (typeResult.items || []).map((item) => ({ id: item.name, name: item.name, description: `${item.guestCpus} vCPU · ${Math.round(item.memoryMb / 1024 * 10) / 10} GB RAM` }));
-  const images = (imageResult.items || []).map((item) => ({ id: item.name, name: item.name, description: item.description || "Debian image" }));
+  const images = (imageResult.items || []).map((item) => ({ id: item.name, name: item.name, description: item.description || "Ubuntu image" }));
   return { regions, sizes, images, defaults: { region, size: sizes.find((item) => item.id === "e2-micro")?.id || sizes[0]?.id, image: images[0]?.id } };
 }
 
 async function gcpProvision(input, credential, fetchImpl) {
-  const image = `projects/debian-cloud/global/images/${input.image}`;
+  const image = `projects/ubuntu-os-cloud/global/images/${input.image}`;
   const value = await gcpRequest(`/zones/${encodeURIComponent(input.region)}/instances`, credential, fetchImpl, {
     method: "POST",
     body: JSON.stringify({
@@ -319,21 +335,53 @@ async function gcpProvision(input, credential, fetchImpl) {
       machineType: `zones/${input.region}/machineTypes/${input.size}`,
       disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: image } }],
       networkInterfaces: [{ network: "global/networks/default", accessConfigs: [{ name: "External NAT", type: "ONE_TO_ONE_NAT" }] }],
-      labels: { managed_by: "oyster-hub" },
+      labels: {
+        managed_by: "oyster-hub",
+        oyster_box: input.boxId.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 63),
+        generation: input.generation.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 63),
+      },
+      metadata: { items: [{ key: "user-data", value: input.userData }] },
     }),
   });
   return { instanceId: String(value.targetId || input.name), state: value.status || "PENDING", consoleUrl: `https://console.cloud.google.com/compute/instancesDetail/zones/${encodeURIComponent(input.region)}/instances/${encodeURIComponent(input.name)}?project=${encodeURIComponent(credential.projectId)}` };
 }
 
-function publicEnvironment(record) {
+function publicEnvironment(record, registration = null) {
   return {
     id: record.id,
     name: record.name,
-    status: record.status,
+    status: registration?.status || record.status,
     local: false,
     cloud: true,
     createdAt: record.createdAt,
-    provider: { ...record.provider },
+    provider: {
+      ...record.provider,
+      generation: record.generation,
+      registrationStatus: registration?.status || record.status,
+      lastSeenAt: registration?.lastSeenAt || null,
+    },
+  };
+}
+
+function publicCloudWorkspace(record, registration = null) {
+  const status = registration?.status || record.status;
+  return {
+    environmentId: record.id,
+    environmentName: record.name,
+    id: record.id,
+    name: record.name,
+    url: null,
+    status,
+    provider: {
+      ...record.provider,
+      type: "cloud",
+      boxId: record.boxId,
+      generation: record.generation,
+      phase: status,
+      directAgent: true,
+      lastSeenAt: registration?.lastSeenAt || null,
+      observed: registration?.observed || null,
+    },
   };
 }
 
@@ -342,7 +390,14 @@ function environmentId(providerId, instanceId) {
   return `${providerId}-${clean || randomUUID().slice(0, 8)}`;
 }
 
-export function createCloudProvisioningService({ stateFile = null, fetchImpl = globalThis.fetch } = {}) {
+export function createCloudProvisioningService({
+  stateFile = null,
+  fetchImpl = globalThis.fetch,
+  boxRegistry = createBoxConnectionRegistry(),
+  boxConnectUrl = oysterCloudInitDefaults.boxConnectUrl,
+  repository = oysterCloudInitDefaults.repository,
+  ref = oysterCloudInitDefaults.ref,
+} = {}) {
   let loaded = false;
   let state = { credentials: {}, environments: [] };
   let writeChain = Promise.resolve();
@@ -427,14 +482,34 @@ export function createCloudProvisioningService({ stateFile = null, fetchImpl = g
       if (!/^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(name)) throw new CloudProvisioningError("Environment name must be a 1-63 character DNS-style name", { status: 400 });
       const request = { name: name.toLowerCase(), region: required(input.region, "region"), size: required(input.size, "instance type"), image: required(input.image, "image") };
       const value = await credential(providerId);
+      const registration = await boxRegistry.prepareRegistration({ boxId: request.name, provider: providerId });
+      request.boxId = registration.boxId;
+      request.generation = registration.generation;
+      request.userData = createOysterCloudInit({
+        boxId: registration.boxId,
+        generation: registration.generation,
+        bootstrapSecret: registration.bootstrapSecret,
+        provider: providerId,
+        boxConnectUrl,
+        repository,
+        ref,
+      });
       let result;
-      if (providerId === "digitalocean") result = await digitalOceanProvision(request, value, fetchImpl);
-      else if (providerId === "aws") result = await awsProvision(request, value, fetchImpl);
-      else result = await gcpProvision(request, value, fetchImpl);
+      try {
+        if (providerId === "digitalocean") result = await digitalOceanProvision(request, value, fetchImpl);
+        else if (providerId === "aws") result = await awsProvision(request, value, fetchImpl);
+        else result = await gcpProvision(request, value, fetchImpl);
+        await boxRegistry.bindProviderInstance(registration.boxId, registration.generation, result.instanceId);
+      } catch (error) {
+        await boxRegistry.revoke(registration.boxId, registration.generation, "provider provisioning failed").catch(() => {});
+        throw error;
+      }
       const record = {
         id: environmentId(providerId, result.instanceId),
         name,
-        status: "provisioned",
+        boxId: registration.boxId,
+        generation: registration.generation,
+        status: "awaiting_agent",
         createdAt: new Date().toISOString(),
         provider: {
           id: provider.id,
@@ -450,11 +525,24 @@ export function createCloudProvisioningService({ stateFile = null, fetchImpl = g
       await load();
       state.environments = [...state.environments.filter((item) => item.id !== record.id), record];
       await persist();
-      return publicEnvironment(record);
+      return publicEnvironment(record, await boxRegistry.get(request.name, registration.generation));
     },
     async listEnvironments() {
       await load();
-      return state.environments.map(publicEnvironment);
+      return Promise.all(state.environments.map(async (record) => publicEnvironment(
+        record,
+        record.generation ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation) : null,
+      )));
+    },
+    async listWorkspaces() {
+      await load();
+      return Promise.all(state.environments.map(async (record) => publicCloudWorkspace(
+        record,
+        record.generation ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation) : null,
+      )));
+    },
+    async getWorkspace(id) {
+      return (await this.listWorkspaces()).find((workspace) => workspace.id === id) || null;
     },
   });
 }

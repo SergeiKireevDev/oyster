@@ -161,6 +161,7 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.throws(() => validateConfig({ token: "x", uploadIdleTimeoutMs: 99, driver: { type: "mock" } }, {}), /uploadIdleTimeoutMs/);
   assert.throws(() => validateConfig({ token: "x", uploadResponseTimeoutMs: 30 * 60 * 1000 + 1, driver: { type: "mock" } }, {}), /uploadResponseTimeoutMs/);
   assert.throws(() => validateConfig({ token: "x", maxConcurrentUploads: 0, driver: { type: "mock" } }, {}), /maxConcurrentUploads/);
+  assert.throws(() => validateConfig({ token: "x", cloud: { boxConnectUrl: "ws://hub.example/box/connect" }, driver: { type: "mock" } }, {}), /must use wss/);
   assert.throws(() => validateConfig({ token: "x", driver: {
     type: "llmbox", endpoint: "file:///tmp/box", token: "key", tokenSecret: "secret",
   } }, {}), /must use http or https/);
@@ -185,6 +186,9 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.equal(mock.uploadIdleTimeoutMs, 30000);
   assert.equal(mock.uploadResponseTimeoutMs, 30000);
   assert.equal(mock.maxConcurrentUploads, 16);
+  assert.equal(mock.cloud.boxConnectUrl, "wss://hub.get-oyster.dev/box/connect");
+  assert.equal(mock.cloud.repository, "https://github.com/SergeiKireevDev/oyster.git");
+  assert.equal(mock.cloud.ref, "main");
   assert.deepEqual(mock.driver, {
     type: "mock", endpoint: "http://localhost:8080",
     environmentId: "local", environmentName: "Local",
