@@ -1,8 +1,9 @@
 /**
  * oyster — pi runner manager
  *
- * One pi process per open session ("runner"). Runners keep working in the
- * background when the browser looks at another session; each SSE client
+ * One durable runner descriptor per opened session, with a pi process started
+ * on demand when work is sent. Live runners keep working in the background
+ * when the browser looks at another session; each SSE client
  * subscribes to exactly one runner, and runner status (busy/idle/dead) is
  * broadcast to everyone so session lists can show live indicators.
  *
@@ -39,8 +40,8 @@ const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 
 // Pi processes that the user never sent a real message to (sessionName is
-// still null) are leaked workers spawned for a session-resume or an
-// open-session that never followed through. They sit idle, burning RAM and
+// still null) are leaked workers spawned for work that never followed through.
+// They sit idle, burning RAM and
 // cluttering the runner list. Reap them after MAX_ORPHAN_AGE_MS of nameless
 // life — long enough to never kill an active-but-silent runner, short
 // enough to fade abandoned ones out.
@@ -342,7 +343,7 @@ export function createRunnerManager(state, {
     throw new Error("runner ID generator repeatedly returned an existing ID");
   }
 
-  function spawnRunner({ dir, sessionRef = null }) {
+  function spawnRunner({ dir, sessionRef = null, autostart = true }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
     const owner = reference ? ensureSessionOwner(reference) : null;
     const id = allocateRunnerId();
@@ -352,7 +353,9 @@ export function createRunnerManager(state, {
       sessionBackend: reference?.backend ?? null,
       sessionId: reference?.id ?? null,
       sessionStoragePath: reference?.storagePath ?? null,
-      desiredState: "running", lastStatus: "starting", createdAt,
+      desiredState: autostart ? "running" : "stopped",
+      lastStatus: autostart ? "starting" : "stopped",
+      createdAt,
     });
     const runner = initializeRunnerRuntime({
       id,
@@ -364,7 +367,7 @@ export function createRunnerManager(state, {
       startCount: 0,
     });
     state.runners.set(runner.id, runner);
-    startRunner(runner);
+    if (autostart) startRunner(runner);
     return runner;
   }
 
@@ -516,13 +519,12 @@ export function createRunnerManager(state, {
     const reference = inputReference ? sessionReferences.validate(inputReference) : null;
     if (reference) {
       for (const r of state.runners.values()) {
-        if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) {
-          if (!r.proc) startRunner(r);
-          return r;
-        }
+        if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) return r;
       }
     }
-    return spawnRunner({ dir: dir || state.currentDir, sessionRef: reference });
+    // Brand-new sessions need pi to establish their durable identity. Saved
+    // sessions already have an identity and can remain dormant while read.
+    return spawnRunner({ dir: dir || state.currentDir, sessionRef: reference, autostart: !reference });
   }
 
   // ------------------------------------------------------------ watchdog
@@ -580,7 +582,7 @@ export function createRunnerManager(state, {
   // has been alive that long without ever earning a name, it's a leaked
   // worker — stop its process so it stops burning RAM and disappears from
   // the swipe carousel. Dead shells stay in the map for instant restart on
-  // next open-session (no proc → openSessionRunner respawns).
+  // next command (opening the session alone leaves the shell dormant).
   function reaperTick() {
     const now = Date.now();
     for (const runner of state.runners.values()) {
@@ -600,7 +602,8 @@ export function createRunnerManager(state, {
   state.runnerReaperTimer = setInterval(reaperTick, ORAPHA_REAP_INTERVAL_MS);
   state.runnerReaperTimer.unref?.();
 
-  // Startup only restores descriptors. The first SSE/RPC selection starts a process.
+  // Startup and read-only session selection only restore descriptors. An RPC
+  // command that requests work starts the selected process.
   function startPi() {}
   function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
 

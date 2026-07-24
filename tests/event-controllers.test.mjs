@@ -25,9 +25,10 @@ test("replay done event controller refreshes runtime state", () => {
     setWorkdir: (workdir) => calls.push(["workdir", workdir]),
     refreshHublots: () => calls.push("hublots"),
     refreshRoutines: () => calls.push("routines"),
+    reloadTranscript: () => calls.push("transcript"),
   });
   controller({ type: "replay_done", runner: "r1", runners: ["r1"], workdir: "/workspace" });
-  assert.deepEqual(calls, ["done", ["replaying", true, "canonical"], ["runner", "r1"], ["runners", ["r1"]], ["workdir", "/workspace"], "hublots", "routines"]);
+  assert.deepEqual(calls, ["done", ["replaying", true, "canonical"], ["runner", "r1"], ["runners", ["r1"]], ["workdir", "/workspace"], "hublots", "routines", "transcript"]);
 });
 
 test("runner ping event controller updates changed runner liveness", () => {

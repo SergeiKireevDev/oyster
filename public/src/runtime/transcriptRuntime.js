@@ -236,7 +236,7 @@ export function createTranscriptAfterRenderController({ annotate, refreshCheckpo
   };
 }
 
-export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, getGeneration = () => 0, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, getRunnerInfo = () => null, isRunnerAlive = () => true, getGeneration = () => 0, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
   let latestJob = 0;
   return async () => {
     const job = ++latestJob;
@@ -246,16 +246,36 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
     log("reloadTranscript:start");
     let messages;
     try {
-      ({ messages } = await loadDurableCanonicalTranscript({
-        rpc,
-        applyState: (state) => { if (isCurrent()) applyState(state); },
-        fetchImpl,
-        sessionFileQuery,
-        getSessionIdentity,
-        onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
-        onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
-        onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
-      }));
+      if (!isRunnerAlive()) {
+        const identity = getSessionIdentity?.();
+        const durable = identity
+          ? await fetchDurableTranscript(fetchImpl, identity, sessionFileQuery)
+          : { messages: [] };
+        messages = Array.isArray(durable.messages) ? durable.messages : [];
+        const runner = getRunnerInfo?.();
+        if (runner?.sessionId && isCurrent()) applyState({
+          sessionId: runner.sessionId,
+          sessionFile: runner.sessionFile ?? null,
+          sessionName: runner.sessionName ?? null,
+          messageCount: messages.length,
+          pendingMessageCount: 0,
+          model: null,
+          isStreaming: false,
+          isCompacting: false,
+        });
+        log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: messages.length, dormant: true });
+      } else {
+        ({ messages } = await loadDurableCanonicalTranscript({
+          rpc,
+          applyState: (state) => { if (isCurrent()) applyState(state); },
+          fetchImpl,
+          sessionFileQuery,
+          getSessionIdentity,
+          onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
+          onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+          onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+        }));
+      }
     } catch (error) {
       if (!isCurrent()) return false;
       throw error;

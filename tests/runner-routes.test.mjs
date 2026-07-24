@@ -65,6 +65,7 @@ test("events route registers before replay, replays runner output, pings, and cl
   assert.equal(res.headers["content-type"], "text/event-stream");
   assert.equal(res.runnerId, "runner-1");
   assert.equal(state.sseClients.has(res), true);
+  assert.equal(dependencies.runnerFromReq().proc, null, "read-only SSE subscription must not start pi");
   assert.ok(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')));
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
   assert.equal(intervals[0].delay, 25000);
@@ -87,6 +88,12 @@ test("SSE reconnect can skip replay while still receiving replay completion", ()
 
 test("runner RPC routes preserve validation, queue status, and listing contracts", async () => {
   const { runner, dependencies } = setup();
+  const sends = [];
+  const sendToRunner = dependencies.sendToRunner;
+  dependencies.sendToRunner = (selected, command, options) => {
+    sends.push({ command, options });
+    return sendToRunner(selected, command, options);
+  };
   const routes = createRunnerRoutes(dependencies);
 
   const invalid = response();
@@ -97,7 +104,15 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   await routes["POST /rpc"]({ body: { type: "prompt", message: "hello" } }, queued, new URL("http://localhost/rpc"));
   assert.equal(queued.status, 202);
   assert.deepEqual(queued.body, { queued: true, runner: "runner-1" });
+  assert.deepEqual(sends[0].options, { autostart: true });
   assert.equal(runner.titledWith, undefined);
+
+  const stateRefresh = response();
+  await routes["POST /rpc"]({ body: { type: "get_state" } }, stateRefresh, new URL("http://localhost/rpc"));
+  assert.deepEqual(sends[1].options, { autostart: false });
+  const messageRefresh = response();
+  await routes["POST /rpc"]({ body: { type: "get_messages" } }, messageRefresh, new URL("http://localhost/rpc"));
+  assert.deepEqual(sends[2].options, { autostart: false });
 
   const unavailable = response();
   await routes["POST /rpc"]({ body: { type: "unavailable" } }, unavailable, new URL("http://localhost/rpc"));

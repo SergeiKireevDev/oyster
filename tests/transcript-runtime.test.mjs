@@ -160,6 +160,34 @@ test("canonical transcript controller clears previews after durable reload", asy
   assert.deepEqual(calls, ["clear", "after"]);
 });
 
+test("canonical transcript controller reads dormant sessions without calling pi", async () => {
+  const calls = [];
+  const controller = createCanonicalTranscriptController({
+    rpc: async () => { throw new Error("dormant runner must not receive RPC"); },
+    applyState: () => calls.push("state"),
+    fetchImpl: async (url) => {
+      calls.push(["fetch", url]);
+      return { ok: true, json: async () => ({ messages: [{ role: "user", content: "saved" }] }) };
+    },
+    sessionFileQuery: (identity) => `key=${identity}`,
+    getSessionIdentity: () => "ps1_saved",
+    getRunnerInfo: () => ({ sessionId: "saved", sessionName: "Saved", sessionFile: null }),
+    isRunnerAlive: () => false,
+    clearPreview: () => calls.push("clear"),
+    render: async (messages) => { calls.push(["render", messages]); return true; },
+    setReplaying: () => {}, takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => calls.push("after"),
+  });
+
+  assert.equal(await controller(), true);
+  assert.deepEqual(calls, [
+    ["fetch", "/session-messages?key=ps1_saved"],
+    "state",
+    "clear",
+    ["render", [{ role: "user", content: "saved" }]],
+    "after",
+  ]);
+});
+
 test("canonical transcript controller discards a reload superseded by a runner switch", async () => {
   let generation = 1;
   let release;
