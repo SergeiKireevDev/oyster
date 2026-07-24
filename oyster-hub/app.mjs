@@ -5,7 +5,7 @@ import { createWorkspaceDriver } from "./drivers/index.mjs";
 import { WorkspaceDriverError } from "./drivers/errors.mjs";
 import { createOysterUiGateway } from "./ui-gateway.mjs";
 import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
-import { prepareOpaqueWorkspaceRequest, proxyWorkspaceRequest, readBufferedRequestBody } from "./workspace-proxy.mjs";
+import { createUploadLimiter, prepareOpaqueWorkspaceRequest, proxyWorkspaceRequest, readBufferedRequestBody } from "./workspace-proxy.mjs";
 
 const AGGREGATE_RESOURCES = ["health", "runners", "sessions?all=1", "routines", "tunnels"];
 
@@ -172,6 +172,7 @@ async function proxyWorkspace(req, res, url, workspace, suffix, options) {
     uploadResponseTimeoutMs: options.uploadResponseTimeoutMs,
     json,
     onTransfer: options.onTransfer,
+    uploadLimiter: options.uploadLimiter,
   });
 }
 
@@ -184,12 +185,14 @@ export function createOysterHub(config, {
   cloudService = createCloudProvisioningService({ stateFile: config.cloud?.stateFile, fetchImpl }),
   onTransfer,
 } = {}) {
+  const uploadLimiter = createUploadLimiter(config.maxConcurrentUploads);
   const options = {
     fetchImpl,
     timeoutMs: config.timeoutMs,
     uploadIdleTimeoutMs: config.uploadIdleTimeoutMs,
     uploadResponseTimeoutMs: config.uploadResponseTimeoutMs,
     onTransfer,
+    uploadLimiter,
   };
   const uiGateway = createOysterUiGateway({
     config,
@@ -199,6 +202,7 @@ export function createOysterHub(config, {
     authorized: (req, url) => authorized(req, config.token, url),
     json,
     onTransfer,
+    uploadLimiter,
   });
 
   return createServer(async (req, res) => {

@@ -160,6 +160,7 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.throws(() => validateConfig({ token: "x", driver: { type: "other" } }, {}), /unsupported workspace driver/);
   assert.throws(() => validateConfig({ token: "x", uploadIdleTimeoutMs: 99, driver: { type: "mock" } }, {}), /uploadIdleTimeoutMs/);
   assert.throws(() => validateConfig({ token: "x", uploadResponseTimeoutMs: 30 * 60 * 1000 + 1, driver: { type: "mock" } }, {}), /uploadResponseTimeoutMs/);
+  assert.throws(() => validateConfig({ token: "x", maxConcurrentUploads: 0, driver: { type: "mock" } }, {}), /maxConcurrentUploads/);
   assert.throws(() => validateConfig({ token: "x", driver: {
     type: "llmbox", endpoint: "file:///tmp/box", token: "key", tokenSecret: "secret",
   } }, {}), /must use http or https/);
@@ -183,6 +184,7 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.equal(mock.port, 8082);
   assert.equal(mock.uploadIdleTimeoutMs, 30000);
   assert.equal(mock.uploadResponseTimeoutMs, 30000);
+  assert.equal(mock.maxConcurrentUploads, 16);
   assert.deepEqual(mock.driver, {
     type: "mock", endpoint: "http://localhost:8080",
     environmentId: "local", environmentName: "Local",
@@ -474,6 +476,94 @@ test("workspace upload idle timeout aborts a stalled stream with an actionable e
     workspace: "alpha",
     detail: "workspace upload idle for 100ms",
   });
+});
+
+test("lost upload responses remain safe to retry through the Hub", async (t) => {
+  let applied = null;
+  let calls = 0;
+  const upstream = createServer(async (req, res) => {
+    const body = await requestBytes(req);
+    calls += 1;
+    if (applied == null) applied = Buffer.from(body);
+    else assert.deepEqual(body, applied, "retry carries the identical offset body");
+    if (calls === 1) {
+      req.socket.destroy();
+      return;
+    }
+    sendJson(res, 200, { saved: "/tmp/retried.bin", bytes: applied.length });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const target = `${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=retried.bin&offset=0&last=1`;
+  const options = {
+    method: "POST",
+    headers: { "x-auth-token": "hub-secret", "content-type": "application/octet-stream" },
+    body: Buffer.from("apply exactly once"),
+  };
+
+  const lost = await fetch(target, options);
+  assert.equal(lost.status, 502);
+  const retried = await fetch(target, options);
+  assert.equal(retried.status, 200);
+  assert.deepEqual(await retried.json(), { saved: "/tmp/retried.bin", bytes: applied.length });
+  assert.equal(calls, 2);
+  assert.equal(applied.toString(), "apply exactly once");
+});
+
+test("workspace upload concurrency is bounded across Hub proxy routes", async (t) => {
+  let startedResolve;
+  const started = new Promise((resolvePromise) => { startedResolve = resolvePromise; });
+  let releaseResolve;
+  const release = new Promise((resolvePromise) => { releaseResolve = resolvePromise; });
+  let calls = 0;
+  const upstream = createServer(async (req, res) => {
+    await requestBytes(req);
+    calls += 1;
+    if (calls === 1) {
+      startedResolve();
+      await release;
+    }
+    sendJson(res, 200, { saved: true });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const config = validateConfig({
+    token: "hub-secret", maxConcurrentUploads: 1,
+    driver: { type: "mock", endpoint: upstreamUrl },
+  }, {});
+  const hub = createOysterHub(config, { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const headers = { "x-auth-token": "hub-secret", "x-oyster-workspace": "alpha", "content-type": "application/octet-stream" };
+
+  const first = fetch(`${hubUrl}/file-upload?name=one&offset=0&last=1`, { method: "POST", headers, body: "a" });
+  await started;
+  const limited = await fetch(`${hubUrl}/api/v1/workspaces/alpha/file-upload?name=two&offset=0&last=1`, {
+    method: "POST", headers: { authorization: "Bearer hub-secret", "content-type": "application/octet-stream" }, body: "b",
+  });
+  assert.equal(limited.status, 429);
+  assert.deepEqual(await limited.json(), { error: "too many concurrent workspace uploads", workspace: "alpha" });
+  releaseResolve();
+  assert.equal((await first).status, 200);
+
+  const resumed = await fetch(`${hubUrl}/file-upload?name=three&offset=0&last=1`, { method: "POST", headers, body: "c" });
+  assert.equal(resumed.status, 200);
+  assert.equal(calls, 2);
 });
 
 test("scoped workspace API preserves a large opaque upload byte-for-byte", async (t) => {
