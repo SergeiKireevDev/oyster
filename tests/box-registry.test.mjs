@@ -35,7 +35,7 @@ function hello(registration, instanceId, auth) {
       instance_id: instanceId,
       attestation: { format: "aws-iid-rsa2048", document: JSON.stringify({ instanceId }), signature: "test-signature" },
     },
-    agent: { version: "test", boot_id: "boot", capabilities: ["register_v1"] },
+    agent: { version: "test", boot_id: "boot", capabilities: ["register_v1", "dial_v1"] },
     observed: { init_state: "complete", service_state: "starting" },
   };
 }

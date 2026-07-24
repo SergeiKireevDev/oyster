@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connect as connectTcp } from "node:net";
 import { connectOnce, loadBoxAgentConfig } from "../oyster-hub/box-agent.mjs";
 import { createBoxConnectionRegistry } from "../oyster-hub/box-registry.mjs";
 
@@ -34,11 +35,33 @@ test("box agent dials a loopback test Hub, registers, and stores reconnect auth"
     instance_id: "i-agent",
     attestation: { format: "aws-iid-rsa2048", document: JSON.stringify({ instanceId: "i-agent" }), signature: "signature" },
   });
-  const { socket, welcome } = await connectOnce(config, { identity, readiness: async () => true });
+  const target = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    res.writeHead(201, { "content-type": "application/json", "x-box-path": req.url });
+    res.end(JSON.stringify({ body: Buffer.concat(chunks).toString("utf8") }));
+  });
+  target.listen(0, "127.0.0.1");
+  await once(target, "listening");
+  t.after(() => target.close());
+  const { socket, welcome } = await connectOnce(config, {
+    identity,
+    readiness: async () => true,
+    dialOptions: { connect: () => connectTcp({ host: "127.0.0.1", port: target.address().port }) },
+  });
   assert.equal(welcome.type, "box_welcome");
   assert.ok(readFileSync(reconnectFile, "utf8").trim());
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal((await registry.get(registration.boxId, registration.generation)).status, "online");
+  const payload = "dial-payload-".repeat(10_000);
+  const response = await registry.fetch(registration.boxId, registration.generation, "http://127.0.0.1:8080/open-session?test=1", {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body: payload,
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("x-box-path"), "/open-session?test=1");
+  assert.deepEqual(await response.json(), { body: payload });
   socket.close();
   await once(socket, "close");
 });

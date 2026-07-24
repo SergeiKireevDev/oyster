@@ -1,11 +1,15 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { Agent as HttpAgent, request as httpRequest } from "node:http";
+import { Duplex, Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 
 const BOOTSTRAP_TTL_MS = 20 * 60 * 1000;
 const FIRST_FRAME_TIMEOUT_MS = 10_000;
 const MAX_FRAME_BYTES = 64 * 1024;
+const DIAL_CHUNK_BYTES = 24 * 1024;
+const MAX_DIAL_STREAMS = 64;
 
 const hashCredential = (value) => createHash("sha256").update(String(value)).digest("base64url");
 const secret = () => randomBytes(32).toString("base64url");
@@ -23,7 +27,8 @@ function validIdentity(value) {
 }
 
 function publicRegistration(record, connected = false, timestamp = Date.now()) {
-  const connectedStatus = record.observed?.service_state === "ready" ? "online" : "initializing";
+  const dialCapable = record.agent?.capabilities?.includes("dial_v1");
+  const connectedStatus = record.observed?.service_state === "ready" && dialCapable ? "online" : "initializing";
   const bootstrapExpired = !connected
     && record.status === "awaiting_agent"
     && !record.reconnectHash
@@ -42,6 +47,83 @@ function publicRegistration(record, connected = false, timestamp = Date.now()) {
     lastSeenAt: record.lastSeenAt || null,
     observed: record.observed || null,
   };
+}
+
+class BoxDialStream extends Duplex {
+  constructor(socket, streamId, port, onRemove) {
+    super();
+    this.socket = socket;
+    this.streamId = streamId;
+    this.port = port;
+    this.onRemove = onRemove;
+    this.remoteClosed = false;
+    this.connecting = true;
+    this.remoteAddress = "127.0.0.1";
+    this.remotePort = port;
+    socket.send(JSON.stringify({ type: "dial_open", stream_id: streamId, port }));
+  }
+
+  opened() {
+    if (!this.connecting || this.destroyed) return;
+    this.connecting = false;
+    this.emit("connect");
+  }
+
+  _read() {}
+
+  _write(chunk, _encoding, callback) {
+    const parts = [];
+    for (let offset = 0; offset < chunk.length; offset += DIAL_CHUNK_BYTES) parts.push(chunk.subarray(offset, offset + DIAL_CHUNK_BYTES));
+    const sendNext = () => {
+      const part = parts.shift();
+      if (!part) return callback();
+      if (this.socket.readyState !== 1) return callback(new Error("box connection is closed"));
+      this.socket.send(JSON.stringify({ type: "dial_data", stream_id: this.streamId, data: part.toString("base64") }), (error) => {
+        if (error) callback(error);
+        else sendNext();
+      });
+    };
+    sendNext();
+  }
+
+  _final(callback) {
+    if (this.socket.readyState === 1) this.socket.send(JSON.stringify({ type: "dial_end", stream_id: this.streamId }), callback);
+    else callback();
+  }
+
+  _destroy(error, callback) {
+    this.onRemove?.();
+    if (!this.remoteClosed && this.socket.readyState === 1) {
+      this.socket.send(JSON.stringify({ type: "dial_close", stream_id: this.streamId }));
+    }
+    callback(error);
+  }
+
+  receive(message) {
+    if (message.type === "dial_opened") return this.opened();
+    if (message.type === "dial_data") {
+      let chunk;
+      try { chunk = Buffer.from(message.data, "base64"); } catch { return this.destroy(new Error("invalid box dial data")); }
+      if (chunk.length > DIAL_CHUNK_BYTES) return this.destroy(new Error("box dial chunk exceeds limit"));
+      this.push(chunk);
+      return;
+    }
+    if (message.type === "dial_end") {
+      this.remoteClosed = true;
+      this.push(null);
+      return;
+    }
+    if (message.type === "dial_error") {
+      this.remoteClosed = true;
+      this.destroy(new Error(message.error || "box dial failed"));
+      return;
+    }
+    if (message.type === "dial_close") {
+      this.remoteClosed = true;
+      this.push(null);
+      this.destroy();
+    }
+  }
 }
 
 function defaultVerifyAttestation({ record, hello, connectOrigin }) {
@@ -159,8 +241,12 @@ export function createBoxConnectionRegistry({
 
     const connectionEpoch = randomUUID();
     const previous = connections.get(recordKey);
-    connections.set(recordKey, { socket, connectionEpoch, instanceId: hello.provider.instance_id });
-    if (previous && previous.socket !== socket) previous.socket.close(4001, "Superseded");
+    connections.set(recordKey, { socket, connectionEpoch, instanceId: hello.provider.instance_id, streams: new Map() });
+    if (previous && previous.socket !== socket) {
+      for (const stream of previous.streams.values()) stream.destroy(new Error("box connection superseded"));
+      previous.streams.clear();
+      previous.socket.close(4001, "Superseded");
+    }
     record.providerInstanceId ||= hello.provider.instance_id;
     record.connectedAt = new Date(now()).toISOString();
     record.lastSeenAt = record.connectedAt;
@@ -203,22 +289,29 @@ export function createBoxConnectionRegistry({
             protocol: 1,
             connection_epoch: authenticated.connectionEpoch,
             ...(authenticated.reconnectCredential ? { credential: authenticated.reconnectCredential } : {}),
-            capabilities: ["register_v1", "heartbeat_v1"],
+            capabilities: ["register_v1", "heartbeat_v1", "dial_v1"],
             limits: {
               max_frame_bytes: MAX_FRAME_BYTES,
               heartbeat_interval_ms: 15000,
               heartbeat_timeout_ms: 45000,
-              max_streams: 0,
-              max_inflight_requests: 0,
+              max_streams: MAX_DIAL_STREAMS,
+              max_inflight_requests: MAX_DIAL_STREAMS,
             },
           }));
           socket.on("message", async (frame, isBinary) => {
             if (isBinary || frame.byteLength > MAX_FRAME_BYTES) return socket.close(4002, "Protocol error");
             let message;
             try { message = JSON.parse(frame.toString("utf8")); } catch { return socket.close(4002, "Protocol error"); }
-            if (!["heartbeat", "status"].includes(message.type)) return socket.close(4002, "Protocol error");
             const current = connections.get(authenticated.recordKey);
             if (current?.connectionEpoch !== authenticated.connectionEpoch) return;
+            if (["dial_opened", "dial_data", "dial_end", "dial_error", "dial_close"].includes(message.type)) {
+              if (!validIdentity(message.stream_id)) return socket.close(4002, "Protocol error");
+              const stream = current.streams.get(message.stream_id);
+              if (!stream) return;
+              stream.receive(message);
+              return;
+            }
+            if (!["heartbeat", "status"].includes(message.type)) return socket.close(4002, "Protocol error");
             authenticated.record.lastSeenAt = new Date(now()).toISOString();
             if (message.type === "status" && message.observed && typeof message.observed === "object") authenticated.record.observed = message.observed;
             await persist().catch((error) => logger.error?.("cannot persist box heartbeat", error));
@@ -234,6 +327,8 @@ export function createBoxConnectionRegistry({
         const current = connections.get(authenticated.recordKey);
         if (current?.connectionEpoch !== authenticated.connectionEpoch) return;
         connections.delete(authenticated.recordKey);
+        for (const stream of current.streams.values()) stream.destroy(new Error("box connection closed"));
+        current.streams.clear();
         authenticated.record.status = "offline";
         authenticated.record.disconnectedAt = new Date(now()).toISOString();
         await persist().catch((error) => logger.error?.("cannot persist box disconnect", error));
@@ -242,13 +337,69 @@ export function createBoxConnectionRegistry({
     return () => server.off("upgrade", onUpgrade);
   }
 
+  async function dial(boxId, generation, port = 8080) {
+    if (!validIdentity(boxId) || !validIdentity(generation)) throw new Error("invalid box dial identity");
+    if (port !== 8080) throw new Error("box agent only permits localhost port 8080");
+    await load();
+    const recordKey = keyOf(boxId, generation);
+    const connection = connections.get(recordKey);
+    const record = records.get(recordKey);
+    if (!connection || !record || record.revokedAt) throw new Error("box is not connected");
+    if (!record.agent?.capabilities?.includes("dial_v1")) throw new Error("box agent does not support localhost Dial");
+    if (connection.streams.size >= MAX_DIAL_STREAMS) throw new Error("box dial stream limit reached");
+    const streamId = randomUUID();
+    let stream;
+    stream = new BoxDialStream(connection.socket, streamId, port, () => connection.streams.delete(streamId));
+    connection.streams.set(streamId, stream);
+    return stream;
+  }
+
+  async function fetchBox(boxId, generation, target, options = {}) {
+    const url = new URL(target);
+    const connection = await dial(boxId, generation, 8080);
+    return new Promise((resolve, reject) => {
+      const agent = new HttpAgent({ keepAlive: false });
+      agent.createConnection = () => connection;
+      const request = httpRequest({
+        method: options.method || "GET",
+        hostname: "127.0.0.1",
+        port: 8080,
+        path: `${url.pathname}${url.search}`,
+        headers: options.headers ? Object.fromEntries(new Headers(options.headers).entries()) : undefined,
+        agent,
+      }, (response) => {
+        const headers = new Headers();
+        for (let index = 0; index < response.rawHeaders.length; index += 2) headers.append(response.rawHeaders[index], response.rawHeaders[index + 1]);
+        const noBody = options.method === "HEAD" || [204, 205, 304].includes(response.statusCode);
+        const body = noBody ? null : Readable.toWeb(response);
+        resolve(new Response(body, { status: response.statusCode, statusText: response.statusMessage, headers }));
+      });
+      request.once("error", reject);
+      const abort = () => request.destroy(options.signal?.reason instanceof Error ? options.signal.reason : new Error("box request aborted"));
+      if (options.signal?.aborted) return abort();
+      options.signal?.addEventListener("abort", abort, { once: true });
+      request.once("close", () => options.signal?.removeEventListener("abort", abort));
+      const body = options.body;
+      if (body == null) request.end();
+      else if (typeof body?.pipe === "function") body.on("error", (error) => request.destroy(error)).pipe(request);
+      else if (typeof body?.getReader === "function") Readable.fromWeb(body).on("error", (error) => request.destroy(error)).pipe(request);
+      else request.end(body);
+    });
+  }
+
   return Object.freeze({
     attach,
+    dial,
+    fetch: fetchBox,
     async close() {
       if (attachedServer && upgradeHandler) attachedServer.off("upgrade", upgradeHandler);
       attachedServer = null;
       upgradeHandler = null;
-      for (const { socket } of connections.values()) socket.terminate();
+      for (const { socket, streams } of connections.values()) {
+        for (const stream of streams.values()) stream.destroy(new Error("box registry closed"));
+        streams.clear();
+        socket.terminate();
+      }
       connections.clear();
       const closing = webSocketServer;
       webSocketServer = null;

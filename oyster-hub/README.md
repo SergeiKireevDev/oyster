@@ -115,7 +115,7 @@ The generated `#cloud-config` installs Node.js 22, Git, and build dependencies, 
 
 Provider credentials remain in the owner-only cloud state file and are never sent to the VM. The VM receives only its box ID, generation, provider kind, and expiring one-use bootstrap secret. After the first WebSocket registration, Hub returns a generation-scoped reconnect credential which the agent stores under `/var/lib/oyster-box-agent/`. Provider resources are created with Hub ownership, box ID, and generation tags/labels.
 
-`/box/connect` accepts no query credentials and keeps the box principal separate from `/spoke/connect`. This increment implements registration, status, heartbeat, reconnect, and connection replacement. Exec and multiplexed localhost Dial frames remain follow-up protocol capabilities. The registry binds registration to the instance ID returned by the provider connector and requires a provider attestation envelope; production deployments should inject cryptographic attestation verification in addition to the built-in envelope and identity checks.
+`/box/connect` accepts no query credentials and keeps the box principal separate from `/spoke/connect`. It implements registration, status, heartbeat, reconnect, connection replacement, and bounded multiplexed Dial streams to Oyster on box-local `127.0.0.1:8080`. Hub carries workspace HTTP, uploads, and SSE over those streams without exposing the VM service publicly. Exec remains a follow-up protocol capability. The registry binds registration to the instance ID returned by the provider connector and requires a provider attestation envelope; production deployments should inject cryptographic attestation verification in addition to the built-in envelope and identity checks.
 
 The UI-facing `/sessions` and `/runners` APIs aggregate every discovered workspace. Hub-scoped opaque session and runner identities prevent collisions, while each item includes `environmentId`, `environmentName`, `workspaceId`, and `workspaceName`. An environment is the physical or cloud device (`spoke` for llmbox); a workspace is the project microVM on that device; a session is one discussion thread. The session sidebar presents that hierarchy and uses cwd as a category within each workspace, not as workspace identity. Session operations, RPC, and SSE are routed back to the owning workspace; no iframe embedding is used.
 
@@ -222,7 +222,7 @@ Both upload settings accept 100 ms through 30 minutes. Increase the idle setting
 
 - The native `llmbox` and read-only local `mock` drivers are implemented; `drivers/index.mjs` is the extension point. The older llmbox HTTP transport remains available by omitting `transport: "native"` for compatibility.
 - Discovery and aggregation are request-time queries; cloud credentials/provision records and hashed box registrations use their configured owner-only state files.
-- `/box/connect` currently carries registration, status, heartbeat, and reconnect only. Exec and multiplexed Dial are not yet advertised.
+- `/box/connect` carries registration, status, heartbeat, reconnect, and multiplexed localhost Dial. Restricted Exec is not yet advertised.
 - A newly created box is `provisioning` until llmbox exposes its configured Oyster port.
 - An active workspace SSE stream includes runner snapshots from the other discovered workspaces; non-runner events remain scoped to the active workspace.
 - Authentication is one shared hub bearer token; user accounts and per-workspace authorization are future work.
