@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+
 const DEFAULT_REPOSITORY = "https://github.com/SergeiKireevDev/oyster.git";
 const DEFAULT_REF = "main";
 const DEFAULT_CONNECT_URL = "wss://hub.get-oyster.dev/box/connect";
+const BOX_AGENT_SOURCE = readFileSync(new URL("./box-agent.mjs", import.meta.url), "utf8");
+const BOX_AGENT_PACKAGE = `${JSON.stringify({ private: true, type: "module", dependencies: { ws: "8.21.1" } }, null, 2)}\n`;
 
 function required(value, label) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is required`);
@@ -83,7 +87,7 @@ Environment=HOME=/var/lib/oyster
 EnvironmentFile=/etc/oyster/box-agent.env
 StateDirectory=oyster-box-agent
 StateDirectoryMode=0700
-ExecStart=/usr/bin/node /opt/oyster/oyster-hub/box-agent.mjs
+ExecStart=/usr/bin/node /usr/local/lib/oyster-box-agent/box-agent.mjs
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -135,6 +139,22 @@ node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if
 
 id oyster >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/oyster --shell /usr/sbin/nologin oyster
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster /var/lib/oyster-box-agent
+
+# Register before the source checkout and build so bootstrap does not depend on
+# the selected repository ref already containing the box agent.
+npm install --prefix /usr/local/lib/oyster-box-agent --omit=dev --no-audit --no-fund
+systemctl daemon-reload
+systemctl enable --now oyster-box-agent.service
+
+# Small instances need swap while installing and building pi/Oyster.
+if [ "$(awk '/MemTotal/ { print $2 }' /proc/meminfo)" -lt 2000000 ] && ! swapon --show=NAME --noheadings | grep -q .; then
+  fallocate -l 2G /swapfile
+  chmod 0600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+fi
+
 rm -rf /opt/oyster.new
 git clone --depth 1 --branch ${JSON.stringify(settings.ref)} --recurse-submodules ${JSON.stringify(settings.repository)} /opt/oyster.new
 cd /opt/oyster.new
@@ -148,7 +168,7 @@ mv /opt/oyster.new /opt/oyster
 chown -R root:root /opt/oyster
 chmod 0600 /etc/oyster/box-agent.env
 systemctl daemon-reload
-systemctl enable --now oyster.service oyster-box-agent.service
+systemctl enable --now oyster.service
 
 # The bootstrap credential is one-use. Remove cloud-init's local copies after
 # services have inherited their configuration; the root-only environment file
@@ -158,6 +178,8 @@ find /var/lib/cloud/instances -maxdepth 2 -type f -name 'user-data*' -delete 2>/
 
   const files = [
     ["/etc/oyster/box-agent.env", "0600", agentEnvironment],
+    ["/usr/local/lib/oyster-box-agent/package.json", "0644", BOX_AGENT_PACKAGE],
+    ["/usr/local/lib/oyster-box-agent/box-agent.mjs", "0644", BOX_AGENT_SOURCE],
     ["/etc/systemd/system/oyster-box-agent.service", "0644", agentUnit],
     ["/etc/systemd/system/oyster.service", "0644", oysterUnit],
     ["/usr/local/sbin/install-oyster-box", "0700", installScript],
