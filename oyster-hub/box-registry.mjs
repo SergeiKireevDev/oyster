@@ -22,14 +22,20 @@ function validIdentity(value) {
   return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 }
 
-function publicRegistration(record, connected = false) {
+function publicRegistration(record, connected = false, timestamp = Date.now()) {
   const connectedStatus = record.observed?.service_state === "ready" ? "online" : "initializing";
+  const bootstrapExpired = !connected
+    && record.status === "awaiting_agent"
+    && !record.reconnectHash
+    && Number.isFinite(Date.parse(record.expiresAt))
+    && timestamp > Date.parse(record.expiresAt);
   return {
     boxId: record.boxId,
     generation: record.generation,
     provider: record.provider,
     providerInstanceId: record.providerInstanceId || null,
-    status: connected ? connectedStatus : record.status,
+    status: connected ? connectedStatus : bootstrapExpired ? "failed" : record.status,
+    ...(bootstrapExpired ? { failureReason: "agent did not register before the bootstrap credential expired" } : {}),
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
     connectedAt: record.connectedAt || null,
@@ -288,7 +294,7 @@ export function createBoxConnectionRegistry({
         throw new Error("connected agent provider identity does not match created instance");
       }
       await persist();
-      return publicRegistration(record, connections.has(recordKey));
+      return publicRegistration(record, connections.has(recordKey), now());
     },
     async revoke(boxId, generation, reason = "revoked") {
       await load();
@@ -309,11 +315,11 @@ export function createBoxConnectionRegistry({
       await load();
       const recordKey = keyOf(boxId, generation);
       const record = records.get(recordKey);
-      return record ? publicRegistration(record, connections.has(recordKey)) : null;
+      return record ? publicRegistration(record, connections.has(recordKey), now()) : null;
     },
     async list() {
       await load();
-      return [...records.entries()].map(([key, record]) => publicRegistration(record, connections.has(key)));
+      return [...records.entries()].map(([key, record]) => publicRegistration(record, connections.has(key), now()));
     },
   });
 }
