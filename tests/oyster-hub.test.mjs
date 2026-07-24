@@ -478,6 +478,43 @@ test("workspace upload idle timeout aborts a stalled stream with an actionable e
   });
 });
 
+test("workspace upload offsets recover from 409 and finalize through the Hub", async (t) => {
+  let stored = Buffer.alloc(0);
+  const upstream = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://workspace.test");
+    const offset = Number(url.searchParams.get("offset"));
+    const last = url.searchParams.get("last") === "1";
+    const body = await requestBytes(req);
+    if (offset !== stored.length) return sendJson(res, 409, { error: "chunk out of sequence", have: stored.length });
+    stored = Buffer.concat([stored, body]);
+    return sendJson(res, 200, last ? { saved: "/tmp/chunked.bin", bytes: stored.length } : { received: stored.length });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const headers = { "x-auth-token": "hub-secret", "content-type": "application/octet-stream" };
+  const upload = (offset, last, body) => fetch(`${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=chunked.bin&offset=${offset}&last=${last ? 1 : 0}`, {
+    method: "POST", headers, body,
+  });
+
+  const first = await upload(0, false, "abc");
+  assert.deepEqual(await first.json(), { received: 3 });
+  const conflict = await upload(1, true, "def");
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).have, 3);
+  const final = await upload(3, true, "def");
+  assert.deepEqual(await final.json(), { saved: "/tmp/chunked.bin", bytes: 6 });
+  assert.equal(stored.toString(), "abcdef");
+});
+
 test("lost upload responses remain safe to retry through the Hub", async (t) => {
   let applied = null;
   let calls = 0;
