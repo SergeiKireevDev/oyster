@@ -119,6 +119,15 @@ class SmartGitHandler(BaseHTTPRequestHandler):
 
     def serve_git(self, head_only=False):
         parsed = urlsplit(self.path)
+        if parsed.path in {"", "/"} and "service=" not in parsed.query and self.command in {"GET", "HEAD"}:
+            body = b"Oyster read-only Git Smart HTTP server\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if not head_only: self.wfile.write(body)
+            return
         if "git-receive-pack" in parsed.path or "service=git-receive-pack" in parsed.query:
             self.send_error(403, "Push is disabled")
             return
