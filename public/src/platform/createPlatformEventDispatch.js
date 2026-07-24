@@ -30,6 +30,7 @@ export function createPlatformEventDispatch(deps) {
     setWorkdir: deps.setWorkdir,
     refreshHublots: deps.refreshHublots,
     refreshRoutines: deps.refreshRoutines,
+    reloadTranscript: () => void deps.reloadTranscript().catch((error) => deps.log("replayDone:reload:error", { error: error?.message ?? String(error) })),
   });
   const runnerPingEvent = createRunnerPingEventController({ currentRunners: deps.getRunners, setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
   const runnersUpdate = createRunnersUpdateController({ setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });

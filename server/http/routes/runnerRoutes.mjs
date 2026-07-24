@@ -28,7 +28,8 @@ export function createRunnerRoutes({
   return {
     "GET /events": (req, res, url) => {
       const runner = runnerFromReq(url);
-      if (!runner.proc) startRunner(runner);
+      // Subscribing is a read-only operation. Keep a stopped runner dormant;
+      // commands sent through /rpc can revive it when work is requested.
       res.writeHead(200, {
         "content-type": "text/event-stream",
         "cache-control": "no-cache, no-transform",
@@ -70,7 +71,10 @@ export function createRunnerRoutes({
         return;
       }
       const runner = runnerFromReq(url);
-      const queued = sendToRunner(runner, command);
+      // State refreshes happen while opening a transcript and must not turn a
+      // read-only visit into a live pi process. User commands still autostart.
+      const readOnly = command.type === "get_state" || command.type === "get_messages";
+      const queued = sendToRunner(runner, command, { autostart: !readOnly });
       json(res, queued ? 202 : 503, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
         : { error: "pi process unavailable" });

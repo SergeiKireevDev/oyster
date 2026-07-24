@@ -23,13 +23,15 @@ The `token` query parameter is allowed only on `GET` requests. Auth failures are
 | `GET /health` | Liveness and safe process, backend, and database diagnostics |
 | `GET /authcheck` | Report whether supplied token locations are valid, or that authentication is disabled, without exposing the token |
 | `GET /runtime-config.js` | Tell the browser whether this Oyster instance requires its own token |
-| `GET /events` | SSE stream for runner output and server events |
-| `GET /runners` | List runner status |
-| `DELETE /runners?id=…` | Stop and remove a runner |
-| `POST /open-session` | Create or resume a runner for a session |
-| `POST /restart?runner=…` | Restart one runner |
-| `POST /rpc?runner=…` | Forward a pi RPC object verbatim |
+| `GET /events` | Subscribe to runner output and server events without starting a stopped pi process |
+| `GET /runners` | List runner descriptors and their `alive`/`busy` process status |
+| `DELETE /runners?id=…` | Stop a runner process |
+| `POST /open-session` | Select a saved runner without reviving it, or start a brand-new session |
+| `POST /restart?runner=…` | Explicitly restart one runner process |
+| `POST /rpc?runner=…` | Forward a pi RPC object; work commands start a stopped process on demand |
 | `POST /workdir` | Set the workspace and spawn a runner there |
+
+Runner descriptors and pi processes have separate lifecycles. Opening a saved session, subscribing to its event stream, and reading its durable transcript leave `alive: false` runners stopped. A brand-new session starts pi once so it can establish a durable session identity. The browser reads those transcripts through `GET /session-messages`. Sending a work command such as `prompt` through `POST /rpc` starts the selected runner before forwarding the command. Read-only `get_state` and `get_messages` RPC commands do not autostart a stopped runner and return `503` when no process is available.
 
 ## Sessions
 

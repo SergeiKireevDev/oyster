@@ -194,14 +194,14 @@ export function createSessionPreviewController({ fetchPreview, render, log = () 
 }
 
 /** Debounce authoritative state refresh requests. */
-export function createSessionStateRefresher({ rpc, applyState, getGeneration = () => 0, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+export function createSessionStateRefresher({ rpc, applyState, isRunnerAlive = () => true, getGeneration = () => 0, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;
   return () => {
     if (timer) clearTimeoutImpl(timer);
     const generation = getGeneration();
     timer = setTimeoutImpl(async () => {
       timer = null;
-      if (generation !== getGeneration()) return;
+      if (generation !== getGeneration() || !isRunnerAlive()) return;
       try {
         const incoming = await rpc({ type: "get_state" });
         if (generation === getGeneration()) applyState(incoming);
@@ -316,12 +316,14 @@ export function createSearchHitSessionController({ close, getSessionId, open, ge
   };
 }
 
-export function switchSessionRunner({ id, currentRunner, hooks }) {
-  hooks.log({ targetRunner: id, sameRunner: id === currentRunner });
+export function switchSessionRunner({ id, currentRunner, isRunnerAlive = () => true, hooks }) {
+  const alive = isRunnerAlive(id);
+  hooks.log({ targetRunner: id, sameRunner: id === currentRunner, alive });
   if (id === currentRunner) {
     hooks.resetPreview();
     hooks.resetSessionUi();
-    hooks.refreshState();
+    if (alive) hooks.refreshState();
+    else hooks.setBusy(false);
     return false;
   }
   hooks.switchComposerDraft?.(currentRunner, id);
@@ -330,18 +332,20 @@ export function switchSessionRunner({ id, currentRunner, hooks }) {
   hooks.resetSessionUi();
   hooks.renderPreview();
   hooks.resetCommands();
+  if (!alive) hooks.setBusy(false);
   hooks.connect({ replay: false });
   return true;
 }
 
 export function createSessionRuntime({
-  getCurrentRunner, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
-  setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands, switchComposerDraft,
+  getCurrentRunner, isRunnerAlive = () => true, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
+  setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands, switchComposerDraft, setBusy,
   connect,
 }) {
   const switchRunner = (id) => switchSessionRunner({
     id,
     currentRunner: getCurrentRunner(),
+    isRunnerAlive,
     hooks: {
       log,
       resetPreview,
@@ -352,6 +356,7 @@ export function createSessionRuntime({
       renderPreview,
       resetCommands,
       switchComposerDraft,
+      setBusy,
       connect,
     },
   });

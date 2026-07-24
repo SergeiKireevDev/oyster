@@ -168,6 +168,8 @@ export function createTranscriptAssembly(deps) {
       fetchImpl: syncDeps.fetchImpl,
       sessionFileQuery: syncDeps.sessionFileQuery,
       getSessionIdentity: syncDeps.getSessionIdentity,
+      getRunnerInfo: syncDeps.getRunnerInfo,
+      isRunnerAlive: syncDeps.isRunnerAlive,
       getGeneration: syncDeps.getGeneration,
       clearPreview: syncDeps.clearPreview,
       log: syncDeps.log,

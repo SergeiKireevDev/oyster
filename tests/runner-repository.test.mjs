@@ -248,7 +248,7 @@ test("backend rollback ignores an incompatible persisted default runner without 
   const selected = manager.runnerFromReq(new URL("http://localhost/events?runner=r-12345678-1234-4123-8123-123456789abc"));
   assert.equal(selected.sessionRef, null);
   assert.notEqual(selected.id, "r-12345678-1234-4123-8123-123456789abc");
-  assert.equal(spawnCount, 1);
+  assert.equal(spawnCount, 1, "a brand-new default session establishes its identity");
   assert.ok(store.repositories.runners.find("r-12345678-1234-4123-8123-123456789abc"), "dormant SQLite descriptor survives a JSONL rollback toggle");
   assert.equal(store.repositories.runners.find(selected.id).session_backend, null);
 });

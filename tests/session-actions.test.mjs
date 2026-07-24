@@ -229,3 +229,17 @@ test("reselecting the current runner returns the layout to the transcript", () =
   assert.equal(switchSessionRunner({ id: "current", currentRunner: "current", hooks }), false);
   assert.deepEqual(calls.map(([name]) => name), ["log", "resetPreview", "resetSessionUi", "refreshState"]);
 });
+
+test("switching to a dormant runner marks it done without requesting state", () => {
+  const calls = [];
+  const hooks = Object.fromEntries(["log", "resetPreview", "refreshState", "switchComposerDraft", "setRunner", "clearTranscript", "resetSessionUi", "renderPreview", "resetCommands", "setBusy"].map((name) => [name, (...args) => calls.push([name, ...args])]));
+  hooks.connect = (options) => calls.push(["connect", options]);
+
+  assert.equal(switchSessionRunner({ id: "dormant", currentRunner: "current", isRunnerAlive: () => false, hooks }), true);
+  assert.deepEqual(calls.find(([name]) => name === "setBusy"), ["setBusy", false]);
+  assert.equal(calls.some(([name]) => name === "refreshState"), false);
+
+  calls.length = 0;
+  assert.equal(switchSessionRunner({ id: "dormant", currentRunner: "dormant", isRunnerAlive: () => false, hooks }), false);
+  assert.deepEqual(calls.map(([name]) => name), ["log", "resetPreview", "resetSessionUi", "setBusy"]);
+});

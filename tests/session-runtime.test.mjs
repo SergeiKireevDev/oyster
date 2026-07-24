@@ -84,15 +84,32 @@ test("session state refresher discards an in-flight response after a runner swit
   assert.deepEqual(applied, []);
 });
 
+test("session state refresher does not send get_state to a dormant runner", async () => {
+  let runTimer;
+  let rpcCalls = 0;
+  const refresh = createSessionStateRefresher({
+    rpc: async () => { rpcCalls += 1; },
+    applyState: () => {},
+    isRunnerAlive: () => false,
+    setTimeoutImpl: (callback) => { runTimer = callback; return callback; },
+    clearTimeoutImpl: () => {},
+  });
+
+  refresh();
+  await runTimer();
+  assert.equal(rpcCalls, 0);
+});
+
 test("session runtime delegates deliberate switches with the current runner and adapters", () => {
   const calls = [];
   const runtime = createSessionRuntime({
     getCurrentRunner: () => "current",
+    isRunnerAlive: (id) => id === "live",
     switchSessionRunner: (options) => { calls.push(options); return true; },
     openSession: (options) => { calls.push(["open", options]); return "opened"; },
     stopSession: (id) => { calls.push(["stop", id]); return "stopped"; },
     log: () => {}, resetPreview: () => {}, refreshState: () => {}, setRunner: () => {},
-    clearTranscript: () => {}, resetSessionUi: () => {}, renderPreview: () => {}, resetCommands: () => {}, connect: () => {},
+    clearTranscript: () => {}, resetSessionUi: () => {}, renderPreview: () => {}, resetCommands: () => {}, setBusy: () => {}, connect: () => {},
   });
   assert.equal(runtime.openSession({ dir: "/workspace" }), "opened");
   assert.equal(runtime.stopSession("finished"), "stopped");
@@ -101,6 +118,8 @@ test("session runtime delegates deliberate switches with the current runner and 
   assert.deepEqual(calls[1], ["stop", "finished"]);
   assert.equal(calls[2].id, "next");
   assert.equal(calls[2].currentRunner, "current");
+  assert.equal(calls[2].isRunnerAlive("next"), false);
+  assert.equal(typeof calls[2].hooks.setBusy, "function");
   assert.equal(typeof calls[2].hooks.connect, "function");
 });
 

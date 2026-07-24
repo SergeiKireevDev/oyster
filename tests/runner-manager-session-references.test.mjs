@@ -105,6 +105,29 @@ test("runner ID generation rejects collisions instead of replacing a durable des
   assert.equal(state.runners.size, 1);
 });
 
+test("opening a stopped session stays dormant until a message is sent", (t) => {
+  const { manager, sqlitePath, spawns } = setup(t);
+  const sessionRef = { backend: "sqlite", id: "read-only", storagePath: sqlitePath };
+
+  const runner = manager.openSessionRunner({ sessionRef, dir: "/workspace" });
+  assert.equal(runner.proc, null);
+  assert.equal(spawns.length, 0);
+  assert.equal(manager.openSessionRunner({ sessionRef }), runner);
+  assert.equal(spawns.length, 0);
+
+  assert.equal(manager.sendToRunner(runner, { type: "prompt", message: "hello" }), true);
+  assert.equal(spawns.length, 1);
+  assert.equal(runner.proc, spawns[0].proc);
+
+  manager.stopRunner(runner);
+  runner.lastSpawnAt = 0;
+  assert.equal(manager.openSessionRunner({ sessionRef }), runner);
+  assert.equal(runner.proc, null);
+  assert.equal(spawns.length, 1, "reopening for reading must not revive pi");
+  assert.equal(manager.sendToRunner(runner, { type: "prompt", message: "again" }), true);
+  assert.equal(spawns.length, 2, "sending a message revives pi");
+});
+
 test("runner deduplication compares the full reference, not the shared SQLite path", (t) => {
   const { manager, sqlitePath, owners, state } = setup(t);
   const firstRef = { backend: "sqlite", id: "first", storagePath: sqlitePath };

@@ -243,6 +243,7 @@ const sessionAssembly = createSessionAssembly({
   },
   featureDependencies: ({ sessionOpenController, previewController }) => ({
     getCurrentRunner: () => getCurrentRunner(),
+    isRunnerAlive: (id) => Boolean(getRunners().find((runner) => runner.id === id)?.alive),
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
     stopSession: (id) => stopSessionRunner(fetch, id),
@@ -256,6 +257,7 @@ const sessionAssembly = createSessionAssembly({
     renderPreview: () => previewController.renderNow(),
     resetCommands: composerOperations.resetCommands,
     switchComposerDraft: composerOperations.switchDraft,
+    setBusy: (value) => setBusy(value),
     connect,
   }),
 });
@@ -353,6 +355,8 @@ transcriptAssembly.configureSynchronization({
   fetchImpl: fetch,
   sessionFileQuery,
   getSessionIdentity: () => runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner())) ?? getSessionState()?.sessionFile,
+  getRunnerInfo: () => getRunners().find((runner) => runner.id === getCurrentRunner()) ?? null,
+  isRunnerAlive: () => Boolean(getRunners().find((runner) => runner.id === getCurrentRunner())?.alive),
   getGeneration: () => getRunnerGeneration(),
   clearPreview: sessionOperations.clearPreview,
   log: lifecycleLog,
@@ -389,6 +393,7 @@ const refreshStateNow = sessionAssembly.configureRefresh({
     return value;
   },
   applyState,
+  isRunnerAlive: () => Boolean(getRunners().find((runner) => runner.id === getCurrentRunner())?.alive),
   getGeneration: () => getRunnerGeneration(),
   onError: (e) => lifecycleLog("refreshState:error", { error: e?.message ?? String(e) }),
 });

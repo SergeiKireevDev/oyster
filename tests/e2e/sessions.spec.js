@@ -271,6 +271,25 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       },
       { timeout: 15000, label: "ALPHA stopped, BETA still running" }
     );
+
+    // Opening ALPHA to read its durable transcript must leave pi stopped.
+    await switchToSessionByToken(page, A, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: A }).last()).toBeVisible({ timeout: 15000 });
+    await waitFor(
+      async () => !(await byKey()).alpha?.runner?.alive,
+      { timeout: 5000, label: "read-only ALPHA open remains dormant" }
+    );
+
+    // The first new user message revives the selected runner on demand.
+    if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
+    const revived = tag("ALPHA-REVIVED");
+    await page.fill("#input", `Do not use any tools. Reply with exactly the word ${revived}.`);
+    await page.click("#sendBtn");
+    await expect(page.locator(".msg.user", { hasText: revived }).last()).toBeVisible({ timeout: 15000 });
+    await waitFor(
+      async () => Boolean((await byKey()).alpha?.runner?.alive),
+      { timeout: 15000, label: "ALPHA revived after prompt" }
+    );
   });
 
   test("switch between sessions — transcript follows the selection", async ({ page }) => {

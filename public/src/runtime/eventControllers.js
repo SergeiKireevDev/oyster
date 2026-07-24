@@ -1,4 +1,4 @@
-export function handleReplayDone(message, { markReplayDone, isReplaying, setReplaying, setRunner, setRunners, setWorkdir, refreshHublots, refreshRoutines }) {
+export function handleReplayDone(message, { markReplayDone, isReplaying, setReplaying, setRunner, setRunners, setWorkdir, refreshHublots, refreshRoutines, reloadTranscript = () => {} }) {
   markReplayDone();
   if (isReplaying()) setReplaying(true, "canonical");
   if (message.runner) setRunner(message.runner);
@@ -6,6 +6,7 @@ export function handleReplayDone(message, { markReplayDone, isReplaying, setRepl
   if (message.workdir) setWorkdir(message.workdir);
   refreshHublots();
   refreshRoutines();
+  reloadTranscript();
 }
 
 export function createReplayDoneEventController(dependencies) {
