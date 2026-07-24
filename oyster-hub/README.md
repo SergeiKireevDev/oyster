@@ -43,7 +43,7 @@ The checked-in `config.mock.example.json` selects the mock driver and maps the O
 ```json
 {
   "port": 8082,
-  "sharedTokenFile": "/home/ubuntu/tree-pi/.ui-token",
+  "sharedTokenFile": "../.ui-token",
   "driver": {
     "type": "mock",
     "workspaces": [
