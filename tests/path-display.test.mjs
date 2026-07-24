@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { abbreviateHomePath } from "../public/src/lib/pathDisplay.js";
 
 test("home paths are abbreviated for display", () => {
-  assert.equal(abbreviateHomePath("/home/ubuntu/project"), "~/project");
-  assert.equal(abbreviateHomePath("/home/ubuntu"), "~");
+  assert.equal(abbreviateHomePath("/home/alice/project"), "~/project");
+  assert.equal(abbreviateHomePath("/home/alice"), "~");
   assert.equal(abbreviateHomePath("/root/project"), "~/project");
   assert.equal(abbreviateHomePath("/Users/alice/project"), "~/project");
 });

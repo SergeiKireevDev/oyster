@@ -2,7 +2,7 @@
   "host": "127.0.0.1",
   "port": 8082,
   "token": "replace-with-a-hub-bearer-token",
-  "sharedTokenFile": "/home/ubuntu/tree-pi/.ui-token",
+  "sharedTokenFile": "../.ui-token",
   "timeoutMs": 5000,
   "uploadIdleTimeoutMs": 30000,
   "uploadResponseTimeoutMs": 30000,
