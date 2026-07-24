@@ -339,14 +339,51 @@
     cursor: pointer;
   }
   .session-sidebar-workspace-create:hover { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+  .session-sidebar-workspace-create:disabled { opacity: .38; cursor: not-allowed; border-color: var(--border); background: transparent; color: var(--muted); }
+  .session-sidebar-workspace-create:disabled:hover { border-color: var(--border); background: transparent; color: var(--muted); }
   .session-sidebar-workspace-icon {
     width: 13px;
     height: 13px;
     flex: none;
-    border: 1.5px solid #8f9aff;
+    border: 1.5px solid var(--muted);
     border-radius: 3px;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    background: color-mix(in srgb, var(--muted) 12%, transparent);
+    box-shadow: 0 0 0 transparent;
     transform: rotate(45deg) scale(.78);
+  }
+  .session-sidebar-workspace-icon[data-status="online"],
+  .session-sidebar-workspace-icon[data-status="ready"] {
+    border-color: var(--green);
+    background: color-mix(in srgb, var(--green) 22%, transparent);
+    box-shadow: 0 0 7px color-mix(in srgb, var(--green) 36%, transparent);
+  }
+  .session-sidebar-workspace-icon:is(
+    [data-status="provisioning"],
+    [data-status="awaiting_agent"],
+    [data-status="awaiting-agent"],
+    [data-status="initializing"],
+    [data-status="pausing"],
+    [data-status="resuming"]
+  ) {
+    border-color: #e0af68;
+    background: color-mix(in srgb, #e0af68 22%, transparent);
+    box-shadow: 0 0 7px color-mix(in srgb, #e0af68 30%, transparent);
+  }
+  .session-sidebar-workspace-icon:is(
+    [data-status="offline"],
+    [data-status="unreachable"],
+    [data-status="failed"],
+    [data-status="error"],
+    [data-status="terminated"],
+    [data-status="exited"]
+  ) {
+    border-color: var(--red);
+    background: color-mix(in srgb, var(--red) 20%, transparent);
+    box-shadow: 0 0 7px color-mix(in srgb, var(--red) 28%, transparent);
+  }
+  .session-sidebar-workspace-icon[data-status="paused"] {
+    border-color: #7aa2f7;
+    background: color-mix(in srgb, #7aa2f7 18%, transparent);
   }
   .session-sidebar-cwd { min-width: 0; }
   .session-sidebar-cwd > summary {
