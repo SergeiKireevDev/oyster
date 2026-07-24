@@ -4,8 +4,9 @@ import { readFile } from "node:fs/promises";
 import { createWorkspaceDriver } from "./drivers/index.mjs";
 import { WorkspaceDriverError } from "./drivers/errors.mjs";
 import { createOysterUiGateway } from "./ui-gateway.mjs";
-import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
 import { createUploadLimiter, prepareOpaqueWorkspaceRequest, proxyWorkspaceRequest, readBufferedRequestBody } from "./workspace-proxy.mjs";
+import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
+import { createBoxConnectionRegistry } from "./box-registry.mjs";
 
 const AGGREGATE_RESOURCES = ["health", "runners", "sessions?all=1", "routines", "tunnels"];
 
@@ -88,7 +89,7 @@ async function listEnvironments(driver, cloudService) {
 
 async function readJsonBody(req) {
   try {
-    const raw = await readRequestBody(req);
+    const raw = await readBufferedRequestBody(req);
     return raw.length ? JSON.parse(raw.toString("utf8")) : {};
   } catch (error) {
     throw new CloudProvisioningError(`invalid JSON: ${error.message}`, { status: 400 });
@@ -112,7 +113,7 @@ async function inspectWorkspace(workspace, options, full = false) {
       || ["unreachable", "terminated", "exited"].includes(workspace.provider?.state);
     return {
       ...publicWorkspace(workspace),
-      status: unavailable ? "offline" : "provisioning",
+      status: unavailable ? "offline" : (workspace.status || workspace.provider?.phase || "provisioning"),
       latencyMs: null,
       results: {},
       errors: { endpoint: "Oyster endpoint is not exposed yet" },
@@ -182,10 +183,19 @@ export function createOysterHub(config, {
   driver = createWorkspaceDriver(config.driver, { fetchImpl }),
   dashboardPath = new URL("./public/index.html", import.meta.url),
   openApiPath = new URL("./openapi.json", import.meta.url),
-  cloudService = createCloudProvisioningService({ stateFile: config.cloud?.stateFile, fetchImpl }),
   onTransfer,
+  boxRegistry = createBoxConnectionRegistry({ stateFile: config.cloud?.registryStateFile, logger }),
+  cloudService = null,
 } = {}) {
   const uploadLimiter = createUploadLimiter(config.maxConcurrentUploads);
+  const cloud = cloudService || createCloudProvisioningService({
+    stateFile: config.cloud?.stateFile,
+    fetchImpl,
+    boxRegistry,
+    boxConnectUrl: config.cloud?.boxConnectUrl,
+    repository: config.cloud?.repository,
+    ref: config.cloud?.ref,
+  });
   const options = {
     fetchImpl,
     timeoutMs: config.timeoutMs,
@@ -205,7 +215,7 @@ export function createOysterHub(config, {
     uploadLimiter,
   });
 
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://hub.local");
     try {
       if (req.method === "GET" && url.pathname === "/health") {
@@ -225,13 +235,13 @@ export function createOysterHub(config, {
         return res.end(body);
       }
       if (url.pathname === "/api/v1/environments" && req.method === "GET") {
-        return json(res, 200, { environments: await listEnvironments(driver, cloudService) });
+        return json(res, 200, { environments: await listEnvironments(driver, cloud) });
       }
       if (url.pathname === "/api/v1/environments" && req.method === "POST") {
-        return json(res, 201, { environment: await cloudService.provision(await readJsonBody(req)) });
+        return json(res, 201, { environment: await cloud.provision(await readJsonBody(req)) });
       }
       if (url.pathname === "/api/v1/cloud/providers" && req.method === "GET") {
-        return json(res, 200, { providers: await cloudService.listProviders() });
+        return json(res, 200, { providers: await cloud.listProviders() });
       }
       const cloudProviderMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/(credentials|options)$/);
       if (cloudProviderMatch) {
@@ -239,18 +249,18 @@ export function createOysterHub(config, {
         try { providerId = decodeURIComponent(cloudProviderMatch[1]); }
         catch { return json(res, 400, { error: "invalid cloud provider id" }); }
         if (cloudProviderMatch[2] === "credentials" && req.method === "PUT") {
-          return json(res, 200, { credential: await cloudService.configure(providerId, await readJsonBody(req)) });
+          return json(res, 200, { credential: await cloud.configure(providerId, await readJsonBody(req)) });
         }
         if (cloudProviderMatch[2] === "credentials" && req.method === "DELETE") {
-          return json(res, 200, { credential: await cloudService.removeCredentials(providerId) });
+          return json(res, 200, { credential: await cloud.removeCredentials(providerId) });
         }
         if (cloudProviderMatch[2] === "options" && req.method === "GET") {
-          return json(res, 200, { provider: providerId, ...(await cloudService.options(providerId, { region: url.searchParams.get("region") || "" })) });
+          return json(res, 200, { provider: providerId, ...(await cloud.options(providerId, { region: url.searchParams.get("region") || "" })) });
         }
         return json(res, 405, { error: "method not allowed" });
       }
       if (url.pathname === "/api/v1/workspaces" && req.method === "GET") {
-        const discovered = await driver.listWorkspaces();
+        const discovered = [...await driver.listWorkspaces(), ...(cloud.listWorkspaces ? await cloud.listWorkspaces() : [])];
         const workspaces = await Promise.all(discovered.map((workspace) => inspectWorkspace(workspace, options)));
         return json(res, 200, { driver: driverDescriptor(driver), workspaces });
       }
@@ -269,7 +279,7 @@ export function createOysterHub(config, {
         return json(res, 201, { workspace });
       }
       if (req.method === "GET" && url.pathname === "/api/v1/overview") {
-        const discovered = await driver.listWorkspaces();
+        const discovered = [...await driver.listWorkspaces(), ...(cloud.listWorkspaces ? await cloud.listWorkspaces() : [])];
         const workspaces = await Promise.all(discovered.map((workspace) => inspectWorkspace(workspace, options, true)));
         return json(res, 200, { generatedAt: new Date().toISOString(), driver: driverDescriptor(driver), totals: overviewTotals(workspaces), workspaces });
       }
@@ -278,7 +288,7 @@ export function createOysterHub(config, {
       if (match) {
         let wid;
         try { wid = decodeURIComponent(match[1]); } catch { return json(res, 400, { error: "invalid workspace id" }); }
-        const workspace = await driver.getWorkspace(wid);
+        const workspace = await driver.getWorkspace(wid) || (cloud.getWorkspace ? await cloud.getWorkspace(wid) : null);
         if (!workspace) return json(res, 404, { error: "workspace not found", workspace: wid });
         if (!match[2]) {
           if (req.method === "DELETE" && !driver.capabilities?.remove) {
@@ -303,4 +313,7 @@ export function createOysterHub(config, {
       else res.destroy(error);
     }
   });
+  boxRegistry.attach?.(server);
+  server.boxRegistry = boxRegistry;
+  return server;
 }

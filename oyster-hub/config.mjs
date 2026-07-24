@@ -19,6 +19,15 @@ function httpUrl(value, label) {
   return url.toString().replace(/\/$/, "");
 }
 
+function wssUrl(value, label) {
+  const raw = requireString(value, label);
+  let url;
+  try { url = new URL(raw); } catch { throw new Error(`${label} is not a valid URL: ${raw}`); }
+  if (url.protocol !== "wss:") throw new Error(`${label} must use wss: ${raw}`);
+  if (url.username || url.password || url.search || url.hash) throw new Error(`${label} must not contain credentials, a query, or a fragment`);
+  return url.toString();
+}
+
 function nonNegativeInteger(value, label, fallback) {
   const number = Number(value ?? fallback);
   if (!Number.isSafeInteger(number) || number < 0) throw new Error(`${label} must be a non-negative safe integer`);
@@ -129,6 +138,24 @@ export function validateConfig(input, env = process.env) {
   const uploadResponseTimeoutMs = duration(input.uploadResponseTimeoutMs, "uploadResponseTimeoutMs", 30000, 30 * 60 * 1000);
   const maxConcurrentUploads = positiveInteger(input.maxConcurrentUploads, "maxConcurrentUploads", 16, 1024);
 
+  const configuredCloudStateFile = env.OYSTER_HUB_CLOUD_STATE_FILE || input.cloud?.stateFile || null;
+  if (configuredCloudStateFile != null && (typeof configuredCloudStateFile !== "string" || !configuredCloudStateFile.trim())) {
+    throw new Error("cloud.stateFile must be a non-empty path");
+  }
+  const cloudStateFile = configuredCloudStateFile
+    ? (isAbsolute(configuredCloudStateFile.trim()) ? configuredCloudStateFile.trim() : resolve(configuredCloudStateFile.trim()))
+    : null;
+  const configuredRegistryStateFile = env.OYSTER_HUB_BOX_REGISTRY_STATE_FILE || input.cloud?.registryStateFile || (cloudStateFile ? `${cloudStateFile}.boxes` : null);
+  if (configuredRegistryStateFile != null && (typeof configuredRegistryStateFile !== "string" || !configuredRegistryStateFile.trim())) {
+    throw new Error("cloud.registryStateFile must be a non-empty path");
+  }
+  const registryStateFile = configuredRegistryStateFile
+    ? (isAbsolute(configuredRegistryStateFile.trim()) ? configuredRegistryStateFile.trim() : resolve(configuredRegistryStateFile.trim()))
+    : null;
+  const boxConnectUrl = wssUrl(env.OYSTER_HUB_BOX_CONNECT_URL || input.cloud?.boxConnectUrl || "wss://hub.get-oyster.dev/box/connect", "cloud.boxConnectUrl");
+  const repository = httpUrl(env.OYSTER_HUB_SOURCE_REPOSITORY || input.cloud?.repository || "https://github.com/SergeiKireevDev/oyster.git", "cloud.repository");
+  const ref = requireString(env.OYSTER_HUB_SOURCE_REF || input.cloud?.ref || "main", "cloud.ref");
+
   const driverInput = input.driver;
   if (!driverInput || typeof driverInput !== "object" || Array.isArray(driverInput)) {
     throw new Error("driver must be an object");
@@ -139,14 +166,6 @@ export function validateConfig(input, env = process.env) {
   else if (driverType === "mock") driver = validateMockDriver(driverInput, env);
   else throw new Error(`unsupported workspace driver: ${driverType}`);
 
-  const configuredCloudStateFile = env.OYSTER_HUB_CLOUD_STATE_FILE || input.cloud?.stateFile || null;
-  if (configuredCloudStateFile != null && (typeof configuredCloudStateFile !== "string" || !configuredCloudStateFile.trim())) {
-    throw new Error("cloud.stateFile must be a non-empty path");
-  }
-  const cloudStateFile = configuredCloudStateFile
-    ? (isAbsolute(configuredCloudStateFile.trim()) ? configuredCloudStateFile.trim() : resolve(configuredCloudStateFile.trim()))
-    : null;
-
   return Object.freeze({
     host: String(env.HOST || input.host || "127.0.0.1"),
     port,
@@ -156,7 +175,7 @@ export function validateConfig(input, env = process.env) {
     uploadResponseTimeoutMs,
     maxConcurrentUploads,
     driver,
-    cloud: Object.freeze({ stateFile: cloudStateFile }),
+    cloud: Object.freeze({ stateFile: cloudStateFile, registryStateFile, boxConnectUrl, repository, ref }),
   });
 }
 
@@ -170,6 +189,9 @@ export async function loadConfig(argv = process.argv.slice(2), env = process.env
   let resolvedEnv = env;
   if (parsed.cloud?.stateFile && !isAbsolute(parsed.cloud.stateFile)) {
     parsed.cloud = { ...parsed.cloud, stateFile: resolve(dirname(configPath), parsed.cloud.stateFile) };
+  }
+  if (parsed.cloud?.registryStateFile && !isAbsolute(parsed.cloud.registryStateFile)) {
+    parsed.cloud = { ...parsed.cloud, registryStateFile: resolve(dirname(configPath), parsed.cloud.registryStateFile) };
   }
   const sharedTokenFile = env.OYSTER_HUB_SHARED_TOKEN_FILE || parsed.sharedTokenFile;
   if (sharedTokenFile) {
