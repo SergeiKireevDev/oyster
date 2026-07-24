@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, spawnMarkdownService, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -13,17 +13,17 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       const requestedPort = body?.port;
       const brief = body?.brief ? String(body.brief) : null;
       const serviceType = body?.type ? String(body.type) : null;
-      const markdownPath = body?.path ? String(body.path) : null;
+      const servicePath = body?.path ? String(body.path) : null;
       if (!brief) {
         json(res, 400, { error: "managed hublots require a non-empty brief" });
         return;
       }
-      if (serviceType && serviceType !== "markdown") {
+      if (serviceType && !["markdown", "git-server"].includes(serviceType)) {
         json(res, 400, { error: `unsupported hublot type: ${serviceType}` });
         return;
       }
-      if (serviceType === "markdown" && (!markdownPath || !isAbsolute(markdownPath))) {
-        json(res, 400, { error: "type='markdown' requires an absolute path" });
+      if (["markdown", "git-server"].includes(serviceType) && (!servicePath || !isAbsolute(servicePath))) {
+        json(res, 400, { error: `type='${serviceType}' requires an absolute path` });
         return;
       }
       let prepared = null;
@@ -49,13 +49,15 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
           serviceStartScriptPath: reserved.service_start_script_path,
         };
         prepared = serviceType === "markdown"
-          ? await spawnMarkdownService(state, reservedOptions, markdownPath)
-          : await spawnHublotAgent(state, reservedOptions, brief);
+          ? await spawnMarkdownService(state, reservedOptions, servicePath)
+          : serviceType === "git-server"
+            ? await spawnGitServerService(state, reservedOptions, servicePath)
+            : await spawnHublotAgent(state, reservedOptions, brief);
         const tunnel = await openTunnel(state, reservedOptions);
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, {
           tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
-          agent: serviceType !== "markdown",
+          agent: !serviceType,
           type: serviceType,
         });
       } catch (e) {
