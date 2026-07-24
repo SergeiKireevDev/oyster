@@ -232,8 +232,14 @@ export async function proxyWorkspaceRequest({
     }
 
     let source = response.body ? Readable.fromWeb(response.body) : null;
+    // A downstream browser can disappear at the same moment Undici reports
+    // the matching AbortSignal through its response body. pipeline() observes
+    // the failure while active; this listener also covers the detach race after
+    // pipeline has already unwound.
+    source?.on("error", () => {});
     if (source && transformStream) {
       source = await transformStream(source, response);
+      source?.on("error", () => {});
       delete headers["content-length"];
     }
     res.writeHead(response.status, headers);
