@@ -14,7 +14,7 @@ test("Hub environment selector exposes the cloud provisioning modal, including a
   assert.match(overlays, /\$modalState\.content === "cloudEnvironment"[\s\S]*<CloudEnvironmentModal \/>/);
 });
 
-test("cloud environment modal implements provider, write-only credential, live option, and raw provisioning stages", () => {
+test("cloud environment modal provisions source-installed reverse-connected Oyster VMs", () => {
   const source = component("CloudEnvironmentModal.svelte");
   assert.match(source, /\/api\/v1\/cloud\/providers/);
   assert.match(source, /method: "PUT"/);
@@ -24,7 +24,10 @@ test("cloud environment modal implements provider, write-only credential, live o
   assert.match(source, /providerId === "digitalocean"/);
   assert.match(source, /providerId === "aws" \? "AWS"/);
   assert.match(source, /OAuth 2\.0 service account/);
-  assert.match(source, /cloud-init are not installed/);
+  assert.match(source, /installs Oyster from source with cloud-init/);
+  assert.match(source, /wss:\/\/hub\.get-oyster\.dev\/box\/connect/);
+  assert.match(source, /appears immediately as awaiting agent/);
+  assert.doesNotMatch(source, /cloud-init are not installed|raw VM will be created/);
   assert.match(source, /class="btn cloud-primary wide" type="submit" disabled=\{loading\}/);
   assert.doesNotMatch(source, /disabled=\{loading \|\| !provisionComplete\}/);
   assert.match(source, /select bind:value=\{size\} required/);
