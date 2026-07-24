@@ -40,6 +40,7 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster\.service/);
   assert.match(files.get("/etc/systemd/system/oyster-box-agent.service"), /ExecStart=\/usr\/bin\/node \/usr\/local\/lib\/oyster-box-agent\/box-agent\.mjs/);
+  assert.match(files.get("/etc/systemd/system/oyster.service"), /Environment=PI_UI_UNAUTHENTICATED=1/);
   assert.match(files.get("/etc/systemd/system/oyster.service"), /--host 127\.0\.0\.1 --port 8080 --unauthenticated/);
   assert.equal(oysterCloudInitDefaults.repository, "https://github.com/SergeiKireevDev/oyster.git");
 });

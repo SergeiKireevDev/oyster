@@ -113,6 +113,7 @@ WorkingDirectory=/opt/oyster
 Environment=HOME=/var/lib/oyster
 Environment=PI_CODING_AGENT_DIR=/var/lib/oyster/.pi/agent
 Environment=PI_UI_DB_PATH=/var/lib/oyster/.pi/agent/oyster.sqlite
+Environment=PI_UI_UNAUTHENTICATED=1
 ExecStart=/usr/bin/node /opt/oyster/server/server.mjs --host 127.0.0.1 --port 8080 --unauthenticated
 Restart=always
 RestartSec=5
