@@ -144,7 +144,12 @@ function monitoredBody(source, { controller, timer, uploadIdleTimeoutMs, uploadR
       }
     }
   }
-  return Readable.from(monitor());
+  const body = Readable.from(monitor());
+  // Undici may detach from an upload body immediately after its AbortSignal
+  // fires. Keep an error consumer attached so the async generator's matching
+  // abort cannot become an unhandled stream error and terminate Hub.
+  body.on("error", () => {});
+  return body;
 }
 
 export async function proxyWorkspaceRequest({
