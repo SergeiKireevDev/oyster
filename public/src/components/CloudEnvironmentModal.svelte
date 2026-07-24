@@ -153,7 +153,7 @@
   </nav>
 
   {#if step === "providers"}
-    <p class="cloud-intro">Choose where to create the new environment. Oyster stores credentials on the Hub and never sends secret values back to the browser.</p>
+    <p class="cloud-intro">Choose where to create the new environment. Hub provisions an Ubuntu VM, installs Oyster from source with cloud-init, and registers it over outbound WSS. Provider credentials remain on Hub.</p>
     {#if loading}<p class="cloud-state" role="status">Loading cloud providers…</p>{/if}
     <div class="cloud-provider-grid">
       {#each providers as provider (provider.id)}
@@ -203,7 +203,7 @@
         <label class="wide">
           <span>Environment name *</span>
           <input type="text" bind:value={environmentName} pattern="[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" maxlength="63" placeholder="dev-cloud-1" title="Use 1–63 letters, numbers, or hyphens; start and end with a letter or number" required />
-          <small>A raw VM will be created. Oyster and cloud-init are not installed in this version.</small>
+          <small>Cloud-init installs Oyster from source and registers this VM with Hub at wss://hub.get-oyster.dev/box/connect.</small>
         </label>
         <label>
           <span>{selectedProvider.id === "gcp" ? "Zone" : "Region"} *</span>
@@ -229,7 +229,7 @@
           <span><small>Type</small><strong>{size}</strong></span>
         </div>
         <p class="cloud-required-hint wide">All fields are required. If anything is missing, selecting Provision will highlight it.</p>
-        <button class="btn cloud-primary wide" type="submit" disabled={loading}>{loading ? "Provisioning…" : "Provision environment"}</button>
+        <button class="btn cloud-primary wide" type="submit" disabled={loading}>{loading ? "Provisioning…" : "Provision Oyster environment"}</button>
       </form>
     {:else if !error}
       <p class="cloud-state">No available regions or zones were returned by this provider.</p>
@@ -239,7 +239,7 @@
       <span class="cloud-success-icon">✓</span>
       <small>Provisioning started</small>
       <h3>{createdEnvironment.name}</h3>
-      <p>The instance was created successfully. It appears in the environment selector, but stays disconnected until Oyster is installed and registered.</p>
+      <p>The VM was created with Oyster cloud-init. It appears immediately as awaiting agent while the source build runs, then registers itself with Hub and becomes online.</p>
       <dl>
         <div><dt>Provider</dt><dd>{createdEnvironment.provider.name}</dd></div>
         <div><dt>Instance</dt><dd>{createdEnvironment.provider.instanceId}</dd></div>
