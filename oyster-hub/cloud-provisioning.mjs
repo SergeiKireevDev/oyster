@@ -171,7 +171,12 @@ async function digitalOceanProvision(input, credential, fetchImpl) {
       tags: [DIGITALOCEAN_OWNERSHIP_TAG],
     }),
   });
-  return { instanceId: String(value.droplet?.id || ""), state: value.droplet?.status || "new", consoleUrl: value.links?.actions?.[0]?.href || null };
+  const instanceId = String(value.droplet?.id || "");
+  return {
+    instanceId,
+    state: value.droplet?.status || "new",
+    consoleUrl: instanceId ? `https://cloud.digitalocean.com/droplets/${encodeURIComponent(instanceId)}` : null,
+  };
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -361,6 +366,13 @@ async function gcpProvision(input, credential, fetchImpl) {
   return { instanceId: String(value.targetId || input.name), state: value.status || "PENDING", consoleUrl: `https://console.cloud.google.com/compute/instancesDetail/zones/${encodeURIComponent(input.region)}/instances/${encodeURIComponent(input.name)}?project=${encodeURIComponent(credential.projectId)}` };
 }
 
+function publicProvider(provider) {
+  if (provider?.id === "digitalocean" && provider.instanceId) {
+    return { ...provider, consoleUrl: `https://cloud.digitalocean.com/droplets/${encodeURIComponent(provider.instanceId)}` };
+  }
+  return { ...provider };
+}
+
 function publicEnvironment(record, registration = null) {
   return {
     id: record.id,
@@ -370,7 +382,7 @@ function publicEnvironment(record, registration = null) {
     cloud: true,
     createdAt: record.createdAt,
     provider: {
-      ...record.provider,
+      ...publicProvider(record.provider),
       generation: record.generation,
       registrationStatus: registration?.status || record.status,
       lastSeenAt: registration?.lastSeenAt || null,
@@ -388,7 +400,7 @@ function publicCloudWorkspace(record, registration = null) {
     url: null,
     status,
     provider: {
-      ...record.provider,
+      ...publicProvider(record.provider),
       type: "cloud",
       boxId: record.boxId,
       generation: record.generation,

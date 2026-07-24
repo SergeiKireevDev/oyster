@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCloudProvisioningService } from "../oyster-hub/cloud-provisioning.mjs";
@@ -77,7 +77,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
     createdAt: environment.createdAt,
     provider: {
       id: "digitalocean", name: "DigitalOcean", instanceId: "451", state: "new", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64",
-      consoleUrl: "https://api.digitalocean.com/v2/actions/9",
+      consoleUrl: "https://cloud.digitalocean.com/droplets/451",
       generation: environment.provider.generation,
       registrationStatus: "awaiting_agent",
       lastSeenAt: null,
@@ -88,8 +88,13 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   assert.match(readFileSync(stateFile, "utf8"), new RegExp(canary));
   assert.equal(readFileSync(stateFile, "utf8").includes(bootstrapSecret), false);
 
+  const legacyState = JSON.parse(readFileSync(stateFile, "utf8"));
+  legacyState.environments[0].provider.consoleUrl = "/v2/actions/legacy-relative-link";
+  writeFileSync(stateFile, JSON.stringify(legacyState));
   const restored = createCloudProvisioningService({ stateFile, fetchImpl });
-  assert.deepEqual((await restored.listEnvironments()).map(({ id }) => id), ["digitalocean-451"]);
+  const restoredEnvironments = await restored.listEnvironments();
+  assert.deepEqual(restoredEnvironments.map(({ id }) => id), ["digitalocean-451"]);
+  assert.equal(restoredEnvironments[0].provider.consoleUrl, "https://cloud.digitalocean.com/droplets/451");
   const [workspace] = await restored.listWorkspaces();
   assert.equal(workspace.id, "digitalocean-451");
   assert.equal(workspace.status, "awaiting_agent");
