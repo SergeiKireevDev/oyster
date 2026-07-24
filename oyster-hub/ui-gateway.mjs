@@ -159,7 +159,7 @@ function mimeType(pathname) {
   return ({ js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", html: "text/html; charset=utf-8", svg: "image/svg+xml", json: "application/json; charset=utf-8", wasm: "application/wasm", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" })[extension] || "application/octet-stream";
 }
 
-export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uiDir = new URL("../dist/", import.meta.url) }) {
+export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uploadLimiter, uiDir = new URL("../dist/", import.meta.url) }) {
   const root = resolve(uiDir.pathname);
   const indexPath = resolve(root, "index.html");
   let workspaceCache = { expires: 0, promise: null };
@@ -253,6 +253,7 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
       uploadResponseTimeoutMs: config.uploadResponseTimeoutMs,
       json,
       onTransfer,
+      uploadLimiter,
       async transformJson(value, response) {
         let scoped = value;
         if (url.pathname === "/open-session" && value?.runner) scoped = { ...value, runner: scopeRunner(workspace, value.runner) };

@@ -199,6 +199,7 @@ Three timeout settings have distinct roles:
 | `timeoutMs` | 5000 | Bounded workspace discovery, JSON, and bodyless request/response operations. |
 | `uploadIdleTimeoutMs` | 30000 | Maximum interval with no upload bytes making progress; reset for every forwarded chunk. |
 | `uploadResponseTimeoutMs` | 30000 | Maximum wait for workspace response headers after the final upload byte. |
+| `maxConcurrentUploads` | 16 | Hub-wide cap on opaque streaming request bodies; excess requests receive `429`. |
 
 Both upload settings accept 100 ms through 30 minutes. Increase the idle setting for highly latent or intermittently scheduled cloud VMs. A progressing upload may run longer than `timeoutMs`; an idle stream is aborted and the browser retries from the workspace-reported offset. Transfer diagnostics expose only workspace ID, byte counts, duration, and close reason—never body contents or credentials.
 

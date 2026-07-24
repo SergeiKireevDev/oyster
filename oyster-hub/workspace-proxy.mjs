@@ -8,6 +8,23 @@ const HOP_BY_HOP = new Set([
 const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
 export const DEFAULT_JSON_BODY_LIMIT = 5 * 1024 * 1024;
 
+export function createUploadLimiter(maxConcurrent) {
+  let active = 0;
+  return {
+    get active() { return active; },
+    tryAcquire() {
+      if (active >= maxConcurrent) return null;
+      active += 1;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        active -= 1;
+      };
+    },
+  };
+}
+
 function requestHasBody(req) {
   if (BODYLESS_METHODS.has(req.method)) return false;
   if (req.headers["transfer-encoding"]) return true;
@@ -144,7 +161,14 @@ export async function proxyWorkspaceRequest({
   transformJson,
   transformStream,
   onTransfer,
+  uploadLimiter,
 }) {
+  const releaseUpload = prepared.streaming && uploadLimiter ? uploadLimiter.tryAcquire() : () => {};
+  if (!releaseUpload) {
+    req.resume?.();
+    json(res, 429, { error: "too many concurrent workspace uploads", workspace: workspace.id });
+    return;
+  }
   const controller = new AbortController();
   const timer = timerController(controller);
   const startedAt = performance.now();
@@ -212,14 +236,19 @@ export async function proxyWorkspaceRequest({
     source.on("data", (chunk) => { downloadedBytes += chunk.length; });
     await pipeline(source, res);
   } catch (error) {
-    closeReason = controller.signal.aborted ? "aborted" : "upstream-error";
     const detail = controller.signal.aborted && controller.signal.reason instanceof Error
       ? controller.signal.reason.message
       : error.message;
+    if (closeReason === "complete") {
+      if (detail.includes("upload idle")) closeReason = "upload-idle-timeout";
+      else if (detail.includes("after upload")) closeReason = "upload-response-timeout";
+      else closeReason = controller.signal.aborted ? "aborted" : "upstream-error";
+    }
     if (!res.headersSent) json(res, 502, { error: "workspace request failed", workspace: workspace.id, detail });
     else res.destroy(error);
   } finally {
     timer.clear();
+    releaseUpload();
     req.off("aborted", abortRequest);
     res.off("close", abortResponse);
     onTransfer?.({

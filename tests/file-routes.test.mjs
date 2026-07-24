@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, utimes } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,6 +74,45 @@ test("chunked upload enforces ordered offsets and makes final retries idempotent
   const retried = res();
   await routes["POST /file-upload"](req("def"), retried, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(root)}&name=upload.txt&offset=3&last=1`));
   assert.deepEqual(retried.body, { saved: join(root, "upload.txt"), bytes: 6 });
+});
+
+test("an interrupted chunk preserves the last completed upload offset", async (t) => {
+  const { root, routes } = await setup(t);
+  const first = res();
+  await routes["POST /file-upload"](req("abc"), first, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(root)}&name=interrupted.bin&offset=0&last=0`));
+  assert.deepEqual(first.body, { received: 3 });
+
+  const interruptedReq = Readable.from((async function* () {
+    yield Buffer.from("def");
+    throw new Error("browser disconnected");
+  })());
+  interruptedReq.headers = {};
+  const interrupted = res();
+  await routes["POST /file-upload"](interruptedReq, interrupted, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(root)}&name=interrupted.bin&offset=3&last=1`));
+  assert.equal(interrupted.status, 413);
+  assert.equal(readFileSync(join(root, ".interrupted.bin.upload"), "utf8"), "abc");
+
+  const resumed = res();
+  await routes["POST /file-upload"](req("def"), resumed, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(root)}&name=interrupted.bin&offset=3&last=1`));
+  assert.deepEqual(resumed.body, { saved: join(root, "interrupted.bin"), bytes: 6 });
+  assert.equal(readFileSync(join(root, "interrupted.bin"), "utf8"), "abcdef");
+});
+
+test("upload cleanup removes only abandoned temporary files", async (t) => {
+  const { root, routes } = await setup(t);
+  const stale = join(root, ".stale.bin.upload");
+  const fresh = join(root, ".fresh.bin.upload");
+  await writeFile(stale, "old");
+  await writeFile(fresh, "active");
+  const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+  await utimes(stale, old, old);
+
+  const uploaded = res();
+  await routes["POST /file-upload"](req("new"), uploaded, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(root)}&name=new.bin&offset=0&last=1`));
+  assert.equal(uploaded.status, 200);
+  assert.equal(existsSync(stale), false);
+  assert.equal(existsSync(fresh), true);
+  assert.equal(readFileSync(join(root, "new.bin"), "utf8"), "new");
 });
 
 test("mkdir validates names, conflicts, and creates only beneath an allowed parent", async (t) => {

@@ -25,6 +25,14 @@ function nonNegativeInteger(value, label, fallback) {
   return number;
 }
 
+function positiveInteger(value, label, fallback, maximum) {
+  const number = Number(value ?? fallback);
+  if (!Number.isSafeInteger(number) || number < 1 || number > maximum) {
+    throw new Error(`${label} must be between 1 and ${maximum}`);
+  }
+  return number;
+}
+
 function duration(value, label, fallback, maximum = 120000) {
   const number = Number(value ?? fallback);
   if (!Number.isFinite(number) || number < 100 || number > maximum) {
@@ -119,6 +127,7 @@ export function validateConfig(input, env = process.env) {
   const timeoutMs = duration(input.timeoutMs, "timeoutMs", 5000);
   const uploadIdleTimeoutMs = duration(input.uploadIdleTimeoutMs, "uploadIdleTimeoutMs", 30000, 30 * 60 * 1000);
   const uploadResponseTimeoutMs = duration(input.uploadResponseTimeoutMs, "uploadResponseTimeoutMs", 30000, 30 * 60 * 1000);
+  const maxConcurrentUploads = positiveInteger(input.maxConcurrentUploads, "maxConcurrentUploads", 16, 1024);
 
   const driverInput = input.driver;
   if (!driverInput || typeof driverInput !== "object" || Array.isArray(driverInput)) {
@@ -145,6 +154,7 @@ export function validateConfig(input, env = process.env) {
     timeoutMs,
     uploadIdleTimeoutMs,
     uploadResponseTimeoutMs,
+    maxConcurrentUploads,
     driver,
     cloud: Object.freeze({ stateFile: cloudStateFile }),
   });
