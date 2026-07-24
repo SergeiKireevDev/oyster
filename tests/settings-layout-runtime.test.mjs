@@ -74,6 +74,8 @@ test("header routes scoped actions and settings delegates persistence to its pre
   }
   assert.match(settings, /getSettingsPreferences\(\)/);
   assert.match(settings, /preferences\.setThinkingVisible\(event\.currentTarget\.checked\)/);
+  assert.match(settings, /preferences\.setLightMode\(event\.currentTarget\.checked\)/);
+  assert.match(settings, /Light mode/);
   assert.doesNotMatch(settings, /localStorage/);
   assert.doesNotMatch(header, /features\/settings\/headerActions\.js/);
   assert.doesNotMatch(settings, /features\/settings\/settingsActions\.js/);

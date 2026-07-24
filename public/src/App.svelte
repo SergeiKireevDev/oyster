@@ -25,6 +25,8 @@
   provideAuthBrowser(createAuthBrowserService({ storage: localStorage, reload: () => location.reload() }));
   const settingsPreferences = provideSettingsPreferences(createSettingsPreferenceService({
     storage: localStorage,
+    rootElement: document.documentElement,
+    themeColorElement: document.querySelector('meta[name="theme-color"]'),
     onThinkingVisibilityChanged: () => uiActions.invoke(SETTINGS_CHANGED_ACTION),
   }));
   const checkpointModelPicker = provideCheckpointModelPicker(createCheckpointModelPickerService({

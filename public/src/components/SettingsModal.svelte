@@ -5,14 +5,18 @@
   const preferences = getSettingsPreferences();
   const settings = [
     ["pi_show_thinking", "Show thinking blocks"],
+    ["pi_theme", "Light mode"],
   ];
 
   function checked(key) {
-    return key === "pi_show_thinking" && preferences.isThinkingVisible();
+    if (key === "pi_show_thinking") return preferences.isThinkingVisible();
+    if (key === "pi_theme") return preferences.isLightMode();
+    return false;
   }
 
   function changed(key, event) {
     if (key === "pi_show_thinking") preferences.setThinkingVisible(event.currentTarget.checked);
+    if (key === "pi_theme") preferences.setLightMode(event.currentTarget.checked);
   }
 </script>
 

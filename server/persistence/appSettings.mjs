@@ -34,7 +34,7 @@ export function assertGeneralAppSettingValue(value) {
 export const BROWSER_PREFERENCE_SYNC_POLICY = Object.freeze({
   syncToSqlite: false,
   storage: "browser-localStorage",
-  keys: Object.freeze(["pi_show_thinking", "pi_carousel", "pi_ckpt_model", "pi_runner"]),
+  keys: Object.freeze(["pi_show_thinking", "pi_theme", "pi_carousel", "pi_ckpt_model", "pi_runner"]),
   rationale: "These choices are device-specific and do not affect server resource ownership or recovery.",
 });
 

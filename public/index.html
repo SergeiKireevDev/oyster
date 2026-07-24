@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
+<script>
+  (() => {
+    let theme = "dark";
+    try { theme = localStorage.getItem("pi_theme") === "light" ? "light" : "dark"; } catch {}
+    document.documentElement.setAttribute("data-theme", theme);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f5f7fb" : "#0b0d12");
+  })();
+</script>
 <link rel="icon" type="image/svg+xml" href="/src/assets/oyster.svg">
 <title>Oyster</title>
 <script src="/runtime-config.js"></script>

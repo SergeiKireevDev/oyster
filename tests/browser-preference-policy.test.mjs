@@ -15,7 +15,7 @@ test("non-secret browser preferences deliberately remain device-local", () => {
   assert.equal(BROWSER_PREFERENCE_SYNC_POLICY.storage, "browser-localStorage");
   assert.match(BROWSER_PREFERENCE_SYNC_POLICY.rationale, /device-specific/);
   assert.deepEqual(BROWSER_PREFERENCE_SYNC_POLICY.keys, [
-    "pi_show_thinking", "pi_carousel", "pi_ckpt_model", "pi_runner",
+    "pi_show_thinking", "pi_theme", "pi_carousel", "pi_ckpt_model", "pi_runner",
   ]);
   for (const key of BROWSER_PREFERENCE_SYNC_POLICY.keys) {
     assert.match(browserSources, new RegExp(key), `${key} must remain implemented in browser storage`);
