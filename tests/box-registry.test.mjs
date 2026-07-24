@@ -96,6 +96,18 @@ test("box registration consumes bootstrap auth, persists only hashes, and reconn
   replay.terminate();
 });
 
+test("an agent that misses its bootstrap deadline is reported as failed", async (t) => {
+  let timestamp = Date.parse("2026-07-24T12:00:00Z");
+  const registry = createBoxConnectionRegistry({ now: () => timestamp });
+  t.after(() => registry.close());
+  const registration = await registry.prepareRegistration({ boxId: "slow-box", provider: "digitalocean", ttlMs: 1000 });
+  assert.equal((await registry.get(registration.boxId, registration.generation)).status, "awaiting_agent");
+  timestamp += 1001;
+  const expired = await registry.get(registration.boxId, registration.generation);
+  assert.equal(expired.status, "failed");
+  assert.match(expired.failureReason, /bootstrap credential expired/);
+});
+
 test("box endpoint rejects credentials in its URL and identities not bound by the provider connector", async (t) => {
   const registry = createBoxConnectionRegistry();
   const server = createServer((_req, res) => res.end());
