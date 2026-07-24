@@ -25,6 +25,14 @@ function nonNegativeInteger(value, label, fallback) {
   return number;
 }
 
+function duration(value, label, fallback, maximum = 120000) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number) || number < 100 || number > maximum) {
+    throw new Error(`${label} must be between 100 and ${maximum}`);
+  }
+  return number;
+}
+
 function validateMockWorkspace(input, env, index = null) {
   const prefix = index == null ? "driver" : `driver.workspaces[${index}]`;
   const id = String(input.id || (index == null ? "local" : "")).trim();
@@ -108,10 +116,9 @@ export function validateConfig(input, env = process.env) {
   const token = requireString(env.OYSTER_HUB_TOKEN || input.token, "token");
   const port = Number(env.PORT || input.port || 8787);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`invalid port: ${port}`);
-  const timeoutMs = Number(input.timeoutMs || 5000);
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 100 || timeoutMs > 120000) {
-    throw new Error("timeoutMs must be between 100 and 120000");
-  }
+  const timeoutMs = duration(input.timeoutMs, "timeoutMs", 5000);
+  const uploadIdleTimeoutMs = duration(input.uploadIdleTimeoutMs, "uploadIdleTimeoutMs", 30000, 30 * 60 * 1000);
+  const uploadResponseTimeoutMs = duration(input.uploadResponseTimeoutMs, "uploadResponseTimeoutMs", 30000, 30 * 60 * 1000);
 
   const driverInput = input.driver;
   if (!driverInput || typeof driverInput !== "object" || Array.isArray(driverInput)) {
@@ -136,6 +143,8 @@ export function validateConfig(input, env = process.env) {
     port,
     token,
     timeoutMs,
+    uploadIdleTimeoutMs,
+    uploadResponseTimeoutMs,
     driver,
     cloud: Object.freeze({ stateFile: cloudStateFile }),
   });

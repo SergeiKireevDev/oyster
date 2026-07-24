@@ -1,13 +1,9 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { Transform } from "node:stream";
+import { prepareScopedWorkspaceRequest, proxyWorkspaceRequest } from "./workspace-proxy.mjs";
 
-const HOP_BY_HOP = new Set([
-  "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-  "te", "trailer", "transfer-encoding", "upgrade", "host",
-]);
 const DOCUMENT_ROUTE = /^\/(?:index\.html)?$|^\/s\/[\w.-]+(?:\/m\/[\w.-]+)?$/;
 const SCOPE_PREFIX = "oh1.";
 const SESSION_SCOPE_PREFIX = "ps1_oh1.";
@@ -142,68 +138,6 @@ function createSseScopeTransform(workspace, otherRunners = []) {
   });
 }
 
-function upstreamHeaders(req, workspace) {
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(req.headers)) {
-    if (!HOP_BY_HOP.has(name.toLowerCase())
-      && !["authorization", "x-api-key", "x-auth-token", "x-oyster-workspace", "cookie", "content-length"].includes(name.toLowerCase())
-      && value != null) {
-      headers.set(name, Array.isArray(value) ? value.join(", ") : value);
-    }
-  }
-  if (workspace.token) headers.set("authorization", `Bearer ${workspace.token}`);
-  return headers;
-}
-
-async function readBody(req) {
-  if (["GET", "HEAD"].includes(req.method)) return undefined;
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  return Buffer.concat(chunks);
-}
-
-function decodeDeep(value, scopes) {
-  if (typeof value === "string") {
-    const scoped = parseScopedValue(value);
-    if (!scoped) return value;
-    scopes.add(scoped.workspaceId);
-    return scoped.value;
-  }
-  if (Array.isArray(value)) return value.map((item) => decodeDeep(item, scopes));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decodeDeep(item, scopes)]));
-  }
-  return value;
-}
-
-function prepareRequest(req, url, body) {
-  const targetUrl = new URL(url);
-  const scopes = new Set();
-  for (const [name, value] of [...targetUrl.searchParams.entries()]) {
-    const scoped = parseScopedValue(value);
-    if (!scoped) continue;
-    scopes.add(scoped.workspaceId);
-    targetUrl.searchParams.set(name, scoped.value);
-  }
-  let targetBody = body;
-  const contentType = String(req.headers["content-type"] ?? "");
-  if (body?.length && contentType.includes("application/json")) {
-    try {
-      const parsed = JSON.parse(body.toString("utf8"));
-      targetBody = Buffer.from(JSON.stringify(decodeDeep(parsed, scopes)));
-    } catch {}
-  }
-  return { targetUrl, targetBody, scopes };
-}
-
-function publicHeaders(response) {
-  const headers = {};
-  response.headers.forEach((value, name) => {
-    if (!HOP_BY_HOP.has(name.toLowerCase()) && name.toLowerCase() !== "set-cookie") headers[name] = value;
-  });
-  return headers;
-}
-
 async function fetchWorkspace(workspace, pathAndQuery, fetchImpl, timeoutMs) {
   const headers = { accept: "application/json" };
   if (workspace.token) headers.authorization = `Bearer ${workspace.token}`;
@@ -225,7 +159,7 @@ function mimeType(pathname) {
   return ({ js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", html: "text/html; charset=utf-8", svg: "image/svg+xml", json: "application/json; charset=utf-8", wasm: "application/wasm", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" })[extension] || "application/octet-stream";
 }
 
-export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, uiDir = new URL("../dist/", import.meta.url) }) {
+export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uiDir = new URL("../dist/", import.meta.url) }) {
   const root = resolve(uiDir.pathname);
   const indexPath = resolve(root, "index.html");
   let workspaceCache = { expires: 0, promise: null };
@@ -290,8 +224,12 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
   }
 
   async function proxy(req, res, url, discovered) {
-    const body = await readBody(req);
-    const prepared = prepareRequest(req, url, body);
+    let prepared;
+    try {
+      prepared = await prepareScopedWorkspaceRequest(req, url, parseScopedValue);
+    } catch (error) {
+      return json(res, error.code === "body_too_large" ? 413 : 400, { error: error.message });
+    }
     if (prepared.scopes.size > 1) return json(res, 400, { error: "request contains identities from multiple workspaces" });
     const scopedWorkspace = [...prepared.scopes][0];
     const requestedWorkspace = scopedWorkspace || String(req.headers["x-oyster-workspace"] ?? url.searchParams.get("workspace") ?? "");
@@ -303,23 +241,19 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
     prepared.targetUrl.searchParams.delete("workspace");
     prepared.targetUrl.searchParams.delete("token");
     const target = `${workspace.url}/${prepared.targetUrl.pathname.replace(/^\/+/, "")}${prepared.targetUrl.search}`;
-    const controller = new AbortController();
-    let timer = setTimeout(() => controller.abort(new Error(`workspace timed out after ${config.timeoutMs}ms`)), config.timeoutMs);
-    try {
-      const response = await fetchImpl(target, {
-        method: req.method,
-        headers: upstreamHeaders(req, workspace),
-        body: prepared.targetBody,
-        redirect: "manual",
-        signal: controller.signal,
-      });
-      clearTimeout(timer); timer = null;
-      res.once("close", () => controller.abort());
-      const headers = publicHeaders(response);
-      headers["x-oyster-workspace"] = workspace.id;
-      const contentType = response.headers.get("content-type") || "";
-      const scopeJson = async () => {
-        const value = await response.json().catch(() => null);
+    return proxyWorkspaceRequest({
+      req,
+      res,
+      target,
+      workspace,
+      prepared,
+      fetchImpl,
+      timeoutMs: config.timeoutMs,
+      uploadIdleTimeoutMs: config.uploadIdleTimeoutMs,
+      uploadResponseTimeoutMs: config.uploadResponseTimeoutMs,
+      json,
+      onTransfer,
+      async transformJson(value, response) {
         let scoped = value;
         if (url.pathname === "/open-session" && value?.runner) scoped = { ...value, runner: scopeRunner(workspace, value.runner) };
         else if (url.pathname === "/session-by-id" && value?.session) scoped = { ...value, session: scopeSession(workspace, value.session) };
@@ -341,30 +275,18 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
             : `workspace ${workspace.id}`;
           scoped = { ...scoped, error: `${req.method} ${url.pathname} on ${label}: ${scoped.error}` };
         }
-        const output = Buffer.from(JSON.stringify(scoped));
-        delete headers["content-length"];
-        headers["content-length"] = String(output.length);
-        res.writeHead(response.status, headers);
-        res.end(output);
-      };
-      if (contentType.includes("application/json")) return scopeJson();
-      res.writeHead(response.status, headers);
-      if (!response.body || req.method === "HEAD") return res.end();
-      if (contentType.includes("text/event-stream")) {
+        return scoped;
+      },
+      async transformStream(source, response) {
+        if (!(response.headers.get("content-type") || "").includes("text/event-stream")) return source;
         const others = discovered.filter((item) => item.id !== workspace.id);
         const snapshots = await Promise.all(others.map((item) => fetchWorkspace(item, "/runners", fetchImpl, config.timeoutMs)));
         const otherRunners = snapshots.flatMap((snapshot, index) => snapshot.ok
           ? (snapshot.value?.runners ?? []).map((runner) => scopeRunner(others[index], runner))
           : []);
-        return pipeline(Readable.fromWeb(response.body), createSseScopeTransform(workspace, otherRunners), res);
-      }
-      return pipeline(Readable.fromWeb(response.body), res);
-    } catch (error) {
-      if (!res.headersSent) json(res, 502, { error: "workspace request failed", workspace: workspace.id, detail: error.message });
-      else res.destroy(error);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+        return source.pipe(createSseScopeTransform(workspace, otherRunners));
+      },
+    });
   }
 
   return {

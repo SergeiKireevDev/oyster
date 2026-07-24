@@ -1,17 +1,12 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { readFile } from "node:fs/promises";
 import { createWorkspaceDriver } from "./drivers/index.mjs";
 import { WorkspaceDriverError } from "./drivers/errors.mjs";
 import { createOysterUiGateway } from "./ui-gateway.mjs";
 import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
+import { prepareOpaqueWorkspaceRequest, proxyWorkspaceRequest, readBufferedRequestBody } from "./workspace-proxy.mjs";
 
-const HOP_BY_HOP = new Set([
-  "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-  "te", "trailer", "transfer-encoding", "upgrade", "host",
-]);
 const AGGREGATE_RESOURCES = ["health", "runners", "sessions?all=1", "routines", "tunnels"];
 
 function json(res, status, value) {
@@ -52,24 +47,6 @@ function workspaceUrl(workspace, pathAndQuery) {
 
 function driverDescriptor(driver) {
   return { type: driver.type, endpoint: driver.endpoint, capabilities: driver.capabilities };
-}
-
-function upstreamHeaders(req, workspace) {
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(req.headers)) {
-    if (!HOP_BY_HOP.has(name.toLowerCase()) && !["authorization", "x-api-key", "x-auth-token", "cookie"].includes(name.toLowerCase()) && value != null) {
-      headers.set(name, Array.isArray(value) ? value.join(", ") : value);
-    }
-  }
-  if (workspace.token) headers.set("authorization", `Bearer ${workspace.token}`);
-  return headers;
-}
-
-async function readRequestBody(req) {
-  if (["GET", "HEAD"].includes(req.method)) return undefined;
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  return Buffer.concat(chunks);
 }
 
 async function fetchJson(workspace, path, { fetchImpl, timeoutMs }) {
@@ -183,39 +160,19 @@ function overviewTotals(workspaces) {
 }
 
 async function proxyWorkspace(req, res, url, workspace, suffix, options) {
-  const target = workspaceUrl(workspace, `${suffix || "/"}${url.search}`);
-  const controller = new AbortController();
-  let connectTimer;
-  try {
-    const body = await readRequestBody(req);
-    connectTimer = setTimeout(
-      () => controller.abort(new Error(`workspace timed out after ${options.timeoutMs}ms`)),
-      options.timeoutMs,
-    );
-    const response = await options.fetchImpl(target, {
-      method: req.method,
-      headers: upstreamHeaders(req, workspace),
-      body,
-      redirect: "manual",
-      signal: controller.signal,
-    });
-    clearTimeout(connectTimer);
-    connectTimer = null;
-    res.once("close", () => controller.abort());
-    const headers = {};
-    response.headers.forEach((value, name) => {
-      if (!HOP_BY_HOP.has(name.toLowerCase()) && name.toLowerCase() !== "set-cookie") headers[name] = value;
-    });
-    headers["x-oyster-workspace"] = workspace.id;
-    res.writeHead(response.status, headers);
-    if (!response.body || req.method === "HEAD") return res.end();
-    await pipeline(Readable.fromWeb(response.body), res);
-  } catch (error) {
-    if (!res.headersSent) json(res, 502, { error: "workspace request failed", workspace: workspace.id, detail: error.message });
-    else res.destroy(error);
-  } finally {
-    if (connectTimer) clearTimeout(connectTimer);
-  }
+  return proxyWorkspaceRequest({
+    req,
+    res,
+    target: workspaceUrl(workspace, `${suffix || "/"}${url.search}`),
+    workspace,
+    prepared: prepareOpaqueWorkspaceRequest(req),
+    fetchImpl: options.fetchImpl,
+    timeoutMs: options.timeoutMs,
+    uploadIdleTimeoutMs: options.uploadIdleTimeoutMs,
+    uploadResponseTimeoutMs: options.uploadResponseTimeoutMs,
+    json,
+    onTransfer: options.onTransfer,
+  });
 }
 
 export function createOysterHub(config, {
@@ -225,8 +182,15 @@ export function createOysterHub(config, {
   dashboardPath = new URL("./public/index.html", import.meta.url),
   openApiPath = new URL("./openapi.json", import.meta.url),
   cloudService = createCloudProvisioningService({ stateFile: config.cloud?.stateFile, fetchImpl }),
+  onTransfer,
 } = {}) {
-  const options = { fetchImpl, timeoutMs: config.timeoutMs };
+  const options = {
+    fetchImpl,
+    timeoutMs: config.timeoutMs,
+    uploadIdleTimeoutMs: config.uploadIdleTimeoutMs,
+    uploadResponseTimeoutMs: config.uploadResponseTimeoutMs,
+    onTransfer,
+  };
   const uiGateway = createOysterUiGateway({
     config,
     driver,
@@ -234,6 +198,7 @@ export function createOysterHub(config, {
     logger,
     authorized: (req, url) => authorized(req, config.token, url),
     json,
+    onTransfer,
   });
 
   return createServer(async (req, res) => {
@@ -291,7 +256,7 @@ export function createOysterHub(config, {
         }
         let body;
         try {
-          const raw = await readRequestBody(req);
+          const raw = await readBufferedRequestBody(req);
           body = raw.length ? JSON.parse(raw.toString("utf8")) : {};
         } catch (error) {
           return json(res, 400, { error: `invalid JSON: ${error.message}` });
