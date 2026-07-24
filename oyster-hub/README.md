@@ -99,7 +99,7 @@ The cloud connector supports DigitalOcean, AWS EC2, and GCP Compute Engine. Crea
 - AWS: base64 `UserData` on `RunInstances`; and
 - GCP: the `user-data` instance metadata item.
 
-The generated `#cloud-config` installs Node.js 22, Git, and build dependencies, clones [`SergeiKireevDev/oyster`](https://github.com/SergeiKireevDev/oyster/tree/main) at `main`, initializes submodules, runs both lockfile-scoped installs, builds pi and the Oyster UI, and installs two services. `oyster.service` listens only on `127.0.0.1:8080`; `oyster-box-agent.service` makes an outbound connection to `wss://hub.get-oyster.dev/box/connect`.
+The generated `#cloud-config` installs Node.js 22, Git, and build dependencies, clones the configured Oyster repository/ref, initializes the required `pi` submodule (cloud boxes do not build `llmbox`), runs both lockfile-scoped installs, builds pi and the Oyster UI, and installs two services. `oyster.service` listens only on `127.0.0.1:8080`; `oyster-box-agent.service` makes an outbound connection to `wss://hub.get-oyster.dev/box/connect`.
 
 ```json
 {

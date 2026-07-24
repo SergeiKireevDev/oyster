@@ -156,9 +156,10 @@ if [ "$(awk '/MemTotal/ { print $2 }' /proc/meminfo)" -lt 2000000 ] && ! swapon 
 fi
 
 rm -rf /opt/oyster.new
-git clone --depth 1 --branch ${JSON.stringify(settings.ref)} --recurse-submodules ${JSON.stringify(settings.repository)} /opt/oyster.new
+git clone --depth 1 --branch ${JSON.stringify(settings.ref)} ${JSON.stringify(settings.repository)} /opt/oyster.new
 cd /opt/oyster.new
-git submodule update --init --recursive --depth 1
+# Cloud boxes do not build llmbox; initialize only Oyster's required pi source.
+git submodule update --init --recursive --depth 1 pi
 npm ci
 npm ci --prefix pi --ignore-scripts
 npm run build:pi
