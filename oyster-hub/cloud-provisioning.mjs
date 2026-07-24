@@ -390,15 +390,16 @@ function publicEnvironment(record, registration = null) {
   };
 }
 
-function publicCloudWorkspace(record, registration = null) {
+function publicCloudWorkspace(record, registration = null, fetchImpl = null) {
   const status = registration?.status || record.status;
   return {
     environmentId: record.id,
     environmentName: record.name,
     id: record.id,
     name: record.name,
-    url: null,
+    url: "http://127.0.0.1:8080",
     status,
+    ...(fetchImpl ? { fetchImpl } : {}),
     provider: {
       ...publicProvider(record.provider),
       type: "cloud",
@@ -566,6 +567,9 @@ export function createCloudProvisioningService({
       return Promise.all(state.environments.map(async (record) => publicCloudWorkspace(
         record,
         record.generation ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation) : null,
+        record.generation
+          ? (target, options) => boxRegistry.fetch(record.boxId || record.name.toLowerCase(), record.generation, target, options)
+          : null,
       )));
     },
     async getWorkspace(id) {

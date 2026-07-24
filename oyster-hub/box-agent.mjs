@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { connect as connectTcp } from "node:net";
 import WebSocket from "ws";
+
+const DIAL_CHUNK_BYTES = 24 * 1024;
+const MAX_DIAL_STREAMS = 64;
+const WEBSOCKET_BUFFER_HIGH_WATER = 1024 * 1024;
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -150,10 +155,87 @@ export async function waitForOysterHealth({ timeoutMs = 10 * 60 * 1000 } = {}) {
   return false;
 }
 
+export function attachDialProtocol(socket, {
+  connect = (port) => connectTcp({ host: "127.0.0.1", port }),
+  maxStreams = MAX_DIAL_STREAMS,
+} = {}) {
+  const streams = new Map();
+  const send = (message) => new Promise((resolve, reject) => {
+    if (socket.readyState !== WebSocket.OPEN) return reject(new Error("box connection is closed"));
+    socket.send(JSON.stringify(message), (error) => error ? reject(error) : resolve());
+  });
+  const waitForCapacity = async () => {
+    while (socket.readyState === WebSocket.OPEN && socket.bufferedAmount > WEBSOCKET_BUFFER_HIGH_WATER) await delay(10);
+    if (socket.readyState !== WebSocket.OPEN) throw new Error("box connection is closed");
+  };
+  const sendData = async (streamId, chunk) => {
+    for (let offset = 0; offset < chunk.length; offset += DIAL_CHUNK_BYTES) {
+      await waitForCapacity();
+      await send({ type: "dial_data", stream_id: streamId, data: chunk.subarray(offset, offset + DIAL_CHUNK_BYTES).toString("base64") });
+    }
+  };
+  const validStreamId = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+  const closeStream = (streamId) => {
+    const target = streams.get(streamId);
+    streams.delete(streamId);
+    target?.destroy();
+  };
+  const onMessage = (data, binary) => {
+    if (binary) return;
+    let message;
+    try { message = JSON.parse(data.toString("utf8")); } catch { return; }
+    if (!["dial_open", "dial_data", "dial_end", "dial_close"].includes(message.type) || !validStreamId(message.stream_id)) return;
+    if (message.type === "dial_open") {
+      if (message.port !== 8080 || streams.has(message.stream_id) || streams.size >= maxStreams) {
+        void send({ type: "dial_error", stream_id: message.stream_id, error: message.port !== 8080 ? "localhost port is not permitted" : "dial stream rejected" }).catch(() => {});
+        return;
+      }
+      const target = connect(8080);
+      streams.set(message.stream_id, target);
+      let ended = false;
+      target.once("connect", () => { void send({ type: "dial_opened", stream_id: message.stream_id }).catch(() => closeStream(message.stream_id)); });
+      target.on("data", (chunk) => {
+        target.pause();
+        void sendData(message.stream_id, chunk).then(() => target.resume(), () => closeStream(message.stream_id));
+      });
+      target.once("end", () => {
+        ended = true;
+        void send({ type: "dial_end", stream_id: message.stream_id }).catch(() => {});
+      });
+      target.once("error", (error) => {
+        void send({ type: "dial_error", stream_id: message.stream_id, error: String(error.message || "localhost dial failed").slice(0, 256) }).catch(() => {});
+      });
+      target.once("close", () => {
+        streams.delete(message.stream_id);
+        if (!ended) void send({ type: "dial_close", stream_id: message.stream_id }).catch(() => {});
+      });
+      return;
+    }
+    const target = streams.get(message.stream_id);
+    if (!target) return;
+    if (message.type === "dial_data") {
+      let chunk;
+      try { chunk = Buffer.from(message.data, "base64"); } catch { return closeStream(message.stream_id); }
+      if (chunk.length > DIAL_CHUNK_BYTES) return closeStream(message.stream_id);
+      target.write(chunk);
+    } else if (message.type === "dial_end") target.end();
+    else closeStream(message.stream_id);
+  };
+  const onClose = () => {
+    socket.off("message", onMessage);
+    for (const target of streams.values()) target.destroy();
+    streams.clear();
+  };
+  socket.on("message", onMessage);
+  socket.once("close", onClose);
+  return onClose;
+}
+
 export async function connectOnce(config, {
   WebSocketImpl = WebSocket,
   identity = collectProviderIdentity,
   readiness = waitForOysterHealth,
+  dialOptions = {},
 } = {}) {
   const reconnectCredential = await readReconnectCredential(config.reconnectFile);
   if (!reconnectCredential && !config.bootstrapSecret) throw new Error("no bootstrap or reconnect credential is available");
@@ -172,11 +254,12 @@ export async function connectOnce(config, {
     agent: {
       version: "0.1.0",
       boot_id: await bootId(),
-      capabilities: ["register_v1", "heartbeat_v1"],
+      capabilities: ["register_v1", "heartbeat_v1", "dial_v1"],
     },
     observed: { init_state: "complete", service_state: "starting" },
   }));
   const welcome = await waitForWelcome(socket);
+  attachDialProtocol(socket, dialOptions);
   if (welcome.credential) {
     await storeReconnectCredential(config.reconnectFile, welcome.credential);
     config.bootstrapSecret = null;

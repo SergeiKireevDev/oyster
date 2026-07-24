@@ -142,7 +142,7 @@ async function fetchWorkspace(workspace, pathAndQuery, fetchImpl, timeoutMs) {
   const headers = { accept: "application/json" };
   if (workspace.token) headers.authorization = `Bearer ${workspace.token}`;
   try {
-    const response = await fetchImpl(`${workspace.url}/${pathAndQuery.replace(/^\/+/, "")}`, {
+    const response = await (workspace.fetchImpl || fetchImpl)(`${workspace.url}/${pathAndQuery.replace(/^\/+/, "")}`, {
       headers,
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -159,7 +159,7 @@ function mimeType(pathname) {
   return ({ js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", html: "text/html; charset=utf-8", svg: "image/svg+xml", json: "application/json; charset=utf-8", wasm: "application/wasm", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" })[extension] || "application/octet-stream";
 }
 
-export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uploadLimiter, uiDir = new URL("../dist/", import.meta.url) }) {
+export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uploadLimiter, listWorkspaces = () => driver.listWorkspaces(), uiDir = new URL("../dist/", import.meta.url) }) {
   const root = resolve(uiDir.pathname);
   const indexPath = resolve(root, "index.html");
   let workspaceCache = { expires: 0, promise: null };
@@ -167,7 +167,7 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
   async function workspaces() {
     const now = Date.now();
     if (workspaceCache.promise && workspaceCache.expires > now) return workspaceCache.promise;
-    const promise = driver.listWorkspaces().then((items) => items.filter((workspace) => workspace.url));
+    const promise = Promise.resolve(listWorkspaces()).then((items) => items.filter((workspace) => workspace.url));
     workspaceCache = { expires: now + 2000, promise };
     try { return await promise; }
     catch (error) { workspaceCache = { expires: 0, promise: null }; throw error; }
@@ -247,7 +247,7 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
       target,
       workspace,
       prepared,
-      fetchImpl,
+      fetchImpl: workspace.fetchImpl || fetchImpl,
       timeoutMs: config.timeoutMs,
       uploadIdleTimeoutMs: config.uploadIdleTimeoutMs,
       uploadResponseTimeoutMs: config.uploadResponseTimeoutMs,

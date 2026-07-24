@@ -55,7 +55,7 @@ async function fetchJson(workspace, path, { fetchImpl, timeoutMs }) {
   try {
     const headers = { accept: "application/json" };
     if (workspace.token) headers.authorization = `Bearer ${workspace.token}`;
-    const response = await fetchImpl(workspaceUrl(workspace, path), {
+    const response = await (workspace.fetchImpl || fetchImpl)(workspaceUrl(workspace, path), {
       headers,
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
@@ -167,7 +167,7 @@ async function proxyWorkspace(req, res, url, workspace, suffix, options) {
     target: workspaceUrl(workspace, `${suffix || "/"}${url.search}`),
     workspace,
     prepared: prepareOpaqueWorkspaceRequest(req),
-    fetchImpl: options.fetchImpl,
+    fetchImpl: workspace.fetchImpl || options.fetchImpl,
     timeoutMs: options.timeoutMs,
     uploadIdleTimeoutMs: options.uploadIdleTimeoutMs,
     uploadResponseTimeoutMs: options.uploadResponseTimeoutMs,
@@ -213,6 +213,7 @@ export function createOysterHub(config, {
     json,
     onTransfer,
     uploadLimiter,
+    listWorkspaces: async () => [...await driver.listWorkspaces(), ...(cloud.listWorkspaces ? await cloud.listWorkspaces() : [])],
   });
 
   const server = createServer(async (req, res) => {
