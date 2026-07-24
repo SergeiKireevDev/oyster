@@ -6,7 +6,7 @@
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
-  import { isHubRuntime, listEnvironments, listOnlineWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
+  import { isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
   import { cloudEnvironmentChanges } from "../stores/cloudEnvironments.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
@@ -77,7 +77,7 @@
     try {
       [availableEnvironments, availableWorkspaces] = await Promise.all([
         listEnvironments(),
-        listOnlineWorkspaces(),
+        listWorkspaces(),
       ]);
       availableWorkspacesLoaded = true;
       if (preferredId) selectedEnvironmentId = preferredId;
@@ -132,7 +132,7 @@
   $: visibleSessionEnvironments = availableWorkspaceIds
     ? availableEnvironmentView(sessionEnvironments, selectedEnvironmentId, availableWorkspaces)
     : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null);
-  $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds);
+  $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds, availableWorkspaces);
   let expandedCwds = new Set();
   let initializedCwdExpansion = false;
   $: if (!initializedCwdExpansion && currentCwd) {
@@ -159,13 +159,16 @@
     return [{
       environmentId,
       environmentName: available[0].environmentName || environmentId,
-      workspaces: available.map((workspace) => existing?.workspaces.find((candidate) => candidate.workspaceId === workspace.id) ?? {
-        workspaceId: workspace.id,
-        workspaceName: workspace.name || workspace.id,
-        recentGroups: [],
-        archivedGroups: [],
-        archivedCount: 0,
-      }),
+      workspaces: available.map((workspace) => ({
+        ...(existing?.workspaces.find((candidate) => candidate.workspaceId === workspace.id) ?? {
+          workspaceId: workspace.id,
+          workspaceName: workspace.name || workspace.id,
+          recentGroups: [],
+          archivedGroups: [],
+          archivedCount: 0,
+        }),
+        status: workspace.status || "unknown",
+      })),
     }];
   }
   function isLocalEnvironment(environmentId, environmentName) {
@@ -177,13 +180,18 @@
       ?? options[0]?.environmentId
       ?? null;
   }
-  function filterEnvironmentWorkspaces(environments, environmentId, workspaceIds) {
+  function filterEnvironmentWorkspaces(environments, environmentId, workspaceIds, workspaceCatalog = []) {
     return environments
       .filter((environment) => environment.environmentId === environmentId)
       .map((environment) => ({
         ...environment,
         workspaces: workspaceIds
-          ? environment.workspaces.filter((workspace) => workspaceIds.has(workspace.workspaceId))
+          ? environment.workspaces
+            .filter((workspace) => workspaceIds.has(workspace.workspaceId))
+            .map((workspace) => ({
+              ...workspace,
+              status: workspaceCatalog.find((candidate) => candidate.id === workspace.workspaceId)?.status || workspace.status || "unknown",
+            }))
           : environment.workspaces,
       }))
       .filter((environment) => environment.workspaces.length);
@@ -198,6 +206,12 @@
       });
     }
     return [...options.values()];
+  }
+  function normalizedWorkspaceStatus(workspace) {
+    return String(workspace.status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  }
+  function workspaceStatusLabel(workspace) {
+    return normalizedWorkspaceStatus(workspace).replaceAll("_", " ").replaceAll("-", " ");
   }
   function isCurrentWorkspace(environment, workspace) {
     if (!currentRunner) return false;
@@ -356,8 +370,16 @@
 {/snippet}
 
 {#snippet WorkspaceHeading(workspace)}
+  {@const status = normalizedWorkspaceStatus(workspace)}
+  {@const statusLabel = workspaceStatusLabel(workspace)}
   <div class="session-sidebar-workspace-heading">
-    <span class="session-sidebar-workspace-icon" aria-hidden="true"></span>
+    <span
+      class="session-sidebar-workspace-icon"
+      data-status={status}
+      role="img"
+      aria-label={`Workspace status: ${statusLabel}`}
+      title={`Workspace status: ${statusLabel}`}
+    ></span>
     <span class="session-sidebar-hierarchy-copy">
       <small>Workspace</small>
       <strong>{workspace.workspaceName}</strong>
@@ -366,8 +388,9 @@
     <button
       type="button"
       class="session-sidebar-workspace-create"
-      title={`New session in ${workspace.workspaceName}`}
-      aria-label={`New session in ${workspace.workspaceName}`}
+      title={status === "online" ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel}`}
+      aria-label={status === "online" ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel}`}
+      disabled={status !== "online"}
       onclick={() => createSessionInFolder({ id: workspace.workspaceId, name: workspace.workspaceName })}
     >+</button>
   </div>
