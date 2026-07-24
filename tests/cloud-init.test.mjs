@@ -32,7 +32,9 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm install --prefix \/usr\/local\/lib\/oyster-box-agent/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster-box-agent\.service[\s\S]*git clone/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /fallocate -l 2G \/swapfile/);
-  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /git clone --depth 1 --branch "main" --recurse-submodules "https:\/\/github\.com\/SergeiKireevDev\/oyster\.git"/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /git clone --depth 1 --branch "main" "https:\/\/github\.com\/SergeiKireevDev\/oyster\.git"/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /git submodule update --init --recursive --depth 1 pi/);
+  assert.doesNotMatch(files.get("/usr/local/sbin/install-oyster-box"), /submodule update[^\n]*llmbox/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm ci --prefix pi --ignore-scripts/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build:pi/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build/);
