@@ -7,7 +7,7 @@ This repo ships the pi extensions that power its features in `extensions/`:
 | File | Tool / command | What it does |
 |---|---|---|
 | `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
-| `extensions/hublot.ts` | `hublot` tool | Open/close/list public web interfaces (cloudflared tunnels) for a session. |
+| `extensions/hublot.ts` | `hublot` tool | Open/close/list public web interfaces, including deterministic Markdown and read-only Git servers. |
 | `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
 | `extensions/goal-loop.ts` | `/goal-loop` + `goal_loop` tool | Execute a plan one verified commit at a time; full validation failures reset to the previous commit for retry. |
 
@@ -21,7 +21,7 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 # cp extensions/*.ts ~/.pi/agent/extensions/              # copy — stable snapshot
 ```
 
-Restart pi afterwards. The `hublot` and `routine` tools discover the UI server
+Restart pi afterwards. For deterministic hublots, `type="markdown"` takes an absolute document path, while `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
 from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
 `PI_UI_TOKEN` or the project-root `.ui-token` file.
 
