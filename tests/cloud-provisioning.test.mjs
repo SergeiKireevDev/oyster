@@ -40,6 +40,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
     if (String(url).includes("/regions")) return jsonResponse({ regions: [{ slug: "nyc3", name: "New York 3", available: true }, { slug: "old", name: "Old", available: false }] });
     if (String(url).includes("/sizes")) return jsonResponse({ sizes: [{ slug: "s-1vcpu-1gb", available: true, vcpus: 1, memory: 1024, price_monthly: 6, regions: ["nyc3"] }] });
     if (String(url).includes("/images")) return jsonResponse({ images: [{ slug: "ubuntu-24-04-x64", status: "available", description: "Ubuntu 24.04", distribution: "Ubuntu", regions: ["nyc3"] }] });
+    if (String(url).includes("/tags?")) return jsonResponse({ tags: [{ name: "oyster-hub" }] });
     if (String(url).endsWith("/droplets")) {
       const body = JSON.parse(options.body);
       assert.deepEqual({ name: body.name, region: body.region, size: body.size, image: body.image }, { name: "cloud-dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
@@ -47,8 +48,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
       const agentEnvironment = Buffer.from(body.user_data.match(/content: ([A-Za-z0-9+/=]+)/)[1], "base64").toString("utf8");
       assert.match(agentEnvironment, /wss:\/\/hub\.get-oyster\.dev\/box\/connect/);
       bootstrapSecret = agentEnvironment.match(/OYSTER_BOX_BOOTSTRAP_SECRET="([^"]+)"/)[1];
-      assert.equal(body.tags[0], "oyster-hub");
-      assert.match(body.tags.join(" "), /oyster-generation-/);
+      assert.deepEqual(body.tags, ["oyster-hub"]);
       return jsonResponse({ droplet: { id: 451, status: "new" }, links: { actions: [{ href: "https://api.digitalocean.com/v2/actions/9" }] } }, 202);
     }
     throw new Error(`unexpected request ${url}`);
@@ -97,7 +97,28 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   await restored.removeCredentials("digitalocean");
   assert.equal((await restored.listProviders()).find(({ id }) => id === "digitalocean").configured, false);
   assert.deepEqual((await restored.listEnvironments()).map(({ id }) => id), ["digitalocean-451"]);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
+  assert.equal(calls.some(({ url }) => String(url).endsWith("/tags")), false, "an existing ownership tag does not require tag:create");
+});
+
+test("DigitalOcean explicitly creates one stable ownership tag when it is absent", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const target = String(url);
+    calls.push([target, options.method || "GET", options.body ? JSON.parse(options.body) : null]);
+    if (target.includes("/tags?")) return jsonResponse({ tags: [] });
+    if (target.endsWith("/tags")) return jsonResponse({ tag: { name: "oyster-hub" } }, 201);
+    if (target.endsWith("/droplets")) return jsonResponse({ droplet: { id: 99, status: "new" } }, 202);
+    throw new Error(`unexpected request ${target}`);
+  };
+  const service = createCloudProvisioningService({ fetchImpl });
+  await service.configure("digitalocean", { token: "test-token" });
+  await service.provision({ provider: "digitalocean", name: "tagged-box", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
+  assert.deepEqual(calls.map(([, method, body]) => [method, body?.name, body?.tags]), [
+    ["GET", undefined, undefined],
+    ["POST", "oyster-hub", undefined],
+    ["POST", "tagged-box", ["oyster-hub"]],
+  ]);
 });
 
 test("AWS options and EC2 provisioning use signed provider API requests", async () => {

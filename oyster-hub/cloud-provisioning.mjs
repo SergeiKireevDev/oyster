@@ -98,7 +98,7 @@ async function responseValue(response, providerName) {
   catch { throw new CloudProvisioningError(`${providerName} returned a non-JSON response (${response.status})`); }
   if (!response.ok) {
     const detail = value?.message || value?.error?.message || value?.error_description || value?.error || `${response.status} ${response.statusText}`;
-    throw new CloudProvisioningError(`${providerName}: ${detail}`, { status: response.status === 401 || response.status === 403 ? 401 : 502 });
+    throw new CloudProvisioningError(`${providerName}: ${detail}`, { status: response.status === 401 || response.status === 403 ? response.status : 502 });
   }
   return value;
 }
@@ -144,7 +144,22 @@ async function digitalOceanOptions(credential, fetchImpl) {
   return { regions, sizes, images, defaults: { region: regions[0]?.id, size: sizes.find((item) => item.id === "s-1vcpu-1gb")?.id || sizes[0]?.id, image: images.find((item) => /ubuntu/i.test(item.id))?.id || images[0]?.id } };
 }
 
+const DIGITALOCEAN_OWNERSHIP_TAG = "oyster-hub";
+
+async function ensureDigitalOceanOwnershipTag(credential, fetchImpl) {
+  const value = await digitalOceanRequest("/tags?per_page=200", credential, fetchImpl);
+  if ((value.tags || []).some((tag) => tag.name === DIGITALOCEAN_OWNERSHIP_TAG)) return;
+  await digitalOceanRequest("/tags", credential, fetchImpl, {
+    method: "POST",
+    body: JSON.stringify({ name: DIGITALOCEAN_OWNERSHIP_TAG }),
+  });
+}
+
 async function digitalOceanProvision(input, credential, fetchImpl) {
+  // Use one stable ownership tag. Generation-specific tags would be new for
+  // every VM and force DigitalOcean to exercise tag:create during every
+  // Droplet request even when the Hub ownership tag already exists.
+  await ensureDigitalOceanOwnershipTag(credential, fetchImpl);
   const value = await digitalOceanRequest("/droplets", credential, fetchImpl, {
     method: "POST",
     body: JSON.stringify({
@@ -153,7 +168,7 @@ async function digitalOceanProvision(input, credential, fetchImpl) {
       size: input.size,
       image: input.image,
       user_data: input.userData,
-      tags: ["oyster-hub", `oyster-box-${input.boxId}`, `oyster-generation-${input.generation}`],
+      tags: [DIGITALOCEAN_OWNERSHIP_TAG],
     }),
   });
   return { instanceId: String(value.droplet?.id || ""), state: value.droplet?.status || "new", consoleUrl: value.links?.actions?.[0]?.href || null };
