@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +33,28 @@ async function requestJson(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   return chunks.length ? JSON.parse(Buffer.concat(chunks)) : {};
+}
+
+async function requestBytes(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+function wait(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+function streamingRequest(target, { method = "POST", headers = {} } = {}) {
+  const url = new URL(target);
+  let request;
+  const response = new Promise((resolvePromise, reject) => {
+    request = httpRequest(url, { method, headers }, (res) => {
+      requestBytes(res).then((body) => resolvePromise({ res, body }), reject);
+    });
+    request.on("error", reject);
+  });
+  return { request, response };
 }
 
 function fakeWorkspace({ unauthenticated = false } = {}) {
@@ -136,6 +158,8 @@ async function fleet(t, timeoutMs = 1000) {
 test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.throws(() => validateConfig({ token: "x" }, {}), /driver must be an object/);
   assert.throws(() => validateConfig({ token: "x", driver: { type: "other" } }, {}), /unsupported workspace driver/);
+  assert.throws(() => validateConfig({ token: "x", uploadIdleTimeoutMs: 99, driver: { type: "mock" } }, {}), /uploadIdleTimeoutMs/);
+  assert.throws(() => validateConfig({ token: "x", uploadResponseTimeoutMs: 30 * 60 * 1000 + 1, driver: { type: "mock" } }, {}), /uploadResponseTimeoutMs/);
   assert.throws(() => validateConfig({ token: "x", driver: {
     type: "llmbox", endpoint: "file:///tmp/box", token: "key", tokenSecret: "secret",
   } }, {}), /must use http or https/);
@@ -157,6 +181,8 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
 
   const mock = validateConfig({ token: "x", port: 8082, driver: { type: "mock" } }, {});
   assert.equal(mock.port, 8082);
+  assert.equal(mock.uploadIdleTimeoutMs, 30000);
+  assert.equal(mock.uploadResponseTimeoutMs, 30000);
   assert.deepEqual(mock.driver, {
     type: "mock", endpoint: "http://localhost:8080",
     environmentId: "local", environmentName: "Local",
@@ -348,6 +374,141 @@ test("workspace-scoped API resolves through the driver and proxies the request",
   const schema = await fetch(`${hubUrl}/api/v1/openapi.json`, { headers: { "x-auth-token": "hub-secret" } });
   assert.equal(schema.status, 200);
   assert.equal((await schema.json()).openapi, "3.1.0");
+});
+
+test("workspace uploads stream before the browser finishes and outlive the normal request timeout", async (t) => {
+  let firstDataResolve;
+  const firstData = new Promise((resolvePromise) => { firstDataResolve = resolvePromise; });
+  const observed = { chunks: [], headers: null, query: null };
+  const upstream = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://workspace.test");
+    observed.headers = req.headers;
+    observed.query = Object.fromEntries(url.searchParams);
+    for await (const chunk of req) {
+      observed.chunks.push(chunk);
+      firstDataResolve();
+    }
+    sendJson(res, 200, { received: Buffer.concat(observed.chunks).length });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: "workspace-secret" };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const config = validateConfig({
+    token: "hub-secret",
+    timeoutMs: 100,
+    uploadIdleTimeoutMs: 250,
+    uploadResponseTimeoutMs: 250,
+    driver: { type: "mock", endpoint: upstreamUrl },
+  }, {});
+  const transfers = [];
+  const hub = createOysterHub(config, { driver, logger: { error() {} }, onTransfer: (event) => transfers.push(event) });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+
+  const chunks = [Buffer.alloc(64 * 1024, 1), Buffer.alloc(64 * 1024, 2), Buffer.alloc(64 * 1024, 3)];
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const { request, response } = streamingRequest(`${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=data.bin&offset=0&last=1&token=remove-me`, {
+    headers: {
+      "x-auth-token": "hub-secret",
+      "content-type": "application/octet-stream",
+      "content-length": String(total),
+    },
+  });
+  request.write(chunks[0]);
+  await firstData;
+  assert.equal(request.writableEnded, false, "upstream receives bytes before the browser request ends");
+  await wait(70);
+  request.write(chunks[1]);
+  await wait(70);
+  request.end(chunks[2]);
+  const result = await response;
+
+  assert.equal(result.res.statusCode, 200);
+  assert.deepEqual(JSON.parse(result.body), { received: total });
+  assert.deepEqual(Buffer.concat(observed.chunks), Buffer.concat(chunks));
+  assert.equal(observed.headers.authorization, "Bearer workspace-secret");
+  assert.equal(observed.headers["x-auth-token"], undefined);
+  assert.equal(observed.headers["content-length"], String(total));
+  assert.deepEqual(observed.query, { dir: "/tmp", name: "data.bin", offset: "0", last: "1" });
+  assert.deepEqual(transfers.map(({ workspaceId, uploadedBytes, closeReason }) => ({ workspaceId, uploadedBytes, closeReason })), [
+    { workspaceId: "alpha", uploadedBytes: total, closeReason: "complete" },
+  ]);
+  assert.ok(transfers[0].durationMs >= 100, "progressing upload lasted longer than the normal request timeout");
+});
+
+test("workspace upload idle timeout aborts a stalled stream with an actionable error", async (t) => {
+  const upstream = createServer(async (req, res) => {
+    try { for await (const _chunk of req) {} } catch {}
+    if (!res.headersSent) sendJson(res, 200, { unexpected: true });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const config = validateConfig({
+    token: "hub-secret", timeoutMs: 1000, uploadIdleTimeoutMs: 100, uploadResponseTimeoutMs: 100,
+    driver: { type: "mock", endpoint: upstreamUrl },
+  }, {});
+  const hub = createOysterHub(config, { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+
+  const { request, response } = streamingRequest(`${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=stalled.bin&offset=0&last=1`, {
+    headers: { "x-auth-token": "hub-secret", "content-type": "application/octet-stream", "content-length": "2" },
+  });
+  request.write(Buffer.from("a"));
+  const result = await response;
+  request.destroy();
+  assert.equal(result.res.statusCode, 502);
+  assert.deepEqual(JSON.parse(result.body), {
+    error: "workspace request failed",
+    workspace: "alpha",
+    detail: "workspace upload idle for 100ms",
+  });
+});
+
+test("scoped workspace API preserves a large opaque upload byte-for-byte", async (t) => {
+  let observed;
+  const upstream = createServer(async (req, res) => {
+    observed = { path: req.url, headers: req.headers, body: await requestBytes(req) };
+    res.writeHead(201, { "content-type": "application/octet-stream", "x-upstream": "yes" });
+    res.end(Buffer.from("saved"));
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: "workspace-secret" };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const body = Buffer.alloc(8 * 1024 * 1024);
+  for (let i = 0; i < body.length; i += 1) body[i] = i % 251;
+
+  const response = await fetch(`${hubUrl}/api/v1/workspaces/alpha/file-upload?dir=%2Ftmp&name=large.bin&offset=0&last=1`, {
+    method: "POST",
+    headers: { authorization: "Bearer hub-secret", "content-type": "application/octet-stream" },
+    body,
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("x-oyster-workspace"), "alpha");
+  assert.equal(response.headers.get("x-upstream"), "yes");
+  assert.equal(await response.text(), "saved");
+  assert.equal(observed.path, "/file-upload?dir=%2Ftmp&name=large.bin&offset=0&last=1");
+  assert.equal(observed.headers.authorization, "Bearer workspace-secret");
+  assert.deepEqual(observed.body, body);
 });
 
 test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runners", async (t) => {
