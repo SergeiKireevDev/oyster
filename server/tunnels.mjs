@@ -757,6 +757,87 @@ export async function spawnMarkdownService(state, hublot, markdownPath, {
   }
 }
 
+export function gitSmartHttpServerScriptPath() {
+  return resolve(process.env.GIT_SMART_HTTP_SERVER_SCRIPT
+    ?? join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "serve-git-smart-http.sh"));
+}
+
+function gitServerStartupScript({ serverPath, worktreePath, stateDir, port }) {
+  return `#!/bin/sh\n# oyster: idempotent\n` +
+    `if python3 - ${port} <<'PY'\n` +
+    `import socket, sys\n` +
+    `try:\n` +
+    `    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1): pass\n` +
+    `except OSError:\n` +
+    `    raise SystemExit(1)\n` +
+    `PY\nthen\n  exit 0\nfi\n` +
+    `exec ${shellQuote(serverPath)} --host 127.0.0.1 --port ${port} --state-dir ${shellQuote(stateDir)} ${shellQuote(worktreePath)}\n`;
+}
+
+/** Start the fixed read-only Git Smart HTTP server without a setup agent. */
+export async function spawnGitServerService(state, hublot, worktreePath, {
+  serverPath = gitSmartHttpServerScriptPath(),
+  spawnProcess = spawn,
+  waitForPort = waitForLocalPort,
+} = {}) {
+  if (!isAbsolute(worktreePath)) throw new Error("Git worktree path must be absolute");
+  const worktree = statSync(worktreePath);
+  if (!worktree.isDirectory()) throw new Error(`Git worktree path is not a directory: ${worktreePath}`);
+  try { execFileSync("git", ["-C", worktreePath, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore" }); }
+  catch { throw new Error(`Git worktree path is not a Git worktree: ${worktreePath}`); }
+  const server = statSync(serverPath);
+  if (!server.isFile()) throw new Error(`Git Smart HTTP server is not a file: ${serverPath}`);
+  accessSync(serverPath, constants.X_OK);
+
+  const row = hublotRepository(state).find(hublot.id);
+  if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
+  const stateDir = join(dirname(row.service_start_script_path), "git-server-state");
+  const startupSource = gitServerStartupScript({ serverPath, worktreePath, stateDir, port: hublot.port });
+  const startupSha256 = createHash("sha256").update(startupSource).digest("hex");
+  hublotRepository(state).update(row.id, {
+    service_start_script: startupSource,
+    service_start_script_sha256: startupSha256,
+  });
+  materializeHublotStartupScript(state, row.id);
+
+  console.log(`[pi-ui] starting read-only Git Smart HTTP server for ${worktreePath} on :${hublot.port}`);
+  const serviceProc = spawnProcess(serverPath, ["--host", "127.0.0.1", "--port", String(hublot.port), "--state-dir", stateDir, worktreePath], {
+    cwd: worktreePath,
+    stdio: "ignore",
+    detached: true,
+  });
+  let serviceProcess = null;
+  let ready = false;
+  const stopped = new Promise((_, reject) => {
+    serviceProc.once("error", (error) => {
+      removeHublotProcessHandle(state, serviceProcess, serviceProc);
+      finishPersistedProcess(state, serviceProcess, { status: "failed" });
+      if (!ready) reject(new Error(`failed to start Git Smart HTTP server: ${error.message}`));
+    });
+    serviceProc.once("exit", (exitCode, signal) => {
+      removeHublotProcessHandle(state, serviceProcess, serviceProc);
+      finishPersistedProcess(state, serviceProcess, { exitCode, signal });
+      if (!ready) reject(new Error(`Git Smart HTTP server exited before serving port ${hublot.port} (code=${exitCode})`));
+    });
+  });
+
+  try {
+    await Promise.race([waitForPort(hublot.port), stopped]);
+    if (serviceProc.exitCode !== null) throw new Error(`Git Smart HTTP server exited before serving port ${hublot.port} (code=${serviceProc.exitCode})`);
+    serviceProcess = persistHublotProcessIdentity(state, {
+      hublotId: hublot.id, role: "service", pid: serviceProc.pid, status: "running",
+    });
+    if (!serviceProcess) throw new Error("Git Smart HTTP server started without a persistent process identity");
+    registerHublotProcessHandle(state, serviceProcess, serviceProc);
+    ready = true;
+    serviceProc.unref();
+    return { servicePid: serviceProc.pid, serviceProc, serviceProcess };
+  } catch (error) {
+    if (serviceProc.exitCode === null) serviceProc.kill("SIGTERM");
+    throw error;
+  }
+}
+
 /** Restart an agent-managed service and persist its replacement before tunneling. */
 export async function recoverAnsweringHublotService(state, hublot, {
   checkPort = localPortAnswers,
