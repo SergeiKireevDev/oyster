@@ -10,9 +10,30 @@
   "paths": {
     "/environments": {
       "get": {
-        "summary": "List environments (llmbox spokes)",
+        "summary": "List driver-discovered and cloud-provisioned environments",
         "responses": { "200": { "description": "Environment list", "content": { "application/json": { "schema": { "type": "object", "required": ["environments"], "properties": { "environments": { "type": "array", "items": { "$ref": "#/components/schemas/Environment" } } } } } } } }
+      },
+      "post": {
+        "summary": "Provision a raw virtual machine with a configured cloud provider",
+        "description": "Creates the provider instance only. This version does not install Oyster or apply cloud-init.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCloudEnvironment" } } } },
+        "responses": { "201": { "description": "Cloud instance created", "content": { "application/json": { "schema": { "type": "object", "required": ["environment"], "properties": { "environment": { "$ref": "#/components/schemas/Environment" } } } } } }, "400": { "description": "Invalid request" }, "409": { "description": "Provider credentials are not configured" }, "502": { "description": "Cloud provider request failed" } }
       }
+    },
+    "/cloud/providers": {
+      "get": {
+        "summary": "List supported cloud providers and redacted credential status",
+        "responses": { "200": { "description": "Cloud provider catalog", "content": { "application/json": { "schema": { "type": "object", "required": ["providers"], "properties": { "providers": { "type": "array", "items": { "$ref": "#/components/schemas/CloudProvider" } } } } } } } }
+      }
+    },
+    "/cloud/providers/{provider}/credentials": {
+      "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }],
+      "put": { "summary": "Store or replace cloud credentials", "description": "Secret values are write-only and are never included in API responses.", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }, "responses": { "200": { "description": "Credential configured" }, "400": { "description": "Invalid credentials" } } },
+      "delete": { "summary": "Remove stored cloud credentials", "responses": { "200": { "description": "Credential removed" } } }
+    },
+    "/cloud/providers/{provider}/options": {
+      "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }, { "name": "region", "in": "query", "schema": { "type": "string" }, "description": "Region or zone used to query available instance types" }],
+      "get": { "summary": "Query live regions, instance types, and images from a cloud provider", "responses": { "200": { "description": "Available provisioning options", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloudOptions" } } } }, "409": { "description": "Provider credentials are not configured" }, "502": { "description": "Cloud provider request failed" } } }
     },
     "/workspaces": {
       "get": {
@@ -67,7 +88,8 @@
       "bearerAuth": { "type": "http", "scheme": "bearer" }
     },
     "parameters": {
-      "WorkspaceId": { "name": "wid", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" } }
+      "WorkspaceId": { "name": "wid", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" } },
+      "CloudProviderId": { "name": "provider", "in": "path", "required": true, "schema": { "type": "string", "enum": ["digitalocean", "aws", "gcp"] } }
     },
     "responses": {
       "NotFound": { "description": "Workspace not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
@@ -80,11 +102,41 @@
         "properties": {
           "id": { "type": "string", "description": "llmbox spoke name" },
           "name": { "type": "string" },
-          "status": { "enum": ["online", "offline"] },
+          "status": { "enum": ["online", "offline", "provisioned"] },
           "default": { "type": "boolean" },
-          "local": { "type": "boolean" }
+          "local": { "type": "boolean" },
+          "cloud": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "provider": { "type": "object", "additionalProperties": true }
         }
       },
+      "CloudProvider": {
+        "type": "object",
+        "required": ["id", "name", "configured", "authType", "oauthSupported", "fields"],
+        "properties": {
+          "id": { "enum": ["digitalocean", "aws", "gcp"] },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "configured": { "type": "boolean" },
+          "account": { "type": ["string", "null"], "description": "Non-secret account identifier when available" },
+          "authType": { "enum": ["api_token", "access_key", "oauth_service_account"] },
+          "oauthSupported": { "type": "boolean" },
+          "fields": { "type": "array", "items": { "type": "object", "required": ["id", "label", "type", "required"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "type": { "enum": ["text", "password", "textarea"] }, "required": { "type": "boolean" }, "placeholder": { "type": "string" } } } }
+        }
+      },
+      "CloudOptions": {
+        "type": "object",
+        "required": ["provider", "regions", "sizes", "images", "defaults"],
+        "properties": {
+          "provider": { "type": "string" },
+          "regions": { "type": "array", "items": { "$ref": "#/components/schemas/CloudOption" } },
+          "sizes": { "type": "array", "items": { "$ref": "#/components/schemas/CloudOption" } },
+          "images": { "type": "array", "items": { "$ref": "#/components/schemas/CloudOption" } },
+          "defaults": { "type": "object", "properties": { "region": { "type": "string" }, "size": { "type": "string" }, "image": { "type": "string" } } }
+        }
+      },
+      "CloudOption": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" }, "regions": { "type": "array", "items": { "type": "string" } } } },
+      "CreateCloudEnvironment": { "type": "object", "required": ["provider", "name", "region", "size", "image"], "properties": { "provider": { "enum": ["digitalocean", "aws", "gcp"] }, "name": { "type": "string", "pattern": "^[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$" }, "region": { "type": "string" }, "size": { "type": "string" }, "image": { "type": "string" } } },
       "Workspace": {
         "type": "object",
         "required": ["environmentId", "environmentName", "id", "name", "url"],

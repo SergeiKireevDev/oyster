@@ -3,6 +3,9 @@
   "port": 8787,
   "token": "replace-with-a-hub-bearer-token",
   "timeoutMs": 5000,
+  "cloud": {
+    "stateFile": "./cloud-state.json"
+  },
   "driver": {
     "type": "llmbox",
     "endpoint": "http://127.0.0.1:8080",

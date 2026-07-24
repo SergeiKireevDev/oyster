@@ -7,6 +7,8 @@
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { isHubRuntime, listEnvironments, listOnlineWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
+  import { openModal } from "../stores/modal.js";
+  import { cloudEnvironmentChanges } from "../stores/cloudEnvironments.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
@@ -70,7 +72,7 @@
   let availableEnvironments = [];
   let availableWorkspaces = [];
   let availableWorkspacesLoaded = !hubMode;
-  onMount(async () => {
+  async function refreshEnvironmentCatalog(preferredId = null) {
     if (!hubMode) return;
     try {
       [availableEnvironments, availableWorkspaces] = await Promise.all([
@@ -78,10 +80,20 @@
         listOnlineWorkspaces(),
       ]);
       availableWorkspacesLoaded = true;
+      if (preferredId) selectedEnvironmentId = preferredId;
     } catch {
       // Keep session-derived environment options when discovery is temporarily unavailable.
     }
-  });
+  }
+  function openCloudEnvironment() {
+    openModal({ title: "New cloud environment", wide: true, content: "cloudEnvironment" });
+  }
+  onMount(() => { refreshEnvironmentCatalog(); });
+  let cloudEnvironmentRevision = 0;
+  $: if ($cloudEnvironmentChanges.revision > cloudEnvironmentRevision) {
+    cloudEnvironmentRevision = $cloudEnvironmentChanges.revision;
+    refreshEnvironmentCatalog($cloudEnvironmentChanges.environment?.id);
+  }
 
   let clock = Date.now();
   const clockTimer = setInterval(() => { clock = Date.now(); }, 60_000);
@@ -403,21 +415,32 @@
     </div>
   {/if}
   {#if hubMode && environmentOptions.length}
-    <label class="session-sidebar-environment-selector">
-      <span class="session-sidebar-environment-tab-icon" aria-hidden="true"></span>
-      <span class="session-sidebar-environment-label">Environment</span>
-      <select
-        aria-label="Environment"
-        value={selectedEnvironmentId}
-        onchange={(event) => { selectedEnvironmentId = event.currentTarget.value; }}
-      >
-        {#each environmentOptions as environment (environment.environmentId)}
-          <option value={environment.environmentId} disabled={environment.status === "offline"}>
-            {environment.environmentName}{environment.status === "offline" ? " · offline" : ""}
-          </option>
-        {/each}
-      </select>
-    </label>
+    <div class="session-sidebar-environment-selector">
+      <label class="session-sidebar-environment-control">
+        <span class="session-sidebar-environment-tab-icon" aria-hidden="true"></span>
+        <span class="session-sidebar-environment-label">Environment</span>
+        <select
+          aria-label="Environment"
+          value={selectedEnvironmentId || ""}
+          onchange={(event) => { selectedEnvironmentId = event.currentTarget.value; }}
+        >
+          {#each environmentOptions as environment (environment.environmentId)}
+            <option value={environment.environmentId} disabled={environment.status === "offline"}>
+              {environment.environmentName}{environment.status === "offline" ? " · offline" : environment.status === "provisioned" ? " · setup needed" : ""}
+            </option>
+          {/each}
+        </select>
+      </label>
+      <button
+        type="button"
+        class="session-sidebar-environment-create"
+        title="Provision a cloud environment"
+        aria-label="Provision a cloud environment"
+        onclick={openCloudEnvironment}
+      >+</button>
+    </div>
+  {:else if hubMode}
+    <button type="button" class="session-sidebar-environment-empty-create" onclick={openCloudEnvironment}>+ Provision cloud environment</button>
   {/if}
   <div class="session-sidebar-list">
     {#if hubMode && availableWorkspacesLoaded && !environmentOptions.length}

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 const WORKSPACE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
@@ -100,12 +100,21 @@ export function validateConfig(input, env = process.env) {
   else if (driverType === "mock") driver = validateMockDriver(driverInput, env);
   else throw new Error(`unsupported workspace driver: ${driverType}`);
 
+  const configuredCloudStateFile = env.OYSTER_HUB_CLOUD_STATE_FILE || input.cloud?.stateFile || null;
+  if (configuredCloudStateFile != null && (typeof configuredCloudStateFile !== "string" || !configuredCloudStateFile.trim())) {
+    throw new Error("cloud.stateFile must be a non-empty path");
+  }
+  const cloudStateFile = configuredCloudStateFile
+    ? (isAbsolute(configuredCloudStateFile.trim()) ? configuredCloudStateFile.trim() : resolve(configuredCloudStateFile.trim()))
+    : null;
+
   return Object.freeze({
     host: String(env.HOST || input.host || "127.0.0.1"),
     port,
     token,
     timeoutMs,
     driver,
+    cloud: Object.freeze({ stateFile: cloudStateFile }),
   });
 }
 
@@ -117,6 +126,9 @@ export async function loadConfig(argv = process.argv.slice(2), env = process.env
   let parsed;
   try { parsed = JSON.parse(source); } catch (error) { throw new Error(`cannot parse ${configPath}: ${error.message}`); }
   let resolvedEnv = env;
+  if (parsed.cloud?.stateFile && !isAbsolute(parsed.cloud.stateFile)) {
+    parsed.cloud = { ...parsed.cloud, stateFile: resolve(dirname(configPath), parsed.cloud.stateFile) };
+  }
   const sharedTokenFile = env.OYSTER_HUB_SHARED_TOKEN_FILE || parsed.sharedTokenFile;
   if (sharedTokenFile) {
     if (parsed.driver?.type !== "mock") throw new Error("sharedTokenFile is only supported by the mock workspace driver");

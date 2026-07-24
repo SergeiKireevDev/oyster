@@ -84,6 +84,22 @@ npm run hub
 
 Open `http://127.0.0.1:8787/#token=<hub-token>`. The standard Oyster interface stores the token using its normal authentication flow. `oyster-hub/config.json` is git-ignored.
 
+### Cloud environment provisioning
+
+The **+** control beside the environment selector opens a provider flow for DigitalOcean, AWS, and GCP. It stores write-only provider credentials, queries each provider's live regions/zones, instance types, and images, then provisions a raw VM. The initial implementation intentionally does not apply cloud-init, install Oyster, or register an llmbox spoke. A created VM therefore appears as `provisioned · setup needed` until it is configured separately.
+
+Configure a state file to keep credentials and provisioned-environment records across Hub restarts:
+
+```json
+{
+  "cloud": { "stateFile": "./cloud-state.json" }
+}
+```
+
+Relative paths are resolved from the Hub config file. The state file is written with mode `0600`; it contains plaintext cloud credentials and must be backed up, mounted, and access-controlled as a secret. If `cloud.stateFile` is omitted, cloud state is process-local. `OYSTER_HUB_CLOUD_STATE_FILE` overrides the configured path.
+
+Authentication methods in this release are a DigitalOcean personal access token, AWS IAM access/secret keys (with optional session token), and a GCP service-account JSON key. GCP exchanges a signed service-account JWT through OAuth 2.0. Interactive user OAuth is not yet implemented.
+
 The UI-facing `/sessions` and `/runners` APIs aggregate every discovered workspace. Hub-scoped opaque session and runner identities prevent collisions, while each item includes `environmentId`, `environmentName`, `workspaceId`, and `workspaceName`. An environment is the physical or cloud device (`spoke` for llmbox); a workspace is the project microVM on that device; a session is one discussion thread. The session sidebar presents that hierarchy and uses cwd as a category within each workspace, not as workspace identity. Session operations, RPC, and SSE are routed back to the owning workspace; no iframe embedding is used.
 
 Every non-aggregate workspace request must be explicit through a scoped identity, `X-Oyster-Workspace`, or the `workspace` query parameter. The Hub never falls back to the first workspace. On browser startup the UI lists workspaces, persists an explicit online selection, and only then opens its event stream. If none are available, startup stops with guidance to create an environment or workspace first. Starting a session in Hub mode always asks for an online workspace before opening that workspace's folder browser; canceling the picker leaves the current workspace and session unchanged.
@@ -119,6 +135,7 @@ Environment overrides are available for deployment:
 | `OYSTER_HUB_DRIVER_ENDPOINT` | llmbox API endpoint |
 | `OYSTER_HUB_DRIVER_TOKEN` | llmbox API key |
 | `OYSTER_HUB_WORKSPACE_TOKEN_SECRET` | HMAC secret used to derive Oyster tokens |
+| `OYSTER_HUB_CLOUD_STATE_FILE` | Owner-only file containing cloud credentials and provision records |
 | `HOST`, `PORT` | Listener |
 
 ## API
@@ -129,7 +146,11 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 |---|---|
 | `GET /health` | Unauthenticated hub and configured-driver identity. |
 | `GET /api/v1/openapi.json` | OpenAPI 3.1 schema. |
-| `GET /api/v1/environments` | List environments (llmbox spokes); the mock driver returns `local`. |
+| `GET /api/v1/environments` | List driver-discovered and cloud-provisioned environments. |
+| `POST /api/v1/environments` | Provision a raw cloud instance from selected live provider options. |
+| `GET /api/v1/cloud/providers` | List supported providers and redacted credential status. |
+| `PUT, DELETE /api/v1/cloud/providers/{provider}/credentials` | Store/replace or remove write-only cloud credentials. |
+| `GET /api/v1/cloud/providers/{provider}/options` | Query live regions/zones, instance types, and images. |
 | `GET /api/v1/workspaces` | Query llmbox and list discovered workspaces. |
 | `POST /api/v1/workspaces` | Create a workspace when the selected driver advertises that capability; otherwise `405`. |
 | `GET /api/v1/workspaces/{wid}` | Inspect one dynamically discovered workspace. |
@@ -157,7 +178,8 @@ The hub replaces its credential with the workspace-specific derived credential b
 ## Prototype boundaries
 
 - The `llmbox` and read-only local `mock` drivers are implemented; `drivers/index.mjs` is the extension point.
-- Discovery and aggregation are request-time queries with no persistent cache.
+- Workspace discovery and aggregation are request-time queries with no persistent cache; optional cloud credentials and provision records use `cloud.stateFile`.
+- Cloud provisioning creates provider instances only. Bootstrap, cloud-init, Oyster installation, registration, status polling, and instance deletion are future work.
 - A newly created box is `provisioning` until llmbox exposes its configured Oyster port.
 - An active workspace SSE stream includes runner snapshots from the other discovered workspaces; non-runner events remain scoped to the active workspace.
 - Authentication is one shared hub bearer token; user accounts and per-workspace authorization are future work.
