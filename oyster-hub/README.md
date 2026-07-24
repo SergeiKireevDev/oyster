@@ -186,6 +186,22 @@ curl -H "Authorization: Bearer $HUB_TOKEN" \
 
 The hub replaces its credential with the workspace-specific derived credential before forwarding. Redirects are not followed, `Set-Cookie` is not relayed, and llmbox/Oyster credentials are never included in responses.
 
+### Streaming uploads
+
+The standard Oyster file explorer keeps its existing resumable protocol: it sends ordered 8 MiB raw chunks to `POST /file-upload` with `offset` and `last` query parameters. Oyster Hub resolves and authorizes the workspace before forwarding any bytes, then streams each opaque request body with backpressure instead of buffering the chunk. JSON requests remain bounded and buffered because scoped session and runner identities inside JSON must be decoded before routing.
+
+The llmbox proxy carries the resulting HTTP request over the same raw `DialBox` stream used by downloads, SSE, and WebSockets. No upload-specific cluster verb is required. A future reverse-connected cloud box agent must implement the same box-scoped `DialBox(ctx, boxID, localhostPort)` stream contract, so the browser and Oyster upload endpoint remain unchanged.
+
+Three timeout settings have distinct roles:
+
+| Setting | Default | Meaning |
+|---|---:|---|
+| `timeoutMs` | 5000 | Bounded workspace discovery, JSON, and bodyless request/response operations. |
+| `uploadIdleTimeoutMs` | 30000 | Maximum interval with no upload bytes making progress; reset for every forwarded chunk. |
+| `uploadResponseTimeoutMs` | 30000 | Maximum wait for workspace response headers after the final upload byte. |
+
+Both upload settings accept 100 ms through 30 minutes. Increase the idle setting for highly latent or intermittently scheduled cloud VMs. A progressing upload may run longer than `timeoutMs`; an idle stream is aborted and the browser retries from the workspace-reported offset. Transfer diagnostics expose only workspace ID, byte counts, duration, and close reason—never body contents or credentials.
+
 ## Prototype boundaries
 
 - The native `llmbox` and read-only local `mock` drivers are implemented; `drivers/index.mjs` is the extension point. The older llmbox HTTP transport remains available by omitting `transport: "native"` for compatibility.
