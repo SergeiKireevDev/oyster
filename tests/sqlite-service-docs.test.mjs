@@ -9,7 +9,7 @@ const backupDocs = readFileSync(new URL("../docs/operations/backup-and-recovery.
 test("systemd template pins the local SQLite-enabled pi runtime", () => {
   assert.match(service, /Environment=PI_BIN=__PI_UI_DIR__\/pi\/packages\/coding-agent\/dist\/cli\.js/);
   assert.match(service, /Environment=PERSISTENT_STORE=sqlite/);
-  assert.match(service, /Environment=PI_CODING_AGENT_DIR=\/home\/ubuntu\/\.pi\/agent/);
+  assert.match(service, /Environment=PI_CODING_AGENT_DIR=%h\/\.pi\/agent/);
   assert.match(service, /WorkingDirectory=__PI_UI_DIR__/);
 });
 

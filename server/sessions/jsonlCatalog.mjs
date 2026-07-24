@@ -54,7 +54,7 @@ export function sessionFileFromSearch(url) {
 }
 
 /** best-effort human-readable name for a session folder like
- *  "--home-ubuntu-my-project--" -> "/home/ubuntu/my/project" (lossy for dashes) */
+ *  "--home-alice-my-project--" -> "/home/alice/my/project" (lossy for dashes) */
 export function decodeFolderName(name) {
   return "/" + name.replace(/^--/, "").replace(/--$/, "").replace(/-/g, "/");
 }

@@ -1,6 +1,7 @@
 # SQLite and file-storage data audit
 
-**Repository:** `/home/ubuntu/tree-pi-bak-sql`  
+**Repository:** Oyster repository root
+
 **Scope:** server-side data models, the selected pi session backend, and persistent/runtime storage boundaries  
 **Date:** 2026-07-16
 
