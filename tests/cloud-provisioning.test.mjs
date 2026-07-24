@@ -32,6 +32,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const stateFile = join(root, "cloud-state.json");
   const calls = [];
+  let bootstrapSecret;
   const canary = "dop_v1_cloud_secret_canary";
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url: String(url), options });
@@ -40,7 +41,14 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
     if (String(url).includes("/sizes")) return jsonResponse({ sizes: [{ slug: "s-1vcpu-1gb", available: true, vcpus: 1, memory: 1024, price_monthly: 6, regions: ["nyc3"] }] });
     if (String(url).includes("/images")) return jsonResponse({ images: [{ slug: "ubuntu-24-04-x64", status: "available", description: "Ubuntu 24.04", distribution: "Ubuntu", regions: ["nyc3"] }] });
     if (String(url).endsWith("/droplets")) {
-      assert.deepEqual(JSON.parse(options.body), { name: "cloud-dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
+      const body = JSON.parse(options.body);
+      assert.deepEqual({ name: body.name, region: body.region, size: body.size, image: body.image }, { name: "cloud-dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
+      assert.match(body.user_data, /^#cloud-config\n/);
+      const agentEnvironment = Buffer.from(body.user_data.match(/content: ([A-Za-z0-9+/=]+)/)[1], "base64").toString("utf8");
+      assert.match(agentEnvironment, /wss:\/\/hub\.get-oyster\.dev\/box\/connect/);
+      bootstrapSecret = agentEnvironment.match(/OYSTER_BOX_BOOTSTRAP_SECRET="([^"]+)"/)[1];
+      assert.equal(body.tags[0], "oyster-hub");
+      assert.match(body.tags.join(" "), /oyster-generation-/);
       return jsonResponse({ droplet: { id: 451, status: "new" }, links: { actions: [{ href: "https://api.digitalocean.com/v2/actions/9" }] } }, 202);
     }
     throw new Error(`unexpected request ${url}`);
@@ -63,21 +71,29 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   assert.deepEqual(environment, {
     id: "digitalocean-451",
     name: "Cloud-Dev",
-    status: "provisioned",
+    status: "awaiting_agent",
     local: false,
     cloud: true,
     createdAt: environment.createdAt,
     provider: {
       id: "digitalocean", name: "DigitalOcean", instanceId: "451", state: "new", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64",
       consoleUrl: "https://api.digitalocean.com/v2/actions/9",
+      generation: environment.provider.generation,
+      registrationStatus: "awaiting_agent",
+      lastSeenAt: null,
     },
   });
   assert.equal(JSON.stringify(environment).includes(canary), false);
   assert.equal(statSync(stateFile).mode & 0o777, 0o600);
   assert.match(readFileSync(stateFile, "utf8"), new RegExp(canary));
+  assert.equal(readFileSync(stateFile, "utf8").includes(bootstrapSecret), false);
 
   const restored = createCloudProvisioningService({ stateFile, fetchImpl });
   assert.deepEqual((await restored.listEnvironments()).map(({ id }) => id), ["digitalocean-451"]);
+  const [workspace] = await restored.listWorkspaces();
+  assert.equal(workspace.id, "digitalocean-451");
+  assert.equal(workspace.status, "awaiting_agent");
+  assert.equal(workspace.provider.directAgent, true);
   await restored.removeCredentials("digitalocean");
   assert.equal((await restored.listProviders()).find(({ id }) => id === "digitalocean").configured, false);
   assert.deepEqual((await restored.listEnvironments()).map(({ id }) => id), ["digitalocean-451"]);
@@ -108,6 +124,8 @@ test("AWS options and EC2 provisioning use signed provider API requests", async 
   assert.equal(environment.provider.instanceId, "i-123abc");
   assert.equal(environment.provider.state, "pending");
   assert.equal(calls.at(-1).body.get("TagSpecification.1.Tag.1.Value"), "build-node");
+  assert.equal(calls.at(-1).body.get("TagSpecification.1.Tag.2.Value"), "oyster-hub");
+  assert.match(Buffer.from(calls.at(-1).body.get("UserData"), "base64").toString("utf8"), /^#cloud-config\n/);
   assert.deepEqual(calls.map(({ action }) => action), ["DescribeRegions", "DescribeInstanceTypeOfferings", "DescribeImages", "RunInstances"]);
 });
 
@@ -131,12 +149,14 @@ test("GCP exchanges a service-account JWT for OAuth and provisions from live Com
     }
     assert.equal(options.headers.authorization, "Bearer gcp-oauth-canary");
     if (target.includes("/oyster-test-project/zones?")) return jsonResponse({ items: [{ name: "us-central1-a", status: "UP", description: "Iowa" }] });
-    if (target.includes("/debian-cloud/global/images?")) return jsonResponse({ items: [{ name: "debian-12-bookworm-v1", status: "READY", description: "Debian 12" }] });
+    if (target.includes("/ubuntu-os-cloud/global/images?")) return jsonResponse({ items: [{ name: "ubuntu-2404-noble-v1", status: "READY", description: "Ubuntu 24.04" }] });
     if (target.includes("/zones/us-central1-a/machineTypes?")) return jsonResponse({ items: [{ name: "e2-micro", guestCpus: 2, memoryMb: 1024 }] });
     if (target.endsWith("/zones/us-central1-a/instances")) {
       const body = JSON.parse(options.body);
       assert.equal(body.machineType, "zones/us-central1-a/machineTypes/e2-micro");
-      assert.equal(body.disks[0].initializeParams.sourceImage, "projects/debian-cloud/global/images/debian-12-bookworm-v1");
+      assert.equal(body.disks[0].initializeParams.sourceImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-v1");
+      assert.equal(body.labels.managed_by, "oyster-hub");
+      assert.match(body.metadata.items.find(({ key }) => key === "user-data").value, /^#cloud-config\n/);
       return jsonResponse({ targetId: "887766", status: "PENDING" });
     }
     throw new Error(`unexpected GCP request ${target}`);
@@ -147,8 +167,8 @@ test("GCP exchanges a service-account JWT for OAuth and provisions from live Com
   const options = await service.options("gcp");
   assert.deepEqual(options.regions.map(({ id }) => id), ["us-central1-a"]);
   assert.deepEqual(options.sizes.map(({ id }) => id), ["e2-micro"]);
-  assert.deepEqual(options.images.map(({ id }) => id), ["debian-12-bookworm-v1"]);
-  const environment = await service.provision({ provider: "gcp", name: "gcp-node", region: "us-central1-a", size: "e2-micro", image: "debian-12-bookworm-v1" });
+  assert.deepEqual(options.images.map(({ id }) => id), ["ubuntu-2404-noble-v1"]);
+  const environment = await service.provision({ provider: "gcp", name: "gcp-node", region: "us-central1-a", size: "e2-micro", image: "ubuntu-2404-noble-v1" });
   assert.equal(environment.provider.instanceId, "887766");
   assert.equal(environment.provider.state, "PENDING");
   assert.equal(JSON.stringify(await service.listProviders()).includes("PRIVATE KEY"), false);
@@ -163,7 +183,9 @@ test("Hub cloud routes are authenticated, merge environments, and keep cloud ser
     async removeCredentials(provider) { return { provider, configured: false }; },
     async options(provider, { region }) { return { regions: [{ id: region || "nyc3", name: "NYC" }], sizes: [], images: [], defaults: {} }; },
     async provision(body) { return { id: "digitalocean-1", name: body.name, status: "provisioned", cloud: true, local: false, provider: { id: body.provider } }; },
-    async listEnvironments() { return [{ id: "digitalocean-1", name: "Cloud", status: "provisioned", cloud: true }]; },
+    async listEnvironments() { return [{ id: "digitalocean-1", name: "Cloud", status: "awaiting_agent", cloud: true }]; },
+    async listWorkspaces() { return [{ environmentId: "digitalocean-1", environmentName: "Cloud", id: "digitalocean-1", name: "Cloud", url: null, status: "awaiting_agent", provider: { type: "cloud", phase: "awaiting_agent" } }]; },
+    async getWorkspace(id) { return id === "digitalocean-1" ? (await this.listWorkspaces())[0] : null; },
   };
   const driver = {
     type: "test", endpoint: "memory://driver", capabilities: { list: true, create: false, remove: false },
@@ -195,4 +217,6 @@ test("Hub cloud routes are authenticated, merge environments, and keep cloud ser
   assert.equal((await createResponse.json()).environment.id, "digitalocean-1");
   const environments = await (await fetch(`${baseUrl}/api/v1/environments`, { headers })).json();
   assert.deepEqual(environments.environments.map(({ id }) => id), ["digitalocean-1", "local"]);
+  const workspaces = await (await fetch(`${baseUrl}/api/v1/workspaces`, { headers })).json();
+  assert.deepEqual(workspaces.workspaces.map(({ id, status }) => [id, status]), [["digitalocean-1", "awaiting_agent"]]);
 });

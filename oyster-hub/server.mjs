@@ -12,6 +12,7 @@ let shutdownPromise = null;
 async function shutdown() {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
+    await server?.boxRegistry?.close?.();
     if (server?.listening) {
       server.close();
       await once(server, "close");
