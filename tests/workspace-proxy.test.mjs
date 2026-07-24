@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
+import { PassThrough, Readable } from "node:stream";
 import {
   createUploadLimiter,
   prepareScopedWorkspaceRequest,
+  proxyWorkspaceRequest,
   readBufferedRequestBody,
 } from "../oyster-hub/workspace-proxy.mjs";
 
@@ -39,6 +41,36 @@ test("workspace preparation decodes scoped JSON but leaves opaque bodies streami
   assert.equal(preparedOpaque.streaming, true);
   assert.equal(preparedOpaque.body, opaqueReq);
   assert.equal(opaqueReq.readableEnded, false);
+});
+
+test("browser upload disconnects do not leave an unhandled monitored-body error", async () => {
+  const req = new PassThrough();
+  req.method = "POST";
+  req.headers = { "content-type": "application/octet-stream", "transfer-encoding": "chunked" };
+  req.on("error", () => {});
+  const res = Object.assign(new EventEmitter(), { headersSent: false, writableEnded: false });
+  let response;
+  const operation = proxyWorkspaceRequest({
+    req,
+    res,
+    target: "http://workspace/file-upload",
+    workspace: { id: "alpha", token: null },
+    timeoutMs: 1000,
+    uploadIdleTimeoutMs: 1000,
+    uploadResponseTimeoutMs: 1000,
+    uploadLimiter: createUploadLimiter(1),
+    json(_res, status, value) { response = { status, value }; },
+    fetchImpl(_target, { signal }) {
+      return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  req.emit("aborted");
+  req.destroy(new Error("client socket closed"));
+  await operation;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(response.status, 502);
+  assert.equal(response.value.detail, "browser disconnected during workspace request");
 });
 
 test("workspace upload limiter bounds and idempotently releases slots", () => {
