@@ -4,6 +4,9 @@
   "token": "replace-with-a-hub-bearer-token",
   "sharedTokenFile": "/home/ubuntu/tree-pi/.ui-token",
   "timeoutMs": 5000,
+  "cloud": {
+    "stateFile": "./cloud-state.json"
+  },
   "driver": {
     "type": "mock",
     "workspaces": [

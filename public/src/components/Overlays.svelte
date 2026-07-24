@@ -5,6 +5,7 @@
   import CredentialsModal from "./CredentialsModal.svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
   import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
+  import CloudEnvironmentModal from "./CloudEnvironmentModal.svelte";
   import CommandPalette from "./CommandPalette.svelte";
   import ConfirmPromptModal from "./ConfirmPromptModal.svelte";
   import EditorPromptModal from "./EditorPromptModal.svelte";
@@ -129,6 +130,8 @@
         <ConfirmPromptModal />
       {:else if $modalState.content === "checkpointModelPicker"}
         <CheckpointModelPickerModal />
+      {:else if $modalState.content === "cloudEnvironment"}
+        <CloudEnvironmentModal />
       {:else if $modalState.content === "hublotManager"}
         <HublotManagerModal />
       {:else if $modalState.content === "routineManager"}

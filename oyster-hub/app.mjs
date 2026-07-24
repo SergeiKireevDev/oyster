@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { createWorkspaceDriver } from "./drivers/index.mjs";
 import { WorkspaceDriverError } from "./drivers/errors.mjs";
 import { createOysterUiGateway } from "./ui-gateway.mjs";
+import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
 
 const HOP_BY_HOP = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -91,13 +92,30 @@ async function fetchJson(workspace, path, { fetchImpl, timeoutMs }) {
   }
 }
 
-async function listEnvironments(driver) {
+async function listDriverEnvironments(driver) {
   if (typeof driver.listEnvironments === "function") return driver.listEnvironments();
   const workspaces = await driver.listWorkspaces();
   return [...new Map(workspaces.map((workspace) => {
     const id = workspace.environmentId || workspace.provider?.spoke || "unassigned-device";
     return [id, { id, name: workspace.environmentName || id, status: "online" }];
   })).values()];
+}
+
+async function listEnvironments(driver, cloudService) {
+  const [driverEnvironments, cloudEnvironments] = await Promise.all([
+    listDriverEnvironments(driver),
+    cloudService.listEnvironments(),
+  ]);
+  return [...new Map([...cloudEnvironments, ...driverEnvironments].map((environment) => [environment.id, environment])).values()];
+}
+
+async function readJsonBody(req) {
+  try {
+    const raw = await readRequestBody(req);
+    return raw.length ? JSON.parse(raw.toString("utf8")) : {};
+  } catch (error) {
+    throw new CloudProvisioningError(`invalid JSON: ${error.message}`, { status: 400 });
+  }
 }
 
 function publicWorkspace(workspace) {
@@ -206,6 +224,7 @@ export function createOysterHub(config, {
   driver = createWorkspaceDriver(config.driver, { fetchImpl }),
   dashboardPath = new URL("./public/index.html", import.meta.url),
   openApiPath = new URL("./openapi.json", import.meta.url),
+  cloudService = createCloudProvisioningService({ stateFile: config.cloud?.stateFile, fetchImpl }),
 } = {}) {
   const options = { fetchImpl, timeoutMs: config.timeoutMs };
   const uiGateway = createOysterUiGateway({
@@ -237,7 +256,29 @@ export function createOysterHub(config, {
         return res.end(body);
       }
       if (url.pathname === "/api/v1/environments" && req.method === "GET") {
-        return json(res, 200, { environments: await listEnvironments(driver) });
+        return json(res, 200, { environments: await listEnvironments(driver, cloudService) });
+      }
+      if (url.pathname === "/api/v1/environments" && req.method === "POST") {
+        return json(res, 201, { environment: await cloudService.provision(await readJsonBody(req)) });
+      }
+      if (url.pathname === "/api/v1/cloud/providers" && req.method === "GET") {
+        return json(res, 200, { providers: await cloudService.listProviders() });
+      }
+      const cloudProviderMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/(credentials|options)$/);
+      if (cloudProviderMatch) {
+        let providerId;
+        try { providerId = decodeURIComponent(cloudProviderMatch[1]); }
+        catch { return json(res, 400, { error: "invalid cloud provider id" }); }
+        if (cloudProviderMatch[2] === "credentials" && req.method === "PUT") {
+          return json(res, 200, { credential: await cloudService.configure(providerId, await readJsonBody(req)) });
+        }
+        if (cloudProviderMatch[2] === "credentials" && req.method === "DELETE") {
+          return json(res, 200, { credential: await cloudService.removeCredentials(providerId) });
+        }
+        if (cloudProviderMatch[2] === "options" && req.method === "GET") {
+          return json(res, 200, { provider: providerId, ...(await cloudService.options(providerId, { region: url.searchParams.get("region") || "" })) });
+        }
+        return json(res, 405, { error: "method not allowed" });
       }
       if (url.pathname === "/api/v1/workspaces" && req.method === "GET") {
         const discovered = await driver.listWorkspaces();
@@ -287,6 +328,8 @@ export function createOysterHub(config, {
       logger.error("oyster-hub request failed", error);
       if (!res.headersSent && error instanceof WorkspaceDriverError) {
         json(res, error.status, { error: error.message, driver: driver.type });
+      } else if (!res.headersSent && error instanceof CloudProvisioningError) {
+        json(res, error.status, { error: error.message });
       } else if (!res.headersSent) json(res, 500, { error: "internal server error" });
       else res.destroy(error);
     }
