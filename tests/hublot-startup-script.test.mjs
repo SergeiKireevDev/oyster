@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +9,7 @@ import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
-  reserveHublot, spawnMarkdownService, validateAndStoreHublotStartupScript,
+  reserveHublot, spawnGitServerService, spawnMarkdownService, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
 function fixture(t) {
@@ -177,6 +178,48 @@ test("Markdown service directly invokes the reader and persists its restart comm
   assert.match(persisted.service_start_script, /# oyster: idempotent/);
   assert.match(persisted.service_start_script, new RegExp(rendererPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(persisted.service_start_script, new RegExp(markdownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
+  assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
+});
+
+test("Git server service directly invokes the bundled script and persists its restart command", async (t) => {
+  const { root, store, state } = fixture(t);
+  const worktreePath = join(root, "worktree");
+  const serverPath = join(root, "serve-git-smart-http.sh");
+  mkdirSync(worktreePath);
+  execFileSync("git", ["init", "--quiet", worktreePath]);
+  writeScript(serverPath, "#!/bin/sh\nexit 0\n");
+  const hublot = reserve(state, 4178);
+  let invocation = null;
+  class FakeProcess extends EventEmitter {
+    pid = process.pid;
+    exitCode = null;
+    unref() {}
+    kill() { this.exitCode = 0; }
+  }
+
+  const service = await spawnGitServerService(state, {
+    id: hublot.id,
+    port: hublot.port,
+  }, worktreePath, {
+    serverPath,
+    spawnProcess(command, args, options) {
+      invocation = { command, args, options };
+      return new FakeProcess();
+    },
+    waitForPort: async () => true,
+  });
+
+  assert.equal(service.servicePid, process.pid);
+  assert.equal(invocation.command, serverPath);
+  const gitStateDir = join(dirname(hublot.service_start_script_path), "git-server-state");
+  assert.deepEqual(invocation.args, ["--host", "127.0.0.1", "--port", String(hublot.port), "--state-dir", gitStateDir, worktreePath]);
+  assert.equal(invocation.options.cwd, worktreePath);
+  assert.equal(invocation.options.detached, true);
+  const persisted = store.repositories.hublots.find(hublot.id);
+  assert.match(persisted.service_start_script, /# oyster: idempotent/);
+  assert.match(persisted.service_start_script, /--host 127\.0\.0\.1 --port 4178 --state-dir/);
+  assert.match(persisted.service_start_script, new RegExp(worktreePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
   assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
 });

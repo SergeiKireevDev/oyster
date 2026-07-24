@@ -104,7 +104,49 @@ test("markdown hublots directly start the reader with an absolute document path"
   assert.equal(created.body.tunnel.servicePid, 456);
 });
 
-test("markdown hublots reject missing, relative, and unsupported service arguments", async () => {
+test("git-server hublots deterministically serve an absolute worktree without a setup agent", async () => {
+  const order = [];
+  const routes = createTunnelRoutes({
+    state: {}, config: { TUNNEL_BIN: "cloudflared" },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      readJsonBody: async (req) => req.body,
+    },
+    listTunnels: () => [],
+    reserveHublot: (_state, options) => {
+      order.push(["reserve", options.port]);
+      return { id: "git-1", port: options.port, service_start_script_path: "/agent/hublots/git-1/start.sh" };
+    },
+    rebindHublot: () => null,
+    openTunnel: async (_state, options) => {
+      order.push(["tunnel", options.port]);
+      return { id: options.id, port: options.port, url: "https://git.test" };
+    },
+    closeTunnel: () => null,
+    spawnHublotAgent: async () => { throw new Error("setup agent must not run for git-server"); },
+    spawnGitServerService: async (_state, options, path) => {
+      order.push(["git-server", options.port, path]);
+      return { servicePid: 789 };
+    },
+  });
+
+  const created = response();
+  await routes["POST /tunnels"]({
+    body: { port: 4002, brief: "serve source", type: "git-server", path: "/workspace/oyster" },
+  }, created);
+
+  assert.equal(created.status, 201);
+  assert.deepEqual(order, [
+    ["reserve", 4002],
+    ["git-server", 4002, "/workspace/oyster"],
+    ["tunnel", 4002],
+  ]);
+  assert.equal(created.body.agent, false);
+  assert.equal(created.body.type, "git-server");
+  assert.equal(created.body.tunnel.servicePid, 789);
+});
+
+test("deterministic hublots reject missing, relative, and unsupported service arguments", async () => {
   let reserved = false;
   const routes = createTunnelRoutes({
     state: {}, config: {},
@@ -118,6 +160,8 @@ test("markdown hublots reject missing, relative, and unsupported service argumen
   for (const body of [
     { brief: "docs", type: "markdown" },
     { brief: "docs", type: "markdown", path: "README.md" },
+    { brief: "source", type: "git-server" },
+    { brief: "source", type: "git-server", path: "workspace" },
     { brief: "docs", type: "pdf", path: "/workspace/file.pdf" },
   ]) {
     const res = response();

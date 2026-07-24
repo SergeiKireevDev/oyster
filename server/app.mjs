@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService, spawnGitServerService } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
@@ -113,7 +113,7 @@ export async function init(state) {
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
     state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
-    spawnHublotAgent, spawnMarkdownService, ensureSessionOwner,
+    spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner,
   });
   const credentialService = createPiCredentialService({ config });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });

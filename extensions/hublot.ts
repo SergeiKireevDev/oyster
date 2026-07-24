@@ -62,9 +62,10 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "Manage hublots — public web interfaces (cloudflared tunnels to local ports) for this " +
       "session. When the user asks to 'create/open a hublot', use this tool. " +
       "Actions: 'open' creates a hublot — the server allocates a free local port and returns " +
-      "the public URL. Normally a background agent serves `description`; with type='markdown', " +
-      "an absolute `path` is required and the Markdown reader is started directly on that " +
-      "port. 'close' tears one " +
+      "the public URL. Normally a background agent serves `description`; deterministic " +
+      "types bypass the agent: type='markdown' serves an absolute document path, while " +
+      "type='git-server' serves an absolute Git worktree path through the bundled read-only " +
+      "Smart HTTP server. 'close' tears one " +
       "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
       "session's hublots. Opened hublots appear automatically in the pi-remote-ui. " +
       "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
@@ -76,6 +77,9 @@ export default function hublotExtension(pi: ExtensionAPI) {
         "will create and persist an idempotent startup script before the tunnel opens.",
       "To expose a Markdown document, use hublot with action=open, type=markdown, and an " +
         "absolute path to the Markdown file; the managed Markdown reader starts directly.",
+      "To expose a Git worktree for clone, fetch, or pull, use hublot with action=open, " +
+        "type=git-server, and the absolute worktree path. The deterministic read-only Smart " +
+        "HTTP server starts directly; pushes are denied.",
       "Use hublot with action=close (id or port) instead of killing cloudflared processes manually.",
       "Do not start or serve the hublot port yourself; hublots are always agent-managed.",
       "Cloudflared quick-tunnel URLs are not restartable. If a hublot is no longer listed " +
@@ -91,13 +95,13 @@ export default function hublotExtension(pi: ExtensionAPI) {
         }),
       ),
       type: Type.Optional(
-        StringEnum(["markdown"] as const, {
-          description: "For 'open': use 'markdown' to directly serve a Markdown document",
+        StringEnum(["markdown", "git-server"] as const, {
+          description: "For 'open': use 'markdown' for a document or 'git-server' for a read-only Git worktree",
         }),
       ),
       path: Type.Optional(
         Type.String({
-          description: "For type='markdown': absolute path to the Markdown file to serve",
+          description: "For type='markdown' or type='git-server': absolute path to the document or Git worktree",
         }),
       ),
       session_id: Type.Optional(
@@ -116,30 +120,34 @@ export default function hublotExtension(pi: ExtensionAPI) {
 
       if (params.action === "open") {
         if (!params.description) throw new Error("'open' requires a description");
-        if (params.type === "markdown") {
-          if (!params.path) throw new Error("type='markdown' requires a path");
-          if (!isAbsolute(params.path)) throw new Error("type='markdown' requires an absolute path");
+        if (params.type === "markdown" || params.type === "git-server") {
+          if (!params.path) throw new Error(`type='${params.type}' requires a path`);
+          if (!isAbsolute(params.path)) throw new Error(`type='${params.type}' requires an absolute path`);
         } else if (params.path) {
-          throw new Error("'path' is only valid with type='markdown'");
+          throw new Error("'path' is only valid with type='markdown' or type='git-server'");
         }
         onUpdate?.({
           content: [{
             type: "text",
             text: params.type === "markdown"
               ? "Starting Markdown reader and waiting for Cloudflare…"
-              : "Preparing local service and waiting for Cloudflare…",
+              : params.type === "git-server"
+                ? "Starting read-only Git Smart HTTP server and waiting for Cloudflare…"
+                : "Preparing local service and waiting for Cloudflare…",
           }],
         });
         const data = await api("POST", "/tunnels", {
           label: params.description.slice(0, 200),
           brief: params.description,
           sessionId: params.session_id ?? sessionId,
-          ...(params.type === "markdown" ? { type: params.type, path: params.path } : {}),
+          ...(params.type === "markdown" || params.type === "git-server" ? { type: params.type, path: params.path } : {}),
         });
         const t = data.tunnel;
         const serviceText = params.type === "markdown"
           ? `The Markdown reader is serving ${params.path} directly on the allocated port.`
-          : "The background agent brought the local service up before the tunnel was opened.";
+          : params.type === "git-server"
+            ? `The read-only Git Smart HTTP server is serving ${params.path}; clone, fetch, and pull are supported, while push is denied.`
+            : "The background agent brought the local service up before the tunnel was opened.";
         const text = `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
           `${serviceText} Do not serve the port yourself.`;
         return { content: [{ type: "text", text }], details: t };
