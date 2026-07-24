@@ -75,6 +75,7 @@ export function createPlatformEventDispatch(deps) {
       case "ui_reload":
       case "code_reloaded":
       case "code_reload_failed": return codeReload(msg);
+      case "tunnel_opening":
       case "tunnel_opened":
       case "hublot_ready":
       case "hublot_failed":

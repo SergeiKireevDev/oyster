@@ -12,14 +12,17 @@
 
 import { spawn, execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, constants, fstatSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { accessSync, closeSync, constants, fstatSync, openSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createConnection, createServer } from "node:net";
 import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
 import { readProcessIdentity, verifyPersistedProcessIdentity } from "./persistence/processIdentity.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
+const PUBLIC_READY_TIMEOUT_MS = 60_000;
+const PUBLIC_READY_INTERVAL_MS = 1_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
 
 /** Client-safe view of a tunnel (no process handles). */
@@ -185,6 +188,7 @@ function persistedTunnelInfo(state, row) {
     port: row.port,
     label: row.label,
     sessionId: row.session_id ?? null,
+    status: row.status,
     url: publishUrl ? row.public_url : null,
     workdir: row.workdir,
     createdAt: row.created_at,
@@ -194,9 +198,9 @@ function persistedTunnelInfo(state, row) {
 
 export function listTunnels(state) {
   return hublotRepository(state).list()
-    .filter((row) => row.status !== "closed" && row.status !== "opening")
+    .filter((row) => row.status !== "closed")
     .map((row) => persistedTunnelInfo(state, row))
-    .filter((tunnel) => tunnel.url);
+    .filter((tunnel) => tunnel.url || ["opening", "recovering"].includes(tunnel.status));
 }
 
 export function isLocalPortAvailable(port, host = "127.0.0.1") {
@@ -260,11 +264,58 @@ function failOpeningHublot(state, id, error) {
   recordHublotTransition(state, id, "failed", { publicUrl: null, lastError: message });
 }
 
+/** Return true only when Cloudflare can route a public request to the origin. */
+export async function publicHublotAnswers(url, {
+  fetchImpl = fetch,
+  timeoutMs = 2_500,
+} = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const target = new URL(url);
+    target.searchParams.set("__oyster_hublot_health", randomBytes(6).toString("hex"));
+    const response = await fetchImpl(target, {
+      method: "GET",
+      redirect: "manual",
+      cache: "no-store",
+      headers: { "cache-control": "no-cache" },
+      signal: controller.signal,
+    });
+    try { await response.body?.cancel(); } catch {}
+    return response.status >= 200 && response.status < 400;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Poll public reachability so callers remain pending behind their spinner. */
+export async function waitForPublicHublot(url, {
+  timeoutMs = PUBLIC_READY_TIMEOUT_MS,
+  intervalMs = PUBLIC_READY_INTERVAL_MS,
+  check = publicHublotAnswers,
+  clock = () => Date.now(),
+  sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+} = {}) {
+  const deadline = clock() + timeoutMs;
+  do {
+    if (await check(url)) return true;
+    const remaining = deadline - clock();
+    if (remaining <= 0) break;
+    await sleep(Math.min(intervalMs, remaining));
+  } while (clock() < deadline);
+  throw new Error(`public hublot did not become ready within ${timeoutMs / 1000}s: ${url}`);
+}
+
 /**
- * Spawn a tunnel for a local port. Resolves with the tunnel entry once the
- * public URL is known; rejects if the process dies or times out first.
+ * Spawn a tunnel for a local port. Resolves only after Cloudflare reports the
+ * URL and a public health check confirms that it reaches the origin.
  */
-export function openTunnel(state, { id, port, label = null, sessionId = null }) {
+export function openTunnel(state, { id, port, label = null, sessionId = null }, {
+  spawnProcess = spawn,
+  waitForPublic = waitForPublicHublot,
+} = {}) {
   return new Promise((resolvePromise, reject) => {
     port = Number(port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -285,7 +336,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     // makes cloudflared print a URL that never actually registers (error 1033)
     const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
     console.log(`[pi-ui] spawning tunnel: ${bin} ${args.join(" ")}`);
-    const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawnProcess(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
     registerHublotProcessHandle(state, tunnelProcess, proc);
 
@@ -295,6 +346,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
     };
 
     let settled = false;
+    let checkingPublicUrl = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -310,26 +362,39 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }) 
       const text = String(chunk);
       errTail = (errTail + text).slice(-2000);
       const m = text.match(PUBLIC_URL_RE);
-      if (m && !settled) {
+      if (m && !settled && !checkingPublicUrl) {
+        checkingPublicUrl = true;
+        clearTimeout(timer);
         if (!confirmSpawnedTunnelProcess(state, tunnelProcess, proc)) {
           settled = true;
-          clearTimeout(timer);
           if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
           const error = new Error("tunnel reported a URL before its persisted process identity could be confirmed healthy");
           failOpeningHublot(state, id, error);
           reject(error);
           return;
         }
-        settled = true;
-        clearTimeout(timer);
         tunnel.url = m[0];
-        const openedAt = new Date().toISOString();
-        const row = recordHublotTransition(state, id, "open", {
-          desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
+        console.log(`[pi-ui] tunnel URL assigned; waiting for public readiness: ${tunnel.url}`);
+        const confirmPublicReadiness = state.config.SKIP_PUBLIC_HUBLOT_READINESS
+          ? async () => true
+          : waitForPublic;
+        void confirmPublicReadiness(tunnel.url).then(() => {
+          if (settled) return;
+          settled = true;
+          const openedAt = new Date().toISOString();
+          const row = recordHublotTransition(state, id, "open", {
+            desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
+          });
+          console.log(`[pi-ui] tunnel ready: ${tunnel.url} -> localhost:${port}`);
+          state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
+          resolvePromise(persistedTunnelInfo(state, row));
+        }).catch((error) => {
+          if (settled) return;
+          settled = true;
+          if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+          failOpeningHublot(state, id, error);
+          reject(error);
         });
-        console.log(`[pi-ui] tunnel up: ${tunnel.url} -> localhost:${port}`);
-        state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
-        resolvePromise(persistedTunnelInfo(state, row));
       }
     };
     proc.stderr.on("data", onOutput);
@@ -603,6 +668,93 @@ export async function waitForLocalPort(port, { timeoutMs = 20_000, intervalMs = 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, intervalMs));
   } while (Date.now() < deadline);
   throw new Error(`service did not answer on port ${port} within ${timeoutMs / 1000}s`);
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+export function markdownReaderScriptPath() {
+  return resolve(process.env.MARKDOWN_READER_SCRIPT
+    ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "markdown-tool", "markdown-reader.py"));
+}
+
+function markdownStartupScript({ rendererPath, markdownPath, port }) {
+  return `#!/bin/sh\n# oyster: idempotent\n` +
+    `if python3 - ${port} <<'PY'\n` +
+    `import socket, sys\n` +
+    `try:\n` +
+    `    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1): pass\n` +
+    `except OSError:\n` +
+    `    raise SystemExit(1)\n` +
+    `PY\nthen\n  exit 0\nfi\n` +
+    `exec ${shellQuote(rendererPath)} ${shellQuote(markdownPath)} ${port}\n`;
+}
+
+/** Start the fixed Markdown reader directly, without asking a setup agent. */
+export async function spawnMarkdownService(state, hublot, markdownPath, {
+  rendererPath = markdownReaderScriptPath(),
+  spawnProcess = spawn,
+  waitForPort = waitForLocalPort,
+} = {}) {
+  if (!isAbsolute(markdownPath)) throw new Error("Markdown path must be absolute");
+  const source = statSync(markdownPath);
+  if (!source.isFile()) throw new Error(`Markdown path is not a file: ${markdownPath}`);
+  const renderer = statSync(rendererPath);
+  if (!renderer.isFile()) throw new Error(`Markdown reader is not a file: ${rendererPath}`);
+  accessSync(rendererPath, constants.X_OK);
+
+  const row = hublotRepository(state).find(hublot.id);
+  if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
+  const startupSource = markdownStartupScript({ rendererPath, markdownPath, port: hublot.port });
+  const startupSha256 = createHash("sha256").update(startupSource).digest("hex");
+  hublotRepository(state).update(row.id, {
+    service_start_script: startupSource,
+    service_start_script_sha256: startupSha256,
+  });
+  materializeHublotStartupScript(state, row.id);
+
+  console.log(`[pi-ui] starting Markdown reader for ${markdownPath} on :${hublot.port}`);
+  const serviceProc = spawnProcess(rendererPath, [markdownPath, String(hublot.port)], {
+    cwd: dirname(markdownPath),
+    stdio: "ignore",
+    detached: true,
+  });
+  // Do not persist identity until the shebang has replaced /usr/bin/env with
+  // Python. Recording it immediately creates a stale identity that makes the
+  // supervisor restart a healthy reader and open a second tunnel.
+  let serviceProcess = null;
+  let ready = false;
+  const stopped = new Promise((_, reject) => {
+    serviceProc.once("error", (error) => {
+      removeHublotProcessHandle(state, serviceProcess, serviceProc);
+      finishPersistedProcess(state, serviceProcess, { status: "failed" });
+      if (!ready) reject(new Error(`failed to start Markdown reader: ${error.message}`));
+    });
+    serviceProc.once("exit", (exitCode, signal) => {
+      removeHublotProcessHandle(state, serviceProcess, serviceProc);
+      finishPersistedProcess(state, serviceProcess, { exitCode, signal });
+      if (!ready) reject(new Error(`Markdown reader exited before serving port ${hublot.port} (code=${exitCode})`));
+    });
+  });
+
+  try {
+    await Promise.race([waitForPort(hublot.port), stopped]);
+    if (serviceProc.exitCode !== null) {
+      throw new Error(`Markdown reader exited before serving port ${hublot.port} (code=${serviceProc.exitCode})`);
+    }
+    serviceProcess = persistHublotProcessIdentity(state, {
+      hublotId: hublot.id, role: "service", pid: serviceProc.pid, status: "running",
+    });
+    if (!serviceProcess) throw new Error("Markdown reader started without a persistent process identity");
+    registerHublotProcessHandle(state, serviceProcess, serviceProc);
+    ready = true;
+    serviceProc.unref();
+    return { servicePid: serviceProc.pid, serviceProc, serviceProcess };
+  } catch (error) {
+    if (serviceProc.exitCode === null) serviceProc.kill("SIGTERM");
+    throw error;
+  }
 }
 
 /** Restart an agent-managed service and persist its replacement before tunneling. */

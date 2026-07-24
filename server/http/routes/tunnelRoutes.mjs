@@ -1,4 +1,6 @@
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, ensureSessionOwner = () => null }) {
+import { isAbsolute } from "node:path";
+
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, spawnMarkdownService, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -10,8 +12,18 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       if (body === undefined) return;
       const requestedPort = body?.port;
       const brief = body?.brief ? String(body.brief) : null;
+      const serviceType = body?.type ? String(body.type) : null;
+      const markdownPath = body?.path ? String(body.path) : null;
       if (!brief) {
-        json(res, 400, { error: "agent-managed hublots require a non-empty brief" });
+        json(res, 400, { error: "managed hublots require a non-empty brief" });
+        return;
+      }
+      if (serviceType && serviceType !== "markdown") {
+        json(res, 400, { error: `unsupported hublot type: ${serviceType}` });
+        return;
+      }
+      if (serviceType === "markdown" && (!markdownPath || !isAbsolute(markdownPath))) {
+        json(res, 400, { error: "type='markdown' requires an absolute path" });
         return;
       }
       let prepared = null;
@@ -30,20 +42,38 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         reserved = requestedPort
           ? reserveHublot(state, options)
           : await allocateHublot(state, options);
+        const opening = listTunnels(state).find((item) => item.id === reserved.id);
+        if (opening) state.serverEvent?.({ type: "tunnel_opening", tunnel: opening });
         const reservedOptions = {
           ...options, id: reserved.id, port: reserved.port,
           serviceStartScriptPath: reserved.service_start_script_path,
         };
-        prepared = await spawnHublotAgent(state, reservedOptions, brief);
+        prepared = serviceType === "markdown"
+          ? await spawnMarkdownService(state, reservedOptions, markdownPath)
+          : await spawnHublotAgent(state, reservedOptions, brief);
         const tunnel = await openTunnel(state, reservedOptions);
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
-        json(res, 201, { tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted, agent: true });
+        json(res, 201, {
+          tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
+          agent: serviceType !== "markdown",
+          type: serviceType,
+        });
       } catch (e) {
         if (reserved && state.appStore?.repositories?.hublots?.find(reserved.id)?.status === "opening") {
           recordHublotTransition(state, reserved.id, "failed", { publicUrl: null, lastError: e.message });
         }
         if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
+        if (prepared?.serviceProc && prepared.serviceProc.exitCode === null) prepared.serviceProc.kill("SIGTERM");
         if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}
+        if (reserved) state.serverEvent?.({
+          type: "hublot_failed",
+          tunnel: {
+            id: reserved.id, port: reserved.port, label: reserved.label,
+            sessionId: reserved.session_id ?? reserved.sessionId ?? null,
+            status: "failed", url: null,
+          },
+          error: e.message,
+        });
         json(res, 502, { error: e.message });
       }
     },

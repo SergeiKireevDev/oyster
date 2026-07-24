@@ -14,6 +14,7 @@ test("Credentials modal is owned by the overlay and covers safe provider states"
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
+  assert.match(modal, /<button class="chip" data-modal-cancel onclick=\{close\}>Close<\/button>/);
 });
 
 test("Credentials modal exposes API-key and OAuth actions with revocation and fallback warnings", () => {

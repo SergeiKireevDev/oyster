@@ -320,5 +320,5 @@
 </section>
 
 <div class="m-actions" id="mActions">
-  <button class="btn" data-modal-cancel onclick={close}>Close</button>
+  <button class="chip" data-modal-cancel onclick={close}>Close</button>
 </div>

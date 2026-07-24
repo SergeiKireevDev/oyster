@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
-  reserveHublot, validateAndStoreHublotStartupScript,
+  reserveHublot, spawnMarkdownService, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
 function fixture(t) {
@@ -139,6 +140,45 @@ test("rematerialization replaces symlinks without changing their targets", (t) =
   assert.equal(lstatSync(hublot.service_start_script_path).isSymbolicLink(), false);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
   assert.equal(readFileSync(victim, "utf8"), "victim");
+});
+
+test("Markdown service directly invokes the reader and persists its restart command", async (t) => {
+  const { root, store, state } = fixture(t);
+  const markdownPath = join(root, "guide.md");
+  const rendererPath = join(root, "markdown-reader.py");
+  writeFileSync(markdownPath, "# Guide\n");
+  writeScript(rendererPath, "#!/bin/sh\nexit 0\n");
+  const hublot = reserve(state, 4177);
+  let invocation = null;
+  class FakeProcess extends EventEmitter {
+    pid = process.pid;
+    exitCode = null;
+    unref() {}
+    kill() { this.exitCode = 0; }
+  }
+
+  const service = await spawnMarkdownService(state, {
+    id: hublot.id,
+    port: hublot.port,
+  }, markdownPath, {
+    rendererPath,
+    spawnProcess(command, args, options) {
+      invocation = { command, args, options };
+      return new FakeProcess();
+    },
+    waitForPort: async () => true,
+  });
+
+  assert.equal(service.servicePid, process.pid);
+  assert.equal(invocation.command, rendererPath);
+  assert.deepEqual(invocation.args, [markdownPath, String(hublot.port)]);
+  assert.equal(invocation.options.detached, true);
+  const persisted = store.repositories.hublots.find(hublot.id);
+  assert.match(persisted.service_start_script, /# oyster: idempotent/);
+  assert.match(persisted.service_start_script, new RegExp(rendererPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(persisted.service_start_script, new RegExp(markdownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
+  assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
 });
 
 test("startup validation rejects unsafe or non-protocol artifacts without persisting them", (t) => {

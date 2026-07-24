@@ -44,10 +44,16 @@ test("runner ping event controller updates changed runner liveness", () => {
   assert.deepEqual(calls, [["set", runners], ["changed", runners], ["tree"]]);
 });
 
-test("hublot stream controller refreshes previews and schedules ready retries", () => {
+test("hublot stream controller refreshes opening placeholders and ready previews", () => {
   const calls = []; const controller = createHublotEventController({ isReplaying: () => false, toast: (...args) => calls.push(["toast", ...args]), refreshHublots: () => calls.push("refresh"), scheduleRefresh: (ms) => calls.push(["schedule", ms]), openUrl: (url) => calls.push(["open", url]) });
+  assert.equal(controller({ type: "tunnel_opening", tunnel: { status: "opening", port: 3000 } }), true);
+  assert.deepEqual(calls, ["refresh"]);
+  calls.length = 0;
   assert.equal(controller({ type: "hublot_ready", tunnel: { url: "https://example.test" } }), true);
   assert.deepEqual(calls.slice(1), ["refresh", ["schedule", 5000], ["schedule", 15000]]);
+  calls.length = 0;
+  assert.equal(controller({ type: "hublot_failed", error: "not reachable" }), true);
+  assert.deepEqual(calls, [["toast", "hublot failed: not reachable", "error"], "refresh"]);
 });
 
 test("carousel gesture classifier distinguishes taps and axes", () => {

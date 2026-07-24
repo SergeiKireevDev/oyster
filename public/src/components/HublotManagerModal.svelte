@@ -40,15 +40,22 @@
   <div class="hublot-grid">
     {#each $hublotManager.tunnels as tunnel (tunnel.id)}
       <div class="hublot-block">
-        <div class="preview">
-          <iframe src={tunnel.url} loading="lazy" sandbox="allow-scripts allow-same-origin" title={tunnel.label ?? tunnel.url}></iframe>
-          <button
-            type="button"
-            class="hit"
-            title={`open ${tunnel.url}`}
-            onclick={() => browserActions.openExternal(tunnel.url)}
-          ></button>
-        </div>
+        {#if tunnel.status === "opening" || tunnel.status === "recovering" || !tunnel.url}
+          <div class="preview pending" aria-label="Waiting for Cloudflare">
+            <span class="spin"></span>
+            <span>Waiting for Cloudflare…</span>
+          </div>
+        {:else}
+          <div class="preview">
+            <iframe src={tunnel.url} loading="lazy" sandbox="allow-scripts allow-same-origin" title={tunnel.label ?? tunnel.url}></iframe>
+            <button
+              type="button"
+              class="hit"
+              title={`open ${tunnel.url}`}
+              onclick={() => browserActions.openExternal(tunnel.url)}
+            ></button>
+          </div>
+        {/if}
         <div class="cap">
           <span class="lbl" title={`${tunnel.url}\n${tunnel.label ?? ""}`}>
             {[
@@ -83,7 +90,11 @@
     ></textarea>
   </div>
   <button class="btn" disabled={$hublotManager.creating} onclick={() => createManagedHublot($hublotManager.desc)}>
-    {$hublotManager.creating ? "Preparing service…" : "Open hublot"}
+    {#if $hublotManager.creating}
+      <span class="spin"></span> Waiting for Cloudflare…
+    {:else}
+      Open hublot
+    {/if}
   </button>
 </div>
 <div class="m-actions" id="mActions">

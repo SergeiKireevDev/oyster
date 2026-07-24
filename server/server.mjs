@@ -135,6 +135,7 @@ const config = {
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
   UNAUTHENTICATED: process.argv.includes("--unauthenticated") || envFlag("PI_UI_UNAUTHENTICATED"),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
+  SKIP_PUBLIC_HUBLOT_READINESS: envFlag("PI_UI_SKIP_PUBLIC_HUBLOT_READINESS"),
   DIRNAME: PROJECT_ROOT,
 };
 validateConfig(config);
