@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPiErrorController, createReplayEventGate, createRunnerExitController, createRunnerUnhealthyController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerExitController, createRunnerUnhealthyController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -25,6 +25,36 @@ test("Pi error controller reports only live failures", () => {
   const calls = []; const error = createPiErrorController({ isReplaying: () => false, toast: (...args) => calls.push(args) });
   assert.equal(error({ error: "spawn failed" }), true);
   assert.deepEqual(calls, [["pi spawn error: spawn failed", "error"]]);
+});
+
+test("Pi started controller refreshes state when a dormant runner is revived", () => {
+  const calls = [];
+  const started = createPiStartedController({
+    isReplaying: () => false,
+    refreshState: () => calls.push("state"),
+    reloadTranscript: async () => calls.push("transcript"),
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  assert.equal(started({ startCount: 1 }), true);
+  assert.deepEqual(calls, ["state"]);
+});
+
+test("Pi started controller ignores replay and refreshes state on restarts", async () => {
+  const calls = [];
+  let replaying = true;
+  const started = createPiStartedController({
+    isReplaying: () => replaying,
+    refreshState: () => calls.push("state"),
+    reloadTranscript: async () => calls.push("transcript"),
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  assert.equal(started({ startCount: 2 }), false);
+  replaying = false;
+  assert.equal(started({ startCount: 2 }), true);
+  await Promise.resolve();
+  assert.deepEqual(calls, ["state", ["toast", "pi process restarted"], "transcript"]);
 });
 
 test("runner exit controller ignores replayed exits", () => {

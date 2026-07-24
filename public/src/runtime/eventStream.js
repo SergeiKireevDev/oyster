@@ -36,11 +36,17 @@ export function createCodeReloadController({ isReplaying, toast, reloadPage }) {
   };
 }
 
-export function createPiStartedController({ isReplaying, toast, reloadTranscript }) {
+export function createPiStartedController({ isReplaying, toast, reloadTranscript, refreshState = () => {} }) {
   return (message) => {
-    if (isReplaying() || message.startCount <= 1) return false;
-    toast("pi process restarted");
-    reloadTranscript().catch((error) => toast(`session reload failed: ${error.message}`, "error"));
+    if (isReplaying()) return false;
+    // pi_started is emitted before the following runners_update. Debounced
+    // refresh waits for that liveness update, then fetches authoritative state
+    // so a revived dormant session regains its model and conversation details.
+    refreshState();
+    if (message.startCount > 1) {
+      toast("pi process restarted");
+      reloadTranscript().catch((error) => toast(`session reload failed: ${error.message}`, "error"));
+    }
     return true;
   };
 }
