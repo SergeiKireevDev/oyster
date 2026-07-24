@@ -45,6 +45,9 @@ test("read-only Git Smart HTTP server requires an absolute worktree and supports
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.match(refs, /refs\/heads\/hub-spoke-llmbox-isolation/);
+  const health = await fetch(`${url}?__oyster_hublot_health=probe`);
+  assert.equal(health.status, 200);
+  assert.match(await health.text(), /read-only Git Smart HTTP server/);
   execFileSync("git", ["clone", "--quiet", "--single-branch", "--branch", "hub-spoke-llmbox-isolation", url, clone]);
   assert.match(execFileSync("git", ["-C", clone, "pull", "--ff-only"], { encoding: "utf8" }), /Already up to date/);
   const push = spawnSync("git", ["-C", clone, "push", "origin", "HEAD:refs/heads/denied"], { encoding: "utf8" });
