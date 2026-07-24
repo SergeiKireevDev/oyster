@@ -38,7 +38,7 @@ export function createPlatformEventDispatch(deps) {
   const hublotEvent = createHublotEventController({ isReplaying: () => replaying, toast: deps.toast, refreshHublots: deps.refreshHublots, scheduleRefresh: deps.scheduleRefresh, openUrl: deps.openUrl });
   const responseEvent = createResponseEventController({ handleResponse: deps.handleResponse, refreshRequired: stateRefreshRequired, refreshState: deps.refreshState });
   const codeReload = createCodeReloadController({ isReplaying: () => replaying, toast: deps.toast, reloadPage: deps.reloadPage });
-  const piStarted = createPiStartedController({ isReplaying: () => replaying, toast: deps.toast, reloadTranscript: deps.reloadTranscript });
+  const piStarted = createPiStartedController({ isReplaying: () => replaying, toast: deps.toast, reloadTranscript: deps.reloadTranscript, refreshState: deps.refreshState });
   const runnerUnhealthy = createRunnerUnhealthyController({ isReplaying: () => replaying, toast: deps.toast, setBusy: deps.setBusy });
   const piError = createPiErrorController({ isReplaying: () => replaying, toast: deps.toast });
   const runnerExit = createRunnerExitController({ isReplaying: () => replaying, toast: deps.toast, setBusy: deps.setBusy });
