@@ -164,7 +164,10 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /\{#if hubMode && environmentOptions\.length\}[\s\S]*session-sidebar-environment-selector/);
   assert.match(source, /\{#if !hubMode && !searching\}[\s\S]*id="newSessionHere"[\s\S]*id="newSessionFolder"/);
   assert.match(source, /listEnvironments\(\)/);
-  assert.match(source, /listOnlineWorkspaces\(\)/);
+  assert.match(source, /listWorkspaces\(\)/);
+  assert.match(source, /data-status=\{status\}/);
+  assert.match(source, /Workspace status:/);
+  assert.match(source, /disabled=\{status !== "online"\}/);
   assert.match(source, /<select\s+aria-label="Environment"/);
   assert.match(source, /preferredEnvironmentId\(environmentOptions\)/);
   assert.match(source, /options\.find\(\(environment\) => isLocalEnvironment/);

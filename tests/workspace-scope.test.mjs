@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ACTIVE_WORKSPACE_KEY, chooseOnlineWorkspace, ensureActiveWorkspace, listEnvironments, listOnlineWorkspaces } from "../public/src/runtime/workspaceScope.js";
+import { ACTIVE_WORKSPACE_KEY, chooseOnlineWorkspace, ensureActiveWorkspace, listEnvironments, listOnlineWorkspaces, listWorkspaces } from "../public/src/runtime/workspaceScope.js";
 
 function storage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -25,6 +25,18 @@ test("environment discovery returns every llmbox spoke", async () => {
     }),
   });
   assert.deepEqual(environments.map(({ id }) => id), ["local", "edge-2"]);
+});
+
+test("workspace discovery preserves lifecycle statuses for Hub indicators", async () => {
+  const workspaces = [
+    { id: "alpha", status: "online" },
+    { id: "beta", status: "provisioning" },
+    { id: "gamma", status: "offline" },
+    { id: "delta", status: "paused" },
+  ];
+  assert.deepEqual(await listWorkspaces({
+    fetchImpl: async () => ({ ok: true, async json() { return { workspaces }; } }),
+  }), workspaces);
 });
 
 test("new-session workspace choices include only online workspaces", async () => {

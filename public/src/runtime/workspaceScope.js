@@ -22,12 +22,17 @@ export async function listEnvironments({ fetchImpl = fetch } = {}) {
   return data.environments ?? [];
 }
 
-/** List the workspaces that can currently host a new session. */
-export async function listOnlineWorkspaces({ fetchImpl = fetch } = {}) {
+/** List every workspace and its observed Hub status. */
+export async function listWorkspaces({ fetchImpl = fetch } = {}) {
   const response = await fetchImpl("/api/v1/workspaces");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `failed to list workspaces (${response.status})`);
-  return (data.workspaces ?? []).filter((workspace) => workspace.status === "online");
+  return data.workspaces ?? [];
+}
+
+/** List the workspaces that can currently host a new session. */
+export async function listOnlineWorkspaces(options = {}) {
+  return (await listWorkspaces(options)).filter((workspace) => workspace.status === "online");
 }
 
 /** Require an explicit workspace choice before starting a Hub session. */
