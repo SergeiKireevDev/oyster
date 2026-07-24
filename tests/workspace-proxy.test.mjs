@@ -73,6 +73,38 @@ test("browser upload disconnects do not leave an unhandled monitored-body error"
   assert.equal(response.value.detail, "browser disconnected during workspace request");
 });
 
+test("browser response disconnects consume the matching aborted upstream stream error", async () => {
+  const req = request([], { method: "GET" });
+  const res = new PassThrough();
+  res.headersSent = false;
+  res.writeHead = () => { res.headersSent = true; };
+  res.on("error", () => {});
+  let upstreamController;
+  const operation = proxyWorkspaceRequest({
+    req,
+    res,
+    target: "http://workspace/events",
+    workspace: { id: "alpha", token: null },
+    timeoutMs: 1000,
+    uploadIdleTimeoutMs: 1000,
+    uploadResponseTimeoutMs: 1000,
+    json() {},
+    fetchImpl(_target, { signal }) {
+      signal.addEventListener("abort", () => queueMicrotask(() => upstreamController.error(signal.reason)), { once: true });
+      return Promise.resolve(new Response(new ReadableStream({
+        start(controller) {
+          upstreamController = controller;
+          controller.enqueue(new TextEncoder().encode("data: connected\\n\\n"));
+        },
+      }), { headers: { "content-type": "text/event-stream" } }));
+    },
+  });
+  await new Promise((resolve) => res.once("data", resolve));
+  res.destroy();
+  await operation;
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
 test("workspace upload limiter bounds and idempotently releases slots", () => {
   const limiter = createUploadLimiter(1);
   const release = limiter.tryAcquire();
