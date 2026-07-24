@@ -6,6 +6,7 @@
   "timeoutMs": 5000,
   "uploadIdleTimeoutMs": 30000,
   "uploadResponseTimeoutMs": 30000,
+  "maxConcurrentUploads": 16,
   "cloud": {
     "stateFile": "./cloud-state.json"
   },

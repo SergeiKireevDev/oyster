@@ -3,6 +3,19 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 const isHidden = (name) => name.startsWith(".");
+const STALE_UPLOAD_AGE_MS = 24 * 60 * 60 * 1000;
+
+function cleanupStaleUploads(dir, now = Date.now()) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.startsWith(".") || !entry.name.endsWith(".upload")) continue;
+    const path = join(dir, entry.name);
+    try {
+      if (now - statSync(path).mtimeMs > STALE_UPLOAD_AGE_MS) unlinkSync(path);
+    } catch {}
+  }
+}
 
 /** Build confined file-browser routes. */
 export function createFileRoutes({ state, requestContext, logger = console }) {
@@ -103,6 +116,7 @@ export function createFileRoutes({ state, requestContext, logger = console }) {
       let dirOk = false;
       try { dirOk = statSync(dir).isDirectory(); } catch {}
       if (!dirOk) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
+      cleanupStaleUploads(dir);
       const offset = Number(url.searchParams.get("offset") ?? 0);
       const last = url.searchParams.get("last") !== "0"; // default: single-shot = final
       if (!Number.isInteger(offset) || offset < 0) {
