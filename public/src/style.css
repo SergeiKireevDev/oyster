@@ -541,6 +541,18 @@
     background: #fff;
     cursor: pointer;
   }
+  .hublot-block .preview.pending {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--muted);
+    background: var(--panel);
+    cursor: progress;
+    font-size: 12px;
+  }
+  .hublot-block .preview.pending .spin { width: 24px; height: 24px; border-width: 3px; }
   .hublot-block .preview iframe {
     width: 400%; height: 400%;
     transform: scale(0.25);
@@ -699,9 +711,11 @@
     font-size: 12px;
     flex-shrink: 0;
   }
-  .sidebar-loading .spin {
+  .spin {
     display: inline-block;
     width: 12px; height: 12px;
+    flex-shrink: 0;
+    vertical-align: -1px;
     border: 2px solid var(--border);
     border-top-color: var(--muted);
     border-radius: 50%;

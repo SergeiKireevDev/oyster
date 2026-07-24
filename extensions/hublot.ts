@@ -20,7 +20,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -62,8 +62,9 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "Manage hublots — public web interfaces (cloudflared tunnels to local ports) for this " +
       "session. When the user asks to 'create/open a hublot', use this tool. " +
       "Actions: 'open' creates a hublot — the server allocates a free local port and returns " +
-      "the public URL; a background agent is spawned to serve `description` on that " +
-      "port before the tunnel opens. 'close' tears one " +
+      "the public URL. Normally a background agent serves `description`; with type='markdown', " +
+      "an absolute `path` is required and the Markdown reader is started directly on that " +
+      "port. 'close' tears one " +
       "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
       "session's hublots. Opened hublots appear automatically in the pi-remote-ui. " +
       "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
@@ -71,8 +72,10 @@ export default function hublotExtension(pi: ExtensionAPI) {
     promptSnippet: "Open/close/list hublots (public web interfaces / tunnels) for this session",
     promptGuidelines: [
       "A 'hublot' is a public web interface. Use hublot with action=open and a clear " +
-        "description of what should be served; the background agent will create and persist " +
-        "an idempotent startup script before the tunnel opens.",
+        "description of what should be served. For ordinary hublots, the background agent " +
+        "will create and persist an idempotent startup script before the tunnel opens.",
+      "To expose a Markdown document, use hublot with action=open, type=markdown, and an " +
+        "absolute path to the Markdown file; the managed Markdown reader starts directly.",
       "Use hublot with action=close (id or port) instead of killing cloudflared processes manually.",
       "Do not start or serve the hublot port yourself; hublots are always agent-managed.",
       "Cloudflared quick-tunnel URLs are not restartable. If a hublot is no longer listed " +
@@ -83,8 +86,18 @@ export default function hublotExtension(pi: ExtensionAPI) {
       description: Type.Optional(
         Type.String({
           description:
-            "For 'open': what the hublot should expose (becomes the label and the " +
-            "brief given to the background agent that sets it up)",
+            "For 'open': what the hublot should expose (becomes the label and, for an " +
+            "ordinary hublot, the brief given to the background agent that sets it up)",
+        }),
+      ),
+      type: Type.Optional(
+        StringEnum(["markdown"] as const, {
+          description: "For 'open': use 'markdown' to directly serve a Markdown document",
+        }),
+      ),
+      path: Type.Optional(
+        Type.String({
+          description: "For type='markdown': absolute path to the Markdown file to serve",
         }),
       ),
       session_id: Type.Optional(
@@ -103,16 +116,32 @@ export default function hublotExtension(pi: ExtensionAPI) {
 
       if (params.action === "open") {
         if (!params.description) throw new Error("'open' requires a description");
-        onUpdate?.({ content: [{ type: "text", text: "Preparing local service…" }] });
+        if (params.type === "markdown") {
+          if (!params.path) throw new Error("type='markdown' requires a path");
+          if (!isAbsolute(params.path)) throw new Error("type='markdown' requires an absolute path");
+        } else if (params.path) {
+          throw new Error("'path' is only valid with type='markdown'");
+        }
+        onUpdate?.({
+          content: [{
+            type: "text",
+            text: params.type === "markdown"
+              ? "Starting Markdown reader and waiting for Cloudflare…"
+              : "Preparing local service and waiting for Cloudflare…",
+          }],
+        });
         const data = await api("POST", "/tunnels", {
           label: params.description.slice(0, 200),
           brief: params.description,
           sessionId: params.session_id ?? sessionId,
+          ...(params.type === "markdown" ? { type: params.type, path: params.path } : {}),
         });
         const t = data.tunnel;
+        const serviceText = params.type === "markdown"
+          ? `The Markdown reader is serving ${params.path} directly on the allocated port.`
+          : "The background agent brought the local service up before the tunnel was opened.";
         const text = `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
-          `The background agent brought the local service up before the tunnel was opened. ` +
-          `Do not serve the port yourself.`;
+          `${serviceText} Do not serve the port yourself.`;
         return { content: [{ type: "text", text }], details: t };
       }
 
@@ -136,7 +165,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
       const { tunnels } = await api("GET", "/tunnels");
       const mine = tunnels.filter((t: any) => !t.sessionId || t.sessionId === sessionId);
       const lines = mine.map(
-        (t: any) => `- id=${t.id} port=${t.port} ${t.url}${t.label ? ` — ${t.label}` : ""}${t.sessionId === sessionId ? "" : " (unbound)"}`,
+        (t: any) => `- id=${t.id} port=${t.port} ${t.url ?? `(waiting: ${t.status})`}${t.label ? ` — ${t.label}` : ""}${t.sessionId === sessionId ? "" : " (unbound)"}`,
       );
       return {
         content: [{ type: "text", text: lines.length ? `Hublots for this session:\n${lines.join("\n")}` : "No hublots open for this session." }],
