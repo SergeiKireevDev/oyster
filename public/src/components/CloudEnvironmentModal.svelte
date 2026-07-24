@@ -187,6 +187,9 @@
           {/if}
         </label>
       {/each}
+      {#if selectedProvider.id === "digitalocean"}
+        <p class="cloud-secret-note"><strong>Required token permissions:</strong> <code>droplet:create</code>, <code>tag:read</code>, <code>tag:create</code>, <code>region:read</code>, <code>size:read</code>, and <code>image:read</code>. <code>tag:create</code> is required at least once to create the <code>oyster-hub</code> ownership tag.</p>
+      {/if}
       <p class="cloud-secret-note">Credentials are written with owner-only permissions when the Hub has a cloud state file configured.</p>
       <button class="btn cloud-primary" type="submit" disabled={loading || !credentialsComplete}>{loading ? "Connecting…" : `Connect ${selectedProvider.name}`}</button>
     </form>

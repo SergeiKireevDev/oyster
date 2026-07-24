@@ -24,6 +24,7 @@ test("cloud environment modal provisions source-installed reverse-connected Oyst
   assert.match(source, /providerId === "digitalocean"/);
   assert.match(source, /providerId === "aws" \? "AWS"/);
   assert.match(source, /OAuth 2\.0 service account/);
+  assert.match(source, /selectedProvider\.id === "digitalocean"[\s\S]*tag:create[\s\S]*oyster-hub/);
   assert.match(source, /installs Oyster from source with cloud-init/);
   assert.match(source, /wss:\/\/hub\.get-oyster\.dev\/box\/connect/);
   assert.match(source, /appears immediately as awaiting agent/);
