@@ -1504,6 +1504,7 @@
   .cloud-provider-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #1775e5; color: white; font-size: 11px; font-weight: 800; }
   .cloud-provider-icon.aws { background: #202b3c; color: #ffb84d; font-size: 9px; }
   .cloud-provider-icon.gcp { background: #fff; color: #4285f4; font-size: 20px; }
+  .cloud-provider-icon.hetzner { background: #d50c2d; color: white; font-size: 10px; }
   .cloud-provider-copy { min-width: 0; display: grid; align-content: start; gap: 5px; }
   .cloud-provider-copy strong { font-size: 13px; }
   .cloud-provider-copy small { color: var(--muted); font-size: 10.5px; line-height: 1.4; }

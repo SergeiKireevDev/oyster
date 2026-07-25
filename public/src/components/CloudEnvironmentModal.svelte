@@ -38,7 +38,7 @@
   }
 
   function providerIcon(providerId) {
-    return providerId === "digitalocean" ? "DO" : providerId === "aws" ? "AWS" : "G";
+    return providerId === "digitalocean" ? "DO" : providerId === "hetzner" ? "HZ" : providerId === "aws" ? "AWS" : "G";
   }
 
   function chooseProvider(provider) {

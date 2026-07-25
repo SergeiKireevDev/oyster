@@ -22,6 +22,7 @@ test("cloud environment modal provisions source-installed reverse-connected Oyst
   assert.match(source, /method: "POST"/);
   assert.match(source, /body: JSON\.stringify\(\{ provider: selectedProvider\.id, name: environmentName, region, size, image \}\)/);
   assert.match(source, /providerId === "digitalocean"/);
+  assert.match(source, /providerId === "hetzner" \? "HZ"/);
   assert.match(source, /providerId === "aws" \? "AWS"/);
   assert.match(source, /OAuth 2\.0 service account/);
   assert.match(source, /selectedProvider\.id === "digitalocean"[\s\S]*tag:create[\s\S]*oyster-hub/);
