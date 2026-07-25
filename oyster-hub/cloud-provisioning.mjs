@@ -15,6 +15,16 @@ const PROVIDERS = Object.freeze({
       { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "dop_v1_…" },
     ]),
   }),
+  hetzner: Object.freeze({
+    id: "hetzner",
+    name: "Hetzner Cloud",
+    description: "Provision a Cloud Server with a personal access token.",
+    authType: "api_token",
+    oauthSupported: false,
+    fields: Object.freeze([
+      { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "HCLOUD_…" },
+    ]),
+  }),
   aws: Object.freeze({
     id: "aws",
     name: "Amazon Web Services",
@@ -63,7 +73,7 @@ function normalizeCredentials(providerId, input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new CloudProvisioningError("credentials must be an object", { status: 400 });
   }
-  if (providerId === "digitalocean") return { token: required(input.token, "Personal access token") };
+  if (providerId === "digitalocean" || providerId === "hetzner") return { token: required(input.token, "Personal access token") };
   if (providerId === "aws") return {
     accessKeyId: required(input.accessKeyId, "Access key ID"),
     secretAccessKey: required(input.secretAccessKey, "Secret access key"),
@@ -86,7 +96,7 @@ function normalizeCredentials(providerId, input) {
 }
 
 function credentialAccount(providerId, credential) {
-  if (providerId === "digitalocean") return null;
+  if (providerId === "digitalocean" || providerId === "hetzner") return null;
   if (providerId === "aws") return credential.accessKeyId;
   return `${credential.clientEmail} · ${credential.projectId}`;
 }
@@ -192,6 +202,100 @@ async function digitalOceanProvision(input, credential, fetchImpl) {
     instanceId,
     state: value.droplet?.status || "new",
     consoleUrl: instanceId ? `https://cloud.digitalocean.com/droplets/${encodeURIComponent(instanceId)}` : null,
+  };
+}
+
+async function hetznerRequest(path, credential, fetchImpl, options = {}) {
+  let response;
+  try {
+    response = await fetchImpl(`https://api.hetzner.cloud/v1${path}`, {
+      ...options,
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${credential.token}`,
+        ...(options.body ? { "content-type": "application/json" } : {}),
+        ...(options.headers || {}),
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    throw new CloudProvisioningError(`Hetzner Cloud request failed: ${error.message}`, { cause: error });
+  }
+  return responseValue(response, "Hetzner Cloud");
+}
+
+async function hetznerOptions(credential, fetchImpl) {
+  const [locationResult, typeResult, imageResult] = await Promise.all([
+    hetznerRequest("/locations?per_page=100", credential, fetchImpl),
+    hetznerRequest("/server_types?per_page=100", credential, fetchImpl),
+    hetznerRequest("/images?type=system&sort=name&per_page=100", credential, fetchImpl),
+  ]);
+  const regions = (locationResult.locations || []).map((item) => ({
+    id: item.name,
+    name: `${item.description} (${item.name})`,
+  }));
+  // Hetzner lists prices per location. A server type is orderable in a region
+  // only when its prices array references that location.
+  const sizes = (typeResult.server_types || []).map((item) => ({
+    id: item.name,
+    name: item.name,
+    description: `${item.cores} vCPU · ${item.memory} GB RAM · €${item.prices?.[0]?.price_monthly?.net || "?"}/mo`,
+    regions: (item.prices || []).map((entry) => entry.location),
+  }));
+  const images = (imageResult.images || []).filter((item) => /ubuntu/i.test(`${item.description || ""} ${item.name}`)).map((item) => ({
+    id: item.name,
+    name: item.description || item.name,
+    description: item.os_flavor || "Ubuntu",
+  }));
+  return {
+    regions,
+    sizes,
+    images,
+    defaults: {
+      region: regions[0]?.id,
+      size: sizes.find((item) => item.id === "cx22")?.id || sizes[0]?.id,
+      image: images.find((item) => /24\.04/i.test(item.id))?.id || images[0]?.id,
+    },
+  };
+}
+
+const HETZNER_LABELS = Object.freeze({ "managed-by": "oyster-hub" });
+
+async function hetznerManage(record, action, credential, fetchImpl) {
+  const instanceId = encodeURIComponent(required(record.provider?.instanceId, "Hetzner Cloud instance ID"));
+  if (action === "destroy") {
+    await hetznerRequest(`/servers/${instanceId}`, credential, fetchImpl, { method: "DELETE" });
+    return { state: "destroyed" };
+  }
+  const path = action === "pause" ? "poweroff" : "poweron";
+  const value = await hetznerRequest(`/servers/${instanceId}/actions/${path}`, credential, fetchImpl, { method: "POST" });
+  return { state: value.action?.status || (action === "pause" ? "stopping" : "starting") };
+}
+
+async function hetznerProvision(input, credential, fetchImpl) {
+  const value = await hetznerRequest("/servers", credential, fetchImpl, {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      server_type: input.size,
+      image: input.image,
+      location: input.region,
+      user_data: input.userData,
+      labels: {
+        ...HETZNER_LABELS,
+        "oyster:box-id": input.boxId,
+        "oyster:generation": input.generation,
+      },
+    }),
+  });
+  const server = value.server || {};
+  const instanceId = String(server.id || "");
+  const ipv4 = server.public_net?.ipv4?.ip || null;
+  return {
+    instanceId,
+    state: server.status || "starting",
+    ipv4,
+    consoleUrl: `https://console.hetzner.cloud/servers/${encodeURIComponent(instanceId)}`,
   };
 }
 
@@ -404,6 +508,9 @@ function publicProvider(provider) {
   if (provider?.id === "digitalocean" && provider.instanceId) {
     return { ...provider, consoleUrl: `https://cloud.digitalocean.com/droplets/${encodeURIComponent(provider.instanceId)}` };
   }
+  if (provider?.id === "hetzner" && provider.instanceId) {
+    return { ...provider, consoleUrl: `https://console.hetzner.cloud/servers/${encodeURIComponent(provider.instanceId)}` };
+  }
   return { ...provider };
 }
 
@@ -533,6 +640,7 @@ export function createCloudProvisioningService({
     const providerId = record.provider?.id;
     const value = await credential(providerId);
     if (providerId === "digitalocean") return digitalOceanManage(record, action, value, fetchImpl);
+    if (providerId === "hetzner") return hetznerManage(record, action, value, fetchImpl);
     if (providerId === "aws") return awsManage(record, action, value, fetchImpl);
     if (providerId === "gcp") return gcpManage(record, action, value, fetchImpl);
     throw new CloudProvisioningError(`unsupported cloud provider: ${providerId}`, { status: 404 });
@@ -567,6 +675,7 @@ export function createCloudProvisioningService({
     async options(providerId, { region = "" } = {}) {
       const value = await credential(providerId);
       if (providerId === "digitalocean") return digitalOceanOptions(value, fetchImpl);
+      if (providerId === "hetzner") return hetznerOptions(value, fetchImpl);
       if (providerId === "aws") return awsOptions(value, fetchImpl, region);
       return gcpOptions(value, fetchImpl, region);
     },
@@ -593,6 +702,7 @@ export function createCloudProvisioningService({
       let result;
       try {
         if (providerId === "digitalocean") result = await digitalOceanProvision(request, value, fetchImpl);
+        else if (providerId === "hetzner") result = await hetznerProvision(request, value, fetchImpl);
         else if (providerId === "aws") result = await awsProvision(request, value, fetchImpl);
         else result = await gcpProvision(request, value, fetchImpl);
         await boxRegistry.bindProviderInstance(registration.boxId, registration.generation, result.instanceId);
