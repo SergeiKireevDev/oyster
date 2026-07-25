@@ -239,25 +239,35 @@ test("Hetzner Cloud credentials, live options, and provisioning use standard RES
       { id: 1, name: "hel1", description: "Helsinki", country: "FI" },
     ] });
     if (String(url).includes("/server_types")) return jsonResponse({ server_types: [
-      { id: 22, name: "cx22", cores: 2, memory: 4, prices: [{ location: "nbg1" }, { location: "fsn1" }] },
-      { id: 32, name: "cx32", cores: 4, memory: 8, prices: [{ location: "nbg1" }] },
-      { id: 42, name: "cx42", cores: 8, memory: 16, prices: [{ location: "hel1" }] },
+      { id: 22, name: "cx22", cores: 2, memory: 4, architecture: "x86", prices: [{ location: "nbg1", price_monthly: { net: "4.99" } }], locations: [
+        { name: "nbg1", available: true, deprecation: null },
+        { name: "fsn1", available: true, deprecation: null },
+      ] },
+      { id: 32, name: "cx32", cores: 4, memory: 8, architecture: "x86", prices: [{ location: "nbg1", price_monthly: { net: "9.99" } }], locations: [
+        { name: "nbg1", available: false, deprecation: null },
+      ] },
+      { id: 42, name: "cax21", cores: 4, memory: 8, architecture: "arm", prices: [{ location: "hel1", price_monthly: { net: "7.99" } }], locations: [
+        { name: "hel1", available: true, deprecation: null },
+      ] },
     ] });
     if (String(url).includes("/images")) return jsonResponse({ images: [
-      { id: 12345, name: "ubuntu-24.04", description: "Ubuntu 24.04 Standard 64 bit", os_flavor: "ubuntu", type: "system" },
-      { id: 67890, name: "debian-12", description: "Debian 12 Standard", os_flavor: "debian", type: "system" },
+      { id: 12345, name: "ubuntu-24.04", description: "Ubuntu 24.04 x86", os_flavor: "ubuntu", type: "system", status: "available", architecture: "x86" },
+      { id: 12346, name: "ubuntu-24.04", description: "Ubuntu 24.04 Arm", os_flavor: "ubuntu", type: "system", status: "available", architecture: "arm" },
+      { id: 67890, name: "debian-12", description: "Debian 12 Standard", os_flavor: "debian", type: "system", status: "available", architecture: "x86" },
     ] });
-    if (String(url).includes("/servers/1001/actions/poweroff")) return jsonResponse({ action: { status: "success" } }, 201);
+    if (String(url).includes("/servers/1001/actions/shutdown")) return jsonResponse({ action: { status: "running" } }, 201);
     if (String(url).includes("/servers/1001/actions/poweron")) return jsonResponse({ action: { status: "success" } }, 201);
     if (String(url).includes("/servers/1001") && options.method === "DELETE") return new Response(null, { status: 204 });
     if (String(url).endsWith("/servers") && options.method === "POST") {
       const body = JSON.parse(options.body);
       assert.equal(body.server_type, "cx22");
       assert.equal(body.location, "nbg1");
-      assert.equal(body.image, "ubuntu-24.04");
+      assert.equal(body.image, "12345");
       assert.equal(body.labels["managed-by"], "oyster-hub");
-      assert.equal(body.labels["oyster:box-id"], "hetzner-node");
+      assert.equal(body.labels["oyster-box-id"], "hetzner-node");
+      assert.ok(Object.keys(body.labels).every((key) => /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$/.test(key)), "Hetzner label keys are valid");
       assert.match(body.user_data, /^#cloud-config\n/);
+      assert.ok(Buffer.byteLength(body.user_data) <= 32 * 1024, "Hetzner user data must fit its 32 KiB limit");
       return jsonResponse({ server: { id: 1001, status: "starting", public_net: { ipv4: { ip: "159.69.123.45" } } } }, 201);
     }
     throw new Error(`unexpected Hetzner request ${url}`);
@@ -268,15 +278,16 @@ test("Hetzner Cloud credentials, live options, and provisioning use standard RES
   const options = await service.options("hetzner");
   assert.deepEqual(options.regions.map(({ id }) => id), ["nbg1", "fsn1", "hel1"]);
   assert.equal(options.regions[0].name.includes("Nuremberg"), true);
-  // cx42 is only available in hel1, not nbg1
-  assert.deepEqual(options.sizes.filter((item) => item.regions.includes("nbg1")).map(({ id }) => id), ["cx22", "cx32"]);
+  assert.deepEqual(options.sizes.filter((item) => item.regions.includes("nbg1")).map(({ id }) => id), ["cx22"], "temporarily unavailable types are excluded");
+  assert.equal(options.sizes.find(({ id }) => id === "cax21").architecture, "arm");
+  assert.deepEqual(options.images.map(({ id, architecture }) => [id, architecture]), [["12345", "x86"], ["12346", "arm"]]);
   assert.equal(options.defaults.size, "cx22");
-  assert.equal(options.defaults.image, "ubuntu-24.04");
+  assert.equal(options.defaults.image, "12345");
 
-  const environment = await service.provision({ provider: "hetzner", name: "hetzner-node", region: "nbg1", size: "cx22", image: "ubuntu-24.04" });
+  const environment = await service.provision({ provider: "hetzner", name: "hetzner-node", region: "nbg1", size: "cx22", image: "12345" });
   assert.equal(environment.provider.instanceId, "1001");
   assert.equal(environment.provider.state, "starting");
-  assert.match(environment.provider.consoleUrl, /console\.hetzner\.cloud/);
+  assert.equal(environment.provider.consoleUrl, "https://console.hetzner.cloud/");
   assert.equal(JSON.stringify(environment).includes(canary), false);
 
   assert.equal((await service.pause(environment.id)).status, "paused");
@@ -287,7 +298,7 @@ test("Hetzner Cloud credentials, live options, and provisioning use standard RES
     ["GET", "/server_types?per_page=100"],
     ["GET", "/images?type=system&sort=name&per_page=100"],
     ["POST", "/servers"],
-    ["POST", "/servers/1001/actions/poweroff"],
+    ["POST", "/servers/1001/actions/shutdown"],
     ["POST", "/servers/1001/actions/poweron"],
     ["DELETE", "/servers/1001"],
   ]);

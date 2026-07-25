@@ -86,8 +86,8 @@
       options = { regions: data.regions || [], sizes: data.sizes || [], images: data.images || [], defaults: data.defaults || {} };
       region = data.defaults?.region || requestedRegion || options.regions[0]?.id || "";
       const regionSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
-      const regionImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(region));
       size = regionSizes.some((item) => item.id === data.defaults?.size) ? data.defaults.size : regionSizes[0]?.id || "";
+      const regionImages = options.images.filter((item) => imageAvailableForSelection(item, region, size));
       image = regionImages.some((item) => item.id === data.defaults?.image) ? data.defaults.image : regionImages[0]?.id || "";
     } catch (cause) {
       error = cause.message;
@@ -98,20 +98,32 @@
 
   async function changeRegion(value) {
     region = value;
-    if (selectedProvider.id === "digitalocean") {
+    if (["digitalocean", "hetzner"].includes(selectedProvider.id)) {
       const nextSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, value));
-      const nextImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(value));
       if (!nextSizes.some((item) => item.id === size)) size = nextSizes[0]?.id || "";
+      const nextImages = options.images.filter((item) => imageAvailableForSelection(item, value, size));
       if (!nextImages.some((item) => item.id === image)) image = nextImages[0]?.id || "";
       return;
     }
     await loadOptions(value);
   }
 
+  function changeSize(value) {
+    size = value;
+    const nextImages = options.images.filter((item) => imageAvailableForSelection(item, region, value));
+    if (!nextImages.some((item) => item.id === image)) image = nextImages[0]?.id || "";
+  }
+
   function sizeAvailableInRegion(item, regionId) {
     return selectedProvider?.id === "digitalocean"
       ? Boolean(item?.regions?.includes(regionId))
       : (!item?.regions?.length || item.regions.includes(regionId));
+  }
+
+  function imageAvailableForSelection(item, regionId, sizeId) {
+    if (item?.regions?.length && !item.regions.includes(regionId)) return false;
+    const selected = options.sizes.find((candidate) => candidate.id === sizeId);
+    return !selected?.architecture || !item?.architecture || selected.architecture === item.architecture;
   }
 
   function regionAvailability(item) {
@@ -156,7 +168,7 @@
   $: availableSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
   $: selectedSize = options.sizes.find((item) => item.id === size);
   $: selectedSizeAvailability = selectedProvider?.id === "digitalocean" && selectedSize ? regionAvailability(selectedSize) : "";
-  $: availableImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(region));
+  $: availableImages = options.images.filter((item) => imageAvailableForSelection(item, region, size));
   $: credentialsComplete = selectedProvider?.fields.every((field) => !field.required || String(credentialValues[field.id] || "").trim());
 
   onMount(loadProviders);
@@ -239,7 +251,7 @@
         </label>
         <label>
           <span>Instance type *</span>
-          <select bind:value={size} required>
+          <select value={size} onchange={(event) => changeSize(event.currentTarget.value)} required>
             {#each availableSizes as item (item.id)}<option value={item.id}>{item.name}{item.description ? ` — ${item.description}` : ""}</option>{/each}
           </select>
           {#if selectedSizeAvailability}<small>Available in: {selectedSizeAvailability}</small>{/if}
