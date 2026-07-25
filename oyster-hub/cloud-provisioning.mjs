@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID, sign as signValue } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, sign as signValue } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createOysterCloudInit, oysterCloudInitDefaults } from "./cloud-init.mjs";
@@ -8,47 +8,73 @@ const PROVIDERS = Object.freeze({
   digitalocean: Object.freeze({
     id: "digitalocean",
     name: "DigitalOcean",
-    description: "Provision a Droplet with a personal access token.",
-    authType: "api_token",
-    oauthSupported: false,
-    fields: Object.freeze([
-      { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "dop_v1_…" },
+    description: "Sign in and provision a Droplet in your DigitalOcean account.",
+    authMethods: Object.freeze([
+      Object.freeze({ id: "oauth_redirect", label: "Sign in with DigitalOcean", primary: true }),
+      Object.freeze({ id: "api_token", label: "Personal access token", advanced: true, fields: Object.freeze([
+        { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "dop_v1_…" },
+      ]) }),
     ]),
   }),
   hetzner: Object.freeze({
     id: "hetzner",
     name: "Hetzner Cloud",
     description: "Provision a Cloud Server with a personal access token.",
-    authType: "api_token",
-    oauthSupported: false,
-    fields: Object.freeze([
-      { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "HCLOUD_…" },
+    authMethods: Object.freeze([
+      Object.freeze({ id: "api_token", label: "Create Hetzner API token", primary: true, consoleUrl: "https://console.hetzner.cloud/", fields: Object.freeze([
+        { id: "token", label: "Personal access token", type: "password", required: true, placeholder: "HCLOUD_…" },
+      ]) }),
     ]),
   }),
   aws: Object.freeze({
     id: "aws",
     name: "Amazon Web Services",
-    description: "Provision an EC2 instance with an IAM access key.",
-    authType: "access_key",
-    oauthSupported: false,
-    fields: Object.freeze([
-      { id: "accessKeyId", label: "Access key ID", type: "text", required: true, placeholder: "AKIA…" },
-      { id: "secretAccessKey", label: "Secret access key", type: "password", required: true },
-      { id: "sessionToken", label: "Session token", type: "password", required: false },
-      { id: "defaultRegion", label: "Default region", type: "text", required: false, placeholder: "us-east-1" },
+    description: "Connect a least-privilege IAM role and provision an EC2 instance.",
+    authMethods: Object.freeze([
+      Object.freeze({ id: "assume_role", label: "Connect AWS account", primary: true }),
+      Object.freeze({ id: "access_key", label: "IAM access key", advanced: true, fields: Object.freeze([
+        { id: "accessKeyId", label: "Access key ID", type: "text", required: true, placeholder: "AKIA…" },
+        { id: "secretAccessKey", label: "Secret access key", type: "password", required: true },
+        { id: "sessionToken", label: "Session token", type: "password", required: false },
+        { id: "defaultRegion", label: "Default region", type: "text", required: false, placeholder: "us-east-1" },
+      ]) }),
     ]),
   }),
   gcp: Object.freeze({
     id: "gcp",
     name: "Google Cloud",
-    description: "Provision a Compute Engine VM using service-account OAuth 2.0.",
-    authType: "oauth_service_account",
-    oauthSupported: true,
-    fields: Object.freeze([
-      { id: "serviceAccountJson", label: "Service account JSON", type: "textarea", required: true, placeholder: "Paste the JSON key downloaded from Google Cloud" },
+    description: "Sign in, choose a project, and provision a Compute Engine VM.",
+    authMethods: Object.freeze([
+      Object.freeze({ id: "oauth_redirect", label: "Sign in with Google", primary: true }),
+      Object.freeze({ id: "service_account_file", label: "Service account JSON", advanced: true, fields: Object.freeze([
+        { id: "serviceAccountJson", label: "Service account JSON", type: "file", required: true, accept: ".json,application/json" },
+      ]) }),
     ]),
   }),
 });
+
+function credentialKey(value) {
+  if (!value) return null;
+  return createHash("sha256").update(String(value)).digest();
+}
+
+function encryptCredentials(credentials, key) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const data = Buffer.concat([cipher.update(JSON.stringify(credentials), "utf8"), cipher.final()]);
+  return { algorithm: "aes-256-gcm", iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
+}
+
+function decryptCredentials(envelope, key) {
+  try {
+    if (envelope?.algorithm !== "aes-256-gcm") throw new Error("unsupported credential encryption algorithm");
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
+    return JSON.parse(Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8"));
+  } catch (error) {
+    throw new CloudProvisioningError("cannot decrypt cloud credentials; check the configured credential key", { status: 500, cause: error });
+  }
+}
 
 export class CloudProvisioningError extends Error {
   constructor(message, { status = 502, cause } = {}) {
@@ -73,8 +99,9 @@ function normalizeCredentials(providerId, input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new CloudProvisioningError("credentials must be an object", { status: 400 });
   }
-  if (providerId === "digitalocean" || providerId === "hetzner") return { token: required(input.token, "Personal access token") };
+  if (providerId === "digitalocean" || providerId === "hetzner") return { kind: "api_token", token: required(input.token, "Personal access token") };
   if (providerId === "aws") return {
+    kind: "access_key",
     accessKeyId: required(input.accessKeyId, "Access key ID"),
     secretAccessKey: required(input.secretAccessKey, "Secret access key"),
     sessionToken: typeof input.sessionToken === "string" ? input.sessionToken.trim() : "",
@@ -86,6 +113,7 @@ function normalizeCredentials(providerId, input) {
     catch (error) { throw new CloudProvisioningError(`Service account JSON is invalid: ${error.message}`, { status: 400 }); }
     if (!key || typeof key !== "object" || Array.isArray(key)) throw new CloudProvisioningError("Service account JSON must be an object", { status: 400 });
     return {
+      kind: "service_account",
       projectId: required(key.project_id, "service account project_id"),
       clientEmail: required(key.client_email, "service account client_email"),
       privateKey: required(key.private_key, "service account private_key"),
@@ -96,9 +124,10 @@ function normalizeCredentials(providerId, input) {
 }
 
 function credentialAccount(providerId, credential) {
+  if (credential?.account) return credential.projectId ? `${credential.account} · ${credential.projectId}` : credential.account;
   if (providerId === "digitalocean" || providerId === "hetzner") return null;
-  if (providerId === "aws") return credential.accessKeyId;
-  return `${credential.clientEmail} · ${credential.projectId}`;
+  if (providerId === "aws") return credential.roleArn || credential.accessKeyId || null;
+  return credential.clientEmail ? `${credential.clientEmail} · ${credential.projectId}` : credential.projectId || null;
 }
 
 async function responseValue(response, providerName) {
@@ -331,12 +360,10 @@ function awsTimestamp(date = new Date()) {
   return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
 }
 
-async function awsRequest(action, parameters, region, credential, fetchImpl) {
-  const host = `ec2.${region}.amazonaws.com`;
-  const endpoint = `https://${host}/`;
+async function awsQueryRequest({ service, host, endpoint, action, version, parameters, region, credential, fetchImpl }) {
   const timestamp = awsTimestamp();
   const date = timestamp.slice(0, 8);
-  const values = { Action: action, Version: "2016-11-15", ...parameters };
+  const values = { Action: action, Version: version, ...parameters };
   const body = Object.entries(values).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${awsEncode(key)}=${awsEncode(String(value))}`).join("&");
   const headers = {
     "content-type": "application/x-www-form-urlencoded; charset=utf-8",
@@ -348,11 +375,11 @@ async function awsRequest(action, parameters, region, credential, fetchImpl) {
   const canonicalHeaders = signedHeaderNames.map((name) => `${name}:${headers[name].trim()}\n`).join("");
   const signedHeaders = signedHeaderNames.join(";");
   const canonicalRequest = ["POST", "/", "", canonicalHeaders, signedHeaders, sha256(body)].join("\n");
-  const scope = `${date}/${region}/ec2/aws4_request`;
+  const scope = `${date}/${region}/${service}/aws4_request`;
   const stringToSign = ["AWS4-HMAC-SHA256", timestamp, scope, sha256(canonicalRequest)].join("\n");
   const dateKey = hmac(`AWS4${credential.secretAccessKey}`, date);
   const regionKey = hmac(dateKey, region);
-  const serviceKey = hmac(regionKey, "ec2");
+  const serviceKey = hmac(regionKey, service);
   const signingKey = hmac(serviceKey, "aws4_request");
   const signature = hmac(signingKey, stringToSign, "hex");
   headers.authorization = `AWS4-HMAC-SHA256 Credential=${credential.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
@@ -368,6 +395,41 @@ async function awsRequest(action, parameters, region, credential, fetchImpl) {
     throw new CloudProvisioningError(`AWS: ${detail}`, { status: response.status === 401 || response.status === 403 ? 401 : 502 });
   }
   return text;
+}
+
+async function awsRequest(action, parameters, region, credential, fetchImpl) {
+  const host = `ec2.${region}.amazonaws.com`;
+  return awsQueryRequest({ service: "ec2", host, endpoint: `https://${host}/`, action, version: "2016-11-15", parameters, region, credential, fetchImpl });
+}
+
+async function awsAssumeRole(role, sourceCredential, fetchImpl) {
+  const host = "sts.amazonaws.com";
+  const xml = await awsQueryRequest({
+    service: "sts",
+    host,
+    endpoint: `https://${host}/`,
+    action: "AssumeRole",
+    version: "2011-06-15",
+    parameters: {
+      RoleArn: role.roleArn,
+      RoleSessionName: `oyster-hub-${Date.now()}`,
+      ExternalId: role.externalId,
+      DurationSeconds: 3600,
+    },
+    region: "us-east-1",
+    credential: sourceCredential,
+    fetchImpl,
+  });
+  const credential = {
+    kind: "temporary",
+    accessKeyId: xmlFirst(xml, "AccessKeyId"),
+    secretAccessKey: xmlFirst(xml, "SecretAccessKey"),
+    sessionToken: xmlFirst(xml, "SessionToken"),
+    expiresAt: Date.parse(xmlFirst(xml, "Expiration")),
+    defaultRegion: role.defaultRegion || "us-east-1",
+  };
+  if (!credential.accessKeyId || !credential.secretAccessKey || !credential.sessionToken) throw new CloudProvisioningError("AWS STS did not return temporary credentials");
+  return credential;
 }
 
 function decodeXml(value) {
@@ -442,6 +504,7 @@ async function awsProvision(input, credential, fetchImpl) {
 const base64url = (value) => Buffer.from(value).toString("base64url");
 
 async function gcpAccessToken(credential, fetchImpl) {
+  if (credential.kind === "oauth") return required(credential.accessToken, "Google OAuth access token");
   const now = Math.floor(Date.now() / 1000);
   const assertion = `${base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${base64url(JSON.stringify({
     iss: credential.clientEmail,
@@ -596,10 +659,18 @@ export function createCloudProvisioningService({
   boxConnectUrl = oysterCloudInitDefaults.boxConnectUrl,
   repository = oysterCloudInitDefaults.repository,
   ref = oysterCloudInitDefaults.ref,
+  oauth = {},
+  aws = {},
+  credentialEncryptionKey = null,
 } = {}) {
+  const encryptionKey = credentialKey(credentialEncryptionKey);
   let loaded = false;
   let state = { credentials: {}, environments: [] };
   let writeChain = Promise.resolve();
+  const awsRoleFlows = new Map();
+  const awsTemporaryCredentials = new Map();
+  const handoffFlows = new Map();
+  const oauthRefreshes = new Map();
 
   async function load() {
     if (loaded) return;
@@ -609,8 +680,11 @@ export function createCloudProvisioningService({
     }
     try {
       const parsed = JSON.parse(await readFile(stateFile, "utf8"));
+      const credentials = parsed?.encryptedCredentials
+        ? (encryptionKey ? decryptCredentials(parsed.encryptedCredentials, encryptionKey) : (() => { throw new CloudProvisioningError("cloud credentials are encrypted but no credential key is configured", { status: 500 }); })())
+        : (parsed?.credentials && typeof parsed.credentials === "object" ? parsed.credentials : {});
       state = {
-        credentials: parsed?.credentials && typeof parsed.credentials === "object" ? parsed.credentials : {},
+        credentials,
         environments: Array.isArray(parsed?.environments) ? parsed.environments : [],
       };
       loaded = true;
@@ -622,7 +696,10 @@ export function createCloudProvisioningService({
 
   async function persist() {
     if (!stateFile) return;
-    const snapshot = JSON.stringify(state, null, 2);
+    const persisted = encryptionKey
+      ? { version: 2, encryptedCredentials: encryptCredentials(state.credentials, encryptionKey), environments: state.environments }
+      : state;
+    const snapshot = JSON.stringify(persisted, null, 2);
     writeChain = writeChain.catch(() => {}).then(async () => {
       await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 });
       const temporary = `${stateFile}.${process.pid}.${randomUUID()}.tmp`;
@@ -633,12 +710,73 @@ export function createCloudProvisioningService({
     return writeChain;
   }
 
-  async function credential(providerId) {
+  async function performOAuthRefresh(providerId, value) {
+    if (value.kind !== "oauth" || !value.refreshToken || !value.expiresAt || value.expiresAt > Date.now() + 60_000) return value;
+    const providerConfig = oauth?.[providerId];
+    if (!providerConfig?.clientId || !providerConfig?.clientSecret) {
+      throw new CloudProvisioningError(`${PROVIDERS[providerId].name} OAuth refresh is not configured`, { status: 409 });
+    }
+    const endpoint = providerId === "gcp" ? "https://oauth2.googleapis.com/token" : "https://cloud.digitalocean.com/v1/oauth/token";
+    let response;
+    try {
+      response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: value.refreshToken,
+          client_id: providerConfig.clientId,
+          client_secret: providerConfig.clientSecret,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (error) {
+      throw new CloudProvisioningError(`${PROVIDERS[providerId].name} OAuth refresh failed`, { cause: error });
+    }
+    const refreshed = await responseValue(response, `${PROVIDERS[providerId].name} OAuth`);
+    const next = {
+      ...value,
+      accessToken: required(refreshed.access_token, `${PROVIDERS[providerId].name} access token`),
+      refreshToken: refreshed.refresh_token || value.refreshToken,
+      expiresAt: Date.now() + Number(refreshed.expires_in || 3600) * 1000,
+    };
+    state.credentials = { ...state.credentials, [providerId]: next };
+    await persist();
+    return next;
+  }
+
+  async function refreshOAuthCredential(providerId, value) {
+    if (value.kind !== "oauth" || !value.refreshToken || !value.expiresAt || value.expiresAt > Date.now() + 60_000) return value;
+    if (oauthRefreshes.has(providerId)) return oauthRefreshes.get(providerId);
+    const operation = performOAuthRefresh(providerId, value).finally(() => oauthRefreshes.delete(providerId));
+    oauthRefreshes.set(providerId, operation);
+    return operation;
+  }
+
+  async function credential(providerId, { allowIncomplete = false } = {}) {
     await load();
     providerDefinition(providerId);
     const value = state.credentials[providerId];
     if (!value) throw new CloudProvisioningError(`${PROVIDERS[providerId].name} credentials are not configured`, { status: 409 });
-    return value;
+    if (providerId === "aws" && value.kind === "assume_role") {
+      const cached = awsTemporaryCredentials.get(value.roleArn);
+      if (cached?.expiresAt > Date.now() + 5 * 60_000) return cached;
+      const sourceCredential = {
+        accessKeyId: aws.sourceAccessKeyId,
+        secretAccessKey: aws.sourceSecretAccessKey,
+        sessionToken: aws.sourceSessionToken || "",
+      };
+      if (!sourceCredential.accessKeyId || !sourceCredential.secretAccessKey) throw new CloudProvisioningError("Hub AWS source credentials are not configured", { status: 409 });
+      const temporary = await awsAssumeRole(value, sourceCredential, fetchImpl);
+      awsTemporaryCredentials.set(value.roleArn, temporary);
+      return temporary;
+    }
+    const refreshed = await refreshOAuthCredential(providerId, value);
+    if (providerId === "gcp" && refreshed.kind === "oauth" && !refreshed.projectId && !allowIncomplete) {
+      throw new CloudProvisioningError("Choose a Google Cloud project before continuing", { status: 409 });
+    }
+    if (providerId === "digitalocean" && refreshed.kind === "oauth") return { ...refreshed, token: refreshed.accessToken };
+    return refreshed;
   }
 
   async function recordFor(id) {
@@ -673,11 +811,25 @@ export function createCloudProvisioningService({
   return Object.freeze({
     async listProviders() {
       await load();
-      return Object.values(PROVIDERS).map((provider) => ({
-        ...provider,
-        configured: Boolean(state.credentials[provider.id]),
-        account: state.credentials[provider.id] ? credentialAccount(provider.id, state.credentials[provider.id]) : null,
-      }));
+      return Object.values(PROVIDERS).map((provider) => {
+        const stored = state.credentials[provider.id];
+        const authMethods = provider.authMethods.map((method) => ({
+          ...method,
+          available: method.id === "oauth_redirect"
+            ? Boolean(oauth?.[provider.id]?.clientId && oauth?.[provider.id]?.clientSecret && oauth?.[provider.id]?.redirectUrl)
+            : method.id === "assume_role"
+              ? Boolean(aws.sourceAccessKeyId && aws.sourceSecretAccessKey && aws.principalArn && aws.cloudFormationTemplateUrl)
+              : true,
+        }));
+        return {
+          ...provider,
+          authMethods,
+          configured: Boolean(stored),
+          credentialType: stored?.kind || (stored ? (provider.id === "gcp" ? "service_account" : provider.id === "aws" ? "access_key" : "api_token") : null),
+          account: stored ? credentialAccount(provider.id, stored) : null,
+          requiresProject: provider.id === "gcp" && stored?.kind === "oauth" && !stored.projectId,
+        };
+      });
     },
     async configure(providerId, input) {
       const provider = providerDefinition(providerId);
@@ -685,11 +837,144 @@ export function createCloudProvisioningService({
       const value = normalizeCredentials(providerId, input);
       state.credentials = { ...state.credentials, [providerId]: value };
       await persist();
+      if (input?.handoffId) {
+        const handoff = handoffFlows.get(String(input.handoffId));
+        if (handoff?.provider === providerId && handoff.expiresAt > Date.now()) handoff.status = "succeeded";
+      }
       return { provider: provider.id, configured: true, account: credentialAccount(providerId, value) };
+    },
+    async startHandoff(providerId) {
+      providerDefinition(providerId);
+      const id = randomUUID();
+      const flow = { id, provider: providerId, status: "waiting", expiresAt: Date.now() + 15 * 60_000 };
+      handoffFlows.set(id, flow);
+      return { ...flow, expiresAt: new Date(flow.expiresAt).toISOString() };
+    },
+    async handoffStatus(flowId) {
+      const flow = handoffFlows.get(String(flowId || ""));
+      if (!flow || flow.expiresAt <= Date.now()) throw new CloudProvisioningError("device handoff expired", { status: 404 });
+      return { ...flow, expiresAt: new Date(flow.expiresAt).toISOString() };
+    },
+    async cancelHandoff(flowId) {
+      const flow = handoffFlows.get(String(flowId || ""));
+      if (!flow || flow.expiresAt <= Date.now()) throw new CloudProvisioningError("device handoff expired", { status: 404 });
+      flow.status = "cancelled";
+      return { ...flow, expiresAt: new Date(flow.expiresAt).toISOString() };
+    },
+    async startAwsRole(accountId) {
+      const account = required(accountId, "AWS account ID");
+      if (!/^\d{12}$/.test(account)) throw new CloudProvisioningError("AWS account ID must contain 12 digits", { status: 400 });
+      if (!aws.sourceAccessKeyId || !aws.sourceSecretAccessKey || !aws.principalArn || !aws.cloudFormationTemplateUrl) {
+        throw new CloudProvisioningError("AWS role onboarding is not configured by the Hub operator", { status: 409 });
+      }
+      const id = randomUUID();
+      const roleName = aws.roleName || "OysterHubRole";
+      const role = {
+        id,
+        status: "waiting",
+        accountId: account,
+        roleArn: `arn:aws:iam::${account}:role/${roleName}`,
+        externalId: randomUUID(),
+        defaultRegion: aws.defaultRegion || "us-east-1",
+        expiresAt: Date.now() + 20 * 60_000,
+      };
+      const parameters = new URLSearchParams({
+        templateURL: aws.cloudFormationTemplateUrl,
+        stackName: aws.stackName || "OysterHubAccess",
+        param_HubPrincipalArn: aws.principalArn,
+        param_ExternalId: role.externalId,
+        param_RoleName: roleName,
+      });
+      role.setupUrl = `https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?${parameters}`;
+      awsRoleFlows.set(id, role);
+      return { id, provider: "aws", status: role.status, setupUrl: role.setupUrl, expiresAt: new Date(role.expiresAt).toISOString() };
+    },
+    async verifyAwsRole(flowId) {
+      const role = awsRoleFlows.get(String(flowId || ""));
+      if (!role || role.expiresAt <= Date.now()) throw new CloudProvisioningError("AWS connection setup expired", { status: 404 });
+      const sourceCredential = { accessKeyId: aws.sourceAccessKeyId, secretAccessKey: aws.sourceSecretAccessKey, sessionToken: aws.sourceSessionToken || "" };
+      try {
+        const temporary = await awsAssumeRole(role, sourceCredential, fetchImpl);
+        const stored = { kind: "assume_role", roleArn: role.roleArn, externalId: role.externalId, defaultRegion: role.defaultRegion };
+        await load();
+        state.credentials = { ...state.credentials, aws: stored };
+        await persist();
+        awsTemporaryCredentials.set(role.roleArn, temporary);
+        role.status = "succeeded";
+        role.setupUrl = "";
+        return { id: role.id, provider: "aws", status: "succeeded", account: role.roleArn };
+      } catch (error) {
+        role.status = "waiting";
+        return { id: role.id, provider: "aws", status: "waiting", setupUrl: role.setupUrl, error: "The AWS role is not ready yet. Finish the CloudFormation stack, then retry." };
+      }
+    },
+    async configureOAuth(providerId, value) {
+      const provider = providerDefinition(providerId);
+      if (!["digitalocean", "gcp"].includes(providerId) || value?.kind !== "oauth") {
+        throw new CloudProvisioningError("invalid OAuth credential", { status: 400 });
+      }
+      await load();
+      state.credentials = { ...state.credentials, [providerId]: { ...value } };
+      await persist();
+      return { provider: provider.id, configured: true, account: credentialAccount(providerId, value), requiresProject: providerId === "gcp" && !value.projectId };
+    },
+    async listProjects(providerId) {
+      if (providerId !== "gcp") throw new CloudProvisioningError("project selection is only available for Google Cloud", { status: 404 });
+      const value = await credential(providerId, { allowIncomplete: true });
+      if (value.kind !== "oauth") return value.projectId ? [{ id: value.projectId, name: value.projectId }] : [];
+      const projects = [];
+      let pageToken = "";
+      for (let page = 0; page < 10; page += 1) {
+        const query = new URLSearchParams({ pageSize: "100", ...(pageToken ? { pageToken } : {}) });
+        const response = await fetchImpl(`https://cloudresourcemanager.googleapis.com/v1/projects?${query}`, {
+          headers: { accept: "application/json", authorization: `Bearer ${value.accessToken}` },
+          signal: AbortSignal.timeout(30_000),
+        });
+        const result = await responseValue(response, "Google Cloud Resource Manager");
+        projects.push(...(result.projects || []).filter((project) => project.lifecycleState === "ACTIVE").map((project) => ({ id: project.projectId, name: project.name || project.projectId })));
+        pageToken = result.nextPageToken || "";
+        if (!pageToken) break;
+      }
+      return projects;
+    },
+    async selectProject(providerId, projectId) {
+      if (providerId !== "gcp") throw new CloudProvisioningError("project selection is only available for Google Cloud", { status: 404 });
+      const id = required(projectId, "Google Cloud project");
+      await load();
+      const value = state.credentials.gcp;
+      if (!value || value.kind !== "oauth") throw new CloudProvisioningError("Google OAuth is not connected", { status: 409 });
+      const current = await refreshOAuthCredential("gcp", value);
+      let validationResponse;
+      try {
+        validationResponse = await fetchImpl(`https://compute.googleapis.com/compute/v1/projects/${encodeURIComponent(id)}/zones?maxResults=1`, {
+          headers: { accept: "application/json", authorization: `Bearer ${current.accessToken}` },
+          signal: AbortSignal.timeout(30_000),
+        });
+      } catch (error) {
+        throw new CloudProvisioningError("Could not verify Google Compute Engine access", { cause: error });
+      }
+      await responseValue(validationResponse, "Google Compute Engine");
+      state.credentials = { ...state.credentials, gcp: { ...current, projectId: id } };
+      await persist();
+      return { provider: "gcp", configured: true, account: credentialAccount("gcp", state.credentials.gcp), requiresProject: false };
     },
     async removeCredentials(providerId) {
       providerDefinition(providerId);
       await load();
+      const stored = state.credentials[providerId];
+      if (providerId === "gcp" && stored?.kind === "oauth") {
+        const token = stored.refreshToken || stored.accessToken;
+        if (token) {
+          try {
+            await fetchImpl("https://oauth2.googleapis.com/revoke", {
+              method: "POST",
+              headers: { "content-type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ token }),
+              signal: AbortSignal.timeout(15_000),
+            });
+          } catch {}
+        }
+      }
       const next = { ...state.credentials };
       delete next[providerId];
       state.credentials = next;

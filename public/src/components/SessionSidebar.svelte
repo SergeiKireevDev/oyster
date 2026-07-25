@@ -9,6 +9,7 @@
   import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
   import { cloudEnvironmentChanges } from "../stores/cloudEnvironments.js";
+  import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
@@ -128,6 +129,7 @@
   onMount(() => {
     refreshEnvironmentCatalog();
     environmentRefreshTimer = setInterval(refreshEnvironmentCatalog, 5_000);
+    if (hubMode && cloudBrowser.hasConnectionReturn()) openCloudEnvironment();
   });
   let cloudEnvironmentRevision = 0;
   $: if ($cloudEnvironmentChanges.revision > cloudEnvironmentRevision) {

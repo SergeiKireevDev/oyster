@@ -1515,16 +1515,38 @@
   .cloud-section-head small { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
   .cloud-section-head h3 { margin: 0; font-size: 15px; }
   .cloud-back { width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; }
-  .cloud-manage-credentials { margin-left: auto; padding: 4px 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 10px; cursor: pointer; }
+  .cloud-credential-actions { margin-left: auto; display: flex; gap: 10px; }
+  .cloud-manage-credentials { padding: 4px 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 10px; cursor: pointer; }
+  .cloud-manage-credentials.danger { color: var(--red); }
   .cloud-auth-note { display: grid; gap: 2px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent-dim) 12%, transparent); }
   .cloud-auth-note strong { font-size: 11px; }
   .cloud-auth-note span { color: var(--muted); font-size: 10px; }
+  .cloud-connect-action { display: grid; justify-items: start; gap: 10px; margin-bottom: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .cloud-connect-action p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .cloud-account-id { width: min(100%, 280px); display: grid; gap: 5px; color: var(--muted); font-size: 10.5px; }
+  .cloud-account-id input { width: 100%; height: 37px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); font: 12px var(--mono); }
+  .cloud-role-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cloud-token-steps { display: grid; gap: 6px; margin: 0 0 12px; padding-left: 22px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .cloud-advanced-toggle { margin: 16px 0 0; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 10.5px; cursor: pointer; }
+  .cloud-advanced-toggle:hover, .cloud-advanced-toggle:focus-visible { text-decoration: underline; }
+  .cloud-method-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+  .cloud-method-list button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--muted); font: inherit; font-size: 10px; cursor: pointer; }
+  .cloud-method-list button.active { border-color: var(--accent); color: var(--accent); }
+  .cloud-handoff { display: grid; justify-items: start; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cloud-handoff > button { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 10.5px; cursor: pointer; }
+  .cloud-handoff p, .cloud-handoff small { margin: 0; color: var(--muted); font-size: 9.5px; }
+  .cloud-handoff > div { width: 100%; display: flex; gap: 6px; }
+  .cloud-handoff input { min-width: 0; flex: 1; padding: 7px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); font: 10px var(--mono); }
+  .cloud-handoff div button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); }
+  .cloud-handoff-cancel { margin-top: 7px; padding: 0; border: 0; background: transparent; color: var(--red); font: inherit; font-size: 10px; cursor: pointer; }
   .cloud-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
   .cloud-form label { min-width: 0; display: grid; align-content: start; gap: 5px; color: var(--muted); font-size: 10.5px; }
   .cloud-form label.wide, .cloud-form .wide { grid-column: 1 / -1; }
   .cloud-form input, .cloud-form select, .cloud-form textarea { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); font: inherit; font-size: 12px; outline: none; }
   .cloud-form input, .cloud-form select { height: 37px; }
   .cloud-form textarea { resize: vertical; font-family: var(--mono); font-size: 10px; }
+  .cloud-file-paste summary { margin: 3px 0; color: var(--accent); cursor: pointer; }
+  .cloud-file-paste textarea { margin-top: 4px; }
   .cloud-form input:focus, .cloud-form select:focus, .cloud-form textarea:focus { border-color: var(--accent); }
   .cloud-form label > small { color: var(--muted); font-size: 9px; }
   .cloud-secret-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 9.5px; }
@@ -1554,6 +1576,7 @@
   .cloud-success dd { margin: 1px 0 0; overflow: hidden; font: 10.5px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
   .cloud-console-link { text-decoration: none; }
   @media (max-width: 600px) {
+    .cloud-environment-modal { min-height: min(70vh, 620px); }
     .cloud-provider-grid { grid-template-columns: 1fr; }
     .cloud-provider-card { grid-template-columns: auto 1fr auto; grid-template-rows: auto; min-height: 0; align-items: center; }
     .cloud-form { grid-template-columns: 1fr; }

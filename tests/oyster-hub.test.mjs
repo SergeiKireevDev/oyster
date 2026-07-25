@@ -181,6 +181,16 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.match(native.driver.binding.configPath, /llmbox\.yaml$/);
   assert.equal("token" in native.driver, false);
 
+  assert.throws(() => validateConfig({ token: "x", cloud: { repository: "http://example.com/oyster.git" }, driver: { type: "mock" } }, {}), /must use https/);
+  assert.throws(() => validateConfig({ token: "x", cloud: { oauth: { gcp: { clientId: "only-id" } } }, driver: { type: "mock" } }, {}), /both clientId and clientSecret/);
+  const oauthConfig = validateConfig({ token: "x", cloud: { publicUrl: "https://hub.example" }, driver: { type: "mock" } }, {
+    OYSTER_HUB_GOOGLE_OAUTH_CLIENT_ID: "google-id",
+    OYSTER_HUB_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
+    OYSTER_HUB_CLOUD_CREDENTIAL_KEY: "vault-key",
+  });
+  assert.equal(oauthConfig.cloud.oauth.gcp.redirectUrl, "https://hub.example/cloud/oauth/gcp/callback");
+  assert.equal(oauthConfig.cloud.credentialEncryptionKey, "vault-key");
+
   const mock = validateConfig({ token: "x", port: 8082, driver: { type: "mock" } }, {});
   assert.equal(mock.port, 8082);
   assert.equal(mock.uploadIdleTimeoutMs, 30000);
