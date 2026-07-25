@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ACTIVE_WORKSPACE_KEY, chooseOnlineWorkspace, ensureActiveWorkspace, listEnvironments, listOnlineWorkspaces, listWorkspaces } from "../public/src/runtime/workspaceScope.js";
+import { ACTIVE_WORKSPACE_KEY, chooseOnlineWorkspace, effectiveWorkspaceStatus, ensureActiveWorkspace, listEnvironments, listOnlineWorkspaces, listWorkspaces } from "../public/src/runtime/workspaceScope.js";
 
 function storage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -27,16 +27,17 @@ test("environment discovery returns every llmbox spoke", async () => {
   assert.deepEqual(environments.map(({ id }) => id), ["local", "edge-2"]);
 });
 
-test("workspace discovery preserves lifecycle statuses for Hub indicators", async () => {
+test("workspace discovery retains offline and initializing workspaces", async () => {
   const workspaces = [
     { id: "alpha", status: "online" },
-    { id: "beta", status: "provisioning" },
+    { id: "beta", status: "offline", provider: { phase: "initializing" } },
     { id: "gamma", status: "offline" },
-    { id: "delta", status: "paused" },
   ];
-  assert.deepEqual(await listWorkspaces({
+  const selected = await listWorkspaces({
     fetchImpl: async () => ({ ok: true, async json() { return { workspaces }; } }),
-  }), workspaces);
+  });
+  assert.deepEqual(selected, workspaces);
+  assert.equal(effectiveWorkspaceStatus(workspaces[1]), "initializing");
 });
 
 test("new-session workspace choices include only online workspaces", async () => {
@@ -46,7 +47,7 @@ test("new-session workspace choices include only online workspaces", async () =>
       async json() {
         return { workspaces: [
           { id: "alpha", status: "online" },
-          { id: "beta", status: "provisioning" },
+          { id: "beta", status: "offline", provider: { phase: "initializing" } },
           { id: "gamma", status: "offline" },
         ] };
       },

@@ -23,13 +23,6 @@
         "environmentName": "Local",
         "id": "local",
         "name": "Local Oyster"
-      },
-      {
-        "endpoint": "http://localhost:8083",
-        "environmentId": "local",
-        "environmentName": "Local",
-        "id": "pi-2",
-        "name": "Pi 2"
       }
     ]
   }

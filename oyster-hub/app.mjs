@@ -129,9 +129,12 @@ async function inspectWorkspace(workspace, options, full = false) {
     else errors[key] = responses[index].error;
   });
   const health = responses[0];
+  const lifecycleStatus = workspace.status || workspace.provider?.phase;
+  const controlledStatus = ["paused", "pausing", "destroying"].includes(lifecycleStatus) ? lifecycleStatus : null;
+  const pendingStatus = ["provisioning", "awaiting_agent", "initializing", "resuming"].includes(lifecycleStatus) ? lifecycleStatus : null;
   return {
     ...publicWorkspace(workspace),
-    status: health.ok && health.value?.ok !== false ? "online" : "offline",
+    status: controlledStatus || (health.ok && health.value?.ok !== false ? "online" : (pendingStatus || "offline")),
     latencyMs: health.latencyMs,
     results,
     ...(Object.keys(errors).length ? { errors } : {}),
@@ -240,6 +243,22 @@ export function createOysterHub(config, {
       }
       if (url.pathname === "/api/v1/environments" && req.method === "POST") {
         return json(res, 201, { environment: await cloud.provision(await readJsonBody(req)) });
+      }
+      const cloudEnvironmentMatch = url.pathname.match(/^\/api\/v1\/environments\/([^/]+)(?:\/(actions))?$/);
+      if (cloudEnvironmentMatch) {
+        let environmentId;
+        try { environmentId = decodeURIComponent(cloudEnvironmentMatch[1]); }
+        catch { return json(res, 400, { error: "invalid cloud environment id" }); }
+        if (!cloudEnvironmentMatch[2] && req.method === "DELETE") {
+          return json(res, 200, { environment: await cloud.destroy(environmentId) });
+        }
+        if (cloudEnvironmentMatch[2] && req.method === "POST") {
+          const { action } = await readJsonBody(req);
+          if (action === "pause") return json(res, 200, { environment: await cloud.pause(environmentId) });
+          if (action === "resume") return json(res, 200, { environment: await cloud.resume(environmentId) });
+          return json(res, 400, { error: "action must be pause or resume" });
+        }
+        return json(res, 405, { error: "method not allowed" });
       }
       if (url.pathname === "/api/v1/cloud/providers" && req.method === "GET") {
         return json(res, 200, { providers: await cloud.listProviders() });

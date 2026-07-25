@@ -451,8 +451,11 @@ export function createRunnerManager(state, {
     } else {
       requestState(runner);
     }
-    runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
+    // Publish alive=true before pi_started. Clients use the start event to
+    // request authoritative state, so delivering it first would leave a race
+    // where their liveness guard still sees this runner as dormant.
     runnersChanged();
+    runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
   }
 
   function stopRunner(runner) {
