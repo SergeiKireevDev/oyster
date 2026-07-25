@@ -153,6 +153,8 @@ function defaultVerifyAttestation({ record, hello, connectOrigin }) {
     }
   } else if (record.provider === "digitalocean") {
     if (attestation.format !== "digitalocean-metadata-v1") throw Object.assign(new Error("DigitalOcean metadata identity is required"), { code: "attestation_required" });
+  } else if (record.provider === "hetzner") {
+    if (attestation.format !== "hetzner-metadata-v1") throw Object.assign(new Error("Hetzner metadata identity is required"), { code: "attestation_required" });
   } else {
     throw Object.assign(new Error("unsupported provider attestation"), { code: "attestation_invalid" });
   }

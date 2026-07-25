@@ -23,7 +23,7 @@ function nextJson(socket) {
   return once(socket, "message").then(([data]) => JSON.parse(data.toString("utf8")));
 }
 
-function hello(registration, instanceId, auth) {
+function hello(registration, instanceId, auth, provider = "aws") {
   return {
     type: "box_hello",
     protocol: 1,
@@ -31,9 +31,11 @@ function hello(registration, instanceId, auth) {
     generation: registration.generation,
     auth,
     provider: {
-      kind: "aws",
+      kind: provider,
       instance_id: instanceId,
-      attestation: { format: "aws-iid-rsa2048", document: JSON.stringify({ instanceId }), signature: "test-signature" },
+      attestation: provider === "hetzner"
+        ? { format: "hetzner-metadata-v1", region: "fsn1" }
+        : { format: "aws-iid-rsa2048", document: JSON.stringify({ instanceId }), signature: "test-signature" },
     },
     agent: { version: "test", boot_id: "boot", capabilities: ["register_v1", "dial_v1"] },
     observed: { init_state: "complete", service_state: "starting" },
@@ -94,6 +96,20 @@ test("box registration consumes bootstrap auth, persists only hashes, and reconn
   assert.equal(rejected.type, "box_error");
   assert.equal(rejected.error.code, "bootstrap_expired");
   replay.terminate();
+});
+
+test("Hetzner metadata identity registers only the provider-bound instance", async (t) => {
+  const registry = createBoxConnectionRegistry();
+  const server = createServer((_req, res) => res.end());
+  registry.attach(server);
+  const port = await listen(server);
+  t.after(async () => { await registry.close(); server.close(); });
+  const registration = await registry.prepareRegistration({ boxId: "hetzner-box", provider: "hetzner" });
+  await registry.bindProviderInstance(registration.boxId, registration.generation, "155191578");
+  const socket = await open(`ws://127.0.0.1:${port}/box/connect`);
+  socket.send(JSON.stringify(hello(registration, "155191578", { mode: "bootstrap", secret: registration.bootstrapSecret }, "hetzner")));
+  assert.equal((await nextJson(socket)).type, "box_welcome");
+  socket.terminate();
 });
 
 test("an agent that misses its bootstrap deadline is reported as failed", async (t) => {

@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect as connectTcp } from "node:net";
-import { connectOnce, loadBoxAgentConfig } from "../oyster-hub/box-agent.mjs";
+import { collectProviderIdentity, connectOnce, loadBoxAgentConfig } from "../oyster-hub/box-agent.mjs";
 import { createBoxConnectionRegistry } from "../oyster-hub/box-registry.mjs";
 
 test("box agent dials a loopback test Hub, registers, and stores reconnect auth", async (t) => {
@@ -64,6 +64,24 @@ test("box agent dials a loopback test Hub, registers, and stores reconnect auth"
   assert.deepEqual(await response.json(), { body: payload });
   socket.close();
   await once(socket, "close");
+});
+
+test("box agent derives a Hetzner identity from JSON or cloud-init YAML metadata", async () => {
+  const jsonIdentity = await collectProviderIdentity("hetzner", "wss://hub.example/box/connect", async (url) => {
+    assert.equal(url, "http://169.254.169.254/hetzner/v1/metadata");
+    return JSON.stringify({ "instance-id": 155191578, region: "fsn1" });
+  });
+  assert.deepEqual(jsonIdentity, {
+    kind: "hetzner",
+    instance_id: "155191578",
+    attestation: { format: "hetzner-metadata-v1", region: "fsn1" },
+  });
+  const yamlIdentity = await collectProviderIdentity("hetzner", "wss://hub.example/box/connect", async () => "instance-id: 155191578\navailability-zone: fsn1-dc14\n");
+  assert.deepEqual(yamlIdentity, {
+    kind: "hetzner",
+    instance_id: "155191578",
+    attestation: { format: "hetzner-metadata-v1", region: "fsn1-dc14" },
+  });
 });
 
 test("box agent requires secure remote WSS without URL credentials", () => {
