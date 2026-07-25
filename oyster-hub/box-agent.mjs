@@ -49,9 +49,9 @@ async function gcpIdentity(connectUrl) {
   };
 }
 
-async function digitalOceanIdentity() {
-  const instanceId = await metadataFetch("http://169.254.169.254/metadata/v1/id");
-  const region = await metadataFetch("http://169.254.169.254/metadata/v1/region").catch(() => "");
+async function digitalOceanIdentity(fetchText = metadataFetch) {
+  const instanceId = await fetchText("http://169.254.169.254/metadata/v1/id");
+  const region = await fetchText("http://169.254.169.254/metadata/v1/region").catch(() => "");
   return {
     kind: "digitalocean",
     instance_id: instanceId.trim(),
@@ -59,10 +59,35 @@ async function digitalOceanIdentity() {
   };
 }
 
-export async function collectProviderIdentity(provider, connectUrl) {
+function parseHetznerMetadata(value) {
+  const source = String(value || "").trim();
+  try {
+    const parsed = JSON.parse(source);
+    return {
+      instanceId: String(parsed["instance-id"] || parsed.instance_id || parsed.instanceId || "").trim(),
+      region: String(parsed.region || parsed["availability-zone"] || "").trim(),
+    };
+  } catch {
+    const field = (name) => source.match(new RegExp(`^${name}:\\s*["']?([^"'\\s]+)`, "mi"))?.[1]?.trim() || "";
+    return { instanceId: field("instance-id"), region: field("region") || field("availability-zone") };
+  }
+}
+
+async function hetznerIdentity(fetchText = metadataFetch) {
+  const metadata = parseHetznerMetadata(await fetchText("http://169.254.169.254/hetzner/v1/metadata"));
+  if (!metadata.instanceId) throw new Error("Hetzner metadata did not include an instance ID");
+  return {
+    kind: "hetzner",
+    instance_id: metadata.instanceId,
+    attestation: { format: "hetzner-metadata-v1", region: metadata.region },
+  };
+}
+
+export async function collectProviderIdentity(provider, connectUrl, fetchText = metadataFetch) {
   if (provider === "aws") return awsIdentity();
   if (provider === "gcp") return gcpIdentity(connectUrl);
-  if (provider === "digitalocean") return digitalOceanIdentity();
+  if (provider === "digitalocean") return digitalOceanIdentity(fetchText);
+  if (provider === "hetzner") return hetznerIdentity(fetchText);
   throw new Error(`unsupported box provider: ${provider}`);
 }
 
