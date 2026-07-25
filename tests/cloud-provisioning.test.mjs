@@ -66,7 +66,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   const service = createCloudProvisioningService({ stateFile, fetchImpl });
 
   const initial = await service.listProviders();
-  assert.deepEqual(initial.map(({ id, configured }) => [id, configured]), [["digitalocean", false], ["aws", false], ["gcp", false]]);
+  assert.deepEqual(initial.map(({ id, configured }) => [id, configured]), [["digitalocean", false], ["hetzner", false], ["aws", false], ["gcp", false]]);
   assert.equal(JSON.stringify(initial).includes(canary), false);
   assert.equal((await service.configure("digitalocean", { token: canary })).configured, true);
   const providers = await service.listProviders();
@@ -225,6 +225,84 @@ test("GCP exchanges a service-account JWT for OAuth and provisions from live Com
   assert.equal((await service.resume(environment.id)).status, "resuming");
   assert.equal((await service.destroy(environment.id)).destroyed, true);
   assert.equal(calls.filter(({ target }) => target === "https://oauth2.googleapis.com/token").length, 7);
+});
+
+test("Hetzner Cloud credentials, live options, and provisioning use standard REST with Bearer auth", async () => {
+  const calls = [];
+  const canary = "HCLOUD_test_secret_canary";
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method || "GET", headers: options.headers, body: options.body ? JSON.parse(options.body) : null });
+    assert.equal(options.headers.authorization, `Bearer ${canary}`);
+    if (String(url).includes("/locations")) return jsonResponse({ locations: [
+      { id: 2, name: "nbg1", description: "Nuremberg", country: "DE" },
+      { id: 3, name: "fsn1", description: "Falkenstein", country: "DE" },
+      { id: 1, name: "hel1", description: "Helsinki", country: "FI" },
+    ] });
+    if (String(url).includes("/server_types")) return jsonResponse({ server_types: [
+      { id: 22, name: "cx22", cores: 2, memory: 4, prices: [{ location: "nbg1" }, { location: "fsn1" }] },
+      { id: 32, name: "cx32", cores: 4, memory: 8, prices: [{ location: "nbg1" }] },
+      { id: 42, name: "cx42", cores: 8, memory: 16, prices: [{ location: "hel1" }] },
+    ] });
+    if (String(url).includes("/images")) return jsonResponse({ images: [
+      { id: 12345, name: "ubuntu-24.04", description: "Ubuntu 24.04 Standard 64 bit", os_flavor: "ubuntu", type: "system" },
+      { id: 67890, name: "debian-12", description: "Debian 12 Standard", os_flavor: "debian", type: "system" },
+    ] });
+    if (String(url).includes("/servers/1001/actions/poweroff")) return jsonResponse({ action: { status: "success" } }, 201);
+    if (String(url).includes("/servers/1001/actions/poweron")) return jsonResponse({ action: { status: "success" } }, 201);
+    if (String(url).includes("/servers/1001") && options.method === "DELETE") return new Response(null, { status: 204 });
+    if (String(url).endsWith("/servers") && options.method === "POST") {
+      const body = JSON.parse(options.body);
+      assert.equal(body.server_type, "cx22");
+      assert.equal(body.location, "nbg1");
+      assert.equal(body.image, "ubuntu-24.04");
+      assert.equal(body.labels["managed-by"], "oyster-hub");
+      assert.equal(body.labels["oyster:box-id"], "hetzner-node");
+      assert.match(body.user_data, /^#cloud-config\n/);
+      return jsonResponse({ server: { id: 1001, status: "starting", public_net: { ipv4: { ip: "159.69.123.45" } } } }, 201);
+    }
+    throw new Error(`unexpected Hetzner request ${url}`);
+  };
+  const service = createCloudProvisioningService({ fetchImpl });
+
+  await service.configure("hetzner", { token: canary });
+  const options = await service.options("hetzner");
+  assert.deepEqual(options.regions.map(({ id }) => id), ["nbg1", "fsn1", "hel1"]);
+  assert.equal(options.regions[0].name.includes("Nuremberg"), true);
+  // cx42 is only available in hel1, not nbg1
+  assert.deepEqual(options.sizes.filter((item) => item.regions.includes("nbg1")).map(({ id }) => id), ["cx22", "cx32"]);
+  assert.equal(options.defaults.size, "cx22");
+  assert.equal(options.defaults.image, "ubuntu-24.04");
+
+  const environment = await service.provision({ provider: "hetzner", name: "hetzner-node", region: "nbg1", size: "cx22", image: "ubuntu-24.04" });
+  assert.equal(environment.provider.instanceId, "1001");
+  assert.equal(environment.provider.state, "starting");
+  assert.match(environment.provider.consoleUrl, /console\.hetzner\.cloud/);
+  assert.equal(JSON.stringify(environment).includes(canary), false);
+
+  assert.equal((await service.pause(environment.id)).status, "paused");
+  assert.equal((await service.resume(environment.id)).status, "resuming");
+  assert.equal((await service.destroy(environment.id)).destroyed, true);
+  assert.deepEqual(calls.map(({ url, method }) => [method, String(url).split("/v1")[1]]), [
+    ["GET", "/locations?per_page=100"],
+    ["GET", "/server_types?per_page=100"],
+    ["GET", "/images?type=system&sort=name&per_page=100"],
+    ["POST", "/servers"],
+    ["POST", "/servers/1001/actions/poweroff"],
+    ["POST", "/servers/1001/actions/poweron"],
+    ["DELETE", "/servers/1001"],
+  ]);
+});
+
+test("Hetzner Cloud secrets are never exposed through provider listings", async () => {
+  const canary = "HCLOUD_listing_canary";
+  const fetchImpl = async () => jsonResponse({ locations: [], server_types: [], images: [] });
+  const service = createCloudProvisioningService({ fetchImpl });
+  await service.configure("hetzner", { token: canary });
+  const providers = await service.listProviders();
+  const hetzner = providers.find(({ id }) => id === "hetzner");
+  assert.equal(hetzner.configured, true);
+  assert.equal(hetzner.account, null);
+  assert.equal(JSON.stringify(providers).includes(canary), false);
 });
 
 test("Hub cloud routes are authenticated, merge environments, and keep cloud service details scoped", async (t) => {
