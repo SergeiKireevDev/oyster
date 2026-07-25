@@ -292,6 +292,34 @@ test("mock driver exposes one local read-only workspace through a hub on port 80
   assert.deepEqual(await remove.json(), { error: "mock workspace driver cannot remove workspaces" });
 });
 
+test("Hub preserves an initializing workspace status while its Oyster endpoint starts", async (t) => {
+  const workspace = {
+    environmentId: "cloud-1",
+    environmentName: "Cloud 1",
+    id: "cloud-1",
+    name: "Cloud 1",
+    url: "http://127.0.0.1:1",
+    status: "initializing",
+    provider: { type: "cloud", phase: "initializing" },
+  };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true, create: false, remove: false },
+    async listEnvironments() { return []; },
+    async listWorkspaces() { return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const cloudService = { async listEnvironments() { return []; }, async listWorkspaces() { return []; } };
+  const hubServer = createOysterHub(mockHubConfig("http://127.0.0.1:1", 100), { driver, cloudService, logger: { error() {} } });
+  const hubUrl = await listen(hubServer);
+  t.after(() => close(hubServer));
+
+  const response = await fetch(`${hubUrl}/api/v1/workspaces`, { headers: { authorization: "Bearer hub-secret" } });
+  assert.equal(response.status, 200);
+  const [listed] = (await response.json()).workspaces;
+  assert.equal(listed.status, "initializing");
+  assert.match(listed.errors.health, /fetch failed|ECONNREFUSED/);
+});
+
 test("llmbox workspace tokens are stable, scoped, and derived from the configured secret", () => {
   assert.equal(deriveWorkspaceToken("secret", "alpha"), deriveWorkspaceToken("secret", "alpha"));
   assert.notEqual(deriveWorkspaceToken("secret", "alpha"), deriveWorkspaceToken("secret", "beta"));

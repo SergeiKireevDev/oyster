@@ -22,7 +22,16 @@ export async function listEnvironments({ fetchImpl = fetch } = {}) {
   return data.environments ?? [];
 }
 
-/** List every workspace and its observed Hub status. */
+const TRANSIENT_WORKSPACE_STATUSES = new Set(["provisioning", "awaiting_agent", "initializing", "resuming"]);
+
+/** Prefer lifecycle detail from the provider while a workspace is coming online. */
+export function effectiveWorkspaceStatus(workspace) {
+  const providerStatus = workspace?.provider?.phase || workspace?.provider?.registrationStatus;
+  if (TRANSIENT_WORKSPACE_STATUSES.has(providerStatus)) return providerStatus;
+  return workspace?.status || providerStatus || "unknown";
+}
+
+/** List every workspace, including ones that cannot host a session yet. */
 export async function listWorkspaces({ fetchImpl = fetch } = {}) {
   const response = await fetchImpl("/api/v1/workspaces");
   const data = await response.json().catch(() => ({}));
@@ -32,7 +41,7 @@ export async function listWorkspaces({ fetchImpl = fetch } = {}) {
 
 /** List the workspaces that can currently host a new session. */
 export async function listOnlineWorkspaces(options = {}) {
-  return (await listWorkspaces(options)).filter((workspace) => workspace.status === "online");
+  return (await listWorkspaces(options)).filter((workspace) => effectiveWorkspaceStatus(workspace) === "online");
 }
 
 /** Require an explicit workspace choice before starting a Hub session. */

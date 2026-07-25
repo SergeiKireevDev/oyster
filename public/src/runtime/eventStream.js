@@ -39,9 +39,8 @@ export function createCodeReloadController({ isReplaying, toast, reloadPage }) {
 export function createPiStartedController({ isReplaying, toast, reloadTranscript, refreshState = () => {} }) {
   return (message) => {
     if (isReplaying()) return false;
-    // pi_started is emitted before the following runners_update. Debounced
-    // refresh waits for that liveness update, then fetches authoritative state
-    // so a revived dormant session regains its model and conversation details.
+    // The server publishes alive=true before pi_started, so the guarded state
+    // refresh can safely fetch authoritative model and conversation details.
     refreshState();
     if (message.startCount > 1) {
       toast("pi process restarted");

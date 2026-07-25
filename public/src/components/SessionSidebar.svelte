@@ -6,7 +6,7 @@
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
-  import { isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
+  import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
   import { cloudEnvironmentChanges } from "../stores/cloudEnvironments.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
@@ -88,7 +88,47 @@
   function openCloudEnvironment() {
     openModal({ title: "New cloud environment", wide: true, content: "cloudEnvironment" });
   }
-  onMount(() => { refreshEnvironmentCatalog(); });
+  let workspaceActions = new Set();
+  function cloudWorkspace(workspace) {
+    return workspace.provider?.type === "cloud";
+  }
+  async function manageCloudWorkspace(workspace, action) {
+    const verb = action === "destroy" ? "Destroy" : action === "resume" ? "Resume" : "Pause";
+    const warning = action === "destroy"
+      ? `Destroy “${workspace.workspaceName}” permanently?\n\nThe provider VM and its disk, sessions, and stored model credentials will be deleted. This cannot be undone.`
+      : action === "pause"
+        ? `Pause “${workspace.workspaceName}”?\n\nActive sessions will disconnect. The VM disk is retained; storage charges continue, and DigitalOcean may continue charging for the reserved Droplet.`
+        : `Resume “${workspace.workspaceName}”?`;
+    if (!confirm(warning)) return;
+    workspaceActions = new Set([...workspaceActions, workspace.workspaceId]);
+    try {
+      const path = `/api/v1/environments/${encodeURIComponent(workspace.workspaceId)}${action === "destroy" ? "" : "/actions"}`;
+      const response = await fetch(path, action === "destroy" ? { method: "DELETE" } : {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `${verb} failed (${response.status})`);
+      if (action === "destroy" && currentRunner?.workspaceId === workspace.workspaceId) {
+        const replacement = availableWorkspaces.find((candidate) => candidate.id !== workspace.workspaceId && effectiveWorkspaceStatus(candidate) === "online");
+        if (replacement) setActiveWorkspace(replacement.id);
+      }
+      await refreshEnvironmentCatalog();
+      refreshSessions();
+    } catch (cause) {
+      alert(`${verb} failed: ${cause.message}`);
+    } finally {
+      const next = new Set(workspaceActions);
+      next.delete(workspace.workspaceId);
+      workspaceActions = next;
+    }
+  }
+  let environmentRefreshTimer = null;
+  onMount(() => {
+    refreshEnvironmentCatalog();
+    environmentRefreshTimer = setInterval(refreshEnvironmentCatalog, 5_000);
+  });
   let cloudEnvironmentRevision = 0;
   $: if ($cloudEnvironmentChanges.revision > cloudEnvironmentRevision) {
     cloudEnvironmentRevision = $cloudEnvironmentChanges.revision;
@@ -99,6 +139,7 @@
   const clockTimer = setInterval(() => { clock = Date.now(); }, 60_000);
   onDestroy(() => {
     clearTimeout(searchTimer);
+    clearInterval(environmentRefreshTimer);
     clearInterval(clockTimer);
   });
 
@@ -132,7 +173,7 @@
   $: visibleSessionEnvironments = availableWorkspaceIds
     ? availableEnvironmentView(sessionEnvironments, selectedEnvironmentId, availableWorkspaces)
     : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null);
-  $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds, availableWorkspaces);
+  $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds);
   let expandedCwds = new Set();
   let initializedCwdExpansion = false;
   $: if (!initializedCwdExpansion && currentCwd) {
@@ -167,7 +208,8 @@
           archivedGroups: [],
           archivedCount: 0,
         }),
-        status: workspace.status || "unknown",
+        status: effectiveWorkspaceStatus(workspace),
+        provider: workspace.provider,
       })),
     }];
   }
@@ -180,18 +222,13 @@
       ?? options[0]?.environmentId
       ?? null;
   }
-  function filterEnvironmentWorkspaces(environments, environmentId, workspaceIds, workspaceCatalog = []) {
+  function filterEnvironmentWorkspaces(environments, environmentId, workspaceIds) {
     return environments
       .filter((environment) => environment.environmentId === environmentId)
       .map((environment) => ({
         ...environment,
         workspaces: workspaceIds
-          ? environment.workspaces
-            .filter((workspace) => workspaceIds.has(workspace.workspaceId))
-            .map((workspace) => ({
-              ...workspace,
-              status: workspaceCatalog.find((candidate) => candidate.id === workspace.workspaceId)?.status || workspace.status || "unknown",
-            }))
+          ? environment.workspaces.filter((workspace) => workspaceIds.has(workspace.workspaceId))
           : environment.workspaces,
       }))
       .filter((environment) => environment.workspaces.length);
@@ -207,11 +244,28 @@
     }
     return [...options.values()];
   }
-  function normalizedWorkspaceStatus(workspace) {
-    return String(workspace.status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  function workspaceStatus(workspace) {
+    const status = effectiveWorkspaceStatus(workspace);
+    return ["online", "provisioning", "provisioned", "awaiting_agent", "initializing", "resuming", "paused", "pausing", "destroying", "offline", "failed"].includes(status) ? status : "unknown";
   }
-  function workspaceStatusLabel(workspace) {
-    return normalizedWorkspaceStatus(workspace).replaceAll("_", " ").replaceAll("-", " ");
+  function statusLabel(status) {
+    return ({
+      online: "Online",
+      provisioning: "Provisioning",
+      provisioned: "Setup needed",
+      awaiting_agent: "Awaiting agent",
+      initializing: "Initializing",
+      resuming: "Resuming",
+      paused: "Paused",
+      pausing: "Pausing",
+      destroying: "Destroying",
+      offline: "Offline",
+      failed: "Failed",
+      unknown: "Unknown",
+    })[status] || "Unknown";
+  }
+  function environmentStatusLabel(status) {
+    return status === "online" ? "" : ` · ${statusLabel(status)}`;
   }
   function isCurrentWorkspace(environment, workspace) {
     if (!currentRunner) return false;
@@ -370,27 +424,51 @@
 {/snippet}
 
 {#snippet WorkspaceHeading(workspace)}
-  {@const status = normalizedWorkspaceStatus(workspace)}
-  {@const statusLabel = workspaceStatusLabel(workspace)}
-  <div class="session-sidebar-workspace-heading">
+  {@const status = workspaceStatus(workspace)}
+  {@const online = status === "online"}
+  {@const managing = workspaceActions.has(workspace.workspaceId)}
+  <div class="session-sidebar-workspace-heading" class:workspace-unavailable={!online}>
     <span
-      class="session-sidebar-workspace-icon"
-      data-status={status}
+      class={`session-sidebar-workspace-icon status-${status}`}
       role="img"
-      aria-label={`Workspace status: ${statusLabel}`}
-      title={`Workspace status: ${statusLabel}`}
+      aria-label={`Workspace status: ${statusLabel(status)}`}
+      title={statusLabel(status)}
     ></span>
     <span class="session-sidebar-hierarchy-copy">
-      <small>Workspace</small>
+      <span class="session-sidebar-workspace-kicker">
+        <small>Workspace</small>
+        <span class={`session-sidebar-workspace-status status-${status}`}>{statusLabel(status)}</span>
+      </span>
       <strong>{workspace.workspaceName}</strong>
     </span>
     {#if workspace.workspaceId !== workspace.workspaceName}<code>{workspace.workspaceId}</code>{/if}
+    {#if cloudWorkspace(workspace)}
+      <span class="session-sidebar-workspace-cloud-actions">
+        <button
+          type="button"
+          class="session-sidebar-workspace-power"
+          class:resume={status === "paused"}
+          title={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
+          aria-label={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
+          disabled={managing || ["provisioning", "awaiting_agent", "initializing", "resuming", "pausing", "destroying"].includes(status)}
+          onclick={() => manageCloudWorkspace(workspace, status === "paused" ? "resume" : "pause")}
+        >{status === "paused" ? "▶" : "Ⅱ"}</button>
+        <button
+          type="button"
+          class="session-sidebar-workspace-destroy"
+          title={`Destroy ${workspace.workspaceName}`}
+          aria-label={`Destroy ${workspace.workspaceName}`}
+          disabled={managing || status === "destroying"}
+          onclick={() => manageCloudWorkspace(workspace, "destroy")}
+        >×</button>
+      </span>
+    {/if}
     <button
       type="button"
       class="session-sidebar-workspace-create"
-      title={status === "online" ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel}`}
-      aria-label={status === "online" ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel}`}
-      disabled={status !== "online"}
+      title={online ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel(status).toLowerCase()}`}
+      aria-label={`New session in ${workspace.workspaceName}`}
+      disabled={!online}
       onclick={() => createSessionInFolder({ id: workspace.workspaceId, name: workspace.workspaceName })}
     >+</button>
   </div>
@@ -448,8 +526,8 @@
           onchange={(event) => { selectedEnvironmentId = event.currentTarget.value; }}
         >
           {#each environmentOptions as environment (environment.environmentId)}
-            <option value={environment.environmentId} disabled={environment.status === "offline"}>
-              {environment.environmentName}{environment.status === "offline" ? " · offline" : environment.status === "provisioned" ? " · setup needed" : ""}
+            <option value={environment.environmentId}>
+              {environment.environmentName}{environmentStatusLabel(environment.status)}
             </option>
           {/each}
         </select>

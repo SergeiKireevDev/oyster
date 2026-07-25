@@ -20,6 +20,7 @@ function fakeProcess() {
 function setup(t, managerOptions = {}) {
   const spawns = [];
   const owners = [];
+  const eventTimeline = [];
   const sqlitePath = "/agent/sessions.sqlite";
   const sessionReferences = createSessionReferenceCodec({
     agentDir: "/agent",
@@ -37,7 +38,7 @@ function setup(t, managerOptions = {}) {
     runners: new Map(),
     sseClients: new Set(),
     sessionReferences,
-    serverEvent() {},
+    serverEvent(event) { eventTimeline.push(event.type); },
   };
   state.piProcesses = createPiProcessLauncher({
     config: state.config,
@@ -53,7 +54,7 @@ function setup(t, managerOptions = {}) {
     clearInterval(state.runnerReaperTimer);
     manager.stopPi();
   });
-  return { manager, sessionReferences, spawns, owners, state, sqlitePath };
+  return { manager, sessionReferences, spawns, owners, state, sqlitePath, eventTimeline };
 }
 
 test("SQLite runners start and restart by ID with explicit store environment", (t) => {
@@ -106,10 +107,19 @@ test("runner ID generation rejects collisions instead of replacing a durable des
 });
 
 test("opening a stopped session stays dormant until a message is sent", (t) => {
-  const { manager, sqlitePath, spawns } = setup(t);
+  const { manager, sqlitePath, spawns, state, eventTimeline } = setup(t);
   const sessionRef = { backend: "sqlite", id: "read-only", storagePath: sqlitePath };
 
   const runner = manager.openSessionRunner({ sessionRef, dir: "/workspace" });
+  state.sseClients.add({
+    runnerId: runner.id,
+    writableEnded: false,
+    destroyed: false,
+    write(chunk) {
+      const line = String(chunk).split("\n").find((part) => part.startsWith("data: "));
+      if (line) eventTimeline.push(JSON.parse(line.slice(6)).type);
+    },
+  });
   assert.equal(runner.proc, null);
   assert.equal(spawns.length, 0);
   assert.equal(manager.openSessionRunner({ sessionRef }), runner);
@@ -118,6 +128,7 @@ test("opening a stopped session stays dormant until a message is sent", (t) => {
   assert.equal(manager.sendToRunner(runner, { type: "prompt", message: "hello" }), true);
   assert.equal(spawns.length, 1);
   assert.equal(runner.proc, spawns[0].proc);
+  assert.deepEqual(eventTimeline.slice(0, 2), ["runners_update", "pi_started"], "liveness must publish before revival");
 
   manager.stopRunner(runner);
   runner.lastSpawnAt = 0;

@@ -38,7 +38,7 @@ node server/server.mjs --port 8080 --unauthenticated
 npm run hub:mock
 ```
 
-The checked-in `config.mock.example.json` selects the mock driver and maps the Oyster services on ports 8080 and 8083 to the `local` and `pi-2` workspaces. Its `sharedTokenFile` loads one bearer token for the Hub and every mock-driver workspace without copying the secret into configuration. `OYSTER_HUB_SHARED_TOKEN_FILE` can override the path; explicit `OYSTER_HUB_TOKEN` and `OYSTER_HUB_DRIVER_TOKEN` values take precedence. A legacy single-workspace `endpoint`/`id`/`name` object remains supported. Both `POST /api/v1/workspaces` and workspace deletion return `405`.
+The checked-in `config.mock.example.json` selects the mock driver and maps the Oyster service on port 8080 to the `local` workspace. Its `sharedTokenFile` loads one bearer token for the Hub and every mock-driver workspace without copying the secret into configuration. `OYSTER_HUB_SHARED_TOKEN_FILE` can override the path; explicit `OYSTER_HUB_TOKEN` and `OYSTER_HUB_DRIVER_TOKEN` values take precedence. A legacy single-workspace `endpoint`/`id`/`name` object remains supported. Both `POST /api/v1/workspaces` and workspace deletion return `405`.
 
 ```json
 {
@@ -47,8 +47,7 @@ The checked-in `config.mock.example.json` selects the mock driver and maps the O
   "driver": {
     "type": "mock",
     "workspaces": [
-      { "endpoint": "http://localhost:8080", "environmentId": "local", "environmentName": "Local", "id": "local", "name": "Local Oyster" },
-      { "endpoint": "http://localhost:8083", "environmentId": "local", "environmentName": "Local", "id": "pi-2", "name": "Pi 2" }
+      { "endpoint": "http://localhost:8080", "environmentId": "local", "environmentName": "Local", "id": "local", "name": "Local Oyster" }
     ]
   }
 }
@@ -117,6 +116,10 @@ Provider credentials remain in the owner-only cloud state file and are never sen
 
 `/box/connect` accepts no query credentials and keeps the box principal separate from `/spoke/connect`. It implements registration, status, heartbeat, reconnect, connection replacement, and bounded multiplexed Dial streams to Oyster on box-local `127.0.0.1:8080`. Hub carries workspace HTTP, uploads, and SSE over those streams without exposing the VM service publicly. Exec remains a follow-up protocol capability. The registry binds registration to the instance ID returned by the provider connector and requires a provider attestation envelope; production deployments should inject cryptographic attestation verification in addition to the built-in envelope and identity checks.
 
+Authentication methods are a DigitalOcean personal access token, AWS IAM access/secret keys (with optional session token), and a GCP service-account JSON key. The DigitalOcean token needs Droplet create/read/delete/action, image/size/region read, and tag create/read permissions. GCP exchanges a signed service-account JWT through OAuth 2.0. Interactive user OAuth is not yet implemented.
+
+Cloud workspace controls in the Hub sidebar pause/resume the provider VM or permanently destroy it. Pause retains the boot disk and stored Oyster state. Storage charges continue; DigitalOcean may also continue charging for a powered-off Droplet because its resources remain reserved. Destroy deletes the VM and disk, revokes its box credential, and cannot be undone.
+
 The UI-facing `/sessions` and `/runners` APIs aggregate every discovered workspace. Hub-scoped opaque session and runner identities prevent collisions, while each item includes `environmentId`, `environmentName`, `workspaceId`, and `workspaceName`. An environment is the physical or cloud device (`spoke` for llmbox); a workspace is the project microVM on that device; a session is one discussion thread. The session sidebar presents that hierarchy and uses cwd as a category within each workspace, not as workspace identity. Session operations, RPC, and SSE are routed back to the owning workspace; no iframe embedding is used.
 
 Every non-aggregate workspace request must be explicit through a scoped identity, `X-Oyster-Workspace`, or the `workspace` query parameter. The Hub never falls back to the first workspace. On browser startup the UI lists workspaces, persists an explicit online selection, and only then opens its event stream. If none are available, startup stops with guidance to create an environment or workspace first. Starting a session in Hub mode always asks for an online workspace before opening that workspace's folder browser; canceling the picker leaves the current workspace and session unchanged.
@@ -172,7 +175,9 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 | `GET /health` | Unauthenticated hub and configured-driver identity. |
 | `GET /api/v1/openapi.json` | OpenAPI 3.1 schema. |
 | `GET /api/v1/environments` | List driver-discovered and cloud environments. |
-| `POST /api/v1/environments` | Provision a cloud VM with source-installing cloud-init and pending box registration. |
+| `POST /api/v1/environments` | Provision a source-installed, reverse-connected Oyster VM. |
+| `POST /api/v1/environments/{id}/actions` | Pause or resume a managed cloud VM. |
+| `DELETE /api/v1/environments/{id}` | Permanently destroy a managed cloud VM and revoke its box credential. |
 | `GET /api/v1/cloud/providers` | List supported providers and redacted credential status. |
 | `PUT, DELETE /api/v1/cloud/providers/{provider}/credentials` | Store or remove write-only provider credentials. |
 | `GET /api/v1/cloud/providers/{provider}/options` | Query live regions/zones, instance types, and images. |

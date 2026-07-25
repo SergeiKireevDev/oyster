@@ -129,7 +129,9 @@ async function digitalOceanOptions(credential, fetchImpl) {
     digitalOceanRequest("/images?type=distribution&per_page=200", credential, fetchImpl),
   ]);
   const regions = (regionResult.regions || []).filter((item) => item.available).map((item) => ({ id: item.slug, name: item.name }));
-  const sizes = (sizeResult.sizes || []).filter((item) => item.available).map((item) => ({
+  // DigitalOcean uses an empty regions array for sizes that are not currently
+  // orderable anywhere (rather than meaning globally available).
+  const sizes = (sizeResult.sizes || []).filter((item) => item.available && Array.isArray(item.regions) && item.regions.length).map((item) => ({
     id: item.slug,
     name: item.slug,
     description: `${item.vcpus} vCPU · ${Math.round(item.memory / 1024 * 10) / 10} GB RAM · $${item.price_monthly}/mo`,
@@ -153,6 +155,20 @@ async function ensureDigitalOceanOwnershipTag(credential, fetchImpl) {
     method: "POST",
     body: JSON.stringify({ name: DIGITALOCEAN_OWNERSHIP_TAG }),
   });
+}
+
+async function digitalOceanManage(record, action, credential, fetchImpl) {
+  const instanceId = encodeURIComponent(required(record.provider?.instanceId, "DigitalOcean instance ID"));
+  if (action === "destroy") {
+    await digitalOceanRequest(`/droplets/${instanceId}`, credential, fetchImpl, { method: "DELETE" });
+    return { state: "destroyed" };
+  }
+  const type = action === "pause" ? "power_off" : "power_on";
+  const value = await digitalOceanRequest(`/droplets/${instanceId}/actions`, credential, fetchImpl, {
+    method: "POST",
+    body: JSON.stringify({ type }),
+  });
+  return { state: value.action?.status || (action === "pause" ? "paused" : "resuming") };
 }
 
 async function digitalOceanProvision(input, credential, fetchImpl) {
@@ -265,6 +281,14 @@ async function awsOptions(credential, fetchImpl, requestedRegion) {
   return { regions, sizes, images, defaults: { region, size: sizes.find((item) => item.id === "t3.micro")?.id || sizes[0]?.id, image: images[0]?.id } };
 }
 
+async function awsManage(record, action, credential, fetchImpl) {
+  const region = required(record.provider?.region, "AWS region");
+  const instanceId = required(record.provider?.instanceId, "AWS instance ID");
+  const awsAction = action === "pause" ? "StopInstances" : action === "resume" ? "StartInstances" : "TerminateInstances";
+  const xml = await awsRequest(awsAction, { "InstanceId.1": instanceId }, region, credential, fetchImpl);
+  return { state: xmlFirst(xml, "name") || (action === "destroy" ? "terminated" : action === "pause" ? "stopping" : "pending") };
+}
+
 async function awsProvision(input, credential, fetchImpl) {
   const xml = await awsRequest("RunInstances", {
     ImageId: input.image,
@@ -346,6 +370,16 @@ async function gcpOptions(credential, fetchImpl, requestedZone) {
   return { regions, sizes, images, defaults: { region, size: sizes.find((item) => item.id === "e2-micro")?.id || sizes[0]?.id, image: images[0]?.id } };
 }
 
+async function gcpManage(record, action, credential, fetchImpl) {
+  const zone = encodeURIComponent(required(record.provider?.region, "GCP zone"));
+  const instanceName = encodeURIComponent(required(record.boxId || record.name, "GCP instance name"));
+  const suffix = action === "destroy" ? "" : `/${action === "pause" ? "stop" : "start"}`;
+  const value = await gcpRequest(`/zones/${zone}/instances/${instanceName}${suffix}`, credential, fetchImpl, {
+    method: action === "destroy" ? "DELETE" : "POST",
+  });
+  return { state: value.status || (action === "destroy" ? "destroyed" : action === "pause" ? "stopping" : "pending") };
+}
+
 async function gcpProvision(input, credential, fetchImpl) {
   const image = `projects/ubuntu-os-cloud/global/images/${input.image}`;
   const value = await gcpRequest(`/zones/${encodeURIComponent(input.region)}/instances`, credential, fetchImpl, {
@@ -373,25 +407,31 @@ function publicProvider(provider) {
   return { ...provider };
 }
 
+function lifecycleStatus(record, registration = null) {
+  if (["paused", "pausing", "resuming", "destroying"].includes(record.status)) return record.status;
+  return registration?.status || record.status;
+}
+
 function publicEnvironment(record, registration = null) {
+  const status = lifecycleStatus(record, registration);
   return {
     id: record.id,
     name: record.name,
-    status: registration?.status || record.status,
+    status,
     local: false,
     cloud: true,
     createdAt: record.createdAt,
     provider: {
       ...publicProvider(record.provider),
       generation: record.generation,
-      registrationStatus: registration?.status || record.status,
+      registrationStatus: status,
       lastSeenAt: registration?.lastSeenAt || null,
     },
   };
 }
 
 function publicCloudWorkspace(record, registration = null, fetchImpl = null) {
-  const status = registration?.status || record.status;
+  const status = lifecycleStatus(record, registration);
   return {
     environmentId: record.id,
     environmentName: record.name,
@@ -468,6 +508,34 @@ export function createCloudProvisioningService({
     const value = state.credentials[providerId];
     if (!value) throw new CloudProvisioningError(`${PROVIDERS[providerId].name} credentials are not configured`, { status: 409 });
     return value;
+  }
+
+  async function recordFor(id) {
+    await load();
+    const record = state.environments.find((item) => item.id === id);
+    if (!record) throw new CloudProvisioningError("cloud environment not found", { status: 404 });
+    return record;
+  }
+
+  async function registrationFor(record) {
+    const registration = record.generation
+      ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation)
+      : null;
+    if (record.status === "resuming" && registration?.status === "online") {
+      record.status = "active";
+      record.provider = { ...record.provider, state: "running" };
+      await persist();
+    }
+    return registration;
+  }
+
+  async function providerAction(record, action) {
+    const providerId = record.provider?.id;
+    const value = await credential(providerId);
+    if (providerId === "digitalocean") return digitalOceanManage(record, action, value, fetchImpl);
+    if (providerId === "aws") return awsManage(record, action, value, fetchImpl);
+    if (providerId === "gcp") return gcpManage(record, action, value, fetchImpl);
+    throw new CloudProvisioningError(`unsupported cloud provider: ${providerId}`, { status: 404 });
   }
 
   return Object.freeze({
@@ -557,16 +625,13 @@ export function createCloudProvisioningService({
     },
     async listEnvironments() {
       await load();
-      return Promise.all(state.environments.map(async (record) => publicEnvironment(
-        record,
-        record.generation ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation) : null,
-      )));
+      return Promise.all(state.environments.map(async (record) => publicEnvironment(record, await registrationFor(record))));
     },
     async listWorkspaces() {
       await load();
       return Promise.all(state.environments.map(async (record) => publicCloudWorkspace(
         record,
-        record.generation ? await boxRegistry.get(record.boxId || record.name.toLowerCase(), record.generation) : null,
+        await registrationFor(record),
         record.generation
           ? (target, options) => boxRegistry.fetch(record.boxId || record.name.toLowerCase(), record.generation, target, options)
           : null,
@@ -574,6 +639,34 @@ export function createCloudProvisioningService({
     },
     async getWorkspace(id) {
       return (await this.listWorkspaces()).find((workspace) => workspace.id === id) || null;
+    },
+    async pause(id) {
+      const record = await recordFor(id);
+      if (record.status === "paused") return publicEnvironment(record, await registrationFor(record));
+      const result = await providerAction(record, "pause");
+      record.status = "paused";
+      record.provider = { ...record.provider, state: result.state || "paused" };
+      record.pausedAt = new Date().toISOString();
+      await persist();
+      return publicEnvironment(record, await registrationFor(record));
+    },
+    async resume(id) {
+      const record = await recordFor(id);
+      if (record.status !== "paused") throw new CloudProvisioningError("cloud environment is not paused", { status: 409 });
+      const result = await providerAction(record, "resume");
+      record.status = "resuming";
+      record.provider = { ...record.provider, state: result.state || "pending" };
+      record.resumedAt = new Date().toISOString();
+      await persist();
+      return publicEnvironment(record, await registrationFor(record));
+    },
+    async destroy(id) {
+      const record = await recordFor(id);
+      await providerAction(record, "destroy");
+      await boxRegistry.revoke(record.boxId || record.name.toLowerCase(), record.generation, "cloud environment destroyed").catch(() => {});
+      state.environments = state.environments.filter((item) => item.id !== id);
+      await persist();
+      return { id, name: record.name, destroyed: true };
     },
   });
 }
