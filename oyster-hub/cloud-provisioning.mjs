@@ -224,6 +224,20 @@ async function hetznerRequest(path, credential, fetchImpl, options = {}) {
   return responseValue(response, "Hetzner Cloud");
 }
 
+function activeHetznerLocations(serverType) {
+  if (Array.isArray(serverType.locations)) {
+    const now = Date.now();
+    return serverType.locations.filter((location) => {
+      if (!location?.name || location.available === false) return false;
+      const unavailableAt = Date.parse(location.deprecation?.unavailable_after || "");
+      return !Number.isFinite(unavailableAt) || unavailableAt > now;
+    }).map((location) => location.name);
+  }
+  // Compatibility with older responses that exposed availability only through
+  // per-location prices.
+  return (serverType.prices || []).map((entry) => entry.location).filter(Boolean);
+}
+
 async function hetznerOptions(credential, fetchImpl) {
   const [locationResult, typeResult, imageResult] = await Promise.all([
     hetznerRequest("/locations?per_page=100", credential, fetchImpl),
@@ -232,29 +246,34 @@ async function hetznerOptions(credential, fetchImpl) {
   ]);
   const regions = (locationResult.locations || []).map((item) => ({
     id: item.name,
-    name: `${item.description} (${item.name})`,
+    name: `${item.description || item.city || item.name}${item.description || item.city ? ` (${item.name})` : ""}`,
   }));
-  // Hetzner lists prices per location. A server type is orderable in a region
-  // only when its prices array references that location.
+  const knownRegions = new Set(regions.map((region) => region.id));
   const sizes = (typeResult.server_types || []).map((item) => ({
     id: item.name,
     name: item.name,
     description: `${item.cores} vCPU · ${item.memory} GB RAM · €${item.prices?.[0]?.price_monthly?.net || "?"}/mo`,
-    regions: (item.prices || []).map((entry) => entry.location),
-  }));
-  const images = (imageResult.images || []).filter((item) => /ubuntu/i.test(`${item.description || ""} ${item.name}`)).map((item) => ({
-    id: item.name,
+    regions: activeHetznerLocations(item).filter((region) => knownRegions.has(region)),
+    architecture: item.architecture || null,
+  })).filter((item) => item.id && item.regions.length);
+  // Use image IDs rather than names because Hetzner can expose the same system
+  // image name for multiple CPU architectures.
+  const images = (imageResult.images || []).filter((item) => item.id && item.name && item.status !== "creating" && /ubuntu/i.test(`${item.description || ""} ${item.name}`)).map((item) => ({
+    id: String(item.id),
     name: item.description || item.name,
-    description: item.os_flavor || "Ubuntu",
+    description: `${item.os_flavor || "Ubuntu"}${item.architecture ? ` · ${item.architecture}` : ""}`,
+    architecture: item.architecture || null,
   }));
+  const defaultSize = sizes.find((item) => item.id === "cx22") || sizes.find((item) => item.architecture === "x86") || sizes[0];
+  const compatibleImages = images.filter((item) => !defaultSize?.architecture || !item.architecture || item.architecture === defaultSize.architecture);
   return {
     regions,
     sizes,
     images,
     defaults: {
-      region: regions[0]?.id,
-      size: sizes.find((item) => item.id === "cx22")?.id || sizes[0]?.id,
-      image: images.find((item) => /24\.04/i.test(item.id))?.id || images[0]?.id,
+      region: defaultSize?.regions.find((region) => knownRegions.has(region)) || regions[0]?.id,
+      size: defaultSize?.id,
+      image: compatibleImages.find((item) => /24\.04/i.test(item.name))?.id || compatibleImages[0]?.id,
     },
   };
 }
@@ -267,9 +286,11 @@ async function hetznerManage(record, action, credential, fetchImpl) {
     await hetznerRequest(`/servers/${instanceId}`, credential, fetchImpl, { method: "DELETE" });
     return { state: "destroyed" };
   }
-  const path = action === "pause" ? "poweroff" : "poweron";
-  const value = await hetznerRequest(`/servers/${instanceId}/actions/${path}`, credential, fetchImpl, { method: "POST" });
-  return { state: value.action?.status || (action === "pause" ? "stopping" : "starting") };
+  // Pause requests a graceful ACPI shutdown. Hetzner explicitly documents
+  // poweroff as equivalent to pulling the power cord and warns of data loss.
+  const path = action === "pause" ? "shutdown" : "poweron";
+  await hetznerRequest(`/servers/${instanceId}/actions/${path}`, credential, fetchImpl, { method: "POST" });
+  return { state: action === "pause" ? "stopping" : "starting" };
 }
 
 async function hetznerProvision(input, credential, fetchImpl) {
@@ -283,19 +304,22 @@ async function hetznerProvision(input, credential, fetchImpl) {
       user_data: input.userData,
       labels: {
         ...HETZNER_LABELS,
-        "oyster:box-id": input.boxId,
-        "oyster:generation": input.generation,
+        "oyster-box-id": input.boxId,
+        "oyster-generation": input.generation,
       },
     }),
   });
   const server = value.server || {};
   const instanceId = String(server.id || "");
+  if (!instanceId) throw new CloudProvisioningError("Hetzner Cloud did not return a server ID");
   const ipv4 = server.public_net?.ipv4?.ip || null;
   return {
     instanceId,
     state: server.status || "starting",
     ipv4,
-    consoleUrl: `https://console.hetzner.cloud/servers/${encodeURIComponent(instanceId)}`,
+    // Hetzner console deep links require a project ID, which API tokens do not
+    // expose. Link to the valid console root rather than inventing a broken URL.
+    consoleUrl: "https://console.hetzner.cloud/",
   };
 }
 
@@ -509,7 +533,7 @@ function publicProvider(provider) {
     return { ...provider, consoleUrl: `https://cloud.digitalocean.com/droplets/${encodeURIComponent(provider.instanceId)}` };
   }
   if (provider?.id === "hetzner" && provider.instanceId) {
-    return { ...provider, consoleUrl: `https://console.hetzner.cloud/servers/${encodeURIComponent(provider.instanceId)}` };
+    return { ...provider, consoleUrl: "https://console.hetzner.cloud/" };
   }
   return { ...provider };
 }
