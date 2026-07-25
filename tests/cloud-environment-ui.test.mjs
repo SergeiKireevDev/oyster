@@ -14,6 +14,26 @@ test("Hub environment selector exposes the cloud provisioning modal, including a
   assert.match(overlays, /\$modalState\.content === "cloudEnvironment"[\s\S]*<CloudEnvironmentModal \/>/);
 });
 
+test("cloud instance information opens explicitly and closes when switching environments", () => {
+  const sidebar = component("SessionSidebar.svelte");
+  assert.match(sidebar, /\.\.\.environment,[\s\S]*environmentId: environment\.id/);
+  assert.match(sidebar, /function chooseEnvironment\(event\)[\s\S]*selectedEnvironmentId = event\.currentTarget\.value;[\s\S]*closeEnvironmentInfo\(\)/);
+  assert.match(sidebar, /function toggleEnvironmentInfo\(\)[\s\S]*environmentInfoOpen = true/);
+  assert.match(sidebar, /selectedEnvironment\.environmentId !== environmentInfoEnvironmentId/);
+  assert.doesNotMatch(sidebar, /environmentInfoOpen = Boolean\(environmentOptions\.find/);
+  assert.match(sidebar, /selectedEnvironment\?\.cloud/);
+  assert.match(sidebar, /class="session-sidebar-instance-tooltip"/);
+  for (const label of ["Environment ID", "Status", "Provider", "Instance ID", "Provider state", "Region / zone", "Instance type", "Image", "Created", "Registration", "Last seen", "Generation"]) {
+    assert.match(sidebar, new RegExp(`\\["${label.replace("/", "\\/")}"`));
+  }
+  assert.match(sidebar, /Object\.entries\(provider\)/, "future provider metadata should also be shown");
+  assert.match(sidebar, /Estimated VM cost/);
+  assert.match(sidebar, /\/api\/v1\/cloud\/providers\/\$\{encodeURIComponent\(environment\.provider\?\.id\)\}\/options/);
+  assert.match(sidebar, /excludes disks, network, taxes, credits, and discounts/);
+  assert.match(sidebar, /Open provider console/);
+  assert.match(sidebar, /Close instance information/);
+});
+
 test("cloud environment modal provisions source-installed reverse-connected Oyster VMs", () => {
   const source = component("CloudEnvironmentModal.svelte");
   assert.match(source, /\/api\/v1\/cloud\/providers/);

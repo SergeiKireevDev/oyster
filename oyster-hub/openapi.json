@@ -67,6 +67,7 @@
     "/workspaces": {
       "get": {
         "summary": "Query the configured driver and list discovered workspaces",
+        "parameters": [{ "name": "probe", "in": "query", "description": "Set to 0 for fast lifecycle metadata without contacting every Oyster endpoint.", "schema": { "type": "integer", "enum": [0, 1], "default": 1 } }],
         "responses": { "200": { "description": "Workspace list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkspaceList" } } } } }
       },
       "post": {

@@ -33,9 +33,11 @@ test("workspace discovery retains offline and initializing workspaces", async ()
     { id: "beta", status: "offline", provider: { phase: "initializing" } },
     { id: "gamma", status: "offline" },
   ];
+  let requestedPath = null;
   const selected = await listWorkspaces({
-    fetchImpl: async () => ({ ok: true, async json() { return { workspaces }; } }),
+    fetchImpl: async (path) => { requestedPath = path; return { ok: true, async json() { return { workspaces }; } }; },
   });
+  assert.equal(requestedPath, "/api/v1/workspaces?probe=0");
   assert.deepEqual(selected, workspaces);
   assert.equal(effectiveWorkspaceStatus(workspaces[1]), "initializing");
 });

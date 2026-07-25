@@ -204,10 +204,15 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+  .session-sidebar-environment-picker {
+    position: relative;
+    width: 100%;
+    flex: none;
+    min-width: 0;
+  }
   .session-sidebar-environment-selector {
     display: flex;
     align-items: stretch;
-    flex: none;
     width: 100%;
     min-width: 0;
     overflow: hidden;
@@ -253,6 +258,7 @@
     border: 1px solid currentColor;
     border-radius: 1.5px;
   }
+  .session-sidebar-environment-info,
   .session-sidebar-environment-create {
     width: 31px;
     flex: none;
@@ -261,10 +267,75 @@
     border-left: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
     background: color-mix(in srgb, var(--accent-dim) 28%, transparent);
     color: #cbd1ff;
-    font: 17px/1 inherit;
     cursor: pointer;
   }
+  .session-sidebar-environment-info { width: 26px; background: transparent; font: 700 10px/1 var(--mono); }
+  .session-sidebar-environment-info:hover,
+  .session-sidebar-environment-info.active { background: color-mix(in srgb, var(--accent-dim) 45%, transparent); color: #fff; }
+  .session-sidebar-environment-create { font: 17px/1 inherit; }
   .session-sidebar-environment-create:hover { background: var(--accent-dim); color: #fff; }
+  .session-sidebar-instance-tooltip-dismiss {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: default;
+  }
+  .session-sidebar-instance-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 20;
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(480px, calc(100vh - 150px));
+    padding: 11px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-radius: 10px;
+    background: var(--panel-2);
+    color: var(--text);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .48);
+  }
+  .session-sidebar-instance-tooltip::before {
+    position: absolute;
+    top: -5px;
+    right: 38px;
+    width: 8px;
+    height: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-left: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    background: var(--panel-2);
+    content: "";
+    transform: rotate(45deg);
+  }
+  .session-sidebar-instance-tooltip header { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .session-sidebar-instance-tooltip header > span:first-child { min-width: 0; display: grid; gap: 2px; }
+  .session-sidebar-instance-tooltip header small { color: var(--muted); font-size: 7.5px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+  .session-sidebar-instance-tooltip header strong { overflow-wrap: anywhere; font-size: 12px; }
+  .session-sidebar-instance-status { flex: none; font-size: 7px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+  .session-sidebar-instance-status.status-online { color: var(--green); }
+  .session-sidebar-instance-status.status-provisioning,
+  .session-sidebar-instance-status.status-provisioned,
+  .session-sidebar-instance-status.status-awaiting_agent,
+  .session-sidebar-instance-status.status-initializing,
+  .session-sidebar-instance-status.status-resuming,
+  .session-sidebar-instance-status.status-pausing { color: var(--yellow); }
+  .session-sidebar-instance-status.status-failed,
+  .session-sidebar-instance-status.status-destroying { color: var(--red); }
+  .session-sidebar-instance-status.status-paused { color: var(--accent); }
+  .session-sidebar-instance-status.status-offline,
+  .session-sidebar-instance-status.status-unknown { color: var(--muted); }
+  .session-sidebar-instance-tooltip dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; }
+  .session-sidebar-instance-tooltip dl div { min-width: 0; padding: 6px 7px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .session-sidebar-instance-tooltip dl div:nth-child(-n+2) { border-top: 0; }
+  .session-sidebar-instance-tooltip dl div:nth-child(2n) { border-right: 0; }
+  .session-sidebar-instance-tooltip dt { color: var(--muted); font-size: 7px; letter-spacing: .06em; text-transform: uppercase; }
+  .session-sidebar-instance-tooltip dd { margin: 2px 0 0; overflow-wrap: anywhere; font: 8.5px/1.35 var(--mono); }
+  .session-sidebar-instance-cost-note { margin: 7px 1px 0; color: var(--muted); font-size: 7.5px; line-height: 1.4; }
+  .session-sidebar-instance-tooltip > a { display: inline-block; margin-top: 9px; color: var(--accent); font-size: 9px; text-decoration: none; }
+  .session-sidebar-instance-tooltip > a:hover { text-decoration: underline; }
   .session-sidebar-environment-empty-create {
     width: 100%;
     padding: 7px 9px;

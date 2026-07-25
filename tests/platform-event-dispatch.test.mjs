@@ -52,6 +52,17 @@ test("platform event dispatch owns replay state and routes events", () => {
   ]);
 });
 
+test("platform event dispatch merges partial runner updates without replacing the fleet", () => {
+  let runners = [{ id: "one", busy: false }, { id: "two", busy: false }];
+  const deps = createDeps({
+    getRunners: () => runners,
+    setRunners: (next) => { runners = next; },
+  });
+  const runtime = createPlatformEventDispatch(deps);
+  runtime.dispatch({ type: "runners_update", partial: true, runners: [{ id: "two", busy: true }] });
+  assert.deepEqual(runners, [{ id: "one", busy: false }, { id: "two", busy: true }]);
+});
+
 test("platform event dispatch buffers gated transcript events until replay flush", () => {
   const deps = createDeps({ isGateRequired: () => true });
   const runtime = createPlatformEventDispatch(deps);

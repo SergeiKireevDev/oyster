@@ -70,7 +70,8 @@ test("events route registers before replay, replays runner output, pings, and cl
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
   assert.equal(intervals[0].delay, 25000);
   intervals[0].callback();
-  assert.ok(res.chunks.at(-1).includes('"type":"ping"'));
+  const ping = JSON.parse(res.chunks.at(-1).match(/^data: (.*)\n\n$/)[1]);
+  assert.deepEqual(ping, { type: "ping", _server: true }, "heartbeats must not resend the runner catalog");
 
   req.emit("close");
   assert.equal(state.sseClients.has(res), false);

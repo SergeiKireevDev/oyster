@@ -40,7 +40,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
     assert.equal(options.headers.authorization, `Bearer ${canary}`);
     if (String(url).includes("/regions")) return jsonResponse({ regions: [{ slug: "nyc3", name: "New York 3", available: true }, { slug: "old", name: "Old", available: false }] });
     if (String(url).includes("/sizes")) return jsonResponse({ sizes: [
-      { slug: "s-1vcpu-1gb", available: true, vcpus: 1, memory: 1024, price_monthly: 6, regions: ["nyc3"] },
+      { slug: "s-1vcpu-1gb", available: true, vcpus: 1, memory: 1024, price_hourly: 0.009, price_monthly: 6, regions: ["nyc3"] },
       { slug: "gpu-unavailable", available: true, vcpus: 8, memory: 640000, price_monthly: 999, regions: [] },
     ] });
     if (String(url).includes("/images")) return jsonResponse({ images: [{ slug: "ubuntu-24-04-x64", status: "available", description: "Ubuntu 24.04", distribution: "Ubuntu", regions: ["nyc3"] }] });
@@ -77,6 +77,7 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   assert.deepEqual(options.regions, [{ id: "nyc3", name: "New York 3" }]);
   assert.equal(options.defaults.size, "s-1vcpu-1gb");
   assert.deepEqual(options.sizes.map(({ id }) => id), ["s-1vcpu-1gb"], "sizes with no DigitalOcean regions are not orderable");
+  assert.deepEqual(options.sizes[0].pricing, { hourly: 0.009, monthly: 6, currency: "USD" });
   assert.equal(options.defaults.image, "ubuntu-24-04-x64");
   const environment = await service.provision({ provider: "digitalocean", name: "Cloud-Dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
   assert.deepEqual(environment, {
@@ -239,7 +240,7 @@ test("Hetzner Cloud credentials, live options, and provisioning use standard RES
       { id: 1, name: "hel1", description: "Helsinki", country: "FI" },
     ] });
     if (String(url).includes("/server_types")) return jsonResponse({ server_types: [
-      { id: 22, name: "cx22", cores: 2, memory: 4, architecture: "x86", prices: [{ location: "nbg1", price_monthly: { net: "4.99" } }], locations: [
+      { id: 22, name: "cx22", cores: 2, memory: 4, architecture: "x86", prices: [{ location: "nbg1", price_hourly: { net: "0.008" }, price_monthly: { net: "4.99" } }], locations: [
         { name: "nbg1", available: true, deprecation: null },
         { name: "fsn1", available: true, deprecation: null },
       ] },
@@ -280,6 +281,7 @@ test("Hetzner Cloud credentials, live options, and provisioning use standard RES
   assert.equal(options.regions[0].name.includes("Nuremberg"), true);
   assert.deepEqual(options.sizes.filter((item) => item.regions.includes("nbg1")).map(({ id }) => id), ["cx22"], "temporarily unavailable types are excluded");
   assert.equal(options.sizes.find(({ id }) => id === "cax21").architecture, "arm");
+  assert.deepEqual(options.sizes.find(({ id }) => id === "cx22").pricingByRegion.nbg1, { hourly: 0.008, monthly: 4.99, currency: "EUR" });
   assert.deepEqual(options.images.map(({ id, architecture }) => [id, architecture]), [["12345", "x86"], ["12346", "arm"]]);
   assert.equal(options.defaults.size, "cx22");
   assert.equal(options.defaults.image, "12345");
