@@ -51,6 +51,19 @@
       "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }, { "name": "region", "in": "query", "schema": { "type": "string" }, "description": "Region or zone used to query available instance types" }],
       "get": { "summary": "Query live regions, instance types, and images from a cloud provider", "responses": { "200": { "description": "Available provisioning options", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloudOptions" } } } }, "409": { "description": "Provider credentials are not configured" }, "502": { "description": "Cloud provider request failed" } } }
     },
+    "/cloud/providers/{provider}/authorization/start": {
+      "post": { "summary": "Start DigitalOcean or Google browser authorization", "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }], "responses": { "202": { "description": "Authorization flow created" }, "409": { "description": "Provider OAuth client is not configured" } } }
+    },
+    "/cloud/authorization/{flowId}/status": {
+      "get": { "summary": "Read a safe authorization flow snapshot", "parameters": [{ "name": "flowId", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Authorization status" }, "404": { "description": "Flow expired or not found" } } }
+    },
+    "/cloud/providers/{provider}/projects": {
+      "get": { "summary": "List selectable Google Cloud projects", "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }], "responses": { "200": { "description": "Safe project list" } } },
+      "post": { "summary": "Select the Google Cloud project used for provisioning", "parameters": [{ "$ref": "#/components/parameters/CloudProviderId" }], "responses": { "200": { "description": "Project selected" } } }
+    },
+    "/cloud/providers/aws/role/start": {
+      "post": { "summary": "Start AWS CloudFormation cross-account role onboarding", "responses": { "202": { "description": "AWS setup flow created" }, "409": { "description": "Hub AWS onboarding is not configured" } } }
+    },
     "/workspaces": {
       "get": {
         "summary": "Query the configured driver and list discovered workspaces",
@@ -106,7 +119,7 @@
     "parameters": {
       "WorkspaceId": { "name": "wid", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" } },
       "EnvironmentId": { "name": "environmentId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$" } },
-      "CloudProviderId": { "name": "provider", "in": "path", "required": true, "schema": { "type": "string", "enum": ["digitalocean", "aws", "gcp"] } }
+      "CloudProviderId": { "name": "provider", "in": "path", "required": true, "schema": { "type": "string", "enum": ["digitalocean", "hetzner", "aws", "gcp"] } }
     },
     "responses": {
       "NotFound": { "description": "Workspace not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
@@ -129,16 +142,16 @@
       },
       "CloudProvider": {
         "type": "object",
-        "required": ["id", "name", "configured", "authType", "oauthSupported", "fields"],
+        "required": ["id", "name", "configured", "authMethods"],
         "properties": {
-          "id": { "enum": ["digitalocean", "aws", "gcp"] },
+          "id": { "enum": ["digitalocean", "hetzner", "aws", "gcp"] },
           "name": { "type": "string" },
           "description": { "type": "string" },
           "configured": { "type": "boolean" },
           "account": { "type": ["string", "null"], "description": "Non-secret account identifier when available" },
-          "authType": { "enum": ["api_token", "access_key", "oauth_service_account"] },
-          "oauthSupported": { "type": "boolean" },
-          "fields": { "type": "array", "items": { "type": "object", "required": ["id", "label", "type", "required"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "type": { "enum": ["text", "password", "textarea"] }, "required": { "type": "boolean" }, "placeholder": { "type": "string" } } } }
+          "credentialType": { "type": ["string", "null"] },
+          "requiresProject": { "type": "boolean" },
+          "authMethods": { "type": "array", "items": { "type": "object", "required": ["id", "label", "available"], "properties": { "id": { "enum": ["oauth_redirect", "assume_role", "api_token", "access_key", "service_account_file"] }, "label": { "type": "string" }, "primary": { "type": "boolean" }, "advanced": { "type": "boolean" }, "available": { "type": "boolean" }, "fields": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } }
         }
       },
       "CloudOptions": {

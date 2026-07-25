@@ -316,6 +316,122 @@ test("Hetzner Cloud secrets are never exposed through provider listings", async 
   assert.equal(JSON.stringify(providers).includes(canary), false);
 });
 
+test("cloud credential encryption migrates provider secrets out of plaintext state", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-cloud-encrypted-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const stateFile = join(root, "cloud-state.json");
+  const service = createCloudProvisioningService({ stateFile, credentialEncryptionKey: "test-envelope-key" });
+  await service.configure("hetzner", { token: "HCLOUD_encrypted_canary" });
+  const persisted = readFileSync(stateFile, "utf8");
+  assert.equal(persisted.includes("HCLOUD_encrypted_canary"), false);
+  assert.match(persisted, /encryptedCredentials/);
+  const restored = createCloudProvisioningService({ stateFile, credentialEncryptionKey: "test-envelope-key" });
+  assert.equal((await restored.listProviders()).find(({ id }) => id === "hetzner").configured, true);
+  const missingKey = createCloudProvisioningService({ stateFile });
+  await assert.rejects(missingKey.listProviders(), /no credential key is configured/);
+});
+
+test("Google OAuth credentials list projects and complete authenticated device handoff", async () => {
+  const calls = [];
+  const service = createCloudProvisioningService({
+    fetchImpl: async (url, options = {}) => {
+      calls.push([String(url), options]);
+      return jsonResponse({ projects: [{ projectId: "mobile-project", name: "Mobile", lifecycleState: "ACTIVE" }] });
+    },
+  });
+  await service.configureOAuth("gcp", {
+    kind: "oauth", accessToken: "google-access-canary", refreshToken: "google-refresh-canary",
+    expiresAt: Date.now() + 3600_000, account: "owner@example.com", projectId: null,
+  });
+  assert.deepEqual(await service.listProjects("gcp"), [{ id: "mobile-project", name: "Mobile" }]);
+  assert.equal(calls[0][1].headers.authorization, "Bearer google-access-canary");
+  await service.selectProject("gcp", "mobile-project");
+  assert.equal((await service.listProviders()).find(({ id }) => id === "gcp").requiresProject, false);
+
+  const handoff = await service.startHandoff("hetzner");
+  assert.equal((await service.handoffStatus(handoff.id)).status, "waiting");
+  await service.configure("hetzner", { token: "HCLOUD_handoff_canary", handoffId: handoff.id });
+  assert.equal((await service.handoffStatus(handoff.id)).status, "succeeded");
+  const cancelled = await service.startHandoff("gcp");
+  assert.equal((await service.cancelHandoff(cancelled.id)).status, "cancelled");
+});
+
+test("expired provider OAuth credentials refresh once across concurrent requests", async () => {
+  let refreshes = 0;
+  const service = createCloudProvisioningService({
+    oauth: { gcp: { clientId: "google-id", clientSecret: "google-secret", redirectUrl: "https://hub.example/cloud/oauth/gcp/callback" } },
+    fetchImpl: async (url) => {
+      if (String(url) === "https://oauth2.googleapis.com/token") {
+        refreshes += 1;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return jsonResponse({ access_token: "fresh-access", expires_in: 3600 });
+      }
+      return jsonResponse({ projects: [] });
+    },
+  });
+  await service.configureOAuth("gcp", {
+    kind: "oauth", accessToken: "expired", refreshToken: "refresh-canary", expiresAt: Date.now() - 1,
+    account: "owner@example.com", projectId: null,
+  });
+  await Promise.all([service.listProjects("gcp"), service.listProjects("gcp")]);
+  assert.equal(refreshes, 1);
+});
+
+test("AWS role onboarding generates CloudFormation setup and verifies with temporary STS credentials", async () => {
+  const calls = [];
+  const service = createCloudProvisioningService({
+    aws: {
+      sourceAccessKeyId: "AKIAHUB", sourceSecretAccessKey: "hub-secret", principalArn: "arn:aws:iam::111122223333:role/Hub",
+      cloudFormationTemplateUrl: "https://assets.example/oyster-role.yaml", roleName: "OysterHubRole",
+    },
+    fetchImpl: async (url, options) => {
+      const body = new URLSearchParams(options.body);
+      calls.push([String(url), body, options.headers]);
+      assert.equal(body.get("Action"), "AssumeRole");
+      assert.match(options.headers.authorization, /Credential=AKIAHUB/);
+      return xmlResponse("<AssumeRoleResponse><Credentials><AccessKeyId>ASIATEMP</AccessKeyId><SecretAccessKey>temporary-secret</SecretAccessKey><SessionToken>temporary-session</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials></AssumeRoleResponse>");
+    },
+  });
+  const flow = await service.startAwsRole("123456789012");
+  assert.match(flow.setupUrl, /cloudformation/);
+  assert.match(flow.setupUrl, /ExternalId/);
+  const verified = await service.verifyAwsRole(flow.id);
+  assert.equal(verified.status, "succeeded");
+  const aws = (await service.listProviders()).find(({ id }) => id === "aws");
+  assert.equal(aws.credentialType, "assume_role");
+  assert.equal(aws.account, "arn:aws:iam::123456789012:role/OysterHubRole");
+  assert.equal(calls.length, 1);
+});
+
+test("Hub cloud authorization routes require API auth while provider callback remains one-time public", async (t) => {
+  const calls = [];
+  const authorizationService = {
+    start(provider) { calls.push(["start", provider]); return { id: "flow-1", provider, status: "authorizing", authorizationUrl: "https://provider.example/auth" }; },
+    status(id) { calls.push(["status", id]); return { id, provider: "digitalocean", status: "succeeded" }; },
+    cancel(id) { calls.push(["cancel", id]); return { id, status: "cancelled" }; },
+    async callback(provider, parameters) { calls.push(["callback", provider, parameters.state, parameters.code]); return { id: "flow-1", status: "succeeded" }; },
+  };
+  const cloudService = {
+    async listProviders() { return []; }, async listEnvironments() { return []; }, async listWorkspaces() { return []; },
+  };
+  const driver = {
+    type: "test", endpoint: "memory://driver", capabilities: { list: true, create: false, remove: false },
+    async listEnvironments() { return []; }, async listWorkspaces() { return []; }, async getWorkspace() { return null; },
+  };
+  const config = { token: "hub-secret", timeoutMs: 1000, driver, cloud: { stateFile: null, publicUrl: "https://hub.example" } };
+  const server = createOysterHub(config, { driver, cloudService, authorizationService, logger: { error() {} } });
+  const baseUrl = await listen(server);
+  t.after(() => close(server));
+
+  assert.equal((await fetch(`${baseUrl}/api/v1/cloud/providers/digitalocean/authorization/start`, { method: "POST" })).status, 401);
+  const started = await fetch(`${baseUrl}/api/v1/cloud/providers/digitalocean/authorization/start`, { method: "POST", headers: { "x-auth-token": "hub-secret" } });
+  assert.equal(started.status, 202);
+  const callback = await fetch(`${baseUrl}/cloud/oauth/digitalocean/callback?state=one-use&code=secret-code`, { redirect: "manual" });
+  assert.equal(callback.status, 303);
+  assert.equal(callback.headers.get("location"), "https://hub.example/?cloud-connect=flow-1");
+  assert.deepEqual(calls, [["start", "digitalocean"], ["callback", "digitalocean", "one-use", "secret-code"]]);
+});
+
 test("Hub cloud routes are authenticated, merge environments, and keep cloud service details scoped", async (t) => {
   const configured = [];
   const managed = [];

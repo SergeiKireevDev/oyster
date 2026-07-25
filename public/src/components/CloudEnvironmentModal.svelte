@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import { closeModalState } from "../stores/modal.js";
   import { publishCloudEnvironment } from "../stores/cloudEnvironments.js";
+  import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
 
   let providers = [];
   let selectedProvider = null;
@@ -9,6 +10,18 @@
   let loading = true;
   let error = "";
   let credentialValues = {};
+  let selectedMethodId = "";
+  let advancedMethods = false;
+  let authorizationFlow = null;
+  let awsAccountId = "";
+  let awsRoleFlow = null;
+  let handoffFlow = null;
+  let handoffId = "";
+  let handoffTimer = null;
+  let awsRoleTimer = null;
+  let releaseBrowserResume = () => {};
+  let projects = [];
+  let projectId = "";
   let options = { regions: [], sizes: [], images: [], defaults: {} };
   let environmentName = "";
   let region = "";
@@ -37,6 +50,20 @@
     }
   }
 
+  function methodsFor(provider) {
+    return (provider?.authMethods || []).filter((method) => method.available !== false);
+  }
+
+  function primaryMethod(provider) {
+    return methodsFor(provider).find((method) => method.primary) || methodsFor(provider)[0] || null;
+  }
+
+  function chooseMethod(methodId) {
+    selectedMethodId = methodId;
+    credentialValues = {};
+    error = "";
+  }
+
   function providerIcon(providerId) {
     return providerId === "digitalocean" ? "DO" : providerId === "hetzner" ? "HZ" : providerId === "aws" ? "AWS" : "G";
   }
@@ -44,15 +71,197 @@
   function chooseProvider(provider) {
     selectedProvider = provider;
     credentialValues = {};
+    advancedMethods = false;
+    selectedMethodId = primaryMethod(provider)?.id || "";
     error = "";
-    if (provider.configured) loadOptions();
+    if (provider.configured && provider.requiresProject) loadProjects();
+    else if (provider.configured) loadOptions();
     else step = "credentials";
+  }
+
+  async function disconnectProvider() {
+    const upstream = selectedProvider.id === "gcp"
+      ? "Oyster will also request Google token revocation."
+      : "This removes Hub's credential but may not revoke it at the provider.";
+    if (!confirm(`Disconnect ${selectedProvider.name}?\n\n${upstream}`)) return;
+    loading = true;
+    error = "";
+    try {
+      await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/credentials`, { method: "DELETE" });
+      await loadProviders();
+      selectedProvider = null;
+      step = "providers";
+    } catch (cause) {
+      error = cause.message;
+    } finally {
+      loading = false;
+    }
   }
 
   function configureCredentials() {
     credentialValues = {};
+    advancedMethods = false;
+    selectedMethodId = primaryMethod(selectedProvider)?.id || "";
     error = "";
     step = "credentials";
+  }
+
+  async function startAuthorization() {
+    loading = true;
+    error = "";
+    try {
+      const data = await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/authorization/start`, { method: "POST" });
+      authorizationFlow = data.flow;
+      cloudBrowser.navigate(data.flow.authorizationUrl);
+    } catch (cause) {
+      error = cause.message;
+      loading = false;
+    }
+  }
+
+  async function startAwsRole() {
+    loading = true;
+    error = "";
+    try {
+      const data = await request("/api/v1/cloud/providers/aws/role/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accountId: awsAccountId }),
+      });
+      awsRoleFlow = data.flow;
+      clearInterval(awsRoleTimer);
+      awsRoleTimer = setInterval(() => { if (!cloudBrowser.hidden()) verifyAwsRole({ quiet: true }); }, 4_000);
+    } catch (cause) {
+      error = cause.message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function verifyAwsRole({ quiet = false } = {}) {
+    if (!awsRoleFlow || loading || cloudBrowser.hidden()) return;
+    if (!quiet) loading = true;
+    if (!quiet) error = "";
+    try {
+      const data = await request(`/api/v1/cloud/authorization/aws/${encodeURIComponent(awsRoleFlow.id)}/verify`, { method: "POST" });
+      awsRoleFlow = data.flow;
+      if (data.flow.status === "succeeded") {
+        clearInterval(awsRoleTimer);
+        await loadProviders();
+        selectedProvider = providers.find((provider) => provider.id === "aws");
+        await loadOptions();
+      } else if (!quiet) error = data.flow.error || "The AWS role is not ready yet.";
+    } catch (cause) {
+      if (!quiet) error = cause.message;
+    } finally {
+      if (!quiet) loading = false;
+    }
+  }
+
+  async function restoreAuthorization(flowId) {
+    try {
+      const data = await request(`/api/v1/cloud/authorization/${encodeURIComponent(flowId)}/status`);
+      authorizationFlow = data.flow;
+      selectedProvider = providers.find((provider) => provider.id === data.flow.provider) || null;
+      if (!selectedProvider) throw new Error("Connected cloud provider is unavailable");
+      selectedMethodId = "oauth_redirect";
+      cloudBrowser.removeQuery("cloud-connect");
+      if (data.flow.status !== "succeeded") {
+        step = "credentials";
+        throw new Error(data.flow.error || "Cloud sign-in did not complete");
+      }
+      await loadProviders();
+      selectedProvider = providers.find((provider) => provider.id === data.flow.provider) || selectedProvider;
+      if (data.flow.requiresProject || selectedProvider.requiresProject) await loadProjects();
+      else await loadOptions();
+    } catch (cause) {
+      error = cause.message;
+      loading = false;
+    }
+  }
+
+  async function loadProjects() {
+    step = "project";
+    loading = true;
+    error = "";
+    try {
+      const data = await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/projects`);
+      projects = data.projects || [];
+      projectId = projects[0]?.id || "";
+    } catch (cause) {
+      error = cause.message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function selectProject(event) {
+    event.preventDefault();
+    loading = true;
+    error = "";
+    try {
+      await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/projects`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      await loadOptions();
+    } catch (cause) {
+      error = cause.message;
+      loading = false;
+    }
+  }
+
+  async function startHandoff() {
+    loading = true;
+    error = "";
+    try {
+      const data = await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/handoff/start`, { method: "POST" });
+      handoffFlow = { ...data.flow, url: cloudBrowser.handoffUrl(data.flow.id) };
+      clearInterval(handoffTimer);
+      handoffTimer = setInterval(checkHandoff, 2_000);
+    } catch (cause) {
+      error = cause.message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function checkHandoff() {
+    if (!handoffFlow || destroyed || cloudBrowser.hidden()) return;
+    try {
+      const data = await request(`/api/v1/cloud/handoff/${encodeURIComponent(handoffFlow.id)}/status`);
+      handoffFlow = { ...handoffFlow, ...data.flow };
+      if (data.flow.status === "succeeded") {
+        clearInterval(handoffTimer);
+        await loadProviders();
+        selectedProvider = providers.find((provider) => provider.id === data.flow.provider);
+        if (selectedProvider?.requiresProject) await loadProjects();
+        else if (selectedProvider) await loadOptions();
+      }
+    } catch (cause) {
+      clearInterval(handoffTimer);
+      error = cause.message;
+    }
+  }
+
+  async function copyHandoffUrl() {
+    try { await cloudBrowser.copyText(handoffFlow.url); }
+    catch { error = "Copy failed. Select and copy the link manually."; }
+  }
+
+  async function cancelHandoff() {
+    const id = handoffFlow?.id || handoffId;
+    if (!id) return;
+    try { await request(`/api/v1/cloud/handoff/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
+    catch {}
+    clearInterval(handoffTimer);
+    handoffFlow = null;
+    if (handoffId) {
+      handoffId = "";
+      credentialValues = {};
+      step = "providers";
+    }
   }
 
   async function saveCredentials(event) {
@@ -63,12 +272,13 @@
       await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/credentials`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(credentialValues),
+        body: JSON.stringify({ ...credentialValues, ...(handoffId ? { handoffId } : {}) }),
       });
       providers = providers.map((provider) => provider.id === selectedProvider.id ? { ...provider, configured: true } : provider);
       selectedProvider = providers.find((provider) => provider.id === selectedProvider.id);
       credentialValues = {};
-      await loadOptions();
+      if (selectedProvider.id === "gcp" && selectedMethodId === "oauth_redirect") await loadProjects();
+      else await loadOptions();
     } catch (cause) {
       error = cause.message;
     } finally {
@@ -165,15 +375,55 @@
     credentialValues = { ...credentialValues, [fieldId]: value };
   }
 
+  async function updateCredentialFile(fieldId, file) {
+    if (!file) return updateCredential(fieldId, "");
+    if (file.size > 64 * 1024) {
+      error = "Credential file is too large";
+      return;
+    }
+    updateCredential(fieldId, await file.text());
+  }
+
+  function resumeExternalSetup() {
+    if (cloudBrowser.hidden()) return;
+    if (handoffFlow) checkHandoff();
+    if (awsRoleFlow) verifyAwsRole({ quiet: true });
+  }
+
+  async function initialize() {
+    releaseBrowserResume = cloudBrowser.onResume(resumeExternalSetup);
+    await loadProviders();
+    const flowId = cloudBrowser.query("cloud-connect");
+    if (flowId && !destroyed) await restoreAuthorization(flowId);
+    const deviceFlowId = cloudBrowser.query("cloud-handoff");
+    if (deviceFlowId && !destroyed) {
+      try {
+        const data = await request(`/api/v1/cloud/handoff/${encodeURIComponent(deviceFlowId)}/status`);
+        handoffId = deviceFlowId;
+        cloudBrowser.removeQuery("cloud-handoff");
+        selectedProvider = providers.find((provider) => provider.id === data.flow.provider);
+        selectedMethodId = methodsFor(selectedProvider).find((method) => ["api_token", "access_key", "service_account_file"].includes(method.id))?.id || primaryMethod(selectedProvider)?.id || "";
+        advancedMethods = true;
+        step = "credentials";
+      } catch (cause) { error = cause.message; }
+    }
+  }
+
+  $: selectedMethod = methodsFor(selectedProvider).find((method) => method.id === selectedMethodId) || primaryMethod(selectedProvider);
+  $: credentialFields = selectedMethod?.fields || [];
+  $: googleComputeConsoleUrl = projectId ? `https://console.cloud.google.com/apis/library/compute.googleapis.com?project=${encodeURIComponent(projectId)}` : "https://console.cloud.google.com/apis/library/compute.googleapis.com";
   $: availableSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
   $: selectedSize = options.sizes.find((item) => item.id === size);
   $: selectedSizeAvailability = selectedProvider?.id === "digitalocean" && selectedSize ? regionAvailability(selectedSize) : "";
   $: availableImages = options.images.filter((item) => imageAvailableForSelection(item, region, size));
-  $: credentialsComplete = selectedProvider?.fields.every((field) => !field.required || String(credentialValues[field.id] || "").trim());
+  $: credentialsComplete = credentialFields.every((field) => !field.required || String(credentialValues[field.id] || "").trim());
 
-  onMount(loadProviders);
+  onMount(initialize);
   onDestroy(() => {
     destroyed = true;
+    clearInterval(handoffTimer);
+    clearInterval(awsRoleTimer);
+    releaseBrowserResume();
     credentialValues = {};
   });
 </script>
@@ -182,7 +432,7 @@
   <nav class="cloud-steps" aria-label="Provisioning steps">
     <span class:active={step === "providers"} class:complete={step !== "providers"}>1 <b>Provider</b></span>
     <i></i>
-    <span class:active={step === "credentials"} class:complete={["instance", "done"].includes(step)}>2 <b>Connect</b></span>
+    <span class:active={["credentials", "project"].includes(step)} class:complete={["instance", "done"].includes(step)}>2 <b>Connect</b></span>
     <i></i>
     <span class:active={step === "instance"} class:complete={step === "done"}>3 <b>Instance</b></span>
   </nav>
@@ -208,31 +458,123 @@
       <div><small>Cloud provider</small><h3>{selectedProvider.name}</h3></div>
     </header>
     <div class="cloud-auth-note">
-      <strong>{selectedProvider.authType === "oauth_service_account" ? "OAuth 2.0 service account" : selectedProvider.authType === "access_key" ? "IAM access key" : "API token"}</strong>
-      <span>{selectedProvider.oauthSupported ? "OAuth is handled server-to-server with the supplied service account." : "Interactive OAuth is not available for this provider in the initial flow."}</span>
+      <strong>{selectedMethod?.label || "Connect provider"}</strong>
+      <span>Your provider credentials stay on Hub and are never sent to a provisioned workspace.</span>
     </div>
-    <form class="cloud-form" onsubmit={saveCredentials}>
-      {#each selectedProvider.fields as field (field.id)}
-        <label class:wide={field.type === "textarea"}>
-          <span>{field.label}{field.required ? " *" : ""}</span>
-          {#if field.type === "textarea"}
-            <textarea rows="8" value={credentialValues[field.id] || ""} placeholder={field.placeholder || ""} autocomplete="off" spellcheck="false" oninput={(event) => updateCredential(field.id, event.currentTarget.value)}></textarea>
+
+    {#if selectedMethod?.id === "oauth_redirect"}
+      <div class="cloud-connect-action">
+        <p>Continue in your system browser. After approving access, you will return to this step automatically.</p>
+        <button class="btn cloud-primary" type="button" onclick={startAuthorization} disabled={loading}>{loading ? "Opening provider…" : selectedMethod.label}</button>
+      </div>
+    {:else if selectedMethod?.id === "assume_role"}
+      <div class="cloud-connect-action">
+        <p>Oyster connects AWS through a least-privilege IAM role and temporary credentials. Static access keys remain available under advanced options.</p>
+        <label class="cloud-account-id">
+          <span>AWS account ID</span>
+          <input type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" bind:value={awsAccountId} placeholder="123456789012" required />
+        </label>
+        {#if !awsRoleFlow}
+          <button class="btn cloud-primary" type="button" onclick={startAwsRole} disabled={loading || !/^\d{12}$/.test(awsAccountId)}>{loading ? "Preparing…" : "Prepare AWS setup"}</button>
+        {:else}
+          <p>Finish the CloudFormation stack in AWS, return here, then verify the connection.</p>
+          <div class="cloud-role-actions">
+            <a class="btn cloud-console-link" href={awsRoleFlow.setupUrl} target="_blank" rel="noopener noreferrer">Open AWS Console ↗</a>
+            <button class="btn cloud-primary" type="button" onclick={verifyAwsRole} disabled={loading}>{loading ? "Verifying…" : "I've finished setup"}</button>
+          </div>
+        {/if}
+      </div>
+    {:else}
+      {#if selectedProvider.id === "hetzner"}
+        <ol class="cloud-token-steps">
+          <li>Open your Hetzner Cloud project.</li>
+          <li>Choose <strong>Security → API Tokens</strong> and create a read/write token.</li>
+          <li>Return here and paste the token below.</li>
+        </ol>
+        <a class="btn cloud-console-link" href="https://console.hetzner.cloud/" target="_blank" rel="noopener noreferrer">Open Hetzner API tokens ↗</a>
+      {/if}
+      <form class="cloud-form" onsubmit={saveCredentials}>
+        {#each credentialFields as field (field.id)}
+          <label class:wide={["textarea", "file"].includes(field.type)}>
+            <span>{field.label}{field.required ? " *" : ""}</span>
+            {#if field.type === "file"}
+              <input type="file" accept={field.accept || ".json,application/json"} required={field.required && !credentialValues[field.id]} onchange={(event) => updateCredentialFile(field.id, event.currentTarget.files?.[0])} />
+              <small>Select the JSON key from Files. It is submitted directly to Hub and not retained by the browser.</small>
+              <details class="cloud-file-paste"><summary>Paste JSON instead</summary><textarea rows="6" value={credentialValues[field.id] || ""} autocomplete="off" spellcheck="false" oninput={(event) => updateCredential(field.id, event.currentTarget.value)}></textarea></details>
+            {:else if field.type === "textarea"}
+              <textarea rows="8" value={credentialValues[field.id] || ""} placeholder={field.placeholder || ""} autocomplete="off" spellcheck="false" oninput={(event) => updateCredential(field.id, event.currentTarget.value)}></textarea>
+            {:else}
+              <input type={field.type} value={credentialValues[field.id] || ""} placeholder={field.placeholder || ""} required={field.required} autocomplete="off" autocapitalize="none" spellcheck="false" oninput={(event) => updateCredential(field.id, event.currentTarget.value)} />
+            {/if}
+          </label>
+        {/each}
+        <p class="cloud-secret-note">Credentials are written with owner-only permissions when the Hub has a cloud state file configured.</p>
+        <button class="btn cloud-primary" type="submit" disabled={loading || !credentialsComplete}>{loading ? "Verifying access…" : `Connect ${selectedProvider.name}`}</button>
+      </form>
+    {/if}
+
+    {#if ["hetzner", "gcp", "aws"].includes(selectedProvider.id) && !handoffId}
+      <div class="cloud-handoff">
+        <button type="button" onclick={startHandoff} disabled={loading || handoffFlow}>Continue on another device</button>
+        {#if handoffFlow}
+          <p>Authenticate to this Hub on the other device, then open this one-time link:</p>
+          <div><input value={handoffFlow.url} readonly aria-label="One-time device handoff link" /><button type="button" onclick={copyHandoffUrl}>Copy</button></div>
+          <small>Expires at {new Date(handoffFlow.expiresAt).toLocaleTimeString()}.</small>
+          <button type="button" class="cloud-handoff-cancel" onclick={cancelHandoff}>Cancel handoff</button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if handoffId}
+      <button type="button" class="cloud-handoff-cancel" onclick={cancelHandoff}>Cancel device handoff</button>
+    {/if}
+
+    {#if methodsFor(selectedProvider).some((method) => method.advanced)}
+      <button class="cloud-advanced-toggle" type="button" aria-expanded={advancedMethods} onclick={() => { advancedMethods = !advancedMethods; }}>
+        Advanced connection options
+      </button>
+      {#if advancedMethods}
+        <div class="cloud-method-list" role="list">
+          {#each methodsFor(selectedProvider).filter((method) => method.advanced) as method (method.id)}
+            <button type="button" class:active={selectedMethod?.id === method.id} onclick={() => chooseMethod(method.id)}>{method.label}</button>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  {:else if step === "project"}
+    <header class="cloud-section-head">
+      <button type="button" class="cloud-back" onclick={() => { step = "providers"; error = ""; }}>←</button>
+      <div><small>Google Cloud</small><h3>Choose a project</h3></div>
+    </header>
+    {#if loading}
+      <div class="cloud-loading" role="status"><span></span><strong>Loading projects…</strong><small>This can take a few seconds for large organizations.</small></div>
+    {:else}
+      <form class="cloud-form" onsubmit={selectProject}>
+        <label class="wide">
+          <span>Project *</span>
+          {#if projects.length}
+            <select bind:value={projectId} required>
+              {#each projects as project (project.id)}<option value={project.id}>{project.name} ({project.id})</option>{/each}
+            </select>
           {:else}
-            <input type={field.type} value={credentialValues[field.id] || ""} placeholder={field.placeholder || ""} required={field.required} autocomplete="off" autocapitalize="none" spellcheck="false" oninput={(event) => updateCredential(field.id, event.currentTarget.value)} />
+            <input type="text" bind:value={projectId} placeholder="my-google-cloud-project" required autocapitalize="none" spellcheck="false" />
+            <small>No projects were listed. Enter a project ID that your Google account can manage.</small>
           {/if}
         </label>
-      {/each}
-      {#if selectedProvider.id === "digitalocean"}
-        <p class="cloud-secret-note"><strong>Required token permissions:</strong> <code>droplet:create</code>, <code>tag:read</code>, <code>tag:create</code>, <code>region:read</code>, <code>size:read</code>, and <code>image:read</code>. <code>tag:create</code> is required at least once to create the <code>oyster-hub</code> ownership tag.</p>
-      {/if}
-      <p class="cloud-secret-note">Credentials are written with owner-only permissions when the Hub has a cloud state file configured.</p>
-      <button class="btn cloud-primary" type="submit" disabled={loading || !credentialsComplete}>{loading ? "Connecting…" : `Connect ${selectedProvider.name}`}</button>
-    </form>
+        <button class="btn cloud-primary wide" type="submit" disabled={loading || !projectId.trim()}>Use this project</button>
+        {#if error}
+          <a class="btn cloud-console-link wide" href={googleComputeConsoleUrl} target="_blank" rel="noopener noreferrer">Enable Compute Engine or review access ↗</a>
+        {/if}
+      </form>
+    {/if}
   {:else if step === "instance"}
     <header class="cloud-section-head">
       <button type="button" class="cloud-back" onclick={() => { step = "providers"; error = ""; }}>←</button>
       <div><small>Provision with</small><h3>{selectedProvider.name}</h3></div>
-      <button class="cloud-manage-credentials" type="button" onclick={configureCredentials}>Replace credentials</button>
+      <div class="cloud-credential-actions">
+        <button class="cloud-manage-credentials" type="button" onclick={configureCredentials}>Replace connection</button>
+        <button class="cloud-manage-credentials danger" type="button" onclick={disconnectProvider}>Disconnect</button>
+      </div>
     </header>
     {#if loading}
       <div class="cloud-loading" role="status"><span></span><strong>Querying available instances…</strong><small>This may take a few seconds.</small></div>
@@ -241,7 +583,7 @@
         <label class="wide">
           <span>Environment name *</span>
           <input type="text" bind:value={environmentName} pattern="[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" maxlength="63" placeholder="dev-cloud-1" title="Use 1–63 letters, numbers, or hyphens; start and end with a letter or number" required />
-          <small>Cloud-init installs Oyster from source and registers this VM with Hub at wss://hub.get-oyster.dev/box/connect.</small>
+          <small>Cloud-init installs Oyster from the llmbox-cloud-feature source branch and registers this VM with Hub at wss://hub.get-oyster.dev/box/connect.</small>
         </label>
         <label>
           <span>{selectedProvider.id === "gcp" ? "Zone" : "Region"} *</span>

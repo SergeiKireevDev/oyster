@@ -166,6 +166,35 @@ export function validateConfig(input, env = process.env) {
   else if (driverType === "mock") driver = validateMockDriver(driverInput, env);
   else throw new Error(`unsupported workspace driver: ${driverType}`);
 
+  const configuredPublicUrl = env.OYSTER_HUB_PUBLIC_URL || input.cloud?.publicUrl || null;
+  const publicUrl = configuredPublicUrl ? httpUrl(configuredPublicUrl, "cloud.publicUrl") : null;
+  const oauthInput = input.cloud?.oauth || {};
+  const oauthProvider = (id, prefix) => {
+    const clientId = env[`OYSTER_HUB_${prefix}_OAUTH_CLIENT_ID`] || oauthInput[id]?.clientId || "";
+    const clientSecret = env[`OYSTER_HUB_${prefix}_OAUTH_CLIENT_SECRET`] || oauthInput[id]?.clientSecret || "";
+    if (!clientId && !clientSecret) return null;
+    if (!clientId || !clientSecret) throw new Error(`cloud.oauth.${id} requires both clientId and clientSecret`);
+    if (!publicUrl && !oauthInput[id]?.redirectUrl) throw new Error(`cloud.oauth.${id} requires cloud.publicUrl or redirectUrl`);
+    const redirectUrl = httpUrl(oauthInput[id]?.redirectUrl || `${publicUrl}/cloud/oauth/${id}/callback`, `cloud.oauth.${id}.redirectUrl`);
+    return Object.freeze({ clientId: String(clientId), clientSecret: String(clientSecret), redirectUrl, ...(oauthInput[id]?.scope ? { scope: String(oauthInput[id].scope) } : {}) });
+  };
+  const oauth = Object.freeze({
+    digitalocean: oauthProvider("digitalocean", "DIGITALOCEAN"),
+    gcp: oauthProvider("gcp", "GOOGLE"),
+  });
+  const credentialEncryptionKey = env.OYSTER_HUB_CLOUD_CREDENTIAL_KEY || input.cloud?.credentialEncryptionKey || null;
+  const awsInput = input.cloud?.aws || {};
+  const aws = Object.freeze({
+    sourceAccessKeyId: env.OYSTER_HUB_AWS_ACCESS_KEY_ID || awsInput.sourceAccessKeyId || "",
+    sourceSecretAccessKey: env.OYSTER_HUB_AWS_SECRET_ACCESS_KEY || awsInput.sourceSecretAccessKey || "",
+    sourceSessionToken: env.OYSTER_HUB_AWS_SESSION_TOKEN || awsInput.sourceSessionToken || "",
+    principalArn: env.OYSTER_HUB_AWS_PRINCIPAL_ARN || awsInput.principalArn || "",
+    cloudFormationTemplateUrl: env.OYSTER_HUB_AWS_CLOUDFORMATION_TEMPLATE_URL || awsInput.cloudFormationTemplateUrl || "",
+    roleName: env.OYSTER_HUB_AWS_ROLE_NAME || awsInput.roleName || "OysterHubRole",
+    stackName: awsInput.stackName || "OysterHubAccess",
+    defaultRegion: awsInput.defaultRegion || "us-east-1",
+  });
+
   return Object.freeze({
     host: String(env.HOST || input.host || "127.0.0.1"),
     port,
@@ -175,7 +204,7 @@ export function validateConfig(input, env = process.env) {
     uploadResponseTimeoutMs,
     maxConcurrentUploads,
     driver,
-    cloud: Object.freeze({ stateFile: cloudStateFile, registryStateFile, boxConnectUrl, repository, ref }),
+    cloud: Object.freeze({ stateFile: cloudStateFile, registryStateFile, boxConnectUrl, repository, ref, publicUrl, oauth, aws, credentialEncryptionKey }),
   });
 }
 

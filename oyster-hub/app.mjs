@@ -6,6 +6,7 @@ import { WorkspaceDriverError } from "./drivers/errors.mjs";
 import { createOysterUiGateway } from "./ui-gateway.mjs";
 import { createUploadLimiter, prepareOpaqueWorkspaceRequest, proxyWorkspaceRequest, readBufferedRequestBody } from "./workspace-proxy.mjs";
 import { CloudProvisioningError, createCloudProvisioningService } from "./cloud-provisioning.mjs";
+import { CloudAuthorizationError, createCloudAuthorizationService } from "./cloud-authorization.mjs";
 import { createBoxConnectionRegistry } from "./box-registry.mjs";
 
 const AGGREGATE_RESOURCES = ["health", "runners", "sessions?all=1", "routines", "tunnels"];
@@ -89,9 +90,11 @@ async function listEnvironments(driver, cloudService) {
 
 async function readJsonBody(req) {
   try {
-    const raw = await readBufferedRequestBody(req);
+    const raw = await readBufferedRequestBody(req, 128 * 1024);
     return raw.length ? JSON.parse(raw.toString("utf8")) : {};
   } catch (error) {
+    if (error instanceof CloudProvisioningError) throw error;
+    if (error.code === "body_too_large") throw new CloudProvisioningError("request body is too large", { status: 413 });
     throw new CloudProvisioningError(`invalid JSON: ${error.message}`, { status: 400 });
   }
 }
@@ -189,6 +192,7 @@ export function createOysterHub(config, {
   onTransfer,
   boxRegistry = createBoxConnectionRegistry({ stateFile: config.cloud?.registryStateFile, logger }),
   cloudService = null,
+  authorizationService = null,
 } = {}) {
   const uploadLimiter = createUploadLimiter(config.maxConcurrentUploads);
   const cloud = cloudService || createCloudProvisioningService({
@@ -198,6 +202,17 @@ export function createOysterHub(config, {
     boxConnectUrl: config.cloud?.boxConnectUrl,
     repository: config.cloud?.repository,
     ref: config.cloud?.ref,
+    oauth: config.cloud?.oauth,
+    aws: config.cloud?.aws,
+    credentialEncryptionKey: config.cloud?.credentialEncryptionKey,
+  });
+  const cloudAuthorization = authorizationService || createCloudAuthorizationService({
+    config: config.cloud?.oauth,
+    fetchImpl,
+    saveCredential: (provider, credential) => {
+      if (typeof cloud.configureOAuth !== "function") throw new CloudProvisioningError("cloud OAuth storage is unavailable", { status: 503 });
+      return cloud.configureOAuth(provider, credential);
+    },
   });
   const options = {
     fetchImpl,
@@ -224,6 +239,13 @@ export function createOysterHub(config, {
     try {
       if (req.method === "GET" && url.pathname === "/health") {
         return json(res, 200, { ok: true, service: "oyster-hub", driver: driverDescriptor(driver) });
+      }
+      const oauthCallbackMatch = url.pathname.match(/^\/cloud\/oauth\/(digitalocean|gcp)\/callback$/);
+      if (oauthCallbackMatch && req.method === "GET") {
+        const flow = await cloudAuthorization.callback(oauthCallbackMatch[1], Object.fromEntries(url.searchParams));
+        const target = `${config.cloud?.publicUrl || ""}/?cloud-connect=${encodeURIComponent(flow.id)}`;
+        res.writeHead(303, { location: target, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+        return res.end();
       }
       if (await uiGateway.handle(req, res, url)) return;
       if (!url.pathname.startsWith("/api/v1/") && url.pathname !== "/api/v1") {
@@ -262,6 +284,46 @@ export function createOysterHub(config, {
       }
       if (url.pathname === "/api/v1/cloud/providers" && req.method === "GET") {
         return json(res, 200, { providers: await cloud.listProviders() });
+      }
+      const handoffStartMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/handoff\/start$/);
+      if (handoffStartMatch && req.method === "POST") {
+        return json(res, 202, { flow: await cloud.startHandoff(decodeURIComponent(handoffStartMatch[1])) });
+      }
+      const handoffStatusMatch = url.pathname.match(/^\/api\/v1\/cloud\/handoff\/([^/]+)\/(status|cancel)$/);
+      if (handoffStatusMatch) {
+        const flowId = decodeURIComponent(handoffStatusMatch[1]);
+        if (handoffStatusMatch[2] === "status" && req.method === "GET") return json(res, 200, { flow: await cloud.handoffStatus(flowId) });
+        if (handoffStatusMatch[2] === "cancel" && req.method === "POST") return json(res, 200, { flow: await cloud.cancelHandoff(flowId) });
+        return json(res, 405, { error: "method not allowed" });
+      }
+      if (url.pathname === "/api/v1/cloud/providers/aws/role/start" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        return json(res, 202, { flow: await cloud.startAwsRole(body.accountId) });
+      }
+      const awsRoleVerifyMatch = url.pathname.match(/^\/api\/v1\/cloud\/authorization\/aws\/([^/]+)\/verify$/);
+      if (awsRoleVerifyMatch && req.method === "POST") {
+        return json(res, 200, { flow: await cloud.verifyAwsRole(decodeURIComponent(awsRoleVerifyMatch[1])) });
+      }
+      const authorizationStartMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/authorization\/start$/);
+      if (authorizationStartMatch && req.method === "POST") {
+        return json(res, 202, { flow: cloudAuthorization.start(decodeURIComponent(authorizationStartMatch[1])) });
+      }
+      const authorizationFlowMatch = url.pathname.match(/^\/api\/v1\/cloud\/authorization\/([^/]+)\/(status|cancel)$/);
+      if (authorizationFlowMatch) {
+        const flowId = decodeURIComponent(authorizationFlowMatch[1]);
+        if (authorizationFlowMatch[2] === "status" && req.method === "GET") return json(res, 200, { flow: cloudAuthorization.status(flowId) });
+        if (authorizationFlowMatch[2] === "cancel" && req.method === "POST") return json(res, 200, { flow: cloudAuthorization.cancel(flowId) });
+        return json(res, 405, { error: "method not allowed" });
+      }
+      const projectMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/projects$/);
+      if (projectMatch) {
+        const providerId = decodeURIComponent(projectMatch[1]);
+        if (req.method === "GET") return json(res, 200, { provider: providerId, projects: await cloud.listProjects(providerId) });
+        if (req.method === "POST") {
+          const body = await readJsonBody(req);
+          return json(res, 200, { credential: await cloud.selectProject(providerId, body.projectId) });
+        }
+        return json(res, 405, { error: "method not allowed" });
       }
       const cloudProviderMatch = url.pathname.match(/^\/api\/v1\/cloud\/providers\/([^/]+)\/(credentials|options)$/);
       if (cloudProviderMatch) {
@@ -327,13 +389,14 @@ export function createOysterHub(config, {
       logger.error("oyster-hub request failed", error);
       if (!res.headersSent && error instanceof WorkspaceDriverError) {
         json(res, error.status, { error: error.message, driver: driver.type });
-      } else if (!res.headersSent && error instanceof CloudProvisioningError) {
-        json(res, error.status, { error: error.message });
+      } else if (!res.headersSent && (error instanceof CloudProvisioningError || error instanceof CloudAuthorizationError)) {
+        json(res, error.status, { error: error.message, ...(error.code ? { code: error.code } : {}) });
       } else if (!res.headersSent) json(res, 500, { error: "internal server error" });
       else res.destroy(error);
     }
   });
   boxRegistry.attach?.(server);
+  server.once("close", () => cloudAuthorization.close?.());
   server.boxRegistry = boxRegistry;
   return server;
 }

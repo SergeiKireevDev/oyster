@@ -9,9 +9,15 @@
   "cloud": {
     "stateFile": "./cloud-state.json",
     "registryStateFile": "./box-registry.json",
+    "publicUrl": "https://hub.example.com",
     "boxConnectUrl": "wss://hub.get-oyster.dev/box/connect",
     "repository": "https://github.com/SergeiKireevDev/oyster.git",
-    "ref": "main"
+    "ref": "llmbox-cloud-feature",
+    "aws": {
+      "principalArn": "arn:aws:iam::111122223333:role/OysterHub",
+      "cloudFormationTemplateUrl": "https://assets.example.com/oyster-aws-role.yaml",
+      "roleName": "OysterHubRole"
+    }
   },
   "driver": {
     "type": "llmbox",
