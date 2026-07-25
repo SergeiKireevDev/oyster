@@ -116,26 +116,48 @@ function scopeEvent(workspace, message, otherRunners = []) {
     ...(message.sessionId ? { sessionId: scopeValue(workspace.id, "session-id", message.sessionId) } : {}),
     ...(message.routine ? { routine: scopeRoutine(workspace, message.routine) } : {}),
     ...(message.tunnel ? { tunnel: scopeHublot(workspace, message.tunnel) } : {}),
-    ...(Array.isArray(message.runners) ? { runners: [...otherRunners, ...message.runners.map((runner) => scopeRunner(workspace, runner))] } : {}),
+    ...(Array.isArray(message.runners) ? { runners: [...(message.partial ? [] : otherRunners), ...message.runners.map((runner) => scopeRunner(workspace, runner))] } : {}),
   };
 }
 
-function createSseScopeTransform(workspace, otherRunners = []) {
+function createSseScopeTransform(workspace, initialOtherRunners = []) {
   let pending = "";
+  let otherRunners = initialOtherRunners;
+  let activeRunners = [];
+  let finished = false;
   const transformLine = (line) => {
     if (!line.startsWith("data: ")) return line;
-    try { return `data: ${JSON.stringify(scopeEvent(workspace, JSON.parse(line.slice(6)), otherRunners))}`; }
-    catch { return line; }
+    try {
+      const message = JSON.parse(line.slice(6));
+      if (Array.isArray(message.runners)) {
+        const scoped = message.runners.map((runner) => scopeRunner(workspace, runner));
+        if (message.partial) {
+          const merged = new Map(activeRunners.map((runner) => [runner.id, runner]));
+          for (const runner of scoped) merged.set(runner.id, runner);
+          activeRunners = [...merged.values()];
+        } else activeRunners = scoped;
+      }
+      return `data: ${JSON.stringify(scopeEvent(workspace, message, otherRunners))}`;
+    } catch { return line; }
   };
-  return new Transform({
+  const transform = new Transform({
     transform(chunk, _encoding, callback) {
       pending += chunk.toString("utf8");
       const lines = pending.split("\n");
       pending = lines.pop();
       callback(null, `${lines.map(transformLine).join("\n")}${lines.length ? "\n" : ""}`);
     },
-    flush(callback) { callback(null, pending ? transformLine(pending) : ""); },
+    flush(callback) {
+      finished = true;
+      callback(null, pending ? transformLine(pending) : "");
+    },
   });
+  transform.setOtherRunners = (runners) => {
+    otherRunners = runners;
+    if (!activeRunners.length || finished || transform.destroyed || transform.readableEnded) return false;
+    return transform.push(`data: ${JSON.stringify({ type: "runners_update", _server: true, runners: [...otherRunners, ...activeRunners] })}\n\n`);
+  };
+  return transform;
 }
 
 async function fetchWorkspace(workspace, pathAndQuery, fetchImpl, timeoutMs) {
@@ -281,11 +303,16 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
       async transformStream(source, response) {
         if (!(response.headers.get("content-type") || "").includes("text/event-stream")) return source;
         const others = discovered.filter((item) => item.id !== workspace.id);
-        const snapshots = await Promise.all(others.map((item) => fetchWorkspace(item, "/runners", fetchImpl, config.timeoutMs)));
-        const otherRunners = snapshots.flatMap((snapshot, index) => snapshot.ok
-          ? (snapshot.value?.runners ?? []).map((runner) => scopeRunner(others[index], runner))
-          : []);
-        return source.pipe(createSseScopeTransform(workspace, otherRunners));
+        const transform = createSseScopeTransform(workspace);
+        // Forward the selected workspace immediately. Fleet snapshots enrich
+        // runner state later and must never hold the active event stream open.
+        void Promise.all(others.map((item) => fetchWorkspace(item, "/runners", fetchImpl, config.timeoutMs))).then((snapshots) => {
+          const otherRunners = snapshots.flatMap((snapshot, index) => snapshot.ok
+            ? (snapshot.value?.runners ?? []).map((runner) => scopeRunner(others[index], runner))
+            : []);
+          transform.setOtherRunners(otherRunners);
+        }).catch((error) => logger.warn?.("cannot enrich Hub runner stream", error));
+        return source.pipe(transform);
       },
     });
   }

@@ -110,6 +110,25 @@ function publicWorkspace(workspace) {
   };
 }
 
+function summarizeWorkspace(workspace) {
+  const declaredStatus = String(workspace.status || "").toLowerCase();
+  const providerPhase = String(workspace.provider?.phase || "").toLowerCase();
+  const providerState = String(workspace.provider?.state || "").toLowerCase();
+  const unavailableStatuses = ["broken", "unreachable", "terminated", "exited", "failed", "offline"];
+  const lifecycleStatuses = ["provisioning", "awaiting_agent", "initializing", "paused", "pausing", "resuming", "destroying"];
+  const unavailable = unavailableStatuses.includes(declaredStatus)
+    || unavailableStatuses.includes(providerPhase)
+    || unavailableStatuses.includes(providerState);
+  const status = unavailable
+    ? "offline"
+    : declaredStatus && declaredStatus !== "active"
+      ? declaredStatus
+      : lifecycleStatuses.includes(providerPhase)
+        ? providerPhase
+        : workspace.url ? "online" : "provisioning";
+  return { ...publicWorkspace(workspace), status, latencyMs: null, results: {} };
+}
+
 async function inspectWorkspace(workspace, options, full = false) {
   if (!workspace.url) {
     const unavailable = ["broken", "unreachable", "terminated", "exited"].includes(workspace.provider?.phase)
@@ -222,6 +241,24 @@ export function createOysterHub(config, {
     onTransfer,
     uploadLimiter,
   };
+  let workspaceDiscovery = { value: null, expiresAt: 0, promise: null };
+  const listWorkspaces = async () => {
+    const timestamp = Date.now();
+    if (workspaceDiscovery.value && workspaceDiscovery.expiresAt > timestamp) return workspaceDiscovery.value;
+    if (workspaceDiscovery.promise) return workspaceDiscovery.promise;
+    workspaceDiscovery.promise = Promise.all([
+      driver.listWorkspaces(),
+      cloud.listWorkspaces ? cloud.listWorkspaces() : [],
+    ]).then(([driverWorkspaces, cloudWorkspaces]) => {
+      const value = [...driverWorkspaces, ...cloudWorkspaces];
+      workspaceDiscovery = { value, expiresAt: Date.now() + 2000, promise: null };
+      return value;
+    }).catch((error) => {
+      workspaceDiscovery = { value: null, expiresAt: 0, promise: null };
+      throw error;
+    });
+    return workspaceDiscovery.promise;
+  };
   const uiGateway = createOysterUiGateway({
     config,
     driver,
@@ -231,7 +268,7 @@ export function createOysterHub(config, {
     json,
     onTransfer,
     uploadLimiter,
-    listWorkspaces: async () => [...await driver.listWorkspaces(), ...(cloud.listWorkspaces ? await cloud.listWorkspaces() : [])],
+    listWorkspaces,
   });
 
   const server = createServer(async (req, res) => {
@@ -342,8 +379,10 @@ export function createOysterHub(config, {
         return json(res, 405, { error: "method not allowed" });
       }
       if (url.pathname === "/api/v1/workspaces" && req.method === "GET") {
-        const discovered = [...await driver.listWorkspaces(), ...(cloud.listWorkspaces ? await cloud.listWorkspaces() : [])];
-        const workspaces = await Promise.all(discovered.map((workspace) => inspectWorkspace(workspace, options)));
+        const discovered = await listWorkspaces();
+        const workspaces = url.searchParams.get("probe") === "0"
+          ? discovered.map(summarizeWorkspace)
+          : await Promise.all(discovered.map((workspace) => inspectWorkspace(workspace, options)));
         return json(res, 200, { driver: driverDescriptor(driver), workspaces });
       }
       if (url.pathname === "/api/v1/workspaces" && req.method === "POST") {

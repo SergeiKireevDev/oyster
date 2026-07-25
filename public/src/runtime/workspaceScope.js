@@ -33,7 +33,7 @@ export function effectiveWorkspaceStatus(workspace) {
 
 /** List every workspace, including ones that cannot host a session yet. */
 export async function listWorkspaces({ fetchImpl = fetch } = {}) {
-  const response = await fetchImpl("/api/v1/workspaces");
+  const response = await fetchImpl("/api/v1/workspaces?probe=0");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `failed to list workspaces (${response.status})`);
   return data.workspaces ?? [];

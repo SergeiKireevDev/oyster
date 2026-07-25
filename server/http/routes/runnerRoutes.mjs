@@ -58,7 +58,7 @@ export function createRunnerRoutes({
         runners: listRunnerInfo(),
       })}\n\n`);
       ping = setIntervalImpl(
-        () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true, runners: listRunnerInfo() })}\n\n`),
+        () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true })}\n\n`),
         25000,
       );
     },

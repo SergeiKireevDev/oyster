@@ -33,7 +33,7 @@ export function createPlatformEventDispatch(deps) {
     reloadTranscript: () => void deps.reloadTranscript().catch((error) => deps.log("replayDone:reload:error", { error: error?.message ?? String(error) })),
   });
   const runnerPingEvent = createRunnerPingEventController({ currentRunners: deps.getRunners, setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
-  const runnersUpdate = createRunnersUpdateController({ setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
+  const runnersUpdate = createRunnersUpdateController({ currentRunners: deps.getRunners, setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
   const routineEvent = createRoutineStreamEventController({ isReplaying: () => replaying, update: deps.updateRoutine, toast: deps.toast });
   const hublotEvent = createHublotEventController({ isReplaying: () => replaying, toast: deps.toast, refreshHublots: deps.refreshHublots, scheduleRefresh: deps.scheduleRefresh, openUrl: deps.openUrl });
   const responseEvent = createResponseEventController({ handleResponse: deps.handleResponse, refreshRequired: stateRefreshRequired, refreshState: deps.refreshState });

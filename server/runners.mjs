@@ -189,9 +189,14 @@ export function createRunnerManager(state, {
     return runnerEventRepository?.list(runner.id).map((event) => event.payload) ?? [];
   }
 
-  /** global (all-clients) notification that some runner changed state */
-  function runnersChanged() {
-    serverEvent({ type: "runners_update", runners: listRunnerInfo() });
+  /** Global notification. Ordinary lifecycle changes carry one runner delta;
+   * destructive catalog changes can still request a full replacement. */
+  function runnersChanged(changedRunner = null) {
+    serverEvent({
+      type: "runners_update",
+      runners: changedRunner ? [runnerInfo(changedRunner)] : listRunnerInfo(),
+      partial: Boolean(changedRunner),
+    });
   }
 
   function withSseId(line) {
@@ -257,7 +262,7 @@ export function createRunnerManager(state, {
       if (!sendToRunner(runner, { id: srvId(), type: "set_session_name", name }, { autostart: false })) return;
       runner.sessionName = name;
       runnerRepository?.update(runner.id, { session_name: name });
-      runnersChanged();
+      runnersChanged(runner);
     }).catch((error) => {
       console.error(`[pi-ui] cannot title session ${sessionId}: ${error.message}`);
     }).finally(() => {
@@ -269,8 +274,8 @@ export function createRunnerManager(state, {
   function trackRunner(runner, line) {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
-    if (msg.type === "agent_start") { runner.busy = true; runnersChanged(); }
-    else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(); requestState(runner); }
+    if (msg.type === "agent_start") { runner.busy = true; runnersChanged(runner); }
+    else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(runner); requestState(runner); }
     else if (msg.type === "response" && msg.id === runner.resumeId) {
       // session resume finished (success or not): deliver held-back commands
       finishResume(runner);
@@ -308,7 +313,7 @@ export function createRunnerManager(state, {
           });
         }
         runner.busy = !!(d.isStreaming || d.isCompacting);
-        if (changed) runnersChanged();
+        if (changed) runnersChanged(runner);
         maybeTitleSession(runner, d);
       } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
         requestState(runner);
@@ -423,7 +428,7 @@ export function createRunnerManager(state, {
       if (runner.proc === proc) runner.proc = null;
       if (runner.stdoutReader === rl) runner.stdoutReader = null;
       runnerRepository?.update(runner.id, { last_status: "dead" });
-      runnersChanged();
+      runnersChanged(runner);
     });
 
     proc.on("exit", (code, signal) => {
@@ -434,7 +439,7 @@ export function createRunnerManager(state, {
         runner.busy = false;
         runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
         runnerEvent(runner, { type: "pi_exit", code, signal });
-        runnersChanged();
+        runnersChanged(runner);
       }
     });
 
@@ -454,7 +459,7 @@ export function createRunnerManager(state, {
     // Publish alive=true before pi_started. Clients use the start event to
     // request authoritative state, so delivering it first would leave a race
     // where their liveness guard still sees this runner as dormant.
-    runnersChanged();
+    runnersChanged(runner);
     runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
   }
 
@@ -479,7 +484,7 @@ export function createRunnerManager(state, {
     setTimeout(() => {
       if (proc.exitCode === null && !proc.killed) proc.kill("SIGKILL");
     }, 3000).unref();
-    runnersChanged();
+    runnersChanged(runner);
   }
 
   function sendToRunner(runner, obj, { autostart = true } = {}) {
