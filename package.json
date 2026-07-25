@@ -15,6 +15,7 @@
     "benchmark:uploads": "node --expose-gc scripts/benchmark-workspace-upload.mjs",
     "docs:build": "node scripts/build-docs.mjs",
     "preview": "vite preview --config vite.config.js",
+    "perf:prepare-longcat": "bash tests/performance/prepare-longcat-container.sh",
     "migrate-app-data": "node scripts/migrate-app-data.mjs",
     "test": "node --test tests/*.test.mjs"
   },
