@@ -330,6 +330,39 @@ test("Hub preserves an initializing workspace status while its Oyster endpoint s
   assert.match(listed.errors.health, /fetch failed|ECONNREFUSED/);
 });
 
+test("fast workspace discovery skips health probes and shares driver discovery with UI routing", async (t) => {
+  let upstreamCalls = 0;
+  const upstream = createServer((req, res) => {
+    upstreamCalls++;
+    if (new URL(req.url, "http://workspace.test").pathname === "/runners") return sendJson(res, 200, { runners: [] });
+    sendJson(res, 500, { error: "health probing is not expected" });
+  });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  let discoveryCalls = 0;
+  const workspace = { environmentId: "local", environmentName: "Local", id: "local", name: "Local", url: upstreamUrl, provider: { state: "running", phase: "running" } };
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true, create: false, remove: false },
+    async listWorkspaces() { discoveryCalls++; return [workspace]; },
+    async getWorkspace(id) { return id === workspace.id ? workspace : null; },
+  };
+  const cloudService = { async listEnvironments() { return []; }, async listWorkspaces() { return []; } };
+  const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, cloudService, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const headers = { "x-auth-token": "hub-secret" };
+
+  const discovery = await fetch(`${hubUrl}/api/v1/workspaces?probe=0`, { headers });
+  assert.equal(discovery.status, 200);
+  assert.equal((await discovery.json()).workspaces[0].status, "online");
+  assert.equal(upstreamCalls, 0, "fast discovery must not contact the Oyster endpoint");
+
+  const runners = await fetch(`${hubUrl}/runners`, { headers: { ...headers, "x-oyster-workspace": "local" } });
+  assert.equal(runners.status, 200);
+  assert.equal(discoveryCalls, 1, "the following UI route reuses the same discovery result");
+  assert.equal(upstreamCalls, 1);
+});
+
 test("llmbox workspace tokens are stable, scoped, and derived from the configured secret", () => {
   assert.equal(deriveWorkspaceToken("secret", "alpha"), deriveWorkspaceToken("secret", "alpha"));
   assert.notEqual(deriveWorkspaceToken("secret", "alpha"), deriveWorkspaceToken("secret", "beta"));
@@ -800,7 +833,7 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
   assert.equal(events.status, 200);
   const event = JSON.parse((await events.text()).match(/data: (.*)/)[1]);
   assert.equal(parseScopedValue(event.runner).workspaceId, "beta");
-  assert.deepEqual(event.runners.map((runner) => runner.workspaceId), ["alpha", "beta"]);
+  assert.deepEqual(event.runners.map((runner) => runner.workspaceId), ["beta"], "selected workspace replay is not delayed for fleet enrichment");
   assert.equal(calls.at(-1).query.token, undefined);
 
   const opened = await fetch(`${hubUrl}/open-session`, {
@@ -810,6 +843,70 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
   assert.equal((await opened.json()).runner.workspaceId, "beta");
   assert.equal(calls.at(-1).id, "beta");
   assert.equal(calls.at(-1).body.sessionKey, "ps1_beta");
+});
+
+test("Hub forwards selected SSE before other workspace runner snapshots finish", async (t) => {
+  let releaseSnapshot;
+  let markSnapshotStarted;
+  const snapshotStarted = new Promise((resolve) => { markSnapshotStarted = resolve; });
+  const snapshotGate = new Promise((resolve) => { releaseSnapshot = resolve; });
+  const alpha = createServer(async (req, res) => {
+    if (new URL(req.url, "http://alpha.test").pathname !== "/runners") return sendJson(res, 404, { error: "missing" });
+    markSnapshotStarted();
+    await snapshotGate;
+    sendJson(res, 200, { runners: [{ id: "alpha-runner", alive: true }] });
+  });
+  const beta = createServer((req, res) => {
+    if (new URL(req.url, "http://beta.test").pathname !== "/events") return sendJson(res, 404, { error: "missing" });
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(`data: ${JSON.stringify({ type: "replay_done", runner: "beta-runner", runners: [{ id: "beta-runner", alive: true }] })}\n\n`);
+  });
+  const alphaUrl = await listen(alpha);
+  const betaUrl = await listen(beta);
+  t.after(() => close(alpha));
+  t.after(() => close(beta));
+  const workspaces = [
+    { environmentId: "one", id: "alpha", name: "Alpha", url: alphaUrl },
+    { environmentId: "two", id: "beta", name: "Beta", url: betaUrl },
+  ];
+  const driver = {
+    type: "test", endpoint: "memory://test", capabilities: { list: true, create: false, remove: false },
+    async listWorkspaces() { return workspaces; },
+    async getWorkspace(id) { return workspaces.find((workspace) => workspace.id === id) ?? null; },
+  };
+  const hub = createOysterHub(mockHubConfig(betaUrl), { driver, logger: { error() {}, warn() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const abort = new AbortController();
+  t.after(() => { releaseSnapshot(); abort.abort(); });
+
+  const response = await Promise.race([
+    fetch(`${hubUrl}/events?token=hub-secret&workspace=beta`, { signal: abort.signal }),
+    new Promise((_, reject) => setTimeout(() => { releaseSnapshot(); abort.abort(); reject(new Error("selected SSE was blocked by another workspace")); }, 500)),
+  ]);
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  const firstText = Buffer.from(first.value).toString("utf8");
+  assert.match(firstText, /replay_done/);
+  assert.doesNotMatch(firstText, /alpha-runner/);
+  await Promise.race([
+    snapshotStarted,
+    new Promise((_, reject) => setTimeout(() => { releaseSnapshot(); abort.abort(); reject(new Error("fleet runner snapshot did not start")); }, 500)),
+  ]);
+
+  releaseSnapshot();
+  let enriched = "";
+  while (!enriched.includes("runners_update")) {
+    const chunk = await Promise.race([
+      reader.read(),
+      new Promise((_, reject) => setTimeout(() => { abort.abort(); reject(new Error("fleet runner enrichment was not delivered")); }, 500)),
+    ]);
+    assert.equal(chunk.done, false);
+    enriched += Buffer.from(chunk.value).toString("utf8");
+  }
+  const update = JSON.parse(enriched.match(/data: (.*)/)[1]);
+  assert.deepEqual(update.runners.map((runner) => runner.workspaceId), ["alpha", "beta"]);
+  abort.abort();
 });
 
 test("workspace SSE streams remain open after the upstream connection timeout", async (t) => {

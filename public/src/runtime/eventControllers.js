@@ -68,9 +68,17 @@ export function createExtensionUiEventController({ handleRequest }) {
   };
 }
 
-export function createRunnersUpdateController({ setRunners, onRunnersChanged, refreshTree }) {
+export function mergeRunnerUpdates(current, updates) {
+  const merged = new Map((current ?? []).map((runner) => [runner.id, runner]));
+  for (const runner of updates ?? []) merged.set(runner.id, runner);
+  return [...merged.values()];
+}
+
+export function createRunnersUpdateController({ currentRunners = () => [], setRunners, onRunnersChanged, refreshTree }) {
   return (message) => {
-    const runners = message.runners ?? [];
+    const runners = message.partial
+      ? mergeRunnerUpdates(currentRunners(), message.runners)
+      : (message.runners ?? []);
     setRunners(runners); onRunnersChanged(runners); refreshTree();
   };
 }

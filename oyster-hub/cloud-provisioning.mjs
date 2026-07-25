@@ -89,6 +89,16 @@ function required(value, label) {
   return value.trim();
 }
 
+function catalogPricing(hourly, monthly, currency) {
+  const hourlyNumber = Number(hourly);
+  const monthlyNumber = Number(monthly);
+  return {
+    ...(Number.isFinite(hourlyNumber) && hourlyNumber > 0 ? { hourly: hourlyNumber } : {}),
+    ...(Number.isFinite(monthlyNumber) && monthlyNumber > 0 ? { monthly: monthlyNumber } : {}),
+    currency,
+  };
+}
+
 function providerDefinition(providerId) {
   const provider = PROVIDERS[providerId];
   if (!provider) throw new CloudProvisioningError(`unsupported cloud provider: ${providerId}`, { status: 404 });
@@ -175,6 +185,7 @@ async function digitalOceanOptions(credential, fetchImpl) {
     name: item.slug,
     description: `${item.vcpus} vCPU · ${Math.round(item.memory / 1024 * 10) / 10} GB RAM · $${item.price_monthly}/mo`,
     regions: item.regions || [],
+    pricing: catalogPricing(item.price_hourly, item.price_monthly, "USD"),
   }));
   const images = (imageResult.images || []).filter((item) => item.status === "available" && item.slug && /ubuntu/i.test(`${item.distribution || ""} ${item.slug}`)).map((item) => ({
     id: item.slug,
@@ -267,7 +278,7 @@ function activeHetznerLocations(serverType) {
   return (serverType.prices || []).map((entry) => entry.location).filter(Boolean);
 }
 
-async function hetznerOptions(credential, fetchImpl) {
+async function hetznerOptions(credential, fetchImpl, requestedRegion = "") {
   const [locationResult, typeResult, imageResult] = await Promise.all([
     hetznerRequest("/locations?per_page=100", credential, fetchImpl),
     hetznerRequest("/server_types?per_page=100", credential, fetchImpl),
@@ -278,13 +289,21 @@ async function hetznerOptions(credential, fetchImpl) {
     name: `${item.description || item.city || item.name}${item.description || item.city ? ` (${item.name})` : ""}`,
   }));
   const knownRegions = new Set(regions.map((region) => region.id));
-  const sizes = (typeResult.server_types || []).map((item) => ({
-    id: item.name,
-    name: item.name,
-    description: `${item.cores} vCPU · ${item.memory} GB RAM · €${item.prices?.[0]?.price_monthly?.net || "?"}/mo`,
-    regions: activeHetznerLocations(item).filter((region) => knownRegions.has(region)),
-    architecture: item.architecture || null,
-  })).filter((item) => item.id && item.regions.length);
+  const sizes = (typeResult.server_types || []).map((item) => {
+    const pricingByRegion = Object.fromEntries((item.prices || []).filter((price) => price.location).map((price) => [
+      price.location,
+      catalogPricing(price.price_hourly?.net, price.price_monthly?.net, "EUR"),
+    ]));
+    return {
+      id: item.name,
+      name: item.name,
+      description: `${item.cores} vCPU · ${item.memory} GB RAM · €${item.prices?.[0]?.price_monthly?.net || "?"}/mo`,
+      regions: activeHetznerLocations(item).filter((region) => knownRegions.has(region)),
+      architecture: item.architecture || null,
+      pricingByRegion,
+      ...(pricingByRegion[requestedRegion] ? { pricing: pricingByRegion[requestedRegion] } : {}),
+    };
+  }).filter((item) => item.id && item.regions.length);
   // Use image IDs rather than names because Hetzner can expose the same system
   // image name for multiple CPU architectures.
   const images = (imageResult.images || []).filter((item) => item.id && item.name && item.status !== "creating" && /ubuntu/i.test(`${item.description || ""} ${item.name}`)).map((item) => ({
@@ -984,7 +1003,7 @@ export function createCloudProvisioningService({
     async options(providerId, { region = "" } = {}) {
       const value = await credential(providerId);
       if (providerId === "digitalocean") return digitalOceanOptions(value, fetchImpl);
-      if (providerId === "hetzner") return hetznerOptions(value, fetchImpl);
+      if (providerId === "hetzner") return hetznerOptions(value, fetchImpl, region);
       if (providerId === "aws") return awsOptions(value, fetchImpl, region);
       return gcpOptions(value, fetchImpl, region);
     },
