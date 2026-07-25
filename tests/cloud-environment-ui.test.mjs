@@ -32,7 +32,9 @@ test("cloud environment modal provisions source-installed reverse-connected Oyst
   assert.doesNotMatch(source, /cloud-init are not installed|raw VM will be created/);
   assert.match(source, /class="btn cloud-primary wide" type="submit" disabled=\{loading\}/);
   assert.doesNotMatch(source, /disabled=\{loading \|\| !provisionComplete\}/);
-  assert.match(source, /select bind:value=\{size\} required/);
+  assert.match(source, /select value=\{size\} onchange=\{\(event\) => changeSize/);
+  assert.match(source, /imageAvailableForSelection/);
+  assert.match(source, /\["digitalocean", "hetzner"\]\.includes/);
   assert.match(source, /Available in: \{selectedSizeAvailability\}/);
   assert.match(source, /size is not available in this region/);
   assert.match(source, /regionAvailability\(selectedSize\)/);
