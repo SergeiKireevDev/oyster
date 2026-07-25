@@ -283,7 +283,8 @@
     gap: 7px;
     min-width: 0;
   }
-  .session-sidebar-hierarchy-copy { display: grid; min-width: 0; gap: 1px; }
+  .session-sidebar-hierarchy-copy { display: grid; min-width: 0; flex: 1; gap: 1px; }
+  .session-sidebar-workspace-kicker { display: flex; align-items: center; gap: 5px; min-width: 0; }
   .session-sidebar-hierarchy-copy small {
     color: var(--muted);
     font-size: 7.5px;
@@ -293,6 +294,16 @@
     text-transform: uppercase;
   }
   .session-sidebar-hierarchy-copy strong { overflow: hidden; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-workspace-status {
+    overflow: hidden;
+    font-size: 7px;
+    font-weight: 750;
+    letter-spacing: .04em;
+    line-height: 1;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
   .session-sidebar-workspace-container {
     display: flex;
     flex: none;
@@ -317,13 +328,32 @@
   .session-sidebar-workspace-empty { padding: 5px 7px; color: var(--muted); font-size: 9px; }
   .session-sidebar-workspace-heading code {
     max-width: 58px;
-    margin-left: auto;
     overflow: hidden;
     color: var(--muted);
     font-size: 8px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .session-sidebar-workspace-cloud-actions { display: flex; flex: none; gap: 3px; }
+  .session-sidebar-workspace-power,
+  .session-sidebar-workspace-destroy {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font: 10px/1 inherit;
+    cursor: pointer;
+  }
+  .session-sidebar-workspace-power:hover:not(:disabled) { border-color: var(--yellow); color: var(--yellow); }
+  .session-sidebar-workspace-power.resume:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+  .session-sidebar-workspace-destroy:hover:not(:disabled) { border-color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+  .session-sidebar-workspace-power:disabled,
+  .session-sidebar-workspace-destroy:disabled { cursor: not-allowed; opacity: .35; }
   .session-sidebar-workspace-create {
     width: 25px;
     height: 25px;
@@ -338,53 +368,47 @@
     font: 16px/1 inherit;
     cursor: pointer;
   }
-  .session-sidebar-workspace-create:hover { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
-  .session-sidebar-workspace-create:disabled { opacity: .38; cursor: not-allowed; border-color: var(--border); background: transparent; color: var(--muted); }
-  .session-sidebar-workspace-create:disabled:hover { border-color: var(--border); background: transparent; color: var(--muted); }
+  .session-sidebar-workspace-create:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+  .session-sidebar-workspace-create:disabled { border-color: var(--border); background: transparent; color: var(--muted); cursor: not-allowed; opacity: .45; }
   .session-sidebar-workspace-icon {
     width: 13px;
     height: 13px;
     flex: none;
-    border: 1.5px solid var(--muted);
+    border: 1.5px solid currentColor;
     border-radius: 3px;
-    background: color-mix(in srgb, var(--muted) 12%, transparent);
-    box-shadow: 0 0 0 transparent;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--muted);
     transform: rotate(45deg) scale(.78);
   }
-  .session-sidebar-workspace-icon[data-status="online"],
-  .session-sidebar-workspace-icon[data-status="ready"] {
-    border-color: var(--green);
-    background: color-mix(in srgb, var(--green) 22%, transparent);
-    box-shadow: 0 0 7px color-mix(in srgb, var(--green) 36%, transparent);
-  }
-  .session-sidebar-workspace-icon:is(
-    [data-status="provisioning"],
-    [data-status="awaiting_agent"],
-    [data-status="awaiting-agent"],
-    [data-status="initializing"],
-    [data-status="pausing"],
-    [data-status="resuming"]
-  ) {
-    border-color: #e0af68;
-    background: color-mix(in srgb, #e0af68 22%, transparent);
-    box-shadow: 0 0 7px color-mix(in srgb, #e0af68 30%, transparent);
-  }
-  .session-sidebar-workspace-icon:is(
-    [data-status="offline"],
-    [data-status="unreachable"],
-    [data-status="failed"],
-    [data-status="error"],
-    [data-status="terminated"],
-    [data-status="exited"]
-  ) {
-    border-color: var(--red);
-    background: color-mix(in srgb, var(--red) 20%, transparent);
-    box-shadow: 0 0 7px color-mix(in srgb, var(--red) 28%, transparent);
-  }
-  .session-sidebar-workspace-icon[data-status="paused"] {
-    border-color: #7aa2f7;
-    background: color-mix(in srgb, #7aa2f7 18%, transparent);
-  }
+  .session-sidebar-workspace-icon.status-online,
+  .session-sidebar-workspace-status.status-online { color: var(--green); }
+  .session-sidebar-workspace-icon.status-provisioning,
+  .session-sidebar-workspace-icon.status-provisioned,
+  .session-sidebar-workspace-icon.status-awaiting_agent,
+  .session-sidebar-workspace-icon.status-initializing,
+  .session-sidebar-workspace-icon.status-resuming,
+  .session-sidebar-workspace-icon.status-pausing,
+  .session-sidebar-workspace-status.status-provisioning,
+  .session-sidebar-workspace-status.status-provisioned,
+  .session-sidebar-workspace-status.status-awaiting_agent,
+  .session-sidebar-workspace-status.status-initializing,
+  .session-sidebar-workspace-status.status-resuming,
+  .session-sidebar-workspace-status.status-pausing { color: var(--yellow); }
+  .session-sidebar-workspace-icon.status-provisioning,
+  .session-sidebar-workspace-icon.status-awaiting_agent,
+  .session-sidebar-workspace-icon.status-initializing,
+  .session-sidebar-workspace-icon.status-resuming,
+  .session-sidebar-workspace-icon.status-pausing { animation: pulse 1.5s ease-in-out infinite; }
+  .session-sidebar-workspace-icon.status-failed,
+  .session-sidebar-workspace-icon.status-destroying,
+  .session-sidebar-workspace-status.status-failed,
+  .session-sidebar-workspace-status.status-destroying { color: var(--red); }
+  .session-sidebar-workspace-icon.status-paused,
+  .session-sidebar-workspace-status.status-paused { color: var(--accent); }
+  .session-sidebar-workspace-icon.status-offline,
+  .session-sidebar-workspace-status.status-offline,
+  .session-sidebar-workspace-icon.status-unknown,
+  .session-sidebar-workspace-status.status-unknown { color: var(--muted); }
   .session-sidebar-cwd { min-width: 0; }
   .session-sidebar-cwd > summary {
     display: flex;

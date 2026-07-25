@@ -165,9 +165,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /\{#if !hubMode && !searching\}[\s\S]*id="newSessionHere"[\s\S]*id="newSessionFolder"/);
   assert.match(source, /listEnvironments\(\)/);
   assert.match(source, /listWorkspaces\(\)/);
-  assert.match(source, /data-status=\{status\}/);
-  assert.match(source, /Workspace status:/);
-  assert.match(source, /disabled=\{status !== "online"\}/);
+  assert.match(source, /effectiveWorkspaceStatus\(workspace\)/);
   assert.match(source, /<select\s+aria-label="Environment"/);
   assert.match(source, /preferredEnvironmentId\(environmentOptions\)/);
   assert.match(source, /options\.find\(\(environment\) => isLocalEnvironment/);
@@ -184,6 +182,13 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /workspace\.archivedGroups/);
   assert.doesNotMatch(source, /<details class="session-sidebar-archive"\s+open/);
   assert.match(source, /session-archive-divider/);
+  assert.match(source, /session-sidebar-workspace-status/);
+  assert.match(source, /status-\$\{status\}/);
+  assert.match(source, /disabled=\{!online\}/);
+  assert.match(source, /session-sidebar-workspace-cloud-actions/);
+  assert.match(source, /manageCloudWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
+  assert.match(source, /manageCloudWorkspace\(workspace, "destroy"\)/);
+  assert.match(source, /\/api\/v1\/environments\/\$\{encodeURIComponent\(workspace\.workspaceId\)\}/);
   assert.match(source, /session-sidebar-workspace-create/);
   assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);
   assert.match(source, /class:current-cwd=\{isCurrentCwd\(group\)\}/);

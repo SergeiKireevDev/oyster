@@ -85,7 +85,7 @@
       const data = await request(`/api/v1/cloud/providers/${encodeURIComponent(selectedProvider.id)}/options${query}`);
       options = { regions: data.regions || [], sizes: data.sizes || [], images: data.images || [], defaults: data.defaults || {} };
       region = data.defaults?.region || requestedRegion || options.regions[0]?.id || "";
-      const regionSizes = options.sizes.filter((item) => !item.regions?.length || item.regions.includes(region));
+      const regionSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
       const regionImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(region));
       size = regionSizes.some((item) => item.id === data.defaults?.size) ? data.defaults.size : regionSizes[0]?.id || "";
       image = regionImages.some((item) => item.id === data.defaults?.image) ? data.defaults.image : regionImages[0]?.id || "";
@@ -99,13 +99,34 @@
   async function changeRegion(value) {
     region = value;
     if (selectedProvider.id === "digitalocean") {
-      const nextSizes = options.sizes.filter((item) => !item.regions?.length || item.regions.includes(value));
+      const nextSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, value));
       const nextImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(value));
       if (!nextSizes.some((item) => item.id === size)) size = nextSizes[0]?.id || "";
       if (!nextImages.some((item) => item.id === image)) image = nextImages[0]?.id || "";
       return;
     }
     await loadOptions(value);
+  }
+
+  function sizeAvailableInRegion(item, regionId) {
+    return selectedProvider?.id === "digitalocean"
+      ? Boolean(item?.regions?.includes(regionId))
+      : (!item?.regions?.length || item.regions.includes(regionId));
+  }
+
+  function regionAvailability(item) {
+    if (!item?.regions?.length) return selectedProvider?.id === "digitalocean" ? "no currently available regions reported by DigitalOcean" : "all listed regions";
+    return item.regions.map((id) => {
+      const regionOption = options.regions.find((candidate) => candidate.id === id);
+      return regionOption?.name && regionOption.name !== id ? `${regionOption.name} (${id})` : id;
+    }).join(", ");
+  }
+
+  function provisioningError(cause) {
+    const message = cause?.message || "Provisioning failed";
+    if (selectedProvider?.id !== "digitalocean" || !/size is not available in this region/i.test(message)) return message;
+    const selectedSize = options.sizes.find((item) => item.id === size);
+    return selectedSize ? `${message} ${selectedSize.name || selectedSize.id} is listed as available in: ${regionAvailability(selectedSize)}.` : message;
   }
 
   async function provision(event) {
@@ -122,7 +143,7 @@
       step = "done";
       publishCloudEnvironment(data.environment);
     } catch (cause) {
-      error = cause.message;
+      error = provisioningError(cause);
     } finally {
       loading = false;
     }
@@ -132,7 +153,9 @@
     credentialValues = { ...credentialValues, [fieldId]: value };
   }
 
-  $: availableSizes = options.sizes.filter((item) => !item.regions?.length || item.regions.includes(region));
+  $: availableSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
+  $: selectedSize = options.sizes.find((item) => item.id === size);
+  $: selectedSizeAvailability = selectedProvider?.id === "digitalocean" && selectedSize ? regionAvailability(selectedSize) : "";
   $: availableImages = options.images.filter((item) => !item.regions?.length || item.regions.includes(region));
   $: credentialsComplete = selectedProvider?.fields.every((field) => !field.required || String(credentialValues[field.id] || "").trim());
 
@@ -219,6 +242,7 @@
           <select bind:value={size} required>
             {#each availableSizes as item (item.id)}<option value={item.id}>{item.name}{item.description ? ` — ${item.description}` : ""}</option>{/each}
           </select>
+          {#if selectedSizeAvailability}<small>Available in: {selectedSizeAvailability}</small>{/if}
         </label>
         <label class="wide">
           <span>Image *</span>

@@ -32,6 +32,11 @@ test("cloud environment modal provisions source-installed reverse-connected Oyst
   assert.match(source, /class="btn cloud-primary wide" type="submit" disabled=\{loading\}/);
   assert.doesNotMatch(source, /disabled=\{loading \|\| !provisionComplete\}/);
   assert.match(source, /select bind:value=\{size\} required/);
+  assert.match(source, /Available in: \{selectedSizeAvailability\}/);
+  assert.match(source, /size is not available in this region/);
+  assert.match(source, /regionAvailability\(selectedSize\)/);
+  assert.match(source, /no currently available regions reported by DigitalOcean/);
+  assert.match(source, /sizeAvailableInRegion\(item, region\)/);
   assert.match(source, /data-modal-cancel/);
   assert.doesNotMatch(source, /window\.dispatchEvent|localStorage/);
 });

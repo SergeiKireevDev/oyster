@@ -56,6 +56,9 @@ import { chooseOnlineWorkspace, ensureActiveWorkspace, getActiveWorkspace, isHub
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, find } = browser;
   const { uiActions, dialogs: dialogService, browserActions, checkpointModelPicker } = stores;
+  // Resolve at request time: authenticated fetch is installed when the runtime
+  // starts, after this composition graph has already been constructed.
+  const runtimeFetch = (...args) => window.fetch(...args);
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -418,7 +421,7 @@ const extensionUiAdapters = dialogAdapters.extensionUi;
 const credentialsAssembly = createCredentialsAssembly({
   uiActions,
   openModal: openModalState,
-  fetchImpl: fetch,
+  fetchImpl: runtimeFetch,
   confirm: extensionUiAdapters.confirm,
   toast: addToast,
   setState: updateCredentialsState,
@@ -966,7 +969,7 @@ const commandPaletteKeyboardController = commandRuntime.keyboardController;
 
 // Test/debug scripts use these hooks to seed and inspect session state.
 const runtimeAttachments = platformAssembly.configureAttachments({
-  installAuthenticatedFetch: () => installAuthenticatedFetch(token),
+  installAuthenticatedFetch: () => installAuthenticatedFetch(token, { windowTarget: window }),
   installDebugHooks: () => installDebugHooks(window, {
     rpc,
     refreshState: () => getSessionRuntime().refreshState(),
