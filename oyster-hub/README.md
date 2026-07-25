@@ -92,9 +92,9 @@ Open `http://127.0.0.1:8787/#token=<hub-token>`. The standard Oyster interface s
 
 ### Cloud VM source bootstrap
 
-The cloud connector supports DigitalOcean, AWS EC2, and GCP Compute Engine. Creating an environment generates a one-use, generation-scoped registration secret and submits provider-native user data:
+The **+** control provisions DigitalOcean Droplets, Hetzner Cloud Servers, AWS EC2 instances, and GCP Compute Engine VMs. Creating an environment generates a one-use, generation-scoped registration secret and submits the same provider-neutral `#cloud-config` through provider-native user-data or metadata:
 
-- DigitalOcean: `user_data` on the Droplet create request;
+- DigitalOcean and Hetzner: `user_data` on the server create request;
 - AWS: base64 `UserData` on `RunInstances`; and
 - GCP: the `user-data` instance metadata item.
 
@@ -105,18 +105,33 @@ The generated `#cloud-config` installs Node.js 22, Git, and build dependencies, 
   "cloud": {
     "stateFile": "./cloud-state.json",
     "registryStateFile": "./box-registry.json",
+    "publicUrl": "https://hub.example.com",
     "boxConnectUrl": "wss://hub.get-oyster.dev/box/connect",
     "repository": "https://github.com/SergeiKireevDev/oyster.git",
-    "ref": "main"
+    "ref": "llmbox-cloud-feature",
+    "aws": {
+      "principalArn": "arn:aws:iam::111122223333:role/OysterHub",
+      "cloudFormationTemplateUrl": "https://assets.example.com/oyster-aws-role.yaml",
+      "roleName": "OysterHubRole"
+    }
   }
 }
 ```
 
-Provider credentials remain in the owner-only cloud state file and are never sent to the VM. The VM receives only its box ID, generation, provider kind, and expiring one-use bootstrap secret. After the first WebSocket registration, Hub returns a generation-scoped reconnect credential which the agent stores under `/var/lib/oyster-box-agent/`. Provider resources are created with Hub ownership, box ID, and generation tags/labels.
+Provider credentials remain in the owner-only cloud state file and are never sent to the VM. Relative state paths resolve from the Hub config file and are written with mode `0600`. Set `OYSTER_HUB_CLOUD_CREDENTIAL_KEY` in production to envelope-encrypt the credential portion of `cloud.stateFile` with AES-256-GCM; existing plaintext state migrates on its next write. Losing or changing this key makes encrypted provider credentials unreadable.
 
-`/box/connect` accepts no query credentials and keeps the box principal separate from `/spoke/connect`. It implements registration, status, heartbeat, reconnect, connection replacement, and bounded multiplexed Dial streams to Oyster on box-local `127.0.0.1:8080`. Hub carries workspace HTTP, uploads, and SSE over those streams without exposing the VM service publicly. Exec remains a follow-up protocol capability. The registry binds registration to the instance ID returned by the provider connector and requires a provider attestation envelope; production deployments should inject cryptographic attestation verification in addition to the built-in envelope and identity checks.
+The VM receives only its box ID, generation, provider kind, and expiring one-use bootstrap secret. After the first WebSocket registration, Hub returns a generation-scoped reconnect credential which the agent stores under `/var/lib/oyster-box-agent/`; the registry persists only hashed credentials. Provider resources are created with Hub ownership, box ID, and generation tags or labels.
 
-Authentication methods are a DigitalOcean personal access token, AWS IAM access/secret keys (with optional session token), and a GCP service-account JSON key. The DigitalOcean token needs Droplet create/read/delete/action, image/size/region read, and tag create/read permissions. GCP exchanges a signed service-account JWT through OAuth 2.0. Interactive user OAuth is not yet implemented.
+`/box/connect` accepts no query credentials and keeps the box principal separate from `/spoke/connect`. It implements registration, status, heartbeat, reconnect, connection replacement, and bounded multiplexed Dial streams to Oyster on box-local `127.0.0.1:8080`. Hub carries workspace HTTP, uploads, and SSE over those streams without exposing the VM service publicly. Exec remains a follow-up protocol capability. Registrations are bound to the provider instance ID and require a provider attestation envelope; production deployments should inject cryptographic attestation verification in addition to the built-in envelope and identity checks.
+
+The mobile-first connection wizard uses provider-appropriate methods:
+
+- **DigitalOcean:** authorization-code OAuth when a client is configured, with a personal access token under advanced options.
+- **Google Cloud:** authorization-code OAuth with offline access and a project picker, with service-account JSON file upload under advanced options.
+- **AWS:** a CloudFormation-created cross-account IAM role and temporary STS credentials, with IAM access keys under advanced options.
+- **Hetzner Cloud:** guided creation of a project-scoped read/write API token. Hetzner token removal is local; revoke it in the Hetzner console as well.
+
+Register separate development and production DigitalOcean/Google web applications with exact HTTPS callbacks at `{publicUrl}/cloud/oauth/{provider}/callback`. Self-hosted operators supply their own OAuth clients. Keep the Google cloud-provisioning client separate from the llmbox `openid email` admin-login client. Browser authorization uses one-time state and PKCE, expires after 20 minutes, exchanges and refreshes tokens on Hub, and never returns provider credentials to the browser. Google disconnect uses Google's revocation endpoint; DigitalOcean users should also revoke connected-app access in their provider console.
 
 Cloud workspace controls in the Hub sidebar pause/resume the provider VM or permanently destroy it. Pause retains the boot disk and stored Oyster state. Storage charges continue; DigitalOcean may also continue charging for a powered-off Droplet because its resources remain reserved. Destroy deletes the VM and disk, revokes its box credential, and cannot be undone.
 
@@ -159,11 +174,18 @@ Environment overrides are available for deployment:
 | `OYSTER_HUB_LLMBOX_ADDON` | native `llmbox.node` path |
 | `OYSTER_HUB_LLMBOX_CONFIG` | embedded llmbox YAML config path |
 | `OYSTER_HUB_WORKSPACE_TOKEN_SECRET` | HMAC secret used to derive Oyster tokens |
-| `OYSTER_HUB_CLOUD_STATE_FILE` | Owner-only cloud credentials and provision records |
-| `OYSTER_HUB_BOX_REGISTRY_STATE_FILE` | Hashed bootstrap/reconnect records and observed box state |
-| `OYSTER_HUB_BOX_CONNECT_URL` | Public `wss://` callback used by generated cloud-init |
-| `OYSTER_HUB_SOURCE_REPOSITORY` | HTTPS Oyster source repository cloned by cloud-init |
-| `OYSTER_HUB_SOURCE_REF` | Source branch/tag cloned by cloud-init |
+| `OYSTER_HUB_CLOUD_STATE_FILE` | Owner-only file containing cloud credentials and provision records |
+| `OYSTER_HUB_CLOUD_CREDENTIAL_KEY` | Secret used to encrypt the credential portion of cloud state |
+| `OYSTER_HUB_PUBLIC_URL` | Public HTTPS Hub origin used to derive OAuth callback URLs |
+| `OYSTER_HUB_DIGITALOCEAN_OAUTH_CLIENT_ID`, `OYSTER_HUB_DIGITALOCEAN_OAUTH_CLIENT_SECRET` | DigitalOcean OAuth application credentials |
+| `OYSTER_HUB_GOOGLE_OAUTH_CLIENT_ID`, `OYSTER_HUB_GOOGLE_OAUTH_CLIENT_SECRET` | Dedicated Google cloud-provisioning OAuth client |
+| `OYSTER_HUB_AWS_ACCESS_KEY_ID`, `OYSTER_HUB_AWS_SECRET_ACCESS_KEY`, `OYSTER_HUB_AWS_SESSION_TOKEN` | Hub AWS principal credentials used only to call STS AssumeRole |
+| `OYSTER_HUB_AWS_PRINCIPAL_ARN` | Hub role/user trusted by customer CloudFormation stacks |
+| `OYSTER_HUB_AWS_CLOUDFORMATION_TEMPLATE_URL` | HTTPS URL of the reviewed least-privilege role template |
+| `OYSTER_HUB_BOX_REGISTRY_STATE_FILE` | Owner-only hashed box registration state and observed state |
+| `OYSTER_HUB_BOX_CONNECT_URL` | Public `wss://` callback embedded in cloud-init |
+| `OYSTER_HUB_SOURCE_REPOSITORY` | HTTPS source repository cloned by cloud-init |
+| `OYSTER_HUB_SOURCE_REF` | Source branch or tag cloned by cloud-init |
 | `HOST`, `PORT` | Listener |
 
 ## API
@@ -179,7 +201,14 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 | `POST /api/v1/environments/{id}/actions` | Pause or resume a managed cloud VM. |
 | `DELETE /api/v1/environments/{id}` | Permanently destroy a managed cloud VM and revoke its box credential. |
 | `GET /api/v1/cloud/providers` | List supported providers and redacted credential status. |
-| `PUT, DELETE /api/v1/cloud/providers/{provider}/credentials` | Store or remove write-only provider credentials. |
+| `PUT, DELETE /api/v1/cloud/providers/{provider}/credentials` | Store/replace or remove write-only cloud credentials. |
+| `POST /api/v1/cloud/providers/{provider}/authorization/start` | Start DigitalOcean or Google browser authorization. |
+| `GET /cloud/oauth/{provider}/callback` | Public one-time provider callback; returns no token material. |
+| `GET /api/v1/cloud/authorization/{flow}/status` | Read an authenticated safe flow snapshot. |
+| `GET, POST /api/v1/cloud/providers/gcp/projects` | List or select the OAuth account's GCP project. |
+| `POST /api/v1/cloud/providers/aws/role/start` | Start CloudFormation cross-account role setup. |
+| `POST /api/v1/cloud/authorization/aws/{flow}/verify` | Verify the role through STS and complete setup. |
+| `POST /api/v1/cloud/providers/{provider}/handoff/start` | Create an authenticated cross-device setup reference. |
 | `GET /api/v1/cloud/providers/{provider}/options` | Query live regions/zones, instance types, and images. |
 | `WSS /box/connect` | Restricted, generation-scoped outbound box-agent registration. |
 | `GET /api/v1/workspaces` | Query llmbox and list discovered workspaces. |

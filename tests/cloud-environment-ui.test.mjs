@@ -24,9 +24,15 @@ test("cloud environment modal provisions source-installed reverse-connected Oyst
   assert.match(source, /providerId === "digitalocean"/);
   assert.match(source, /providerId === "hetzner" \? "HZ"/);
   assert.match(source, /providerId === "aws" \? "AWS"/);
-  assert.match(source, /OAuth 2\.0 service account/);
-  assert.match(source, /selectedProvider\.id === "digitalocean"[\s\S]*tag:create[\s\S]*oyster-hub/);
+  assert.match(source, /Sign in with DigitalOcean|oauth_redirect/);
+  assert.match(source, /Sign in with Google|Choose a project/);
+  assert.match(source, /Connect AWS account|assume_role/);
+  assert.match(source, /Create Hetzner API token|Open Hetzner API tokens/);
+  assert.match(source, /Advanced connection options/);
+  assert.match(source, /type="file"/);
+  assert.match(source, /cloudBrowser\.navigate/);
   assert.match(source, /installs Oyster from source with cloud-init/);
+  assert.match(source, /llmbox-cloud-feature source branch/);
   assert.match(source, /wss:\/\/hub\.get-oyster\.dev\/box\/connect/);
   assert.match(source, /appears immediately as awaiting agent/);
   assert.doesNotMatch(source, /cloud-init are not installed|raw VM will be created/);
