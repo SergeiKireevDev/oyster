@@ -24,9 +24,9 @@ Only OAuth providers exposed by the configured pi SDK are offered. Pi owns provi
 
 OAuth flows expire after 15 minutes of inactivity and can be cancelled. For a loopback redirect opened on another device, copy the final redirect URL or authorization code from the unreachable page and paste it into the modal.
 
-### OpenAI Codex device-code login
+### Device-code login
 
-OpenAI Codex can bind pi to a ChatGPT Plus or Pro account without exposing Oyster's loopback callback. Start **OpenAI Codex** OAuth, choose **Device code login (headless)**, and Oyster displays a one-time code. Copy the code, open the linked OpenAI verification page, and enter it there. Keep the Credentials modal open while pi polls OpenAI; after approval, pi stores the OAuth credential and Oyster restarts the active pi processes automatically.
+When an OAuth provider supports both browser and device-code login, Oyster selects device-code login automatically instead of presenting a method picker. This includes OpenAI Codex and dynamically configured Radius providers. Copy the one-time code, open the linked verification page, and enter it there. Keep the Credentials modal open while pi polls the provider; after approval, pi stores the OAuth credential and Oyster restarts the active pi processes automatically.
 
 Signing out removes the local OAuth credential but does not revoke the upstream grant. Revoke connected-app access with the provider when required.
 

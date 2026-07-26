@@ -52,7 +52,13 @@
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
   const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, cwd);
   const createSessionInFolder = (workspace = null) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, workspace);
-  const openSearchHit = (group, hit) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
+  const openSearchHit = (group, hit) => {
+    if (hubMode) {
+      selectedEnvironmentId = hit.environmentId || group.first?.environmentId || selectedEnvironmentId;
+      setActiveWorkspace(hit.workspaceId || group.first?.workspaceId);
+    }
+    return uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
+  };
   const stopSession = (runner) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, savedSession(runner) ?? runner);
   const archiveSession = (session) => uiActions.invoke(SESSION_PICKER_ARCHIVE_ACTION, session);
   const deleteSession = (runner) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, savedSession(runner) ?? runner);
@@ -218,7 +224,7 @@
   $: visibleSessionEnvironments = availableWorkspaceIds
     ? availableEnvironmentView(sessionEnvironments, selectedEnvironmentId, availableWorkspaces)
     : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null);
-  $: visibleSearchEnvironments = filterEnvironmentWorkspaces(searchEnvironments, selectedEnvironmentId, availableWorkspaceIds);
+  $: visibleSearchEnvironments = searchEnvironmentView(searchEnvironments, availableWorkspaces);
   let expandedCwds = new Set();
   let initializedCwdExpansion = false;
   $: if (!initializedCwdExpansion && currentCwd) {
@@ -309,6 +315,19 @@
           : environment.workspaces,
       }))
       .filter((environment) => environment.workspaces.length);
+  }
+  function searchEnvironmentView(environments, workspaces) {
+    return environments.map((environment) => ({
+      ...environment,
+      workspaces: environment.workspaces.map((workspace) => {
+        const discovered = workspaces.find((candidate) => candidate.id === workspace.workspaceId);
+        return discovered ? {
+          ...workspace,
+          status: effectiveWorkspaceStatus(discovered),
+          provider: discovered.provider,
+        } : workspace;
+      }),
+    }));
   }
   function mergeEnvironmentOptions(primary, secondary) {
     const options = new Map();
@@ -663,6 +682,10 @@
       {#if hubMode}
         {#each visibleSearchEnvironments as environment (environment.environmentId)}
           <section class="session-sidebar-environment-view">
+            <div class="session-sidebar-search-environment-heading">
+              <small>Environment</small>
+              <strong>{environment.environmentName}</strong>
+            </div>
             {#each environment.workspaces as workspace (workspace.workspaceId)}
               <section
                 class="session-sidebar-workspace-container"

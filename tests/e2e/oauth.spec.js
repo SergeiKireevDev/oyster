@@ -3,9 +3,6 @@ import { api, dexec, login, MOBILE_VIEWPORT } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
 const PROVIDER = "anthropic";
-const FLOW_ID = "a".repeat(64);
-const SELECT_ID = "b".repeat(64);
-const MANUAL_ID = "c".repeat(64);
 
 async function restartCurrentRunner() {
   const result = await api("POST", "/restart");
@@ -31,8 +28,12 @@ async function expectAnthropicAvailability(page, expected) {
 async function installMockOAuthRoutes(page) {
   let signedIn = false;
   let generation = 0;
+  let flowSequence = 0;
   let flow = null;
+  let selectRequestId = null;
+  let autoComplete = true;
   const responseBodies = [];
+  const oauthResponses = [];
 
   const fulfill = async (route, body, status = 200) => {
     responseBodies.push(JSON.stringify(body));
@@ -52,12 +53,15 @@ async function installMockOAuthRoutes(page) {
     }] });
   });
   await page.route("**/oauth/start", async (route) => {
+    flowSequence += 1;
+    const suffix = flowSequence.toString(16);
+    const flowId = `${"a".repeat(64 - suffix.length)}${suffix}`;
+    selectRequestId = `${"b".repeat(64 - suffix.length)}${suffix}`;
     flow = {
-      flowId: FLOW_ID, provider: PROVIDER, status: "pending", phase: "select", createdAt: 1, updatedAt: 1,
+      flowId, provider: PROVIDER, status: "pending", phase: "select", createdAt: flowSequence, updatedAt: flowSequence,
       authorization: { url: "https://auth.invalid/mock", instructions: "Complete mock browser authorization" },
-      deviceCode: { userCode: "MOCK-DEVICE-CODE", verificationUri: "https://auth.invalid/device", expiresInSeconds: 900 },
       requests: [{
-        requestId: SELECT_ID, kind: "select", message: "Choose mock sign-in method",
+        requestId: selectRequestId, kind: "select", message: "Choose mock sign-in method",
         options: [{ id: "manual", label: "Manual callback" }, { id: "device", label: "Device code" }],
       }],
     };
@@ -65,29 +69,31 @@ async function installMockOAuthRoutes(page) {
   });
   await page.route("**/oauth/respond", async (route) => {
     const body = route.request().postDataJSON();
-    if (body.requestId === SELECT_ID) {
-      flow = {
-        ...flow, phase: "manual_code",
-        requests: [{ requestId: MANUAL_ID, kind: "manual_code", message: "Paste mock redirect", placeholder: "http://localhost/callback" }],
-      };
-      return fulfill(route, { flow }, 202);
-    }
+    oauthResponses.push(body);
+    expect(body).toEqual({ flowId: flow.flowId, requestId: selectRequestId, value: "device" });
+    flow = {
+      ...flow,
+      phase: "device_code",
+      deviceCode: { userCode: "MOCK-DEVICE-CODE", verificationUri: "https://auth.invalid/device", expiresInSeconds: 900 },
+      requests: [],
+    };
+    return fulfill(route, { flow }, 202);
+  });
+  await page.route("**/oauth/status", async (route) => {
+    if (!autoComplete) return fulfill(route, { flow });
     signedIn = true;
     generation += 1;
     writeMockOAuth(true, generation);
     await restartCurrentRunner();
-    flow = { ...flow, phase: "waiting", requests: [] };
-    return fulfill(route, { flow }, 202);
-  });
-  await page.route("**/oauth/status", async (route) => {
     flow = {
-      flowId: FLOW_ID, provider: PROVIDER, status: "succeeded", phase: "complete", createdAt: 1, updatedAt: 2,
+      ...flow, status: "succeeded", phase: "complete", updatedAt: flow.updatedAt + 1,
+      deviceCode: undefined,
       restart: { status: "restarted", runnerIds: ["mock-runner"] },
     };
     return fulfill(route, { flow });
   });
   await page.route("**/oauth/cancel", async (route) => {
-    flow = { flowId: FLOW_ID, provider: PROVIDER, status: "cancelled", phase: "complete", failureCode: "oauth_cancelled" };
+    flow = { ...flow, status: "cancelled", phase: "complete", failureCode: "oauth_cancelled", requests: [], deviceCode: undefined };
     return fulfill(route, { flow });
   });
   await page.route("**/oauth", async (route) => {
@@ -100,7 +106,13 @@ async function installMockOAuthRoutes(page) {
       restart: { status: "restarted", runnerIds: ["mock-runner"] },
     });
   });
-  return { responseBodies, isSignedIn: () => signedIn };
+  return {
+    responseBodies,
+    oauthResponses,
+    isSignedIn: () => signedIn,
+    generation: () => generation,
+    holdCompletion: () => { autoComplete = false; },
+  };
 }
 
 async function runOAuthFlow(page) {
@@ -122,40 +134,35 @@ async function runOAuthFlow(page) {
   await expect(page.locator("#mTitle")).toHaveText("Credentials");
   await expect(page.getByRole("link", { name: "Open authorization page" })).toHaveAttribute("target", "_blank");
   await expect(page.getByLabel("Device code")).toHaveValue("MOCK-DEVICE-CODE");
-  await page.getByRole("button", { name: "Manual callback" }).click();
-  const manual = page.locator('input[name="oauthResponse"]');
-  const continueButton = page.getByRole("button", { name: "Continue" });
-  await expect(continueButton).toBeDisabled();
-  await manual.fill("   ");
-  await expect(continueButton).toBeDisabled();
-  await manual.fill("http://localhost/callback?code=e2e-manual-code-canary");
-  await expect(continueButton).toBeEnabled();
-  await continueButton.click();
+  await expect(page.getByRole("button", { name: "Manual callback" })).toHaveCount(0);
   await expect(page.getByText("Sign-in completed.")).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Pi restart: restarted")).toBeVisible();
+  await expect.poll(mock.generation).toBe(1);
+  expect(mock.oauthResponses[0]?.value).toBe("device");
   await expectAnthropicAvailability(page, true);
   await expect(row.getByRole("button", { name: "Re-authenticate" })).toBeVisible();
-  expect(await page.locator("body").textContent()).not.toContain("e2e-manual-code-canary");
   expect(mock.responseBodies.join("\n")).not.toContain("e2e-access-token-1-canary");
   expect(mock.responseBodies.join("\n")).not.toContain("e2e-refresh-token-1-canary");
 
-  // Re-authenticate successfully, replacing the first mock token without
-  // exposing either credential in the page or response bodies.
+  // Re-authenticate successfully through the automatically selected device-code
+  // flow, replacing the first mock token without exposing either credential.
   await row.getByRole("button", { name: "Re-authenticate" }).click();
   await page.getByRole("button", { name: "Yes" }).click();
   await expect(page.locator("#mTitle")).toHaveText("Credentials");
-  await page.getByRole("button", { name: "Manual callback" }).click();
-  await page.locator('input[name="oauthResponse"]').fill("http://localhost/callback?code=e2e-second-code-canary");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByLabel("Device code")).toHaveValue("MOCK-DEVICE-CODE");
   await expect(page.getByText("Sign-in completed.")).toBeVisible({ timeout: 15000 });
-  expect(await page.locator("body").textContent()).not.toContain("e2e-second-code-canary");
+  await expect.poll(mock.generation).toBe(2);
+  expect(mock.oauthResponses[1]?.value).toBe("device");
   expect(mock.responseBodies.join("\n")).not.toContain("e2e-access-token-1-canary");
   expect(mock.responseBodies.join("\n")).not.toContain("e2e-access-token-2-canary");
 
   // A subsequent re-authentication can be cancelled without replacing it.
+  mock.holdCompletion();
   await row.getByRole("button", { name: "Re-authenticate" }).click();
   await page.getByRole("button", { name: "Yes" }).click();
   await expect(page.locator("#mTitle")).toHaveText("Credentials");
+  await expect(page.getByLabel("Device code")).toHaveValue("MOCK-DEVICE-CODE");
+  expect(mock.oauthResponses[2]?.value).toBe("device");
   await page.getByRole("button", { name: "Cancel sign-in" }).click();
   await expect(page.getByText("Sign-in cancelled.")).toBeVisible();
   expect(mock.isSignedIn()).toBe(true);
@@ -167,7 +174,6 @@ async function runOAuthFlow(page) {
   expect(mock.isSignedIn()).toBe(false);
   expect(dexec("grep -F e2e-access-token- /root/.pi/agent/auth.json >/dev/null; echo $? ")).not.toBe("0");
   const browserStorage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-  expect(browserStorage).not.toContain("e2e-manual-code-canary");
   expect(browserStorage).not.toContain("e2e-access-token-");
 }
 

@@ -301,7 +301,11 @@ export function createSearchHitSessionController({ close, getSessionId, open, ge
     close();
     if (hit.sessionId === getSessionId()) return focus(hit);
     try {
-      const runner = await open({ ...sessionOpenSelection(sessionKey), dir: hit.sessionCwd || null });
+      const runner = await open({
+        ...sessionOpenSelection(sessionKey),
+        dir: hit.sessionCwd || null,
+        workspaceId: hit.workspaceId || null,
+      });
       if (hit.sessionCwd) setWorkdir(hit.sessionCwd);
       toast(`switched to: ${hit.sessionName || hit.sessionPreview || "session"}`);
       if (runner.id === getCurrentRunner()) {

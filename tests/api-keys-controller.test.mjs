@@ -144,6 +144,46 @@ test("credentials controller starts, polls, responds to, cancels, and re-authent
   controller.teardown();
 });
 
+test("OAuth providers skip browser selection whenever they offer device-code login", async () => {
+  const flowId = "d".repeat(64);
+  const requestId = "e".repeat(64);
+  const calls = [];
+  const states = [];
+  const responses = [
+    response(200, { providers: [{ provider: "radius", displayName: "Radius", credentialType: "oauth", oauthCapable: true }] }),
+    response(202, { flow: {
+      flowId, provider: "radius", status: "pending", phase: "select",
+      requests: [{
+        requestId, kind: "select", message: "Sign in to Radius:",
+        options: [{ id: "browser", label: "Sign in with browser" }, { id: "device-code", label: "Sign in with device code" }],
+      }],
+    } }),
+    response(202, { flow: {
+      flowId, provider: "radius", status: "pending", phase: "device_code", requests: [],
+      deviceCode: { userCode: "ABCD-1234", verificationUri: "https://auth.openai.com/codex/device" },
+    } }),
+    response(200, { flow: { flowId, provider: "radius", status: "cancelled" } }),
+  ];
+  const controller = createCredentialsController({
+    async fetchImpl(path, options = {}) { calls.push({ path, options }); return responses.shift(); },
+    confirm: async () => true,
+    setState: (patch) => states.push(patch),
+    setTimer: () => ({ unref() {} }),
+    clearTimer() {},
+  });
+
+  controller.activate();
+  await controller.load();
+  assert.equal((await controller.startOAuth("radius")).ok, true);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const responseCall = calls.find((call) => call.path === "/oauth/respond");
+  assert.deepEqual(JSON.parse(responseCall.options.body), { flowId, requestId, value: "device-code" });
+  assert.doesNotMatch(JSON.stringify(states), /Browser login|"browser"/);
+  assert.match(JSON.stringify(states), /Requesting a one-time device code|ABCD-1234/);
+  controller.teardown();
+});
+
 test("credentials controller logs out locally with fallback and partial restart feedback", async () => {
   const providers = [{ provider: "mock", displayName: "Mock", credentialType: "oauth", source: "stored_oauth" }];
   const item = harness([
