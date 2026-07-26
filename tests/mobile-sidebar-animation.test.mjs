@@ -4,12 +4,18 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
-test("mobile session and hublot drawers use gentle directional entry animations", () => {
-  assert.match(css, /#sessions\.open[\s\S]*?box-shadow: 12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: sessions-slide-in 750ms/);
-  assert.match(css, /#hublots\.open[\s\S]*?box-shadow: -12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: hublots-slide-in 750ms/);
-  assert.match(css, /@keyframes sessions-slide-in[\s\S]*?translateX\(-14px\)/);
-  assert.match(css, /@keyframes hublots-slide-in[\s\S]*?translateX\(14px\)/);
-  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?#sessions\.open, #hublots\.open \{ animation: none; \}/);
+test("mobile session and hublot drawers animate in and reverse when closing", () => {
+  assert.match(css, /#sessions\.open[\s\S]*?box-shadow: 12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: sessions-slide-in 500ms/);
+  assert.match(css, /#hublots\.open[\s\S]*?box-shadow: -12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: hublots-slide-in 500ms/);
+  assert.match(css, /#sessions\.open\.closing[\s\S]*?sessions-slide-out 500ms[^;]+sessions-shadow-fade 100ms ease-out forwards/);
+  assert.match(css, /#hublots\.open\.closing[\s\S]*?hublots-slide-out 500ms[^;]+hublots-shadow-fade 100ms ease-out forwards/);
+  assert.match(css, /@keyframes sessions-slide-in[\s\S]*?translateX\(-100%\)/);
+  assert.match(css, /@keyframes sessions-slide-out[\s\S]*?translateX\(-100%\)/);
+  assert.match(css, /@keyframes hublots-slide-in[\s\S]*?translateX\(100%\)/);
+  assert.match(css, /@keyframes hublots-slide-out[\s\S]*?translateX\(100%\)/);
+  assert.match(css, /@keyframes sessions-shadow-fade[\s\S]*?rgba\(0,0,0,0\)/);
+  assert.match(css, /@keyframes hublots-shadow-fade[\s\S]*?rgba\(0,0,0,0\)/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?#sessions\.open\.closing, #hublots\.open\.closing \{ animation: none; \}/);
 });
 
 test("mobile header uses compact capsule typography", () => {
