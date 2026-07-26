@@ -21,6 +21,7 @@ export function createCredentialsController({
   let pollDelay = 500;
   let visible = false;
   let tornDown = false;
+  const automaticResponses = new Set();
 
   function beginRequest() {
     activeRequest?.abort();
@@ -69,8 +70,36 @@ export function createCredentialsController({
     pollTimer?.unref?.();
   }
 
+  function automaticDeviceCodeResponse(candidate) {
+    if (candidate?.status !== "pending") return null;
+    for (const request of candidate.requests ?? []) {
+      if (request.kind !== "select") continue;
+      const option = request.options?.find((item) => /device[ _-]*code/i.test(`${item.id} ${item.label}`));
+      if (option) return { requestId: request.requestId, value: option.id };
+    }
+    return null;
+  }
+
   function applyFlow(next) {
     flow = next ?? null;
+    const automatic = automaticDeviceCodeResponse(flow);
+    if (automatic) {
+      publish({
+        flow: {
+          ...flow,
+          phase: "device_code",
+          progress: "Requesting a one-time device code…",
+          requests: flow.requests.filter((request) => request.requestId !== automatic.requestId),
+        },
+        error: "",
+      });
+      schedulePoll();
+      if (!automaticResponses.has(automatic.requestId)) {
+        automaticResponses.add(automatic.requestId);
+        void respondOAuth(automatic);
+      }
+      return;
+    }
     publish({ flow, error: "" });
     if (flow?.status === "pending") {
       schedulePoll();
@@ -305,6 +334,7 @@ export function createCredentialsController({
     activeRequest = null;
     cancelAbandonedFlow();
     tornDown = true;
+    automaticResponses.clear();
     providers = [];
     setState({ providers: [], flow: null, setupMode: false, loading: false, error: "", lastRestart: null });
   }
