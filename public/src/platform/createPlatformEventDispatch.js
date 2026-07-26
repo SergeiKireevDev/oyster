@@ -21,6 +21,11 @@ export function createPlatformEventDispatch(deps) {
   });
 
   const extensionUiEvent = createExtensionUiEventController({ handleRequest: deps.handleExtensionUI });
+  const reloadAfterReplay = () => void deps.reloadTranscript().catch((error) => {
+    setReplaying(false);
+    deps.log("replayDone:reload:error", { error: error?.message ?? String(error) });
+    deps.toast(`session reload failed: ${error?.message ?? String(error)}`, "error");
+  });
   const replayDoneEvent = createReplayDoneEventController({
     markReplayDone: () => { replayDoneSeen = true; },
     isReplaying: () => replaying,
@@ -30,7 +35,7 @@ export function createPlatformEventDispatch(deps) {
     setWorkdir: deps.setWorkdir,
     refreshHublots: deps.refreshHublots,
     refreshRoutines: deps.refreshRoutines,
-    reloadTranscript: () => void deps.reloadTranscript().catch((error) => deps.log("replayDone:reload:error", { error: error?.message ?? String(error) })),
+    reloadTranscript: reloadAfterReplay,
   });
   const runnerPingEvent = createRunnerPingEventController({ currentRunners: deps.getRunners, setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
   const runnersUpdate = createRunnersUpdateController({ currentRunners: deps.getRunners, setRunners: deps.setRunners, onRunnersChanged: deps.onRunnersChanged, refreshTree: deps.refreshTree });
