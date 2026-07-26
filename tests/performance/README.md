@@ -18,8 +18,9 @@ The preparation:
    `oyster:longcat-100x100`.
 
 The credential files are bind mounts, not copied files. After the commit, the
-script starts a one-shot container to prove that neither credential file is in
-the resulting image and that the performance report is present.
+script starts a one-shot container to prove that no credential payload is in
+the resulting image and that the performance report is present. Docker may
+retain harmless zero-byte files at the two former bind-mount destinations.
 
 ## Do not run casually
 
