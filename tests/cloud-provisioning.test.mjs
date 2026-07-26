@@ -28,7 +28,7 @@ async function close(server) {
   await once(server, "close");
 }
 
-test("DigitalOcean credentials, live options, and provisioned environments persist without secret disclosure", async (t) => {
+test("DigitalOcean contributes one provider environment containing persistent cloud workspaces without secret disclosure", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-cloud-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const stateFile = join(root, "cloud-state.json");
@@ -79,38 +79,41 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   assert.deepEqual(options.sizes.map(({ id }) => id), ["s-1vcpu-1gb"], "sizes with no DigitalOcean regions are not orderable");
   assert.deepEqual(options.sizes[0].pricing, { hourly: 0.009, monthly: 6, currency: "USD" });
   assert.equal(options.defaults.image, "ubuntu-24-04-x64");
-  const environment = await service.provision({ provider: "digitalocean", name: "Cloud-Dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
-  assert.deepEqual(environment, {
-    id: "digitalocean-451",
-    name: "Cloud-Dev",
-    status: "awaiting_agent",
+  const workspace = await service.provision({ provider: "digitalocean", name: "Cloud-Dev", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64" });
+  assert.equal(workspace.environmentId, "cloud-digitalocean");
+  assert.equal(workspace.environmentName, "DigitalOcean");
+  assert.equal(workspace.id, "digitalocean-451");
+  assert.equal(workspace.name, "Cloud-Dev");
+  assert.equal(workspace.status, "awaiting_agent");
+  assert.equal(workspace.provider.type, "cloud");
+  assert.equal(workspace.provider.instanceId, "451");
+  assert.equal(workspace.provider.consoleUrl, "https://cloud.digitalocean.com/droplets/451");
+  assert.equal(JSON.stringify(workspace).includes(canary), false);
+  assert.deepEqual(await service.listEnvironments(), [{
+    id: "cloud-digitalocean",
+    name: "DigitalOcean",
+    kind: "cloud",
+    status: "online",
     local: false,
     cloud: true,
-    createdAt: environment.createdAt,
-    provider: {
-      id: "digitalocean", name: "DigitalOcean", instanceId: "451", state: "new", region: "nyc3", size: "s-1vcpu-1gb", image: "ubuntu-24-04-x64",
-      consoleUrl: "https://cloud.digitalocean.com/droplets/451",
-      generation: environment.provider.generation,
-      registrationStatus: "awaiting_agent",
-      lastSeenAt: null,
-    },
-  });
-  assert.equal(JSON.stringify(environment).includes(canary), false);
+    workspaceCount: 1,
+    provider: { id: "digitalocean", name: "DigitalOcean", configured: true },
+  }]);
   assert.equal(statSync(stateFile).mode & 0o777, 0o600);
   assert.match(readFileSync(stateFile, "utf8"), new RegExp(canary));
   assert.equal(readFileSync(stateFile, "utf8").includes(bootstrapSecret), false);
 
   const legacyState = JSON.parse(readFileSync(stateFile, "utf8"));
-  legacyState.environments[0].provider.consoleUrl = "/v2/actions/legacy-relative-link";
+  legacyState.workspaces[0].provider.consoleUrl = "/v2/actions/legacy-relative-link";
   writeFileSync(stateFile, JSON.stringify(legacyState));
   const restored = createCloudProvisioningService({ stateFile, fetchImpl });
   const restoredEnvironments = await restored.listEnvironments();
-  assert.deepEqual(restoredEnvironments.map(({ id }) => id), ["digitalocean-451"]);
-  assert.equal(restoredEnvironments[0].provider.consoleUrl, "https://cloud.digitalocean.com/droplets/451");
-  const [workspace] = await restored.listWorkspaces();
-  assert.equal(workspace.id, "digitalocean-451");
-  assert.equal(workspace.status, "awaiting_agent");
-  assert.equal(workspace.provider.directAgent, true);
+  assert.deepEqual(restoredEnvironments.map(({ id, workspaceCount }) => [id, workspaceCount]), [["cloud-digitalocean", 1]]);
+  const [restoredWorkspace] = await restored.listWorkspaces();
+  assert.equal(restoredWorkspace.id, "digitalocean-451");
+  assert.equal(restoredWorkspace.status, "awaiting_agent");
+  assert.equal(restoredWorkspace.provider.consoleUrl, "https://cloud.digitalocean.com/droplets/451");
+  assert.equal(restoredWorkspace.provider.directAgent, true);
   assert.equal((await restored.pause("digitalocean-451")).status, "paused");
   assert.equal((await restored.resume("digitalocean-451")).status, "resuming");
   assert.deepEqual(await restored.destroy("digitalocean-451"), { id: "digitalocean-451", name: "Cloud-Dev", destroyed: true });
@@ -119,6 +122,27 @@ test("DigitalOcean credentials, live options, and provisioned environments persi
   assert.deepEqual((await restored.listEnvironments()).map(({ id }) => id), []);
   assert.equal(calls.length, 8);
   assert.equal(calls.some(({ url }) => String(url).endsWith("/tags")), false, "an existing ownership tag does not require tag:create");
+});
+
+test("multiple cloud VM workspaces share one provider environment", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-cloud-environment-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const stateFile = join(root, "cloud-state.json");
+  writeFileSync(stateFile, JSON.stringify({
+    credentials: { digitalocean: { kind: "api_token", token: "provider-secret" } },
+    environments: [
+      { id: "digitalocean-1", name: "One", status: "active", provider: { id: "digitalocean", name: "DigitalOcean", instanceId: "1" } },
+      { id: "digitalocean-2", name: "Two", status: "paused", provider: { id: "digitalocean", name: "DigitalOcean", instanceId: "2" } },
+    ],
+  }));
+  const service = createCloudProvisioningService({ stateFile });
+  assert.deepEqual((await service.listEnvironments()).map(({ id, kind, workspaceCount }) => [id, kind, workspaceCount]), [
+    ["cloud-digitalocean", "cloud", 2],
+  ]);
+  assert.deepEqual((await service.listWorkspaces()).map(({ id, environmentId }) => [id, environmentId]), [
+    ["digitalocean-1", "cloud-digitalocean"],
+    ["digitalocean-2", "cloud-digitalocean"],
+  ]);
 });
 
 test("DigitalOcean explicitly creates one stable ownership tag when it is absent", async () => {
@@ -442,12 +466,12 @@ test("Hub cloud routes are authenticated, merge environments, and keep cloud ser
     async configure(provider, body) { configured.push([provider, body]); return { provider, configured: true }; },
     async removeCredentials(provider) { return { provider, configured: false }; },
     async options(provider, { region }) { return { regions: [{ id: region || "nyc3", name: "NYC" }], sizes: [], images: [], defaults: {} }; },
-    async provision(body) { return { id: "digitalocean-1", name: body.name, status: "provisioned", cloud: true, local: false, provider: { id: body.provider } }; },
+    async provision(body) { return { environmentId: "cloud-digitalocean", environmentName: "DigitalOcean", id: "digitalocean-1", name: body.name, status: "provisioned", url: null, provider: { id: body.provider, type: "cloud" } }; },
     async pause(id) { managed.push(["pause", id]); return { id, status: "paused" }; },
     async resume(id) { managed.push(["resume", id]); return { id, status: "resuming" }; },
     async destroy(id) { managed.push(["destroy", id]); return { id, destroyed: true }; },
-    async listEnvironments() { return [{ id: "digitalocean-1", name: "Cloud", status: "awaiting_agent", cloud: true }]; },
-    async listWorkspaces() { return [{ environmentId: "digitalocean-1", environmentName: "Cloud", id: "digitalocean-1", name: "Cloud", url: null, status: "awaiting_agent", provider: { type: "cloud", phase: "awaiting_agent" } }]; },
+    async listEnvironments() { return [{ id: "cloud-digitalocean", name: "DigitalOcean", kind: "cloud", status: "online", cloud: true, workspaceCount: 1 }]; },
+    async listWorkspaces() { return [{ environmentId: "cloud-digitalocean", environmentName: "DigitalOcean", id: "digitalocean-1", name: "Cloud", url: null, status: "awaiting_agent", provider: { type: "cloud", phase: "awaiting_agent" } }]; },
     async getWorkspace(id) { return id === "digitalocean-1" ? (await this.listWorkspaces())[0] : null; },
   };
   const driver = {
@@ -473,23 +497,24 @@ test("Hub cloud routes are authenticated, merge environments, and keep cloud ser
   assert.deepEqual(configured, [["digitalocean", { token: "canary" }]]);
   const optionResponse = await fetch(`${baseUrl}/api/v1/cloud/providers/digitalocean/options?region=sfo3`, { headers });
   assert.deepEqual((await optionResponse.json()).regions, [{ id: "sfo3", name: "NYC" }]);
-  const createResponse = await fetch(`${baseUrl}/api/v1/environments`, {
+  const createResponse = await fetch(`${baseUrl}/api/v1/workspaces`, {
     method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ provider: "digitalocean", name: "Cloud" }),
   });
   assert.equal(createResponse.status, 201);
-  assert.equal((await createResponse.json()).environment.id, "digitalocean-1");
+  assert.equal((await createResponse.json()).workspace.id, "digitalocean-1");
+  assert.equal((await fetch(`${baseUrl}/api/v1/environments`, { method: "POST", headers })).status, 405);
   const environments = await (await fetch(`${baseUrl}/api/v1/environments`, { headers })).json();
-  assert.deepEqual(environments.environments.map(({ id }) => id), ["digitalocean-1", "local"]);
-  const pauseResponse = await fetch(`${baseUrl}/api/v1/environments/digitalocean-1/actions`, {
+  assert.deepEqual(environments.environments.map(({ id }) => id), ["cloud-digitalocean", "local"]);
+  const pauseResponse = await fetch(`${baseUrl}/api/v1/workspaces/digitalocean-1/actions`, {
     method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ action: "pause" }),
   });
-  assert.equal((await pauseResponse.json()).environment.status, "paused");
-  const resumeResponse = await fetch(`${baseUrl}/api/v1/environments/digitalocean-1/actions`, {
+  assert.equal((await pauseResponse.json()).workspace.status, "paused");
+  const resumeResponse = await fetch(`${baseUrl}/api/v1/workspaces/digitalocean-1/actions`, {
     method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ action: "resume" }),
   });
-  assert.equal((await resumeResponse.json()).environment.status, "resuming");
-  const destroyResponse = await fetch(`${baseUrl}/api/v1/environments/digitalocean-1`, { method: "DELETE", headers });
-  assert.equal((await destroyResponse.json()).environment.destroyed, true);
+  assert.equal((await resumeResponse.json()).workspace.status, "resuming");
+  const destroyResponse = await fetch(`${baseUrl}/api/v1/workspaces/digitalocean-1`, { method: "DELETE", headers });
+  assert.equal((await destroyResponse.json()).workspace.destroyed, true);
   assert.deepEqual(managed, [["pause", "digitalocean-1"], ["resume", "digitalocean-1"], ["destroy", "digitalocean-1"]]);
   const workspaces = await (await fetch(`${baseUrl}/api/v1/workspaces`, { headers })).json();
   assert.deepEqual(workspaces.workspaces.map(({ id, status }) => [id, status]), [["digitalocean-1", "awaiting_agent"]]);

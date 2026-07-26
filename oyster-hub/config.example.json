@@ -12,29 +12,40 @@
     "publicUrl": "https://hub.example.com",
     "boxConnectUrl": "wss://hub.get-oyster.dev/box/connect",
     "repository": "https://github.com/SergeiKireevDev/oyster.git",
-    "ref": "llmbox-cloud-feature",
+    "ref": "main",
     "aws": {
       "principalArn": "arn:aws:iam::111122223333:role/OysterHub",
       "cloudFormationTemplateUrl": "https://assets.example.com/oyster-aws-role.yaml",
       "roleName": "OysterHubRole"
     }
   },
-  "driver": {
-    "type": "llmbox",
-    "transport": "native",
-    "binding": {
-      "addonPath": "llmbox/bindings/build/llmbox.node",
-      "configPath": "llmbox.yaml",
-      "closeTimeoutMs": 5000
+  "drivers": [
+    {
+      "type": "mock",
+      "endpoint": "http://localhost:8080",
+      "environmentId": "local",
+      "environmentName": "Local",
+      "id": "local",
+      "name": "Local Oyster",
+      "token": "replace-with-the-local-oyster-token"
     },
-    "tokenSecret": "replace-with-a-stable-random-workspace-token-secret",
-    "workspacePort": 8080,
-    "createProxy": true,
-    "tokenFile": {
-      "path": "/run/secrets/oyster-ui-token",
-      "mode": 384,
-      "uid": 0,
-      "gid": 0
+    {
+      "type": "llmbox",
+      "transport": "native",
+      "binding": {
+        "addonPath": "llmbox/bindings/build/llmbox.node",
+        "configPath": "llmbox.yaml",
+        "closeTimeoutMs": 5000
+      },
+      "tokenSecret": "replace-with-a-stable-random-workspace-token-secret",
+      "workspacePort": 8080,
+      "createProxy": true,
+      "tokenFile": {
+        "path": "/run/secrets/oyster-ui-token",
+        "mode": 384,
+        "uid": 0,
+        "gid": 0
+      }
     }
-  }
+  ]
 }

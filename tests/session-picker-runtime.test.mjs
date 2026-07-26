@@ -188,7 +188,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /session-sidebar-workspace-cloud-actions/);
   assert.match(source, /manageCloudWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
   assert.match(source, /manageCloudWorkspace\(workspace, "destroy"\)/);
-  assert.match(source, /\/api\/v1\/environments\/\$\{encodeURIComponent\(workspace\.workspaceId\)\}/);
+  assert.match(source, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspace\.workspaceId\)\}/);
   assert.match(source, /session-sidebar-workspace-create/);
   assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);
   assert.match(source, /class:current-cwd=\{isCurrentCwd\(group\)\}/);

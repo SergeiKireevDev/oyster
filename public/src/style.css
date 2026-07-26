@@ -314,6 +314,19 @@
   .session-sidebar-instance-tooltip header > span:first-child { min-width: 0; display: grid; gap: 2px; }
   .session-sidebar-instance-tooltip header small { color: var(--muted); font-size: 7.5px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
   .session-sidebar-instance-tooltip header strong { overflow-wrap: anywhere; font-size: 12px; }
+  .session-sidebar-environment-tooltip-actions { display: flex; align-items: center; gap: 7px; }
+  .session-sidebar-environment-tooltip-close {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font: 15px/1 inherit;
+    cursor: pointer;
+  }
+  .session-sidebar-environment-tooltip-close:hover { background: var(--hover); color: var(--text); }
   .session-sidebar-instance-status { flex: none; font-size: 7px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
   .session-sidebar-instance-status.status-online { color: var(--green); }
   .session-sidebar-instance-status.status-provisioning,
@@ -1577,8 +1590,8 @@
   .api-key-method-toggle:hover, .api-key-method-toggle:focus-visible { text-decoration: underline; }
   @media (max-width: 600px) { .api-key-form { grid-template-columns: 1fr; } .api-key-row, .api-key-status { align-items: flex-start; flex-direction: column; } }
 
-  /* ---------- cloud environment provisioning ---------- */
-  .cloud-environment-modal { min-height: 330px; }
+  /* ---------- cloud workspace provisioning ---------- */
+  .cloud-workspace-modal { min-height: 330px; }
   .cloud-steps { display: flex; align-items: center; margin: 1px 0 18px; color: var(--muted); }
   .cloud-steps span { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
   .cloud-steps span b { font-weight: 600; }
@@ -1679,7 +1692,7 @@
   .cloud-success dd { margin: 1px 0 0; overflow: hidden; font: 10.5px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
   .cloud-console-link { text-decoration: none; }
   @media (max-width: 600px) {
-    .cloud-environment-modal { min-height: min(70vh, 620px); }
+    .cloud-workspace-modal { min-height: min(70vh, 620px); }
     .cloud-provider-grid { grid-template-columns: 1fr; }
     .cloud-provider-card { grid-template-columns: auto 1fr auto; grid-template-rows: auto; min-height: 0; align-items: center; }
     .cloud-form { grid-template-columns: 1fr; }

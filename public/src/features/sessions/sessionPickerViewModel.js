@@ -79,7 +79,7 @@ export function partitionSessionGroupsByArchive(groups, now = Date.now()) {
   ];
 }
 
-/** Nests search results under physical/cloud environments and their microVM workspaces. */
+/** Nests search results under connection environments and their workspaces. */
 export function groupSessionSearchByHierarchy(groups, defaults = {}) {
   const environments = new Map();
   for (const group of groups) {
@@ -107,7 +107,7 @@ export function groupSessionSearchByHierarchy(groups, defaults = {}) {
   }));
 }
 
-/** Nests cwd categories under physical/cloud environments and microVM workspaces. */
+/** Nests cwd categories under connection environments and their workspaces. */
 export function groupSessionCwdsByHierarchy(groups, defaults = {}) {
   const environments = new Map();
   for (const group of groups) {

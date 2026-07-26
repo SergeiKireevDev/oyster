@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createOysterHub } from "../oyster-hub/app.mjs";
 import { loadConfig, validateConfig } from "../oyster-hub/config.mjs";
 import { deriveWorkspaceToken } from "../oyster-hub/drivers/llmbox.mjs";
+import { createWorkspaceDriver } from "../oyster-hub/drivers/index.mjs";
 import { createMockWorkspaceDriver } from "../oyster-hub/drivers/mock.mjs";
 import { parseScopedValue } from "../oyster-hub/ui-gateway.mjs";
 
@@ -181,6 +182,15 @@ test("oyster hub validates configurable llmbox and mock drivers", () => {
   assert.match(native.driver.binding.configPath, /llmbox\.yaml$/);
   assert.equal("token" in native.driver, false);
 
+  const composite = validateConfig({ token: "x", drivers: [
+    { type: "mock", endpoint: "http://localhost:8080", id: "local", name: "Local Oyster", token: "local-token" },
+    { type: "llmbox", endpoint: "http://localhost:8081", token: "llmbox-key", tokenSecret: "secret" },
+  ] }, {});
+  assert.equal(composite.driver.type, "composite");
+  assert.deepEqual(composite.driver.drivers.map(({ type }) => type), ["mock", "llmbox"]);
+  assert.throws(() => validateConfig({ token: "x", driver: { type: "mock" }, drivers: [{ type: "mock" }, { type: "mock" }] }, {}), /either driver or drivers/);
+  assert.throws(() => validateConfig({ token: "x", drivers: [{ type: "mock" }] }, {}), /at least two/);
+
   assert.throws(() => validateConfig({ token: "x", cloud: { repository: "http://example.com/oyster.git" }, driver: { type: "mock" } }, {}), /must use https/);
   assert.throws(() => validateConfig({ token: "x", cloud: { oauth: { gcp: { clientId: "only-id" } } }, driver: { type: "mock" } }, {}), /both clientId and clientSecret/);
   const oauthConfig = validateConfig({ token: "x", cloud: { publicUrl: "https://hub.example" }, driver: { type: "mock" } }, {
@@ -254,6 +264,26 @@ test("mock driver lists every configured local Oyster workspace", async () => {
   assert.equal(await driver.getWorkspace("missing"), null);
 });
 
+test("composite driver exposes configured local and llmbox environments together", async (t) => {
+  const upstream = fakeWorkspace({ unauthenticated: true });
+  const upstreamUrl = await listen(upstream);
+  t.after(() => close(upstream));
+  const llmbox = fakeLlmbox(upstreamUrl);
+  const llmboxUrl = await listen(llmbox.server);
+  t.after(() => close(llmbox.server));
+  const config = validateConfig({ token: "hub-secret", drivers: [
+    { type: "mock", endpoint: upstreamUrl, environmentId: "local", environmentName: "Local", id: "direct", name: "Direct Oyster" },
+    { type: "llmbox", endpoint: llmboxUrl, token: "llmbox-secret", tokenSecret: "workspace-token-secret" },
+  ] }, {});
+  const driver = createWorkspaceDriver(config.driver);
+
+  assert.deepEqual((await driver.listEnvironments()).map(({ id, kind }) => [id, kind]), [["local", "local"], ["edge-1", "llmbox"]]);
+  assert.deepEqual((await driver.listWorkspaces()).map(({ id, environmentId }) => [id, environmentId]), [["direct", "local"], ["local", "edge-1"]]);
+  assert.equal((await driver.getWorkspace("direct")).name, "Direct Oyster");
+  assert.equal((await driver.getWorkspace("local")).provider.type, "llmbox");
+  assert.equal(driver.capabilities.create, true);
+});
+
 test("mock driver exposes one local read-only workspace through a hub on port 8082", async (t) => {
   const upstream = fakeWorkspace({ unauthenticated: true });
   const upstreamUrl = await listen(upstream);
@@ -283,7 +313,7 @@ test("mock driver exposes one local read-only workspace through a hub on port 80
   });
   assert.equal(environmentResponse.status, 200);
   assert.deepEqual((await environmentResponse.json()).environments, [
-    { id: "local", name: "Local", status: "online", local: true },
+    { id: "local", name: "Local", kind: "local", status: "online", local: true },
   ]);
 
   const create = await fetch(`${hubUrl}/api/v1/workspaces`, {
@@ -397,7 +427,7 @@ test("oyster hub discovers llmbox boxes and aggregates their Oyster results", as
     headers: { authorization: "Bearer hub-secret" },
   });
   assert.deepEqual((await environmentResponse.json()).environments, [
-    { id: "edge-1", name: "edge-1", status: "online", default: true },
+    { id: "edge-1", name: "edge-1", kind: "llmbox", status: "online", default: true, spoke: "edge-1" },
   ]);
   assert.equal(JSON.stringify(overview).includes("llmbox-secret"), false);
   assert.equal(JSON.stringify(overview).includes("workspace-token-secret"), false);
