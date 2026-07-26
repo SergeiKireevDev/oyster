@@ -72,8 +72,10 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
       .map((spoke) => ({
         id: String(spoke?.name || ""),
         name: String(spoke?.name || ""),
+        kind: "llmbox",
         status: spoke?.connected ? "online" : "offline",
         default: Boolean(spoke?.default),
+        spoke: String(spoke?.name || ""),
       }))
       .filter((environment) => environment.id);
   }

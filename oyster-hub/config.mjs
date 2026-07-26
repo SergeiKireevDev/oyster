@@ -128,6 +128,22 @@ function validateLlmboxDriver(input, env, timeoutMs) {
   });
 }
 
+function validateWorkspaceDriver(input, env, timeoutMs) {
+  const driverType = requireString(input?.type, "driver.type");
+  if (driverType === "llmbox") return validateLlmboxDriver(input, env, timeoutMs);
+  if (driverType === "mock") return validateMockDriver(input, env);
+  throw new Error(`unsupported workspace driver: ${driverType}`);
+}
+
+function validateCompositeDriver(inputs, env, timeoutMs) {
+  if (!Array.isArray(inputs) || inputs.length < 2) throw new Error("drivers must be an array containing at least two workspace drivers");
+  const drivers = inputs.map((input) => validateWorkspaceDriver(input, env, timeoutMs));
+  if (drivers.filter((driver) => driver.transport === "native").length > 1) {
+    throw new Error("drivers may contain at most one native workspace driver");
+  }
+  return Object.freeze({ type: "composite", endpoint: "multiple", drivers: Object.freeze(drivers) });
+}
+
 export function validateConfig(input, env = process.env) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("hub config must be an object");
   const token = requireString(env.OYSTER_HUB_TOKEN || input.token, "token");
@@ -157,15 +173,14 @@ export function validateConfig(input, env = process.env) {
   if (!repository.startsWith("https://")) throw new Error(`cloud.repository must use https: ${repository}`);
   const ref = requireString(env.OYSTER_HUB_SOURCE_REF || input.cloud?.ref || "main", "cloud.ref");
 
-  const driverInput = input.driver;
-  if (!driverInput || typeof driverInput !== "object" || Array.isArray(driverInput)) {
-    throw new Error("driver must be an object");
-  }
-  const driverType = requireString(driverInput.type, "driver.type");
+  if (input.driver != null && input.drivers != null) throw new Error("configure either driver or drivers, not both");
   let driver;
-  if (driverType === "llmbox") driver = validateLlmboxDriver(driverInput, env, timeoutMs);
-  else if (driverType === "mock") driver = validateMockDriver(driverInput, env);
-  else throw new Error(`unsupported workspace driver: ${driverType}`);
+  if (input.drivers != null) driver = validateCompositeDriver(input.drivers, env, timeoutMs);
+  else {
+    const driverInput = input.driver;
+    if (!driverInput || typeof driverInput !== "object" || Array.isArray(driverInput)) throw new Error("driver must be an object");
+    driver = validateWorkspaceDriver(driverInput, env, timeoutMs);
+  }
 
   const configuredPublicUrl = env.OYSTER_HUB_PUBLIC_URL || input.cloud?.publicUrl || null;
   const publicUrl = configuredPublicUrl ? httpUrl(configuredPublicUrl, "cloud.publicUrl") : null;

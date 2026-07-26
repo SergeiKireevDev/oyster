@@ -2,6 +2,8 @@
 
 Oyster Hub serves the standard Oyster interface and acts as an API gateway for Oyster workspaces. Workspace membership is supplied by a configurable **workspace driver**, rather than a static list. Every driver lists workspaces and advertises capabilities; creation and removal are optional.
 
+An **environment is a connection boundary**, not a machine instance: `local` is the direct Oyster connection hardcoded in Hub configuration, each enrolled llmbox spoke is one environment that can host multiple box workspaces, and each connected cloud provider is one environment that can host multiple VM workspaces. A workspace is always the unit that runs Oyster and owns sessions.
+
 Two prototype drivers are included:
 
 - `llmbox` treats each llmbox box as a workspace and can query and create boxes.
@@ -38,7 +40,7 @@ node server/server.mjs --port 8080 --unauthenticated
 npm run hub:mock
 ```
 
-The checked-in `config.mock.example.json` selects the mock driver and maps the Oyster service on port 8080 to the `local` workspace. Its `sharedTokenFile` loads one bearer token for the Hub and every mock-driver workspace without copying the secret into configuration. `OYSTER_HUB_SHARED_TOKEN_FILE` can override the path; explicit `OYSTER_HUB_TOKEN` and `OYSTER_HUB_DRIVER_TOKEN` values take precedence. A legacy single-workspace `endpoint`/`id`/`name` object remains supported. Both `POST /api/v1/workspaces` and workspace deletion return `405`.
+The checked-in `config.mock.example.json` selects the mock driver and maps the Oyster service on port 8080 to a workspace in the hardcoded `local` environment. Its `sharedTokenFile` loads one bearer token for the Hub and every mock-driver workspace without copying the secret into configuration. `OYSTER_HUB_SHARED_TOKEN_FILE` can override the path; explicit `OYSTER_HUB_TOKEN` and `OYSTER_HUB_DRIVER_TOKEN` values take precedence. A legacy single-workspace `endpoint`/`id`/`name` object remains supported. Both `POST /api/v1/workspaces` and workspace deletion return `405`.
 
 ```json
 {
@@ -54,6 +56,38 @@ The checked-in `config.mock.example.json` selects the mock driver and maps the O
 ```
 
 The Hub itself still requires the shared bearer token.
+
+## Combine direct and llmbox drivers
+
+Use top-level `drivers` when one Hub should retain its configured `local` direct connection while also discovering llmbox spoke environments. Workspace and environment IDs must be unique across child drivers. Creation is routed to the only create-capable child (currently llmbox); mock workspaces remain read-only.
+
+```json
+{
+  "token": "hub-bearer-token",
+  "drivers": [
+    {
+      "type": "mock",
+      "endpoint": "http://localhost:8080",
+      "environmentId": "local",
+      "environmentName": "Local",
+      "id": "local",
+      "name": "Local Oyster",
+      "token": "local-oyster-token"
+    },
+    {
+      "type": "llmbox",
+      "transport": "native",
+      "tokenSecret": "stable-workspace-token-secret",
+      "binding": {
+        "addonPath": "llmbox/bindings/build/llmbox.node",
+        "configPath": "llmbox.yaml"
+      }
+    }
+  ]
+}
+```
+
+The API reports this as a `composite` driver with nested child descriptors. Existing singular `driver` configurations remain supported.
 
 ## Configure llmbox
 
@@ -74,7 +108,7 @@ npm run build:llmbox-bindings
 
 The build produces `llmbox.node` and its colocated `libllmbox.so` under `llmbox/bindings/build/`. It requires a CGo toolchain, a C++17 compiler, and Node's `node_api.h`. The addon uses N-API, while the Go shared library remains platform- and architecture-specific.
 
-The embedded Go hub still binds the `http_addr` from `llmbox.yaml`: spokes need `/spoke/connect`, and box proxy subdomains need a listener. Oyster Hub does **not** call the box-control HTTP API; list/create/proxy operations cross the async N-API → C ABI boundary in-process. The llmbox SQLite store, Go runtime, and spoke registry are opened once by `oyster-hub/server.mjs` and survive every request.
+The embedded Go hub still binds the private `http_addr` from `llmbox.yaml` for box proxy traffic. Oyster Hub forwards WebSocket upgrades from `/spoke/connect` on its own public listener to that embedded listener, so spokes use the Oyster Hub URL rather than exposing the private llmbox port. Oyster Hub does **not** call the box-control HTTP API; list/create/proxy operations cross the async N-API → C ABI boundary in-process. The llmbox SQLite store, Go runtime, and spoke registry are opened once by `oyster-hub/server.mjs` and survive every request.
 
 The Hub calls workspace proxy URLs as a headless service, so llmbox's OIDC gate for proxy subdomains must be disabled or bypassed on a trusted internal route. Service authentication for OIDC-gated proxy URLs is future work. `createProxy: true` creates the Oyster proxy after box creation. A spoke may also publish the Oyster port itself with `--publish-port`.
 
@@ -92,7 +126,7 @@ Open `http://127.0.0.1:8787/#token=<hub-token>`. The standard Oyster interface s
 
 ### Cloud VM source bootstrap
 
-The **+** control provisions DigitalOcean Droplets, Hetzner Cloud Servers, AWS EC2 instances, and GCP Compute Engine VMs. Creating an environment generates a one-use, generation-scoped registration secret and submits the same provider-neutral `#cloud-config` through provider-native user-data or metadata:
+The **+** control provisions a workspace VM inside the selected DigitalOcean, Hetzner, AWS, or GCP environment. Creating a cloud workspace generates a one-use, generation-scoped registration secret and submits the same provider-neutral `#cloud-config` through provider-native user-data or metadata:
 
 - DigitalOcean and Hetzner: `user_data` on the server create request;
 - AWS: base64 `UserData` on `RunInstances`; and
@@ -135,7 +169,7 @@ Register separate development and production DigitalOcean/Google web application
 
 Cloud workspace controls in the Hub sidebar pause/resume the provider VM or permanently destroy it. Pause retains the boot disk and stored Oyster state. Storage charges continue; DigitalOcean may also continue charging for a powered-off Droplet because its resources remain reserved. Destroy deletes the VM and disk, revokes its box credential, and cannot be undone.
 
-The UI-facing `/sessions` and `/runners` APIs aggregate every discovered workspace. Hub-scoped opaque session and runner identities prevent collisions, while each item includes `environmentId`, `environmentName`, `workspaceId`, and `workspaceName`. An environment is the physical or cloud device (`spoke` for llmbox); a workspace is the project microVM on that device; a session is one discussion thread. The session sidebar presents that hierarchy and uses cwd as a category within each workspace, not as workspace identity. Session operations, RPC, and SSE are routed back to the owning workspace; no iframe embedding is used.
+The UI-facing `/sessions` and `/runners` APIs aggregate every discovered workspace. Hub-scoped opaque session and runner identities prevent collisions, while each item includes `environmentId`, `environmentName`, `workspaceId`, and `workspaceName`. An environment is `local`, an llmbox spoke, or a connected cloud provider; a workspace is a directly configured Oyster endpoint, an llmbox box, or a cloud VM within that environment; a session is one discussion thread. The session sidebar presents that hierarchy and uses cwd as a category within each workspace, not as workspace identity. Session operations, RPC, and SSE are routed back to the owning workspace; no iframe embedding is used.
 
 Every non-aggregate workspace request must be explicit through a scoped identity, `X-Oyster-Workspace`, or the `workspace` query parameter. The Hub never falls back to the first workspace. On browser startup the UI lists workspaces, persists an explicit online selection, and only then opens its event stream. If none are available, startup stops with guidance to create an environment or workspace first. Starting a session in Hub mode always asks for an online workspace before opening that workspace's folder browser; canceling the picker leaves the current workspace and session unchanged.
 
@@ -196,10 +230,7 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 |---|---|
 | `GET /health` | Unauthenticated hub and configured-driver identity. |
 | `GET /api/v1/openapi.json` | OpenAPI 3.1 schema. |
-| `GET /api/v1/environments` | List driver-discovered and cloud environments. |
-| `POST /api/v1/environments` | Provision a source-installed, reverse-connected Oyster VM. |
-| `POST /api/v1/environments/{id}/actions` | Pause or resume a managed cloud VM. |
-| `DELETE /api/v1/environments/{id}` | Permanently destroy a managed cloud VM and revoke its box credential. |
+| `GET /api/v1/environments` | List connection boundaries: configured local, llmbox spokes, and connected cloud providers. |
 | `GET /api/v1/cloud/providers` | List supported providers and redacted credential status. |
 | `PUT, DELETE /api/v1/cloud/providers/{provider}/credentials` | Store/replace or remove write-only cloud credentials. |
 | `POST /api/v1/cloud/providers/{provider}/authorization/start` | Start DigitalOcean or Google browser authorization. |
@@ -212,8 +243,10 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 | `GET /api/v1/cloud/providers/{provider}/options` | Query live regions/zones, instance types, and images. |
 | `WSS /box/connect` | Restricted, generation-scoped outbound box-agent registration. |
 | `GET /api/v1/workspaces` | Query llmbox and list discovered workspaces. |
-| `POST /api/v1/workspaces` | Create a workspace when the selected driver advertises that capability; otherwise `405`. |
+| `POST /api/v1/workspaces` | Create an llmbox workspace, or a cloud VM workspace when `provider` is supplied. |
 | `GET /api/v1/workspaces/{wid}` | Inspect one dynamically discovered workspace. |
+| `POST /api/v1/workspaces/{wid}/actions` | Pause or resume a managed cloud workspace. |
+| `DELETE /api/v1/workspaces/{wid}` | Permanently destroy a managed cloud workspace when supported. |
 | `GET /api/v1/overview` | Aggregate health, runners, sessions, routines, and hublots. |
 | `ANY /api/v1/workspaces/{wid}/{path...}` | Proxy an existing Oyster endpoint to one workspace. |
 

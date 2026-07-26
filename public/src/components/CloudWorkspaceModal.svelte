@@ -1,7 +1,9 @@
 <script>
   import { onDestroy, onMount } from "svelte";
   import { closeModalState } from "../stores/modal.js";
-  import { publishCloudEnvironment } from "../stores/cloudEnvironments.js";
+  import { publishWorkspace } from "../stores/workspaces.js";
+
+  export let providerId = "";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
 
   let providers = [];
@@ -23,11 +25,11 @@
   let projects = [];
   let projectId = "";
   let options = { regions: [], sizes: [], images: [], defaults: {} };
-  let environmentName = "";
+  let workspaceName = "";
   let region = "";
   let size = "";
   let image = "";
-  let createdEnvironment = null;
+  let createdWorkspace = null;
   let destroyed = false;
 
   async function request(path, init) {
@@ -356,14 +358,14 @@
     loading = true;
     error = "";
     try {
-      const data = await request("/api/v1/environments", {
+      const data = await request("/api/v1/workspaces", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: selectedProvider.id, name: environmentName, region, size, image }),
+        body: JSON.stringify({ provider: selectedProvider.id, name: workspaceName, region, size, image }),
       });
-      createdEnvironment = data.environment;
+      createdWorkspace = data.workspace;
       step = "done";
-      publishCloudEnvironment(data.environment);
+      publishWorkspace(data.workspace);
     } catch (cause) {
       error = provisioningError(cause);
     } finally {
@@ -406,6 +408,9 @@
         advancedMethods = true;
         step = "credentials";
       } catch (cause) { error = cause.message; }
+    } else if (!flowId && providerId && !destroyed) {
+      const provider = providers.find((candidate) => candidate.id === providerId);
+      if (provider) chooseProvider(provider);
     }
   }
 
@@ -428,7 +433,7 @@
   });
 </script>
 
-<section class="cloud-environment-modal" aria-label="Cloud environment provisioning">
+<section class="cloud-workspace-modal" aria-label="Cloud workspace provisioning">
   <nav class="cloud-steps" aria-label="Provisioning steps">
     <span class:active={step === "providers"} class:complete={step !== "providers"}>1 <b>Provider</b></span>
     <i></i>
@@ -438,7 +443,7 @@
   </nav>
 
   {#if step === "providers"}
-    <p class="cloud-intro">Choose where to create the new environment. Hub provisions an Ubuntu VM, installs Oyster from source with cloud-init, and registers it over outbound WSS. Provider credentials remain on Hub.</p>
+    <p class="cloud-intro">Choose the cloud-provider environment for the new workspace. Hub provisions an Ubuntu VM, installs Oyster from source with cloud-init, and registers it over outbound WSS. Provider credentials remain on Hub.</p>
     {#if loading}<p class="cloud-state" role="status">Loading cloud providers…</p>{/if}
     <div class="cloud-provider-grid">
       {#each providers as provider (provider.id)}
@@ -581,9 +586,9 @@
     {:else if options.regions.length}
       <form class="cloud-form instance" onsubmit={provision}>
         <label class="wide">
-          <span>Environment name *</span>
-          <input type="text" bind:value={environmentName} pattern="[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" maxlength="63" placeholder="dev-cloud-1" title="Use 1–63 letters, numbers, or hyphens; start and end with a letter or number" required />
-          <small>Cloud-init installs Oyster from the llmbox-cloud-feature source branch and registers this VM with Hub at wss://hub.get-oyster.dev/box/connect.</small>
+          <span>Workspace name *</span>
+          <input type="text" bind:value={workspaceName} pattern="[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?" maxlength="63" placeholder="dev-cloud-1" title="Use 1–63 letters, numbers, or hyphens; start and end with a letter or number" required />
+          <small>Cloud-init installs the configured Oyster source and registers this VM with Hub over outbound WSS.</small>
         </label>
         <label>
           <span>{selectedProvider.id === "gcp" ? "Zone" : "Region"} *</span>
@@ -610,7 +615,7 @@
           <span><small>Type</small><strong>{size}</strong></span>
         </div>
         <p class="cloud-required-hint wide">All fields are required. If anything is missing, selecting Provision will highlight it.</p>
-        <button class="btn cloud-primary wide" type="submit" disabled={loading}>{loading ? "Provisioning…" : "Provision Oyster environment"}</button>
+        <button class="btn cloud-primary wide" type="submit" disabled={loading}>{loading ? "Provisioning…" : "Provision Oyster workspace"}</button>
       </form>
     {:else if !error}
       <p class="cloud-state">No available regions or zones were returned by this provider.</p>
@@ -619,15 +624,16 @@
     <div class="cloud-success">
       <span class="cloud-success-icon">✓</span>
       <small>Provisioning started</small>
-      <h3>{createdEnvironment.name}</h3>
-      <p>The VM was created with Oyster cloud-init. It appears immediately as awaiting agent while the source build runs, then registers itself with Hub and becomes online.</p>
+      <h3>{createdWorkspace.name}</h3>
+      <p>The workspace VM was created with Oyster cloud-init. It appears immediately as awaiting agent while the source build runs, then registers itself with Hub and becomes online.</p>
       <dl>
-        <div><dt>Provider</dt><dd>{createdEnvironment.provider.name}</dd></div>
-        <div><dt>Instance</dt><dd>{createdEnvironment.provider.instanceId}</dd></div>
-        <div><dt>Location</dt><dd>{createdEnvironment.provider.region}</dd></div>
-        <div><dt>Type</dt><dd>{createdEnvironment.provider.size}</dd></div>
+        <div><dt>Environment</dt><dd>{createdWorkspace.environmentName}</dd></div>
+        <div><dt>Provider</dt><dd>{createdWorkspace.provider.name}</dd></div>
+        <div><dt>Instance</dt><dd>{createdWorkspace.provider.instanceId}</dd></div>
+        <div><dt>Location</dt><dd>{createdWorkspace.provider.region}</dd></div>
+        <div><dt>Type</dt><dd>{createdWorkspace.provider.size}</dd></div>
       </dl>
-      {#if createdEnvironment.provider.consoleUrl}<a class="btn cloud-console-link" href={createdEnvironment.provider.consoleUrl} target="_blank" rel="noopener noreferrer">Open provider console ↗</a>{/if}
+      {#if createdWorkspace.provider.consoleUrl}<a class="btn cloud-console-link" href={createdWorkspace.provider.consoleUrl} target="_blank" rel="noopener noreferrer">Open provider console ↗</a>{/if}
     </div>
   {/if}
 

@@ -106,6 +106,13 @@ test("Hub mobile session creation starts from its workspace card", async ({ page
   const environmentSelector = page.locator(".session-sidebar-environment-selector select");
   await expect(environmentSelector).toHaveValue("local");
   await expect(environmentSelector.locator("option")).toHaveText(["Local"]);
+  await page.getByRole("button", { name: "Show environment information for Local" }).click();
+  const environmentInfo = page.getByRole("region", { name: "Environment information for Local" });
+  await expect(environmentInfo).toContainText("Direct Hub connection");
+  await expect(environmentInfo).toContainText("Workspaces");
+  await expect(environmentInfo).toContainText("1");
+  await page.getByRole("button", { name: "Close environment information" }).click();
+  await expect(page.getByRole("button", { name: "Connect a cloud provider" })).toBeVisible();
   const workspaceContainer = page.locator(".session-sidebar-environment-view .session-sidebar-workspace-container", {
     has: page.locator(".session-sidebar-workspace-heading", { hasText: "Local E2E" }),
   });

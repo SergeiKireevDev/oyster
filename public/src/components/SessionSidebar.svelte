@@ -8,9 +8,8 @@
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
-  import { cloudEnvironmentChanges } from "../stores/cloudEnvironments.js";
+  import { workspaceChanges } from "../stores/workspaces.js";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
-  import { cumulativeInstanceCost, instancePricing } from "../features/cloud/instanceCost.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
@@ -76,7 +75,6 @@
   let availableWorkspacesLoaded = !hubMode;
   let environmentInfoOpen = false;
   let environmentInfoEnvironmentId = null;
-  let environmentCosts = {};
   async function refreshEnvironmentCatalog(preferredId = null) {
     if (!hubMode) return;
     try {
@@ -94,44 +92,42 @@
     environmentInfoOpen = false;
     environmentInfoEnvironmentId = null;
   }
-  function openCloudEnvironment() {
+  function dismissEnvironmentInfo(event) {
+    event.stopPropagation();
     closeEnvironmentInfo();
-    openModal({ title: "New cloud environment", wide: true, content: "cloudEnvironment" });
+  }
+  function openWorkspaceProvisioning() {
+    closeEnvironmentInfo();
+    if (selectedEnvironment?.kind === "llmbox") {
+      openModal({
+        title: `New workspace in ${selectedEnvironment.environmentName}`,
+        wide: true,
+        content: "llmboxWorkspace",
+        context: { spoke: selectedEnvironment.spoke || selectedEnvironment.environmentId, environmentName: selectedEnvironment.environmentName },
+      });
+      return;
+    }
+    openModal({
+      title: selectedEnvironment?.kind === "cloud" ? `New workspace in ${selectedEnvironment.environmentName}` : "New cloud workspace",
+      wide: true,
+      content: "cloudWorkspace",
+      context: { providerId: selectedEnvironment?.kind === "cloud" ? selectedEnvironment.provider?.id : "" },
+    });
   }
   function chooseEnvironment(event) {
     selectedEnvironmentId = event.currentTarget.value;
     closeEnvironmentInfo();
   }
   function toggleEnvironmentInfo() {
-    if (!selectedEnvironment?.cloud) return;
+    if (!selectedEnvironment) return;
     if (environmentInfoOpen) closeEnvironmentInfo();
     else {
       environmentInfoEnvironmentId = selectedEnvironment.environmentId;
       environmentInfoOpen = true;
-      loadEnvironmentCost(selectedEnvironment);
     }
   }
   function handleEnvironmentInfoKeydown(event) {
     if (event.key === "Escape") closeEnvironmentInfo();
-  }
-  async function loadEnvironmentCost(environment) {
-    if (!environment?.cloud || Object.hasOwn(environmentCosts, environment.environmentId)) return;
-    const environmentId = environment.environmentId;
-    environmentCosts = { ...environmentCosts, [environmentId]: { status: "loading" } };
-    try {
-      const query = environment.provider?.region ? `?region=${encodeURIComponent(environment.provider.region)}` : "";
-      const response = await fetch(`/api/v1/cloud/providers/${encodeURIComponent(environment.provider?.id)}/options${query}`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || `pricing request failed (${response.status})`);
-      const selectedSize = (data.sizes || []).find((item) => item.id === environment.provider?.size);
-      const pricing = instancePricing(selectedSize, environment.provider?.region);
-      environmentCosts = {
-        ...environmentCosts,
-        [environmentId]: pricing ? { status: "available", pricing } : { status: "unavailable" },
-      };
-    } catch {
-      environmentCosts = { ...environmentCosts, [environmentId]: { status: "unavailable" } };
-    }
   }
   let workspaceActions = new Set();
   function cloudWorkspace(workspace) {
@@ -147,7 +143,7 @@
     if (!confirm(warning)) return;
     workspaceActions = new Set([...workspaceActions, workspace.workspaceId]);
     try {
-      const path = `/api/v1/environments/${encodeURIComponent(workspace.workspaceId)}${action === "destroy" ? "" : "/actions"}`;
+      const path = `/api/v1/workspaces/${encodeURIComponent(workspace.workspaceId)}${action === "destroy" ? "" : "/actions"}`;
       const response = await fetch(path, action === "destroy" ? { method: "DELETE" } : {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -173,12 +169,12 @@
   onMount(() => {
     refreshEnvironmentCatalog();
     environmentRefreshTimer = setInterval(refreshEnvironmentCatalog, 5_000);
-    if (hubMode && cloudBrowser.hasConnectionReturn()) openCloudEnvironment();
+    if (hubMode && cloudBrowser.hasConnectionReturn()) openWorkspaceProvisioning();
   });
-  let cloudEnvironmentRevision = 0;
-  $: if ($cloudEnvironmentChanges.revision > cloudEnvironmentRevision) {
-    cloudEnvironmentRevision = $cloudEnvironmentChanges.revision;
-    refreshEnvironmentCatalog($cloudEnvironmentChanges.environment?.id);
+  let workspaceRevision = 0;
+  $: if ($workspaceChanges.revision > workspaceRevision) {
+    workspaceRevision = $workspaceChanges.revision;
+    refreshEnvironmentCatalog($workspaceChanges.workspace?.environmentId);
   }
 
   let clock = Date.now();
@@ -212,9 +208,8 @@
     selectedEnvironmentId = preferredEnvironmentId(environmentOptions);
   }
   $: selectedEnvironment = environmentOptions.find((environment) => environment.environmentId === selectedEnvironmentId) ?? null;
-  $: if (environmentInfoOpen && (!selectedEnvironment?.cloud || selectedEnvironment.environmentId !== environmentInfoEnvironmentId)) closeEnvironmentInfo();
-  $: selectedEnvironmentCost = selectedEnvironment?.cloud ? cloudCostInfo(selectedEnvironment, environmentCosts[selectedEnvironment.environmentId], clock) : { rows: [], note: "" };
-  $: selectedEnvironmentInfo = selectedEnvironment?.cloud ? cloudInstanceInfo(selectedEnvironment, selectedEnvironmentCost.rows) : [];
+  $: if (environmentInfoOpen && (!selectedEnvironment || selectedEnvironment.environmentId !== environmentInfoEnvironmentId)) closeEnvironmentInfo();
+  $: selectedEnvironmentInfo = selectedEnvironment ? environmentInfo(selectedEnvironment) : [];
   $: availableWorkspaceIds = hubMode && availableWorkspacesLoaded
     ? new Set(availableWorkspaces
       .filter((workspace) => workspace.environmentId === selectedEnvironmentId)
@@ -241,6 +236,8 @@
       environmentId: environment.id,
       environmentName: environment.name || environment.id,
       status: environment.status || "unknown",
+      kind: environment.kind || (environment.cloud ? "cloud" : environment.local ? "local" : "unknown"),
+      workspaceCount: availableWorkspaces.filter((workspace) => workspace.environmentId === environment.id).length,
       local: Boolean(environment.local) || isLocalEnvironment(environment.id, environment.name),
     }));
   }
@@ -250,57 +247,28 @@
     if (value && typeof value === "object") return JSON.stringify(value);
     return String(value);
   }
-  function displayInstanceDate(value) {
-    if (!value) return "Never";
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? displayInstanceValue(value) : date.toLocaleString();
-  }
-  function instanceLabel(key) {
-    return String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase());
-  }
-  function formatCloudMoney(amount, currency, rate = false) {
-    const digits = rate || amount < 0.01 ? 4 : 2;
-    try {
-      return new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: rate ? 2 : Math.min(2, digits), maximumFractionDigits: digits }).format(amount);
-    } catch {
-      return `${amount.toFixed(digits)} ${currency}`;
-    }
-  }
-  function cloudCostInfo(environment, catalog, now) {
-    if (!catalog || catalog.status === "loading") return { rows: [["Estimated VM cost", "Loading provider pricing…"]], note: "" };
-    if (catalog.status !== "available") return { rows: [["Estimated VM cost", "Unavailable from provider"]], note: "" };
-    const amount = cumulativeInstanceCost(catalog.pricing, environment.createdAt, now);
-    if (amount == null) return { rows: [["Estimated VM cost", "Unavailable from provider"]], note: "" };
-    const rate = `${formatCloudMoney(catalog.pricing.hourly, catalog.pricing.currency, true)}/hour${catalog.pricing.monthly ? ` · ${formatCloudMoney(catalog.pricing.monthly, catalog.pricing.currency)}/month cap` : ""}`;
-    return {
-      rows: [["Estimated VM cost", formatCloudMoney(amount, catalog.pricing.currency)], ["Catalog rate", rate]],
-      note: "Compute estimate since creation; excludes disks, network, taxes, credits, and discounts.",
-    };
-  }
-  function cloudInstanceInfo(environment, costRows = []) {
+  function environmentInfo(environment) {
     const provider = environment.provider ?? {};
-    const knownProviderFields = new Set(["id", "name", "instanceId", "state", "region", "size", "image", "registrationStatus", "lastSeenAt", "generation", "consoleUrl"]);
+    const type = environment.kind === "cloud" ? "Cloud provider"
+      : environment.kind === "llmbox" ? "llmbox spoke"
+        : environment.kind === "local" ? "Direct Hub connection" : environment.kind;
     const rows = [
       ["Environment ID", environment.id],
+      ["Type", type],
       ["Status", statusLabel(environment.status)],
-      ["Provider", provider.name || provider.id],
-      ["Instance ID", provider.instanceId],
-      ["Provider state", provider.state],
-      ["Region / zone", provider.region],
-      ["Instance type", provider.size],
-      ["Image", provider.image],
-      ...costRows,
-      ["Created", environment.createdAt, true],
-      ["Registration", provider.registrationStatus],
-      ["Last seen", provider.lastSeenAt, true],
-      ["Generation", provider.generation],
+      ...(environment.kind === "cloud" ? [
+        ["Provider", provider.name || provider.id],
+        ["Connection", provider.configured ? "Connected" : "Disconnected"],
+      ] : []),
+      ...(environment.kind === "llmbox" ? [
+        ["Spoke", environment.spoke || environment.id],
+        ["Default", environment.default ? "Yes" : "No"],
+      ] : []),
+      ["Workspaces", environment.workspaceCount ?? 0],
     ];
-    for (const [key, value] of Object.entries(provider)) {
-      if (!knownProviderFields.has(key)) rows.push([instanceLabel(key), value]);
-    }
     return rows
-      .filter(([, value, date = false]) => date || (value !== undefined && value !== null && value !== ""))
-      .map(([label, value, date = false]) => ({ label, value: date ? displayInstanceDate(value) : displayInstanceValue(value), raw: value == null ? "" : String(value) }));
+      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .map(([label, value]) => ({ label, value: displayInstanceValue(value), raw: String(value) }));
   }
   function availableEnvironmentView(environments, environmentId, workspaces) {
     const available = workspaces.filter((workspace) => workspace.environmentId === environmentId);
@@ -642,35 +610,36 @@
             {/each}
           </select>
         </label>
-        {#if selectedEnvironment?.cloud}
-          <button
-            type="button"
-            class="session-sidebar-environment-info"
-            class:active={environmentInfoOpen}
-            title={`Instance information for ${selectedEnvironment.environmentName}`}
-            aria-label={`${environmentInfoOpen ? "Hide" : "Show"} instance information for ${selectedEnvironment.environmentName}`}
-            aria-expanded={environmentInfoOpen}
-            onclick={toggleEnvironmentInfo}
-            onkeydown={handleEnvironmentInfoKeydown}
-          >i</button>
-        {/if}
+        <button
+          type="button"
+          class="session-sidebar-environment-info"
+          class:active={environmentInfoOpen}
+          title={`Environment information for ${selectedEnvironment.environmentName}`}
+          aria-label={`${environmentInfoOpen ? "Hide" : "Show"} environment information for ${selectedEnvironment.environmentName}`}
+          aria-expanded={environmentInfoOpen}
+          onclick={toggleEnvironmentInfo}
+          onkeydown={handleEnvironmentInfoKeydown}
+        >i</button>
         <button
           type="button"
           class="session-sidebar-environment-create"
-          title="Provision a cloud environment"
-          aria-label="Provision a cloud environment"
-          onclick={openCloudEnvironment}
+          title={selectedEnvironment.kind === "llmbox" || selectedEnvironment.kind === "cloud" ? `New workspace in ${selectedEnvironment.environmentName}` : "Connect a cloud provider"}
+          aria-label={selectedEnvironment.kind === "llmbox" || selectedEnvironment.kind === "cloud" ? `New workspace in ${selectedEnvironment.environmentName}` : "Connect a cloud provider"}
+          onclick={openWorkspaceProvisioning}
         >+</button>
       </div>
-      {#if environmentInfoOpen && selectedEnvironment?.cloud}
-        <button class="session-sidebar-instance-tooltip-dismiss" type="button" tabindex="-1" aria-label="Close instance information" onclick={closeEnvironmentInfo}></button>
-        <section class="session-sidebar-instance-tooltip" aria-label={`Instance information for ${selectedEnvironment.environmentName}`}>
+      {#if environmentInfoOpen && selectedEnvironment}
+        <button class="session-sidebar-instance-tooltip-dismiss" type="button" tabindex="-1" aria-label="Dismiss environment information backdrop" onclick={dismissEnvironmentInfo}></button>
+        <section class="session-sidebar-instance-tooltip" aria-label={`Environment information for ${selectedEnvironment.environmentName}`}>
           <header>
             <span>
-              <small>Cloud instance</small>
+              <small>Environment · {selectedEnvironment.kind}</small>
               <strong>{selectedEnvironment.environmentName}</strong>
             </span>
-            <span class={`session-sidebar-instance-status status-${workspaceStatus(selectedEnvironment)}`}>{statusLabel(selectedEnvironment.status)}</span>
+            <span class="session-sidebar-environment-tooltip-actions">
+              <span class={`session-sidebar-instance-status status-${workspaceStatus(selectedEnvironment)}`}>{statusLabel(selectedEnvironment.status)}</span>
+              <button type="button" class="session-sidebar-environment-tooltip-close" aria-label="Close environment information" onclick={dismissEnvironmentInfo}>×</button>
+            </span>
           </header>
           <dl>
             {#each selectedEnvironmentInfo as row (row.label)}
@@ -680,15 +649,11 @@
               </div>
             {/each}
           </dl>
-          {#if selectedEnvironmentCost.note}<p class="session-sidebar-instance-cost-note">{selectedEnvironmentCost.note}</p>{/if}
-          {#if selectedEnvironment.provider?.consoleUrl}
-            <a href={selectedEnvironment.provider.consoleUrl} target="_blank" rel="noopener noreferrer" onkeydown={handleEnvironmentInfoKeydown}>Open provider console ↗</a>
-          {/if}
         </section>
       {/if}
     </div>
   {:else if hubMode}
-    <button type="button" class="session-sidebar-environment-empty-create" onclick={openCloudEnvironment}>+ Provision cloud environment</button>
+    <button type="button" class="session-sidebar-environment-empty-create" onclick={openWorkspaceProvisioning}>+ Connect cloud provider</button>
   {/if}
   <div class="session-sidebar-list">
     {#if hubMode && availableWorkspacesLoaded && !environmentOptions.length}

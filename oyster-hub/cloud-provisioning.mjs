@@ -626,20 +626,23 @@ function lifecycleStatus(record, registration = null) {
   return registration?.status || record.status;
 }
 
-function publicEnvironment(record, registration = null) {
-  const status = lifecycleStatus(record, registration);
+function cloudEnvironmentId(providerId) {
+  return `cloud-${providerId}`;
+}
+
+function publicCloudEnvironment(provider, records, configured) {
   return {
-    id: record.id,
-    name: record.name,
-    status,
+    id: cloudEnvironmentId(provider.id),
+    name: provider.name,
+    kind: "cloud",
+    status: configured ? "online" : "offline",
     local: false,
     cloud: true,
-    createdAt: record.createdAt,
+    workspaceCount: records.length,
     provider: {
-      ...publicProvider(record.provider),
-      generation: record.generation,
-      registrationStatus: status,
-      lastSeenAt: registration?.lastSeenAt || null,
+      id: provider.id,
+      name: provider.name,
+      configured,
     },
   };
 }
@@ -647,12 +650,13 @@ function publicEnvironment(record, registration = null) {
 function publicCloudWorkspace(record, registration = null, fetchImpl = null) {
   const status = lifecycleStatus(record, registration);
   return {
-    environmentId: record.id,
-    environmentName: record.name,
+    environmentId: cloudEnvironmentId(record.provider.id),
+    environmentName: record.provider.name,
     id: record.id,
     name: record.name,
     url: "http://127.0.0.1:8080",
     status,
+    createdAt: record.createdAt,
     ...(fetchImpl ? { fetchImpl } : {}),
     provider: {
       ...publicProvider(record.provider),
@@ -667,7 +671,7 @@ function publicCloudWorkspace(record, registration = null, fetchImpl = null) {
   };
 }
 
-function environmentId(providerId, instanceId) {
+function workspaceId(providerId, instanceId) {
   const clean = String(instanceId || randomUUID()).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 52);
   return `${providerId}-${clean || randomUUID().slice(0, 8)}`;
 }
@@ -685,7 +689,7 @@ export function createCloudProvisioningService({
 } = {}) {
   const encryptionKey = credentialKey(credentialEncryptionKey);
   let loaded = false;
-  let state = { credentials: {}, environments: [] };
+  let state = { credentials: {}, workspaces: [] };
   let writeChain = Promise.resolve();
   const awsRoleFlows = new Map();
   const awsTemporaryCredentials = new Map();
@@ -705,7 +709,9 @@ export function createCloudProvisioningService({
         : (parsed?.credentials && typeof parsed.credentials === "object" ? parsed.credentials : {});
       state = {
         credentials,
-        environments: Array.isArray(parsed?.environments) ? parsed.environments : [],
+        workspaces: Array.isArray(parsed?.workspaces)
+          ? parsed.workspaces
+          : Array.isArray(parsed?.environments) ? parsed.environments : [],
       };
       loaded = true;
     } catch (error) {
@@ -717,8 +723,8 @@ export function createCloudProvisioningService({
   async function persist() {
     if (!stateFile) return;
     const persisted = encryptionKey
-      ? { version: 2, encryptedCredentials: encryptCredentials(state.credentials, encryptionKey), environments: state.environments }
-      : state;
+      ? { version: 3, encryptedCredentials: encryptCredentials(state.credentials, encryptionKey), workspaces: state.workspaces }
+      : { version: 3, credentials: state.credentials, workspaces: state.workspaces };
     const snapshot = JSON.stringify(persisted, null, 2);
     writeChain = writeChain.catch(() => {}).then(async () => {
       await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 });
@@ -801,8 +807,8 @@ export function createCloudProvisioningService({
 
   async function recordFor(id) {
     await load();
-    const record = state.environments.find((item) => item.id === id);
-    if (!record) throw new CloudProvisioningError("cloud environment not found", { status: 404 });
+    const record = state.workspaces.find((item) => item.id === id);
+    if (!record) throw new CloudProvisioningError("cloud workspace not found", { status: 404 });
     return record;
   }
 
@@ -1009,11 +1015,11 @@ export function createCloudProvisioningService({
       return gcpOptions(value, fetchImpl, region);
     },
     async provision(input) {
-      if (!input || typeof input !== "object" || Array.isArray(input)) throw new CloudProvisioningError("environment request must be an object", { status: 400 });
+      if (!input || typeof input !== "object" || Array.isArray(input)) throw new CloudProvisioningError("workspace request must be an object", { status: 400 });
       const providerId = required(input.provider, "provider");
       const provider = providerDefinition(providerId);
-      const name = required(input.name, "Environment name");
-      if (!/^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(name)) throw new CloudProvisioningError("Environment name must be a 1-63 character DNS-style name", { status: 400 });
+      const name = required(input.name, "Workspace name");
+      if (!/^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(name)) throw new CloudProvisioningError("Workspace name must be a 1-63 character DNS-style name", { status: 400 });
       const request = { name: name.toLowerCase(), region: required(input.region, "region"), size: required(input.size, "instance type"), image: required(input.image, "image") };
       const value = await credential(providerId);
       const registration = await boxRegistry.prepareRegistration({ boxId: request.name, provider: providerId });
@@ -1040,7 +1046,7 @@ export function createCloudProvisioningService({
         throw error;
       }
       const record = {
-        id: environmentId(providerId, result.instanceId),
+        id: workspaceId(providerId, result.instanceId),
         name,
         boxId: registration.boxId,
         generation: registration.generation,
@@ -1058,17 +1064,24 @@ export function createCloudProvisioningService({
         },
       };
       await load();
-      state.environments = [...state.environments.filter((item) => item.id !== record.id), record];
+      state.workspaces = [...state.workspaces.filter((item) => item.id !== record.id), record];
       await persist();
-      return publicEnvironment(record, await boxRegistry.get(request.name, registration.generation));
+      return publicCloudWorkspace(record, await boxRegistry.get(request.name, registration.generation));
     },
     async listEnvironments() {
       await load();
-      return Promise.all(state.environments.map(async (record) => publicEnvironment(record, await registrationFor(record))));
+      return Object.values(PROVIDERS)
+        .map((provider) => {
+          const records = state.workspaces.filter((record) => record.provider?.id === provider.id);
+          return state.credentials[provider.id] || records.length
+            ? publicCloudEnvironment(provider, records, Boolean(state.credentials[provider.id]))
+            : null;
+        })
+        .filter(Boolean);
     },
     async listWorkspaces() {
       await load();
-      return Promise.all(state.environments.map(async (record) => publicCloudWorkspace(
+      return Promise.all(state.workspaces.map(async (record) => publicCloudWorkspace(
         record,
         await registrationFor(record),
         record.generation
@@ -1081,29 +1094,29 @@ export function createCloudProvisioningService({
     },
     async pause(id) {
       const record = await recordFor(id);
-      if (record.status === "paused") return publicEnvironment(record, await registrationFor(record));
+      if (record.status === "paused") return publicCloudWorkspace(record, await registrationFor(record));
       const result = await providerAction(record, "pause");
       record.status = "paused";
       record.provider = { ...record.provider, state: result.state || "paused" };
       record.pausedAt = new Date().toISOString();
       await persist();
-      return publicEnvironment(record, await registrationFor(record));
+      return publicCloudWorkspace(record, await registrationFor(record));
     },
     async resume(id) {
       const record = await recordFor(id);
-      if (record.status !== "paused") throw new CloudProvisioningError("cloud environment is not paused", { status: 409 });
+      if (record.status !== "paused") throw new CloudProvisioningError("cloud workspace is not paused", { status: 409 });
       const result = await providerAction(record, "resume");
       record.status = "resuming";
       record.provider = { ...record.provider, state: result.state || "pending" };
       record.resumedAt = new Date().toISOString();
       await persist();
-      return publicEnvironment(record, await registrationFor(record));
+      return publicCloudWorkspace(record, await registrationFor(record));
     },
     async destroy(id) {
       const record = await recordFor(id);
       await providerAction(record, "destroy");
-      await boxRegistry.revoke(record.boxId || record.name.toLowerCase(), record.generation, "cloud environment destroyed").catch(() => {});
-      state.environments = state.environments.filter((item) => item.id !== id);
+      await boxRegistry.revoke(record.boxId || record.name.toLowerCase(), record.generation, "cloud workspace destroyed").catch(() => {});
+      state.workspaces = state.workspaces.filter((item) => item.id !== id);
       await persist();
       return { id, name: record.name, destroyed: true };
     },

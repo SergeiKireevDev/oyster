@@ -129,6 +129,6 @@ test("Hub startup stops before connecting when no workspace is available", async
       storage: storage(),
       fetchImpl: async () => ({ ok: true, async json() { return { workspaces: [] }; } }),
     }),
-    /create an environment or workspace first/,
+    /connect an environment and create a workspace first/,
   );
 });

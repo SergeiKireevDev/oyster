@@ -65,7 +65,7 @@ test("native llmbox workspace driver uses bindings instead of fetch", async () =
   });
 
   assert.deepEqual(await driver.listEnvironments(), [
-    { id: "edge-1", name: "edge-1", status: "online", default: true },
+    { id: "edge-1", name: "edge-1", kind: "llmbox", status: "online", default: true, spoke: "edge-1" },
   ]);
   const workspaces = await driver.listWorkspaces();
   assert.equal(workspaces[0].url, "https://alpha.test");
