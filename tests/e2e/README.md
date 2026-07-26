@@ -36,8 +36,12 @@ replacement; every test removes its volume during teardown.
 cd tests/e2e
 npm install
 npx playwright install chromium   # one-time browser download
-npm test
+npm test                           # runs with five workers by default
 ```
+
+The standard E2E run uses **five Playwright workers**. Override concurrency only
+when needed for a constrained host or focused debugging, for example
+`E2E_WORKERS=1 npm test`.
 
 ### Hosts without root (can't `sudo apt-get install`)
 
@@ -68,12 +72,13 @@ and both interfaces read the same test token.
 | `PI_UI_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
 | `PI_SOURCE_CONTEXT` | `<repository>/pi` | named BuildKit source used when the SQLite image must be built |
 | `PI_UI_CONTAINER` | allocated per test | name for a container the suite starts |
+| `E2E_WORKERS` | `5` | Playwright worker count; lower it only for constrained hosts or debugging |
 
 ## Notes
 
-- Specs run **sequentially** (one worker). Product specs isolate themselves by
-  starting a fresh mock container in `beforeEach` and removing it in
-  `afterEach`, so workspace/session state does not leak between scenarios.
+- Specs run in parallel with **five workers by default**. Product specs isolate
+  themselves by starting a fresh mock container in `beforeEach` and removing it
+  in `afterEach`, so workspace/session state does not leak between scenarios.
 - The hublot spec opens a real cloudflared tunnel; the bundled mock serves
   the button page deterministically in seconds (a real model would take
   minutes). with the bundled mock the button
