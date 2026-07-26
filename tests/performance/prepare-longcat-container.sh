@@ -125,14 +125,15 @@ docker commit \
   --change 'CMD []' \
   "$CONTAINER" "$OUTPUT_IMAGE" >/dev/null
 
-# Bind-mounted credentials must never become image content. The report and
-# session/application stores, which live beside those mounts, must be present.
-log "checking the committed image for persisted data and absent credentials"
+# Bind-mounted credential payloads must never become image content. Docker can
+# retain zero-byte mountpoint placeholders when committing a file bind mount,
+# so reject non-empty files rather than requiring the paths to be absent.
+log "checking the committed image for persisted data and absent credential payloads"
 docker run --rm --entrypoint /bin/sh "$OUTPUT_IMAGE" -c \
-  'test ! -e /root/.pi/agent/auth.json && test ! -e /root/.pi/agent/models.json && test -s "$1"' \
+  'test ! -s /root/.pi/agent/auth.json && test ! -s /root/.pi/agent/models.json && test -s "$1"' \
   image-check "$REPORT_PATH"
 
 succeeded=1
 log "prepared image: $OUTPUT_IMAGE"
 log "report in image: $REPORT_PATH"
-log "auth.json and models.json were mount-only and are not present in the image"
+log "auth.json and models.json were mount-only; no credential payload is present in the image"
