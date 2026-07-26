@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, sign as signValue } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { gzipSync } from "node:zlib";
 import { createOysterCloudInit, oysterCloudInitDefaults } from "./cloud-init.mjs";
 import { createBoxConnectionRegistry } from "./box-registry.mjs";
 
@@ -504,7 +505,7 @@ async function awsProvision(input, credential, fetchImpl) {
     InstanceType: input.size,
     MinCount: 1,
     MaxCount: 1,
-    UserData: Buffer.from(input.userData, "utf8").toString("base64"),
+    UserData: gzipSync(Buffer.from(input.userData, "utf8")).toString("base64"),
     "TagSpecification.1.ResourceType": "instance",
     "TagSpecification.1.Tag.1.Key": "Name",
     "TagSpecification.1.Tag.1.Value": input.name,
