@@ -131,6 +131,21 @@ that the session is current, its newest user message is the expected
 shown in the transcript. It also verifies that switching leaves all 100 runners
 dormant.
 
+To measure the same switching path while runner processes are live, use:
+
+```sh
+npm run perf:switch-sessions-live
+```
+
+This starts the bundled deterministic E2E model, revives all 100 dormant
+runners with `mock/e2e-mock`, and sends one uniquely marked prompt to each
+runner before timing the first 20 switches. The benchmark waits for every mock
+response, then asserts that all 100 processes stay alive and idle throughout
+the switching pass. The mounted fixture remains read-only; revival messages,
+runner state, and SQLite sidecars exist only in the container's tmpfs. No real
+provider requests or credentials are used. Its separate report is written to
+`/tmp/oyster-session-switch-live-performance.json`.
+
 Each switch must finish within three seconds by default. The command writes
 latencies and per-session results to:
 
@@ -148,6 +163,10 @@ Playwright CI spec pattern. It uses the Playwright installation under
 | `PERF_SWITCH_DATA_DIR` | `tests/data/longcat-100x100/.pi` | Exported `.pi` fixture to mount read-only |
 | `PERF_SWITCH_SKIP_BUILD` | `0` | Set to `1` to reuse the current test image |
 | `PERF_SWITCH_SESSION_COUNT` | `20` | Numbered sessions to switch through |
+| `PERF_SWITCH_REVIVE` | `0` | Set to `1` to run the live-runner variant |
+| `PERF_SWITCH_REVIVE_COUNT` | `100` | Runners revived with the E2E mock |
+| `PERF_SWITCH_REVIVE_CONCURRENCY` | `10` | Concurrent runner revival operations |
+| `PERF_SWITCH_REVIVE_TIMEOUT_MS` | `120000` | Per-command revival timeout |
 | `PERF_SWITCH_BUDGET_MS` | `3000` | Maximum render latency for each switch |
-| `PERF_SWITCH_REPORT` | `/tmp/oyster-session-switch-performance.json` | JSON report path |
+| `PERF_SWITCH_REPORT` | mode-specific `/tmp` path | JSON report path override |
 | `PERF_SWITCH_HEADED` | `0` | Set to `1` to show the browser |
