@@ -141,6 +141,11 @@ test("credential operations preserve unrelated credentials, provider env, concur
       credentialType: "oauth", source: "stored_oauth", configured: true,
     });
     assert.equal(providers.find((item) => item.provider === "openai").displayName, "OpenAI");
+    const openaiCodex = providers.find((item) => item.provider === "openai-codex");
+    assert.equal(openaiCodex.registered, true);
+    assert.equal(openaiCodex.oauthCapable, true);
+    assert.match(openaiCodex.oauthDisplayName, /ChatGPT Plus\/Pro/);
+    assert.equal(openaiCodex.credentialType, null);
     const anthropic = providers.find((item) => item.provider === "anthropic");
     assert.equal(anthropic.oauthCapable, true);
     assert.equal(anthropic.oauthDisplayName, "Anthropic (Claude Pro/Max)");

@@ -54,7 +54,9 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /aria-label="OAuth sign-in"[^>]*aria-live="polite"/);
   assert.match(modal, /target="_blank" rel="noopener noreferrer">Open authorization page/);
   assert.match(modal, /Device code[\s\S]*?readonly[\s\S]*?\.select\(\)/);
-  assert.match(modal, /Open device verification/);
+  assert.match(modal, /copyTextToClipboard\(code\)[\s\S]*?Copy code/);
+  assert.match(modal, /enter this one-time code[\s\S]*?finish binding pi to your account automatically/);
+  assert.match(modal, /Open verification page/);
   assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
   assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);
   assert.match(modal, /oninput=\{\(event\) => updateOAuthInput\(event, request\.requestId\)\}/);
