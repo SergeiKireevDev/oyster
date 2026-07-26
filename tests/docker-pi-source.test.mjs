@@ -24,9 +24,9 @@ test("local SQLite Docker build requires and packages the named pi source contex
   assert.match(local, /FROM node:22-slim/);
 });
 
-test("both runtime images include lsof for restart-safe hublot PID discovery", () => {
-  assert.match(fallback, /procps ripgrep lsof/);
-  assert.match(local, /procps ripgrep lsof/);
+test("both runtime images include hublot process and Git server dependencies", () => {
+  assert.match(fallback, /procps ripgrep lsof python3/);
+  assert.match(local, /procps ripgrep lsof python3/);
 });
 
 test("local-source build documentation pins context, revision, and version", () => {
