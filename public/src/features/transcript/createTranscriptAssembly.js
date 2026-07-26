@@ -32,6 +32,7 @@ export function createTranscriptAssembly(deps) {
   let synchronization = null;
   let permalinkOperations = null;
   let copyMessage = async () => {};
+  let mounted = true;
 
   const transcriptActions = createTranscriptActions({
     callbacks: {
@@ -87,14 +88,17 @@ export function createTranscriptAssembly(deps) {
     startToolCard: (id) => toolCards.start(id),
     updateToolCard: (id, result) => toolCards.updateResult(id, result),
     toolResultText,
-    nearBottom: () => transcriptScroll.nearBottom(),
-    notifyNewContent: (wasNearBottom) => {
-      if (!wasNearBottom) {
+    nearBottom: () => transcriptScroll.isFollowingHead(),
+    notifyNewContent: (wasFollowingHead) => {
+      if (!wasFollowingHead) {
         deps.showTranscriptNotice();
         return;
       }
       deps.clearTranscriptNotice();
-      deps.tick().then(() => transcriptScroll.scrollToBottom(true));
+      deps.tick().then(() => {
+        if (!mounted) return;
+        if (!transcriptScroll.followHead()) deps.showTranscriptNotice();
+      });
     },
   });
 
@@ -281,7 +285,9 @@ export function createTranscriptAssembly(deps) {
     configureSynchronization,
     operations,
     teardown() {
+      mounted = false;
       synchronization?.teardown();
+      transcriptScroll.teardown();
       renderer.cancel();
       localEchoes.length = 0;
       afterTranscript = null;

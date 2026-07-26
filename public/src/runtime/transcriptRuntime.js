@@ -303,12 +303,53 @@ export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
 }
 
 export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
+  const distanceFromBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+  let lastScrollTop = scroller.scrollTop;
+  let followingHead = distanceFromBottom() < threshold;
+
+  // Proximity starts head-following, but any upward movement explicitly
+  // detaches it until the reader reaches the bottom again.
+  const onScroll = () => {
+    const scrollTop = scroller.scrollTop;
+    if (scrollTop < lastScrollTop) followingHead = false;
+    else if (distanceFromBottom() <= 1) followingHead = true;
+    lastScrollTop = scrollTop;
+  };
+  const setBottom = () => {
+    followingHead = true;
+    scroller.scrollTop = scroller.scrollHeight;
+    lastScrollTop = scroller.scrollTop;
+  };
+  const onLoad = () => {
+    onScroll();
+    if (followingHead) setBottom();
+  };
+
+  scroller.addEventListener?.("scroll", onScroll, { passive: true });
+  scroller.addEventListener?.("load", onLoad, true);
+
   return {
     nearBottom() {
-      return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < threshold;
+      return distanceFromBottom() < threshold;
+    },
+    isFollowingHead() {
+      onScroll();
+      return followingHead;
+    },
+    followHead() {
+      onScroll();
+      if (!followingHead) return false;
+      setBottom();
+      return true;
     },
     scrollToBottom(force = false) {
-      if (force || this.nearBottom()) scroller.scrollTop = scroller.scrollHeight;
+      if (!force && (!this.nearBottom() || !this.isFollowingHead())) return false;
+      setBottom();
+      return true;
+    },
+    teardown() {
+      scroller.removeEventListener?.("scroll", onScroll, { passive: true });
+      scroller.removeEventListener?.("load", onLoad, true);
     },
   };
 }
