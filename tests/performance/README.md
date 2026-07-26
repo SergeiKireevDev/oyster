@@ -101,3 +101,38 @@ docker run --rm -p 4000:4000 \
 All prepared runners are dormant. Reading their session catalog/transcripts
 must not reactivate them; a later prompt will reactivate only its selected
 runner.
+
+## Fast session-switch browser test
+
+After preparing the image, run the manual browser performance test:
+
+```sh
+npm run perf:switch-sessions
+```
+
+It starts a disposable container from `oyster:longcat-100x100`, mounts the same
+credential files read-only, and drives the real desktop UI with Playwright. It
+selects `LongCat perf 001` through `LongCat perf 020` as quickly as rendering
+allows. After every click it asserts that the session is current, its newest
+user message is the expected `message=100` marker, and the latest persisted
+message is the final message shown in the transcript. It also verifies that
+read-only switching leaves all 100 runners dormant.
+
+Each switch must finish within three seconds by default. The command writes
+latencies and per-session results to:
+
+```text
+/tmp/oyster-session-switch-performance.json
+```
+
+The test is manual and is not matched by either the root Node test glob or the
+Playwright CI spec pattern. It uses the Playwright installation under
+`tests/e2e`; install that package and Chromium first if they are absent.
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `PERF_SWITCH_IMAGE` | `oyster:longcat-100x100` | Prepared image to test |
+| `PERF_SWITCH_SESSION_COUNT` | `20` | Numbered sessions to switch through |
+| `PERF_SWITCH_BUDGET_MS` | `3000` | Maximum render latency for each switch |
+| `PERF_SWITCH_REPORT` | `/tmp/oyster-session-switch-performance.json` | JSON report path |
+| `PERF_SWITCH_HEADED` | `0` | Set to `1` to show the browser |
