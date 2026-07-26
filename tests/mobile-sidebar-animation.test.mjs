@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
-test("mobile session and hublot drawers use quick directional entry animations", () => {
-  assert.match(css, /#sessions\.open[\s\S]*?animation: sessions-slide-in 120ms/);
-  assert.match(css, /#hublots\.open[\s\S]*?animation: hublots-slide-in 120ms/);
+test("mobile session and hublot drawers use gentle directional entry animations", () => {
+  assert.match(css, /#sessions\.open[\s\S]*?box-shadow: 12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: sessions-slide-in 750ms/);
+  assert.match(css, /#hublots\.open[\s\S]*?box-shadow: -12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: hublots-slide-in 750ms/);
   assert.match(css, /@keyframes sessions-slide-in[\s\S]*?translateX\(-14px\)/);
   assert.match(css, /@keyframes hublots-slide-in[\s\S]*?translateX\(14px\)/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?#sessions\.open, #hublots\.open \{ animation: none; \}/);

@@ -31,7 +31,7 @@
           </div>
         {:else}
           <div class="preview">
-            <iframe src={hublot.url} loading="lazy" sandbox="allow-scripts allow-same-origin" title={hublot.label || hublot.url}></iframe>
+            <iframe src={hublot.url} loading="eager" sandbox="allow-scripts allow-same-origin" title={hublot.label || hublot.url}></iframe>
             <button type="button" class="hit" title={`open ${hublot.url}`} onclick={() => browserActions.openExternal(hublot.url)}></button>
           </div>
         {/if}

@@ -157,15 +157,19 @@ test("carousel controller persists and applies mobile drawer pages", () => {
     windowTarget: { matchMedia: () => ({ matches: true }) },
     storage: { getItem: () => "0", setItem: (...args) => writes.push(args) },
     setPage: (page) => pages.push(page),
-    loadHublots: () => pages.push("hublots"),
     loadCheckpointTree: () => pages.push("tree"),
   });
-  controller.step(2);
+  controller.set(1);
+  assert.equal(controller.get(), 1);
+  assert.deepEqual([...hublots.classList.values], ["open"]);
+  assert.deepEqual([...treebar.classList.values], []);
+  assert.deepEqual(pages, [1], "revealing prefetched hublots does not reload them");
+  controller.step(1);
   assert.equal(controller.get(), 2);
   assert.deepEqual([...hublots.classList.values], ["open"]);
   assert.deepEqual([...treebar.classList.values], ["open"]);
-  assert.deepEqual(writes, [["pi_carousel", "2"]]);
-  assert.deepEqual(pages, ["tree", 2]);
+  assert.deepEqual(writes, [["pi_carousel", "1"], ["pi_carousel", "2"]]);
+  assert.deepEqual(pages, [1, "tree", 2]);
   controller.reset();
   controller.step(-1);
   assert.equal(controller.get(), -1);

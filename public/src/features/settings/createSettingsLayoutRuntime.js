@@ -40,7 +40,6 @@ export function createSettingsLayoutRuntime(deps) {
       windowTarget: deps.windowTarget,
       storage: deps.storage,
       setPage: deps.setCarouselPage,
-      loadHublots: deps.loadScopedResources,
       loadCheckpointTree: deps.loadCheckpointTree,
     },
   });
