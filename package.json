@@ -16,6 +16,7 @@
     "docs:build": "node scripts/build-docs.mjs",
     "preview": "vite preview --config vite.config.js",
     "perf:prepare-longcat": "bash tests/performance/prepare-longcat-container.sh",
+    "perf:switch-sessions": "node tests/performance/session-switches.mjs",
     "migrate-app-data": "node scripts/migrate-app-data.mjs",
     "test": "node --test tests/*.test.mjs"
   },
