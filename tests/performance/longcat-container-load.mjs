@@ -200,8 +200,14 @@ async function rpc(runner, command, { waitForSettled = false } = {}) {
     (message) => message?.type === "response" && message.id === id,
     `${command.type} response`,
   );
+  // The release-fallback Dockerfile pins pi 0.80.3, which predates
+  // agent_settled. A non-retrying agent_end is its compatible completion
+  // boundary; newer agents prefer the fully settled event.
   const settledWait = waitForSettled
-    ? runner.feed.waitFor((message) => message?.type === "agent_settled", `${command.type} agent_settled`)
+    ? runner.feed.waitFor(
+      (message) => message?.type === "agent_settled" || (message?.type === "agent_end" && message.willRetry !== true),
+      `${command.type} completion`,
+    )
     : null;
   // The stream can fail while the HTTP acknowledgement is still in flight.
   // Mark both waiter rejections handled immediately; awaiting them below still
