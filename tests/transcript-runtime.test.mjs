@@ -303,18 +303,45 @@ test("transcript stream captures bottom proximity before content changes", () =>
   assert.deepEqual(notices, [true]);
 });
 
-test("scroll adapter preserves reading position unless pinned or forced", () => {
-  const scroller = { scrollHeight: 1000, scrollTop: 500, clientHeight: 400 };
+test("scroll adapter lets upward scrolling override transcript head follow", () => {
+  const listeners = new Map();
+  const scroller = {
+    scrollHeight: 1000,
+    scrollTop: 350,
+    clientHeight: 600,
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) { if (listeners.get(type) === listener) listeners.delete(type); },
+  };
+  const dispatch = (type) => listeners.get(type)?.();
   const scroll = createTranscriptScrollAdapter({ scroller });
+
   assert.equal(scroll.nearBottom(), true);
-  scroll.scrollToBottom();
-  assert.equal(scroller.scrollTop, 1000);
+  assert.equal(scroll.isFollowingHead(), true);
+  scroller.scrollTop = 340;
+  dispatch("scroll");
+  assert.equal(scroll.nearBottom(), true);
+  assert.equal(scroll.isFollowingHead(), false);
+  assert.equal(scroll.followHead(), false);
+  assert.equal(scroll.scrollToBottom(), false);
+  assert.equal(scroller.scrollTop, 340);
+
+  scroller.scrollTop = 400;
+  dispatch("scroll");
+  assert.equal(scroll.isFollowingHead(), true);
+  scroller.scrollHeight = 1100;
+  dispatch("load");
+  assert.equal(scroller.scrollTop, 1100);
+
   scroller.scrollTop = 100;
+  dispatch("scroll");
   assert.equal(scroll.nearBottom(), false);
-  scroll.scrollToBottom();
+  assert.equal(scroll.scrollToBottom(), false);
   assert.equal(scroller.scrollTop, 100);
-  scroll.scrollToBottom(true);
-  assert.equal(scroller.scrollTop, 1000);
+  assert.equal(scroll.scrollToBottom(true), true);
+  assert.equal(scroller.scrollTop, 1100);
+
+  scroll.teardown();
+  assert.deepEqual([...listeners.keys()], []);
 });
 
 test("tool card registry assembles and completes streamed tool cards", () => {
