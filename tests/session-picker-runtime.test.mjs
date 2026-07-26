@@ -174,7 +174,10 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /visibleSessionEnvironments = availableWorkspaceIds/);
   assert.match(source, /availableEnvironmentView\(sessionEnvironments, selectedEnvironmentId, availableWorkspaces\)/);
   assert.match(source, /session-sidebar-workspace-empty/);
-  assert.match(source, /visibleSearchEnvironments = filterEnvironmentWorkspaces/);
+  assert.match(source, /visibleSearchEnvironments = searchEnvironmentView\(searchEnvironments, availableWorkspaces\)/);
+  assert.match(source, /session-sidebar-search-environment-heading/);
+  assert.match(source, /selectedEnvironmentId = hit\.environmentId \|\| group\.first\?\.environmentId/);
+  assert.match(source, /setActiveWorkspace\(hit\.workspaceId \|\| group\.first\?\.workspaceId\)/);
   assert.match(source, /session-sidebar-workspace-container/);
   assert.match(source, /session-sidebar-cwd-label/);
   assert.match(source, /workspace\.recentGroups/);

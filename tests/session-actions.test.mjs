@@ -154,14 +154,22 @@ test("session open controller previews resumed sessions and marks new runners em
   assert.deepEqual(opened.map(({ id, workspaceId }) => [id, workspaceId]), [["resumed", "workspace-a"], ["new", "workspace-a"]]);
 });
 
-test("search hit controller reloads a runner already selected before focusing", async () => {
+test("search hit controller selects the hit workspace and reloads a runner already selected before focusing", async () => {
   const calls = [];
   const open = createSearchHitSessionController({
-    close: () => calls.push("close"), getSessionId: () => "other", open: async () => ({ id: "current" }), getCurrentRunner: () => "current",
+    close: () => calls.push("close"),
+    getSessionId: () => "other",
+    open: async (selection) => { calls.push(["open", selection]); return { id: "current" }; },
+    getCurrentRunner: () => "current",
     setWorkdir: () => {}, reload: async () => calls.push("reload"), focus: () => calls.push("focus"), setAfterTranscript: () => {}, switchRunner: () => {}, toast: () => {},
   });
-  await open("/session", { sessionId: "target" });
-  assert.deepEqual(calls, ["close", "reload", "focus"]);
+  await open("ps1_session", { sessionId: "target", sessionCwd: "/work", workspaceId: "workspace-b" });
+  assert.deepEqual(calls, [
+    "close",
+    ["open", { sessionKey: "ps1_session", dir: "/work", workspaceId: "workspace-b" }],
+    "reload",
+    "focus",
+  ]);
 });
 
 test("session actions stop runners with normalized errors", async () => {

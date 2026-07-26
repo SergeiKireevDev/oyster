@@ -173,11 +173,13 @@
         {#if $credentialsState.flow.deviceCode}
           <div class="oauth-device-code">
             <p>Open the verification page and enter this one-time code. Oyster will finish binding pi to your account automatically.</p>
-            <label>
-              <span>Device code</span>
-              <input bind:this={deviceCodeInput} readonly value={$credentialsState.flow.deviceCode.userCode} aria-label="Device code" onfocus={(event) => event.currentTarget.select()} />
-            </label>
-            <button class="btn" type="button" onclick={copyDeviceCode}>{deviceCodeCopied ? "Copied" : "Copy code"}</button>
+            <div class="oauth-device-code-entry">
+              <label>
+                <span>Device code</span>
+                <input bind:this={deviceCodeInput} readonly value={$credentialsState.flow.deviceCode.userCode} aria-label="Device code" onfocus={(event) => event.currentTarget.select()} />
+              </label>
+              <button class="oauth-device-code-copy" type="button" onclick={copyDeviceCode}>{deviceCodeCopied ? "Copied" : "Copy"}</button>
+            </div>
             <a class="btn" href={$credentialsState.flow.deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">Open verification page</a>
             {#if $credentialsState.flow.deviceCode.expiresInSeconds}
               <span>Expires in {$credentialsState.flow.deviceCode.expiresInSeconds} seconds</span>
