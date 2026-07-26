@@ -74,6 +74,8 @@ test("hublot components route feature workflows through scoped actions", () => {
   assert.match(manager, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node\)/);
   assert.match(list, /preview pending/);
+  assert.match(list, /<iframe[^>]+loading="eager"/);
+  assert.doesNotMatch(list, /<iframe[^>]+loading="lazy"/);
   assert.match(manager, /Waiting for Cloudflare/);
   for (const source of [sidebar, list, manager]) {
     assert.doesNotMatch(source, /features\/hublots\/hublotActions\.js|removeHublot\(fetch|addToast/);

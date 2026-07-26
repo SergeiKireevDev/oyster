@@ -14,10 +14,12 @@ export function createCarouselController({
   windowTarget,
   storage,
   setPage,
-  loadHublots,
   loadCheckpointTree,
 }) {
-  const pages = new Map([[1, loadHublots], [2, loadCheckpointTree]]);
+  // Scoped hublots and routines are prefetched when the active session is
+  // applied. Revealing that cached sidebar must not refresh it: the loading
+  // state would otherwise unmount embedded previews on every swipe.
+  const pages = new Map([[2, loadCheckpointTree]]);
   let current = Number.parseInt(storage.getItem("pi_carousel") || "0", 10);
   if (!Number.isFinite(current)) current = 0;
 
