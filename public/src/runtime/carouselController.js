@@ -15,11 +15,15 @@ export function createCarouselController({
   storage,
   setPage,
   loadCheckpointTree,
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+  drawerAnimationMs = 500,
 }) {
   // Scoped hublots and routines are prefetched when the active session is
   // applied. Revealing that cached sidebar must not refresh it: the loading
   // state would otherwise unmount embedded previews on every swipe.
   const pages = new Map([[2, loadCheckpointTree]]);
+  const closingTimers = new Map();
   let current = Number.parseInt(storage.getItem("pi_carousel") || "0", 10);
   if (!Number.isFinite(current)) current = 0;
 
@@ -27,23 +31,59 @@ export function createCarouselController({
   // hublot and checkpoint drawers to its right.
   const clamp = (page) => Math.max(-1, Math.min(2, Number(page) || 0));
   const isMobile = () => windowTarget.matchMedia("(max-width: 760px)").matches;
+  const prefersReducedMotion = () => windowTarget.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sync = () => setPage(current);
+
+  function cancelClosing(element) {
+    const timer = closingTimers.get(element);
+    if (timer !== undefined) clearTimeoutImpl(timer);
+    closingTimers.delete(element);
+    element.classList.remove("closing");
+  }
+
+  function hideImmediately(element) {
+    cancelClosing(element);
+    element.classList.remove("open");
+  }
+
+  function showDrawer(element) {
+    cancelClosing(element);
+    element.classList.add("open");
+  }
+
+  function hideDrawer(element) {
+    if (!element.classList.contains("open") || element.classList.contains("closing")) return;
+    element.classList.add("closing");
+    const finish = () => {
+      closingTimers.delete(element);
+      if (!element.classList.contains("closing")) return;
+      element.classList.remove("closing");
+      element.classList.remove("open");
+    };
+    if (prefersReducedMotion()) finish();
+    else closingTimers.set(element, setTimeoutImpl(finish, drawerAnimationMs));
+  }
+
+  function setDrawerOpen(element, open) {
+    if (open) showDrawer(element);
+    else hideDrawer(element);
+  }
 
   function apply() {
     const sessions = documentTarget.getElementById("sessions");
     const hublots = documentTarget.getElementById("hublots");
     const treebar = documentTarget.getElementById("treebar");
     if (!isMobile()) {
-      sessions.classList.remove("open");
-      hublots.classList.remove("open");
+      hideImmediately(sessions);
+      hideImmediately(hublots);
       treebar.classList.remove("open");
       current = 0;
       sync();
       return;
     }
     current = clamp(current);
-    sessions.classList.toggle("open", current === -1);
-    hublots.classList.toggle("open", current >= 1);
+    setDrawerOpen(sessions, current === -1);
+    setDrawerOpen(hublots, current >= 1);
     treebar.classList.toggle("open", current >= 2);
     pages.get(current)?.();
     sync();
@@ -62,13 +102,21 @@ export function createCarouselController({
   }
 
   function reset() {
-    documentTarget.getElementById("sessions").classList.remove("open");
-    documentTarget.getElementById("hublots").classList.remove("open");
+    hideImmediately(documentTarget.getElementById("sessions"));
+    hideImmediately(documentTarget.getElementById("hublots"));
     documentTarget.getElementById("treebar").classList.remove("open");
     set(0, { apply: false });
   }
 
-  return { apply, get: () => current, reset, set, step };
+  function teardown() {
+    for (const [element, timer] of closingTimers) {
+      clearTimeoutImpl(timer);
+      element.classList.remove("closing");
+    }
+    closingTimers.clear();
+  }
+
+  return { apply, get: () => current, reset, set, step, teardown };
 }
 
 /** Own one- and two-finger carousel gesture state independently of the DOM adapter. */
