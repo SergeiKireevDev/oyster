@@ -91,6 +91,34 @@ test("new transcript content stays pinned near the bottom and only shows a notic
   assembly.teardown();
 });
 
+test("scrolling up cancels a queued transcript head follow", async () => {
+  const deps = createDependencies();
+  const listeners = new Map();
+  const scroller = deps.findElement("scroller");
+  scroller.scrollHeight = 1000;
+  scroller.clientHeight = 600;
+  scroller.scrollTop = 350;
+  scroller.addEventListener = (type, listener) => listeners.set(type, listener);
+  scroller.removeEventListener = (type, listener) => {
+    if (listeners.get(type) === listener) listeners.delete(type);
+  };
+  let releaseTick;
+  deps.tick = () => new Promise((resolve) => { releaseTick = resolve; });
+  let notices = 0;
+  deps.showTranscriptNotice = () => notices++;
+  const assembly = createTranscriptAssembly(deps);
+
+  assembly.operations.handleStreamEvent({ type: "message_start", message: { role: "assistant", content: [] } });
+  scroller.scrollTop = 340;
+  listeners.get("scroll")();
+  releaseTick();
+  await Promise.resolve();
+
+  assert.equal(scroller.scrollTop, 340);
+  assert.equal(notices, 1);
+  assembly.teardown();
+});
+
 test("transcript assembly owns reload and synchronization controller construction", () => {
   const assembly = createTranscriptAssembly(createDependencies());
   const synchronization = assembly.configureSynchronization({

@@ -7,31 +7,18 @@
   import { transcriptItems } from "../stores/transcriptItems.js";
   import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
 
-  let messages;
   let now = Date.now();
   let workPeriod;
 
   $: workPeriod = latestTranscriptWorkPeriod($transcriptItems);
 
-  // Late-loading markdown content can grow the transcript after render. Keep
-  // a reader who was already at the bottom pinned there.
   onMount(() => {
-    const scroller = messages.parentElement;
-    const onLoad = () => {
-      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120) {
-        scroller.scrollTop = scroller.scrollHeight;
-      }
-    };
     const timer = setInterval(() => { if ($appSession.busy) now = Date.now(); }, 1000);
-    messages.addEventListener("load", onLoad, true);
-    return () => {
-      clearInterval(timer);
-      messages.removeEventListener("load", onLoad, true);
-    };
+    return () => clearInterval(timer);
   });
 </script>
 
-<div id="messages" bind:this={messages}>
+<div id="messages">
   {#each $transcriptItems as item (item.id)}
     {#if item.kind === "user"}
       <UserMessage
