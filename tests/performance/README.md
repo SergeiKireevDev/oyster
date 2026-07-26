@@ -104,19 +104,32 @@ runner.
 
 ## Fast session-switch browser test
 
-After preparing the image, run the manual browser performance test:
+The prepared `/root/.pi` directory is exported once to the repository fixture:
+
+```text
+tests/data/longcat-100x100/.pi
+```
+
+Run the manual browser performance test with:
 
 ```sh
 npm run perf:switch-sessions
 ```
 
-It starts a disposable container from `oyster:longcat-100x100`, mounts the same
-credential files read-only, and drives the real desktop UI with Playwright. It
-selects `LongCat perf 001` through `LongCat perf 020` as quickly as rendering
-allows. After every click it asserts that the session is current, its newest
-user message is the expected `message=100` marker, and the latest persisted
-message is the final message shown in the transcript. It also verifies that
-read-only switching leaves all 100 runners dormant.
+The command builds the current repository source as
+`oyster:session-switch-current`, then starts a disposable container with the
+exported fixture bind-mounted read-only. At startup it copies the 87 MB fixture
+to an ephemeral tmpfs so SQLite can create its WAL and application state can be
+updated without mutating the checked-in conversations. Regenerating the 10,000
+LongCat prompts is therefore unnecessary after code changes, and no provider
+credentials or requests are needed for this read-only UI workload.
+
+Playwright drives the real desktop UI and selects `LongCat perf 001` through
+`LongCat perf 020` as quickly as rendering allows. After every click it asserts
+that the session is current, its newest user message is the expected
+`message=100` marker, and the latest persisted message is the final message
+shown in the transcript. It also verifies that switching leaves all 100 runners
+dormant.
 
 Each switch must finish within three seconds by default. The command writes
 latencies and per-session results to:
@@ -131,7 +144,9 @@ Playwright CI spec pattern. It uses the Playwright installation under
 
 | Variable | Default | Meaning |
 |---|---:|---|
-| `PERF_SWITCH_IMAGE` | `oyster:longcat-100x100` | Prepared image to test |
+| `PERF_SWITCH_IMAGE` | `oyster:session-switch-current` | Image tag built from current source |
+| `PERF_SWITCH_DATA_DIR` | `tests/data/longcat-100x100/.pi` | Exported `.pi` fixture to mount read-only |
+| `PERF_SWITCH_SKIP_BUILD` | `0` | Set to `1` to reuse the current test image |
 | `PERF_SWITCH_SESSION_COUNT` | `20` | Numbered sessions to switch through |
 | `PERF_SWITCH_BUDGET_MS` | `3000` | Maximum render latency for each switch |
 | `PERF_SWITCH_REPORT` | `/tmp/oyster-session-switch-performance.json` | JSON report path |

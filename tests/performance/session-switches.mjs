@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Manual browser performance test for the prepared LongCat image.
+ * Manual browser performance test for the exported LongCat fixture.
  *
- * Starts a disposable container from oyster:longcat-100x100, switches through
- * the first 20 named sessions in the real UI, and requires the newest user
- * message for each selected session to render within the configured budget.
+ * Builds the current source, mounts the prepared .pi directory read-only into
+ * a disposable container, switches through the first 20 named sessions in the
+ * real UI, and requires the latest message for each selected session to render
+ * within the configured budget.
  */
 
 import { execFileSync } from "node:child_process";
@@ -28,10 +29,10 @@ function positiveInteger(name, fallback) {
 }
 
 const config = Object.freeze({
-  image: String(process.env.PERF_SWITCH_IMAGE ?? "oyster:longcat-100x100"),
+  image: String(process.env.PERF_SWITCH_IMAGE ?? "oyster:session-switch-current"),
+  dataDir: resolve(process.env.PERF_SWITCH_DATA_DIR ?? join(ROOT, "tests/data/longcat-100x100/.pi")),
+  skipBuild: process.env.PERF_SWITCH_SKIP_BUILD === "1",
   token: String(process.env.PI_UI_TOKEN ?? "session-switch-performance"),
-  authJson: resolve(process.env.PERF_AUTH_JSON ?? join(homedir(), ".pi/agent/auth.json")),
-  modelsJson: resolve(process.env.PERF_MODELS_JSON ?? join(homedir(), ".pi/agent/models.json")),
   sessionCount: positiveInteger("PERF_SWITCH_SESSION_COUNT", 20),
   switchBudgetMs: positiveInteger("PERF_SWITCH_BUDGET_MS", 3_000),
   startupTimeoutMs: positiveInteger("PERF_SWITCH_STARTUP_TIMEOUT_MS", 60_000),
@@ -45,10 +46,11 @@ let containerStarted = false;
 let report = null;
 
 function docker(args, options = {}) {
-  return execFileSync("docker", args, {
+  const output = execFileSync("docker", args, {
     encoding: "utf8",
     stdio: options.capture === false ? "inherit" : ["ignore", "pipe", "pipe"],
-  }).trim();
+  });
+  return typeof output === "string" ? output.trim() : "";
 }
 
 function configureBrowserRuntime() {
@@ -174,6 +176,11 @@ async function runBrowser(baseUrl, sessions) {
   await page.goto(`${baseUrl}/#token=${encodeURIComponent(config.token)}`, { waitUntil: "domcontentloaded" });
   await page.locator("#connDot.ok").waitFor({ state: "visible", timeout: config.startupTimeoutMs });
   await page.locator("#input").waitFor({ state: "visible", timeout: config.startupTimeoutMs });
+  const startupModal = page.locator("#overlay.open");
+  if (await startupModal.isVisible()) {
+    await startupModal.locator("[data-modal-cancel]").click();
+    await page.locator("#overlay").waitFor({ state: "hidden", timeout: config.startupTimeoutMs });
+  }
   await page.locator(".session-sidebar-name").filter({ hasText: /^LongCat perf 001$/ }).waitFor({
     state: "attached",
     timeout: config.startupTimeoutMs,
@@ -237,9 +244,17 @@ async function runBrowser(baseUrl, sessions) {
 }
 
 async function main() {
-  if (!existsSync(config.authJson)) throw new Error(`auth.json not found: ${config.authJson}`);
-  if (!existsSync(config.modelsJson)) throw new Error(`models.json not found: ${config.modelsJson}`);
-  docker(["image", "inspect", config.image]);
+  if (!existsSync(config.dataDir)) throw new Error(`prepared .pi directory not found: ${config.dataDir}`);
+  if (!existsSync(join(config.dataDir, "agent/oyster.sqlite"))) {
+    throw new Error(`prepared Oyster database not found under: ${config.dataDir}`);
+  }
+  if (config.skipBuild) {
+    docker(["image", "inspect", config.image]);
+    console.log(`reusing image: ${config.image}`);
+  } else {
+    console.log(`building current source as ${config.image}`);
+    docker(["build", "--file", join(ROOT, "Dockerfile"), "--tag", config.image, ROOT], { capture: false });
+  }
   const port = await unusedPort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const startedAt = new Date();
@@ -247,10 +262,12 @@ async function main() {
   docker([
     "run", "--detach", "--rm", "--name", containerName,
     "--publish", `127.0.0.1:${port}:4000`,
-    "--mount", `type=bind,src=${config.authJson},dst=/root/.pi/agent/auth.json,readonly`,
-    "--mount", `type=bind,src=${config.modelsJson},dst=/root/.pi/agent/models.json,readonly`,
+    "--mount", `type=bind,src=${config.dataDir},dst=/var/lib/oyster-performance-fixture,readonly`,
+    "--mount", "type=tmpfs,dst=/root/.pi,tmpfs-size=268435456",
     "--env", `PI_UI_TOKEN=${config.token}`,
+    "--entrypoint", "/bin/sh",
     config.image,
+    "-c", "cp -a /var/lib/oyster-performance-fixture/. /root/.pi/ && exec /usr/local/bin/docker-entrypoint.sh",
   ]);
   containerStarted = true;
 
@@ -271,6 +288,8 @@ async function main() {
       endedAt: new Date().toISOString(),
       image: config.image,
       imageId: docker(["image", "inspect", "--format", "{{.Id}}", config.image]),
+      dataDir: config.dataDir,
+      fixtureMountReadOnly: true,
       baseUrl,
       sessionCount: config.sessionCount,
       perSwitchBudgetMs: config.switchBudgetMs,
