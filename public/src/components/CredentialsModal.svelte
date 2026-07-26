@@ -1,5 +1,6 @@
 <script>
   import { onDestroy } from "svelte";
+  import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { credentialsState } from "../stores/credentials.js";
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -18,6 +19,9 @@
   let oauthInputs = new Set();
   let oauthInputReady = {};
   let requestSignature = "";
+  let deviceCodeInput;
+  let deviceCodeCopied = false;
+  let deviceCodeCopiedTimer;
 
   const sourceLabels = {
     stored_api_key: "stored API key",
@@ -57,6 +61,22 @@
   function clearOAuthInputs() {
     for (const input of oauthInputs) input.value = "";
     oauthInputReady = {};
+    deviceCodeCopied = false;
+    clearTimeout(deviceCodeCopiedTimer);
+    deviceCodeCopiedTimer = undefined;
+  }
+
+  async function copyDeviceCode() {
+    const code = $credentialsState.flow?.deviceCode?.userCode ?? "";
+    if (!code) return;
+    if (!await copyTextToClipboard(code)) {
+      deviceCodeInput?.focus();
+      deviceCodeInput?.select();
+      return;
+    }
+    deviceCodeCopied = true;
+    clearTimeout(deviceCodeCopiedTimer);
+    deviceCodeCopiedTimer = setTimeout(() => { deviceCodeCopied = false; }, 2000);
   }
 
   function updateOAuthInput(event, requestId) {
@@ -130,6 +150,7 @@
   onDestroy(() => {
     clearKey();
     clearOAuthInputs();
+    deviceCodeInput = undefined;
     oauthInputs.clear();
     uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
   });
@@ -151,11 +172,13 @@
         {/if}
         {#if $credentialsState.flow.deviceCode}
           <div class="oauth-device-code">
+            <p>Open the verification page and enter this one-time code. Oyster will finish binding pi to your account automatically.</p>
             <label>
               <span>Device code</span>
-              <input readonly value={$credentialsState.flow.deviceCode.userCode} aria-label="Device code" onfocus={(event) => event.currentTarget.select()} />
+              <input bind:this={deviceCodeInput} readonly value={$credentialsState.flow.deviceCode.userCode} aria-label="Device code" onfocus={(event) => event.currentTarget.select()} />
             </label>
-            <a href={$credentialsState.flow.deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">Open device verification</a>
+            <button class="btn" type="button" onclick={copyDeviceCode}>{deviceCodeCopied ? "Copied" : "Copy code"}</button>
+            <a class="btn" href={$credentialsState.flow.deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">Open verification page</a>
             {#if $credentialsState.flow.deviceCode.expiresInSeconds}
               <span>Expires in {$credentialsState.flow.deviceCode.expiresInSeconds} seconds</span>
             {/if}
