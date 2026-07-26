@@ -1,0 +1,5 @@
+{
+  "defaultProvider": "meituan",
+  "defaultModel": "LongCat-2.0",
+  "defaultThinkingLevel": "off"
+}

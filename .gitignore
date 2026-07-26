@@ -13,6 +13,9 @@ castle/
 hello/
 mario/
 .pi/
+# Versioned, credential-free fixture for the manual session-switch benchmark.
+!tests/data/longcat-100x100/.pi/
+!tests/data/longcat-100x100/.pi/**
 .demo-artifacts/
 foobar.py
 preview-gallery/
