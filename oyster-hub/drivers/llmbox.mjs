@@ -91,6 +91,7 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
         const id = boxId(box);
         const proxy = proxies.find((candidate) => candidate.box_id === id && candidate.port === config.workspacePort);
         const environmentId = String(box.spoke || "unassigned-device");
+        const state = String(box.state || "").toLowerCase();
         return {
           environmentId,
           environmentName: environmentId,
@@ -98,6 +99,7 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
           name: box.description || id,
           url: proxy?.url ? String(proxy.url).replace(/\/$/, "") : null,
           token: deriveWorkspaceToken(config.tokenSecret, id),
+          ...(state === "paused" ? { status: "paused" } : {}),
           provider: publicProviderState(box),
         };
       })
@@ -164,13 +166,31 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
     };
   }
 
+  async function pauseWorkspace(id) {
+    await call("pause-box", { box_id: id });
+    return { id, status: "paused" };
+  }
+
+  async function resumeWorkspace(id) {
+    await call("resume-box", { box_id: id });
+    return { id, status: "online" };
+  }
+
+  async function removeWorkspace(id) {
+    await call("destroy-box", { box_id: id });
+    return { id, destroyed: true };
+  }
+
   return Object.freeze({
     type: "llmbox",
     endpoint,
-    capabilities: Object.freeze({ list: true, create: true, remove: false }),
+    capabilities: Object.freeze({ list: true, create: true, remove: true }),
     listEnvironments,
     listWorkspaces,
     getWorkspace,
     createWorkspace,
+    pauseWorkspace,
+    resumeWorkspace,
+    removeWorkspace,
   });
 }

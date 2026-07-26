@@ -114,6 +114,21 @@ function fakeLlmbox(workspaceUrl) {
       proxies.push(proxy);
       return sendJson(res, 200, { proxy });
     }
+    if (url.pathname === "/api/v1/pause-box" || url.pathname === "/api/v1/resume-box") {
+      const box = boxes.find((candidate) => candidate.box_id === body.box_id);
+      if (!box) return sendJson(res, 404, { error: "box not found" });
+      box.state = url.pathname.endsWith("pause-box") ? "paused" : "running";
+      box.status = box.state === "paused" ? "Paused" : "Up";
+      return sendJson(res, 200, {});
+    }
+    if (url.pathname === "/api/v1/destroy-box") {
+      const index = boxes.findIndex((candidate) => candidate.box_id === body.box_id);
+      if (index >= 0) boxes.splice(index, 1);
+      for (let proxyIndex = proxies.length - 1; proxyIndex >= 0; proxyIndex -= 1) {
+        if (proxies[proxyIndex].box_id === body.box_id) proxies.splice(proxyIndex, 1);
+      }
+      return sendJson(res, 200, {});
+    }
     sendJson(res, 404, { error: "missing llmbox operation" });
   });
   return { server, calls, boxes, proxies };
@@ -282,6 +297,20 @@ test("composite driver exposes configured local and llmbox environments together
   assert.equal((await driver.getWorkspace("direct")).name, "Direct Oyster");
   assert.equal((await driver.getWorkspace("local")).provider.type, "llmbox");
   assert.equal(driver.capabilities.create, true);
+  assert.equal(driver.capabilities.remove, true);
+  assert.equal((await driver.pauseWorkspace("local")).status, "paused");
+  assert.equal((await driver.getWorkspace("local")).status, "paused");
+  assert.equal((await driver.resumeWorkspace("local")).status, "online");
+
+  const hub = createOysterHub(config, { driver, logger: { error() {} } });
+  const hubUrl = await listen(hub);
+  t.after(() => close(hub));
+  const destroyed = await fetch(`${hubUrl}/api/v1/workspaces/local`, {
+    method: "DELETE", headers: { authorization: "Bearer hub-secret" },
+  });
+  assert.equal(destroyed.status, 200);
+  assert.deepEqual(await destroyed.json(), { workspace: { id: "local", destroyed: true } });
+  assert.equal(await driver.getWorkspace("local"), null);
 });
 
 test("mock driver exposes one local read-only workspace through a hub on port 8082", async (t) => {
@@ -411,7 +440,7 @@ test("oyster hub discovers llmbox boxes and aggregates their Oyster results", as
   assert.deepEqual(overview.driver, {
     type: "llmbox",
     endpoint: overview.driver.endpoint,
-    capabilities: { list: true, create: true, remove: false },
+    capabilities: { list: true, create: true, remove: true },
   });
   assert.deepEqual(overview.totals, {
     workspaces: 1, online: 1, offline: 0, provisioning: 0,
@@ -461,6 +490,36 @@ test("POST workspaces creates an llmbox box, injects its Oyster token, and expos
   assert.deepEqual(llmbox.calls.find((call) => call.path === "/api/v1/create-proxy").body, {
     box_id: "created", port: 8080, description: "Oyster workspace",
   });
+});
+
+test("llmbox workspaces can be paused, resumed, and destroyed through Hub lifecycle routes", async (t) => {
+  const { hubUrl, llmbox } = await fleet(t);
+  const headers = { authorization: "Bearer hub-secret", "content-type": "application/json" };
+
+  const pause = await fetch(`${hubUrl}/api/v1/workspaces/local/actions`, {
+    method: "POST", headers, body: JSON.stringify({ action: "pause" }),
+  });
+  assert.equal(pause.status, 200);
+  assert.deepEqual(await pause.json(), { workspace: { id: "local", status: "paused" } });
+
+  const pausedList = await fetch(`${hubUrl}/api/v1/workspaces?probe=0`, { headers });
+  assert.equal((await pausedList.json()).workspaces[0].status, "paused");
+
+  const resume = await fetch(`${hubUrl}/api/v1/workspaces/local/actions`, {
+    method: "POST", headers, body: JSON.stringify({ action: "resume" }),
+  });
+  assert.equal(resume.status, 200);
+  assert.deepEqual(await resume.json(), { workspace: { id: "local", status: "online" } });
+
+  const destroy = await fetch(`${hubUrl}/api/v1/workspaces/local`, { method: "DELETE", headers });
+  assert.equal(destroy.status, 200);
+  assert.deepEqual(await destroy.json(), { workspace: { id: "local", destroyed: true } });
+  assert.equal(llmbox.boxes.some((box) => box.box_id === "local"), false);
+  assert.deepEqual(llmbox.calls.filter((call) => /\/(pause|resume|destroy)-box$/.test(call.path)).map((call) => [call.path, call.body]), [
+    ["/api/v1/pause-box", { box_id: "local" }],
+    ["/api/v1/resume-box", { box_id: "local" }],
+    ["/api/v1/destroy-box", { box_id: "local" }],
+  ]);
 });
 
 test("workspace-scoped API resolves through the driver and proxies the request", async (t) => {

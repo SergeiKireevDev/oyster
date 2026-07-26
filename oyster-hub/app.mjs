@@ -410,7 +410,12 @@ export function createOysterHub(config, {
               invalidateWorkspaceDiscovery();
               return json(res, 200, { workspace: destroyed });
             }
-            if (!driver.capabilities?.remove) return json(res, 405, { error: `${driver.type} workspace driver cannot remove workspaces` });
+            if (driver.type !== "composite" && !driver.capabilities?.remove) {
+              return json(res, 405, { error: `${driver.type} workspace driver cannot remove workspaces` });
+            }
+            if (typeof driver.removeWorkspace !== "function") {
+              return json(res, 405, { error: `${driver.type} workspace driver cannot remove workspaces` });
+            }
             await driver.removeWorkspace(wid);
             invalidateWorkspaceDiscovery();
             return json(res, 200, { workspace: { id: wid, destroyed: true } });
@@ -420,14 +425,20 @@ export function createOysterHub(config, {
         }
         if (match[2] === "/actions") {
           if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
-          if (!cloudWorkspace) return json(res, 405, { error: "workspace lifecycle actions are only supported for cloud workspaces" });
           const { action } = await readJsonBody(req);
-          const updated = action === "pause"
-            ? await cloud.pause(wid)
-            : action === "resume"
-              ? await cloud.resume(wid)
-              : null;
-          if (!updated) return json(res, 400, { error: "action must be pause or resume" });
+          if (action !== "pause" && action !== "resume") {
+            return json(res, 400, { error: "action must be pause or resume" });
+          }
+          let updated;
+          if (cloudWorkspace) {
+            updated = action === "pause" ? await cloud.pause(wid) : await cloud.resume(wid);
+          } else {
+            const method = action === "pause" ? "pauseWorkspace" : "resumeWorkspace";
+            if (typeof driver[method] !== "function") {
+              return json(res, 405, { error: `${driver.type} workspace driver cannot ${action} workspaces` });
+            }
+            updated = await driver[method](wid);
+          }
           invalidateWorkspaceDiscovery();
           return json(res, 200, { workspace: updated });
         }

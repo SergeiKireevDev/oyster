@@ -75,7 +75,7 @@
         }
       },
       "delete": {
-        "summary": "Remove a cloud workspace or a driver workspace when supported",
+        "summary": "Permanently destroy a managed cloud or llmbox workspace",
         "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
         "responses": { "200": { "description": "Workspace destroyed" }, "405": { "description": "Selected driver cannot remove workspaces" } }
       }
@@ -83,9 +83,9 @@
     "/workspaces/{wid}/actions": {
       "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
       "post": {
-        "summary": "Pause or resume a managed cloud workspace",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloudWorkspaceAction" } } } },
-        "responses": { "200": { "description": "Cloud workspace lifecycle action accepted" }, "400": { "description": "Invalid action" }, "404": { "description": "Workspace not found" }, "409": { "description": "Workspace state does not allow the action" }, "502": { "description": "Cloud provider request failed" } }
+        "summary": "Pause or resume a managed cloud or llmbox workspace",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkspaceAction" } } } },
+        "responses": { "200": { "description": "Workspace lifecycle action accepted" }, "400": { "description": "Invalid action" }, "404": { "description": "Workspace not found" }, "409": { "description": "Workspace state does not allow the action" }, "502": { "description": "Cloud provider request failed" } }
       }
     },
     "/workspaces/{wid}/{path}": {
@@ -154,7 +154,7 @@
       },
       "CloudOption": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" }, "regions": { "type": "array", "items": { "type": "string" } } } },
       "CreateCloudWorkspace": { "type": "object", "required": ["provider", "name", "region", "size", "image"], "properties": { "provider": { "enum": ["digitalocean", "hetzner", "aws", "gcp"] }, "name": { "type": "string", "pattern": "^[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$" }, "region": { "type": "string" }, "size": { "type": "string" }, "image": { "type": "string" } } },
-      "CloudWorkspaceAction": { "type": "object", "required": ["action"], "properties": { "action": { "enum": ["pause", "resume"] } } },
+      "WorkspaceAction": { "type": "object", "required": ["action"], "properties": { "action": { "enum": ["pause", "resume"] } } },
       "Workspace": {
         "type": "object",
         "required": ["environmentId", "environmentName", "id", "name", "url"],

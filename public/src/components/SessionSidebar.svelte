@@ -136,15 +136,16 @@
     if (event.key === "Escape") closeEnvironmentInfo();
   }
   let workspaceActions = new Set();
-  function cloudWorkspace(workspace) {
-    return workspace.provider?.type === "cloud";
+  function managedWorkspace(workspace) {
+    return ["cloud", "llmbox"].includes(workspace.provider?.type);
   }
-  async function manageCloudWorkspace(workspace, action) {
+  async function manageWorkspace(workspace, action) {
     const verb = action === "destroy" ? "Destroy" : action === "resume" ? "Resume" : "Pause";
+    const llmbox = workspace.provider?.type === "llmbox";
     const warning = action === "destroy"
-      ? `Destroy “${workspace.workspaceName}” permanently?\n\nThe provider VM and its disk, sessions, and stored model credentials will be deleted. This cannot be undone.`
+      ? `Destroy “${workspace.workspaceName}” permanently?\n\nThe ${llmbox ? "llmbox VM" : "provider VM"} and its disk, sessions, and stored model credentials will be deleted. This cannot be undone.`
       : action === "pause"
-        ? `Pause “${workspace.workspaceName}”?\n\nActive sessions will disconnect. The VM disk is retained; storage charges continue, and DigitalOcean may continue charging for the reserved Droplet.`
+        ? `Pause “${workspace.workspaceName}”?\n\nActive sessions will disconnect. The VM disk is retained${llmbox ? "." : "; storage charges continue, and DigitalOcean may continue charging for the reserved Droplet."}`
         : `Resume “${workspace.workspaceName}”?`;
     if (!confirm(warning)) return;
     workspaceActions = new Set([...workspaceActions, workspace.workspaceId]);
@@ -538,7 +539,7 @@
       <strong>{workspace.workspaceName}</strong>
     </span>
     {#if workspace.workspaceId !== workspace.workspaceName}<code>{workspace.workspaceId}</code>{/if}
-    {#if cloudWorkspace(workspace)}
+    {#if managedWorkspace(workspace)}
       <span class="session-sidebar-workspace-cloud-actions">
         <button
           type="button"
@@ -547,7 +548,7 @@
           title={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
           aria-label={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
           disabled={managing || ["provisioning", "awaiting_agent", "initializing", "resuming", "pausing", "destroying"].includes(status)}
-          onclick={() => manageCloudWorkspace(workspace, status === "paused" ? "resume" : "pause")}
+          onclick={() => manageWorkspace(workspace, status === "paused" ? "resume" : "pause")}
         >{status === "paused" ? "▶" : "Ⅱ"}</button>
         <button
           type="button"
@@ -555,7 +556,7 @@
           title={`Destroy ${workspace.workspaceName}`}
           aria-label={`Destroy ${workspace.workspaceName}`}
           disabled={managing || status === "destroying"}
-          onclick={() => manageCloudWorkspace(workspace, "destroy")}
+          onclick={() => manageWorkspace(workspace, "destroy")}
         >×</button>
       </span>
     {/if}

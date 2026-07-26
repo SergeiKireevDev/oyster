@@ -189,8 +189,9 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /status-\$\{status\}/);
   assert.match(source, /disabled=\{!online\}/);
   assert.match(source, /session-sidebar-workspace-cloud-actions/);
-  assert.match(source, /manageCloudWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
-  assert.match(source, /manageCloudWorkspace\(workspace, "destroy"\)/);
+  assert.match(source, /\["cloud", "llmbox"\]\.includes\(workspace\.provider\?\.type\)/);
+  assert.match(source, /manageWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
+  assert.match(source, /manageWorkspace\(workspace, "destroy"\)/);
   assert.match(source, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspace\.workspaceId\)\}/);
   assert.match(source, /session-sidebar-workspace-create/);
   assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);

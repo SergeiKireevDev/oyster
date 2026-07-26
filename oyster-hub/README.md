@@ -245,8 +245,8 @@ Hub requests accept `Authorization: Bearer ...`, `X-API-Key`, or `X-Auth-Token`.
 | `GET /api/v1/workspaces` | Query llmbox and list discovered workspaces. |
 | `POST /api/v1/workspaces` | Create an llmbox workspace, or a cloud VM workspace when `provider` is supplied. |
 | `GET /api/v1/workspaces/{wid}` | Inspect one dynamically discovered workspace. |
-| `POST /api/v1/workspaces/{wid}/actions` | Pause or resume a managed cloud workspace. |
-| `DELETE /api/v1/workspaces/{wid}` | Permanently destroy a managed cloud workspace when supported. |
+| `POST /api/v1/workspaces/{wid}/actions` | Pause or resume a managed cloud VM or llmbox box workspace. |
+| `DELETE /api/v1/workspaces/{wid}` | Permanently destroy a managed cloud VM or llmbox box workspace. |
 | `GET /api/v1/overview` | Aggregate health, runners, sessions, routines, and hublots. |
 | `ANY /api/v1/workspaces/{wid}/{path...}` | Proxy an existing Oyster endpoint to one workspace. |
 
