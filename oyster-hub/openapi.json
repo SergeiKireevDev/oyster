@@ -10,30 +10,8 @@
   "paths": {
     "/environments": {
       "get": {
-        "summary": "List driver-discovered and cloud environments",
+        "summary": "List connection environments: configured local, llmbox spokes, and connected cloud providers",
         "responses": { "200": { "description": "Environment list", "content": { "application/json": { "schema": { "type": "object", "required": ["environments"], "properties": { "environments": { "type": "array", "items": { "$ref": "#/components/schemas/Environment" } } } } } } } }
-      },
-      "post": {
-        "summary": "Provision a reverse-connected Oyster VM with a configured cloud provider",
-        "description": "Applies provider-native cloud-init, installs Oyster from source, and registers an outbound WSS channel to the Hub.",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCloudEnvironment" } } } },
-        "responses": { "201": { "description": "Cloud instance created", "content": { "application/json": { "schema": { "type": "object", "required": ["environment"], "properties": { "environment": { "$ref": "#/components/schemas/Environment" } } } } } }, "400": { "description": "Invalid request" }, "409": { "description": "Provider credentials are not configured" }, "502": { "description": "Cloud provider request failed" } }
-      }
-    },
-    "/environments/{environmentId}": {
-      "parameters": [{ "$ref": "#/components/parameters/EnvironmentId" }],
-      "delete": {
-        "summary": "Permanently destroy a managed cloud environment",
-        "description": "Deletes the provider VM and disk, revokes its reverse-connection credential, and removes its Hub record.",
-        "responses": { "200": { "description": "Cloud environment destroyed" }, "404": { "description": "Cloud environment not found" }, "502": { "description": "Cloud provider request failed" } }
-      }
-    },
-    "/environments/{environmentId}/actions": {
-      "parameters": [{ "$ref": "#/components/parameters/EnvironmentId" }],
-      "post": {
-        "summary": "Pause or resume a managed cloud environment",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloudEnvironmentAction" } } } },
-        "responses": { "200": { "description": "Cloud lifecycle action accepted" }, "400": { "description": "Invalid action" }, "404": { "description": "Cloud environment not found" }, "409": { "description": "Environment state does not allow the action" }, "502": { "description": "Cloud provider request failed" } }
       }
     },
     "/cloud/providers": {
@@ -71,8 +49,8 @@
         "responses": { "200": { "description": "Workspace list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkspaceList" } } } } }
       },
       "post": {
-        "summary": "Create a workspace through the configured driver",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateWorkspace" } } } },
+        "summary": "Create an llmbox workspace or a cloud VM workspace",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/CreateWorkspace" }, { "$ref": "#/components/schemas/CreateCloudWorkspace" }] } } } },
         "responses": {
           "201": { "description": "Workspace created", "content": { "application/json": { "schema": { "type": "object", "required": ["workspace"], "properties": { "workspace": { "$ref": "#/components/schemas/Workspace" } } } } } },
           "400": { "description": "Invalid workspace request" },
@@ -97,9 +75,17 @@
         }
       },
       "delete": {
-        "summary": "Remove a workspace when supported by the selected driver",
+        "summary": "Remove a cloud workspace or a driver workspace when supported",
         "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
-        "responses": { "405": { "description": "Selected driver cannot remove workspaces" } }
+        "responses": { "200": { "description": "Workspace destroyed" }, "405": { "description": "Selected driver cannot remove workspaces" } }
+      }
+    },
+    "/workspaces/{wid}/actions": {
+      "parameters": [{ "$ref": "#/components/parameters/WorkspaceId" }],
+      "post": {
+        "summary": "Pause or resume a managed cloud workspace",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CloudWorkspaceAction" } } } },
+        "responses": { "200": { "description": "Cloud workspace lifecycle action accepted" }, "400": { "description": "Invalid action" }, "404": { "description": "Workspace not found" }, "409": { "description": "Workspace state does not allow the action" }, "502": { "description": "Cloud provider request failed" } }
       }
     },
     "/workspaces/{wid}/{path}": {
@@ -119,7 +105,6 @@
     },
     "parameters": {
       "WorkspaceId": { "name": "wid", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" } },
-      "EnvironmentId": { "name": "environmentId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$" } },
       "CloudProviderId": { "name": "provider", "in": "path", "required": true, "schema": { "type": "string", "enum": ["digitalocean", "hetzner", "aws", "gcp"] } }
     },
     "responses": {
@@ -129,15 +114,16 @@
       "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
       "Environment": {
         "type": "object",
-        "required": ["id", "name", "status"],
+        "required": ["id", "name", "kind", "status"],
         "properties": {
-          "id": { "type": "string", "description": "llmbox spoke name" },
+          "id": { "type": "string", "description": "Configured local ID, llmbox spoke name, or cloud provider environment ID" },
           "name": { "type": "string" },
-          "status": { "enum": ["provisioning", "awaiting_agent", "initializing", "online", "offline", "failed", "provisioned", "paused", "pausing", "resuming", "destroying"] },
+          "kind": { "enum": ["local", "llmbox", "cloud"] },
+          "status": { "enum": ["online", "offline"] },
           "default": { "type": "boolean" },
           "local": { "type": "boolean" },
           "cloud": { "type": "boolean" },
-          "createdAt": { "type": "string", "format": "date-time" },
+          "workspaceCount": { "type": "integer", "minimum": 0 },
           "provider": { "type": "object", "additionalProperties": true }
         }
       },
@@ -167,14 +153,14 @@
         }
       },
       "CloudOption": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" }, "regions": { "type": "array", "items": { "type": "string" } } } },
-      "CreateCloudEnvironment": { "type": "object", "required": ["provider", "name", "region", "size", "image"], "properties": { "provider": { "enum": ["digitalocean", "aws", "gcp"] }, "name": { "type": "string", "pattern": "^[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$" }, "region": { "type": "string" }, "size": { "type": "string" }, "image": { "type": "string" } } },
-      "CloudEnvironmentAction": { "type": "object", "required": ["action"], "properties": { "action": { "enum": ["pause", "resume"] } } },
+      "CreateCloudWorkspace": { "type": "object", "required": ["provider", "name", "region", "size", "image"], "properties": { "provider": { "enum": ["digitalocean", "hetzner", "aws", "gcp"] }, "name": { "type": "string", "pattern": "^[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$" }, "region": { "type": "string" }, "size": { "type": "string" }, "image": { "type": "string" } } },
+      "CloudWorkspaceAction": { "type": "object", "required": ["action"], "properties": { "action": { "enum": ["pause", "resume"] } } },
       "Workspace": {
         "type": "object",
         "required": ["environmentId", "environmentName", "id", "name", "url"],
         "properties": {
-          "environmentId": { "type": "string", "description": "Physical or cloud device ID" },
-          "environmentName": { "type": "string", "description": "Physical or cloud device label" },
+          "environmentId": { "type": "string", "description": "Local connection, llmbox spoke, or cloud provider environment ID" },
+          "environmentName": { "type": "string", "description": "Connection environment label" },
           "id": { "type": "string", "description": "Project microVM ID" },
           "name": { "type": "string" },
           "url": { "type": ["string", "null"], "format": "uri" },
@@ -185,7 +171,8 @@
           "errors": { "type": "object", "additionalProperties": { "type": "string" } }
         }
       },
-      "WorkspaceList": { "type": "object", "required": ["driver", "workspaces"], "properties": { "driver": { "type": "object", "required": ["type", "endpoint", "capabilities"], "properties": { "type": { "type": "string" }, "endpoint": { "type": "string", "format": "uri" }, "capabilities": { "type": "object", "required": ["list", "create", "remove"], "properties": { "list": { "type": "boolean" }, "create": { "type": "boolean" }, "remove": { "type": "boolean" } } } } }, "workspaces": { "type": "array", "items": { "$ref": "#/components/schemas/Workspace" } } } },
+      "Driver": { "type": "object", "required": ["type", "endpoint", "capabilities"], "properties": { "type": { "enum": ["mock", "llmbox", "composite"] }, "endpoint": { "type": "string" }, "capabilities": { "type": "object", "required": ["list", "create", "remove"], "properties": { "list": { "type": "boolean" }, "create": { "type": "boolean" }, "remove": { "type": "boolean" } } }, "drivers": { "type": "array", "items": { "$ref": "#/components/schemas/Driver" }, "description": "Child descriptors when type is composite" } } },
+      "WorkspaceList": { "type": "object", "required": ["driver", "workspaces"], "properties": { "driver": { "$ref": "#/components/schemas/Driver" }, "workspaces": { "type": "array", "items": { "$ref": "#/components/schemas/Workspace" } } } },
       "CreateWorkspace": {
         "type": "object",
         "required": ["id"],

@@ -14,7 +14,7 @@ export function setActiveWorkspace(workspaceId, storage = localStorage) {
   return true;
 }
 
-/** List physical/cloud environments (llmbox spokes) known to the Hub. */
+/** List Hub connections: configured local, one per llmbox spoke, and one per connected cloud provider. */
 export async function listEnvironments({ fetchImpl = fetch } = {}) {
   const response = await fetchImpl("/api/v1/environments");
   const data = await response.json().catch(() => ({}));
@@ -61,7 +61,7 @@ export async function ensureActiveWorkspace({
 } = {}) {
   if (!isHubRuntime(runtimeConfig)) return null;
   const available = await listOnlineWorkspaces({ fetchImpl });
-  if (!available.length) throw new Error("no workspaces available — create an environment or workspace first");
+  if (!available.length) throw new Error("no online workspaces available — connect an environment and create a workspace first");
   const persisted = storage.getItem(ACTIVE_WORKSPACE_KEY);
   const selected = available.find((workspace) => workspace.id === persisted) ?? available[0];
   storage.setItem(ACTIVE_WORKSPACE_KEY, selected.id);

@@ -19,8 +19,9 @@ export function createMockWorkspaceDriver(config) {
   const environments = Object.freeze([...new Map(workspaces.map((workspace) => [workspace.environmentId || "local", Object.freeze({
     id: workspace.environmentId || "local",
     name: workspace.environmentName || "Local",
+    kind: "local",
     status: "online",
-    local: (workspace.environmentId || "local") === "local",
+    local: true,
   })])).values()]);
 
   return Object.freeze({

@@ -48,7 +48,12 @@ function workspaceUrl(workspace, pathAndQuery) {
 }
 
 function driverDescriptor(driver) {
-  return { type: driver.type, endpoint: driver.endpoint, capabilities: driver.capabilities };
+  return {
+    type: driver.type,
+    endpoint: driver.endpoint,
+    capabilities: driver.capabilities,
+    ...(driver.drivers ? { drivers: driver.drivers.map(driverDescriptor) } : {}),
+  };
 }
 
 async function fetchJson(workspace, path, { fetchImpl, timeoutMs }) {
@@ -76,7 +81,7 @@ async function listDriverEnvironments(driver) {
   const workspaces = await driver.listWorkspaces();
   return [...new Map(workspaces.map((workspace) => {
     const id = workspace.environmentId || workspace.provider?.spoke || "unassigned-device";
-    return [id, { id, name: workspace.environmentName || id, status: "online" }];
+    return [id, { id, name: workspace.environmentName || id, kind: driver.type === "mock" ? "local" : driver.type, status: "online", local: driver.type === "mock" }];
   })).values()];
 }
 
@@ -106,6 +111,7 @@ function publicWorkspace(workspace) {
     id: workspace.id,
     name: workspace.name,
     url: workspace.url,
+    createdAt: workspace.createdAt,
     provider: workspace.provider,
   };
 }
@@ -242,6 +248,7 @@ export function createOysterHub(config, {
     uploadLimiter,
   };
   let workspaceDiscovery = { value: null, expiresAt: 0, promise: null };
+  const invalidateWorkspaceDiscovery = () => { workspaceDiscovery = { value: null, expiresAt: 0, promise: null }; };
   const listWorkspaces = async () => {
     const timestamp = Date.now();
     if (workspaceDiscovery.value && workspaceDiscovery.expiresAt > timestamp) return workspaceDiscovery.value;
@@ -301,23 +308,7 @@ export function createOysterHub(config, {
         return json(res, 200, { environments: await listEnvironments(driver, cloud) });
       }
       if (url.pathname === "/api/v1/environments" && req.method === "POST") {
-        return json(res, 201, { environment: await cloud.provision(await readJsonBody(req)) });
-      }
-      const cloudEnvironmentMatch = url.pathname.match(/^\/api\/v1\/environments\/([^/]+)(?:\/(actions))?$/);
-      if (cloudEnvironmentMatch) {
-        let environmentId;
-        try { environmentId = decodeURIComponent(cloudEnvironmentMatch[1]); }
-        catch { return json(res, 400, { error: "invalid cloud environment id" }); }
-        if (!cloudEnvironmentMatch[2] && req.method === "DELETE") {
-          return json(res, 200, { environment: await cloud.destroy(environmentId) });
-        }
-        if (cloudEnvironmentMatch[2] && req.method === "POST") {
-          const { action } = await readJsonBody(req);
-          if (action === "pause") return json(res, 200, { environment: await cloud.pause(environmentId) });
-          if (action === "resume") return json(res, 200, { environment: await cloud.resume(environmentId) });
-          return json(res, 400, { error: "action must be pause or resume" });
-        }
-        return json(res, 405, { error: "method not allowed" });
+        return json(res, 405, { error: "environments are connections; create a workspace with POST /api/v1/workspaces" });
       }
       if (url.pathname === "/api/v1/cloud/providers" && req.method === "GET") {
         return json(res, 200, { providers: await cloud.listProviders() });
@@ -386,17 +377,16 @@ export function createOysterHub(config, {
         return json(res, 200, { driver: driverDescriptor(driver), workspaces });
       }
       if (url.pathname === "/api/v1/workspaces" && req.method === "POST") {
-        if (!driver.capabilities?.create) {
-          return json(res, 405, { error: `${driver.type} workspace driver cannot create workspaces` });
+        const body = await readJsonBody(req);
+        let workspace;
+        if (body.provider) workspace = await cloud.provision(body);
+        else {
+          if (!driver.capabilities?.create) {
+            return json(res, 405, { error: `${driver.type} workspace driver cannot create workspaces` });
+          }
+          workspace = await driver.createWorkspace(body);
         }
-        let body;
-        try {
-          const raw = await readBufferedRequestBody(req);
-          body = raw.length ? JSON.parse(raw.toString("utf8")) : {};
-        } catch (error) {
-          return json(res, 400, { error: `invalid JSON: ${error.message}` });
-        }
-        const workspace = await driver.createWorkspace(body);
+        invalidateWorkspaceDiscovery();
         return json(res, 201, { workspace });
       }
       if (req.method === "GET" && url.pathname === "/api/v1/overview") {
@@ -409,14 +399,37 @@ export function createOysterHub(config, {
       if (match) {
         let wid;
         try { wid = decodeURIComponent(match[1]); } catch { return json(res, 400, { error: "invalid workspace id" }); }
-        const workspace = await driver.getWorkspace(wid) || (cloud.getWorkspace ? await cloud.getWorkspace(wid) : null);
+        const driverWorkspace = await driver.getWorkspace(wid);
+        const cloudWorkspace = driverWorkspace ? null : (cloud.getWorkspace ? await cloud.getWorkspace(wid) : null);
+        const workspace = driverWorkspace || cloudWorkspace;
         if (!workspace) return json(res, 404, { error: "workspace not found", workspace: wid });
         if (!match[2]) {
-          if (req.method === "DELETE" && !driver.capabilities?.remove) {
-            return json(res, 405, { error: `${driver.type} workspace driver cannot remove workspaces` });
+          if (req.method === "DELETE") {
+            if (cloudWorkspace) {
+              const destroyed = await cloud.destroy(wid);
+              invalidateWorkspaceDiscovery();
+              return json(res, 200, { workspace: destroyed });
+            }
+            if (!driver.capabilities?.remove) return json(res, 405, { error: `${driver.type} workspace driver cannot remove workspaces` });
+            await driver.removeWorkspace(wid);
+            invalidateWorkspaceDiscovery();
+            return json(res, 200, { workspace: { id: wid, destroyed: true } });
           }
           if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
           return json(res, 200, await inspectWorkspace(workspace, options));
+        }
+        if (match[2] === "/actions") {
+          if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+          if (!cloudWorkspace) return json(res, 405, { error: "workspace lifecycle actions are only supported for cloud workspaces" });
+          const { action } = await readJsonBody(req);
+          const updated = action === "pause"
+            ? await cloud.pause(wid)
+            : action === "resume"
+              ? await cloud.resume(wid)
+              : null;
+          if (!updated) return json(res, 400, { error: "action must be pause or resume" });
+          invalidateWorkspaceDiscovery();
+          return json(res, 200, { workspace: updated });
         }
         if (!workspace.url) {
           return json(res, 503, { error: "workspace endpoint is not ready", workspace: wid });
