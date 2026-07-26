@@ -154,6 +154,7 @@ export function validateConfig(input, env = process.env) {
     : null;
   const boxConnectUrl = wssUrl(env.OYSTER_HUB_BOX_CONNECT_URL || input.cloud?.boxConnectUrl || "wss://hub.get-oyster.dev/box/connect", "cloud.boxConnectUrl");
   const repository = httpUrl(env.OYSTER_HUB_SOURCE_REPOSITORY || input.cloud?.repository || "https://github.com/SergeiKireevDev/oyster.git", "cloud.repository");
+  if (!repository.startsWith("https://")) throw new Error(`cloud.repository must use https: ${repository}`);
   const ref = requireString(env.OYSTER_HUB_SOURCE_REF || input.cloud?.ref || "main", "cloud.ref");
 
   const driverInput = input.driver;
