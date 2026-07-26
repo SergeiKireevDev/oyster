@@ -16,10 +16,11 @@ test("standalone Hub dashboard groups workspaces under connection environments",
   assert.match(script, /environment\.kind/);
 });
 
-test("standalone Hub dashboard creates llmbox workspaces and manages cloud workspaces", () => {
+test("standalone Hub dashboard creates and manages llmbox and cloud workspaces", () => {
   assert.match(html, />New llmbox workspace</);
   assert.match(script, /environment\.kind === "llmbox"/);
   assert.match(script, /spoke: form\.get\("spoke"\)/);
+  assert.match(script, /\["cloud", "llmbox"\]\.includes\(workspace\.provider\?\.type\)/);
   assert.match(script, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspace\.id\)\}\/actions/);
   assert.match(script, /method: "DELETE"/);
 });

@@ -120,7 +120,7 @@
       card.append(head, resources);
       const footer = element("div", "workspace-footer");
       footer.append(element("span", "provider", workspace.provider?.type === "cloud" ? `${workspace.provider.name || workspace.provider.id} · ${workspace.provider.instanceId || "VM"}` : workspace.provider?.type || "direct"));
-      if (workspace.provider?.type === "cloud") {
+      if (["cloud", "llmbox"].includes(workspace.provider?.type)) {
         const actions = element("div", "workspace-actions");
         const pause = element("button", "", workspace.status === "paused" ? "Resume" : "Pause");
         pause.type = "button"; pause.disabled = ["provisioning", "awaiting_agent", "initializing", "resuming", "pausing", "destroying"].includes(workspace.status);
@@ -173,7 +173,8 @@
       finally { $("refresh").disabled = false; }
     }
     async function manageWorkspace(workspace, action) {
-      const warning = action === "destroy" ? `Destroy “${workspace.name}” and its provider VM permanently?` : `${action === "pause" ? "Pause" : "Resume"} “${workspace.name}”?`;
+      const kind = workspace.provider?.type === "llmbox" ? "llmbox VM" : "provider VM";
+      const warning = action === "destroy" ? `Destroy “${workspace.name}” and its ${kind} permanently?` : `${action === "pause" ? "Pause" : "Resume"} “${workspace.name}”?`;
       if (!confirm(warning)) return;
       try {
         if (action === "destroy") await request(`/api/v1/workspaces/${encodeURIComponent(workspace.id)}`, { method: "DELETE" });

@@ -71,8 +71,12 @@ test("native llmbox workspace driver uses bindings instead of fetch", async () =
   assert.equal(workspaces[0].url, "https://alpha.test");
   const created = await driver.createWorkspace({ id: "created", name: "Created", spoke: "edge-1" });
   assert.equal(created.url, "https://created.test");
+  assert.equal((await driver.pauseWorkspace("alpha")).status, "paused");
+  assert.equal((await driver.resumeWorkspace("alpha")).status, "online");
+  assert.equal((await driver.removeWorkspace("alpha")).destroyed, true);
   assert.deepEqual(addon.calls.filter(([name]) => name === "invoke").map((call) => call[2]), [
     "spoke-statuses", "list-boxes", "list-proxies", "create-box", "create-proxy",
+    "pause-box", "resume-box", "destroy-box",
   ]);
   await binding.close();
 });

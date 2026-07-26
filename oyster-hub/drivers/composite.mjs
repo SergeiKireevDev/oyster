@@ -33,10 +33,26 @@ export function createCompositeWorkspaceDriver(_config, { drivers = [] } = {}) {
     return mergeUnique(await Promise.all(drivers.map((driver) => driver.listWorkspaces())), "id", "workspace");
   }
 
-  async function getWorkspace(id) {
-    const matches = (await Promise.all(drivers.map((driver) => driver.getWorkspace(id)))).filter(Boolean);
+  async function workspaceOwner(id) {
+    const matches = (await Promise.all(drivers.map(async (driver) => ({
+      driver,
+      workspace: await driver.getWorkspace(id),
+    })))).filter(({ workspace }) => Boolean(workspace));
     if (matches.length > 1) throw new WorkspaceDriverError(`duplicate workspace id across workspace drivers: ${id}`);
     return matches[0] || null;
+  }
+
+  async function getWorkspace(id) {
+    return (await workspaceOwner(id))?.workspace || null;
+  }
+
+  async function manageWorkspace(id, method, label) {
+    const owner = await workspaceOwner(id);
+    if (!owner) throw new WorkspaceDriverError(`workspace not found: ${id}`, { status: 404 });
+    if (typeof owner.driver[method] !== "function") {
+      throw new WorkspaceDriverError(`${owner.driver.type} workspace driver cannot ${label} workspaces`, { status: 405 });
+    }
+    return owner.driver[method](id);
   }
 
   async function createWorkspace(input) {
@@ -60,5 +76,8 @@ export function createCompositeWorkspaceDriver(_config, { drivers = [] } = {}) {
     listWorkspaces,
     getWorkspace,
     ...(creators.length ? { createWorkspace } : {}),
+    pauseWorkspace: (id) => manageWorkspace(id, "pauseWorkspace", "pause"),
+    resumeWorkspace: (id) => manageWorkspace(id, "resumeWorkspace", "resume"),
+    removeWorkspace: (id) => manageWorkspace(id, "removeWorkspace", "remove"),
   });
 }
