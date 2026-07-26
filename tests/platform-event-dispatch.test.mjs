@@ -52,6 +52,15 @@ test("platform event dispatch owns replay state and routes events", () => {
   ]);
 });
 
+test("platform event dispatch releases the transcript gate when the replay reload fails", async () => {
+  const deps = createDeps({ reloadTranscript: async () => { throw new Error("workspace unavailable"); } });
+  const runtime = createPlatformEventDispatch(deps);
+  runtime.dispatch({ type: "replay_done", runner: "r1", runners: [], workdir: "/workspace" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runtime.snapshot().replaying, false);
+  assert.ok(deps.calls.some((call) => call[0] === "toast" && call[1] === "session reload failed: workspace unavailable"));
+});
+
 test("platform event dispatch merges partial runner updates without replacing the fleet", () => {
   let runners = [{ id: "one", busy: false }, { id: "two", busy: false }];
   const deps = createDeps({
