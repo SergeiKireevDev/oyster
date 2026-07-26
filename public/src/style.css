@@ -930,7 +930,13 @@
       z-index: 55;
       box-shadow: 12px 0 36px rgba(0,0,0,.62);
       touch-action: pan-x pan-y;
-      animation: sessions-slide-in 750ms cubic-bezier(.2,.8,.2,1);
+      animation: sessions-slide-in 500ms cubic-bezier(.2,.8,.2,1);
+    }
+    #sessions.open.closing {
+      pointer-events: none;
+      animation:
+        sessions-slide-out 500ms cubic-bezier(.2,.8,.2,1) forwards,
+        sessions-shadow-fade 100ms ease-out forwards;
     }
     #sessions .session-sidebar-new.hub-mode {
       width: fit-content;
@@ -954,18 +960,41 @@
       box-shadow: -12px 0 36px rgba(0,0,0,.62);
       border-left: 1px solid var(--border);
       touch-action: pan-x pan-y;
-      animation: hublots-slide-in 750ms cubic-bezier(.2,.8,.2,1);
+      animation: hublots-slide-in 500ms cubic-bezier(.2,.8,.2,1);
+    }
+    #hublots.open.closing {
+      pointer-events: none;
+      animation:
+        hublots-slide-out 500ms cubic-bezier(.2,.8,.2,1) forwards,
+        hublots-shadow-fade 100ms ease-out forwards;
     }
     @keyframes sessions-slide-in {
-      from { opacity: .92; transform: translateX(-14px); }
+      from { opacity: .92; transform: translateX(-100%); }
       to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes sessions-slide-out {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: .92; transform: translateX(-100%); }
+    }
+    @keyframes sessions-shadow-fade {
+      from { box-shadow: 12px 0 36px rgba(0,0,0,.62); }
+      to { box-shadow: 12px 0 36px rgba(0,0,0,0); }
     }
     @keyframes hublots-slide-in {
-      from { opacity: .92; transform: translateX(14px); }
+      from { opacity: .92; transform: translateX(100%); }
       to { opacity: 1; transform: translateX(0); }
     }
+    @keyframes hublots-slide-out {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: .92; transform: translateX(100%); }
+    }
+    @keyframes hublots-shadow-fade {
+      from { box-shadow: -12px 0 36px rgba(0,0,0,.62); }
+      to { box-shadow: -12px 0 36px rgba(0,0,0,0); }
+    }
     @media (prefers-reduced-motion: reduce) {
-      #sessions.open, #hublots.open { animation: none; }
+      #sessions.open, #hublots.open,
+      #sessions.open.closing, #hublots.open.closing { animation: none; }
     }
     /* ---------- thin mobile carousel position indicator ---------- */
     #carouselIndicator {

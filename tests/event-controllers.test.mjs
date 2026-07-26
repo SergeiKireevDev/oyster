@@ -145,7 +145,7 @@ test("carousel swipe controller routes horizontal single and multi-touch gesture
 test("carousel controller persists and applies mobile drawer pages", () => {
   const classes = () => {
     const values = new Set();
-    return { values, add: (name) => values.add(name), remove: (name) => values.delete(name), toggle: (name, force) => force ? values.add(name) : values.delete(name) };
+    return { values, add: (name) => values.add(name), remove: (name) => values.delete(name), contains: (name) => values.has(name), toggle: (name, force) => force ? values.add(name) : values.delete(name) };
   };
   const sessions = { classList: classes() };
   const hublots = { classList: classes() };
@@ -179,6 +179,46 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.deepEqual([...sessions.classList.values], []);
   assert.deepEqual([...hublots.classList.values], []);
   assert.deepEqual([...treebar.classList.values], []);
+});
+
+test("carousel controller keeps drawers mounted until reverse swipe animations finish", () => {
+  const classes = () => {
+    const values = new Set();
+    return {
+      values,
+      add: (name) => values.add(name),
+      remove: (name) => values.delete(name),
+      contains: (name) => values.has(name),
+      toggle: (name, force) => force ? values.add(name) : values.delete(name),
+    };
+  };
+  const sessions = { classList: classes() };
+  const hublots = { classList: classes() };
+  const treebar = { classList: classes() };
+  const timers = new Map();
+  let nextTimer = 0;
+  const controller = createCarouselController({
+    documentTarget: { getElementById: (id) => ({ sessions, hublots, treebar })[id] },
+    windowTarget: { matchMedia: (query) => ({ matches: query === "(max-width: 760px)" }) },
+    storage: { getItem: () => "0", setItem() {} },
+    setPage() {},
+    loadCheckpointTree() {},
+    setTimeoutImpl: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; },
+    clearTimeoutImpl: (id) => timers.delete(id),
+  });
+
+  controller.set(-1);
+  controller.set(0);
+  assert.deepEqual([...sessions.classList.values], ["open", "closing"]);
+  assert.equal([...timers.values()][0].delay, 500);
+  timers.get(1).fn();
+  assert.deepEqual([...sessions.classList.values], []);
+
+  controller.set(1);
+  controller.set(0);
+  assert.deepEqual([...hublots.classList.values], ["open", "closing"]);
+  timers.get(2).fn();
+  assert.deepEqual([...hublots.classList.values], []);
 });
 
 test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {
