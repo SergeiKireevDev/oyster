@@ -928,9 +928,9 @@
       top: 0; left: 0; bottom: 0;
       width: 100vw;
       z-index: 55;
-      box-shadow: 8px 0 30px rgba(0,0,0,.5);
+      box-shadow: 12px 0 36px rgba(0,0,0,.62);
       touch-action: pan-x pan-y;
-      animation: sessions-slide-in 120ms cubic-bezier(.2,.8,.2,1);
+      animation: sessions-slide-in 750ms cubic-bezier(.2,.8,.2,1);
     }
     #sessions .session-sidebar-new.hub-mode {
       width: fit-content;
@@ -951,10 +951,10 @@
       top: 0; right: 0; bottom: 0;
       width: 100vw;
       z-index: 55;
-      box-shadow: -8px 0 30px rgba(0,0,0,.5);
+      box-shadow: -12px 0 36px rgba(0,0,0,.62);
       border-left: 1px solid var(--border);
       touch-action: pan-x pan-y;
-      animation: hublots-slide-in 120ms cubic-bezier(.2,.8,.2,1);
+      animation: hublots-slide-in 750ms cubic-bezier(.2,.8,.2,1);
     }
     @keyframes sessions-slide-in {
       from { opacity: .92; transform: translateX(-14px); }
