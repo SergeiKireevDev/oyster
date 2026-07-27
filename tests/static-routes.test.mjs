@@ -23,6 +23,7 @@ async function setup(t) {
   await writeFile(join(root, "public", "index.html"), "development UI");
   await writeFile(join(root, "dist", "index.html"), "built UI");
   await writeFile(join(root, "dist", "app.JS"), "export const built = true;");
+  await writeFile(join(root, "dist", "manifest.webmanifest"), "{\"name\":\"Oyster\"}");
   await writeFile(join(root, "dist", "runtime.wasm"), Buffer.from([0, 97, 115, 109]));
   const state = { config: { TOKEN: "token", PI_DIR: root, DIRNAME: root } };
   const routes = createStaticRoutes({ config: state.config, requestContext: createRequestContext(state) });
@@ -56,6 +57,10 @@ test("public assets preserve MIME and no-cache headers", async (t) => {
   assert.equal(res.headers["content-type"], "text/javascript; charset=utf-8");
   assert.equal(res.headers["cache-control"], "no-cache");
   assert.equal(res.body, "export const built = true;");
+
+  const manifest = await invoke(handler, "/manifest.webmanifest");
+  assert.equal(manifest.res.status, 200);
+  assert.equal(manifest.res.headers["content-type"], "application/manifest+json; charset=utf-8");
 
   const wasm = await invoke(handler, "/runtime.wasm");
   assert.equal(wasm.res.status, 200);

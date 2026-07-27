@@ -178,12 +178,20 @@ async function fetchWorkspace(workspace, pathAndQuery, fetchImpl, timeoutMs) {
 
 function mimeType(pathname) {
   const extension = pathname.split(".").pop()?.toLowerCase();
-  return ({ js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", html: "text/html; charset=utf-8", svg: "image/svg+xml", json: "application/json; charset=utf-8", wasm: "application/wasm", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" })[extension] || "application/octet-stream";
+  return ({ js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", html: "text/html; charset=utf-8", webmanifest: "application/manifest+json; charset=utf-8", svg: "image/svg+xml", png: "image/png", json: "application/json; charset=utf-8", wasm: "application/wasm", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf" })[extension] || "application/octet-stream";
+}
+
+function hubDocument(html) {
+  return html
+    .replace("<title>Oyster</title>", "<title>Oyster Hub</title>")
+    .replace('<meta name="application-name" content="Oyster">', '<meta name="application-name" content="Oyster Hub">')
+    .replace('<meta name="apple-mobile-web-app-title" content="Oyster">', '<meta name="apple-mobile-web-app-title" content="Oyster Hub">');
 }
 
 export function createOysterUiGateway({ config, driver, fetchImpl, authorized, json, logger = console, onTransfer, uploadLimiter, listWorkspaces = () => driver.listWorkspaces(), uiDir = new URL("../dist/", import.meta.url) }) {
   const root = resolve(uiDir.pathname);
   const indexPath = resolve(root, "index.html");
+  const manifestPath = resolve(root, "manifest.webmanifest");
   let workspaceCache = { expires: 0, promise: null };
 
   async function workspaces() {
@@ -203,6 +211,32 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
     res.writeHead(200, { "content-type": mimeType(target), "cache-control": "no-cache" });
     createReadStream(target).pipe(res);
     return true;
+  }
+
+  async function serveHubManifest(res) {
+    if (!existsSync(manifestPath)) {
+      json(res, 500, { error: "Oyster PWA manifest missing; run npm run build" });
+      return;
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    } catch (error) {
+      json(res, 500, { error: `Oyster PWA manifest is invalid: ${error.message}` });
+      return;
+    }
+    const body = JSON.stringify({
+      ...manifest,
+      name: "Oyster Hub",
+      short_name: "Oyster Hub",
+      description: "Manage Oyster environments and workspaces.",
+    });
+    res.writeHead(200, {
+      "content-type": "application/manifest+json; charset=utf-8",
+      "content-length": Buffer.byteLength(body),
+      "cache-control": "no-cache",
+    });
+    res.end(body);
   }
 
   function upstreamPath(url) {
@@ -329,9 +363,13 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
         const valid = authorized(req, url);
         return json(res, 200, { authorized: valid, credentials: { xAuthToken: req.headers["x-auth-token"] ? (valid ? "valid" : "present-invalid") : "absent" } }), true;
       }
+      if (req.method === "GET" && url.pathname === "/manifest.webmanifest") {
+        await serveHubManifest(res);
+        return true;
+      }
       if (req.method === "GET" && DOCUMENT_ROUTE.test(url.pathname)) {
         if (!existsSync(indexPath)) return json(res, 500, { error: "Oyster UI build missing; run npm run build" }), true;
-        const body = (await readFile(indexPath, "utf8")).replace("<title>Oyster</title>", "<title>Oyster Hub</title>");
+        const body = hubDocument(await readFile(indexPath, "utf8"));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-cache" });
         res.end(body);
         return true;
