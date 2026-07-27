@@ -79,7 +79,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
         "description of what should be served. For ordinary hublots, the background agent " +
         "will create and persist an idempotent startup script before the tunnel opens.",
       "To expose a Markdown document, use hublot with action=open, type=markdown, and an " +
-        "absolute path to the Markdown file; the managed Markdown reader starts directly.",
+        "absolute path to the Markdown file; the bundled Node.js Markdown reader starts directly.",
       "To expose a Git worktree for clone, fetch, or pull, use hublot with action=open, " +
         "type=git-server, and the absolute worktree path. The deterministic read-only Smart " +
         "HTTP server starts directly; pushes are denied.",
@@ -133,7 +133,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
           content: [{
             type: "text",
             text: params.type === "markdown"
-              ? "Starting Markdown reader and waiting for Cloudflare…"
+              ? "Starting bundled Markdown reader and waiting for Cloudflare…"
               : params.type === "git-server"
                 ? "Starting read-only Git Smart HTTP server and waiting for Cloudflare…"
                 : "Preparing local service and waiting for Cloudflare…",
@@ -147,7 +147,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
         });
         const t = data.tunnel;
         const serviceText = params.type === "markdown"
-          ? `The Markdown reader is serving ${params.path} directly on the allocated port.`
+          ? `The bundled Node.js Markdown reader is serving ${params.path} directly on the allocated port.`
           : params.type === "git-server"
             ? `The read-only Git Smart HTTP server is serving ${params.path}; clone, fetch, and pull are supported, while push is denied.`
             : "The background agent brought the local service up before the tunnel was opened.";

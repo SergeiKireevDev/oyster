@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
-  hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
+  hublotAgentPrompt, invokeHublotStartupScript, markdownReaderScriptPath, materializeHublotStartupScript,
   reserveHublot, spawnGitServerService, spawnMarkdownService, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
@@ -143,12 +143,20 @@ test("rematerialization replaces symlinks without changing their targets", (t) =
   assert.equal(readFileSync(victim, "utf8"), "victim");
 });
 
-test("Markdown service directly invokes the reader and persists its restart command", async (t) => {
+test("default Markdown reader and template are bundled in this repository", () => {
+  const rendererPath = markdownReaderScriptPath();
+  assert.match(rendererPath, /\/markdown-tool\/markdown-reader\.mjs$/);
+  assert.equal(lstatSync(rendererPath).isFile(), true);
+  assert.equal(lstatSync(join(dirname(rendererPath), "reader-template.html")).isFile(), true);
+});
+
+test("Markdown service invokes the bundled Node.js reader and persists its restart command", async (t) => {
   const { root, store, state } = fixture(t);
   const markdownPath = join(root, "guide.md");
-  const rendererPath = join(root, "markdown-reader.py");
+  const rendererPath = join(root, "markdown-reader.mjs");
+  const nodePath = "/runtime/node";
   writeFileSync(markdownPath, "# Guide\n");
-  writeScript(rendererPath, "#!/bin/sh\nexit 0\n");
+  writeFileSync(rendererPath, "export {};\n");
   const hublot = reserve(state, 4177);
   let invocation = null;
   class FakeProcess extends EventEmitter {
@@ -163,6 +171,7 @@ test("Markdown service directly invokes the reader and persists its restart comm
     port: hublot.port,
   }, markdownPath, {
     rendererPath,
+    nodePath,
     spawnProcess(command, args, options) {
       invocation = { command, args, options };
       return new FakeProcess();
@@ -171,13 +180,15 @@ test("Markdown service directly invokes the reader and persists its restart comm
   });
 
   assert.equal(service.servicePid, process.pid);
-  assert.equal(invocation.command, rendererPath);
-  assert.deepEqual(invocation.args, [markdownPath, String(hublot.port)]);
+  assert.equal(invocation.command, nodePath);
+  assert.deepEqual(invocation.args, [rendererPath, markdownPath, String(hublot.port)]);
   assert.equal(invocation.options.detached, true);
   const persisted = store.repositories.hublots.find(hublot.id);
   assert.match(persisted.service_start_script, /# oyster: idempotent/);
+  assert.match(persisted.service_start_script, new RegExp(nodePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(persisted.service_start_script, new RegExp(rendererPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(persisted.service_start_script, new RegExp(markdownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(persisted.service_start_script, /python3/);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
   assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
 });
