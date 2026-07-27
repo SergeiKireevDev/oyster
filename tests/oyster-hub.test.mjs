@@ -845,7 +845,44 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
 
   const documentResponse = await fetch(`${hubUrl}/`);
   assert.equal(documentResponse.status, 200);
-  assert.match(await documentResponse.text(), /<title>Oyster Hub<\/title>/);
+  const document = await documentResponse.text();
+  assert.match(document, /<title>Oyster Hub<\/title>/);
+  assert.match(document, /<meta name="application-name" content="Oyster Hub">/);
+  assert.match(document, /<meta name="apple-mobile-web-app-title" content="Oyster Hub">/);
+  assert.match(document, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+
+  const manifestResponse = await fetch(`${hubUrl}/manifest.webmanifest`);
+  assert.equal(manifestResponse.status, 200);
+  assert.equal(manifestResponse.headers.get("content-type"), "application/manifest+json; charset=utf-8");
+  assert.equal(manifestResponse.headers.get("cache-control"), "no-cache");
+  const manifest = await manifestResponse.json();
+  assert.deepEqual({
+    name: manifest.name,
+    shortName: manifest.short_name,
+    description: manifest.description,
+    id: manifest.id,
+    startUrl: manifest.start_url,
+    scope: manifest.scope,
+    display: manifest.display,
+  }, {
+    name: "Oyster Hub",
+    shortName: "Oyster Hub",
+    description: "Manage Oyster environments and workspaces.",
+    id: "/",
+    startUrl: "/",
+    scope: "/",
+    display: "standalone",
+  });
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
+
+  const serviceWorkerResponse = await fetch(`${hubUrl}/service-worker.js`);
+  assert.equal(serviceWorkerResponse.status, 200);
+  assert.equal(serviceWorkerResponse.headers.get("content-type"), "text/javascript; charset=utf-8");
+  const iconResponse = await fetch(`${hubUrl}/icons/icon-192.png`);
+  assert.equal(iconResponse.status, 200);
+  assert.equal(iconResponse.headers.get("content-type"), "image/png");
+
   const runtime = await (await fetch(`${hubUrl}/runtime-config.js`)).text();
   assert.match(runtime, /"hub":true/);
   const deniedResource = await fetch(`${hubUrl}/routines`);

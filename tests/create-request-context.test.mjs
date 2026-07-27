@@ -67,6 +67,7 @@ test("body helpers parse JSON, preserve binary input, and report malformed JSON 
 test("MIME lookup handles known extensions case-insensitively and defaults binary", () => {
   const { mimeType } = createRequestContext(state());
   assert.equal(mimeType("bundle.JS"), "text/javascript; charset=utf-8");
+  assert.equal(mimeType("app.webmanifest"), "application/manifest+json; charset=utf-8");
   assert.equal(mimeType("photo.jpeg"), "image/jpeg");
   assert.equal(mimeType("archive.unknown"), "application/octet-stream");
 });
