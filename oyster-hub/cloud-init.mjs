@@ -111,8 +111,13 @@ User=oyster
 Group=oyster
 WorkingDirectory=/opt/oyster
 Environment=HOME=/var/lib/oyster
+EnvironmentFile=/etc/oyster/oyster.env
+Environment=PI_BIN=/opt/oyster/pi/packages/coding-agent/dist/cli.js
+Environment=PI_DIR=/var/lib/oyster/workspace
 Environment=PI_CODING_AGENT_DIR=/var/lib/oyster/.pi/agent
 Environment=PI_UI_DB_PATH=/var/lib/oyster/.pi/agent/oyster.sqlite
+Environment=PI_UI_URL=http://127.0.0.1:8080
+Environment=TUNNEL_BIN=/usr/local/bin/cloudflared
 Environment=PI_UI_UNAUTHENTICATED=1
 ExecStart=/usr/bin/node /opt/oyster/server/server.mjs --host 127.0.0.1 --port 8080 --unauthenticated
 Restart=always
@@ -140,6 +145,15 @@ node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if
 
 id oyster >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/oyster --shell /usr/sbin/nologin oyster
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster /var/lib/oyster-box-agent
+install -d -o oyster -g oyster -m 0750 /var/lib/oyster/workspace
+
+case "$(dpkg --print-architecture)" in
+  amd64|arm64) cloudflared_arch="$(dpkg --print-architecture)" ;;
+  *) echo "cloudflared is unavailable for architecture $(dpkg --print-architecture)" >&2; exit 1 ;;
+esac
+curl -fsSL -o /tmp/cloudflared "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cloudflared_arch"
+install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+rm -f /tmp/cloudflared
 
 # Register before the source checkout and build so bootstrap does not depend on
 # the selected repository ref already containing the box agent.
@@ -168,9 +182,34 @@ npm run build
 rm -rf /opt/oyster
 mv /opt/oyster.new /opt/oyster
 chown -R root:root /opt/oyster
+
+install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi/agent/extensions
+for extension in file-explorer.ts goal-loop.ts hublot.ts routine.ts; do
+  test -f "/opt/oyster/extensions/$extension"
+  ln -sfn "/opt/oyster/extensions/$extension" "/var/lib/oyster/.pi/agent/extensions/$extension"
+  chown -h oyster:oyster "/var/lib/oyster/.pi/agent/extensions/$extension"
+done
+
+node -e 'const { randomBytes } = require("node:crypto"); process.stdout.write("PI_UI_TOKEN=" + randomBytes(32).toString("base64url") + "\\n")' >/etc/oyster/oyster.env
+chmod 0600 /etc/oyster/oyster.env
 chmod 0600 /etc/oyster/box-agent.env
 systemctl daemon-reload
 systemctl enable --now oyster.service
+
+healthy=0
+for _ in {1..60}; do
+  if curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  sleep 2
+done
+if [ "$healthy" -ne 1 ]; then
+  systemctl --no-pager status oyster.service || true
+  journalctl --no-pager -u oyster.service -n 100 || true
+  echo "Oyster did not become healthy" >&2
+  exit 1
+fi
 
 # The bootstrap credential is one-use. Remove cloud-init's local copies after
 # services have inherited their configuration; the root-only environment file

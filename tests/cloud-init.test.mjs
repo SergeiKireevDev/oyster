@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { gzipSync } from "node:zlib";
 import { createOysterCloudInit, oysterCloudInitDefaults } from "../oyster-hub/cloud-init.mjs";
 
 function writtenFiles(cloudInit) {
@@ -38,11 +39,41 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm ci --prefix pi --ignore-scripts/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build:pi/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build/);
-  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster\.service/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /cloudflared-linux-\$cloudflared_arch/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /install -m 0755 \/tmp\/cloudflared \/usr\/local\/bin\/cloudflared/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /install -d -o oyster -g oyster -m 0750 \/var\/lib\/oyster\/workspace/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /for extension in file-explorer\.ts goal-loop\.ts hublot\.ts routine\.ts/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /\/var\/lib\/oyster\/\.pi\/agent\/extensions\/\$extension/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /randomBytes\(32\)[\s\S]*>\/etc\/oyster\/oyster\.env/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /chmod 0600 \/etc\/oyster\/oyster\.env/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster\.service[\s\S]*http:\/\/127\.0\.0\.1:8080\/health/);
+  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /Oyster did not become healthy/);
   assert.match(files.get("/etc/systemd/system/oyster-box-agent.service"), /ExecStart=\/usr\/bin\/node \/usr\/local\/lib\/oyster-box-agent\/box-agent\.mjs/);
-  assert.match(files.get("/etc/systemd/system/oyster.service"), /Environment=PI_UI_UNAUTHENTICATED=1/);
-  assert.match(files.get("/etc/systemd/system/oyster.service"), /--host 127\.0\.0\.1 --port 8080 --unauthenticated/);
+  const oysterService = files.get("/etc/systemd/system/oyster.service");
+  assert.match(oysterService, /EnvironmentFile=\/etc\/oyster\/oyster\.env/);
+  assert.match(oysterService, /Environment=PI_BIN=\/opt\/oyster\/pi\/packages\/coding-agent\/dist\/cli\.js/);
+  assert.match(oysterService, /Environment=PI_DIR=\/var\/lib\/oyster\/workspace/);
+  assert.match(oysterService, /Environment=PI_UI_URL=http:\/\/127\.0\.0\.1:8080/);
+  assert.match(oysterService, /Environment=TUNNEL_BIN=\/usr\/local\/bin\/cloudflared/);
+  assert.match(oysterService, /Environment=PI_UI_UNAUTHENTICATED=1/);
+  assert.match(oysterService, /--host 127\.0\.0\.1 --port 8080 --unauthenticated/);
   assert.equal(oysterCloudInitDefaults.repository, "https://github.com/SergeiKireevDev/oyster.git");
+});
+
+test("cloud-init fits every supported provider user-data limit", () => {
+  const cloudInit = createOysterCloudInit({
+    boxId: "provider-size-check",
+    generation: "generation-size-check",
+    bootstrapSecret: "x".repeat(64),
+    provider: "aws",
+  });
+  const rawBytes = Buffer.byteLength(cloudInit);
+  const compressedBytes = gzipSync(Buffer.from(cloudInit)).length;
+
+  assert.ok(compressedBytes <= 16 * 1024, `AWS compressed user data is ${compressedBytes} bytes`);
+  assert.ok(rawBytes <= 32 * 1024, `Hetzner user data is ${rawBytes} bytes`);
+  assert.ok(rawBytes <= 64 * 1024, `DigitalOcean user data is ${rawBytes} bytes`);
+  assert.ok(rawBytes <= 256 * 1024, `GCP metadata value is ${rawBytes} bytes`);
 });
 
 test("cloud-init rejects credential-bearing or insecure callback URLs", () => {

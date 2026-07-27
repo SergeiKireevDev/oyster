@@ -132,7 +132,7 @@ The **+** control provisions a workspace VM inside the selected DigitalOcean, He
 - AWS: base64 `UserData` on `RunInstances`; and
 - GCP: the `user-data` instance metadata item.
 
-The generated `#cloud-config` installs Node.js 22, Git, and build dependencies, clones the configured Oyster repository/ref, initializes the required `pi` submodule (cloud boxes do not build `llmbox`), runs both lockfile-scoped installs, builds pi and the Oyster UI, and installs two services. `oyster.service` listens only on `127.0.0.1:8080`; `oyster-box-agent.service` makes an outbound connection to `wss://hub.get-oyster.dev/box/connect`.
+The generated `#cloud-config` installs Node.js 22, Git, build dependencies, and `cloudflared`; clones the configured Oyster repository/ref; initializes the required `pi` submodule (cloud boxes do not build `llmbox`); runs both lockfile-scoped installs; and builds pi and the Oyster UI. It creates a dedicated writable agent workspace at `/var/lib/oyster/workspace`, registers the bundled file explorer, goal loop, hublot, and routine extensions, then starts and health-checks two services. `oyster.service` listens only on `127.0.0.1:8080`; `oyster-box-agent.service` makes an outbound connection to `wss://hub.get-oyster.dev/box/connect`.
 
 ```json
 {
