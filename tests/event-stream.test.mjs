@@ -82,9 +82,10 @@ test("replay event gate buffers only events that arrive after replay completion"
   assert.equal(gate({ type: "response" }), false);
 });
 
-test("event stream opens an encoded runner/replay URL", () => {
+test("event stream relies on the auth cookie and keeps credentials out of its URL", () => {
   let url;
   const source = openEventStream({ token: "a b", runner: "runner/1", replay: false, EventSourceImpl: class { constructor(value) { url = value; } } });
   assert.ok(source);
-  assert.equal(url, "/events?token=a%20b&runner=runner%2F1&replay=0");
+  assert.equal(url, "/events?runner=runner%2F1&replay=0");
+  assert.doesNotMatch(url, /token=/);
 });

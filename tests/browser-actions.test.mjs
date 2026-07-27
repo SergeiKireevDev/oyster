@@ -15,17 +15,18 @@ test("browser actions open external URLs in an isolated tab", () => {
   assert.equal(Object.isFrozen(actions), true);
 });
 
-test("browser actions build encoded file downloads with stable filenames", () => {
+test("browser actions use cookie authentication for encoded file downloads", () => {
   const actions = createBrowserActions({ windowTarget: { open() {} } });
 
   assert.deepEqual(actions.fileDownload("token +/?", "/workspace/a file #1.txt"), {
-    href: "/file-download?token=token%20%2B%2F%3F&path=%2Fworkspace%2Fa%20file%20%231.txt",
+    href: "/file-download?path=%2Fworkspace%2Fa%20file%20%231.txt",
     filename: "a file #1.txt",
   });
   assert.deepEqual(actions.fileDownload("token", "/"), {
-    href: "/file-download?token=token&path=%2F",
+    href: "/file-download?path=%2F",
     filename: "download",
   });
+  assert.doesNotMatch(actions.fileDownload("token", "/file").href, /token=/);
 });
 
 test("hublot components invoke injected browser actions without direct window access", () => {

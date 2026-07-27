@@ -10,10 +10,10 @@ import { createPiProcessLauncher } from "../server/pi-processes.mjs";
 
 const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 
-test("pi process launcher pins executable and store environment", () => {
+test("pi process launcher pins executable, store, and Oyster authentication environment", () => {
   const calls = [];
   const launcher = createPiProcessLauncher({
-    config: { PI_BIN: "/local/pi", PERSISTENT_STORE: "sqlite" },
+    config: { PI_BIN: "/local/pi", PERSISTENT_STORE: "sqlite", TOKEN: "effective-ui-token" },
     spawnImpl: (...args) => { calls.push(args); return { pid: 1 }; },
   });
   launcher.launch(["--mode", "rpc"], { cwd: "/work", env: { PERSISTENT_STORE: "jsonl", CUSTOM: "yes" } });
@@ -21,6 +21,7 @@ test("pi process launcher pins executable and store environment", () => {
   assert.deepEqual(calls[0][1], ["--mode", "rpc"]);
   assert.equal(calls[0][2].cwd, "/work");
   assert.equal(calls[0][2].env.PERSISTENT_STORE, "sqlite");
+  assert.equal(calls[0][2].env.PI_UI_TOKEN, "effective-ui-token");
   assert.equal(calls[0][2].env.CUSTOM, "yes");
 });
 

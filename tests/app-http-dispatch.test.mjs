@@ -27,6 +27,8 @@ function stableState() {
       repositories: {
         sessions: { upsert: (owner) => owner }, operations: { listIncomplete: () => [] },
         checkpoints: { load: () => ({}), save() {} },
+        routines: { list: () => [] },
+        hublots: { list: () => [], listProcesses: () => [] },
       },
       hydrate: () => ({ incompleteOperations: [] }),
     },
@@ -36,12 +38,12 @@ function stableState() {
   return state;
 }
 
-function request(path, headers = {}) {
+function request(path, headers = {}, { method = "GET", remoteAddress = "192.0.2.10" } = {}) {
   return {
-    method: "GET",
+    method,
     url: path,
     headers: { host: "localhost", ...headers },
-    socket: { remoteAddress: "192.0.2.10" },
+    socket: { remoteAddress },
   };
 }
 
@@ -84,6 +86,27 @@ test("composed dispatch keeps open routes public and authenticated routes protec
   await application.handleRequest(request("/runners", { authorization: "Bearer dispatch-token" }), authorized);
   assert.equal(authorized.status, 200);
   assert.deepEqual(JSON.parse(authorized.body), { runners: [] });
+});
+
+test("loopback routine and hublot requests require explicit authentication", async () => {
+  const application = await init(stableState());
+  for (const path of ["/routines", "/tunnels"]) {
+    const local = response();
+    await application.handleRequest(request(path, {}, { remoteAddress: "127.0.0.1" }), local);
+    assert.equal(local.status, 401, `${path} must not trust loopback`);
+
+    const queryMutation = response();
+    await application.handleRequest(request(`${path}?token=dispatch-token`, {}, {
+      method: "POST", remoteAddress: "::ffff:127.0.0.1",
+    }), queryMutation);
+    assert.equal(queryMutation.status, 401, `${path} mutations must not accept URL credentials`);
+
+    const bearer = response();
+    await application.handleRequest(request(path, { authorization: "Bearer dispatch-token" }, {
+      remoteAddress: "127.0.0.1",
+    }), bearer);
+    assert.equal(bearer.status, 200, `${path} must accept Bearer authentication`);
+  }
 });
 
 test("composed dispatch bypasses token checks only when the Oyster instance is explicitly unauthenticated", async () => {

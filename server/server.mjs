@@ -18,7 +18,10 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { accessSync, constants, readFileSync, readdirSync, existsSync, watch, statSync } from "node:fs";
+import {
+  accessSync, closeSync, constants, existsSync, fsyncSync, openSync,
+  readFileSync, readdirSync, statSync, unlinkSync, watch, writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -47,11 +50,32 @@ function envFlag(name) {
 
 function defaultToken() {
   const tokenFile = join(PROJECT_ROOT, ".ui-token");
-  if (existsSync(tokenFile)) {
-    const t = readFileSync(tokenFile, "utf8").trim();
-    if (t) return t;
+  const readStoredToken = () => {
+    if (!existsSync(tokenFile)) return null;
+    const token = readFileSync(tokenFile, "utf8").trim();
+    if (!token) throw new Error(`Oyster token file is empty: ${tokenFile}`);
+    return token;
+  };
+  const stored = readStoredToken();
+  if (stored) return stored;
+
+  const generated = randomBytes(16).toString("hex");
+  let descriptor = null;
+  let created = false;
+  try {
+    descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    created = true;
+    writeFileSync(descriptor, `${generated}\n`, "utf8");
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = null;
+    return generated;
+  } catch (error) {
+    if (descriptor !== null) try { closeSync(descriptor); } catch {}
+    if (error.code === "EEXIST") return readStoredToken();
+    if (created) try { unlinkSync(tokenFile); } catch {}
+    throw new Error(`cannot persist generated Oyster token at ${tokenFile}: ${error.message}`, { cause: error });
   }
-  return randomBytes(16).toString("hex");
 }
 
 function defaultTunnelBin() {

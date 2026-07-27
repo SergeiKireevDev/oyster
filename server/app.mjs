@@ -86,7 +86,7 @@ export async function init(state) {
   } = runners;
   const requestContext = createRequestContext(state);
   const {
-    json, clientIp, checkAuth,
+    json, checkAuth,
   } = requestContext;
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
@@ -163,18 +163,10 @@ export async function init(state) {
     const open = openRouteKeys.has(key) ? routeTable.get(key) : undefined;
     if (open) return open(req, res, url);
 
-    // everything below requires auth
-    // EXCEPT: tunnel/hublot operations from localhost. The hublot tool runs on
-    // this same machine (it's the local proxy between agent sessions and the
-    // server) and has no way to pass a bearer token — it authenticates by
-    // virtue of being able to reach the loopback port. Per-session isolation
-    // (tunnels are bound to a sessionId) is the real access control here.
-    const isLocal = (() => {
-      const ip = clientIp(req);
-      return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-    })();
-    const isLocalRoute = url.pathname === "/tunnels" || url.pathname === "/routines";
-    const auth = (isLocal && isLocalRoute) ? "ok" : checkAuth(req, url);
+    // Every privileged route requires an explicit credential. Loopback is not
+    // an authentication boundary: same-host reverse proxies make remote
+    // requests appear to originate from 127.0.0.1.
+    const auth = checkAuth(req, url);
     if (auth !== "ok") {
       if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
       else json(res, 401, { error: "unauthorized" });
