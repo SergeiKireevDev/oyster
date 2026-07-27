@@ -6,14 +6,27 @@ tags: install, node, pi
 
 ## Prerequisites
 
+For the automated install, use a Debian or Ubuntu host, a non-root user with `sudo`, and Git (including submodule support). The installer supplies the remaining build dependencies.
+
+For a manual install, provide:
+
 - Node.js **22.19 or newer**
-- Git (including submodule support)
-- A built, executable pi coding agent CLI; the compatible source is bundled as a submodule
+- a built, executable pi coding agent CLI; the compatible source is bundled as a submodule
 - `cloudflared` only if you plan to create public hublots
 
-This repository has no separate install script. Its checked-in lockfile supplies the frontend and test dependencies.
+## Automated server install
 
-## Run from a checkout
+On Debian or Ubuntu, the standalone installer prepares the checkout, builds and tests Oyster, registers its bundled extensions, and installs a persistent systemd user service:
+
+```bash
+git clone --recurse-submodules https://github.com/SergeiKireevDev/oyster.git
+cd oyster
+./scripts/install.sh
+```
+
+It binds Oyster to `127.0.0.1:8080` by default. Keep that port private and put a valid HTTPS reverse proxy in front of it before allowing remote access. Run `./scripts/install.sh --help` for build-only mode, cloudflared control, and listener/workspace overrides.
+
+## Manual install from a checkout
 
 ```bash
 git clone --recurse-submodules <repo-url> oyster
@@ -22,7 +35,8 @@ npm ci
 npm ci --prefix pi --ignore-scripts
 npm run build:pi
 npm run build
-node server/server.mjs
+npm test
+HOST=127.0.0.1 node server/server.mjs
 ```
 
 The development default for `PI_BIN` is the built CLI at `pi/packages/coding-agent/dist/cli.js`. Existing checkouts can initialize it with `git submodule update --init --recursive`. Set `PI_BIN` explicitly to use another compatible build.
