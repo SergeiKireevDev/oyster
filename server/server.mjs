@@ -126,6 +126,9 @@ function validateConfig(config) {
   if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
     throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
   }
+  if (!Number.isInteger(config.HUBLOT_TUNNEL_POOL_SIZE) || config.HUBLOT_TUNNEL_POOL_SIZE < 0 || config.HUBLOT_TUNNEL_POOL_SIZE > 16) {
+    throw new Error("PI_UI_HUBLOT_TUNNEL_POOL_SIZE must be an integer from 0 to 16");
+  }
   try {
     accessSync(config.PI_BIN, constants.X_OK);
   } catch {
@@ -159,6 +162,7 @@ const config = {
   TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
   UNAUTHENTICATED: process.argv.includes("--unauthenticated") || envFlag("PI_UI_UNAUTHENTICATED"),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
+  HUBLOT_TUNNEL_POOL_SIZE: Number(process.env.PI_UI_HUBLOT_TUNNEL_POOL_SIZE ?? 2),
   SKIP_PUBLIC_HUBLOT_READINESS: envFlag("PI_UI_SKIP_PUBLIC_HUBLOT_READINESS"),
   DIRNAME: PROJECT_ROOT,
 };
@@ -174,6 +178,7 @@ if (process.argv.includes("--check-config")) {
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.PI_UI_DB_PATH,
     unauthenticated: config.UNAUTHENTICATED,
+    hublotTunnelPoolSize: config.HUBLOT_TUNNEL_POOL_SIZE,
     node: process.versions.node,
   }));
   process.exit(0);

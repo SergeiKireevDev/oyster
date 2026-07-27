@@ -24,6 +24,13 @@ const URL_TIMEOUT_MS = 20_000;
 const PUBLIC_READY_TIMEOUT_MS = 60_000;
 const PUBLIC_READY_INTERVAL_MS = 1_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
+export const HUBLOT_TUNNEL_POOL_LABEL = "__oyster_reserved_tunnel__";
+const HUBLOT_TUNNEL_POOL_BRIEF = "__oyster_reserved_tunnel_waiting_for_hublot__";
+const HUBLOT_TUNNEL_POOL_PAGE = "tunnel to be created here";
+
+export function isHublotTunnelPoolEntry(row) {
+  return row?.label === HUBLOT_TUNNEL_POOL_LABEL && row?.brief === HUBLOT_TUNNEL_POOL_BRIEF;
+}
 
 /** Client-safe view of a tunnel (no process handles). */
 export function tunnelInfo(t) {
@@ -198,7 +205,7 @@ function persistedTunnelInfo(state, row) {
 
 export function listTunnels(state) {
   return hublotRepository(state).list()
-    .filter((row) => row.status !== "closed")
+    .filter((row) => row.status !== "closed" && !isHublotTunnelPoolEntry(row))
     .map((row) => persistedTunnelInfo(state, row))
     .filter((tunnel) => tunnel.url || ["opening", "recovering"].includes(tunnel.status));
 }
@@ -315,6 +322,7 @@ export async function waitForPublicHublot(url, {
 export function openTunnel(state, { id, port, label = null, sessionId = null }, {
   spawnProcess = spawn,
   waitForPublic = waitForPublicHublot,
+  emitOpenedEvent = true,
 } = {}) {
   return new Promise((resolvePromise, reject) => {
     port = Number(port);
@@ -386,7 +394,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
             desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
           });
           console.log(`[pi-ui] tunnel ready: ${tunnel.url} -> localhost:${port}`);
-          state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
+          if (emitOpenedEvent) state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
           resolvePromise(persistedTunnelInfo(state, row));
         }).catch((error) => {
           if (settled) return;
@@ -435,7 +443,13 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
           lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
         });
         console.log(`[pi-ui] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
-        state.serverEvent({ type: "tunnel_closed", tunnel: { ...tunnelInfo(tunnel), url: null } });
+        const latest = hublotRepository(state).find(tunnel.id);
+        if (latest && !isHublotTunnelPoolEntry(latest)) {
+          state.serverEvent({ type: "tunnel_closed", tunnel: persistedTunnelInfo(state, latest) });
+        }
+        if (latest && isHublotTunnelPoolEntry(latest) && !state.hublotTunnelPoolStopping) {
+          void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+        }
       }
     });
   });
@@ -518,7 +532,7 @@ export async function shutdownHublots(state, {
     }
     for (const processRow of repository.listProcesses(row.id)) {
       if (processRow.ended_at || !["running", "starting"].includes(processRow.status)) continue;
-      if (processRow.role === "service" && row.service_kind !== "agent_managed") continue;
+      if (processRow.role === "service" && row.service_kind !== "agent_managed" && !isHublotTunnelPoolEntry(row)) continue;
       if (!verifyIdentity(processRow)) continue;
       targets.push(processRow);
     }
@@ -668,6 +682,281 @@ export async function waitForLocalPort(port, { timeoutMs = 20_000, intervalMs = 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, intervalMs));
   } while (Date.now() < deadline);
   throw new Error(`service did not answer on port ${port} within ${timeoutMs / 1000}s`);
+}
+
+function enqueueHublotTunnelPoolOperation(state, operation) {
+  const previous = state.hublotTunnelPoolQueue ?? Promise.resolve();
+  const task = previous.catch(() => {}).then(operation);
+  state.hublotTunnelPoolQueue = task.catch(() => {});
+  return task;
+}
+
+function poolSize(state) {
+  const size = Number(state.config?.HUBLOT_TUNNEL_POOL_SIZE ?? 0);
+  return Number.isInteger(size) && size > 0 ? size : 0;
+}
+
+function poolRows(state) {
+  return hublotRepository(state).list().filter((row) => isHublotTunnelPoolEntry(row) && row.status !== "closed");
+}
+
+async function availablePoolRows(state) {
+  const available = [];
+  for (const row of poolRows(state)) {
+    if (row.status === "open" && row.public_url
+      && currentHublotTunnelProcessIsHealthy(state, row.id)
+      && await localPortAnswers(row.port)) available.push(row);
+  }
+  return available;
+}
+
+/** Start the tiny origin used while a quick tunnel waits in the warm pool. */
+export async function spawnHublotTunnelPoolDummy(state, hublot, {
+  spawnProcess = spawn,
+  waitForPort = waitForLocalPort,
+} = {}) {
+  const row = hublotRepository(state).find(hublot.id);
+  if (!row || !isHublotTunnelPoolEntry(row) || row.service_kind !== "self_served") {
+    throw new Error("reserved tunnel-pool hublot is required");
+  }
+  const source = `const http=require("node:http");const port=Number(process.argv[1]);` +
+    `http.createServer((req,res)=>{res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});` +
+    `res.end("<!doctype html><title>Reserved tunnel</title><p>${HUBLOT_TUNNEL_POOL_PAGE}</p>")}).listen(port,"127.0.0.1");`;
+  const proc = spawnProcess(process.execPath, ["-e", source, String(row.port)], {
+    cwd: row.workdir,
+    stdio: "ignore",
+    detached: true,
+  });
+  let processRow = null;
+  let ready = false;
+  const stopped = new Promise((_, reject) => {
+    proc.once("error", (error) => {
+      removeHublotProcessHandle(state, processRow, proc);
+      finishPersistedProcess(state, processRow, { status: "failed" });
+      if (!ready) reject(new Error(`failed to start tunnel-pool dummy: ${error.message}`));
+    });
+    proc.once("exit", (exitCode, signal) => {
+      removeHublotProcessHandle(state, processRow, proc);
+      finishPersistedProcess(state, processRow, { exitCode, signal });
+      const current = hublotRepository(state).find(row.id);
+      if (ready && current?.status === "open" && isHublotTunnelPoolEntry(current) && !state.hublotTunnelPoolStopping) {
+        void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+      } else if (!ready) {
+        reject(new Error(`tunnel-pool dummy exited before serving port ${row.port} (code=${exitCode})`));
+      }
+    });
+  });
+  try {
+    await Promise.race([waitForPort(row.port), stopped]);
+    if (proc.exitCode !== null) throw new Error(`tunnel-pool dummy exited before serving port ${row.port}`);
+    processRow = persistHublotProcessIdentity(state, {
+      hublotId: row.id, role: "service", pid: proc.pid, status: "running",
+    });
+    if (!processRow) throw new Error("tunnel-pool dummy started without a persistent process identity");
+    registerHublotProcessHandle(state, processRow, proc);
+    ready = true;
+    proc.unref();
+    return { servicePid: proc.pid, serviceProc: proc, serviceProcess: processRow };
+  } catch (error) {
+    if (proc.exitCode === null) proc.kill("SIGTERM");
+    throw error;
+  }
+}
+
+async function waitForPortRelease(port, {
+  timeoutMs = 3_000,
+  checkPort = isLocalPortAvailable,
+  sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (await checkPort(port)) return true;
+    await sleep(25);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+async function stopHublotTunnelPoolDummy(state, row) {
+  const processes = hublotRepository(state).listProcesses(row.id)
+    .filter((entry) => entry.role === "service" && !entry.ended_at);
+  const handles = hublotProcessHandles(state);
+  for (const processRow of processes) {
+    const proc = handles.get(processRow.id);
+    if (proc && proc.exitCode === null) proc.kill("SIGTERM");
+    else if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid, "SIGTERM");
+  }
+  if (!(await waitForPortRelease(row.port))) {
+    for (const processRow of processes) {
+      const proc = handles.get(processRow.id);
+      if (proc && proc.exitCode === null) proc.kill("SIGKILL");
+      else if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid, "SIGKILL");
+    }
+    if (!(await waitForPortRelease(row.port, { timeoutMs: 1_000 }))) {
+      throw new Error(`could not reclaim reserved tunnel-pool port ${row.port}`);
+    }
+  }
+  const stoppedAt = new Date().toISOString();
+  for (const processRow of processes) {
+    if (!hublotRepository(state).findProcess(processRow.id)?.ended_at) finishPersistedProcess(state, processRow, {
+      status: "ended", signal: "pool_claimed",
+    });
+    handles.delete(processRow.id);
+  }
+  return stoppedAt;
+}
+
+/** Create one publicly verified quick tunnel backed by the waiting page. */
+export async function createHublotTunnelPoolEntry(state) {
+  if (state.hublotTunnelPoolStopping) throw new Error("hublot tunnel pool is stopping");
+  const reserved = await allocateHublot(state, {
+    label: HUBLOT_TUNNEL_POOL_LABEL,
+    brief: HUBLOT_TUNNEL_POOL_BRIEF,
+    serviceKind: "self_served",
+  });
+  let dummy = null;
+  try {
+    if (state.hublotTunnelPoolStopping) throw new Error("hublot tunnel pool is stopping");
+    dummy = await spawnHublotTunnelPoolDummy(state, reserved);
+    if (state.hublotTunnelPoolStopping) throw new Error("hublot tunnel pool is stopping");
+    const tunnel = await openTunnel(state, {
+      id: reserved.id, port: reserved.port, label: reserved.label, sessionId: null,
+    }, { emitOpenedEvent: false });
+    if (state.hublotTunnelPoolStopping) throw new Error("hublot tunnel pool is stopping");
+    console.log(`[pi-ui] reserved warm tunnel: ${tunnel.url} -> localhost:${tunnel.port}`);
+    return tunnel;
+  } catch (error) {
+    if (dummy?.serviceProc?.exitCode === null) dummy.serviceProc.kill("SIGTERM");
+    closeTunnel(state, reserved.id);
+    throw error;
+  }
+}
+
+async function fillHublotTunnelPool(state, targetSize, createEntry = createHublotTunnelPoolEntry) {
+  if (!targetSize || state.hublotTunnelPoolStopping) return [];
+  const available = await availablePoolRows(state);
+  const availableIds = new Set(available.map((row) => row.id));
+  for (const stale of poolRows(state)) {
+    if (!availableIds.has(stale.id) && !["opening", "closing"].includes(stale.status)) closeTunnel(state, stale.id);
+  }
+  const missing = Math.max(0, targetSize - available.length);
+  if (!missing) return available;
+  const results = await Promise.allSettled(Array.from({ length: missing }, () => createEntry(state)));
+  const created = results
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => hublotRepository(state).find(result.value.id));
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+  return available.concat(created);
+}
+
+/** Keep the configured number of quick tunnels connected in the background. */
+export function ensureHublotTunnelPool(state, { createEntry = createHublotTunnelPoolEntry } = {}) {
+  if (!poolSize(state) || state.hublotTunnelPoolStopping) return Promise.resolve([]);
+  if (state.hublotTunnelPoolRefillTask) {
+    state.hublotTunnelPoolRefillRequested = true;
+    return state.hublotTunnelPoolRefillTask;
+  }
+  state.hublotTunnelPoolRefillRequested = false;
+  const task = fillHublotTunnelPool(state, poolSize(state), createEntry);
+  state.hublotTunnelPoolRefillTask = task;
+  const finished = () => {
+    if (state.hublotTunnelPoolRefillTask === task) state.hublotTunnelPoolRefillTask = null;
+    if (state.hublotTunnelPoolRefillRequested && !state.hublotTunnelPoolStopping) {
+      state.hublotTunnelPoolRefillRequested = false;
+      void ensureHublotTunnelPool(state, { createEntry })
+        .catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+    }
+  };
+  task.then(finished, finished);
+  return task;
+}
+
+/** Claim the oldest warm tunnel, stop its waiting page, and turn it into a real hublot reservation. */
+export async function acquireHublotTunnelPoolEntry(state, {
+  label = null, brief = null, ownerId = null,
+} = {}) {
+  const claimed = await enqueueHublotTunnelPoolOperation(state, async () => {
+    if (!poolSize(state)) return null;
+    let available = await availablePoolRows(state);
+    if (!available.length) {
+      try { await ensureHublotTunnelPool(state); } catch {}
+      available = await availablePoolRows(state);
+    }
+    const pooled = available[0];
+    if (!pooled) throw new Error("no warm hublot tunnel is available");
+    const current = hublotRepository(state).find(pooled.id);
+    if (!current?.public_url || !currentHublotTunnelProcessIsHealthy(state, current.id)) {
+      throw new Error("reserved hublot tunnel is no longer healthy");
+    }
+    // Remove the pool marker before stopping the dummy so its exit callback
+    // cannot mistake an intentional claim for a failed reserve and close the
+    // cloudflared process out from under this request.
+    const scriptRoot = state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+    const serviceStartScriptPath = join(scriptRoot, "hublots", current.id, "start.sh");
+    const at = new Date().toISOString();
+    const promoted = state.appStore.transaction((repositories) => {
+      repositories.hublots.update(current.id, {
+        owner_id: ownerId,
+        label,
+        brief,
+        service_kind: "agent_managed",
+        service_start_script_path: serviceStartScriptPath,
+        service_start_script: null,
+        service_start_script_sha256: null,
+        status: "opening",
+        desired_state: "open",
+        opened_at: null,
+        closed_at: null,
+        last_error: null,
+      });
+      repositories.hublots.appendLifecycleEvent({
+        hublotId: current.id,
+        status: "opening",
+        desiredState: "open",
+        publicUrl: current.public_url,
+        createdAt: at,
+      });
+      return repositories.hublots.find(current.id);
+    });
+    try {
+      await stopHublotTunnelPoolDummy(state, current);
+      return promoted;
+    } catch (error) {
+      closeTunnel(state, current.id);
+      void ensureHublotTunnelPool(state).catch(() => {});
+      throw error;
+    }
+  });
+  if (claimed) {
+    void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+  }
+  return claimed;
+}
+
+/** Publish a claimed warm tunnel only after the replacement origin answers publicly. */
+export async function activateHublotTunnelPoolEntry(state, id, {
+  waitForPublic = waitForPublicHublot,
+} = {}) {
+  const current = hublotRepository(state).find(id);
+  if (!current || current.status !== "opening" || !current.public_url || isHublotTunnelPoolEntry(current)) {
+    throw new Error("claimed hublot tunnel reservation is required");
+  }
+  if (!currentHublotTunnelProcessIsHealthy(state, id)) throw new Error("claimed hublot tunnel process is not healthy");
+  const confirmPublicReadiness = state.config.SKIP_PUBLIC_HUBLOT_READINESS ? async () => true : waitForPublic;
+  await confirmPublicReadiness(current.public_url);
+  if (!currentHublotTunnelProcessIsHealthy(state, id)) throw new Error("claimed hublot tunnel exited before activation");
+  const openedAt = new Date().toISOString();
+  const row = recordHublotTransition(state, id, "open", {
+    desiredState: "open", publicUrl: current.public_url, lastError: null, openedAt, at: openedAt,
+  });
+  const info = persistedTunnelInfo(state, row);
+  state.serverEvent({ type: "tunnel_opened", tunnel: info });
+  return info;
+}
+
+export function stopHublotTunnelPool(state) {
+  state.hublotTunnelPoolStopping = true;
+  state.hublotTunnelPoolRefillRequested = false;
 }
 
 function shellQuote(value) {

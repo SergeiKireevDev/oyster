@@ -16,6 +16,7 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.PI_BIN;
   delete childEnv.PI_CODING_AGENT_DIR;
   delete childEnv.PI_UI_DB_PATH;
+  delete childEnv.PI_UI_HUBLOT_TUNNEL_POOL_SIZE;
   delete childEnv.PI_UI_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
   Object.assign(childEnv, env);
@@ -36,6 +37,7 @@ test("development configuration selects the local SQLite pi build", { skip: !exi
   assert.equal(config.persistentStore, "sqlite");
   assert.match(config.sqlitePath, /\.pi\/agent\/sessions\.sqlite$/);
   assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "oyster.sqlite"));
+  assert.equal(config.hublotTunnelPoolSize, 2);
   assert.ok(Number(config.node.split(".")[0]) >= 22);
 });
 
@@ -95,6 +97,10 @@ test("configuration rejects invalid stores and missing executables", () => {
   result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_UNAUTHENTICATED: "sometimes" } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /PI_UI_UNAUTHENTICATED must be one of/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_HUBLOT_TUNNEL_POOL_SIZE: "1.5" } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PI_UI_HUBLOT_TUNNEL_POOL_SIZE must be an integer/);
 
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);

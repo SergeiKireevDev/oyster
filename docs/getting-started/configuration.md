@@ -16,11 +16,14 @@ Flags take precedence over their corresponding environment variables.
 | `--pi` | `PI_BIN` | local development CLI | pi executable |
 | `--pi-args` | `PI_ARGS` | empty | Extra `pi --mode rpc` arguments |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | Tunnel executable |
+| — | `PI_UI_HUBLOT_TUNNEL_POOL_SIZE` | `2` | Warm Quick Tunnels kept ready for auto-allocated hublots (`0` disables pooling) |
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
 | — | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi-owned data directory |
 | — | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | Oyster application database |
 
 Environment and workspace selection belong to Oyster Hub. A direct spoke runs inside one llmbox microVM, so its session sidebar begins at working-directory categories.
+
+Oyster keeps two auto-allocated Quick Tunnels warm by default. Each reserved port serves a no-cache “tunnel to be created here” page until a hublot claims it; Oyster then stops that dummy origin, starts the requested service on the same port, and replenishes the pool in the background. Requests for an explicit local port bypass the pool. Set `PI_UI_HUBLOT_TUNNEL_POOL_SIZE=0` to restore on-demand tunnel startup.
 
 Check startup configuration without serving HTTP:
 

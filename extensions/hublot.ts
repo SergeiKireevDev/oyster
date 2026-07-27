@@ -6,9 +6,9 @@
  * tunnel to a local port, managed by the pi-remote-ui server (`server/server.mjs`).
  * Opening one through this tool:
  *   - lets the server allocate the next free port (3000+)
- *   - has a background pi agent bring up the local service first
- *   - opens cloudflared only after that service answers, then binds the
- *     interface to the CURRENT session so it appears ready in the UI, and
+ *   - claims an already-connected tunnel from the rolling warm pool, replaces
+ *     its waiting-page service with the requested local service, then binds
+ *     the interface to the CURRENT session so it appears ready in the UI, and
  *     is torn down (service + agent + tunnel) when closed or when the
  *     session is deleted. Quick-tunnel URLs are ephemeral: a verified tunnel
  *     that survived a UI restart is retained, but a stale one is never
@@ -133,10 +133,10 @@ export default function hublotExtension(pi: ExtensionAPI) {
           content: [{
             type: "text",
             text: params.type === "markdown"
-              ? "Starting bundled Markdown reader and waiting for Cloudflare…"
+              ? "Starting bundled Markdown reader on a reserved public tunnel…"
               : params.type === "git-server"
-                ? "Starting read-only Git Smart HTTP server and waiting for Cloudflare…"
-                : "Preparing local service and waiting for Cloudflare…",
+                ? "Starting read-only Git Smart HTTP server on a reserved public tunnel…"
+                : "Preparing local service on a reserved public tunnel…",
           }],
         });
         const data = await api("POST", "/tunnels", {

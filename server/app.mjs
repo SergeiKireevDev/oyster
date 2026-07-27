@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
 export async function init(state) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService, spawnGitServerService } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureHublotTunnelPool, acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry, stopHublotTunnelPool } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
@@ -113,6 +113,7 @@ export async function init(state) {
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
     state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
+    acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry,
     spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner,
   });
   const credentialService = createPiCredentialService({ config });
@@ -181,10 +182,15 @@ export async function init(state) {
     json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 
-  scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
+  const hublotReconciliation = scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
+  if (config.HUBLOT_TUNNEL_POOL_SIZE > 0 && !state.hublotTunnelPoolStopping) {
+    void Promise.resolve(hublotReconciliation)
+      .then(() => ensureHublotTunnelPool(state))
+      .catch((error) => console.error(`[pi-ui] initial tunnel pool failed: ${error.message}`));
+  }
   return {
     handleRequest, startPi, stopPi,
-    stopTunnels: () => { state.hublotSupervisor?.stop(); return shutdownHublots(state); },
+    stopTunnels: () => { stopHublotTunnelPool(state); state.hublotSupervisor?.stop(); return shutdownHublots(state); },
     stopRoutines: () => stopAllRoutines(state), stopOAuth: () => oauthFlowService.shutdown(),
   };
 }
