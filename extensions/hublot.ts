@@ -44,9 +44,12 @@ function uiToken(): string {
 }
 
 async function api(method: string, path: string, body?: unknown) {
-  const res = await fetch(`${BASE}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(uiToken())}`, {
+  const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: {
+      authorization: `Bearer ${uiToken()}`,
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));

@@ -142,9 +142,11 @@ export function closeEventStream(source) {
   try { source?.close(); } catch {}
 }
 
-export function openEventStream({ token, runner, replay, EventSourceImpl = EventSource }) {
+export function openEventStream({ runner, replay, EventSourceImpl = EventSource }) {
   const workspace = isHubRuntime() ? getActiveWorkspace() : null;
   const workspaceQuery = workspace ? `&workspace=${encodeURIComponent(workspace)}` : "";
-  const url = `/events?token=${encodeURIComponent(token)}&runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}${workspaceQuery}`;
+  // Native EventSource cannot set an Authorization header. Same-origin
+  // requests include the pi_ui_token cookie established during browser auth.
+  const url = `/events?runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}${workspaceQuery}`;
   return new EventSourceImpl(url);
 }

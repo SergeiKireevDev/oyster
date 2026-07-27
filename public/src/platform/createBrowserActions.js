@@ -8,12 +8,14 @@ export function createBrowserActions({ windowTarget }) {
     openExternal(url) {
       return windowTarget.open(url, "_blank", "noopener");
     },
-    fileDownload(token, path) {
+    fileDownload(_token, path) {
       const normalizedPath = String(path ?? "");
       const workspace = isHubRuntime() ? getActiveWorkspace(windowTarget.localStorage) : null;
       const workspaceQuery = workspace ? `&workspace=${encodeURIComponent(workspace)}` : "";
+      // Browser navigations cannot set auth headers; the same-origin auth
+      // cookie is sent without exposing the token in the download URL.
       return Object.freeze({
-        href: `/file-download?token=${encodeURIComponent(token ?? "")}&path=${encodeURIComponent(normalizedPath)}${workspaceQuery}`,
+        href: `/file-download?path=${encodeURIComponent(normalizedPath)}${workspaceQuery}`,
         filename: normalizedPath.split("/").pop() || "download",
       });
     },

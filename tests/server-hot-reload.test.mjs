@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, copyFile, writeFile, readFile, rename, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rename, rm, stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -113,6 +113,38 @@ async function nextServerEvent(reader) {
     if (match) return JSON.parse(match[1]);
   }
 }
+
+test("the stable server persists an owner-only default token across restarts", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-ui-default-token-"));
+  const port = await availablePort();
+  const tokenFile = join(root, ".ui-token");
+  await copyStableServer(root);
+  await writeFile(join(root, "server", "app.mjs"), fixture("token-test"));
+  const env = serverEnv(root);
+  delete env.PI_UI_TOKEN;
+  let child;
+  const start = async () => {
+    const serverProcess = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port)], {
+      cwd: root, stdio: ["ignore", "pipe", "pipe"], env,
+    });
+    await waitForOutput(serverProcess, "listening on");
+    return serverProcess;
+  };
+  t.after(async () => {
+    if (child?.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  child = await start();
+  const first = (await readFile(tokenFile, "utf8")).trim();
+  assert.match(first, /^[0-9a-f]{32}$/);
+  assert.equal((await stat(tokenFile)).mode & 0o777, 0o600);
+  child.kill("SIGTERM");
+  await once(child, "exit");
+
+  child = await start();
+  assert.equal((await readFile(tokenFile, "utf8")).trim(), first);
+});
 
 test("the stable server atomically replaces its active application handler", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-"));
