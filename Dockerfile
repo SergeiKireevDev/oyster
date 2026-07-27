@@ -42,6 +42,7 @@ WORKDIR /app
 COPY package.json package-lock.json vite.config.js README.md AGENTS.md pi-ui.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
 COPY server ./server
+COPY markdown-tool ./markdown-tool
 COPY oyster-hub ./oyster-hub
 COPY public ./public
 COPY scripts ./scripts

@@ -676,24 +676,20 @@ function shellQuote(value) {
 
 export function markdownReaderScriptPath() {
   return resolve(process.env.MARKDOWN_READER_SCRIPT
-    ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "markdown-tool", "markdown-reader.py"));
+    ?? join(dirname(fileURLToPath(import.meta.url)), "..", "markdown-tool", "markdown-reader.mjs"));
 }
 
-function markdownStartupScript({ rendererPath, markdownPath, port }) {
+function markdownStartupScript({ nodePath, rendererPath, markdownPath, port }) {
+  const probe = `const net=require("node:net");const socket=net.createConnection({host:"127.0.0.1",port:Number(process.argv[1])});socket.setTimeout(1000);socket.once("connect",()=>{socket.destroy();process.exit(0)});const fail=()=>process.exit(1);socket.once("error",fail);socket.once("timeout",fail);`;
   return `#!/bin/sh\n# oyster: idempotent\n` +
-    `if python3 - ${port} <<'PY'\n` +
-    `import socket, sys\n` +
-    `try:\n` +
-    `    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1): pass\n` +
-    `except OSError:\n` +
-    `    raise SystemExit(1)\n` +
-    `PY\nthen\n  exit 0\nfi\n` +
-    `exec ${shellQuote(rendererPath)} ${shellQuote(markdownPath)} ${port}\n`;
+    `if ${shellQuote(nodePath)} -e ${shellQuote(probe)} ${port}\nthen\n  exit 0\nfi\n` +
+    `exec ${shellQuote(nodePath)} ${shellQuote(rendererPath)} ${shellQuote(markdownPath)} ${port}\n`;
 }
 
 /** Start the fixed Markdown reader directly, without asking a setup agent. */
 export async function spawnMarkdownService(state, hublot, markdownPath, {
   rendererPath = markdownReaderScriptPath(),
+  nodePath = process.execPath,
   spawnProcess = spawn,
   waitForPort = waitForLocalPort,
 } = {}) {
@@ -702,11 +698,11 @@ export async function spawnMarkdownService(state, hublot, markdownPath, {
   if (!source.isFile()) throw new Error(`Markdown path is not a file: ${markdownPath}`);
   const renderer = statSync(rendererPath);
   if (!renderer.isFile()) throw new Error(`Markdown reader is not a file: ${rendererPath}`);
-  accessSync(rendererPath, constants.X_OK);
+  accessSync(rendererPath, constants.R_OK);
 
   const row = hublotRepository(state).find(hublot.id);
   if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
-  const startupSource = markdownStartupScript({ rendererPath, markdownPath, port: hublot.port });
+  const startupSource = markdownStartupScript({ nodePath, rendererPath, markdownPath, port: hublot.port });
   const startupSha256 = createHash("sha256").update(startupSource).digest("hex");
   hublotRepository(state).update(row.id, {
     service_start_script: startupSource,
@@ -715,14 +711,11 @@ export async function spawnMarkdownService(state, hublot, markdownPath, {
   materializeHublotStartupScript(state, row.id);
 
   console.log(`[pi-ui] starting Markdown reader for ${markdownPath} on :${hublot.port}`);
-  const serviceProc = spawnProcess(rendererPath, [markdownPath, String(hublot.port)], {
+  const serviceProc = spawnProcess(nodePath, [rendererPath, markdownPath, String(hublot.port)], {
     cwd: dirname(markdownPath),
     stdio: "ignore",
     detached: true,
   });
-  // Do not persist identity until the shebang has replaced /usr/bin/env with
-  // Python. Recording it immediately creates a stale identity that makes the
-  // supervisor restart a healthy reader and open a second tunnel.
   let serviceProcess = null;
   let ready = false;
   const stopped = new Promise((_, reject) => {
