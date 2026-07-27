@@ -930,9 +930,15 @@ export function validateAndStoreHublotStartupScript(state, hublot) {
 }
 
 /** Spawn a one-shot background pi agent (`pi -p`) and resolve only after
- *  its local service answers. The caller opens and publishes the tunnel
- *  afterwards, so users never see a hublot that still returns 502. */
-export function spawnHublotAgent(state, hublot, brief) {
+ *  its local service answers and its restart artifact validates. The caller
+ *  publishes the tunnel afterwards, so users never see an incomplete hublot. */
+export function spawnHublotAgent(state, hublot, brief, {
+  checkPort: checkPortOverride = null,
+  validateStartupScript = validateAndStoreHublotStartupScript,
+  discoverPids = pidsOnPort,
+  pollIntervalMs = 2_000,
+  timeoutMs = 5 * 60 * 1_000,
+} = {}) {
   return new Promise((resolvePromise, reject) => {
     const prompt = hublotAgentPrompt(hublot, brief);
     console.log(`[pi-ui] preparing local service for hublot :${hublot.port}`);
@@ -955,21 +961,17 @@ export function spawnHublotAgent(state, hublot, brief) {
     let agentExitAt = 0;
     const createdAt = new Date().toISOString();
     const started = Date.now();
-    const timeoutMs = 5 * 60 * 1000;
+    let startupValidationError = null;
 
-    const checkPort = () => new Promise((resolveCheck) => {
+    const checkPort = checkPortOverride ?? (() => new Promise((resolveCheck) => {
       const socket = createConnection({ host: "127.0.0.1", port: hublot.port, timeout: 1500 });
       socket.on("connect", () => { socket.destroy(); resolveCheck(true); });
       socket.on("error", () => resolveCheck(false));
       socket.on("timeout", () => { socket.destroy(); resolveCheck(false); });
-    });
+    }));
 
     const finish = (error = null) => {
       if (done) return;
-      if (!error) {
-        try { validateAndStoreHublotStartupScript(state, hublot); }
-        catch (validationError) { error = validationError.message; }
-      }
       done = true;
       clearInterval(poll);
       if (error) {
@@ -977,7 +979,7 @@ export function spawnHublotAgent(state, hublot, brief) {
         reject(new Error(error));
         return;
       }
-      const servicePid = pidsOnPort(hublot.port)[0] ?? null;
+      const servicePid = discoverPids(hublot.port)[0] ?? null;
       const serviceProcess = servicePid
         ? persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: servicePid, startedAt: createdAt })
         : null;
@@ -992,17 +994,30 @@ export function spawnHublotAgent(state, hublot, brief) {
       const ready = await checkPort();
       checking = false;
       if (ready) {
-        finish();
-        return;
+        try {
+          validateStartupScript(state, hublot);
+          startupValidationError = null;
+          finish();
+          return;
+        } catch (error) {
+          // A port may already answer before the setup agent has created its
+          // required restart artifact. Keep the agent alive and poll until
+          // both readiness conditions hold instead of failing this race.
+          startupValidationError = error;
+        }
+      } else {
+        startupValidationError = null;
       }
-      // Give a just-exited agent a short grace period: detached services can
-      // take a moment to bind after the setup process exits.
+      // Give a just-exited agent a short grace period: detached services and
+      // their startup artifacts can take a moment to become ready.
       if (agentExited && Date.now() - agentExitAt > 10_000) {
-        finish(`agent finished but nothing answers on port ${hublot.port}: ${tail.trim().split("\n").pop() ?? ""}`);
+        finish(ready && startupValidationError
+          ? startupValidationError.message
+          : `agent finished but nothing answers on port ${hublot.port}: ${tail.trim().split("\n").pop() ?? ""}`);
       } else if (Date.now() - started > timeoutMs) {
-        finish("timed out waiting for the local hublot service to come up");
+        finish(startupValidationError?.message ?? "timed out waiting for the local hublot service to come up");
       }
-    }, 2000);
+    }, pollIntervalMs);
 
     proc.on("exit", (code, signal) => {
       removeHublotProcessHandle(state, agentProcess, proc);
