@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   hublotAgentPrompt, invokeHublotStartupScript, markdownReaderScriptPath, materializeHublotStartupScript,
-  reserveHublot, spawnGitServerService, spawnMarkdownService, validateAndStoreHublotStartupScript,
+  reserveHublot, spawnGitServerService, spawnHublotAgent, spawnMarkdownService, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
 function fixture(t) {
@@ -43,6 +43,49 @@ test("setup-agent contract names the allocated idempotent script and requires in
   assert.match(prompt, /Invoke that exact script/);
   assert.match(prompt, /do not start the service by any other command/);
   assert.match(prompt, new RegExp(`port ${hublot.port}`));
+});
+
+test("setup agent waits for its startup artifact when the port already answers", { timeout: 1_000 }, async (t) => {
+  const { state } = fixture(t);
+  const hublot = reserve(state);
+  const processOutput = new EventEmitter();
+  const agent = new EventEmitter();
+  Object.assign(agent, {
+    pid: process.pid,
+    exitCode: null,
+    killed: false,
+    stdout: processOutput,
+    stderr: processOutput,
+    unref() {},
+    kill() { this.killed = true; },
+  });
+  state.piProcesses = { ephemeral: () => agent };
+
+  let reportFirstValidation;
+  const firstValidation = new Promise((resolve) => { reportFirstValidation = resolve; });
+  let validationAttempts = 0;
+  let settled = false;
+  const opening = spawnHublotAgent(state, {
+    id: hublot.id,
+    port: hublot.port,
+    serviceStartScriptPath: hublot.service_start_script_path,
+  }, hublot.brief, {
+    checkPort: async () => true,
+    discoverPids: () => [],
+    pollIntervalMs: 5,
+    validateStartupScript(...args) {
+      validationAttempts += 1;
+      reportFirstValidation();
+      return validateAndStoreHublotStartupScript(...args);
+    },
+  });
+  opening.then(() => { settled = true; }, () => { settled = true; });
+
+  await firstValidation;
+  assert.equal(settled, false, "an answering port alone must not finish setup");
+  writeScript(hublot.service_start_script_path, "#!/bin/sh\n# oyster: idempotent\nexit 0\n");
+  await opening;
+  assert.ok(validationAttempts >= 2);
 });
 
 test("validated startup source and SHA-256 become authoritative in SQLite", (t) => {
