@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, acquireHublotTunnelPoolEntry = null, activateHublotTunnelPoolEntry = null, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -28,6 +28,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       }
       let prepared = null;
       let reserved = null;
+      let claimedWarmTunnel = false;
       try {
         const options = {
           port: requestedPort,
@@ -37,9 +38,15 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         const owner = options.sessionId ? ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
         options.brief = brief;
-        // Durable identity and recovery path must exist before either setup
-        // agent or cloudflared can start.
-        reserved = requestedPort
+        // Auto-allocated hublots claim an already-connected quick tunnel.
+        // Explicit ports cannot use the pool because cloudflared is already
+        // pinned to each reserved pool port.
+        if (!requestedPort && acquireHublotTunnelPoolEntry) {
+          reserved = await acquireHublotTunnelPoolEntry(state, options);
+          claimedWarmTunnel = !!reserved;
+        }
+        // Pooling can be disabled; retain direct allocation as the fallback.
+        if (!reserved) reserved = requestedPort
           ? reserveHublot(state, options)
           : await allocateHublot(state, options);
         const opening = listTunnels(state).find((item) => item.id === reserved.id);
@@ -53,7 +60,9 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
           : serviceType === "git-server"
             ? await spawnGitServerService(state, reservedOptions, servicePath)
             : await spawnHublotAgent(state, reservedOptions, brief);
-        const tunnel = await openTunnel(state, reservedOptions);
+        const tunnel = claimedWarmTunnel
+          ? await activateHublotTunnelPoolEntry(state, reserved.id)
+          : await openTunnel(state, reservedOptions);
         const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, {
           tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
@@ -67,6 +76,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         if (prepared?.agentProc && prepared.agentProc.exitCode === null) prepared.agentProc.kill("SIGTERM");
         if (prepared?.serviceProc && prepared.serviceProc.exitCode === null) prepared.serviceProc.kill("SIGTERM");
         if (prepared?.servicePid) try { process.kill(prepared.servicePid, "SIGTERM"); } catch {}
+        if (claimedWarmTunnel && reserved) closeTunnel(state, reserved.id);
         if (reserved) state.serverEvent?.({
           type: "hublot_failed",
           tunnel: {

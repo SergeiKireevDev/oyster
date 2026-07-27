@@ -40,6 +40,47 @@ test("tunnel routes prepare the local service before opening and publishing its 
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
 });
 
+test("auto-allocated hublots replace a warm tunnel origin without spawning cloudflared", async () => {
+  const order = [];
+  const warm = {
+    id: "warm-1", port: 4010, status: "opening", public_url: "https://warm.test",
+    service_start_script_path: "/agent/hublots/warm-1/start.sh",
+  };
+  const routes = createTunnelRoutes({
+    state: { serverEvent: () => {} }, config: { TUNNEL_BIN: "cloudflared" },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      readJsonBody: async (req) => req.body,
+    },
+    listTunnels: () => [{ id: warm.id, port: warm.port, status: "open", url: warm.public_url }],
+    acquireHublotTunnelPoolEntry: async (_state, options) => { order.push(["claim", options.label]); return warm; },
+    activateHublotTunnelPoolEntry: async (_state, id) => {
+      order.push(["activate", id]);
+      return { id, port: warm.port, status: "open", url: warm.public_url };
+    },
+    reserveHublot: () => { throw new Error("must not reserve a direct tunnel"); },
+    allocateHublot: () => { throw new Error("must not allocate outside the pool"); },
+    openTunnel: () => { throw new Error("must not spawn cloudflared"); },
+    closeTunnel: () => null,
+    rebindHublot: () => null,
+    spawnHublotAgent: async (_state, options, brief) => {
+      order.push(["service", options.port, brief]);
+      return { servicePid: 321, agentProc: { exitCode: 0 } };
+    },
+  });
+
+  const created = response();
+  await routes["POST /tunnels"]({ body: { label: "preview", brief: "serve preview" } }, created);
+  assert.equal(created.status, 201);
+  assert.deepEqual(order, [
+    ["claim", "preview"],
+    ["service", 4010, "serve preview"],
+    ["activate", "warm-1"],
+  ]);
+  assert.equal(created.body.tunnel.url, "https://warm.test");
+  assert.equal(created.body.tunnel.servicePid, 321);
+});
+
 test("tunnel routes reject opens without an agent brief", async () => {
   let reserved = false;
   const routes = createTunnelRoutes({
