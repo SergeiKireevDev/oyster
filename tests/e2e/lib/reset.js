@@ -126,7 +126,7 @@ async function waitUntilReachable() {
 
 function startContainer() {
   console.log(`[e2e] starting ${selectedStore} mock container ${container} on ${base} with volume ${agentVolume} …`);
-  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -v "${agentVolume}:/root/.pi/agent" -e "OYSTER_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" -e "OYSTER_SKIP_PUBLIC_HUBLOT_READINESS=1" -e "PERSISTENT_STORE=${selectedStore}" ${selectedImage}`);
+  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -v "${agentVolume}:/root/.pi/agent" -e "OYSTER_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" -e "E2E_MOCK_TUNNELS=1" -e "OYSTER_SKIP_PUBLIC_HUBLOT_READINESS=1" -e "PERSISTENT_STORE=${selectedStore}" ${selectedImage}`);
 }
 
 // Start a container if one isn't already reachable — records state so
