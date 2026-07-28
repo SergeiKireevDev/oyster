@@ -6,6 +6,8 @@ export const appSession = writable({
   runners: [],
   workdir: null,
   busy: false,
+  compacting: false,
+  workTimerResetAt: null,
   connected: false,
   replayingTranscript: false,
   transcriptLoadPhase: null,

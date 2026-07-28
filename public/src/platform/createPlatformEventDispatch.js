@@ -65,7 +65,19 @@ export function createPlatformEventDispatch(deps) {
       case "runners_update": return runnersUpdate(msg);
       case "response": return responseEvent(msg);
       case "agent_start": return deps.agentStart();
+      // agent_end can be followed by automatic context compaction and a retry.
+      // Keep the compatibility completion, then use agent_settled as the
+      // authoritative boundary after all post-run work has finished.
       case "agent_end": return deps.agentCompletion();
+      case "agent_settled": return deps.agentCompletion();
+      case "compaction_start":
+        deps.resetWorkTimer();
+        deps.setCompacting(true);
+        return deps.setBusy(true);
+      case "compaction_end":
+        deps.setCompacting(false);
+        // Manual compaction has no agent_settled event of its own.
+        return msg.reason === "manual" ? deps.agentCompletion() : undefined;
       case "message_start":
       case "message_update":
       case "message_end":

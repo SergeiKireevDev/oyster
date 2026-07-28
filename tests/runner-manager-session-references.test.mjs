@@ -83,6 +83,30 @@ test("SQLite runners start and restart by ID with explicit store environment", (
   assert.deepEqual(spawns[1].args, spawns[0].args);
 });
 
+test("runner busy state follows compaction through the final settled event", async (t) => {
+  const { manager, spawns } = setup(t);
+  const runner = manager.spawnRunner({ dir: "/workspace" });
+  const emit = async (event) => {
+    spawns[0].proc.stdout.write(`${JSON.stringify(event)}\n`);
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  await emit({ type: "agent_start" });
+  assert.equal(manager.runnerInfo(runner).busy, true);
+  await emit({ type: "agent_end", willRetry: false });
+  assert.equal(manager.runnerInfo(runner).busy, false);
+  await emit({ type: "compaction_start", reason: "threshold" });
+  assert.equal(manager.runnerInfo(runner).busy, true);
+  await emit({ type: "compaction_end", reason: "threshold", willRetry: false });
+  assert.equal(manager.runnerInfo(runner).busy, true, "automatic compaction stays busy until post-run work settles");
+  await emit({ type: "agent_settled" });
+  assert.equal(manager.runnerInfo(runner).busy, false);
+
+  await emit({ type: "compaction_start", reason: "manual" });
+  await emit({ type: "compaction_end", reason: "manual", willRetry: false });
+  assert.equal(manager.runnerInfo(runner).busy, false, "manual compaction settles without an agent run");
+});
+
 test("new runners use unique persistence-safe IDs that survive manager reconstruction", (t) => {
   const { manager, state } = setup(t);
   const first = manager.spawnRunner({ dir: "/workspace" });

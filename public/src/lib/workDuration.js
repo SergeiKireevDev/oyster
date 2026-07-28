@@ -8,7 +8,7 @@ export function messageTimestampMs(value, fallback = NaN) {
 }
 
 /** Find the latest user turn and the last timestamp rendered after it. */
-export function latestTranscriptWorkPeriod(items) {
+export function latestTranscriptWorkPeriod(items, resetAt = NaN) {
   let period = null;
   for (const item of items) {
     const timestamp = messageTimestampMs(item.timestamp);
@@ -17,6 +17,11 @@ export function latestTranscriptWorkPeriod(items) {
       continue;
     }
     if (period && Number.isFinite(timestamp)) period.endedAt = Math.max(period.endedAt, timestamp);
+  }
+  const resetTimestamp = messageTimestampMs(resetAt);
+  if (period && Number.isFinite(resetTimestamp)) {
+    period.startedAt = Math.max(period.startedAt, resetTimestamp);
+    period.endedAt = Math.max(period.endedAt, period.startedAt);
   }
   return period;
 }

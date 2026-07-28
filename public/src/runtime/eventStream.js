@@ -2,7 +2,7 @@ import { getActiveWorkspace, isHubRuntime } from "./workspaceScope.js";
 
 /** Create the authenticated EventSource used by the live Pi event stream. */
 /** Decide whether a replay-gated transcript event should be buffered or dispatched. */
-const LIFECYCLE_LOGGED_EVENT_TYPES = new Set(["replay_done", "agent_start", "agent_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"]);
+const LIFECYCLE_LOGGED_EVENT_TYPES = new Set(["replay_done", "agent_start", "agent_end", "agent_settled", "compaction_start", "compaction_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"]);
 
 /** Whether a stream event is important enough for lifecycle diagnostics. */
 export function eventLifecycleLogged(type) {

@@ -27,6 +27,8 @@ function createDeps(overrides = {}) {
     reloadPage: () => calls.push(["reloadPage"]),
     reloadTranscript: () => calls.push(["reloadTranscript"]),
     setBusy: (busy) => calls.push(["busy", busy]),
+    setCompacting: (compacting) => calls.push(["compacting", compacting]),
+    resetWorkTimer: () => calls.push(["resetWorkTimer"]),
     isGateRequired: () => false,
     agentStart: () => calls.push(["agentStart"]),
     agentCompletion: () => calls.push(["agentCompletion"]),
@@ -50,6 +52,33 @@ test("platform event dispatch owns replay state and routes events", () => {
     ["agentStart"],
     ["response", "r1"],
   ]);
+});
+
+test("platform event dispatch tracks compaction until the agent is fully settled", () => {
+  const deps = createDeps();
+  const runtime = createPlatformEventDispatch(deps);
+  runtime.setReplaying(false, "live");
+
+  runtime.dispatch({ type: "compaction_start", reason: "threshold" });
+  runtime.dispatch({ type: "compaction_end", reason: "threshold", willRetry: false });
+  assert.deepEqual(deps.calls.filter((call) => ["busy", "compacting", "resetWorkTimer", "agentCompletion"].includes(call[0])), [
+    ["resetWorkTimer"],
+    ["compacting", true],
+    ["busy", true],
+    ["compacting", false],
+  ]);
+
+  runtime.dispatch({ type: "agent_settled" });
+  assert.deepEqual(deps.calls.filter((call) => call[0] === "agentCompletion"), [["agentCompletion"]]);
+});
+
+test("manual compaction completes without waiting for an agent-settled event", () => {
+  const deps = createDeps();
+  const runtime = createPlatformEventDispatch(deps);
+  runtime.setReplaying(false, "live");
+  runtime.dispatch({ type: "compaction_start", reason: "manual" });
+  runtime.dispatch({ type: "compaction_end", reason: "manual", willRetry: false });
+  assert.deepEqual(deps.calls.filter((call) => call[0] === "agentCompletion"), [["agentCompletion"]]);
 });
 
 test("platform event dispatch releases the transcript gate when the replay reload fails", async () => {

@@ -25,7 +25,7 @@ function dependencies(pathname = "/s/session-1", trackers = {}) {
       hooks: {
         log() {}, updateAppSession() {}, setTranscriptGateRequired() {}, setRoutines() {},
         setRoutineScopeAll() {}, setRoutineCurrentSessionId() {}, loadHublots() {}, loadRoutines() {},
-        updateHeaderState() {}, setBusy() {},
+        updateHeaderState() {}, setBusy() {}, setCompacting() {},
       },
     },
     preview: { fetchPreview: async () => [], render: async () => true, log() {} },
@@ -55,6 +55,9 @@ test("session assembly constructs route runner UI preview open and refresh bound
   assert.deepEqual(operations.getRunners(), []);
   assert.equal(typeof operations.getState, "function");
   assert.equal(typeof operations.getWorkdir, "function");
+  assert.equal(typeof operations.getCompacting, "function");
+  assert.equal(typeof operations.setCompacting, "function");
+  assert.equal(typeof operations.resetWorkTimer, "function");
   assert.equal(typeof operations.openSession, "function");
   assert.equal(typeof operations.switchRunner, "function");
   assert.equal(typeof operations.refresh, "function");

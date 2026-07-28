@@ -10,7 +10,7 @@
   let now = Date.now();
   let workPeriod;
 
-  $: workPeriod = latestTranscriptWorkPeriod($transcriptItems);
+  $: workPeriod = latestTranscriptWorkPeriod($transcriptItems, $appSession.workTimerResetAt);
 
   onMount(() => {
     const timer = setInterval(() => { if ($appSession.busy) now = Date.now(); }, 1000);
@@ -45,8 +45,14 @@
   {/each}
   {#if workPeriod}
     <div class="work-duration" aria-live="off">
-      {#if $appSession.busy}<span class="spin" aria-hidden="true"></span>{/if}
+      {#if $appSession.busy && !$appSession.compacting}<span class="spin" aria-hidden="true"></span>{/if}
       <span>worked for {formatWorkDuration(($appSession.busy ? now : workPeriod.endedAt) - workPeriod.startedAt)}</span>
+    </div>
+  {/if}
+  {#if $appSession.compacting}
+    <div class="compaction-status" role="status" aria-live="polite">
+      <span class="spin" aria-hidden="true"></span>
+      <span>Compacting context…</span>
     </div>
   {/if}
 </div>

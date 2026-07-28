@@ -1094,6 +1094,26 @@
     border-radius: 50%;
     animation: spin .8s linear infinite;
   }
+  .compaction-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: fit-content;
+    margin-top: 5px;
+    padding: 5px 9px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .compaction-status .spin {
+    width: 10px;
+    height: 10px;
+    border-width: 1.5px;
+    border-top-color: var(--accent);
+  }
   .msg { min-width: 0; position: relative; }
   .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .assistant-part[data-assistant-part="thinking"] + .assistant-part[data-assistant-part="toolCall"],

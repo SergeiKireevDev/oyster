@@ -88,13 +88,16 @@ export function usageInfo(usage) {
 }
 
 /** Synchronize session-scoped workdir, busy state, and usage into UI adapters. */
-export function createSessionUiRuntime({ updateAppSession, updateHeaderState }) {
+export function createSessionUiRuntime({ updateAppSession, updateHeaderState, now = Date.now }) {
   let workdir = null;
   let busy = false;
+  let compacting = false;
   return {
-    get workdir() { return workdir; }, get busy() { return busy; },
+    get workdir() { return workdir; }, get busy() { return busy; }, get compacting() { return compacting; },
     setWorkdir(dir) { workdir = dir; updateAppSession({ workdir }); },
-    setBusy(value) { busy = value; updateAppSession({ busy }); },
+    setBusy(value) { busy = !!value; updateAppSession({ busy }); },
+    setCompacting(value) { compacting = !!value; updateAppSession({ compacting }); },
+    resetWorkTimer() { const workTimerResetAt = now(); updateAppSession({ workTimerResetAt }); return workTimerResetAt; },
     updateUsage(message) {
       const usage = message?.usage;
       if (!usage) return;
@@ -220,7 +223,7 @@ export function applySessionState({ incoming, previousState, currentRunner, empt
   const sessionChanged = incoming?.sessionId !== previousState?.sessionId;
   hooks.log(sessionChanged);
   hooks.setState(incoming);
-  hooks.updateAppSession({ state: incoming, ...(sessionChanged ? { titleOverride: null } : {}) });
+  hooks.updateAppSession({ state: incoming, ...(sessionChanged ? { titleOverride: null, workTimerResetAt: null } : {}) });
   if (sessionChanged) {
     if ((incoming?.messageCount ?? 0) > 0) emptySessionRunners.delete(currentRunner);
     hooks.setTranscriptGateRequired(transcriptGateRequired({ runner: currentRunner, messageCount: incoming?.messageCount, emptySessionRunners }));
@@ -231,6 +234,7 @@ export function applySessionState({ incoming, previousState, currentRunner, empt
     hooks.syncUrlToSession(incoming?.sessionId);
   }
   hooks.updateHeaderState({ stateInfo: `${incoming.model ? incoming.model.provider : "?"} · ${incoming.messageCount} msgs` + (incoming.pendingMessageCount ? ` · ${incoming.pendingMessageCount} queued` : "") });
+  hooks.setCompacting(!!incoming.isCompacting);
   hooks.setBusy(incoming.isStreaming || incoming.isCompacting);
   return { state: incoming, sessionChanged };
 }

@@ -195,6 +195,7 @@ export function createTranscriptAssembly(deps) {
     const agentStart = createAgentStartController({ setBusy: syncDeps.setBusy });
     const agentCompletion = createAgentCompletionController({
       setBusy: syncDeps.setBusy,
+      setCompacting: syncDeps.setCompacting,
       clearAssistant: () => assistantStream.clear(),
       refreshState: syncDeps.refreshState,
       scheduleSync: () => postAgentSync.schedule(),
