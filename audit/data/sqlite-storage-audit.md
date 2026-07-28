@@ -331,7 +331,7 @@ The server still consumes filesystem/env configuration. Relevant files include:
 - Optional `<oyster>/.ui-token`
 - pi agent configuration/model/credential files under `~/.pi/agent` or `$HOME`
 - pi extensions under `~/.pi/agent/extensions/`
-- systemd configuration in `pi-ui.service`
+- systemd configuration in `oyster.service`
 
 These are not represented in `sessions.sqlite`.
 

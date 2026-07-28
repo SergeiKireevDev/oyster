@@ -8,7 +8,7 @@ import { join } from "node:path";
 const SERVER = new URL("../server/server.mjs", import.meta.url);
 
 test("an application database migration failure exits before the HTTP server listens", () => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-invalid-app-store-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-invalid-app-store-"));
   const databasePath = join(root, "oyster.sqlite");
   writeFileSync(databasePath, "not a sqlite database");
   const result = spawnSync(process.execPath, [
@@ -24,7 +24,7 @@ test("an application database migration failure exits before the HTTP server lis
       ...process.env,
       HOME: root,
       PERSISTENT_STORE: "jsonl",
-      PI_UI_DB_PATH: databasePath,
+      OYSTER_DB_PATH: databasePath,
     },
   });
   rmSync(root, { recursive: true, force: true });

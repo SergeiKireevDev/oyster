@@ -8,7 +8,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { invokeHublotStartupScript, reserveHublot, validateAndStoreHublotStartupScript } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-runtime-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-runtime-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });

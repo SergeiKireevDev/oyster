@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const FAKE_HOME = mkdtempSync(join(tmpdir(), "pi-ui-test-home-"));
+const FAKE_HOME = mkdtempSync(join(tmpdir(), "oyster-test-home-"));
 process.env.HOME = FAKE_HOME;
 
 const { SESSIONS_ROOT } = await import("../server/sessions.mjs");
@@ -137,7 +137,7 @@ test("checkpointTree: legacy forks infer forkedAtHash from newest inherited reco
 // ---------------------------------------------------------------- git flow
 
 function initRepo() {
-  const repo = mkdtempSync(join(tmpdir(), "pi-ui-test-repo-"));
+  const repo = mkdtempSync(join(tmpdir(), "oyster-test-repo-"));
   const g = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
   g("init", "-q");
   g("config", "user.email", "t@t");
@@ -180,7 +180,7 @@ test("checkpointWorkdir: clean tree marks HEAD, dirty tree commits", async () =>
 });
 
 test("checkpointWorkdir refuses non-repos", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-ui-test-norepo-"));
+  const dir = mkdtempSync(join(tmpdir(), "oyster-test-norepo-"));
   const r = await checkpointWorkdir("pi", dir, null);
   assert.equal(r.status, 400);
   assert.match(r.body.error, /not a git repository/);

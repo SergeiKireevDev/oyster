@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
 test("app store creates its database directory and closes idempotently", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-app-store-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-app-store-"));
   const databasePath = join(root, "nested", "oyster.sqlite");
   const store = openAppStore({ databasePath });
   t.after(() => {
@@ -34,7 +34,7 @@ test("app store configures durability, integrity, and contention pragmas", () =>
     close() {}
   }
 
-  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-pragma-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
+  const store = openAppStore({ databasePath: join(tmpdir(), "oyster-pragma-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
   store.close();
 
   assert.equal(statements.length, 1);
@@ -51,7 +51,7 @@ test("app store exposes synchronous commit and rollback without exposing its dat
     close() {}
   }
   const store = openAppStore({
-    databasePath: join(tmpdir(), "pi-ui-transaction-store.sqlite"),
+    databasePath: join(tmpdir(), "oyster-transaction-store.sqlite"),
     Database: FakeDatabase,
     migrate: () => ({ currentVersion: 0, appliedVersions: [] }),
   });
@@ -73,7 +73,7 @@ test("app store checkpoints WAL writes before close", () => {
     exec(sql) { statements.push(sql.trim()); }
     close() { statements.push("CLOSE"); }
   }
-  const store = openAppStore({ databasePath: join(tmpdir(), "pi-ui-flush-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
+  const store = openAppStore({ databasePath: join(tmpdir(), "oyster-flush-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
   store.flush();
   store.close();
   store.flush();
@@ -89,7 +89,7 @@ test("app store closes its owned database exactly once", () => {
     close() { closes++; }
   }
 
-  const databasePath = join(tmpdir(), "pi-ui-fake-store.sqlite");
+  const databasePath = join(tmpdir(), "oyster-fake-store.sqlite");
   const store = openAppStore({ databasePath, Database: FakeDatabase, migrate: () => ({}) });
   store.close();
   store.close();

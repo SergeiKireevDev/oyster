@@ -43,7 +43,7 @@ export async function reconcileSessionDeletions({ appStore, sessionReferences, s
       appStore.repositories.operations.update(operation.id, {
         status: "failed", stage: operation.stage, error: error.message, updatedAt: now(),
       });
-      logger.error(`[pi-ui] failed to reconcile session deletion ${operation.id}: ${error.message}`);
+      logger.error(`[oyster] failed to reconcile session deletion ${operation.id}: ${error.message}`);
       results.push({ id: operation.id, status: "failed", error: error.message });
     }
   }

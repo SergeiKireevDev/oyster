@@ -47,7 +47,7 @@ test("application runtime composition root does not grow browser DOM coupling", 
 });
 
 test("application composition root parses (node --check)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-ui-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "oyster-test-"));
   const file = join(dir, "ui.js");
   writeFileSync(file, runtimeImplementation);
   execFileSync(process.execPath, ["--check", file]);

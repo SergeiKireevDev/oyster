@@ -31,7 +31,7 @@ async function startHub() {
   hubDirectory = mkdtempSync(join(tmpdir(), "oyster-hub-e2e-"));
   const configPath = join(hubDirectory, "config.json");
   const tokenPath = join(hubDirectory, "ui-token");
-  writeFileSync(tokenPath, `${process.env.PI_UI_TOKEN}\n`);
+  writeFileSync(tokenPath, `${process.env.OYSTER_TOKEN}\n`);
   writeFileSync(configPath, JSON.stringify({
     host: "127.0.0.1",
     port,
@@ -39,7 +39,7 @@ async function startHub() {
     sharedTokenFile: tokenPath,
     driver: {
       type: "mock",
-      endpoint: process.env.PI_UI_URL,
+      endpoint: process.env.OYSTER_URL,
       environmentId: "local",
       environmentName: "Local",
       id: "local",
@@ -91,7 +91,7 @@ test.afterEach(async () => {
 test.use({ viewport: MOBILE_VIEWPORT });
 
 test("Hub mobile session creation starts from its workspace card", async ({ page }) => {
-  await page.goto(`${hubUrl}/#token=${process.env.PI_UI_TOKEN}`);
+  await page.goto(`${hubUrl}/#token=${process.env.OYSTER_TOKEN}`);
   await page.waitForSelector("#connDot.ok", { timeout: 30_000 });
   const credentialSetup = page.locator("#mTitle", { hasText: "Set up credentials" });
   if (await credentialSetup.waitFor({ state: "visible", timeout: 3_000 }).then(() => true).catch(() => false)) {

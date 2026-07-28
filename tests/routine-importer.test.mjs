@@ -7,7 +7,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { importLegacyRoutines } from "../server/persistence/routineImporter.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-import-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-import-"));
   const sourceDir = join(root, "routines");
   mkdirSync(sourceDir);
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });

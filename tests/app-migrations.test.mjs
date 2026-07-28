@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { applyMigrations } from "../server/persistence/migrations.mjs";
 
 function databaseFixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-migrations-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-migrations-"));
   const database = new DatabaseSync(join(root, "app.sqlite"));
   t.after(() => {
     database.close();

@@ -15,7 +15,7 @@ function owner(store, sessionId) {
 }
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-cascade-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-cascade-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const waiters = [];
   const state = {

@@ -33,7 +33,7 @@ test("authenticated fetch adapter restores the original fetch on detach", async 
 test("clearAuthToken removes storage and expires the cookie", () => {
   let removed; const documentTarget = {};
   clearAuthToken({ storage: { removeItem: (key) => { removed = key; } }, documentTarget });
-  assert.equal(removed, "pi_ui_token");
+  assert.equal(removed, "oyster_token");
   assert.match(documentTarget.cookie, /max-age=0/);
 });
 
@@ -54,7 +54,7 @@ test("unauthorized handler clears auth only after a confirmed 401", async () => 
     toast: () => assert.fail("must not toast after a confirmed unauthorized response"),
   });
   await handler();
-  assert.equal(removed, "pi_ui_token");
+  assert.equal(removed, "oyster_token");
   assert.equal(opened, 1);
 });
 

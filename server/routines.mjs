@@ -118,7 +118,7 @@ function runScript(state, definition, mode) {
     startedAt: new Date().toISOString(),
   });
   if (mode === "run") repository.updateProgress(run.id, 0, null);
-  console.log(`[pi-ui] routine ${mode}: ${executionPath} (pid ${proc.pid}, cwd ${cwd}, session ${definition.session_id ?? "-"})`);
+  console.log(`[oyster] routine ${mode}: ${executionPath} (pid ${proc.pid}, cwd ${cwd}, session ${definition.session_id ?? "-"})`);
   emit(state, definition, mode === "run" ? "started" : "teardown_started");
 
   const onLine = (stream) => (value) => {
@@ -160,7 +160,7 @@ function runScript(state, definition, mode) {
   proc.on("exit", (code, signal) => {
     if (!clearRuntime()) return;
     const current = repository.findRun(run.id);
-    console.log(`[pi-ui] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
+    console.log(`[oyster] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
     if (mode === "teardown") {
       repository.finishRun(run.id, {
         status: code === 0 ? "idle" : "failed",
@@ -195,7 +195,7 @@ export function createRoutine(state, { name, script, sessionId = null, ownerId =
     ownerId: sessionId ? ownerId : existing?.owner_id ?? null,
     name, script, cwd: cwd ?? existing?.cwd ?? null, now: new Date().toISOString(),
   });
-  console.log(`[pi-ui] routine ${existing ? "updated" : "created"}: ${join(ROUTINES_DIR, name)} (session ${definition.session_id ?? "-"})`);
+  console.log(`[oyster] routine ${existing ? "updated" : "created"}: ${join(ROUTINES_DIR, name)} (session ${definition.session_id ?? "-"})`);
   emit(state, definition, existing ? "updated" : "created");
   return routineView(state, definition);
 }

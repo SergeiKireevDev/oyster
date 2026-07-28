@@ -84,7 +84,7 @@ test("token comparison and auth accept supported credentials while query auth st
   assert.equal(context.checkAuth(postQuery, new URL("http://localhost/path?token=secret-token")), "fail");
   const postBearer = request("", { method: "POST", ip: "127.0.0.2", headers: { authorization: "Bearer secret-token" } });
   assert.equal(context.checkAuth(postBearer, new URL("http://localhost/path")), "ok");
-  const eventSourceCookie = request("", { method: "GET", ip: "127.0.0.3", headers: { cookie: "pi_ui_token=secret-token" } });
+  const eventSourceCookie = request("", { method: "GET", ip: "127.0.0.3", headers: { cookie: "oyster_token=secret-token" } });
   assert.equal(context.checkAuth(eventSourceCookie, new URL("http://localhost/events")), "ok");
 });
 

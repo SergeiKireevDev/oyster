@@ -13,7 +13,7 @@ import {
 } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-script-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-script-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
@@ -135,7 +135,7 @@ test("missing and mismatched startup artifacts are atomically restored before in
 });
 
 test("a missing startup script is rematerialized from SQLite contents and hash after restart", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-script-restart-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-script-restart-"));
   const databasePath = join(root, "app.sqlite");
   const agentDir = join(root, "agent");
   let store = openAppStore({ databasePath });

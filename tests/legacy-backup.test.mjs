@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { LEGACY_BACKUP_RETENTION_POLICY, retainLegacyFileAsReadOnlyBackup } from "../server/persistence/legacyBackup.mjs";
 
 test("legacy backup policy retains read-only files through at least one release", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-legacy-backup-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-legacy-backup-"));
   const sourcePath = join(root, "checkpoints.json");
   writeFileSync(sourcePath, "legacy");
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -19,7 +19,7 @@ test("legacy backup policy retains read-only files through at least one release"
 });
 
 test("failure to enforce read-only mode restores the original legacy path", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-legacy-backup-fail-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-legacy-backup-fail-"));
   const sourcePath = join(root, "bindings.json");
   writeFileSync(sourcePath, "{}");
   t.after(() => rmSync(root, { recursive: true, force: true }));

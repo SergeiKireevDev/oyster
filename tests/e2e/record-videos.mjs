@@ -32,7 +32,7 @@ async function main() {
 
   // start container
   sh(`docker rm -f ${CONTROLLER} 2>/dev/null || true`);
-  sh(`docker run -d --name ${CONTROLLER} -p ${PORT}:4000 -e PI_UI_TOKEN=${TOKEN} -e E2E_MOCK_LLM=1 oyster`);
+  sh(`docker run -d --name ${CONTROLLER} -p ${PORT}:4000 -e OYSTER_TOKEN=${TOKEN} -e E2E_MOCK_LLM=1 oyster`);
 
   // wait for it to come up
   let up = false;

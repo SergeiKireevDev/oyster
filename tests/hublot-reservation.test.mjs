@@ -7,7 +7,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { reserveHublot } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-reservation-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-reservation-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,

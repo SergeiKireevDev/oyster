@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
 function setup(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-repository-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-repository-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const owner = store.repositories.sessions.upsert({

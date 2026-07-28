@@ -20,7 +20,7 @@ function positiveInteger(name, fallback) {
 
 const config = Object.freeze({
   baseUrl: String(process.env.PERF_BASE_URL ?? "http://127.0.0.1:4000").replace(/\/$/, ""),
-  token: String(process.env.PI_UI_TOKEN ?? "longcat-performance-preparation"),
+  token: String(process.env.OYSTER_TOKEN ?? "longcat-performance-preparation"),
   provider: String(process.env.PERF_MODEL_PROVIDER ?? "meituan"),
   model: String(process.env.PERF_MODEL_ID ?? "LongCat-2.0"),
   sessionCount: positiveInteger("PERF_SESSION_COUNT", 100),

@@ -21,7 +21,7 @@ test("pi process launcher pins executable, store, and Oyster authentication envi
   assert.deepEqual(calls[0][1], ["--mode", "rpc"]);
   assert.equal(calls[0][2].cwd, "/work");
   assert.equal(calls[0][2].env.PERSISTENT_STORE, "sqlite");
-  assert.equal(calls[0][2].env.PI_UI_TOKEN, "effective-ui-token");
+  assert.equal(calls[0][2].env.OYSTER_TOKEN, "effective-ui-token");
   assert.equal(calls[0][2].env.CUSTOM, "yes");
 });
 

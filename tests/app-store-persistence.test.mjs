@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-app-persistence-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-app-persistence-"));
   const path = join(root, "oyster.sqlite");
   const databases = [];
   class CapturingDatabase {

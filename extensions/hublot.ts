@@ -1,9 +1,9 @@
 /**
- * hublot.ts — pi extension exposing the pi-remote-ui "interfaces" feature
+ * hublot.ts — pi extension exposing the Oyster "interfaces" feature
  * as the "hublot" tool the LLM can call directly from the harness.
  *
  * A "hublot" (French for porthole) is a public web interface: a cloudflared
- * tunnel to a local port, managed by the pi-remote-ui server (`server/server.mjs`).
+ * tunnel to a local port, managed by the Oyster server (`server/server.mjs`).
  * Opening one through this tool:
  *   - lets the server allocate the next free port (3000+)
  *   - claims an already-connected tunnel from the rolling warm pool, replaces
@@ -14,8 +14,8 @@
  *     that survived a UI restart is retained, but a stale one is never
  *     recreated automatically.
  *
- * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
- * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
+ * Config: the UI server is found at OYSTER_URL (default http://127.0.0.1:8080)
+ * and authenticated with OYSTER_TOKEN or the .ui-token file at the project
  * project root.
  */
 
@@ -26,10 +26,10 @@ import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const BASE = process.env.PI_UI_URL ?? "http://127.0.0.1:8080";
+const BASE = process.env.OYSTER_URL ?? "http://127.0.0.1:8080";
 
 function uiToken(): string {
-  if (process.env.PI_UI_TOKEN) return process.env.PI_UI_TOKEN.trim();
+  if (process.env.OYSTER_TOKEN) return process.env.OYSTER_TOKEN.trim();
   // Try the current project first, then next to this file's project root.
   const candidates = [
     join(process.cwd(), ".ui-token"),
@@ -40,7 +40,7 @@ function uiToken(): string {
       return readFileSync(p, "utf8").trim();
     } catch {}
   }
-  throw new Error("pi-remote-ui token not found (set PI_UI_TOKEN or provide .ui-token)");
+  throw new Error("Oyster token not found (set OYSTER_TOKEN or provide .ui-token)");
 }
 
 async function api(method: string, path: string, body?: unknown) {
@@ -70,7 +70,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "type='git-server' serves an absolute Git worktree path through the bundled read-only " +
       "Smart HTTP server. 'close' tears one " +
       "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
-      "session's hublots. Opened hublots appear automatically in the pi-remote-ui. " +
+      "session's hublots. Opened hublots appear automatically in the Oyster. " +
       "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
       "are closed instead of recreated; use 'open' afterwards to obtain a fresh URL.",
     promptSnippet: "Open/close/list hublots (public web interfaces / tunnels) for this session",

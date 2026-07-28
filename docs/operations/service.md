@@ -4,13 +4,13 @@ description: Install, verify, update, and troubleshoot the user service.
 tags: systemd, deployment
 ---
 
-The repository includes `pi-ui.service`. Render its checkout placeholder before installing it:
+The repository includes `oyster.service`. Render its checkout placeholder before installing it:
 
 ```bash
 mkdir -p ~/.config/systemd/user
-sed "s|__PI_UI_DIR__|$(pwd)|g" pi-ui.service > ~/.config/systemd/user/pi-ui.service
+sed "s|__OYSTER_DIR__|$(pwd)|g" oyster.service > ~/.config/systemd/user/oyster.service
 systemctl --user daemon-reload
-systemctl --user enable --now pi-ui.service
+systemctl --user enable --now oyster.service
 sudo loginctl enable-linger "$USER"
 ```
 
@@ -19,9 +19,9 @@ The checked-in unit pins the development pi CLI path and SQLite backend. Edit th
 ## Verify
 
 ```bash
-systemctl --user status pi-ui.service
+systemctl --user status oyster.service
 curl --fail http://127.0.0.1:8080/health
-journalctl --user -u pi-ui.service -f
+journalctl --user -u oyster.service -f
 ```
 
 Check the health response after every pi rebuild or deployment. It should identify the intended executable, backend, and database.
@@ -36,7 +36,7 @@ npm ci --prefix pi --ignore-scripts
 npm run build:pi
 npm run build
 npm test
-systemctl --user restart pi-ui.service
+systemctl --user restart oyster.service
 ```
 
 A clean process restart bounds the ESM module cache and ensures that all requests use one application version.
@@ -46,10 +46,10 @@ A clean process restart bounds the ESM module cache and ensures that all request
 Backend selection does not migrate data. To temporarily select JSONL, add a service override:
 
 ```bash
-mkdir -p ~/.config/systemd/user/pi-ui.service.d
-printf '[Service]\nEnvironment=PERSISTENT_STORE=jsonl\n' > ~/.config/systemd/user/pi-ui.service.d/rollback.conf
+mkdir -p ~/.config/systemd/user/oyster.service.d
+printf '[Service]\nEnvironment=PERSISTENT_STORE=jsonl\n' > ~/.config/systemd/user/oyster.service.d/rollback.conf
 systemctl --user daemon-reload
-systemctl --user restart pi-ui.service
+systemctl --user restart oyster.service
 ```
 
 Remove the override and restart to return to SQLite.

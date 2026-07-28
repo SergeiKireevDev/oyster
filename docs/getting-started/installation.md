@@ -41,7 +41,7 @@ HOST=127.0.0.1 node server/server.mjs
 
 The development default for `PI_BIN` is the built CLI at `pi/packages/coding-agent/dist/cli.js`. Existing checkouts can initialize it with `git submodule update --init --recursive`. Set `PI_BIN` explicitly to use another compatible build.
 
-On first start the server prints an authentication token. Unless `PI_UI_TOKEN` or `--token` is set, the token is persisted in the project-root `.ui-token` file.
+On first start the server prints an authentication token. Unless `OYSTER_TOKEN` or `--token` is set, the token is persisted in the project-root `.ui-token` file.
 
 Open:
 

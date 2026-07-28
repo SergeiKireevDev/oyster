@@ -23,7 +23,7 @@ function serverEnv(root) {
     ...process.env,
     HOME: root,
     PI_BIN: process.execPath,
-    PI_UI_DB_PATH: join(root, "oyster.sqlite"),
+    OYSTER_DB_PATH: join(root, "oyster.sqlite"),
   };
 }
 
@@ -115,13 +115,13 @@ async function nextServerEvent(reader) {
 }
 
 test("the stable server persists an owner-only default token across restarts", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-default-token-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-default-token-"));
   const port = await availablePort();
   const tokenFile = join(root, ".ui-token");
   await copyStableServer(root);
   await writeFile(join(root, "server", "app.mjs"), fixture("token-test"));
   const env = serverEnv(root);
-  delete env.PI_UI_TOKEN;
+  delete env.OYSTER_TOKEN;
   let child;
   const start = async () => {
     const serverProcess = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port)], {
@@ -147,7 +147,7 @@ test("the stable server persists an owner-only default token across restarts", a
 });
 
 test("the stable server atomically replaces its active application handler", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-hot-reload-"));
   const port = await availablePort();
   await copyStableServer(root);
   await writeFile(join(root, "server", "app.mjs"), fixture("before"));
@@ -177,7 +177,7 @@ test("the stable server atomically replaces its active application handler", asy
 });
 
 test("full restart restores app-store data and shutdown awaits callbacks before closing it", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-store-restart-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-store-restart-"));
   const port = await availablePort();
   const marker = join(root, "shutdown-marker.txt");
   await copyStableServer(root);
@@ -229,7 +229,7 @@ export function init(state) {
 });
 
 test("hublot identity, ownership, desired state, and history survive server replacement", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-hublot-server-restart-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-hublot-server-restart-"));
   const port = await availablePort();
   await copyStableServer(root);
   await writeFile(join(root, "server", "app.mjs"), `
@@ -284,7 +284,7 @@ export function init(state) {
 });
 
 test("an open SSE response survives an application reload and receives the state-owned broadcast", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-sse-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-hot-reload-sse-"));
   const port = await availablePort();
   await copyStableServer(root);
   await writeFile(join(root, "server", "app.mjs"), fixture("before"));
@@ -319,7 +319,7 @@ test("an open SSE response survives an application reload and receives the state
 });
 
 test("editing a route factory reloads its response without disconnecting SSE", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-route-reload-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-route-reload-"));
   const port = await availablePort();
   await mkdir(join(root, "server", "http", "routes"), { recursive: true });
   await copyStableServer(root);
@@ -361,7 +361,7 @@ export async function init(state) {
 });
 
 test("an invalid application replacement keeps the active handler and emits a failure event", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "pi-ui-hot-reload-failure-"));
+  const root = await mkdtemp(join(tmpdir(), "oyster-hot-reload-failure-"));
   const port = await availablePort();
   await copyStableServer(root);
   await writeFile(join(root, "server", "app.mjs"), fixture("working"));

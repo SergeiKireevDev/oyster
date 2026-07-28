@@ -57,7 +57,7 @@ test("credential canary remains only in pi auth.json and is absent after removal
   appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
   appStore.close();
 
-  const canary = `PI_UI_CREDENTIAL_CANARY_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const canary = `OYSTER_CREDENTIAL_CANARY_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const runners = new Map([
     ["active", { id: "active", proc: {}, resumeQueue: [] }],
     ["inactive", { id: "inactive", proc: null, resumeQueue: [] }],

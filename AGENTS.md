@@ -22,8 +22,8 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 ```
 
 Restart pi afterwards. For deterministic hublots, `type="markdown"` takes an absolute document path, while `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
-from `PI_UI_URL` (default `http://127.0.0.1:8080`) and authenticate with
-`PI_UI_TOKEN` or the project-root `.ui-token` file.
+from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
+`OYSTER_TOKEN` or the project-root `.ui-token` file.
 
 ## Installation
 
@@ -56,32 +56,32 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 |---|---|---|---|
 | `--port` | `PORT` | `8080` | listen port |
 | `--host` | `HOST` | `0.0.0.0` | bind address |
-| `--token` | `PI_UI_TOKEN` | `.ui-token` file, else random | auth token |
-| `--unauthenticated` | `PI_UI_UNAUTHENTICATED` | off | disable Oyster token auth behind an authenticated outer proxy |
+| `--token` | `OYSTER_TOKEN` | `.ui-token` file, else random | auth token |
+| `--unauthenticated` | `OYSTER_UNAUTHENTICATED` | off | disable Oyster token auth behind an authenticated outer proxy |
 | `--dir` | `PI_DIR` | cwd | working directory pi runs in |
 | `--pi` | `PI_BIN` | `pi/packages/coding-agent/dist/cli.js` | pi executable path |
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
-| – | `PI_UI_DB_PATH` | `~/.pi/agent/oyster.sqlite` | separate SQLite database for oyster-owned application data |
+| – | `OYSTER_DB_PATH` | `~/.pi/agent/oyster.sqlite` | separate SQLite database for oyster-owned application data |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |
-| – | `PI_UI_HUBLOT_TUNNEL_POOL_SIZE` | `2` | warm Quick Tunnels reserved for auto-allocated hublots (`0` disables pooling) |
+| – | `OYSTER_HUBLOT_TUNNEL_POOL_SIZE` | `2` | warm Quick Tunnels reserved for auto-allocated hublots (`0` disables pooling) |
 
 ### Running as a service
 
-A systemd user unit is provided as `pi-ui.service`: it auto-restarts on crash and starts on login. Before using it, update the hardcoded `WorkingDirectory=` and `ExecStart=` paths to match your clone location:
+A systemd user unit is provided as `oyster.service`: it auto-restarts on crash and starts on login. Before using it, update the hardcoded `WorkingDirectory=` and `ExecStart=` paths to match your clone location:
 
 ```bash
-sed "s|__PI_UI_DIR__|$(pwd)|g" pi-ui.service > ~/.config/systemd/user/pi-ui.service
+sed "s|__OYSTER_DIR__|$(pwd)|g" oyster.service > ~/.config/systemd/user/oyster.service
 systemctl --user daemon-reload
-systemctl --user enable --now pi-ui.service
+systemctl --user enable --now oyster.service
 sudo loginctl enable-linger $USER   # keep running without an active login session
 ```
 
-Logs: `journalctl --user -u pi-ui -f`.
+Logs: `journalctl --user -u oyster -f`.
 
 For a backgrounded foreground process instead:
 
 ```bash
-nohup node server/server.mjs > /tmp/pi-ui.log 2>&1 &
+nohup node server/server.mjs > /tmp/oyster.log 2>&1 &
 ```
 
 ## Run the tests after every feature or fix
@@ -130,4 +130,4 @@ remote clients.
   object from `server/server.mjs` — never in module-level variables.
 - If a reload fails to parse, the server keeps the previous version running
   and broadcasts `code_reload_failed`; check the journal
-  (`journalctl --user -u pi-ui`) if your change doesn't seem to apply.
+  (`journalctl --user -u oyster`) if your change doesn't seem to apply.

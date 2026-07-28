@@ -12,5 +12,5 @@ test("lifecycle logger records elapsed time and a current state snapshot", () =>
   });
   now = 123.6;
   lifecycleLog("connected", { replaying: false });
-  assert.deepEqual(calls, [["[pi-ui lifecycle +24ms] connected", { runner: "r1", replaying: false }]]);
+  assert.deepEqual(calls, [["[oyster lifecycle +24ms] connected", { runner: "r1", replaying: false }]]);
 });

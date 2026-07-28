@@ -12,7 +12,7 @@ Responses are JSON unless a route streams events, downloads a file, or serves st
 
 ## Authentication
 
-`GET /health`, `GET /authcheck`, `GET /runtime-config.js`, and static application assets are open. By default, every other API route requires the configured token via bearer header, `X-Auth-Token`, or the `pi_ui_token` cookie. When the Oyster spoke is explicitly started with `--unauthenticated`, those routes accept requests without a token; this mode must be protected by an authenticated outer proxy such as llmbox.
+`GET /health`, `GET /authcheck`, `GET /runtime-config.js`, and static application assets are open. By default, every other API route requires the configured token via bearer header, `X-Auth-Token`, or the `oyster_token` cookie. When the Oyster spoke is explicitly started with `--unauthenticated`, those routes accept requests without a token; this mode must be protected by an authenticated outer proxy such as llmbox.
 
 The `token` query parameter is allowed only on `GET` requests. Auth failures are rate-limited by client IP.
 

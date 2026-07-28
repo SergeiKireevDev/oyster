@@ -12,7 +12,7 @@ export function createPiProcessLauncher({ config, spawnImpl = spawn } = {}) {
         ...process.env,
         ...(options.env ?? {}),
         PERSISTENT_STORE: persistentStore,
-        ...(config.TOKEN ? { PI_UI_TOKEN: config.TOKEN } : {}),
+        ...(config.TOKEN ? { OYSTER_TOKEN: config.TOKEN } : {}),
       },
     });
   }

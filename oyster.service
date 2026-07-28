@@ -2,11 +2,11 @@
 Description=oyster - web UI for the pi coding agent
 
 [Service]
-WorkingDirectory=__PI_UI_DIR__
-Environment=PI_BIN=__PI_UI_DIR__/pi/packages/coding-agent/dist/cli.js
+WorkingDirectory=__OYSTER_DIR__
+Environment=PI_BIN=__OYSTER_DIR__/pi/packages/coding-agent/dist/cli.js
 Environment=PERSISTENT_STORE=sqlite
 Environment=PI_CODING_AGENT_DIR=%h/.pi/agent
-ExecStart=/usr/bin/node __PI_UI_DIR__/server/server.mjs
+ExecStart=/usr/bin/node __OYSTER_DIR__/server/server.mjs
 # always: a stray SIGTERM/clean exit (e.g. an agent running pkill) must not
 # leave the UI down
 Restart=always

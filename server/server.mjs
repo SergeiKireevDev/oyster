@@ -117,17 +117,17 @@ function validateConfig(config) {
   if (!supportedNode) {
     throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
-  if (!config.PI_UI_DB_PATH.endsWith(".sqlite")) {
-    throw new Error(`PI_UI_DB_PATH must name a .sqlite file: ${config.PI_UI_DB_PATH}`);
+  if (!config.OYSTER_DB_PATH.endsWith(".sqlite")) {
+    throw new Error(`OYSTER_DB_PATH must name a .sqlite file: ${config.OYSTER_DB_PATH}`);
   }
-  if (config.SQLITE_PATH && config.PI_UI_DB_PATH === config.SQLITE_PATH) {
-    throw new Error("PI_UI_DB_PATH must be separate from the coding-agent sessions database");
+  if (config.SQLITE_PATH && config.OYSTER_DB_PATH === config.SQLITE_PATH) {
+    throw new Error("OYSTER_DB_PATH must be separate from the coding-agent sessions database");
   }
   if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
     throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
   }
   if (!Number.isInteger(config.HUBLOT_TUNNEL_POOL_SIZE) || config.HUBLOT_TUNNEL_POOL_SIZE < 0 || config.HUBLOT_TUNNEL_POOL_SIZE > 16) {
-    throw new Error("PI_UI_HUBLOT_TUNNEL_POOL_SIZE must be an integer from 0 to 16");
+    throw new Error("OYSTER_HUBLOT_TUNNEL_POOL_SIZE must be an integer from 0 to 16");
   }
   try {
     accessSync(config.PI_BIN, constants.X_OK);
@@ -155,15 +155,15 @@ const config = {
   PI_EXTRA_ARGS: piExtraArgs,
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
-  PI_UI_DB_PATH: resolve(process.env.PI_UI_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
+  OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
   SQLITE_PATH: persistentStore === "sqlite"
     ? join(resolve(sessionDirIndex >= 0 && piExtraArgs[sessionDirIndex + 1] ? piExtraArgs[sessionDirIndex + 1] : agentDir), "sessions.sqlite")
     : null,
-  TOKEN: argValue("--token") ?? process.env.PI_UI_TOKEN ?? defaultToken(),
-  UNAUTHENTICATED: process.argv.includes("--unauthenticated") || envFlag("PI_UI_UNAUTHENTICATED"),
+  TOKEN: argValue("--token") ?? process.env.OYSTER_TOKEN ?? defaultToken(),
+  UNAUTHENTICATED: process.argv.includes("--unauthenticated") || envFlag("OYSTER_UNAUTHENTICATED"),
   TUNNEL_BIN: argValue("--tunnel-bin") ?? process.env.TUNNEL_BIN ?? defaultTunnelBin(),
-  HUBLOT_TUNNEL_POOL_SIZE: Number(process.env.PI_UI_HUBLOT_TUNNEL_POOL_SIZE ?? 2),
-  SKIP_PUBLIC_HUBLOT_READINESS: envFlag("PI_UI_SKIP_PUBLIC_HUBLOT_READINESS"),
+  HUBLOT_TUNNEL_POOL_SIZE: Number(process.env.OYSTER_HUBLOT_TUNNEL_POOL_SIZE ?? 2),
+  SKIP_PUBLIC_HUBLOT_READINESS: envFlag("OYSTER_SKIP_PUBLIC_HUBLOT_READINESS"),
   DIRNAME: PROJECT_ROOT,
 };
 validateConfig(config);
@@ -176,7 +176,7 @@ if (process.argv.includes("--check-config")) {
     piBin: config.PI_BIN,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
-    appDbPath: config.PI_UI_DB_PATH,
+    appDbPath: config.OYSTER_DB_PATH,
     unauthenticated: config.UNAUTHENTICATED,
     hublotTunnelPoolSize: config.HUBLOT_TUNNEL_POOL_SIZE,
     node: process.versions.node,
@@ -189,7 +189,7 @@ if (process.argv.includes("--check-config")) {
 
 // Open exactly once in the stable core. Hot-reloaded app modules receive this
 // same service through state rather than creating their own connections.
-const appStore = openAppStore({ databasePath: config.PI_UI_DB_PATH });
+const appStore = openAppStore({ databasePath: config.OYSTER_DB_PATH });
 const recoveredOperationCount = appStore.reconcileInterruptedOperations();
 const interruptedRoutineRunCount = appStore.reconcileInterruptedRoutineRuns();
 const appHydration = appStore.hydrate();
@@ -239,7 +239,7 @@ async function loadApp() {
   const next = await mod.init(state); // { handleRequest }
   app = next;
   state.reloadCount++;
-  console.log(`[pi-ui] app.mjs loaded (reload #${state.reloadCount})`);
+  console.log(`[oyster] app.mjs loaded (reload #${state.reloadCount})`);
   if (state.reloadCount > 1) {
     state.serverEvent({ type: "code_reloaded", reloadCount: state.reloadCount });
   }
@@ -255,10 +255,10 @@ function watchApp() {
     reloadTimer = setTimeout(async () => {
       try {
         await loadApp();
-        console.log(`[pi-ui] hot-reloaded app.mjs after ${changed} (clients stay connected: ${state.sseClients.size})`);
+        console.log(`[oyster] hot-reloaded app.mjs after ${changed} (clients stay connected: ${state.sseClients.size})`);
       } catch (e) {
         // keep serving with the previous version on syntax/runtime errors
-        console.error(`[pi-ui] reload FAILED, keeping old code: ${e.message}`);
+        console.error(`[oyster] reload FAILED, keeping old code: ${e.message}`);
         state.serverEvent({ type: "code_reload_failed", error: e.message });
       }
     }, 150);
@@ -287,7 +287,7 @@ function watchApp() {
     const notifyUiChanged = (label) => {
       clearTimeout(uiTimer);
       uiTimer = setTimeout(() => {
-        console.log(`[pi-ui] ${label} changed, notifying browsers`);
+        console.log(`[oyster] ${label} changed, notifying browsers`);
         state.serverEvent({ type: "ui_reload" });
       }, 150);
     };
@@ -305,7 +305,7 @@ function watchApp() {
 const server = http.createServer((req, res) => {
   // delegate to whatever version of app.mjs is current
   app.handleRequest(req, res).catch((e) => {
-    console.error(`[pi-ui] handler error: ${e.stack ?? e}`);
+    console.error(`[oyster] handler error: ${e.stack ?? e}`);
     if (!res.headersSent) {
       res.writeHead(500, { "content-type": "application/json" });
     }
@@ -317,21 +317,21 @@ await loadApp();
 watchApp();
 
 server.listen(config.PORT, config.HOST, () => {
-  console.log(`[pi-ui] listening on http://${config.HOST}:${config.PORT}`);
-  console.log(`[pi-ui] pi executable: ${config.PI_BIN}`);
-  console.log(`[pi-ui] session backend: ${config.PERSISTENT_STORE}`);
-  if (config.SQLITE_PATH) console.log(`[pi-ui] SQLite database: ${config.SQLITE_PATH}`);
-  console.log(`[pi-ui] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);
-  if (interruptedRoutineRunCount) console.log(`[pi-ui] reconciled ${interruptedRoutineRunCount} interrupted routine run(s)`);
-  console.log(`[pi-ui] pi working directory: ${config.PI_DIR}`);
+  console.log(`[oyster] listening on http://${config.HOST}:${config.PORT}`);
+  console.log(`[oyster] pi executable: ${config.PI_BIN}`);
+  console.log(`[oyster] session backend: ${config.PERSISTENT_STORE}`);
+  if (config.SQLITE_PATH) console.log(`[oyster] SQLite database: ${config.SQLITE_PATH}`);
+  console.log(`[oyster] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);
+  if (interruptedRoutineRunCount) console.log(`[oyster] reconciled ${interruptedRoutineRunCount} interrupted routine run(s)`);
+  console.log(`[oyster] pi working directory: ${config.PI_DIR}`);
   if (config.UNAUTHENTICATED) {
-    console.warn("[pi-ui] WARNING: authentication is DISABLED; every client that can reach Oyster has full workspace and agent access");
-    console.log(`[pi-ui] open: http://localhost:${config.PORT}/`);
+    console.warn("[oyster] WARNING: authentication is DISABLED; every client that can reach Oyster has full workspace and agent access");
+    console.log(`[oyster] open: http://localhost:${config.PORT}/`);
   } else {
-    console.log(`[pi-ui] auth token: ${config.TOKEN}`);
-    console.log(`[pi-ui] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
+    console.log(`[oyster] auth token: ${config.TOKEN}`);
+    console.log(`[oyster] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
   }
-  console.log(`[pi-ui] hot reload: watching server/app.mjs, server/http/, dist/`);
+  console.log(`[oyster] hot reload: watching server/app.mjs, server/http/, dist/`);
   app.startPi();
 });
 
@@ -354,7 +354,7 @@ function shutdown() {
     state.appStore.close();
     process.exit(0);
   })().catch((error) => {
-    console.error(`[pi-ui] shutdown failed: ${error.stack ?? error}`);
+    console.error(`[oyster] shutdown failed: ${error.stack ?? error}`);
     try { state.appStore.close(); } catch {}
     process.exit(1);
   });

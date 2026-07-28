@@ -12,8 +12,8 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..");
 const LOCK_DIR = join(HERE, ".port-locks");
-const IMAGE = process.env.PI_UI_IMAGE ?? "oyster:published";
-const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "oyster:sqlite";
+const IMAGE = process.env.OYSTER_IMAGE ?? "oyster:published";
+const SQLITE_IMAGE = process.env.OYSTER_SQLITE_IMAGE ?? "oyster:sqlite";
 const VERIFIED_IMAGE = "oyster:latest";
 const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? join(REPO_ROOT, "pi");
 
@@ -42,7 +42,7 @@ export default async function globalSetup() {
   // The verified loop builds the current worktree as `oyster` immediately
   // before E2E. Point the default published-package test tag at that fresh
   // image so an older cached tag cannot run stale UI code.
-  if (!process.env.PI_UI_IMAGE && imageExists(VERIFIED_IMAGE)) {
+  if (!process.env.OYSTER_IMAGE && imageExists(VERIFIED_IMAGE)) {
     sh(["tag", VERIFIED_IMAGE, IMAGE]);
   }
 

@@ -176,7 +176,7 @@ export function listSessions(dir) {
       const summary = summarizeSessionFile(path);
       sessions.push({ path, modifiedAt: statSync(path).mtime.toISOString(), ...summary });
     } catch (e) {
-      console.error(`[pi-ui] failed to read session ${file}: ${e.message}`);
+      console.error(`[oyster] failed to read session ${file}: ${e.message}`);
     }
   }
   sessions.sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));

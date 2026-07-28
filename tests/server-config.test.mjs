@@ -10,14 +10,14 @@ const SERVER = new URL("../server/server.mjs", import.meta.url);
 const LOCAL_PI = fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 
 function checkConfig({ args = [], env = {} } = {}) {
-  const home = mkdtempSync(join(tmpdir(), "pi-ui-config-"));
+  const home = mkdtempSync(join(tmpdir(), "oyster-config-"));
   const childEnv = { ...process.env, HOME: home, ...env };
   delete childEnv.PI_ARGS;
   delete childEnv.PI_BIN;
   delete childEnv.PI_CODING_AGENT_DIR;
-  delete childEnv.PI_UI_DB_PATH;
-  delete childEnv.PI_UI_HUBLOT_TUNNEL_POOL_SIZE;
-  delete childEnv.PI_UI_UNAUTHENTICATED;
+  delete childEnv.OYSTER_DB_PATH;
+  delete childEnv.OYSTER_HUBLOT_TUNNEL_POOL_SIZE;
+  delete childEnv.OYSTER_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
   Object.assign(childEnv, env);
   const result = spawnSync(process.execPath, [SERVER.pathname, "--check-config", ...args], {
@@ -77,14 +77,14 @@ test("configuration keeps auth enabled by default and accepts explicit unauthent
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).unauthenticated, true);
 
-  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_UNAUTHENTICATED: "true" } });
+  result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_UNAUTHENTICATED: "true" } });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).unauthenticated, true);
 });
 
-test("application database accepts an independent PI_UI_DB_PATH", () => {
+test("application database accepts an independent OYSTER_DB_PATH", () => {
   const appDbPath = join(tmpdir(), "custom-oyster", "app.sqlite");
-  const result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_DB_PATH: appDbPath } });
+  const result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_DB_PATH: appDbPath } });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).appDbPath, appDbPath);
 });
@@ -94,26 +94,26 @@ test("configuration rejects invalid stores and missing executables", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Invalid PERSISTENT_STORE.*jsonl.*sqlite/);
 
-  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_UNAUTHENTICATED: "sometimes" } });
+  result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_UNAUTHENTICATED: "sometimes" } });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /PI_UI_UNAUTHENTICATED must be one of/);
+  assert.match(result.stderr, /OYSTER_UNAUTHENTICATED must be one of/);
 
-  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_HUBLOT_TUNNEL_POOL_SIZE: "1.5" } });
+  result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_HUBLOT_TUNNEL_POOL_SIZE: "1.5" } });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /PI_UI_HUBLOT_TUNNEL_POOL_SIZE must be an integer/);
+  assert.match(result.stderr, /OYSTER_HUBLOT_TUNNEL_POOL_SIZE must be an integer/);
 
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /pi executable is missing or not executable/);
 
-  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_UI_DB_PATH: join(tmpdir(), "app.db") } });
+  result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_DB_PATH: join(tmpdir(), "app.db") } });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /PI_UI_DB_PATH must name a \.sqlite file/);
+  assert.match(result.stderr, /OYSTER_DB_PATH must name a \.sqlite file/);
 
   const agentDir = join(tmpdir(), "shared-agent-db");
   result = checkConfig({ args: ["--pi", process.execPath], env: {
     PI_CODING_AGENT_DIR: agentDir,
-    PI_UI_DB_PATH: join(agentDir, "sessions.sqlite"),
+    OYSTER_DB_PATH: join(agentDir, "sessions.sqlite"),
   } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /must be separate from the coding-agent sessions database/);

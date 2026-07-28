@@ -23,7 +23,7 @@ function fakeProcess() {
 }
 
 test("runner repository persists descriptors, default selection, lifecycle, and ownership", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-repository-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-repository-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const sqlitePath = join(root, "agent.sqlite");
   const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });
@@ -97,7 +97,7 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
 });
 
 test("runner replay and selected workdir survive restart without eager process spawning", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-restore-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-restore-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   const sqlitePath = join(root, "agent.sqlite");
@@ -177,7 +177,7 @@ test("runner replay and selected workdir survive restart without eager process s
 });
 
 test("runner replay events persist exact payloads and enforce their configured cap", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-events-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-events-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   t.after(() => { try { store.close(); } catch {} rmSync(root, { recursive: true, force: true }); });
@@ -200,7 +200,7 @@ test("runner replay events persist exact payloads and enforce their configured c
 });
 
 test("runner repository enforces one selected default", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-default-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-default-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const create = (id) => store.repositories.runners.create({ id, dir: "/workspace", desiredState: "stopped", lastStatus: "stopped", createdAt: id });
@@ -214,7 +214,7 @@ test("runner repository enforces one selected default", (t) => {
 });
 
 test("backend rollback ignores an incompatible persisted default runner without deleting it", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-runner-backend-toggle-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-backend-toggle-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const sqlitePath = join(root, "sessions.sqlite");
   const sessionReferences = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath });

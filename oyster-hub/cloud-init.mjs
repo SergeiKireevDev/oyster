@@ -115,10 +115,10 @@ EnvironmentFile=/etc/oyster/oyster.env
 Environment=PI_BIN=/opt/oyster/pi/packages/coding-agent/dist/cli.js
 Environment=PI_DIR=/var/lib/oyster/workspace
 Environment=PI_CODING_AGENT_DIR=/var/lib/oyster/.pi/agent
-Environment=PI_UI_DB_PATH=/var/lib/oyster/.pi/agent/oyster.sqlite
-Environment=PI_UI_URL=http://127.0.0.1:8080
+Environment=OYSTER_DB_PATH=/var/lib/oyster/.pi/agent/oyster.sqlite
+Environment=OYSTER_URL=http://127.0.0.1:8080
 Environment=TUNNEL_BIN=/usr/local/bin/cloudflared
-Environment=PI_UI_UNAUTHENTICATED=1
+Environment=OYSTER_UNAUTHENTICATED=1
 ExecStart=/usr/bin/node /opt/oyster/server/server.mjs --host 127.0.0.1 --port 8080 --unauthenticated
 Restart=always
 RestartSec=5
@@ -189,7 +189,7 @@ for extension in file-explorer.ts goal-loop.ts hublot.ts routine.ts; do
   chown -h oyster:oyster "/var/lib/oyster/.pi/agent/extensions/$extension"
 done
 
-node -e 'const { randomBytes } = require("node:crypto"); process.stdout.write("PI_UI_TOKEN=" + randomBytes(32).toString("base64url") + "\\n")' >/etc/oyster/oyster.env
+node -e 'const { randomBytes } = require("node:crypto"); process.stdout.write("OYSTER_TOKEN=" + randomBytes(32).toString("base64url") + "\\n")' >/etc/oyster/oyster.env
 chmod 0600 /etc/oyster/oyster.env
 chmod 0600 /etc/oyster/box-agent.env
 systemctl daemon-reload

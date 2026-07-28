@@ -209,7 +209,7 @@ export function createSessionRoutes({
               if (tunnel.sessionId !== reference.id) continue;
               closeTunnel(state, tunnel.id);
               closed.push(tunnel.port);
-              logger.log(`[pi-ui] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
+              logger.log(`[oyster] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
             }
             return closed;
           },

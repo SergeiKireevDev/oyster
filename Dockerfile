@@ -2,7 +2,7 @@
 #
 # Build:  docker build -t oyster .
 # Run:    docker run -d -p 4000:4000 \
-#           -e PI_UI_TOKEN=<token> \
+#           -e OYSTER_TOKEN=<token> \
 #           -v ~/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro \
 #           -v ~/.pi/agent/models.json:/root/.pi/agent/models.json:ro \
 #           --name oyster oyster
@@ -39,7 +39,7 @@ RUN mkdir -p /opt/pi && npm install --prefix /opt/pi "${PI_PACKAGE_SPEC}"
 WORKDIR /app
 
 # Frontend build dependencies + app sources (see .dockerignore)
-COPY package.json package-lock.json vite.config.js README.md AGENTS.md pi-ui.service Dockerfile Dockerfile.local-pi ./
+COPY package.json package-lock.json vite.config.js README.md AGENTS.md oyster.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
 COPY server ./server
 COPY markdown-tool ./markdown-tool
@@ -81,7 +81,7 @@ RUN mkdir -p /workspace
 ENV PORT=4000 \
     HOST=0.0.0.0 \
     PI_DIR=/workspace \
-    PI_UI_URL=http://127.0.0.1:4000
+    OYSTER_URL=http://127.0.0.1:4000
 
 EXPOSE 4000
 

@@ -92,7 +92,7 @@ new token and remount credentials when starting it later:
 
 ```sh
 docker run --rm -p 4000:4000 \
-  -e PI_UI_TOKEN="$(openssl rand -hex 16)" \
+  -e OYSTER_TOKEN="$(openssl rand -hex 16)" \
   -v "$HOME/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro" \
   -v "$HOME/.pi/agent/models.json:/root/.pi/agent/models.json:ro" \
   oyster:longcat-100x100
