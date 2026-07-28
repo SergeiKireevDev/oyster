@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 const IMAGE_MIME = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"],
   [".gif", "image/gif"], [".webp", "image/webp"], [".avif", "image/avif"],
+  [".svg", "image/svg+xml"],
 ]);
 const VIDEO_MIME = new Map([
   [".mp4", "video/mp4"], [".webm", "video/webm"], [".ogv", "video/ogg"],

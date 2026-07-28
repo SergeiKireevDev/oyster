@@ -35,7 +35,7 @@ Stop terminates the process group. Teardown should remove every byproduct create
 
 ## Pinned Widgets
 
-Pinned Widgets are durable shortcuts in the right sidebar. Pin any file or directory from the file explorer, or use the `pinned_widget` tool. Tiles use a compact phone-style grid and can be moved into one-level groups. Images and videos receive media thumbnails and open in native Svelte displays; Markdown opens in Oyster's native Markdown reader. These routes remain authenticated and private—pinning never creates a public URL, copies the file, or changes the underlying artifact.
+Pinned Widgets are durable shortcuts in the right sidebar. Pin any file or directory from the file explorer, or use the `pinned_widget` tool. Tiles use a compact phone-style grid and can be moved into one-level groups. Images, including SVG vectors, and videos receive media thumbnails and open in native Svelte displays; Markdown opens in Oyster's native Markdown reader. These routes remain authenticated and private—pinning never creates a public URL, copies the file, or changes the underlying artifact.
 
 Unpinning removes only the shortcut. Missing files remain visible as unavailable so the reference can be repaired or removed.
 

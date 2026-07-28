@@ -18,20 +18,25 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(styles, /\.pinned-widget-icon\s*\{[\s\S]*width: 50px;[\s\S]*height: 50px;/);
 });
 
-test("Markdown images and video use native Svelte artifact displays", () => {
+test("Markdown raster images SVG vectors and video use native Svelte artifact displays", () => {
   const viewer = component("PinnedWidgetViewerModal.svelte");
   const markdown = component("MarkdownArtifact.svelte");
   const image = component("ImageArtifact.svelte");
+  const svg = component("SvgArtifact.svelte");
   const video = component("VideoArtifact.svelte");
   assert.match(viewer, /<MarkdownArtifact/);
   assert.match(viewer, /<ImageArtifact/);
+  assert.match(viewer, /widget\.mimeType === "image\/svg\+xml"/);
+  assert.match(viewer, /<SvgArtifact/);
   assert.match(viewer, /<VideoArtifact/);
   assert.match(markdown, /renderMarkdown/);
   assert.match(markdown, /<article class="pinned-markdown-viewer"/);
   assert.match(image, /<img \{src\} \{alt\}/);
+  assert.match(svg, /SVG remains in the browser's inert image context/);
+  assert.match(svg, /<img \{src\} \{alt\}/);
   assert.match(video, /<video/);
   assert.match(video, /controls=\{!thumbnail\}/);
-  for (const source of [viewer, markdown, image, video]) assert.doesNotMatch(source, /<iframe/);
+  for (const source of [viewer, markdown, image, svg, video]) assert.doesNotMatch(source, /<iframe/);
 });
 
 test("file explorer pins files and directories through scoped actions", () => {

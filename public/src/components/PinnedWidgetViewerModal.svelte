@@ -1,5 +1,6 @@
 <script>
   import ImageArtifact from "./ImageArtifact.svelte";
+  import SvgArtifact from "./SvgArtifact.svelte";
   import VideoArtifact from "./VideoArtifact.svelte";
   import MarkdownArtifact from "./MarkdownArtifact.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
@@ -19,6 +20,8 @@
   <div class="pinned-widget-viewer-stage">
     {#if widget.availability !== "ready"}
       <div class="pinned-widget-unavailable">This artifact is no longer available.</div>
+    {:else if widget.kind === "image" && widget.mimeType === "image/svg+xml"}
+      <SvgArtifact src={source} alt={widget.label} />
     {:else if widget.kind === "image"}
       <ImageArtifact src={source} alt={widget.label} />
     {:else if widget.kind === "video"}

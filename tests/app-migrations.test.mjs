@@ -27,7 +27,7 @@ test("numbered migrations apply once and report stable status", (t) => {
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
-  assert.deepEqual(first, { currentVersion: 13, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] });
+  assert.deepEqual(first, { currentVersion: 14, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] });
   assert.deepEqual(second, first);
   assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
@@ -44,6 +44,7 @@ test("numbered migrations apply once and report stable status", (t) => {
     { version: 11, name: "session_archiving", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 12, name: "pinned_widgets", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 13, name: "browser_video_containers", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 14, name: "svg_media", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 
@@ -60,6 +61,22 @@ test("video-container migration upgrades existing AVI file widgets", (t) => {
   applyMigrations(database);
   assert.deepEqual({ ...database.prepare("SELECT kind, mime_type FROM pinned_widgets WHERE id = 'legacy-avi'").get() }, {
     kind: "video", mime_type: "video/x-msvideo",
+  });
+});
+
+test("SVG migration upgrades existing vector file widgets", (t) => {
+  const database = databaseFixture(t);
+  applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 13) });
+  database.prepare(`
+    INSERT INTO pinned_widgets(
+      id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
+      mime_type, size, mtime_ms, created_at, updated_at
+    ) VALUES ('legacy-svg', NULL, 'workspace', NULL, 'file', 'Legacy SVG', 1,
+      '/workspace/legacy.svg', NULL, 'application/octet-stream', 12, 1, 'now', 'now')
+  `).run();
+  applyMigrations(database);
+  assert.deepEqual({ ...database.prepare("SELECT kind, mime_type FROM pinned_widgets WHERE id = 'legacy-svg'").get() }, {
+    kind: "image", mime_type: "image/svg+xml",
   });
 });
 
