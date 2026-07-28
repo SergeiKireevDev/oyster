@@ -3,7 +3,7 @@ import {
   deletePinnedWidgetGroup,
   pinLink,
   pinPath,
-  readPinnedMarkdown,
+  readPinnedTextArtifact,
   unpinWidget,
   updatePinnedWidget,
   updatePinnedWidgetGroup,
@@ -43,9 +43,9 @@ export function createPinnedWidgetRuntime(deps) {
       deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget } });
       return;
     }
-    if (widget.kind === "markdown") {
+    if (widget.kind === "markdown" || String(widget.mimeType ?? "").startsWith("text/html")) {
       try {
-        const data = await readPinnedMarkdown(deps.fetchImpl, widget.id);
+        const data = await readPinnedTextArtifact(deps.fetchImpl, widget.id);
         deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget: { ...widget, content: data.content } } });
       } catch (error) { deps.toast(error.message, "error"); }
       return;
@@ -66,16 +66,25 @@ export function createPinnedWidgetRuntime(deps) {
 
   async function manage(widget) {
     const groups = deps.getGroups().filter((group) => group.scope === widget.scope);
+    const destinations = [
+      ...(widget.groupId ? [{ label: "Top level", groupId: null }] : []),
+      ...groups.filter((group) => group.id !== widget.groupId).map((group) => ({ label: group.name, groupId: group.id })),
+    ];
     const actions = [
       { label: "Rename", run: async () => {
         const label = await deps.dialogs.openText("Rename pinned widget", "Widget label", widget.label);
         if (label?.trim()) await updatePinnedWidget(deps.fetchImpl, { id: widget.id, label, sessionId: sessionId() });
       } },
-      { label: "Move to top level", run: () => updatePinnedWidget(deps.fetchImpl, { id: widget.id, groupId: null, sessionId: sessionId() }) },
-      ...groups.filter((group) => group.id !== widget.groupId).map((group) => ({
-        label: `Move to ${group.name}`,
-        run: () => updatePinnedWidget(deps.fetchImpl, { id: widget.id, groupId: group.id, sessionId: sessionId() }),
-      })),
+      ...(destinations.length ? [{ label: "Move to", run: async () => {
+        const destination = await deps.dialogs.openOption(`Move ${widget.label} to`, destinations.map((item) => item.label));
+        if (destination != null) {
+          await updatePinnedWidget(deps.fetchImpl, {
+            id: widget.id,
+            groupId: destinations[destination].groupId,
+            sessionId: sessionId(),
+          });
+        }
+      } }] : []),
       ...(widget.kind === "live_interface" ? [{ label: "Close live interface", run: () => deps.closeLiveInterface(widget.hublotId) }] : []),
       { label: "Unpin", run: () => unpinWidget(deps.fetchImpl, widget.id) },
     ];
@@ -95,14 +104,18 @@ export function createPinnedWidgetRuntime(deps) {
   }
 
   async function manageGroup(group) {
-    const choice = await deps.dialogs.openOption(`Manage ${group.name}`, ["Rename", "Delete and ungroup widgets"]);
+    const choice = await deps.dialogs.openOption(`Manage ${group.name}`, [
+      "Rename",
+      "Delete and ungroup widgets",
+      "Delete group and all widgets",
+    ]);
     if (choice == null) return;
     try {
       if (choice === 0) {
         const name = await deps.dialogs.openText("Rename widget group", "Group name", group.name);
         if (name?.trim()) await updatePinnedWidgetGroup(deps.fetchImpl, { id: group.id, name, sessionId: sessionId() });
       } else {
-        await deletePinnedWidgetGroup(deps.fetchImpl, group.id, { ungroup: true });
+        await deletePinnedWidgetGroup(deps.fetchImpl, group.id, choice === 1 ? { ungroup: true } : { deleteWidgets: true });
       }
       await refresh();
     } catch (error) { deps.toast(error.message, "error"); }

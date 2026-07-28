@@ -105,7 +105,7 @@
 
 <CarouselIndicator />
 
-<div id="overlay" bind:this={overlayElement} class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
+<div id="overlay" bind:this={overlayElement} class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} class:markdown-reader-modal={$modalState.content === "pinnedWidgetViewer" && ($modalState.context?.widget?.kind === "markdown" || String($modalState.context?.widget?.mimeType ?? "").startsWith("text/html"))} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
   <div class="m-title" id="mTitle">
     {#if ["fileExplorer", "filePicker", "folderBrowser"].includes($modalState.content)}<FolderIcon size={17} />{/if}
     <span>{$modalState.title}</span>

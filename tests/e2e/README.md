@@ -8,7 +8,7 @@ no network model calls, fully deterministic**.
 
 | Spec | Scenario |
 |---|---|
-| `pinned-widgets.spec.js` | Open native artifact widgets, create a managed **live-interface widget** for a button service, assert it uses a status tile without an iframe, and preserve the mobile widget drawer through operations. |
+| `pinned-widgets.spec.js` | Open native artifact widgets, create a managed **live-interface widget** for a button service, drag it into a group with desktop or long-press touch input, assert it uses a status tile without an iframe, and preserve the mobile widget drawer through operations. |
 | `routine.spec.js` | Start a session → create a **dummy routine** in the store → ▶ run it from the sidebar to completion → 🧹 tear it down. |
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; autocomplete composer paths and fall back to the file explorer for large result sets. |

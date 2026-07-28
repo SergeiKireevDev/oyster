@@ -37,6 +37,20 @@ async function expectWidgetSidebarOpen(page, mobile) {
   if (mobile) await expect(page.locator("#hublots")).toHaveClass(/open/);
 }
 
+async function touchDragTo(page, source, target) {
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error("touch drag source or target is not visible");
+  const from = { x: sourceBox.x + sourceBox.width / 2, y: sourceBox.y + sourceBox.height / 2 };
+  const to = { x: targetBox.x + targetBox.width / 2, y: targetBox.y + targetBox.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...from, id: 1 }] });
+  await page.waitForTimeout(350);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...to, id: 1 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+}
+
 async function body(page, { mobile = false } = {}) {
   const marker = `e2e-widget-${Date.now()}`;
   const brief =
@@ -108,29 +122,29 @@ async function body(page, { mobile = false } = {}) {
   expect(served).toMatch(/<button/i);
   expect(served).toMatch(/click me/i);
 
+  const groupName = `${mobile ? "Mobile" : "Dragged"} group ${Date.now()}`;
+  const createdGroup = await api("POST", "/pinned-widget-groups", { name: groupName, sessionId, scope: "session" });
+  expect(createdGroup.status).toBe(201);
+
+  const group = page.locator("#hublots .pinned-widget-group-cell", { hasText: groupName });
+  await expect(group).toBeVisible();
+  await expect(group.locator(".pinned-widget-count")).toHaveText("0");
+
   if (mobile) {
-    // Touch users should not have to rely on HTML drag-and-drop. Create a group,
-    // move the widget through its management menu, then open the group.
-    const groupName = `Mobile group ${Date.now()}`;
-    await page.locator('#hublots button[title="Create a widget group"]').click();
-    await expect(page.locator("#mTitle")).toHaveText("New widget group");
-    await page.locator("#mBody input[type=text]").fill(groupName);
-    await page.locator("#mActions .btn", { hasText: "OK" }).click();
+    // Long-press the widget icon and drag it onto the group using real browser
+    // touch input; mobile browsers do not synthesize native HTML drop events.
+    await touchDragTo(page, liveWidget.locator(".pinned-widget-icon"), group);
     await expectWidgetSidebarOpen(page, true);
-
-    const group = page.locator("#hublots .pinned-widget-group-cell", { hasText: groupName });
-    await expect(group).toBeVisible();
-    await expect(group.locator(".pinned-widget-count")).toHaveText("0");
-
-    await liveWidget.locator(".pinned-widget-menu").click();
-    await expect(page.locator("#mTitle")).toContainText("Manage");
-    await page.locator("#mBody .m-option", { hasText: `Move to ${groupName}` }).click();
-    await expectWidgetSidebarOpen(page, true);
-    await expect(group.locator(".pinned-widget-count")).toHaveText("1");
-    await group.locator(".pinned-widget-tile").click();
-    await expect(page.locator("#hublots .pinned-widget-folder-title")).toHaveText(groupName);
-    await expect(liveWidget).toBeVisible();
+  } else {
+    // Exercise the desktop HTML drag-and-drop path rather than moving through
+    // the management menu. The drop must persist before the group is opened.
+    await liveWidget.dragTo(group);
   }
+
+  await expect(group.locator(".pinned-widget-count")).toHaveText("1");
+  await group.locator(".pinned-widget-tile").click();
+  await expect(page.locator("#hublots .pinned-widget-folder-title")).toHaveText(groupName);
+  await expect(liveWidget).toBeVisible();
 
   // Manage the widget through its three-dot menu. Closing the live interface
   // is separate from unpinning and must not dismiss the mobile widget drawer.
@@ -149,14 +163,14 @@ async function body(page, { mobile = false } = {}) {
 }
 
 test.describe("desktop", () => {
-  test("pin artifacts and manage a live-interface widget", async ({ page }) => {
+  test("drag a live-interface widget into a group", async ({ page }) => {
     await body(page);
   });
 });
 
 test.describe("mobile", () => {
   test.use({ viewport: MOBILE_VIEWPORT });
-  test("group a widget while keeping the sidebar open throughout mobile operations", async ({ page }) => {
+  test("touch-drag a widget into a group while keeping the sidebar open", async ({ page }) => {
     await body(page, { mobile: true });
   });
 });

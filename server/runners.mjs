@@ -39,6 +39,16 @@ const RUNNER_BUFFER_MAX = 400;
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 
+export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
+  "Artifact pinning policy:",
+  "Whenever this session creates or materially updates a documentation or media file, use the pinned_widget tool to pin that file before completing the task.",
+  "Documentation includes Markdown, text documents, PDFs, and standalone HTML files intended to be viewed directly; media includes images, audio, and video.",
+  "Pin a standalone HTML artifact with pinned_widget so it appears in the Pinned Widgets viewer.",
+  "If an HTML file is part of a web app or website being built or served, do not automatically pin or open it and do not automatically create a live-interface widget; only offer to open the app in a pinned widget, then wait for explicit user confirmation.",
+  "When one task produces four or more qualifying files, call group_pinned_widgets once with a short descriptive group name in `group` and every artifact path in `paths`; this creates one dedicated pinned-widget group containing all of the task's qualifying files.",
+  "Do not merely mention the artifacts, and do not pin other source code, configuration, or test files solely because of this policy.",
+].join(" ");
+
 // Pi processes that the user never sent a real message to (sessionName is
 // still null) are leaked workers spawned for work that never followed through.
 // They sit idle, burning RAM and
@@ -394,7 +404,12 @@ export function createRunnerManager(state, {
       desired_state: "running", last_status: "starting", start_count: runner.startCount, last_started_at: startedAt,
     });
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
-    const args = ["--mode", "rpc", ...sqliteResumeArgs, ...config.PI_EXTRA_ARGS];
+    const args = [
+      "--mode", "rpc",
+      ...sqliteResumeArgs,
+      ...config.PI_EXTRA_ARGS,
+      "--append-system-prompt", PINNED_ARTIFACT_SYSTEM_PROMPT,
+    ];
     console.log(`[oyster] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
     const proc = piProcesses.launch(args, {
       cwd: runner.dir,
