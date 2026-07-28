@@ -94,7 +94,7 @@ See [Installation](docs/getting-started/installation.md), [Configuration](docs/g
 - **Made for mobile** — steer an active agent, review work, and manage sessions from your phone.
 
 <p align="center">
-  <img src="docs/images/oyster-mobile.png" alt="Oyster mobile workspace" width="390">
+  <img src="docs/images/oyster-mobile.gif" alt="Creating a mobile Oyster session and opening a Markdown document in a hublot" width="390">
 </p>
 
 <p align="center">
