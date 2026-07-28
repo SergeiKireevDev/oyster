@@ -63,15 +63,15 @@ export function createVoiceInputController({
   recognition.onresult = (event) => {
     if (disposed) return;
     const results = event.results;
-    let speech = "";
-    for (let index = 0; index < (results?.length ?? 0); index++) {
-      // Safari exposes parts through item() on some versions instead of
-      // reliably supporting bracket indexing on these WebIDL list objects.
-      const result = results[index] ?? results.item?.(index);
-      const alternative = result?.[0] ?? result?.item?.(0);
-      speech += alternative?.transcript ?? "";
-    }
-    if (speech.trim()) setDraft(combinedDraft(speech.trim()));
+    const index = (results?.length ?? 0) - 1;
+    // Chrome sends the complete accumulated transcript on every result event,
+    // so replace the streamed portion with the newest value instead of
+    // appending each cumulative update. Safari may expose these list entries
+    // only through item().
+    const result = index >= 0 ? results[index] ?? results.item?.(index) : null;
+    const alternative = result?.[0] ?? result?.item?.(0);
+    const speech = String(alternative?.transcript ?? "").trim();
+    if (speech) setDraft(combinedDraft(speech));
   };
   recognition.onnomatch = () => {
     if (!disposed) onError("Speech wasn't recognized");
