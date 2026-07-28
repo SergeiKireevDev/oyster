@@ -11,9 +11,10 @@
 set -euo pipefail
 
 if [ "${E2E_MOCK_LLM:-0}" = "1" ]; then
-  # Keep hublot tests offline and deterministic while preserving the tunnel
-  # process URL contract consumed by tunnels.mjs.
-  export TUNNEL_BIN=/usr/local/bin/e2e-cloudflared
+  # Keep hublot tests offline and deterministic by default while preserving the
+  # tunnel process URL contract consumed by tunnels.mjs. Persistent test/staging
+  # containers can explicitly select real Cloudflare without losing the mock LLM.
+  export TUNNEL_BIN="${TUNNEL_BIN:-/usr/local/bin/e2e-cloudflared}"
   MOCK_PORT="${MOCK_PORT:-4010}"
   MODEL_ID="${MOCK_MODEL_ID:-e2e-mock}"
   mkdir -p /root/.pi/agent
