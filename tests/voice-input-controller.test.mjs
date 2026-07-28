@@ -32,7 +32,9 @@ test("voice input appends live recognition to the existing draft", () => {
   FakeRecognition.instance.onstart();
   FakeRecognition.instance.onspeechstart();
   assert.deepEqual(states.at(-1), { available: true, listening: true, speaking: true });
-  FakeRecognition.instance.onresult(speechResult("write ", "the tests"));
+  FakeRecognition.instance.onresult(speechResult("write"));
+  assert.equal(draft, "Please write");
+  FakeRecognition.instance.onresult(speechResult("write", "write the tests"));
   assert.equal(draft, "Please write the tests");
   FakeRecognition.instance.onspeechend();
   assert.deepEqual(states.at(-1), { available: true, listening: true, speaking: false });
