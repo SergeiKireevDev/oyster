@@ -16,6 +16,7 @@ const resourceActionNames = [
   "fileExplorer.edit",
   "fileExplorer.save",
   "fileExplorer.upload",
+  "fileExplorer.pin",
   "fileExplorer.back",
   "fileExplorer.returnToHublots",
   "fileExplorer.open",
@@ -24,6 +25,14 @@ const resourceActionNames = [
   "hublot.toggleScope",
   "hublot.remove",
   "hublot.openCommandPalette",
+  "pinnedWidget.open",
+  "pinnedWidget.manage",
+  "pinnedWidget.move",
+  "pinnedWidget.pinPath",
+  "pinnedWidget.pinLink",
+  "pinnedWidget.createGroup",
+  "pinnedWidget.renameGroup",
+  "pinnedWidget.reveal",
   "routine.run",
   "routine.showGenerator",
   "routine.generate",
@@ -48,7 +57,7 @@ test("UI action registry replacement registration keeps only the current handler
 
 test("resource UI action names are complete, unique, and feature-namespaced", () => {
   const exportedResourceNames = Object.values(uiActionNames).filter((name) =>
-    /^(?:filePicker|folderBrowser|fileExplorer|hublot|routine)\./.test(name),
+    /^(?:filePicker|folderBrowser|fileExplorer|hublot|pinnedWidget|routine)\./.test(name),
   );
 
   assert.deepEqual([...exportedResourceNames].sort(), [...resourceActionNames].sort());

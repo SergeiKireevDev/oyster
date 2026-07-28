@@ -5,7 +5,7 @@ import { createTunnelRoutes } from "../server/http/routes/tunnelRoutes.mjs";
 const response = () => ({});
 
 test("tunnel routes prepare the local service before opening and publishing its tunnel", async () => {
-  const events = [], agents = [], closed = [], owners = [], order = [];
+  const events = [], agents = [], closed = [], owners = [], pins = [], order = [];
   const state = { tunnels: new Map(), serverEvent: (event) => events.push(event) };
   const listTunnels = () => [...state.tunnels.values()].map(({ proc, ...t }) => t);
   const routes = createTunnelRoutes({
@@ -16,6 +16,7 @@ test("tunnel routes prepare the local service before opening and publishing its 
       readJsonBody: async (req) => req.body,
     },
     listTunnels,
+    pinHublot: (hublot) => { pins.push(hublot.id); order.push(`pin:${hublot.id}`); },
     reserveHublot: (_state, options) => {
       order.push("reserved");
       const reserved = { id: "t1", status: "opening", url: null, service_start_script_path: "/agent/hublots/t1/start.sh", ...options };
@@ -29,13 +30,14 @@ test("tunnel routes prepare the local service before opening and publishing its 
   });
   const created = response(); await routes["POST /tunnels"]({ body: { port: 4000, sessionId: "s1", brief: "serve" } }, created);
   assert.equal(created.status, 201);
-  assert.deepEqual(order, ["owner:s1", "reserved", "service", "tunnel"]);
+  assert.deepEqual(order, ["owner:s1", "reserved", "pin:t1", "service", "tunnel"]);
   assert.deepEqual(agents, [[4000, "serve", "/agent/hublots/t1/start.sh"]]);
   assert.equal(created.body.tunnel.servicePid, 123);
   const rebound = response(); await routes["PATCH /tunnels"]({ body: { id: "t1", sessionId: "s2" } }, rebound);
   assert.equal(events[0].type, "tunnel_opening");
   assert.equal(rebound.body.tunnel.sessionId, "s2"); assert.equal(events[1].type, "tunnel_opened");
   assert.deepEqual(owners, ["s1", "s2"]);
+  assert.deepEqual(pins, ["t1", "t1"]);
   const removed = response(); routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
 });

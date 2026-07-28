@@ -25,9 +25,9 @@ test("prompt picker checkpoint and hublot modal controls use native buttons", ()
   assert.match(read("CheckpointModelPickerModal.svelte"), /<button class="chip" data-modal-cancel onclick=\{cancelCheckpointModelPicker\}>Cancel<\/button>/);
 
   const hublot = read("HublotManagerModal.svelte");
-  assert.match(hublot, /<button class="chip" title="toggle between this session's tunnels and all of them" onclick=\{toggleManagedHublotScope\}>/);
+  assert.match(hublot, /<button class="chip" title="toggle between this session's live interfaces and all of them" onclick=\{toggleManagedHublotScope\}>/);
   assert.match(hublot, /<button class="chip" data-modal-cancel onclick=\{closeModalState\}>Close<\/button>/);
-  assert.match(hublot, /<button\s+class="x"\s+title="close this hublot"/);
+  assert.match(hublot, /<button\s+class="x"\s+title="close this live interface"/);
 });
 
 test("overlay provides shared keyboard navigation and cancellation", () => {

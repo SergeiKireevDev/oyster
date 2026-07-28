@@ -315,6 +315,84 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       },
       listProcesses: (hublotId) => database.prepare("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id").all(hublotId).map((row) => ({ ...row })),
     }),
+    pinnedWidgets: Object.freeze({
+      list: () => database.prepare(`
+        SELECT w.*, s.session_id
+        FROM pinned_widgets w LEFT JOIN app_sessions s ON s.id = w.owner_id
+        ORDER BY w.scope, w.owner_id, w.group_id, w.position, w.id
+      `).all().map((row) => ({ ...row })),
+      find: (id) => {
+        const row = database.prepare(`
+          SELECT w.*, s.session_id
+          FROM pinned_widgets w LEFT JOIN app_sessions s ON s.id = w.owner_id
+          WHERE w.id = ?
+        `).get(id);
+        return row ? { ...row } : null;
+      },
+      create: ({
+        id, ownerId = null, scope, groupId = null, kind, label, position,
+        target = null, hublotId = null, mimeType = null, size = null,
+        mtimeMs = null, createdAt, updatedAt = createdAt,
+      }) => {
+        database.prepare(`
+          INSERT INTO pinned_widgets(
+            id, owner_id, scope, group_id, kind, label, position, target,
+            hublot_id, mime_type, size, mtime_ms, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, ownerId, scope, groupId, kind, label, position, target,
+          hublotId, mimeType, size, mtimeMs, createdAt, updatedAt);
+        return repositories.pinnedWidgets.find(id);
+      },
+      update: (id, changes) => {
+        const allowed = new Set([
+          "owner_id", "scope", "group_id", "kind", "label", "position",
+          "target", "hublot_id", "mime_type", "size", "mtime_ms", "updated_at",
+        ]);
+        const entries = Object.entries(changes ?? {});
+        if (!entries.length) return 0;
+        for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported pinned widget field: ${column}`);
+        return database.prepare(`UPDATE pinned_widgets SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`)
+          .run(...entries.map(([, value]) => value), id).changes;
+      },
+      delete: (id) => database.prepare("DELETE FROM pinned_widgets WHERE id = ?").run(id).changes,
+      nextPosition: ({ ownerId = null, scope, groupId = null }) => Number(database.prepare(`
+        SELECT COALESCE(MAX(position), -1) + 1 AS position
+        FROM pinned_widgets WHERE scope = ? AND owner_id IS ? AND group_id IS ?
+      `).get(scope, ownerId, groupId).position),
+      listGroups: () => database.prepare(`
+        SELECT g.*, s.session_id
+        FROM pinned_widget_groups g LEFT JOIN app_sessions s ON s.id = g.owner_id
+        ORDER BY g.scope, g.owner_id, g.position, g.id
+      `).all().map((row) => ({ ...row })),
+      findGroup: (id) => {
+        const row = database.prepare(`
+          SELECT g.*, s.session_id
+          FROM pinned_widget_groups g LEFT JOIN app_sessions s ON s.id = g.owner_id
+          WHERE g.id = ?
+        `).get(id);
+        return row ? { ...row } : null;
+      },
+      createGroup: ({ id, ownerId = null, scope, name, position, createdAt, updatedAt = createdAt }) => {
+        database.prepare(`
+          INSERT INTO pinned_widget_groups(id, owner_id, scope, name, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(id, ownerId, scope, name, position, createdAt, updatedAt);
+        return repositories.pinnedWidgets.findGroup(id);
+      },
+      updateGroup: (id, changes) => {
+        const allowed = new Set(["owner_id", "scope", "name", "position", "updated_at"]);
+        const entries = Object.entries(changes ?? {});
+        if (!entries.length) return 0;
+        for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported pinned widget group field: ${column}`);
+        return database.prepare(`UPDATE pinned_widget_groups SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`)
+          .run(...entries.map(([, value]) => value), id).changes;
+      },
+      deleteGroup: (id) => database.prepare("DELETE FROM pinned_widget_groups WHERE id = ?").run(id).changes,
+      nextGroupPosition: ({ ownerId = null, scope }) => Number(database.prepare(`
+        SELECT COALESCE(MAX(position), -1) + 1 AS position
+        FROM pinned_widget_groups WHERE scope = ? AND owner_id IS ?
+      `).get(scope, ownerId).position),
+    }),
     runners: Object.freeze({
       list: () => database.prepare("SELECT * FROM runners ORDER BY created_at, id").all().map((row) => ({ ...row })),
       find: (id) => {

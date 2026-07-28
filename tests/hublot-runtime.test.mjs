@@ -62,22 +62,21 @@ test("hublot runtime removal preserves stores and reports network failures", asy
   assert.deepEqual(calls, [["toast", "close hublot failed: already closed", "error"]]);
 });
 
-test("hublot components route feature workflows through scoped actions", () => {
+test("live-interface widgets route workflows through scoped actions without eager iframes", () => {
   const sidebar = readFileSync(new URL("../public/src/components/HublotSidebar.svelte", import.meta.url), "utf8");
-  const list = readFileSync(new URL("../public/src/components/HublotList.svelte", import.meta.url), "utf8");
+  const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
   const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
 
   assert.match(sidebar, /uiActions\.invoke\(HUBLOT_SHOW_ACTION\)/);
-  assert.match(list, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
+  assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_MANAGE_ACTION, widget\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_CREATE_ACTION, description\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_TOGGLE_SCOPE_ACTION\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node\)/);
-  assert.match(list, /preview pending/);
-  assert.match(list, /<iframe[^>]+loading="eager"/);
-  assert.doesNotMatch(list, /<iframe[^>]+loading="lazy"/);
+  assert.doesNotMatch(grid, /<iframe/);
+  assert.doesNotMatch(manager, /<iframe/);
   assert.match(manager, /Waiting for Cloudflare/);
-  for (const source of [sidebar, list, manager]) {
+  for (const source of [sidebar, grid, manager]) {
     assert.doesNotMatch(source, /features\/hublots\/hublotActions\.js|removeHublot\(fetch|addToast/);
   }
 });

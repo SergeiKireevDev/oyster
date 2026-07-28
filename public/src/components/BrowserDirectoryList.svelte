@@ -10,6 +10,7 @@
   export let showWorkdir = false;
   export let showPath = true;
   export let onBrowse = () => {};
+  export let onPin = null;
 
   $: visibleDirs = visibleBrowserEntries(dirs, showHidden);
   $: hasNavigation = path !== home || (showWorkdir && workdir && path !== workdir) || parent;
@@ -32,5 +33,9 @@
   <div class="browser-directory-separator" role="separator" aria-label="Folders"></div>
 {/if}
 {#each visibleDirs as dir (dir.name)}
-  <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => onBrowse(browserPathFor(path, dir))}>{dir.name}</button>
+  {@const fullPath = browserPathFor(path, dir)}
+  <div class="browser-directory-row">
+    <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => onBrowse(fullPath)}>{dir.name}</button>
+    {#if onPin}<button type="button" class="chip" title={`pin ${dir.name}`} onclick={() => onPin(fullPath)}>⌖</button>{/if}
+  </div>
 {/each}

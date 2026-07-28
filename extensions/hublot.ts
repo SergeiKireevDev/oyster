@@ -60,9 +60,9 @@ async function api(method: string, path: string, body?: unknown) {
 export default function hublotExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "hublot",
-    label: "Hublot",
+    label: "Live Interface",
     description:
-      "Manage hublots — public web interfaces (cloudflared tunnels to local ports) for this " +
+      "Manage live-interface widgets (legacy name: hublots) — public web interfaces (cloudflared tunnels to local ports) for this " +
       "session. When the user asks to 'create/open a hublot', use this tool. " +
       "Actions: 'open' creates a hublot — the server allocates a free local port and returns " +
       "the public URL. Normally a background agent serves `description`; deterministic " +
@@ -73,12 +73,12 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "session's hublots. Opened hublots appear automatically in the Oyster. " +
       "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
       "are closed instead of recreated; use 'open' afterwards to obtain a fresh URL.",
-    promptSnippet: "Open/close/list hublots (public web interfaces / tunnels) for this session",
+    promptSnippet: "Open/close/list public live-interface widgets (hublot tunnels) for this session",
     promptGuidelines: [
-      "A 'hublot' is a public web interface. Use hublot with action=open and a clear " +
+      "A 'hublot' is a public live-interface widget. Use hublot with action=open only when public access is required, and provide a clear " +
         "description of what should be served. For ordinary hublots, the background agent " +
         "will create and persist an idempotent startup script before the tunnel opens.",
-      "To expose a Markdown document, use hublot with action=open, type=markdown, and an " +
+      "For private Markdown display, use pinned_widget. Only to expose a Markdown document publicly, use hublot with action=open, type=markdown, and an " +
         "absolute path to the Markdown file; the bundled Node.js Markdown reader starts directly.",
       "To expose a Git worktree for clone, fetch, or pull, use hublot with action=open, " +
         "type=git-server, and the absolute worktree path. The deterministic read-only Smart " +

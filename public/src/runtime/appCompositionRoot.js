@@ -31,7 +31,7 @@ import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
 import { setComposerTextValue, setComposerVoiceState } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
-import { hublots, hublotsLoading } from "../stores/hublots.js";
+import { pinnedWidgetGroups, pinnedWidgets, pinnedWidgetsLoading, setPinnedWidgetCollection } from "../stores/pinnedWidgets.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
 import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { resetRoutineManager, updateRoutineManager } from "../stores/routineManager.js";
@@ -41,6 +41,8 @@ import { createCheckpointAssembly } from "../features/checkpoints/createCheckpoi
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
 import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
+import { listPinnedWidgets } from "../lib/pinnedWidgetActions.js";
+import { createPinnedWidgetRuntime } from "../features/pinned-widgets/createPinnedWidgetRuntime.js";
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
 import { generateRoutine, listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
@@ -546,15 +548,20 @@ const resourceAssembly = createResourceAssembly({
     close: closeModal,
     toast: addToast,
     listHublots: () => listHublots(fetch),
-    listSidebarHublots: (visible) => listHublots(fetch, visible),
+    listSidebarHublots: async () => {
+      const collection = await listPinnedWidgets(fetch, { sessionId: getSessionState()?.sessionId ?? null });
+      pinnedWidgetGroups.set(collection.groups ?? []);
+      return collection.widgets ?? [];
+    },
     isAuthenticated: () => Boolean(token),
-    setSidebarLoading: hublotsLoading.set,
-    setSidebarTunnels: hublots.set,
+    setSidebarLoading: pinnedWidgetsLoading.set,
+    setSidebarTunnels: pinnedWidgets.set,
     deleteHublot: (id) => removeHublot(fetch, id),
-    removeSidebarHublot: (id) => hublots.update((items) => items.filter((item) => item.id !== id)),
+    // Closing a live interface does not unpin its durable widget.
+    removeSidebarHublot: () => {},
     removeManagerHublot: (id) => hublotManager.update((state) => ({ ...state, tunnels: state.tunnels.filter((tunnel) => tunnel.id !== id) })),
     updateManager: updateHublotManager,
-    updateTitle: (scope) => updateModal({ title: scope ? "Hublots — all sessions" : "Hublots — this session" }),
+    updateTitle: (scope) => updateModal({ title: scope ? "Live interface widgets — all sessions" : "Pin widget" }),
   },
   routines: {
     listRoutines: () => listRoutines(fetch),
@@ -664,8 +671,8 @@ const folderBrowserActions = {
 // per-file actions — download the file, or edit it right in the modal.
 
 
-// Always open in the current session's working directory.
-const showFileExplorer = () => resourceOperations.showFileExplorer(getWorkdir());
+// Open in the current workdir unless a pinned artifact supplies a directory.
+const showFileExplorer = (path = getWorkdir()) => resourceOperations.showFileExplorer(path);
 
 const uploadExplorerFiles = () => fileExplorerController.chooseFiles(fileExplorerState.curPath);
 
@@ -681,6 +688,7 @@ const fileExplorerActions = {
   edit: editExplorerFile,
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
+  pin: (path) => pinArtifactPath(path),
   back: () => loadFileExplorer(fileExplorerState.curPath),
   backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
 };
@@ -700,11 +708,29 @@ const hublotActions = {
   show: () => showHublots().catch((e) => addToast(e.message, "error")),
   create: createManagedHublot,
   toggleScope: toggleManagedHublotScope,
-  remove: hublotRuntime.removeHublot,
+  remove: async (id) => { await hublotRuntime.removeHublot(id); await loadHublots(); },
   openCommandPalette: setupCommandPalette,
 };
 
 const loadHublots = resourceOperations.loadHublots;
+
+const pinnedWidgetRuntime = createPinnedWidgetRuntime({
+  fetchImpl: runtimeFetch,
+  getSessionId: () => getSessionState()?.sessionId,
+  getGroups: () => get(pinnedWidgetGroups),
+  setCollection: setPinnedWidgetCollection,
+  toast: addToast,
+  dialogs: dialogService,
+  openExternal: browserActions.openExternal,
+  showFileExplorer,
+  editFile: editExplorerFile,
+  openModal,
+  closeModal,
+  closeLiveInterface: (id) => hublotRuntime.removeHublot(id),
+  load: () => loadHublots(),
+});
+function pinArtifactPath(path) { return pinnedWidgetRuntime.pinPath(path); }
+const pinnedWidgetActions = pinnedWidgetRuntime.actions;
 
 const filesActions = {
   openExplorer: () => showFileExplorer().catch((e) => addToast(e.message, "error")),
@@ -753,6 +779,7 @@ resourceAssembly.configureActions({
   fileExplorer: fileExplorerActions,
   files: filesActions,
   hublots: hublotActions,
+  pinnedWidgets: pinnedWidgetActions,
   routine: {
     run: routineController.run,
     showGenerator: showRoutineGenerator,

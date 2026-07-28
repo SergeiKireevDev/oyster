@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, acquireHublotTunnelPoolEntry = null, activateHublotTunnelPoolEntry = null, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner = () => null }) {
+export function createTunnelRoutes({ state, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, acquireHublotTunnelPoolEntry = null, activateHublotTunnelPoolEntry = null, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner = () => null, pinHublot = () => null }) {
   const { json, readJsonBody } = requestContext;
   return {
     "GET /tunnels": (req, res) => {
@@ -49,6 +49,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
         if (!reserved) reserved = requestedPort
           ? reserveHublot(state, options)
           : await allocateHublot(state, options);
+        pinHublot(reserved);
         const opening = listTunnels(state).find((item) => item.id === reserved.id);
         if (opening) state.serverEvent?.({ type: "tunnel_opening", tunnel: opening });
         const reservedOptions = {
@@ -103,6 +104,7 @@ export function createTunnelRoutes({ state, config, requestContext, listTunnels,
       const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
       const owner = sessionId ? ensureSessionOwner(sessionId) : null;
       const rebound = rebindHublot(state, t.id, owner?.id ?? null);
+      pinHublot(rebound);
       state.serverEvent({ type: "tunnel_opened", tunnel: listTunnels(state).find((x) => x.id === t.id) });
       json(res, 200, { tunnel: listTunnels(state).find((x) => x.id === t.id) });
     },

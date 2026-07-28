@@ -247,6 +247,75 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX app_sessions_archived_idx ON app_sessions(archived);
     `,
   }),
+  Object.freeze({
+    version: 12,
+    name: "pinned_widgets",
+    sql: `
+      CREATE TABLE pinned_widget_groups (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope IN ('session', 'workspace')),
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 80),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((scope = 'workspace' AND owner_id IS NULL) OR (scope = 'session' AND owner_id IS NOT NULL))
+      ) WITHOUT ROWID;
+
+      CREATE TABLE pinned_widgets (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope IN ('session', 'workspace')),
+        group_id TEXT REFERENCES pinned_widget_groups(id) ON DELETE SET NULL,
+        kind TEXT NOT NULL CHECK (kind IN (
+          'live_interface', 'image', 'video', 'markdown', 'file', 'directory', 'builtin', 'link'
+        )),
+        label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 200),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        target TEXT,
+        hublot_id TEXT REFERENCES hublots(id) ON DELETE SET NULL,
+        mime_type TEXT,
+        size INTEGER CHECK (size IS NULL OR size >= 0),
+        mtime_ms INTEGER CHECK (mtime_ms IS NULL OR mtime_ms >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((scope = 'workspace' AND owner_id IS NULL) OR (scope = 'session' AND owner_id IS NOT NULL)),
+        CHECK (kind = 'live_interface' OR hublot_id IS NULL),
+        CHECK ((kind IN ('image', 'video', 'markdown', 'file', 'directory', 'link') AND target IS NOT NULL)
+          OR (kind IN ('live_interface', 'builtin')))
+      ) WITHOUT ROWID;
+
+      CREATE INDEX pinned_widget_groups_scope_position_idx
+        ON pinned_widget_groups(scope, owner_id, position, id);
+      CREATE INDEX pinned_widgets_scope_group_position_idx
+        ON pinned_widgets(scope, owner_id, group_id, position, id);
+      CREATE UNIQUE INDEX pinned_widgets_hublot_idx
+        ON pinned_widgets(hublot_id) WHERE hublot_id IS NOT NULL;
+      CREATE UNIQUE INDEX pinned_widgets_builtin_workspace_idx
+        ON pinned_widgets(target) WHERE kind = 'builtin' AND scope = 'workspace';
+
+      INSERT INTO pinned_widgets(
+        id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
+        mime_type, size, mtime_ms, created_at, updated_at
+      ) VALUES (
+        'builtin:file-explorer', NULL, 'workspace', NULL, 'builtin',
+        'Files', 0, 'file-explorer', NULL, NULL, NULL, NULL,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+
+      INSERT OR IGNORE INTO pinned_widgets(
+        id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
+        mime_type, size, mtime_ms, created_at, updated_at
+      )
+      SELECT 'hublot:' || id, owner_id,
+        CASE WHEN owner_id IS NULL THEN 'workspace' ELSE 'session' END,
+        NULL, 'live_interface', COALESCE(NULLIF(trim(label), ''), 'Live interface'),
+        1000 + row_number() OVER (ORDER BY created_at, id), NULL, id,
+        NULL, NULL, NULL, created_at, created_at
+      FROM hublots
+      WHERE desired_state = 'open' OR status <> 'closed';
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

@@ -15,6 +15,7 @@
   import FolderBrowserModal from "./FolderBrowserModal.svelte";
   import HublotManagerModal from "./HublotManagerModal.svelte";
   import OptionPickerModal from "./OptionPickerModal.svelte";
+  import PinnedWidgetViewerModal from "./PinnedWidgetViewerModal.svelte";
   import RoutineManagerModal from "./RoutineManagerModal.svelte";
   import SettingsModal from "./SettingsModal.svelte";
   import SessionPickerModal from "./SessionPickerModal.svelte";
@@ -137,6 +138,8 @@
         <LlmboxWorkspaceModal spoke={$modalState.context?.spoke || ""} environmentName={$modalState.context?.environmentName || ""} />
       {:else if $modalState.content === "hublotManager"}
         <HublotManagerModal />
+      {:else if $modalState.content === "pinnedWidgetViewer"}
+        <PinnedWidgetViewerModal />
       {:else if $modalState.content === "routineManager"}
         <RoutineManagerModal />
       {:else if $modalState.content === "folderBrowser"}

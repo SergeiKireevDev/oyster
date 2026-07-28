@@ -24,6 +24,7 @@ export const FILE_EXPLORER_BROWSE_ACTION = "fileExplorer.browse";
 export const FILE_EXPLORER_EDIT_ACTION = "fileExplorer.edit";
 export const FILE_EXPLORER_SAVE_ACTION = "fileExplorer.save";
 export const FILE_EXPLORER_UPLOAD_ACTION = "fileExplorer.upload";
+export const FILE_EXPLORER_PIN_ACTION = "fileExplorer.pin";
 export const FILE_EXPLORER_BACK_ACTION = "fileExplorer.back";
 export const FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION = "fileExplorer.returnToHublots";
 export const FILE_EXPLORER_OPEN_ACTION = "fileExplorer.open";
@@ -33,6 +34,15 @@ export const HUBLOT_CREATE_ACTION = "hublot.create";
 export const HUBLOT_TOGGLE_SCOPE_ACTION = "hublot.toggleScope";
 export const HUBLOT_REMOVE_ACTION = "hublot.remove";
 export const HUBLOT_OPEN_COMMAND_PALETTE_ACTION = "hublot.openCommandPalette";
+
+export const PINNED_WIDGET_OPEN_ACTION = "pinnedWidget.open";
+export const PINNED_WIDGET_MANAGE_ACTION = "pinnedWidget.manage";
+export const PINNED_WIDGET_MOVE_ACTION = "pinnedWidget.move";
+export const PINNED_WIDGET_PIN_PATH_ACTION = "pinnedWidget.pinPath";
+export const PINNED_WIDGET_PIN_LINK_ACTION = "pinnedWidget.pinLink";
+export const PINNED_WIDGET_CREATE_GROUP_ACTION = "pinnedWidget.createGroup";
+export const PINNED_WIDGET_RENAME_GROUP_ACTION = "pinnedWidget.renameGroup";
+export const PINNED_WIDGET_REVEAL_ACTION = "pinnedWidget.reveal";
 
 export const ROUTINE_RUN_ACTION = "routine.run";
 export const ROUTINE_SHOW_GENERATOR_ACTION = "routine.showGenerator";

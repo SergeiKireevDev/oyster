@@ -27,14 +27,14 @@
 </div>
 
 {#if $hublotManager.loading}
-  <div class="m-path"><span class="spin"></span> loading hublots…</div>
+  <div class="m-path"><span class="spin"></span> loading live interfaces…</div>
 {:else if !$hublotManager.tunnels.length}
   <div class="m-path">
     {$hublotManager.scopeAll
-      ? "(no active hublots)"
+      ? "(no active live interfaces)"
       : $hublotManager.total
         ? `(none for this session — ${$hublotManager.total} in other sessions)`
-        : "(no active hublots)"}
+        : "(no active live interfaces)"}
   </div>
 {:else}
   <div class="hublot-grid">
@@ -46,15 +46,9 @@
             <span>Waiting for Cloudflare…</span>
           </div>
         {:else}
-          <div class="preview">
-            <iframe src={tunnel.url} loading="lazy" sandbox="allow-scripts allow-same-origin" title={tunnel.label ?? tunnel.url}></iframe>
-            <button
-              type="button"
-              class="hit"
-              title={`open ${tunnel.url}`}
-              onclick={() => browserActions.openExternal(tunnel.url)}
-            ></button>
-          </div>
+          <button type="button" class="preview builtin live-interface-preview" title={`open ${tunnel.url}`} onclick={() => browserActions.openExternal(tunnel.url)}>
+            <span aria-hidden="true">◉</span><span>Live</span>
+          </button>
         {/if}
         <div class="cap">
           <span class="lbl" title={`${tunnel.url}\n${tunnel.label ?? ""}`}>
@@ -68,7 +62,7 @@
           </span>
           <button
             class="x"
-            title="close this hublot"
+            title="close this live interface"
             onclick={() => closeManagedHublot(tunnel.id)}
           >✕</button>
         </div>
@@ -78,12 +72,12 @@
 {/if}
 
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--border,#333);padding-top:12px;">
-  <div style="font-weight:600;font-size:13.5px;">New hublot</div>
+  <div style="font-weight:600;font-size:13.5px;">New live interface widget</div>
   <div style="display:flex;gap:6px;align-items:flex-start;">
     <textarea
       use:commandPalette
       rows="3"
-      placeholder="What should the agent expose through this hublot? (e.g. “the vite dev server for the dashboard, with hot reload”)"
+      placeholder="What should the agent expose? (e.g. “the Vite dashboard with hot reload”)"
       style="resize:vertical;flex:1;min-width:0;"
       value={$hublotManager.desc}
       oninput={(event) => updateHublotManager({ desc: event.currentTarget.value })}
@@ -93,11 +87,11 @@
     {#if $hublotManager.creating}
       <span class="spin"></span> Waiting for Cloudflare…
     {:else}
-      Open hublot
+      Create live interface widget
     {/if}
   </button>
 </div>
 <div class="m-actions" id="mActions">
-  <button class="chip" title="toggle between this session's tunnels and all of them" onclick={toggleManagedHublotScope}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</button>
+  <button class="chip" title="toggle between this session's live interfaces and all of them" onclick={toggleManagedHublotScope}>{$hublotManager.scopeAll ? "This session only" : "All sessions"}</button>
   <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>
