@@ -53,7 +53,7 @@ test("hublot stream controller refreshes opening placeholders and ready previews
   assert.deepEqual(calls.slice(1), ["refresh", ["schedule", 5000], ["schedule", 15000]]);
   calls.length = 0;
   assert.equal(controller({ type: "hublot_failed", error: "not reachable" }), true);
-  assert.deepEqual(calls, [["toast", "hublot failed: not reachable", "error"], "refresh"]);
+  assert.deepEqual(calls, [["toast", "live interface failed: not reachable", "error"], "refresh"]);
 });
 
 test("carousel gesture classifier distinguishes taps and axes", () => {

@@ -31,10 +31,10 @@ export function createHublotController({ createHublot, getSessionId, setDescript
   async function create(description) {
     const text = (description ?? "").trim();
     setDescription(description ?? "");
-    if (!text) { toast("describe what the hublot should expose", "warning"); return; }
+    if (!text) { toast("describe what the live interface should expose", "warning"); return; }
     setCreating(true);
-    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`hublot ready at ${data.tunnel.url}`); }
-    catch (error) { toast(`hublot failed: ${error.message}`, "error"); } finally { setCreating(false); }
+    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`live interface ready at ${data.tunnel.url}`); }
+    catch (error) { toast(`live interface failed: ${error.message}`, "error"); } finally { setCreating(false); }
   }
   async function refresh({ loading = false } = {}) {
     const common = { scopeAll: getScopeAll(), currentSessionId: getSessionId(), desc: getDescription() };

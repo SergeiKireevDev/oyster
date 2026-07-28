@@ -10,7 +10,18 @@ import { loadConfig, validateConfig } from "../oyster-hub/config.mjs";
 import { deriveWorkspaceToken } from "../oyster-hub/drivers/llmbox.mjs";
 import { createWorkspaceDriver } from "../oyster-hub/drivers/index.mjs";
 import { createMockWorkspaceDriver } from "../oyster-hub/drivers/mock.mjs";
-import { parseScopedValue } from "../oyster-hub/ui-gateway.mjs";
+import { parseScopedValue, scopePinnedWidget, scopePinnedWidgetGroup } from "../oyster-hub/ui-gateway.mjs";
+
+test("Hub scopes pinned widget, group, hublot, and session identities to one workspace", () => {
+  const workspace = { id: "box-a", name: "Box A", environmentId: "local" };
+  const group = scopePinnedWidgetGroup(workspace, { id: "g1", name: "Media", sessionId: "s1" });
+  const widget = scopePinnedWidget(workspace, { id: "w1", label: "Clip", groupId: "g1", hublotId: "h1", sessionId: "s1" });
+  assert.deepEqual(parseScopedValue(group.id), { workspaceId: "box-a", kind: "pinned-widget-group", value: "g1" });
+  assert.deepEqual(parseScopedValue(widget.id), { workspaceId: "box-a", kind: "pinned-widget", value: "w1" });
+  assert.deepEqual(parseScopedValue(widget.groupId), { workspaceId: "box-a", kind: "pinned-widget-group", value: "g1" });
+  assert.deepEqual(parseScopedValue(widget.hublotId), { workspaceId: "box-a", kind: "hublot", value: "h1" });
+  assert.deepEqual(parseScopedValue(widget.sessionId), { workspaceId: "box-a", kind: "session-id", value: "s1" });
+});
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");

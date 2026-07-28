@@ -39,18 +39,24 @@ export function createHublotEventController({ isReplaying, toast, refreshHublots
         refreshHublots();
         return true;
       case "tunnel_opened":
-        toast(`hublot up: ${tunnel.url} → :${tunnel.port}`, "info", { onClick: () => openUrl(tunnel.url) });
+        toast(`live interface ready: ${tunnel.url} → :${tunnel.port}`, "info", { onClick: () => openUrl(tunnel.url) });
         refreshHublots();
         return true;
       case "hublot_ready":
-        toast(`hublot ready: ${tunnel.url}`, "info", { onClick: () => openUrl(tunnel.url) });
+        toast(`live interface ready: ${tunnel.url}`, "info", { onClick: () => openUrl(tunnel.url) });
         refreshHublots(); scheduleRefresh(5000); scheduleRefresh(15000);
         return true;
       case "hublot_failed":
-        toast(`hublot failed: ${message.error ?? "unknown error"}`, "error");
+        toast(`live interface failed: ${message.error ?? "unknown error"}`, "error");
         refreshHublots();
         return true;
-      case "tunnel_closed": toast(`hublot closed: :${tunnel.port}`, "warning"); refreshHublots(); return true;
+      case "tunnel_closed": toast(`live interface closed: :${tunnel.port}`, "warning"); refreshHublots(); return true;
+      case "pinned_widget_created":
+      case "pinned_widget_updated":
+      case "pinned_widget_deleted":
+      case "pinned_widgets_reordered":
+        refreshHublots();
+        return true;
       default: return false;
     }
   };

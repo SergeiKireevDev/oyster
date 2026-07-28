@@ -120,7 +120,7 @@ test("opening and migrating oyster.sqlite leaves the coding-agent schema unchang
   const app = new DatabaseSync(appPath, { readOnly: true });
   t.after(() => app.close());
   const appTables = app.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
-  assert.deepEqual(appTables, ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
+  assert.deepEqual(appTables, ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
   assert.equal(appTables.includes("sessions"), false);
 });
 

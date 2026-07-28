@@ -89,7 +89,7 @@ See [Installation](docs/getting-started/installation.md), [Configuration](docs/g
 - **Session history** — search, resume, fork, archive, and switch between conversations.
 - **Workspace access** — browse, edit, and download files without leaving the app.
 - **Routines** — run repeatable jobs with live progress and teardown controls.
-- **Hublots** — expose agent-built local interfaces through managed tunnels.
+- **Pinned Widgets** — keep files, Markdown, images, videos, links, and grouped shortcuts in a phone-style right rail; live-interface widgets can still expose agent-built services through managed tunnels.
 - **Credentials** — use pi-native API key and OAuth storage without sending secrets to the browser.
 - **Made for mobile** — steer an active agent, review work, and manage sessions from your phone.
 

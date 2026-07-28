@@ -29,24 +29,18 @@ test("browser actions use cookie authentication for encoded file downloads", () 
   assert.doesNotMatch(actions.fileDownload("token", "/file").href, /token=/);
 });
 
-test("hublot components invoke injected browser actions without direct window access", () => {
-  for (const name of ["HublotList.svelte", "HublotManagerModal.svelte"]) {
-    const source = readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
-    assert.match(source, /getBrowserActions\(\)/);
-    assert.match(source, /browserActions\.openExternal\(/);
-    assert.doesNotMatch(source, /window\.open/);
-  }
-
-  const list = readFileSync(new URL("../public/src/components/HublotList.svelte", import.meta.url), "utf8");
+test("pinned widget components use injected browser actions without direct window access", () => {
   const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
+  const viewer = readFileSync(new URL("../public/src/components/PinnedWidgetViewerModal.svelte", import.meta.url), "utf8");
+  const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
   const sidebar = readFileSync(new URL("../public/src/components/HublotSidebar.svelte", import.meta.url), "utf8");
-  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
-  assert.match(list, /<button type="button" class="hublot-block" onclick=\{openFileExplorer\}>/);
-  assert.match(list, /<button type="button" class="hit"[^>]*onclick=\{\(\) => browserActions\.openExternal\(hublot\.url\)\}/);
-  assert.match(manager, /<button[\s\S]*type="button"[\s\S]*class="hit"[\s\S]*browserActions\.openExternal\(tunnel\.url\)/);
-  assert.match(sidebar, /<button type="button" id="hublotAdd"[^>]*onclick=\{showHublotManager\}>/);
-  for (const source of [list, manager, sidebar]) assert.doesNotMatch(source, /role="button"/);
-  assert.match(styles, /\.hublot-block \.preview \.hit \{[\s\S]*position: absolute; inset: 0;/);
+  assert.match(manager, /getBrowserActions\(\)/);
+  assert.match(manager, /browserActions\.openExternal\(tunnel\.url\)/);
+  assert.match(viewer, /getBrowserActions\(\)/);
+  assert.match(viewer, /browserActions\.fileDownload\(/);
+  assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
+  assert.match(sidebar, /<button type="button" id="hublotAdd"[^>]*onclick=\{showWidgetManager\}>/);
+  for (const source of [manager, viewer, grid, sidebar]) assert.doesNotMatch(source, /window\.open|role="button"/);
 
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(root, /openUrl: browserActions\.openExternal/);

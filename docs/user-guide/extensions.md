@@ -1,7 +1,7 @@
 ---
-title: Files, routines, and hublots
+title: Files, routines, and Pinned Widgets
 description: Use the bundled pi extensions and browser integrations.
-tags: extensions, files, routines, tunnels
+tags: extensions, files, routines, widgets, media, tunnels
 ---
 
 The repository bundles pi extensions in `extensions/`. Register them with the pi installation that launches the sessions:
@@ -33,8 +33,14 @@ Routine scripts report UI progress with newline-terminated records:
 
 Stop terminates the process group. Teardown should remove every byproduct created by `run`. Release removes the session binding so another session can use the routine.
 
-## Hublots
+## Pinned Widgets
 
-A hublot is a public `cloudflared` tunnel to a local port. Give the hublot a description of the interface to expose; the agent receives that brief and prepares the service while the server owns the tunnel lifecycle.
+Pinned Widgets are durable shortcuts in the right sidebar. Pin any file or directory from the file explorer, or use the `pinned_widget` tool. Tiles use a compact phone-style grid and can be moved into one-level groups. Images and videos receive media thumbnails and open in native Svelte displays; Markdown opens in Oyster's native Markdown reader. These routes remain authenticated and private—pinning never creates a public URL, copies the file, or changes the underlying artifact.
 
-Hublots survive application hot reloads but are stopped when the server shuts down. Use only the tunnel's HTTPS URL: TLS is mandatory across the untrusted browser-to-edge network, even when the local edge-to-service hop uses loopback HTTP. Public URLs provide no substitute for the tunneled application's own authentication.
+Unpinning removes only the shortcut. Missing files remain visible as unavailable so the reference can be repaired or removed.
+
+### Live-interface widgets (hublots)
+
+A hublot is the managed tunnel behind a public live-interface widget: a `cloudflared` tunnel to a local port. Give it a description of the interface to expose; the agent receives that brief and prepares the service while the server owns the tunnel lifecycle. Creating one automatically pins its widget.
+
+Closing the live interface and unpinning its widget are separate operations. Hublots survive application hot reloads but are stopped when the server shuts down. Use only the tunnel's HTTPS URL: TLS is mandatory across the untrusted browser-to-edge network, even when the local edge-to-service hop uses loopback HTTP. Public URLs provide no substitute for the tunneled application's own authentication.

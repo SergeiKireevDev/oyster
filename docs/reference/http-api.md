@@ -76,12 +76,19 @@ Credential mutations can restart runners that were active at mutation time. Loca
 
 File routes accept only paths under the configured safe roots and deny known credential stores.
 
-## Routines and hublots
+## Routines and Pinned Widgets
 
 | Route | Purpose |
 |---|---|
 | `GET /routines` | List routines, bindings, and live state |
 | `POST /routines` | Start, stop, teardown, or release a routine |
+| `GET /pinned-widgets` | List scoped widgets and one-level groups |
+| `POST /pinned-widgets` | Pin a confined path, HTTPS link, or live interface |
+| `PATCH /pinned-widgets` | Rename, reorder, group, or ungroup a widget |
+| `DELETE /pinned-widgets?id=…` | Unpin without deleting the target |
+| `POST/PATCH/DELETE /pinned-widget-groups` | Manage one-level groups |
+| `GET /pinned-widget-content?id=…` | Read bounded Markdown for the native viewer |
+| `GET/HEAD /pinned-widget-media?id=…` | Stream authenticated image/video bytes with range support |
 | `GET /tunnels` | List hublots and tunnel configuration |
 | `POST /tunnels` | Reserve a port, prepare its service, and open a hublot |
 | `PATCH /tunnels` | Rebind a hublot to a session |

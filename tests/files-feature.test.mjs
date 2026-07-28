@@ -49,11 +49,12 @@ test("file explorer component routes browse, edit, save, upload, back, and retur
   assert.doesNotMatch(source, /features\/files\/fileExplorerActions\.js/);
 });
 
-test("both hublot entry points open the current-workdir explorer through the scoped action", () => {
-  for (const component of ["HublotList.svelte", "HublotManagerModal.svelte"]) {
-    const source = readFileSync(new URL(`../public/src/components/${component}`, import.meta.url), "utf8");
-    assert.match(source, /getUiActionRegistry\(\)/);
-    assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_OPEN_ACTION\)/);
-    assert.doesNotMatch(source, /features\/files\/filesActions\.js/);
-  }
+test("widget and manager entry points route file workflows through scoped actions", () => {
+  const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
+  const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
+  assert.match(manager, /getUiActionRegistry\(\)/);
+  assert.match(manager, /uiActions\.invoke\(FILE_EXPLORER_OPEN_ACTION\)/);
+  assert.match(grid, /getUiActionRegistry\(\)/);
+  assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
+  for (const source of [manager, grid]) assert.doesNotMatch(source, /features\/files\/filesActions\.js/);
 });

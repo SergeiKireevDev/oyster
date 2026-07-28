@@ -1,5 +1,4 @@
 /** Hot-reloadable HTTP application composition. Durable state remains owned by server.mjs. */
-
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +24,7 @@ export async function init(state) {
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor, scheduleHublotStartupReconciliation } = await import(bust("persistence/hublotSupervisor.mjs"));
+  const { createPinnedWidgetRoutes, ensurePinnedHublot } = await import(bust("pinned-widgets.mjs"));
 
   const [
     { createRequestContext }, { createRouteTable },
@@ -115,7 +115,9 @@ export async function init(state) {
     state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
     acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry,
     spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureSessionOwner,
+    pinHublot: (hublot) => ensurePinnedHublot(state, hublot),
   });
+  const pinnedWidgetRoutes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels });
   const credentialService = createPiCredentialService({ config });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners });
@@ -149,7 +151,7 @@ export async function init(state) {
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes });
   const openRouteKeys = new Set(Object.keys(openRoutes));
 
   // ---------------------------------------------------------------- dispatch

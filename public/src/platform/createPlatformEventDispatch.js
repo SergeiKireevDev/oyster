@@ -96,7 +96,11 @@ export function createPlatformEventDispatch(deps) {
       case "tunnel_opened":
       case "hublot_ready":
       case "hublot_failed":
-      case "tunnel_closed": return hublotEvent(msg);
+      case "tunnel_closed":
+      case "pinned_widget_created":
+      case "pinned_widget_updated":
+      case "pinned_widget_deleted":
+      case "pinned_widgets_reordered": return hublotEvent(msg);
       case "routine_update": return routineEvent(msg);
     }
   }

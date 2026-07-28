@@ -87,6 +87,28 @@ export function scopeHublot(workspace, hublot) {
   };
 }
 
+export function scopePinnedWidgetGroup(workspace, group) {
+  if (!group || typeof group !== "object") return group;
+  return {
+    ...group,
+    ...workspaceMeta(workspace),
+    id: scopeValue(workspace.id, "pinned-widget-group", group.id),
+    sessionId: scopeValue(workspace.id, "session-id", group.sessionId),
+  };
+}
+
+export function scopePinnedWidget(workspace, widget) {
+  if (!widget || typeof widget !== "object") return widget;
+  return {
+    ...widget,
+    ...workspaceMeta(workspace),
+    id: scopeValue(workspace.id, "pinned-widget", widget.id),
+    groupId: scopeValue(workspace.id, "pinned-widget-group", widget.groupId),
+    hublotId: scopeValue(workspace.id, "hublot", widget.hublotId),
+    sessionId: scopeValue(workspace.id, "session-id", widget.sessionId),
+  };
+}
+
 function scopeSearchHit(workspace, hit) {
   if (!hit || typeof hit !== "object") return hit;
   const identity = hit.sessionKey ?? hit.sessionPath;
@@ -116,6 +138,10 @@ function scopeEvent(workspace, message, otherRunners = []) {
     ...(message.sessionId ? { sessionId: scopeValue(workspace.id, "session-id", message.sessionId) } : {}),
     ...(message.routine ? { routine: scopeRoutine(workspace, message.routine) } : {}),
     ...(message.tunnel ? { tunnel: scopeHublot(workspace, message.tunnel) } : {}),
+    ...(message.widget ? { widget: scopePinnedWidget(workspace, message.widget) } : {}),
+    ...(message.widgetId ? { widgetId: scopeValue(workspace.id, "pinned-widget", message.widgetId) } : {}),
+    ...(message.group ? { group: scopePinnedWidgetGroup(workspace, message.group) } : {}),
+    ...(message.groupId ? { groupId: scopeValue(workspace.id, "pinned-widget-group", message.groupId) } : {}),
     ...(Array.isArray(message.runners) ? { runners: [...(message.partial ? [] : otherRunners), ...message.runners.map((runner) => scopeRunner(workspace, runner))] } : {}),
   };
 }
@@ -325,6 +351,15 @@ export function createOysterUiGateway({ config, driver, fetchImpl, authorized, j
           ...value,
           ...(Array.isArray(value?.tunnels) ? { tunnels: value.tunnels.map((hublot) => scopeHublot(workspace, hublot)) } : {}),
           ...(value?.tunnel ? { tunnel: scopeHublot(workspace, value.tunnel) } : {}),
+        };
+        else if (["/pinned-widgets", "/pinned-widget-groups"].includes(url.pathname)) scoped = {
+          ...value,
+          ...(Array.isArray(value?.widgets) ? { widgets: value.widgets.map((widget) => scopePinnedWidget(workspace, widget)) } : {}),
+          ...(Array.isArray(value?.groups) ? { groups: value.groups.map((group) => scopePinnedWidgetGroup(workspace, group)) } : {}),
+          ...(value?.widget ? { widget: scopePinnedWidget(workspace, value.widget) } : {}),
+          ...(value?.group ? { group: scopePinnedWidgetGroup(workspace, value.group) } : {}),
+          ...(value?.unpinned ? { unpinned: scopeValue(workspace.id, "pinned-widget", value.unpinned) } : {}),
+          ...(value?.deleted ? { deleted: scopeValue(workspace.id, "pinned-widget-group", value.deleted) } : {}),
         };
         if (!response.ok && typeof scoped?.error === "string") {
           const label = workspace.name && workspace.name !== workspace.id

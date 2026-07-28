@@ -10,6 +10,7 @@
     FILE_EXPLORER_BACK_ACTION,
     FILE_EXPLORER_BROWSE_ACTION,
     FILE_EXPLORER_EDIT_ACTION,
+    FILE_EXPLORER_PIN_ACTION,
     FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
     FILE_EXPLORER_SAVE_ACTION,
     FILE_EXPLORER_UPLOAD_ACTION,
@@ -22,6 +23,7 @@
   const saveFileExplorer = () => uiActions.invoke(FILE_EXPLORER_SAVE_ACTION);
   const saveExploredFile = saveFileExplorer;
   const uploadFileExplorer = () => uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
+  const pinExploredPath = (path) => uiActions.invoke(FILE_EXPLORER_PIN_ACTION, path);
   const backFileExplorer = () => uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
   const backFileExplorerToHublots = () => uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
 
@@ -55,6 +57,7 @@
     showHidden={$fileExplorer.showHidden}
     showWorkdir={true}
     onBrowse={browseFileExplorer}
+    onPin={pinExploredPath}
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}
@@ -70,6 +73,7 @@
         title={`download ${file.name}`}
         style="text-decoration:none"
       >⬇</a>
+      <button class="chip" title={`pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}>⌖</button>
       <button class="chip" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
     </div>
   {/each}
@@ -85,8 +89,9 @@
     <button class="chip" onclick={backFileExplorer}>← Back</button>
   {:else}
     <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</button>
+    <button class="chip" title={`pin ${$fileExplorer.path}`} onclick={() => pinExploredPath($fileExplorer.path)}>⌖ Pin folder</button>
     <button class="chip toggle-hidden" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
-    <button class="chip" onclick={backFileExplorerToHublots}>← Hublots</button>
+    <button class="chip" onclick={backFileExplorerToHublots}>← Widgets</button>
   {/if}
   <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>
