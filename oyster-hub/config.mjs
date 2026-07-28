@@ -94,6 +94,7 @@ function validateLlmboxDriver(input, env, timeoutMs) {
     type: "llmbox",
     tokenSecret: requireString(env.OYSTER_HUB_WORKSPACE_TOKEN_SECRET || input.tokenSecret, "driver.tokenSecret"),
     timeoutMs,
+    createTimeoutMs: duration(input.createTimeoutMs, "driver.createTimeoutMs", 6 * 60 * 1000, 30 * 60 * 1000),
     workspacePort,
     createProxy: input.createProxy !== false,
     tokenFile: Object.freeze({

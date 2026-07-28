@@ -27,13 +27,13 @@ export async function openLlmboxBinding(config, {
   let closed = false;
   let closePromise = null;
 
-  async function invoke(operation, input = {}) {
+  async function invoke(operation, input = {}, timeoutMs = config.timeoutMs) {
     if (closed) throw new Error("llmbox native binding is closed");
     const result = decodeEnvelope(await addon.invoke(
       handle,
       String(operation),
       JSON.stringify(input ?? {}),
-      config.timeoutMs,
+      timeoutMs,
     ), operation);
     return result.value ?? {};
   }

@@ -56,6 +56,7 @@ test("native llmbox workspace driver uses bindings instead of fetch", async () =
     endpoint: "native://embedded-llmbox",
     tokenSecret: "workspace-secret",
     timeoutMs: 1234,
+    createTimeoutMs: 9876,
     workspacePort: 8080,
     createProxy: true,
     tokenFile: { path: "/run/oyster-token", mode: 384, uid: 1000, gid: 1000 },
@@ -74,10 +75,13 @@ test("native llmbox workspace driver uses bindings instead of fetch", async () =
   assert.equal((await driver.pauseWorkspace("alpha")).status, "paused");
   assert.equal((await driver.resumeWorkspace("alpha")).status, "online");
   assert.equal((await driver.removeWorkspace("alpha")).destroyed, true);
-  assert.deepEqual(addon.calls.filter(([name]) => name === "invoke").map((call) => call[2]), [
+  const invokeCalls = addon.calls.filter(([name]) => name === "invoke");
+  assert.deepEqual(invokeCalls.map((call) => call[2]), [
     "spoke-statuses", "list-boxes", "list-proxies", "create-box", "create-proxy",
     "pause-box", "resume-box", "destroy-box",
   ]);
+  assert.equal(invokeCalls.find((call) => call[2] === "create-box")[4], 9876);
+  assert.ok(invokeCalls.filter((call) => call[2] !== "create-box").every((call) => call[4] === 1234));
   await binding.close();
 });
 
