@@ -41,12 +41,7 @@ export default function pinnedWidgetExtension(pi: ExtensionAPI) {
       "Pin, list, organize, move, or unpin artifacts in Oyster's right sidebar. " +
       "Pinned image, video, and Markdown files use Oyster's native viewers; pinning stays private " +
       "and does not create a public tunnel. Use the hublot tool only when a public live interface is required.",
-    promptSnippet: "Pin and organize private workspace artifacts in Oyster's Pinned Widgets rail",
-    promptGuidelines: [
-      "Use pinned_widget with action=pin when the user wants a file, directory, image, video, Markdown document, or HTTPS link retained in the Oyster sidebar.",
-      "Pinned widgets are private authenticated references. Use hublot instead only when the user explicitly needs a public live interface or tunnel.",
-      "Use pinned_widget action=unpin to remove the shortcut; unpinning never deletes the underlying artifact or closes a live interface.",
-    ],
+    promptSnippet: "Pin private artifacts with pinned_widget; use hublot only for public interfaces. Unpinning never deletes the source.",
     parameters: Type.Object({
       action: StringEnum(["pin", "list", "unpin", "group", "move"] as const),
       path: Type.Optional(Type.String({ description: "For pin: artifact path, absolute or relative to the session cwd" })),

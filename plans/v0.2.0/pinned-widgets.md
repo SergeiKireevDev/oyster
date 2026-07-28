@@ -117,8 +117,9 @@ putting kind-specific conditionals into the layout shell.
   works through direct Oyster and Hub proxies.
 - Inline only an explicit safe image/video MIME allowlist, set
   `X-Content-Type-Options: nosniff`, and use a restrictive media response policy.
-  SVG, HTML, scripts, unknown binary formats, and MIME/extension disagreements
-  fall back to download/generic-file behavior rather than active inline content.
+  SVG is permitted only through a dedicated inert `<img>` viewer with a sandboxed,
+  no-script response policy. HTML, scripts, unknown binary formats, and
+  MIME/extension disagreements fall back to download/generic-file behavior.
 - Do not put bearer tokens or absolute filesystem paths in media URLs. Browser
   navigations use the existing same-origin authenticated cookie and, under Hub,
   an opaque workspace-scoped widget ID.
@@ -244,8 +245,9 @@ in one workspace without changing or closing the referenced artifacts.
 
 ### 3. Implement Safe Media Streaming
 
-- [ ] Classify pinned file MIME/category using one server policy; treat SVG,
-  HTML, unknown, and mismatched content as non-inline.
+- [ ] Classify pinned file MIME/category using one server policy; render SVG only
+  through its inert sandboxed image viewer, and keep HTML, unknown, and
+  mismatched content non-inline.
 - [ ] Implement authenticated widget-ID media `GET`/`HEAD`, streaming, byte
   ranges, cache validators, disconnect cleanup, and safe headers.
 - [ ] Preserve range and response streaming through Oyster Hub and llmbox/cloud

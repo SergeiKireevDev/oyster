@@ -331,6 +331,17 @@ export const APP_MIGRATIONS = Object.freeze([
         AND (lower(target) LIKE '%.avi' OR lower(target) LIKE '%.mkv');
     `,
   }),
+  Object.freeze({
+    version: 14,
+    name: "svg_media",
+    sql: `
+      UPDATE pinned_widgets
+      SET kind = 'image',
+          mime_type = 'image/svg+xml',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE kind = 'file' AND lower(target) LIKE '%.svg';
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

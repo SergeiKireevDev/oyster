@@ -143,6 +143,30 @@ test("media route streams safe ranges by widget identity", async (t) => {
   assert.equal(denied.status, 415);
 });
 
+test("SVG artifacts stream only through the sandboxed native image viewer", async (t) => {
+  const { root, routes } = fixture(t);
+  const path = join(root, "vector.svg");
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect width="10" height="10"/></svg>');
+  writeFileSync(path, svg);
+  assert.deepEqual(classifyPinnedPath(path), { kind: "image", mimeType: "image/svg+xml" });
+
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path, scope: "workspace" }), created);
+  assert.equal(created.body.widget.kind, "image");
+  assert.equal(created.body.widget.mimeType, "image/svg+xml");
+
+  const req = new PassThrough();
+  req.headers = {};
+  const res = streamResponse();
+  const finished = new Promise((resolvePromise) => res.on("finish", resolvePromise));
+  await routes["GET /pinned-widget-media"](req, res, new URL(`http://localhost/pinned-widget-media?id=${created.body.widget.id}`));
+  await finished;
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["content-type"], "image/svg+xml");
+  assert.match(res.headers["content-security-policy"], /default-src 'none'; sandbox/);
+  assert.deepEqual(res.body(), svg);
+});
+
 test("AVI artifacts open in the native player through a browser-compatible MP4 conversion", async (t) => {
   let converted = 0;
   const { root, routes } = fixture(t, {
