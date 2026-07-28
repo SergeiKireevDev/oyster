@@ -2056,7 +2056,7 @@
   --user-bubble: #29315a;
   --surface-hover: #1d222d;
   --sidebar-width: 272px;
-  --rightbar-width: 260px;
+  --rightbar-width: 320px;
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, .42);
   --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
 }
@@ -2551,7 +2551,7 @@ details.thinking[open] .thinking-preview { display: none; }
 .toast { border-color: rgba(255,255,255,.1); border-radius: 10px; background: rgba(28,33,43,.96); box-shadow: 0 12px 32px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
 
 @media (max-width: 1080px) and (min-width: 761px) {
-  :root { --sidebar-width: 238px; --rightbar-width: 220px; }
+  :root { --sidebar-width: 238px; --rightbar-width: 280px; }
   #messages { padding-inline: 24px; }
 }
 @media (max-width: 760px) {
