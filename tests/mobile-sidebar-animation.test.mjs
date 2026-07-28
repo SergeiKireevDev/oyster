@@ -18,7 +18,8 @@ test("mobile session and hublot drawers animate in and reverse when closing", ()
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?#sessions\.open\.closing, #hublots\.open\.closing \{ animation: none; \}/);
 });
 
-test("mobile header uses compact capsule typography", () => {
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#cfgChip \{ font-size: 11px; \}/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#menuBtn::before \{ font-size: 12px; letter-spacing: 1\.5px; \}/);
+test("mobile header uses compact grouped controls", () => {
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{ gap: 1px; padding: 2px; \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#cfgChip \{ max-width: 42vw; display: inline-flex; font-size: 10\.5px; \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#treeChip \{ display: none; \}/);
 });
