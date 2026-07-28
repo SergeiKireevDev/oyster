@@ -41,9 +41,11 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /npm run build/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /cloudflared-linux-\$cloudflared_arch/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /install -m 0755 \/tmp\/cloudflared \/usr\/local\/bin\/cloudflared/);
-  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /install -d -o oyster -g oyster -m 0750 \/var\/lib\/oyster\/workspace/);
-  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /for extension in file-explorer\.ts goal-loop\.ts hublot\.ts routine\.ts/);
-  assert.match(files.get("/usr/local/sbin/install-oyster-box"), /\/var\/lib\/oyster\/\.pi\/agent\/extensions\/\$extension/);
+  const installScript = files.get("/usr/local/sbin/install-oyster-box");
+  assert.match(installScript, /install -d -o oyster -g oyster -m 0750 \/var\/lib\/oyster\/workspace/);
+  assert.match(installScript, /install -d -o oyster -g oyster -m 0700 \/var\/lib\/oyster\/\.pi\ninstall -d -o oyster -g oyster -m 0700 \/var\/lib\/oyster\/\.pi\/agent\ninstall -d -o oyster -g oyster -m 0700 \/var\/lib\/oyster\/\.pi\/agent\/extensions/);
+  assert.match(installScript, /for extension in file-explorer\.ts goal-loop\.ts hublot\.ts routine\.ts/);
+  assert.match(installScript, /\/var\/lib\/oyster\/\.pi\/agent\/extensions\/\$extension/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /randomBytes\(32\)[\s\S]*>\/etc\/oyster\/oyster\.env/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /chmod 0600 \/etc\/oyster\/oyster\.env/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster\.service[\s\S]*http:\/\/127\.0\.0\.1:8080\/health/);
