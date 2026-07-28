@@ -43,7 +43,11 @@ export function createPinnedWidgetRuntime(deps) {
       deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget } });
       return;
     }
-    if (widget.kind === "markdown" || String(widget.mimeType ?? "").startsWith("text/html")) {
+    if (String(widget.mimeType ?? "").startsWith("text/html")) {
+      deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget } });
+      return;
+    }
+    if (widget.kind === "markdown") {
       try {
         const data = await readPinnedTextArtifact(deps.fetchImpl, widget.id);
         deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget: { ...widget, content: data.content } } });

@@ -142,10 +142,10 @@ test("deleting a group with its widgets preserves the source artifacts", async (
   assert.ok(paths.every(existsSync));
 });
 
-test("standalone HTML is classified and returned as a pinned preview artifact", async (t) => {
+test("standalone HTML of any size is streamed as a sandboxed pinned preview artifact", async (t) => {
   const { root, routes } = fixture(t);
   const path = join(root, "report.html");
-  const html = "<!doctype html><html><head><style>body{color:navy}</style></head><body><h1>Report</h1></body></html>";
+  const html = `<!doctype html><html><head><style>body{color:navy}</style></head><body><h1>Report</h1><!--${"x".repeat(6 * 1024 * 1024)}--></body></html>`;
   writeFileSync(path, html);
   assert.deepEqual(classifyPinnedPath(path), { kind: "file", mimeType: "text/html; charset=utf-8" });
 
@@ -153,10 +153,21 @@ test("standalone HTML is classified and returned as a pinned preview artifact", 
   await routes["POST /pinned-widgets"](request({ path, sessionId: "session-a" }), created);
   assert.equal(created.body.widget.mimeType, "text/html; charset=utf-8");
 
+  const req = new PassThrough();
+  req.headers = {};
+  const preview = streamResponse();
+  const finished = new Promise((resolvePromise) => preview.on("finish", resolvePromise));
+  routes["GET /pinned-widget-html"](req, preview, new URL(`http://localhost/pinned-widget-html?id=${created.body.widget.id}`));
+  await finished;
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers["content-length"], Buffer.byteLength(html));
+  assert.match(preview.headers["content-security-policy"], /sandbox; default-src 'none'/);
+  assert.equal(preview.headers["x-content-type-options"], "nosniff");
+  assert.equal(preview.body().toString(), html);
+
   const content = response();
   routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
-  assert.equal(content.status, 200);
-  assert.equal(content.body.content, html);
+  assert.equal(content.status, 415);
 });
 
 test("media route streams safe ranges by widget identity", async (t) => {

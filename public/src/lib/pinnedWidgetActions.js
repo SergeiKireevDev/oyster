@@ -68,3 +68,7 @@ export async function readPinnedTextArtifact(fetchImpl, id) {
 export function pinnedWidgetMediaUrl(id) {
   return `/pinned-widget-media?id=${encodeURIComponent(id)}`;
 }
+
+export function pinnedWidgetHtmlUrl(id) {
+  return `/pinned-widget-html?id=${encodeURIComponent(id)}`;
+}

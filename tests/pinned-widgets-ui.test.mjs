@@ -63,6 +63,25 @@ test("pinned widget rail keeps creation compact and nests group destinations und
   assert.equal(JSON.parse(requests[0].options.body).groupId, "group-b");
 });
 
+test("standalone HTML opens its streaming viewer without buffering the artifact as JSON", async () => {
+  const modals = [];
+  let fetched = false;
+  const runtime = createPinnedWidgetRuntime({
+    getSessionId: () => "session-1",
+    fetchImpl: async () => { fetched = true; throw new Error("HTML must not be fetched as text"); },
+    openModal: (modal) => modals.push(modal),
+  });
+
+  const widget = {
+    id: "widget-html", label: "Large report", kind: "file", availability: "ready",
+    mimeType: "text/html; charset=utf-8",
+  };
+  await runtime.actions.open(widget);
+  assert.equal(fetched, false);
+  assert.equal(modals.length, 1);
+  assert.equal(modals[0].context.widget, widget);
+});
+
 test("group management can delete the group together with all of its widgets", async () => {
   const requests = [];
   const runtime = createPinnedWidgetRuntime({
@@ -100,9 +119,10 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(viewer, /<VideoArtifact/);
   assert.match(markdown, /renderMarkdown/);
   assert.match(html, /<iframe/);
+  assert.match(html, /\{src\}/);
   assert.match(html, /sandbox=""/);
-  assert.match(html, /Content-Security-Policy/);
-  assert.match(html, /default-src 'none'/);
+  assert.doesNotMatch(html, /srcdoc/);
+  assert.match(viewer, /pinnedWidgetHtmlUrl\(widget\.id\)/);
   assert.match(markdown, /<article class="pinned-markdown-viewer" aria-label=\{label\}/);
   assert.match(viewer, /class:markdown-stage=\{widget\.kind === "markdown"\}/);
   assert.match(viewer, /copyTextToClipboard\(String\(widget\.content \?\? ""\)\)/);

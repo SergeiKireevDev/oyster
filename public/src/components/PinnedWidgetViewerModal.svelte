@@ -6,7 +6,7 @@
   import VideoArtifact from "./VideoArtifact.svelte";
   import MarkdownArtifact from "./MarkdownArtifact.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
-  import { pinnedWidgetMediaUrl } from "../lib/pinnedWidgetActions.js";
+  import { pinnedWidgetHtmlUrl, pinnedWidgetMediaUrl } from "../lib/pinnedWidgetActions.js";
   import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -16,6 +16,7 @@
   const uiActions = getUiActionRegistry();
   $: widget = $modalState.context?.widget ?? {};
   $: source = widget.id ? pinnedWidgetMediaUrl(widget.id) : "";
+  $: htmlSource = widget.id ? pinnedWidgetHtmlUrl(widget.id) : "";
   $: download = widget.path ? browserActions.fileDownload(null, widget.path) : null;
   $: isHtml = String(widget.mimeType ?? "").startsWith("text/html");
   let copyRawState = "idle";
@@ -51,7 +52,7 @@
     {:else if widget.kind === "markdown"}
       <MarkdownArtifact source={widget.content ?? ""} label={widget.label} />
     {:else if isHtml}
-      <HtmlArtifact source={widget.content ?? ""} label={widget.label} />
+      <HtmlArtifact src={htmlSource} label={widget.label} />
     {/if}
   </div>
   <div class="m-actions pinned-widget-viewer-actions">
