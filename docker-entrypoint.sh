@@ -10,11 +10,17 @@
 # credential mounts and no network model calls.
 set -euo pipefail
 
+# Tunnel mocking is independently selectable inside the test image. Preserve
+# the historical mock-LLM default, while allowing staging to use real Quick
+# Tunnels with the deterministic model via E2E_MOCK_TUNNELS=0.
+MOCK_TUNNELS="${E2E_MOCK_TUNNELS:-${E2E_MOCK_LLM:-0}}"
+case "$MOCK_TUNNELS" in
+  1) export TUNNEL_BIN=/usr/local/bin/e2e-cloudflared ;;
+  0) export TUNNEL_BIN="${TUNNEL_BIN:-/usr/local/bin/cloudflared}" ;;
+  *) echo "E2E_MOCK_TUNNELS must be 0 or 1" >&2; exit 2 ;;
+esac
+
 if [ "${E2E_MOCK_LLM:-0}" = "1" ]; then
-  # Keep hublot tests offline and deterministic by default while preserving the
-  # tunnel process URL contract consumed by tunnels.mjs. Persistent test/staging
-  # containers can explicitly select real Cloudflare without losing the mock LLM.
-  export TUNNEL_BIN="${TUNNEL_BIN:-/usr/local/bin/e2e-cloudflared}"
   MOCK_PORT="${MOCK_PORT:-4010}"
   MODEL_ID="${MOCK_MODEL_ID:-e2e-mock}"
   mkdir -p /root/.pi/agent

@@ -25,8 +25,11 @@ no network model calls, fully deterministic**.
 - Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
 
 Both images bundle a mock LLM, so no host credentials or external model access
-are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`, an
-explicit `PERSISTENT_STORE`, and a fresh named volume at `/root/.pi/agent`.
+are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`,
+`E2E_MOCK_TUNNELS=1`, an explicit `PERSISTENT_STORE`, and a fresh named volume
+at `/root/.pi/agent`. Set `E2E_MOCK_TUNNELS=0` in a persistent test/staging
+container to retain the deterministic model while using real Cloudflare Quick
+Tunnels.
 The SQLite persistence scenario retains that volume across deliberate container
 replacement; every test removes its volume during teardown.
 
