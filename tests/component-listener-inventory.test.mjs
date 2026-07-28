@@ -26,7 +26,7 @@ test("component browser and imperative listener inventory is explicit", () => {
     "App.svelte:28:rootElement: document.documentElement,",
     "App.svelte:29:themeColorElement: document.querySelector('meta[name=\"theme-color\"]'),",
     "App.svelte:40:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
-    "components/Menu.svelte:23:<svelte:document onclick={close} />",
+    "components/Menu.svelte:24:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
   ]);
 
@@ -41,7 +41,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/CredentialsModal.svelte:204:use:trackOAuthInput",
     "components/FolderBrowserModal.svelte:50:use:focusOnMount",
     "components/HublotManagerModal.svelte:84:use:commandPalette",
-    "components/Menu.svelte:23:<svelte:document onclick={close} />",
+    "components/Menu.svelte:24:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:42:<svelte:document onkeydowncapture={onKey} />",
     "components/SessionPickerModal.svelte:100:use:focusOnMount",
   ]);

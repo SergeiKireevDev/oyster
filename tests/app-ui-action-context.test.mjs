@@ -8,6 +8,7 @@ import { createCheckpointModelPickerService } from "../public/src/runtime/checkp
 
 const appSource = readFileSync(new URL("../public/src/App.svelte", import.meta.url), "utf8");
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
+const headerSource = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
 const commandPaletteSource = readFileSync(new URL("../public/src/components/CommandPalette.svelte", import.meta.url), "utf8");
 
 test("App provides its UI action registry and passes it to the runtime", () => {
@@ -24,6 +25,18 @@ test("Menu routes every action through the scoped registry", () => {
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
     ["analytics", "credentials", "settings", "logout"],
   );
+  for (const icon of ["analytics", "key", "settings", "logout"]) {
+    assert.match(menuSource, new RegExp(`<AppIcon name="${icon}"`));
+  }
+  assert.match(menuSource, />Log out<\/span>/);
+});
+
+test("Header presents session controls as a consistent icon action group", () => {
+  assert.match(headerSource, /<nav class="header-actions" aria-label="Session controls">/);
+  for (const icon of ["fork", "sliders", "model", "thinking", "more"]) {
+    assert.match(headerSource, new RegExp(`<AppIcon name="${icon}"`));
+  }
+  assert.match(headerSource, /class="header-status"/);
 });
 
 test("CommandPalette routes mouse selection through the scoped registry", () => {

@@ -23,6 +23,7 @@ export const appHeader = derived(appSession, ($appSession) => {
   const workdir = $appSession.workdir ?? "";
   return {
     connectionClass: $appSession.connected ? `dot ${$appSession.busy ? "busy" : "ok"}` : "dot",
+    connectionLabel: !$appSession.connected ? "Disconnected" : $appSession.busy ? "Working" : "Connected",
     sessionTitle: $appSession.titleOverride || state?.sessionName || "oyster",
     modelChip: modelId,
     thinkChip: state ? `think: ${thinking}` : "think",
