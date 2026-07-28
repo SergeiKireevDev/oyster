@@ -13,7 +13,7 @@ esac
 test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
 test.afterEach(() => { teardownContainer(); });
 
-test("routines persist while ephemeral hublots retire across server/server.mjs restarts", async ({ page }) => {
+test("routines and pinned live-interface records persist while ephemeral tunnel URLs retire", async ({ page }) => {
   const suffix = `${Date.now()}`;
   const routineName = `sqlite-restart-${suffix}.sh`;
   const hublotLabel = `sqlite-restart-hublot-${suffix}`;
@@ -43,8 +43,10 @@ test("routines persist while ephemeral hublots retire across server/server.mjs r
   await expect(page.locator("#routineList .routine-block", { hasText: routineName })).toBeVisible({
     timeout: 30000,
   });
-  const retiredHublot = page.locator("#hublotList .hublot-block:not(.builtin)", { hasText: hublotLabel });
-  await expect(retiredHublot).toHaveCount(0);
+  const retiredWidget = page.locator("#hublots .pinned-widget-cell", { hasText: hublotLabel });
+  await expect(retiredWidget).toBeVisible();
+  await expect(retiredWidget).toHaveClass(/unavailable/);
+  await expect(retiredWidget.locator("iframe")).toHaveCount(0);
 
   const reopened = await api("POST", "/tunnels", {
     label: `${hublotLabel}-fresh`,

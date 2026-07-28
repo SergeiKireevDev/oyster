@@ -161,7 +161,9 @@ function modelChip(page, mobile) {
 async function expectSidebarResources(page, { hublots, routines, mobile = false }) {
   await openResourceSidebarIfMobile(page, mobile);
   for (const label of hublots) {
-    await expect(page.locator("#hublotList .hublot-block", { hasText: label })).toBeVisible({ timeout: 30000 });
+    const widget = page.locator("#hublots .pinned-widget-cell", { hasText: label });
+    await expect(widget).toBeVisible({ timeout: 30000 });
+    await expect(widget.locator("iframe")).toHaveCount(0);
   }
   for (const name of routines) {
     await expect(page.locator("#routineList .routine-block", { hasText: name })).toBeVisible({ timeout: 30000 });
@@ -487,7 +489,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await expect(page.locator("#mTitle")).toHaveText("Select model");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
-      await expect(page.locator("#mBody .m-option.active")).toContainText("e2e-mock-b");
+      await expect(page.locator("#mBody .model-autocomplete-option.active")).toContainText("e2e-mock-b");
       await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
       await expect(modelChip(page, true)).toHaveText(originalModel ?? "");
@@ -500,7 +502,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 
       await swipe(page, "left");
       await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
-      await page.locator("#hublotList .hublot-block", { hasText: "file explorer" }).first().click();
+      await page.locator("#hublots .pinned-widget-cell", { hasText: "Files" }).first().locator(".pinned-widget-tile").click();
       await expect(page.locator("#mTitle")).toHaveText("File explorer");
       await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
@@ -535,7 +537,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
   });
 
-  if (includeResourceSwitch) test("switching sessions restores session-scoped hublots, routines, and model", async ({ page }) => {
+  if (includeResourceSwitch) test("switching sessions restores session-scoped widgets, routines, and model", async ({ page }) => {
     await installSecondMockModel();
     await installFakeCloudflared();
     await login(page);
@@ -547,7 +549,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     const sessionA = await waitFor(() => currentSessionId(page), { timeout: 30000, label: "session A id" });
     await expect(modelChip(page, mobile)).toContainText("e2e-mock");
 
-    const aHublots = [tag("hublot-a-1"), tag("hublot-a-2")];
+    const aHublots = [tag("widget-a-1"), tag("widget-a-2")];
     const aRoutines = [tag("routine-a-1") + ".sh", tag("routine-a-2") + ".sh"];
     for (const label of aHublots) await createBoundHublot(label, sessionA);
     for (const name of aRoutines) await createBoundRoutine(name, sessionA);
@@ -566,27 +568,27 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     });
     await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
 
-    const bHublots = [tag("hublot-b-1")];
+    const bHublots = [tag("widget-b-1")];
     const bRoutines = [tag("routine-b-1") + ".sh"];
     for (const label of bHublots) await createBoundHublot(label, sessionB);
     for (const name of bRoutines) await createBoundRoutine(name, sessionB);
     await page.evaluate(() => { loadHublots(); loadRoutines(); });
     await expectSidebarResources(page, { hublots: bHublots, routines: bRoutines, mobile });
-    await expect(page.locator("#hublotList")).not.toContainText(aHublots[0]);
+    await expect(page.locator("#hublots")).not.toContainText(aHublots[0]);
     await expect(page.locator("#routineList")).not.toContainText(aRoutines[0]);
     await closeResourceSidebarIfMobile(page, mobile);
 
     await switchToSessionByToken(page, A, { mobile });
     await expect(modelChip(page, mobile)).toContainText("e2e-mock", { timeout: 15000 });
     await expectSidebarResources(page, { hublots: aHublots, routines: aRoutines, mobile });
-    await expect(page.locator("#hublotList")).not.toContainText(bHublots[0]);
+    await expect(page.locator("#hublots")).not.toContainText(bHublots[0]);
     await expect(page.locator("#routineList")).not.toContainText(bRoutines[0]);
     await closeResourceSidebarIfMobile(page, mobile);
 
     await switchToSessionByToken(page, B, { mobile });
     await expect(modelChip(page, mobile)).toContainText("e2e-mock-b", { timeout: 15000 });
     await expectSidebarResources(page, { hublots: bHublots, routines: bRoutines, mobile });
-    await expect(page.locator("#hublotList")).not.toContainText(aHublots[0]);
+    await expect(page.locator("#hublots")).not.toContainText(aHublots[0]);
     await expect(page.locator("#routineList")).not.toContainText(aRoutines[0]);
   });
 }

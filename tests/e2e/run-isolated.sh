@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 
 SPECS=(
   checkpoint-rollback.spec.js
-  hublot.spec.js
+  pinned-widgets.spec.js
   routine.spec.js
   sessions.spec.js
 )

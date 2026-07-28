@@ -127,9 +127,11 @@ export function createCarouselController({
  * The DOM targets remain injected so this can be installed and torn down by
  * the composition root without coupling the carousel to Svelte components.
  */
-export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, treebar, getCarousel, isToggleTarget }) {
+export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, treebar, getCarousel, isToggleTarget, isOverlayOpen = () => false }) {
   const onClick = (event) => {
     if (!windowTarget.matchMedia("(max-width: 760px)").matches
+      || isOverlayOpen()
+      || event.target.closest?.("#modal, #cmdPalette, #menu")
       || sessions.contains(event.target)
       || hublots.contains(event.target)
       || treebar.contains(event.target)
@@ -138,12 +140,12 @@ export function createMobileDrawerDismissController({ documentTarget, windowTarg
   };
 
   function attach() {
-    documentTarget.addEventListener("click", onClick);
+    documentTarget.addEventListener("click", onClick, true);
     return detach;
   }
 
   function detach() {
-    documentTarget.removeEventListener("click", onClick);
+    documentTarget.removeEventListener("click", onClick, true);
   }
 
   return { attach, detach };

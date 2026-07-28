@@ -950,6 +950,7 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   hublotsEl: layoutDom.hublots,
   treebarEl: layoutDom.treebar,
   isDrawerToggleTarget: layoutDom.isDrawerToggleTarget,
+  isOverlayOpen: dialogAdapters.modal.isOverlayOpen,
 });
 const handleExtensionUI = settingsLayoutRuntime.handleExtensionUI;
 const layoutOperations = settingsLayoutRuntime.layout;

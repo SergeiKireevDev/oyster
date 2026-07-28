@@ -83,6 +83,7 @@ export function createSettingsLayoutRuntime(deps) {
     treebar: deps.treebarEl,
     getCarousel: () => carousel,
     isToggleTarget: deps.isDrawerToggleTarget,
+    isOverlayOpen: deps.isOverlayOpen,
   });
 
   const headerActions = {
