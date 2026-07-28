@@ -228,6 +228,21 @@ function mediaTarget(state, widgetId, resolveSafePath) {
   return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
 }
 
+function htmlTarget(state, widgetId, resolveSafePath) {
+  const row = state.appStore.repositories.pinnedWidgets.find(widgetId);
+  if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
+  const isHtml = row.kind === "file" && String(row.mime_type ?? "").startsWith("text/html");
+  if (!isHtml) throw Object.assign(new Error("widget is not an HTML artifact"), { statusCode: 415 });
+  const target = row.target ? resolveSafePath(resolve(row.target)) : null;
+  if (!target) throw Object.assign(new Error("pinned HTML artifact is unavailable"), { statusCode: 404 });
+  const stat = statSync(target);
+  const classification = classifyPinnedPath(target, stat);
+  if (classification.kind !== "file" || !String(classification.mimeType ?? "").startsWith("text/html")) {
+    throw Object.assign(new Error("pinned HTML type changed; re-pin it before display"), { statusCode: 415 });
+  }
+  return { target, stat, mimeType: classification.mimeType };
+}
+
 /** Convert browser-incompatible video containers once, then serve the cached MP4 with range support. */
 export async function preparePinnedVideo(state, media, {
   ffmpegBin = process.env.FFMPEG_BIN || "ffmpeg",
@@ -449,13 +464,33 @@ export function createPinnedWidgetRoutes({
       try {
         const row = repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
-        const isHtml = row.kind === "file" && String(row.mime_type ?? "").startsWith("text/html");
-        if (row.kind !== "markdown" && !isHtml) throw Object.assign(new Error("widget is not a readable text artifact"), { statusCode: 415 });
+        if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a readable text artifact"), { statusCode: 415 });
         const target = row.target ? resolveSafePath(resolve(row.target)) : null;
         if (!target) throw Object.assign(new Error("pinned text artifact is unavailable"), { statusCode: 404 });
         const stat = statSync(target);
         if (stat.size > 5 * 1024 * 1024) throw Object.assign(new Error("text artifact is too large to display"), { statusCode: 413 });
         json(res, 200, { id: row.id, path: target, content: readFileSync(target, "utf8") });
+      } catch (error) { sendError(json, res, error); }
+    },
+
+    "GET /pinned-widget-html": (req, res, url) => {
+      try {
+        const { target, stat, mimeType } = htmlTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
+        res.writeHead(200, {
+          "content-type": mimeType,
+          "content-length": stat.size,
+          "cache-control": "private, no-cache",
+          "content-security-policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'",
+          "referrer-policy": "no-referrer",
+          "x-content-type-options": "nosniff",
+        });
+        if (stat.size === 0) { res.end(); return; }
+        const stream = createReadStream(target);
+        const destroy = () => stream.destroy();
+        req.once("aborted", destroy);
+        res.once("close", destroy);
+        stream.once("error", () => { if (!res.writableEnded) res.destroy(); });
+        stream.pipe(res);
       } catch (error) { sendError(json, res, error); }
     },
 
