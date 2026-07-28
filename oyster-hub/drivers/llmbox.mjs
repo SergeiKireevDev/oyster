@@ -30,10 +30,10 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
     throw new Error("native llmbox driver requires an open binding");
   }
 
-  async function call(path, body = {}) {
+  async function call(path, body = {}, timeoutMs = config.timeoutMs) {
     if (config.transport === "native") {
       try {
-        return await binding.invoke(path, body);
+        return await binding.invoke(path, body, timeoutMs);
       } catch (error) {
         throw new WorkspaceDriverError(`llmbox ${path} native call failed: ${error.message}`, { cause: error });
       }
@@ -49,7 +49,7 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
         },
         body: JSON.stringify(body),
         redirect: "manual",
-        signal: AbortSignal.timeout(config.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       throw new WorkspaceDriverError(`llmbox ${path} request failed: ${error.message}`, { cause: error });
@@ -138,7 +138,7 @@ export function createLlmboxDriver(config, { fetchImpl = globalThis.fetch, bindi
     };
     if (diskBytes > 0) opts.DiskBytes = diskBytes;
 
-    const created = await call("create-box", { opts });
+    const created = await call("create-box", { opts }, config.createTimeoutMs);
     let proxy = null;
     let warning = null;
     if (config.createProxy) {
