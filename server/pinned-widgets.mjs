@@ -18,6 +18,7 @@ const VIDEO_MIME = new Map([
 const BROWSER_VIDEO_MIME = new Set(["video/mp4", "video/webm", "video/ogg"]);
 const execFileAsync = promisify(execFile);
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
+const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 const INLINE_KINDS = new Set(["image", "video"]);
 
 function id(prefix) {
@@ -30,6 +31,7 @@ export function classifyPinnedPath(path, stat = statSync(path)) {
   if (IMAGE_MIME.has(extension)) return { kind: "image", mimeType: IMAGE_MIME.get(extension) };
   if (VIDEO_MIME.has(extension)) return { kind: "video", mimeType: VIDEO_MIME.get(extension) };
   if (MARKDOWN_EXTENSIONS.has(extension)) return { kind: "markdown", mimeType: "text/markdown; charset=utf-8" };
+  if (HTML_EXTENSIONS.has(extension)) return { kind: "file", mimeType: "text/html; charset=utf-8" };
   return { kind: "file", mimeType: "application/octet-stream" };
 }
 
@@ -425,16 +427,21 @@ export function createPinnedWidgetRoutes({
         const group = repository.findGroup(groupId);
         if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
         const children = repository.list().filter((item) => item.group_id === groupId);
-        if (children.length && url.searchParams.get("ungroup") !== "1") {
-          throw Object.assign(new Error("group is not empty; request ungroup=1 to keep its widgets"), { statusCode: 409 });
+        const ungroup = url.searchParams.get("ungroup") === "1";
+        const deleteWidgets = url.searchParams.get("deleteWidgets") === "1";
+        if (children.length && !ungroup && !deleteWidgets) {
+          throw Object.assign(new Error("group is not empty; request ungroup=1 to keep its widgets or deleteWidgets=1 to remove them"), { statusCode: 409 });
         }
         state.appStore.transaction(() => {
-          children.forEach((item) => repository.update(item.id, { group_id: null, updated_at: new Date().toISOString() }));
+          children.forEach((item) => {
+            if (deleteWidgets) repository.delete(item.id);
+            else repository.update(item.id, { group_id: null, updated_at: new Date().toISOString() });
+          });
           repository.deleteGroup(groupId);
           normalizeContainer(repository, { scope: group.scope, ownerId: group.owner_id }, null);
         });
-        emit("pinned_widget_updated", { groupId, deleted: true });
-        json(res, 200, { deleted: groupId });
+        emit("pinned_widget_updated", { groupId, deleted: true, deletedWidgetIds: deleteWidgets ? children.map((item) => item.id) : [] });
+        json(res, 200, { deleted: groupId, deletedWidgets: deleteWidgets ? children.map((item) => item.id) : [] });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -442,11 +449,12 @@ export function createPinnedWidgetRoutes({
       try {
         const row = repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
-        if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a Markdown artifact"), { statusCode: 415 });
+        const isHtml = row.kind === "file" && String(row.mime_type ?? "").startsWith("text/html");
+        if (row.kind !== "markdown" && !isHtml) throw Object.assign(new Error("widget is not a readable text artifact"), { statusCode: 415 });
         const target = row.target ? resolveSafePath(resolve(row.target)) : null;
-        if (!target) throw Object.assign(new Error("pinned Markdown is unavailable"), { statusCode: 404 });
+        if (!target) throw Object.assign(new Error("pinned text artifact is unavailable"), { statusCode: 404 });
         const stat = statSync(target);
-        if (stat.size > 5 * 1024 * 1024) throw Object.assign(new Error("Markdown artifact is too large to display"), { statusCode: 413 });
+        if (stat.size > 5 * 1024 * 1024) throw Object.assign(new Error("text artifact is too large to display"), { statusCode: 413 });
         json(res, 200, { id: row.id, path: target, content: readFileSync(target, "utf8") });
       } catch (error) { sendError(json, res, error); }
     },

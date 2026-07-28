@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { createRunnerManager } from "../server/runners.mjs";
+import { createRunnerManager, PINNED_ARTIFACT_SYSTEM_PROMPT } from "../server/runners.mjs";
 import { createPiProcessLauncher } from "../server/pi-processes.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
@@ -62,7 +62,14 @@ test("SQLite runners start and restart by ID with explicit store environment", (
   const sessionRef = { backend: "sqlite", id: "sqlite-one", storagePath: sqlitePath };
   const runner = manager.spawnRunner({ dir: "/workspace", sessionRef });
 
-  assert.deepEqual(spawns[0].args, ["--mode", "rpc", "--session", "sqlite-one", "--thinking", "off"]);
+  assert.deepEqual(spawns[0].args, [
+    "--mode", "rpc", "--session", "sqlite-one", "--thinking", "off",
+    "--append-system-prompt", PINNED_ARTIFACT_SYSTEM_PROMPT,
+  ]);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /creates or materially updates a documentation or media file/);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /standalone HTML.*pinned_widget.*Pinned Widgets viewer/);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /HTML file is part of a web app.*do not automatically pin or open.*only offer.*wait for explicit user confirmation/);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /four or more.*group_pinned_widgets.*`group`.*`paths`.*dedicated pinned-widget group/);
   assert.equal(spawns[0].options.env.PERSISTENT_STORE, "sqlite");
   assert.equal(runner.resumeId, null);
   assert.deepEqual(manager.runnerInfo(runner), {

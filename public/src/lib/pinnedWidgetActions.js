@@ -54,14 +54,15 @@ export async function updatePinnedWidgetGroup(fetchImpl, { id, name, sessionId =
   }), "cannot update widget group");
 }
 
-export async function deletePinnedWidgetGroup(fetchImpl, id, { ungroup = false } = {}) {
+export async function deletePinnedWidgetGroup(fetchImpl, id, { ungroup = false, deleteWidgets = false } = {}) {
   const query = new URLSearchParams({ id });
   if (ungroup) query.set("ungroup", "1");
+  if (deleteWidgets) query.set("deleteWidgets", "1");
   return jsonResponse(await fetchImpl(`/pinned-widget-groups?${query}`, { method: "DELETE" }), "cannot delete widget group");
 }
 
-export async function readPinnedMarkdown(fetchImpl, id) {
-  return jsonResponse(await fetchImpl(`/pinned-widget-content?id=${encodeURIComponent(id)}`), "cannot display Markdown");
+export async function readPinnedTextArtifact(fetchImpl, id) {
+  return jsonResponse(await fetchImpl(`/pinned-widget-content?id=${encodeURIComponent(id)}`), "cannot display text artifact");
 }
 
 export function pinnedWidgetMediaUrl(id) {

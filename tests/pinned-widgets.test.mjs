@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -116,6 +116,47 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   const removed = response();
   routes["DELETE /pinned-widgets"]({}, removed, new URL(`http://localhost/pinned-widgets?id=${created.body.widget.id}`));
   assert.equal(removed.status, 200);
+});
+
+test("deleting a group with its widgets preserves the source artifacts", async (t) => {
+  const { root, routes, appStore } = fixture(t);
+  const paths = [join(root, "one.md"), join(root, "two.png")];
+  writeFileSync(paths[0], "# One");
+  writeFileSync(paths[1], Buffer.from([1, 2, 3]));
+
+  const grouped = response();
+  await routes["POST /pinned-widget-groups"](request({ name: "Disposable", sessionId: "session-a" }), grouped);
+  const widgetIds = [];
+  for (const path of paths) {
+    const created = response();
+    await routes["POST /pinned-widgets"](request({ path, groupId: grouped.body.group.id, sessionId: "session-a" }), created);
+    widgetIds.push(created.body.widget.id);
+  }
+
+  const removed = response();
+  routes["DELETE /pinned-widget-groups"]({}, removed, new URL(`http://localhost/pinned-widget-groups?id=${grouped.body.group.id}&deleteWidgets=1`));
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.body.deletedWidgets, widgetIds);
+  assert.equal(appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id), null);
+  assert.ok(widgetIds.every((id) => appStore.repositories.pinnedWidgets.find(id) === null));
+  assert.ok(paths.every(existsSync));
+});
+
+test("standalone HTML is classified and returned as a pinned preview artifact", async (t) => {
+  const { root, routes } = fixture(t);
+  const path = join(root, "report.html");
+  const html = "<!doctype html><html><head><style>body{color:navy}</style></head><body><h1>Report</h1></body></html>";
+  writeFileSync(path, html);
+  assert.deepEqual(classifyPinnedPath(path), { kind: "file", mimeType: "text/html; charset=utf-8" });
+
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path, sessionId: "session-a" }), created);
+  assert.equal(created.body.widget.mimeType, "text/html; charset=utf-8");
+
+  const content = response();
+  routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
+  assert.equal(content.status, 200);
+  assert.equal(content.body.content, html);
 });
 
 test("media route streams safe ranges by widget identity", async (t) => {
