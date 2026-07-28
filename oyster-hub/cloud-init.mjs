@@ -122,11 +122,6 @@ Environment=PI_UI_UNAUTHENTICATED=1
 ExecStart=/usr/bin/node /opt/oyster/server/server.mjs --host 127.0.0.1 --port 8080 --unauthenticated
 Restart=always
 RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/oyster
 
 [Install]
 WantedBy=multi-user.target
@@ -223,6 +218,7 @@ find /var/lib/cloud/instances -maxdepth 2 -type f -name 'user-data*' -delete 2>/
 
   const files = [
     ["/etc/oyster/box-agent.env", "0600", agentEnvironment],
+    ["/etc/sudoers.d/oyster", "0440", "oyster ALL=(ALL:ALL) NOPASSWD:ALL\n"],
     ["/usr/local/lib/oyster-box-agent/package.json", "0644", BOX_AGENT_PACKAGE],
     ["/usr/local/lib/oyster-box-agent/box-agent.mjs", "0644", BOX_AGENT_SOURCE],
     ["/etc/systemd/system/oyster-box-agent.service", "0644", agentUnit],
@@ -240,6 +236,7 @@ find /var/lib/cloud/instances -maxdepth 2 -type f -name 'user-data*' -delete 2>/
     "  - git",
     "  - gnupg",
     "  - python3",
+    "  - sudo",
     "write_files:",
     ...files.flatMap(([path, permissions, content]) => [
       `  - path: ${path}`,

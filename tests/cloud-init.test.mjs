@@ -25,7 +25,9 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   });
   const files = writtenFiles(cloudInit);
   assert.match(cloudInit, /^#cloud-config\n/);
+  assert.match(cloudInit, /^  - sudo$/m);
   assert.equal(cloudInit.includes(bootstrap), false, "write_files content must be encoded");
+  assert.equal(files.get("/etc/sudoers.d/oyster"), "oyster ALL=(ALL:ALL) NOPASSWD:ALL\n");
   assert.match(files.get("/etc/oyster/box-agent.env"), /OYSTER_BOX_CONNECT_URL="wss:\/\/hub\.get-oyster\.dev\/box\/connect"/);
   assert.match(files.get("/etc/oyster/box-agent.env"), new RegExp(`OYSTER_BOX_BOOTSTRAP_SECRET="${bootstrap}"`));
   assert.match(files.get("/usr/local/lib/oyster-box-agent/package.json"), /"ws": "8\.21\.1"/);
@@ -50,8 +52,11 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /chmod 0600 \/etc\/oyster\/oyster\.env/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /systemctl enable --now oyster\.service[\s\S]*http:\/\/127\.0\.0\.1:8080\/health/);
   assert.match(files.get("/usr/local/sbin/install-oyster-box"), /Oyster did not become healthy/);
-  assert.match(files.get("/etc/systemd/system/oyster-box-agent.service"), /ExecStart=\/usr\/bin\/node \/usr\/local\/lib\/oyster-box-agent\/box-agent\.mjs/);
+  const boxAgentService = files.get("/etc/systemd/system/oyster-box-agent.service");
+  assert.match(boxAgentService, /ExecStart=\/usr\/bin\/node \/usr\/local\/lib\/oyster-box-agent\/box-agent\.mjs/);
+  assert.match(boxAgentService, /NoNewPrivileges=true/);
   const oysterService = files.get("/etc/systemd/system/oyster.service");
+  assert.doesNotMatch(oysterService, /^(?:NoNewPrivileges|PrivateTmp|ProtectSystem|ProtectHome|ReadWritePaths)=/m);
   assert.match(oysterService, /EnvironmentFile=\/etc\/oyster\/oyster\.env/);
   assert.match(oysterService, /Environment=PI_BIN=\/opt\/oyster\/pi\/packages\/coding-agent\/dist\/cli\.js/);
   assert.match(oysterService, /Environment=PI_DIR=\/var\/lib\/oyster\/workspace/);
