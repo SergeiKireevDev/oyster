@@ -98,6 +98,9 @@ test("transcript entry matcher aligns persisted entries from the tail", () => {
 
 test("replay gate identifies transcript event types", () => {
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("message_update"), true);
+  assert.equal(REPLAY_GATED_EVENT_TYPES.has("compaction_start"), true);
+  assert.equal(REPLAY_GATED_EVENT_TYPES.has("compaction_end"), true);
+  assert.equal(REPLAY_GATED_EVENT_TYPES.has("agent_settled"), true);
   assert.equal(REPLAY_GATED_EVENT_TYPES.has("response"), false);
 });
 
@@ -139,8 +142,8 @@ test("agent start controller marks the transcript busy", () => {
 
 test("agent completion controller restores transcript consistency", () => {
   const calls = [];
-  createAgentCompletionController({ setBusy: (value) => calls.push(["busy", value]), clearAssistant: () => calls.push("clear"), refreshState: () => calls.push("state"), scheduleSync: () => calls.push("sync") })();
-  assert.deepEqual(calls, [["busy", false], "clear", "state", "sync"]);
+  createAgentCompletionController({ setBusy: (value) => calls.push(["busy", value]), setCompacting: (value) => calls.push(["compacting", value]), clearAssistant: () => calls.push("clear"), refreshState: () => calls.push("state"), scheduleSync: () => calls.push("sync") })();
+  assert.deepEqual(calls, [["busy", false], ["compacting", false], "clear", "state", "sync"]);
 });
 
 test("transcript post-render controller refreshes markers and deferred focus", async () => {

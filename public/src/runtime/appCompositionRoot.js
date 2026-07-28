@@ -228,6 +228,7 @@ const sessionAssembly = createSessionAssembly({
       loadRoutines: () => loadRoutines(),
       updateHeaderState,
       setBusy: (value) => setBusy(value),
+      setCompacting: (value) => setCompacting(value),
     },
   },
   preview: {
@@ -279,6 +280,8 @@ const getWorkdir = sessionOperations.getWorkdir;
 const getBusy = sessionOperations.getBusy;
 const setWorkdir = sessionOperations.setWorkdir;
 const setBusy = sessionOperations.setBusy;
+const setCompacting = sessionOperations.setCompacting;
+const resetWorkTimer = sessionOperations.resetWorkTimer;
 const updateUsage = sessionOperations.updateUsage;
 
 // ------------------------------------------------------------ event stream
@@ -343,6 +346,8 @@ const platformEvents = platformAssembly.configureEvents({
       assistantAlreadyRendered,
       reloadTranscript: () => reloadTranscript(),
       setBusy,
+      setCompacting,
+      resetWorkTimer,
       isGateRequired: platformAssembly.state.isTranscriptGateRequired,
       agentStart: () => agentStart(),
       agentCompletion: () => agentCompletion(),
@@ -375,6 +380,7 @@ transcriptAssembly.configureSynchronization({
     if (!String(error.message).includes("unauthorized")) console.warn(`${label} transcript sync failed`, error);
   },
   setBusy,
+  setCompacting,
   refreshState,
   getRunner: () => getCurrentRunner(),
   getGeneration: () => getRunnerGeneration(),
@@ -937,16 +943,13 @@ const commandRuntime = composerAssembly.configureCommands({
   schedule: (...args) => delayedTasks.schedule(...args),
   session: {
     openNew: () => isHubRuntime() ? showFolderBrowser() : getSessionRuntime().openAndSwitchSession({ dir: getWorkdir() }),
-    getCurrentRunner,
   },
   transcript: {
-    clear: clearMessages,
     reload: reloadTranscript,
     renderMessage: renderFullMessage,
   },
   platform: {
     rpc,
-    restart: (runner) => fetch(`/restart?runner=${encodeURIComponent(runner ?? "")}`, { method: "POST" }),
     logout: () => {
       clearAuthToken({ storage: localStorage, documentTarget: document });
       location.reload();

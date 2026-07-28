@@ -19,10 +19,10 @@ test("App provides its UI action registry and passes it to the runtime", () => {
 test("Menu routes every action through the scoped registry", () => {
   assert.match(menuSource, /getUiActionRegistry\(\)/);
   assert.match(menuSource, /uiActions\.invoke\(MENU_ACTION, action\)/);
-  assert.doesNotMatch(menuSource, /window\.dispatchEvent|CustomEvent/);
+  assert.doesNotMatch(menuSource, /window\.dispatchEvent|CustomEvent|Compact context|data-action="compact"|Restart pi process|data-action="restart"/);
   assert.deepEqual(
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
-    ["compact", "analytics", "credentials", "settings", "restart", "logout"],
+    ["analytics", "credentials", "settings", "logout"],
   );
 });
 

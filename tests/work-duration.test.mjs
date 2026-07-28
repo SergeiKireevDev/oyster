@@ -18,12 +18,15 @@ test("message timestamps accept agent milliseconds and persisted ISO values", ()
 });
 
 test("latest work period freezes completed turns at the last rendered timestamp", () => {
-  assert.deepEqual(latestTranscriptWorkPeriod([
+  const items = [
     { kind: "user", timestamp: 1_000 },
     { kind: "assistant", timestamp: 4_000 },
     { kind: "user", timestamp: 10_000 },
     { kind: "assistant", timestamp: 15_000 },
-  ]), { startedAt: 10_000, endedAt: 15_000 });
+  ];
+  assert.deepEqual(latestTranscriptWorkPeriod(items), { startedAt: 10_000, endedAt: 15_000 });
+  assert.deepEqual(latestTranscriptWorkPeriod(items, 12_000), { startedAt: 12_000, endedAt: 15_000 });
+  assert.deepEqual(latestTranscriptWorkPeriod(items, 20_000), { startedAt: 20_000, endedAt: 20_000 });
   assert.deepEqual(latestTranscriptWorkPeriod([{ kind: "user", timestamp: 2_000 }]), { startedAt: 2_000, endedAt: 2_000 });
 });
 
@@ -33,6 +36,14 @@ test("work duration is rendered once after the transcript items for busy and idl
   const label = source.indexOf('class="work-duration"');
   assert.ok(loopEnd >= 0 && label > loopEnd);
   assert.equal(source.match(/class="work-duration"/g)?.length, 1);
+  assert.match(source, /latestTranscriptWorkPeriod\(\$transcriptItems, \$appSession\.workTimerResetAt\)/);
   assert.match(source, /\$appSession\.busy \? now : workPeriod\.endedAt/);
-  assert.match(source, /{#if \$appSession\.busy}<span class="spin"/);
+  assert.match(source, /{#if \$appSession\.busy && !\$appSession\.compacting}<span class="spin"/);
+});
+
+test("context compaction renders a dedicated live spinner", () => {
+  const source = readFileSync(new URL("../public/src/components/Transcript.svelte", import.meta.url), "utf8");
+  assert.match(source, /{#if \$appSession\.compacting}/);
+  assert.match(source, /class="compaction-status" role="status" aria-live="polite"/);
+  assert.match(source, /Compacting context…/);
 });

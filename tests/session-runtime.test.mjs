@@ -4,10 +4,10 @@ import { createCurrentRunnerController, createRunnerListController, createSessio
 
 test("session UI runtime publishes workdir, busy state, and usage", () => {
   const app = []; const header = [];
-  const runtime = createSessionUiRuntime({ updateAppSession: (value) => app.push(value), updateHeaderState: (value) => header.push(value) });
-  runtime.setWorkdir("/work"); runtime.setBusy(true); runtime.updateUsage({ usage: { input: 12, output: 3, cost: { total: 0.02 } } });
-  assert.equal(runtime.workdir, "/work"); assert.equal(runtime.busy, true);
-  assert.deepEqual(app, [{ workdir: "/work" }, { busy: true }]);
+  const runtime = createSessionUiRuntime({ updateAppSession: (value) => app.push(value), updateHeaderState: (value) => header.push(value), now: () => 1_234 });
+  runtime.setWorkdir("/work"); runtime.setBusy(true); runtime.setCompacting(true); runtime.resetWorkTimer(); runtime.updateUsage({ usage: { input: 12, output: 3, cost: { total: 0.02 } } });
+  assert.equal(runtime.workdir, "/work"); assert.equal(runtime.busy, true); assert.equal(runtime.compacting, true);
+  assert.deepEqual(app, [{ workdir: "/work" }, { busy: true }, { compacting: true }, { workTimerResetAt: 1_234 }]);
   assert.deepEqual(header, [{ usageInfo: "↑12 ↓3 tok · $0.02" }]);
 });
 

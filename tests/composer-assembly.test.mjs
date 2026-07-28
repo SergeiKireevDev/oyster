@@ -174,23 +174,20 @@ test("composer assembly owns command guard palette menu and listener constructio
   assert.equal(typeof commands.setup, "function");
   assert.equal(typeof commands.keyboardController.attach, "function");
   assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), false);
-  for (const action of ["newSession", "newSessionIn", "sessions", "compact", "analytics", "settings", "restart", "logout"]) {
+  for (const action of ["newSession", "newSessionIn", "sessions", "analytics", "settings", "logout"]) {
     await uiActions.invoke(MENU_ACTION, action);
   }
-  for (const routed of ["newSession", "newSessionIn", "sessions", "analytics", "settings", "restart", "logout"]) {
+  for (const routed of ["newSession", "newSessionIn", "sessions", "analytics", "settings", "logout"]) {
     assert.ok(calls.some((call) => call[0] === routed), `${routed} was not routed`);
   }
-  assert.ok(calls.some((call) => call[0] === "clear"));
-  const compactIndex = calls.findIndex((call) => call[0] === "rpc" && call[1] === "compact");
-  const reloadIndex = calls.findIndex((call) => call[0] === "reload");
-  assert.ok(compactIndex >= 0 && reloadIndex > compactIndex);
-  assert.equal(calls.some((call) => call[0] === "rpc" && call[1] === "get_messages"), false);
+  assert.equal(calls.some((call) => call[0] === "rpc" && call[1] === "compact"), false);
+  assert.equal(calls.some((call) => call[0] === "restart"), false);
   assert.equal(assembly.configureCommands({}), commands);
   assembly.teardown();
-  const clearCount = calls.filter((call) => call[0] === "clear").length;
-  assert.equal(uiActions.invoke(MENU_ACTION, "compact"), undefined);
+  const analyticsCount = calls.filter((call) => call[0] === "analytics").length;
+  assert.equal(uiActions.invoke(MENU_ACTION, "analytics"), undefined);
   assert.equal(uiActions.invoke(COMMAND_PALETTE_RUN_ACTION, 0), undefined);
-  assert.equal(calls.filter((call) => call[0] === "clear").length, clearCount);
+  assert.equal(calls.filter((call) => call[0] === "analytics").length, analyticsCount);
   uiActions.teardown();
 });
 

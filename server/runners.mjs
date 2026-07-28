@@ -156,7 +156,7 @@ export function createRunnerManager(state, {
   // may survive a hot reload as state.pi; its stdout listeners belong to old
   // code, so retire it and let runners take over
   if (state.pi) {
-    console.log("[pi-ui] retiring pre-runner pi process (multi-runner migration)");
+    console.log("[oyster] retiring pre-runner pi process (multi-runner migration)");
     try { state.pi.kill("SIGTERM"); } catch {}
     state.pi = null;
   }
@@ -244,7 +244,7 @@ export function createRunnerManager(state, {
     let messages;
     try { messages = catalog.messages(identity)?.messages ?? []; }
     catch (error) {
-      console.error(`[pi-ui] cannot read session ${sessionId} for title: ${error.message}`);
+      console.error(`[oyster] cannot read session ${sessionId} for title: ${error.message}`);
       return;
     }
     if (!messages.length) return;
@@ -264,7 +264,7 @@ export function createRunnerManager(state, {
       runnerRepository?.update(runner.id, { session_name: name });
       runnersChanged(runner);
     }).catch((error) => {
-      console.error(`[pi-ui] cannot title session ${sessionId}: ${error.message}`);
+      console.error(`[oyster] cannot title session ${sessionId}: ${error.message}`);
     }).finally(() => {
       if (runner.titleSessionId === sessionId) runner.titleProcess = null;
     });
@@ -275,7 +275,10 @@ export function createRunnerManager(state, {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
     if (msg.type === "agent_start") { runner.busy = true; runnersChanged(runner); }
-    else if (msg.type === "agent_end") { runner.busy = false; runnersChanged(runner); requestState(runner); }
+    else if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); }
+    else if (msg.type === "agent_settled") { runner.busy = false; runnersChanged(runner); requestState(runner); }
+    else if (msg.type === "compaction_start") { runner.busy = true; runnersChanged(runner); }
+    else if (msg.type === "compaction_end" && msg.reason === "manual") { runner.busy = false; runnersChanged(runner); requestState(runner); }
     else if (msg.type === "response" && msg.id === runner.resumeId) {
       // session resume finished (success or not): deliver held-back commands
       finishResume(runner);
@@ -392,7 +395,7 @@ export function createRunnerManager(state, {
     });
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
     const args = ["--mode", "rpc", ...sqliteResumeArgs, ...config.PI_EXTRA_ARGS];
-    console.log(`[pi-ui] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
+    console.log(`[oyster] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
     const proc = piProcesses.launch(args, {
       cwd: runner.dir,
       stdio: ["pipe", "pipe", "pipe"],
@@ -423,7 +426,7 @@ export function createRunnerManager(state, {
     });
 
     proc.on("error", (err) => {
-      console.error(`[pi-ui] failed to spawn runner ${runner.id}: ${err.message}`);
+      console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
       if (runner.proc === proc) runner.proc = null;
       if (runner.stdoutReader === rl) runner.stdoutReader = null;
@@ -432,7 +435,7 @@ export function createRunnerManager(state, {
     });
 
     proc.on("exit", (code, signal) => {
-      console.log(`[pi-ui] runner ${runner.id} exited (code=${code}, signal=${signal})`);
+      console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
       if (runner.proc === proc) {
         runner.proc = null;
         if (runner.stdoutReader === rl) runner.stdoutReader = null;
@@ -560,7 +563,7 @@ export function createRunnerManager(state, {
         // total silence since the last probe — not even a get_state response
         runner.probeMisses = (runner.probeMisses ?? 0) + 1;
         if (runner.probeMisses >= WATCHDOG_MAX_MISSES) {
-          console.warn(`[pi-ui] runner ${runner.id} unresponsive (${runner.probeMisses} silent probes), restarting`);
+          console.warn(`[oyster] runner ${runner.id} unresponsive (${runner.probeMisses} silent probes), restarting`);
           runner.probeSentAt = null;
           runner.probeMisses = 0;
           runnerEvent(runner, {
@@ -600,7 +603,7 @@ export function createRunnerManager(state, {
       // it as "when this runner became alive"
       if (now - runner.lastLineAt <= MAX_ORPHAN_AGE_MS) continue;
       console.log(
-        `[pi-ui] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastLineAt) / 60000)}min, no session name) in ${runner.dir}`
+        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastLineAt) / 60000)}min, no session name) in ${runner.dir}`
       );
       stopRunner(runner);
     }

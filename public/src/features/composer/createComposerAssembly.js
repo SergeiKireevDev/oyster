@@ -264,15 +264,6 @@ export function createComposerAssembly(deps) {
           await commandDeps.dialogs.showSessionPicker();
         } else if (action === "analytics") {
           await commandDeps.dialogs.showAnalytics();
-        } else if (action === "compact") {
-          deps.toast("compacting…");
-          await commandDeps.platform.rpc({ type: "compact" });
-          await commandDeps.transcript.reload();
-          deps.toast("compacted");
-        } else if (action === "restart") {
-          await commandDeps.platform.restart(commandDeps.session.getCurrentRunner());
-          commandDeps.transcript.clear();
-          deps.toast("restarting pi…");
         } else if (action === "logout") {
           commandDeps.platform.logout();
         } else if (action === "settings") {

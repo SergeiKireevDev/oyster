@@ -3,7 +3,8 @@ import { loadCanonicalTranscript } from "../lib/transcriptReloadActions.js";
 export const REPLAY_GATED_EVENT_TYPES = new Set([
   "message_start", "message_update", "message_end",
   "tool_execution_start", "tool_execution_update", "tool_execution_end",
-  "agent_start", "agent_end",
+  "agent_start", "agent_end", "agent_settled",
+  "compaction_start", "compaction_end",
 ]);
 
 /** Load state and authoritative durable messages while applying state promptly. */
@@ -218,9 +219,10 @@ export function createAgentStartController({ setBusy }) {
   return () => setBusy(true);
 }
 
-export function createAgentCompletionController({ setBusy, clearAssistant, refreshState, scheduleSync }) {
+export function createAgentCompletionController({ setBusy, setCompacting = () => {}, clearAssistant, refreshState, scheduleSync }) {
   return () => {
     setBusy(false);
+    setCompacting(false);
     clearAssistant();
     refreshState();
     scheduleSync();

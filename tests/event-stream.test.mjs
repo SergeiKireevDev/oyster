@@ -64,6 +64,9 @@ test("runner exit controller ignores replayed exits", () => {
 
 test("event lifecycle logging classification excludes noisy updates", () => {
   assert.equal(eventLifecycleLogged("agent_end"), true);
+  assert.equal(eventLifecycleLogged("agent_settled"), true);
+  assert.equal(eventLifecycleLogged("compaction_start"), true);
+  assert.equal(eventLifecycleLogged("compaction_end"), true);
   assert.equal(eventLifecycleLogged("message_update"), false);
 });
 
