@@ -13,7 +13,10 @@ const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? fileURLToPath(new URL("../pi/
 test("pi process launcher pins executable, store, and Oyster authentication environment", () => {
   const calls = [];
   const launcher = createPiProcessLauncher({
-    config: { PI_BIN: "/local/pi", PERSISTENT_STORE: "sqlite", TOKEN: "effective-ui-token" },
+    config: {
+      PI_BIN: "/local/pi", PERSISTENT_STORE: "sqlite", TOKEN: "effective-ui-token",
+      OYSTER_URL: "http://127.0.0.1:8083",
+    },
     spawnImpl: (...args) => { calls.push(args); return { pid: 1 }; },
   });
   launcher.launch(["--mode", "rpc"], { cwd: "/work", env: { PERSISTENT_STORE: "jsonl", CUSTOM: "yes" } });
@@ -22,6 +25,7 @@ test("pi process launcher pins executable, store, and Oyster authentication envi
   assert.equal(calls[0][2].cwd, "/work");
   assert.equal(calls[0][2].env.PERSISTENT_STORE, "sqlite");
   assert.equal(calls[0][2].env.OYSTER_TOKEN, "effective-ui-token");
+  assert.equal(calls[0][2].env.OYSTER_URL, "http://127.0.0.1:8083");
   assert.equal(calls[0][2].env.CUSTOM, "yes");
 });
 
