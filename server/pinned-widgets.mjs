@@ -1,6 +1,9 @@
-import { randomBytes } from "node:crypto";
-import { createReadStream, readFileSync, statSync } from "node:fs";
-import { basename, extname, resolve } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
+import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, extname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 
 const IMAGE_MIME = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"],
@@ -9,7 +12,10 @@ const IMAGE_MIME = new Map([
 const VIDEO_MIME = new Map([
   [".mp4", "video/mp4"], [".webm", "video/webm"], [".ogv", "video/ogg"],
   [".mov", "video/quicktime"], [".m4v", "video/x-m4v"],
+  [".avi", "video/x-msvideo"], [".mkv", "video/x-matroska"],
 ]);
+const BROWSER_VIDEO_MIME = new Set(["video/mp4", "video/webm", "video/ogg"]);
+const execFileAsync = promisify(execFile);
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
 const INLINE_KINDS = new Set(["image", "video"]);
 
@@ -216,10 +222,62 @@ function mediaTarget(state, widgetId, resolveSafePath) {
   if (classification.kind !== row.kind || classification.mimeType !== row.mime_type) {
     throw Object.assign(new Error("pinned media type changed; re-pin it before display"), { statusCode: 415 });
   }
-  return { row, target, stat, mimeType: classification.mimeType };
+  return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
 }
 
-export function createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels = () => [] }) {
+/** Convert browser-incompatible video containers once, then serve the cached MP4 with range support. */
+export async function preparePinnedVideo(state, media, {
+  ffmpegBin = process.env.FFMPEG_BIN || "ffmpeg",
+  cacheRoot = join(tmpdir(), "oyster-pinned-widget-media"),
+  execFileImpl = execFileAsync,
+} = {}) {
+  if (media.row.kind !== "video" || BROWSER_VIDEO_MIME.has(media.mimeType)) return media;
+  const fingerprint = createHash("sha256")
+    .update(`${media.target}\0${media.stat.size}\0${Math.trunc(media.stat.mtimeMs)}`)
+    .digest("hex");
+  mkdirSync(cacheRoot, { recursive: true });
+  const target = join(cacheRoot, `${fingerprint}.mp4`);
+  const cached = () => existsSync(target) && statSync(target).size > 0;
+  if (!cached()) {
+    const pending = state.pinnedWidgetTranscodes?.get(fingerprint);
+    if (pending) await pending;
+    else {
+      const temporary = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.part`;
+      const task = (async () => {
+        try {
+          await execFileImpl(ffmpegBin, [
+            "-hide_banner", "-loglevel", "error", "-y", "-i", media.target,
+            "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", "-f", "mp4", temporary,
+          ], { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
+          if (!existsSync(temporary) || statSync(temporary).size === 0) throw new Error("video conversion produced no playable output");
+          renameSync(temporary, target);
+        } catch (error) {
+          rmSync(temporary, { force: true });
+          const unavailable = error?.code === "ENOENT"
+            ? new Error("this video needs FFmpeg for browser playback, but FFmpeg is not installed")
+            : new Error(`video conversion failed: ${String(error?.stderr || error?.message || error).trim().slice(0, 500)}`);
+          unavailable.statusCode = 415;
+          throw unavailable;
+        }
+      })();
+      state.pinnedWidgetTranscodes?.set(fingerprint, task);
+      try { await task; } finally { state.pinnedWidgetTranscodes?.delete(fingerprint); }
+    }
+  }
+  if (!cached()) throw Object.assign(new Error("converted video is unavailable"), { statusCode: 415 });
+  return {
+    ...media,
+    target,
+    stat: statSync(target),
+    mimeType: "video/mp4",
+    displayName: `${basename(media.target, extname(media.target))}.mp4`,
+  };
+}
+
+export function createPinnedWidgetRoutes({
+  state, requestContext, ensureSessionOwner, listTunnels = () => [], prepareVideo = preparePinnedVideo,
+}) {
   const { json, readJsonBody, resolveSafePath } = requestContext;
   const repository = state.appStore.repositories.pinnedWidgets;
   const emit = (type, value) => state.serverEvent?.({ type, ...value });
@@ -392,9 +450,9 @@ export function createPinnedWidgetRoutes({ state, requestContext, ensureSessionO
       } catch (error) { sendError(json, res, error); }
     },
 
-    "HEAD /pinned-widget-media": (req, res, url) => {
+    "HEAD /pinned-widget-media": async (req, res, url) => {
       try {
-        const { stat, mimeType } = mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
+        const { stat, mimeType } = await prepareVideo(state, mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
         res.writeHead(200, {
           "content-type": mimeType, "content-length": stat.size, "accept-ranges": "bytes",
           "cache-control": "private, no-cache", "x-content-type-options": "nosniff",
@@ -403,9 +461,9 @@ export function createPinnedWidgetRoutes({ state, requestContext, ensureSessionO
       } catch (error) { res.writeHead(Number(error.statusCode) || 404); res.end(); }
     },
 
-    "GET /pinned-widget-media": (req, res, url) => {
+    "GET /pinned-widget-media": async (req, res, url) => {
       try {
-        const { target, stat, mimeType } = mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
+        const { target, stat, mimeType, displayName } = await prepareVideo(state, mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
         const etag = `W/\"${stat.size}-${Math.trunc(stat.mtimeMs)}\"`;
         if (!req.headers.range && req.headers["if-none-match"] === etag) {
           res.writeHead(304, { etag, "cache-control": "private, no-cache" });
@@ -426,7 +484,7 @@ export function createPinnedWidgetRoutes({ state, requestContext, ensureSessionO
           "content-length": stat.size === 0 ? 0 : end - start + 1,
           "accept-ranges": "bytes",
           "cache-control": "private, no-cache",
-          "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(basename(target))}`,
+          "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(displayName)}`,
           "content-security-policy": "default-src 'none'; sandbox",
           "x-content-type-options": "nosniff",
           etag,

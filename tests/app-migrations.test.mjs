@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { applyMigrations } from "../server/persistence/migrations.mjs";
+import { APP_MIGRATIONS, applyMigrations } from "../server/persistence/migrations.mjs";
 
 function databaseFixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-migrations-"));
@@ -27,7 +27,7 @@ test("numbered migrations apply once and report stable status", (t) => {
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
-  assert.deepEqual(first, { currentVersion: 12, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] });
+  assert.deepEqual(first, { currentVersion: 13, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] });
   assert.deepEqual(second, first);
   assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
@@ -43,7 +43,24 @@ test("numbered migrations apply once and report stable status", (t) => {
     { version: 10, name: "legacy_migration_ledger", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 11, name: "session_archiving", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 12, name: "pinned_widgets", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 13, name: "browser_video_containers", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
+});
+
+test("video-container migration upgrades existing AVI file widgets", (t) => {
+  const database = databaseFixture(t);
+  applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 12) });
+  database.prepare(`
+    INSERT INTO pinned_widgets(
+      id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
+      mime_type, size, mtime_ms, created_at, updated_at
+    ) VALUES ('legacy-avi', NULL, 'workspace', NULL, 'file', 'Legacy AVI', 1,
+      '/workspace/legacy.avi', NULL, 'application/octet-stream', 12, 1, 'now', 'now')
+  `).run();
+  applyMigrations(database);
+  assert.deepEqual({ ...database.prepare("SELECT kind, mime_type FROM pinned_widgets WHERE id = 'legacy-avi'").get() }, {
+    kind: "video", mime_type: "video/x-msvideo",
+  });
 });
 
 test("a failed migration rolls back its schema and ledger row", (t) => {

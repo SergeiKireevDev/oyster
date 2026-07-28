@@ -42,4 +42,4 @@ docker build -f Dockerfile.local-pi \
 
 This image builds pi from that exact context, enables SQLite, and runs the process-level SQLite contract test during the image build.
 
-Both images run `npm test` while building. Port `4000` is exposed by default.
+Both images include FFmpeg so pinned AVI, MOV, MKV, and M4V artifacts are converted once to a cached browser-compatible MP4 for native playback. Both images run `npm test` while building. Port `4000` is exposed by default.

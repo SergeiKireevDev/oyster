@@ -94,7 +94,7 @@ if (( INSTALL_SYSTEM_PACKAGES )); then
   log "Installing server build dependencies"
   run_as_root apt-get update
   run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    ca-certificates curl git build-essential python3
+    ca-certificates curl git build-essential python3 ffmpeg
 fi
 
 node_version=""
@@ -124,6 +124,7 @@ fi
 command -v npm >/dev/null 2>&1 || die "npm is required but was not found."
 command -v git >/dev/null 2>&1 || die "Git is required but was not found."
 command -v curl >/dev/null 2>&1 || die "curl is required but was not found."
+command -v ffmpeg >/dev/null 2>&1 || warn "FFmpeg is not installed; AVI, MOV, MKV, and M4V pinned videos cannot be converted for browser playback."
 readonly NODE_BIN="$(command -v node)"
 
 cloudflared_bin="$(command -v cloudflared || true)"

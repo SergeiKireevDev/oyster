@@ -37,6 +37,7 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
   serverEvent: entry("ephemeral", "live event serialization function"),
   authFails: entry("ephemeral", "short-lived authentication throttle buckets"),
   oauthFlows: entry("ephemeral", "bounded transient OAuth callbacks, prompts, and timers"),
+  pinnedWidgetTranscodes: entry("ephemeral", "in-flight browser-video conversion promises"),
 
   hublotSupervisor: entry("ephemeral", "live supervisor and timer"),
   piProcesses: entry("ephemeral", "process launcher service"),
@@ -59,6 +60,7 @@ export function createStableEphemeralState() {
     hublotStartupReconciliationTask: null,
     sseClients: new Set(),
     authFails: new Map(),
+    pinnedWidgetTranscodes: new Map(),
     reloadCount: 0,
   };
 }

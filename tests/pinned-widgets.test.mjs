@@ -13,7 +13,7 @@ import {
   listPinnedWidgets,
 } from "../server/pinned-widgets.mjs";
 
-function fixture(t) {
+function fixture(t, routeOptions = {}) {
   const root = mkdtempSync(join(tmpdir(), "oyster-pinned-widgets-"));
   const appStore = openAppStore({ databasePath: join(root, "oyster.sqlite") });
   const state = {
@@ -26,7 +26,7 @@ function fixture(t) {
   const ensureSessionOwner = (sessionId) => appStore.repositories.sessions.upsert({
     backend: "sqlite", sessionId, storagePath: join(root, "agent.sqlite"), createdAt: "created",
   });
-  const routes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels: () => [] });
+  const routes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels: () => [], ...routeOptions });
   t.after(() => { appStore.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, state, appStore, requestContext, routes, ensureSessionOwner };
 }
@@ -131,7 +131,7 @@ test("media route streams safe ranges by widget identity", async (t) => {
   req.headers = { range: "bytes=2-5" };
   const res = streamResponse();
   const finished = new Promise((resolvePromise) => res.on("finish", resolvePromise));
-  routes["GET /pinned-widget-media"](req, res, new URL(`http://localhost/pinned-widget-media?id=${created.body.widget.id}`));
+  await routes["GET /pinned-widget-media"](req, res, new URL(`http://localhost/pinned-widget-media?id=${created.body.widget.id}`));
   await finished;
   assert.equal(res.status, 206);
   assert.equal(res.headers["content-range"], "bytes 2-5/10");
@@ -139,6 +139,35 @@ test("media route streams safe ranges by widget identity", async (t) => {
   assert.deepEqual(res.body(), Buffer.from("2345"));
 
   const denied = response();
-  routes["GET /pinned-widget-media"]({ headers: {} }, denied, new URL("http://localhost/pinned-widget-media?id=builtin:file-explorer"));
+  await routes["GET /pinned-widget-media"]({ headers: {} }, denied, new URL("http://localhost/pinned-widget-media?id=builtin:file-explorer"));
   assert.equal(denied.status, 415);
+});
+
+test("AVI artifacts open in the native player through a browser-compatible MP4 conversion", async (t) => {
+  let converted = 0;
+  const { root, routes } = fixture(t, {
+    prepareVideo: async (_state, media) => {
+      converted++;
+      assert.equal(media.mimeType, "video/x-msvideo");
+      return { ...media, mimeType: "video/mp4", displayName: "legacy.mp4" };
+    },
+  });
+  const path = join(root, "legacy.avi");
+  writeFileSync(path, Buffer.from("converted-video"));
+  assert.deepEqual(classifyPinnedPath(path), { kind: "video", mimeType: "video/x-msvideo" });
+
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path, scope: "workspace" }), created);
+  assert.equal(created.body.widget.kind, "video");
+
+  const req = new PassThrough();
+  req.headers = {};
+  const res = streamResponse();
+  const finished = new Promise((resolvePromise) => res.on("finish", resolvePromise));
+  await routes["GET /pinned-widget-media"](req, res, new URL(`http://localhost/pinned-widget-media?id=${created.body.widget.id}`));
+  await finished;
+  assert.equal(converted, 1);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["content-type"], "video/mp4");
+  assert.match(res.headers["content-disposition"], /legacy.mp4/);
 });

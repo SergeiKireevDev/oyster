@@ -316,6 +316,21 @@ export const APP_MIGRATIONS = Object.freeze([
       WHERE desired_state = 'open' OR status <> 'closed';
     `,
   }),
+  Object.freeze({
+    version: 13,
+    name: "browser_video_containers",
+    sql: `
+      UPDATE pinned_widgets
+      SET kind = 'video',
+          mime_type = CASE
+            WHEN lower(target) LIKE '%.avi' THEN 'video/x-msvideo'
+            WHEN lower(target) LIKE '%.mkv' THEN 'video/x-matroska'
+          END,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE kind = 'file'
+        AND (lower(target) LIKE '%.avi' OR lower(target) LIKE '%.mkv');
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {
