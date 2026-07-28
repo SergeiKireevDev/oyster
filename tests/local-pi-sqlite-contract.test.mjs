@@ -145,7 +145,7 @@ test("configured local pi persists and restores RPC sessions through SQLite", {
 }, async (t) => {
   assert.equal(existsSync(LOCAL_PI), true,
     `local pi is required at ${LOCAL_PI}; build it or explicitly set PI_SQLITE_CONTRACT_TEST=skip`);
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-sqlite-contract-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-sqlite-contract-"));
   const agentDir = join(root, "agent");
   const cwd = join(root, "workspace");
   mkdirSync(agentDir, { recursive: true });

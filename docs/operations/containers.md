@@ -21,7 +21,7 @@ Run it with a persistent workspace and an explicit UI token:
 
 ```bash
 docker run --rm -p 4000:4000 \
-  -e PI_UI_TOKEN='<strong-random-token>' \
+  -e OYSTER_TOKEN='<strong-random-token>' \
   -v "$PWD:/workspace" \
   oyster:published
 ```

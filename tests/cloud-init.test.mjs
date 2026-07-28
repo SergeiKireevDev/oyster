@@ -60,9 +60,9 @@ test("cloud-init installs Oyster from the requested source and starts its outbou
   assert.match(oysterService, /EnvironmentFile=\/etc\/oyster\/oyster\.env/);
   assert.match(oysterService, /Environment=PI_BIN=\/opt\/oyster\/pi\/packages\/coding-agent\/dist\/cli\.js/);
   assert.match(oysterService, /Environment=PI_DIR=\/var\/lib\/oyster\/workspace/);
-  assert.match(oysterService, /Environment=PI_UI_URL=http:\/\/127\.0\.0\.1:8080/);
+  assert.match(oysterService, /Environment=OYSTER_URL=http:\/\/127\.0\.0\.1:8080/);
   assert.match(oysterService, /Environment=TUNNEL_BIN=\/usr\/local\/bin\/cloudflared/);
-  assert.match(oysterService, /Environment=PI_UI_UNAUTHENTICATED=1/);
+  assert.match(oysterService, /Environment=OYSTER_UNAUTHENTICATED=1/);
   assert.match(oysterService, /--host 127\.0\.0\.1 --port 8080 --unauthenticated/);
   assert.equal(oysterCloudInitDefaults.repository, "https://github.com/SergeiKireevDev/oyster.git");
 });

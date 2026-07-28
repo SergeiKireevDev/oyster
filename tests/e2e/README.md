@@ -66,12 +66,12 @@ and both interfaces read the same test token.
 
 | Env | Default | Meaning |
 |---|---|---|
-| `PI_UI_URL` | `http://localhost:4000` | UI base URL |
-| `PI_UI_TOKEN` | `e2e-test-token` | auth token |
-| `PI_UI_IMAGE` | `oyster:published` | published-package JSONL image for the existing scenarios |
-| `PI_UI_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
+| `OYSTER_URL` | `http://localhost:4000` | UI base URL |
+| `OYSTER_TOKEN` | `e2e-test-token` | auth token |
+| `OYSTER_IMAGE` | `oyster:published` | published-package JSONL image for the existing scenarios |
+| `OYSTER_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
 | `PI_SOURCE_CONTEXT` | `<repository>/pi` | named BuildKit source used when the SQLite image must be built |
-| `PI_UI_CONTAINER` | allocated per test | name for a container the suite starts |
+| `OYSTER_CONTAINER` | allocated per test | name for a container the suite starts |
 | `E2E_WORKERS` | `5` | Playwright worker count; lower it only for constrained hosts or debugging |
 
 ## Notes

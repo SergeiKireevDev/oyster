@@ -18,11 +18,11 @@ export function initializeAuth({
   const query = new URLSearchParams(locationTarget.search);
   const fromUrl = hash.get("token") || query.get("token");
   if (fromUrl) {
-    storage.setItem("pi_ui_token", fromUrl.trim());
+    storage.setItem("oyster_token", fromUrl.trim());
     historyTarget.replaceState(null, "", locationTarget.pathname);
   }
-  const token = (storage.getItem("pi_ui_token") || "").trim() || null;
-  if (token) documentTarget.cookie = `pi_ui_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
+  const token = (storage.getItem("oyster_token") || "").trim() || null;
+  if (token) documentTarget.cookie = `oyster_token=${encodeURIComponent(token)}; path=/; max-age=31536000; samesite=strict`;
   return token;
 }
 
@@ -34,8 +34,8 @@ export function showAuthGate({ gate, input }) {
 
 /** Clear persisted authentication when the server explicitly rejects it. */
 export function clearAuthToken({ storage, documentTarget }) {
-  storage.removeItem("pi_ui_token");
-  documentTarget.cookie = "pi_ui_token=; path=/; max-age=0";
+  storage.removeItem("oyster_token");
+  documentTarget.cookie = "oyster_token=; path=/; max-age=0";
 }
 
 /**

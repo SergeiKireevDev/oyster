@@ -30,9 +30,9 @@ function tokenMatches(expected, candidate) {
 
 function authorized(req, expected, url = null) {
   const bearer = req.headers.authorization;
-  const cookie = String(req.headers.cookie ?? "").split(";").map((part) => part.trim()).find((part) => part.startsWith("pi_ui_token="));
+  const cookie = String(req.headers.cookie ?? "").split(";").map((part) => part.trim()).find((part) => part.startsWith("oyster_token="));
   let cookieToken = null;
-  try { cookieToken = cookie ? decodeURIComponent(cookie.slice("pi_ui_token=".length)) : null; } catch {}
+  try { cookieToken = cookie ? decodeURIComponent(cookie.slice("oyster_token=".length)) : null; } catch {}
   const candidates = [
     bearer?.startsWith("Bearer ") ? bearer.slice(7) : bearer,
     req.headers["x-api-key"],

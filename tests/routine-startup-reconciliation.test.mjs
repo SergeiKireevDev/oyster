@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-reconcile-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-reconcile-"));
   const path = join(root, "app.sqlite");
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return path;

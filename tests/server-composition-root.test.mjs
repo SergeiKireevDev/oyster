@@ -19,7 +19,7 @@ test("app is a small disposable composition root", () => {
 
 test("stable core owns one app-store service across application reloads", () => {
   assert.equal((stableSource.match(/openAppStore\(\{/g) ?? []).length, 1);
-  assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.PI_UI_DB_PATH \}\);/);
+  assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.OYSTER_DB_PATH \}\);/);
   assert.match(stableSource, /const state = \{[\s\S]*?appStore,/);
   assert.match(stableSource, /if \(shutdownPromise\) return shutdownPromise;/);
   assert.match(stableSource, /server\.close\(\);[\s\S]*Promise\.race\(\[cleanup, timeout\]\)[\s\S]*state\.appStore\.flush\(\);[\s\S]*state\.appStore\.close\(\);/);

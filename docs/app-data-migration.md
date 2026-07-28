@@ -9,7 +9,7 @@ This runbook applies only to Oyster's application database, `oyster.sqlite`. The
 
 ## Paths and prerequisites
 
-The application database is `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`. Legacy inputs default to:
+The application database is `OYSTER_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`. Legacy inputs default to:
 
 - `~/.pi/agent/checkpoints.json`
 - `~/.pi/routines/` executable definitions and `bindings.json`
@@ -18,16 +18,16 @@ Override inputs with `PI_LEGACY_CHECKPOINTS_PATH` and `PI_LEGACY_ROUTINES_DIR`. 
 
 ## Back up before cutover
 
-1. Stop the service, for example `systemctl --user stop pi-ui`.
-2. Record the application version and resolved `PI_UI_DB_PATH`.
+1. Stop the service, for example `systemctl --user stop oyster`.
+2. Record the application version and resolved `OYSTER_DB_PATH`.
 3. Copy the closed application database and any SQLite sidecars that exist:
 
    ```sh
    stamp=$(date -u +%Y%m%dT%H%M%SZ)
-   db=${PI_UI_DB_PATH:-$HOME/.pi/agent/oyster.sqlite}
-   mkdir -m 700 "$HOME/pi-ui-backup-$stamp"
-   cp -p "$db" "$HOME/pi-ui-backup-$stamp/"
-   for sidecar in "$db-wal" "$db-shm"; do test ! -e "$sidecar" || cp -p "$sidecar" "$HOME/pi-ui-backup-$stamp/"; done
+   db=${OYSTER_DB_PATH:-$HOME/.pi/agent/oyster.sqlite}
+   mkdir -m 700 "$HOME/oyster-backup-$stamp"
+   cp -p "$db" "$HOME/oyster-backup-$stamp/"
+   for sidecar in "$db-wal" "$db-shm"; do test ! -e "$sidecar" || cp -p "$sidecar" "$HOME/oyster-backup-$stamp/"; done
    ```
 
 4. Back up the legacy inputs independently. Do not move them yet.

@@ -34,7 +34,7 @@ test("every stable state field has a repository or explicit non-durable classifi
   const unknown = [...observed].filter((field) => !STABLE_STATE_INVENTORY[field]).sort();
   assert.deepEqual(unknown, [], `classify new stable state fields: ${unknown.join(", ")}`);
 
-  const dbRoot = mkdtempSync(join(tmpdir(), "pi-ui-state-inventory-"));
+  const dbRoot = mkdtempSync(join(tmpdir(), "oyster-state-inventory-"));
   const store = openAppStore({ databasePath: join(dbRoot, "app.sqlite") });
   t.after(() => { store.close(); rmSync(dbRoot, { recursive: true, force: true }); });
   for (const [field, metadata] of Object.entries(STABLE_STATE_INVENTORY)) {

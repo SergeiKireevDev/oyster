@@ -34,7 +34,7 @@ test("reload, connection, throttle, and timer state is explicitly ephemeral and 
 });
 
 test("ephemeral server and runner fields never enter app_settings", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-ephemeral-settings-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-ephemeral-settings-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const settings = createAppSettings({ repository: store.repositories.settings, startupWorkdir: "/workspace" });

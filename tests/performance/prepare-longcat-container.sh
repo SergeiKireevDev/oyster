@@ -10,7 +10,7 @@ OUTPUT_IMAGE="${PERF_OUTPUT_IMAGE:-oyster:longcat-100x100}"
 CONTAINER="${PERF_CONTAINER:-oyster-longcat-preparation}"
 AUTH_JSON="${PERF_AUTH_JSON:-${HOME}/.pi/agent/auth.json}"
 MODELS_JSON="${PERF_MODELS_JSON:-${HOME}/.pi/agent/models.json}"
-TOKEN="${PI_UI_TOKEN:-longcat-performance-preparation}"
+TOKEN="${OYSTER_TOKEN:-longcat-performance-preparation}"
 REPORT_PATH="${PERF_REPORT_PATH:-/var/lib/oyster-performance/longcat-100x100.json}"
 MODEL_PROVIDER="${PERF_MODEL_PROVIDER:-meituan}"
 MODEL_ID="${PERF_MODEL_ID:-LongCat-2.0}"
@@ -78,7 +78,7 @@ docker run --detach \
   --name "$CONTAINER" \
   --mount "type=bind,src=$AUTH_JSON,dst=/root/.pi/agent/auth.json,readonly" \
   --mount "type=bind,src=$MODELS_JSON,dst=/root/.pi/agent/models.json,readonly" \
-  --env "PI_UI_TOKEN=$TOKEN" \
+  --env "OYSTER_TOKEN=$TOKEN" \
   --env "PI_ARGS=$PI_ARGS_VALUE" \
   --env "PERSISTENT_STORE=jsonl" \
   "$BASE_IMAGE" >/dev/null
@@ -100,7 +100,7 @@ done
 
 log "starting the manual LongCat workload (real provider calls may incur substantial cost)"
 docker exec \
-  --env "PI_UI_TOKEN=$TOKEN" \
+  --env "OYSTER_TOKEN=$TOKEN" \
   --env "PERF_MODEL_PROVIDER=$MODEL_PROVIDER" \
   --env "PERF_MODEL_ID=$MODEL_ID" \
   --env "PERF_SESSION_COUNT=$SESSION_COUNT" \
@@ -120,7 +120,7 @@ docker stop --time 60 "$CONTAINER" >/dev/null
 log "committing prepared data as $OUTPUT_IMAGE"
 docker commit \
   --message "$SESSION_COUNT $MODEL_ID sessions with $MESSAGE_COUNT prompts each; runners deactivated" \
-  --change 'ENV PI_UI_TOKEN=replace-before-running' \
+  --change 'ENV OYSTER_TOKEN=replace-before-running' \
   --change 'ENV PI_ARGS=' \
   --change 'CMD []' \
   "$CONTAINER" "$OUTPUT_IMAGE" >/dev/null

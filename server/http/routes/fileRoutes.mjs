@@ -97,7 +97,7 @@ export function createFileRoutes({ state, requestContext, logger = console }) {
         json(res, 500, { error: `save failed: ${e.message}` });
         return;
       }
-      logger.log(`[pi-ui] file saved via explorer: ${target}`);
+      logger.log(`[oyster] file saved via explorer: ${target}`);
       json(res, 200, { saved: target, bytes: Buffer.byteLength(body.content) });
     },
 
@@ -161,7 +161,7 @@ export function createFileRoutes({ state, requestContext, logger = console }) {
       }
       if (last) {
         const bytes = statSync(target).size;
-        logger.log(`[pi-ui] file uploaded via explorer: ${target} (${bytes} bytes)`);
+        logger.log(`[oyster] file uploaded via explorer: ${target} (${bytes} bytes)`);
         json(res, 200, { saved: target, bytes });
       } else {
         json(res, 200, { received: offset + buf.length });
@@ -185,7 +185,7 @@ export function createFileRoutes({ state, requestContext, logger = console }) {
       if (existsSync(target)) { json(res, 409, { error: `already exists: ${target}` }); return; }
       try { mkdirSync(target); }
       catch (error) { json(res, 500, { error: `mkdir failed: ${error.message}` }); return; }
-      logger.log(`[pi-ui] created folder ${target}`);
+      logger.log(`[oyster] created folder ${target}`);
       json(res, 201, { path: target });
     },
   };

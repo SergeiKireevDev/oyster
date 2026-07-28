@@ -7,7 +7,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createCheckpointRollbackJournal } from "../server/persistence/checkpointRollbackJournal.mjs";
 
 function setup(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-rollback-journal-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-rollback-journal-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const reference = { backend: "sqlite", id: "session-a", storagePath: "/agent/sessions.sqlite" };

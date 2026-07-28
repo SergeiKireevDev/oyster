@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 readonly MIN_NODE_VERSION="22.19.0"
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-readonly SERVICE_NAME="pi-ui.service"
+readonly SERVICE_NAME="oyster.service"
 
 INSTALL_SYSTEM_PACKAGES=1
 INSTALL_CLOUDFLARED=1
@@ -80,7 +80,7 @@ esac
 
 [[ "$OYSTER_PORT" =~ ^[0-9]+$ ]] && (( OYSTER_PORT >= 1 && OYSTER_PORT <= 65535 )) \
   || die "OYSTER_PORT must be an integer from 1 through 65535."
-[[ -f "$ROOT_DIR/package-lock.json" && -f "$ROOT_DIR/pi-ui.service" ]] \
+[[ -f "$ROOT_DIR/package-lock.json" && -f "$ROOT_DIR/oyster.service" ]] \
   || die "Run this script from a complete Oyster source checkout."
 
 if [[ "$OYSTER_HOST" != "127.0.0.1" && "$OYSTER_HOST" != "::1" && "$OYSTER_HOST" != "localhost" ]]; then
@@ -197,7 +197,7 @@ if (( INSTALL_SERVICE )); then
     printf 'Environment=%s\n' "$(systemd_quote "PI_DIR=$OYSTER_WORKSPACE")"
     printf 'Environment=%s\n' "$(systemd_quote "HOST=$OYSTER_HOST")"
     printf 'Environment=%s\n' "$(systemd_quote "PORT=$OYSTER_PORT")"
-    printf 'Environment=%s\n' "$(systemd_quote "PI_UI_URL=$INTERNAL_URL")"
+    printf 'Environment=%s\n' "$(systemd_quote "OYSTER_URL=$INTERNAL_URL")"
     printf 'Environment=%s\n' "$(systemd_quote "PERSISTENT_STORE=sqlite")"
     printf 'Environment=%s\n' "$(systemd_quote "PI_CODING_AGENT_DIR=$HOME/.pi/agent")"
     if [[ -n "$cloudflared_bin" ]]; then

@@ -10,7 +10,7 @@
 // and through the HTTP API for a few read-only cross-checks.
 //
 // Desktop and mobile run as SEPARATE projects with separate containers. The
-// per-project PI_UI_URL / PI_UI_TOKEN / PI_UI_CONTAINER are wired by the
+// per-project OYSTER_URL / OYSTER_TOKEN / OYSTER_CONTAINER are wired by the
 // playwright config `use` block — this module just consumes process.env.
 
 import { execFileSync } from "node:child_process";
@@ -21,21 +21,21 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = join(HERE, "..", ".e2e-state.json");
 
-export const BASE = process.env.PI_UI_URL ?? "http://localhost:4000";
-export const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const DEFAULT_CONTAINER = process.env.PI_UI_CONTAINER ?? "oyster-e2e";
+export const BASE = process.env.OYSTER_URL ?? "http://localhost:4000";
+export const TOKEN = process.env.OYSTER_TOKEN ?? "e2e-test-token";
+const DEFAULT_CONTAINER = process.env.OYSTER_CONTAINER ?? "oyster-e2e";
 
 function baseUrl() {
-  return process.env.PI_UI_URL ?? BASE;
+  return process.env.OYSTER_URL ?? BASE;
 }
 
 function authToken() {
-  return process.env.PI_UI_TOKEN ?? TOKEN;
+  return process.env.OYSTER_TOKEN ?? TOKEN;
 }
 
 /** Name of the container the suite drives (recorded by global-setup). */
 export function containerName() {
-  if (process.env.PI_UI_CONTAINER) return process.env.PI_UI_CONTAINER;
+  if (process.env.OYSTER_CONTAINER) return process.env.OYSTER_CONTAINER;
   if (existsSync(STATE_FILE)) {
     try { return JSON.parse(readFileSync(STATE_FILE, "utf8")).container; } catch {}
   }

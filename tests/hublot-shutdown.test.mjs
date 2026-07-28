@@ -10,7 +10,7 @@ import {
 } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-shutdown-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-shutdown-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,

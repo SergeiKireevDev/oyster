@@ -132,7 +132,7 @@ function summarizeDiff(piProcesses, dir, model, diff) {
       "Reply with ONLY that line — no quotes, no code fences, no explanation.\n\n" +
       `<diff>\n${diff}\n</diff>`;
     const args = ["--no-session", "--no-tools", "--thinking", "off", "--model", model, "-p", prompt];
-    console.log(`[pi-ui] checkpoint summary sub-agent (${model}) for ${dir}`);
+    console.log(`[oyster] checkpoint summary sub-agent (${model}) for ${dir}`);
     const proc = piProcesses.ephemeral(args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
     proc.stdout.on("data", (c) => { out += c; });
@@ -143,7 +143,7 @@ function summarizeDiff(piProcesses, dir, model, diff) {
     proc.on("exit", (code) => {
       clearTimeout(timer);
       if (code !== 0) {
-        console.error(`[pi-ui] summary sub-agent failed (code=${code}): ${err.trim().split("\n").pop() ?? ""}`);
+        console.error(`[oyster] summary sub-agent failed (code=${code}): ${err.trim().split("\n").pop() ?? ""}`);
         resolvePromise(null);
         return;
       }
@@ -189,6 +189,6 @@ export async function checkpointWorkdir(piProcesses, dir, label, model = null) {
     return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };
   }
   const hash = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-  console.log(`[pi-ui] checkpoint ${hash} in ${dir} (${files} files): ${message}`);
+  console.log(`[oyster] checkpoint ${hash} in ${dir} (${files} files): ${message}`);
   return { status: 200, body: { committed: true, hash, message, files, dir, summarized } };
 }

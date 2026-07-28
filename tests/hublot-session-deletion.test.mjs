@@ -10,7 +10,7 @@ import {
 } from "../server/tunnels.mjs";
 
 test("session deletion stops service and tunnel before cascading hublot and startup records", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-delete-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-delete-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root, hublotProcessHandles: new Map() };
   const children = [];

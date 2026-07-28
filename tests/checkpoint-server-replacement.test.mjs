@@ -8,7 +8,7 @@ import { createCheckpointRollbackJournal } from "../server/persistence/checkpoin
 import { checkpointTree } from "../server/checkpoints.mjs";
 
 test("checkpoint trees and in-progress rollback records survive stable server replacement", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-checkpoint-replacement-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-checkpoint-replacement-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });

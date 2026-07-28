@@ -60,7 +60,7 @@ test("SQLite identity is never reduced to a bare database-path comparison", () =
   const pathEquality = /(?:\b(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b\s*={2,3}|={2,3}\s*(?:\w+\.)*(?:storagePath|SQLITE_PATH|sqlitePath)\b)/;
   const offenders = sources
     .filter(({ name }) => name !== "server/session-references.mjs")
-    .filter(({ text }) => text.split("\n").some((line) => pathEquality.test(line) && !/PI_UI_DB_PATH/.test(line) && !/backend\s*={2,3}\s*["']jsonl["']/.test(line)))
+    .filter(({ text }) => text.split("\n").some((line) => pathEquality.test(line) && !/OYSTER_DB_PATH/.test(line) && !/backend\s*={2,3}\s*["']jsonl["']/.test(line)))
     .map(({ name }) => name);
   assert.deepEqual(offenders, [], `compare full session references through server/session-references.mjs: ${offenders.join(", ")}`);
 });
@@ -99,7 +99,7 @@ test("only the app-store owner and read-only session catalog can construct SQLit
 });
 
 test("opening and migrating oyster.sqlite leaves the coding-agent schema unchanged", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-schema-boundary-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-schema-boundary-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const agentPath = join(root, "sessions.sqlite");
   const appPath = join(root, "oyster.sqlite");

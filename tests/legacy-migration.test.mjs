@@ -7,7 +7,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { runLegacyMigration } from "../server/persistence/legacyMigration.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-legacy-migration-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-legacy-migration-"));
   const databasePath = join(root, "app.sqlite");
   const store = openAppStore({ databasePath });
   t.after(() => { try { store.close(); } catch {} rmSync(root, { recursive: true, force: true }); });

@@ -29,7 +29,7 @@ async function unusedPort() {
 }
 
 test("reserved warm tunnels serve the waiting page and stay out of public hublot listings", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-pool-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,
@@ -64,7 +64,7 @@ test("reserved warm tunnels serve the waiting page and stay out of public hublot
 });
 
 test("claiming a warm tunnel kills only the dummy and preserves its cloudflared URL", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-pool-claim-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-claim-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   let sizeReads = 0;
   const config = { PI_AGENT_DIR: join(root, "agent") };

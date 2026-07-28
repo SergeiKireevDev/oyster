@@ -17,7 +17,7 @@ export function scheduleHublotStartupReconciliation({ state, supervisor, logger 
         return report;
       })
       .catch((error) => {
-        logger.error(`[pi-ui] hublot startup reconciliation failed: ${error.message}`);
+        logger.error(`[oyster] hublot startup reconciliation failed: ${error.message}`);
         return null;
       })
       .finally(() => {
@@ -156,13 +156,13 @@ export function createHublotSupervisor({
               if (recovery?.recovered) { resetRestartState(hublot.id); recoveredTunnels++; continue; }
             } catch (error) {
               recordRestartFailure(hublot.id, error);
-              logger.error(`[pi-ui] hublot ${hublot.id} tunnel recovery failed: ${error.message}`);
+              logger.error(`[oyster] hublot ${hublot.id} tunnel recovery failed: ${error.message}`);
               continue;
             }
           }
           if (serviceDead && restartService) {
             try { await restartService(hublot); resetRestartState(hublot.id); restarted++; }
-            catch (error) { recordRestartFailure(hublot.id, error); logger.error(`[pi-ui] hublot ${hublot.id} service restart failed: ${error.message}`); }
+            catch (error) { recordRestartFailure(hublot.id, error); logger.error(`[oyster] hublot ${hublot.id} service restart failed: ${error.message}`); }
           }
         } else if (hublot.restart_count || hublot.next_restart_at) {
           resetRestartState(hublot.id);
@@ -177,7 +177,7 @@ export function createHublotSupervisor({
   function start() {
     if (timer) return timer;
     timer = setIntervalFn(() => {
-      Promise.resolve(reconcile()).catch((error) => logger.error(`[pi-ui] hublot supervisor: ${error.message}`));
+      Promise.resolve(reconcile()).catch((error) => logger.error(`[oyster] hublot supervisor: ${error.message}`));
     }, intervalMs);
     timer?.unref?.();
     return timer;

@@ -30,11 +30,11 @@ node --input-type=module -e '
 Stop the service before copying a database as files. Copy the main file and every existing `-wal` and `-shm` sidecar as one snapshot.
 
 ```bash
-systemctl --user stop pi-ui.service
+systemctl --user stop oyster.service
 for file in "$HOME/.pi/agent/sessions.sqlite"{,-wal,-shm}; do
   test ! -e "$file" || cp --preserve "$file" "$HOME/pi-backups/"
 done
-systemctl --user start pi-ui.service
+systemctl --user start oyster.service
 ```
 
 Apply the same closed-database rule to `oyster.sqlite`.

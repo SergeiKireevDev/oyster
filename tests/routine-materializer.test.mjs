@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { materializeRoutineScript } from "../server/persistence/routineMaterializer.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-materializer-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-materializer-"));
   const runtimeDir = join(root, "private", "routines");
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return { root, runtimeDir };

@@ -26,7 +26,7 @@ function pendingDeletion(store, id, sessionId, stage) {
 }
 
 test("session deletion journals each cross-store stage and completes the app cascade before broadcast", async (t) => {
-  const store = fixture(t, "pi-ui-session-delete-");
+  const store = fixture(t, "oyster-session-delete-");
   const reference = { backend: "jsonl", id: "session-a", storagePath: "/agent/sessions/a.jsonl" };
   const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
   const order = [];
@@ -69,7 +69,7 @@ test("session deletion journals each cross-store stage and completes the app cas
 });
 
 test("agent deletion failure preserves every owned resource descriptor and database row", async (t) => {
-  const store = fixture(t, "pi-ui-session-delete-failure-");
+  const store = fixture(t, "oyster-session-delete-failure-");
   const reference = { backend: "sqlite", id: "session-failure", storagePath: "/agent/sessions.sqlite" };
   const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
   const resources = {
@@ -106,7 +106,7 @@ test("agent deletion failure preserves every owned resource descriptor and datab
 });
 
 test("startup reconciliation retries agent deletion or infers its completion before cascading owners", async (t) => {
-  const store = fixture(t, "pi-ui-session-reconcile-");
+  const store = fixture(t, "oyster-session-reconcile-");
   const existing = pendingDeletion(store, "delete-existing", "existing", "routines_stopped");
   const missing = pendingDeletion(store, "delete-missing", "missing", "routines_stopped");
   const deleted = [], deletedRoutineOwners = [];

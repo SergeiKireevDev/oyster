@@ -29,13 +29,13 @@ HOST=127.0.0.1 node server/server.mjs
 
 ## Authenticated outer proxies
 
-`--unauthenticated` (or `PI_UI_UNAUTHENTICATED=true`) disables Oyster's own bearer-token check. Use it only for an Oyster spoke whose listener is reachable exclusively through an authenticated llmbox proxy or an equivalent trusted authentication boundary. It does **not** disable authentication on Oyster Hub or llmbox.
+`--unauthenticated` (or `OYSTER_UNAUTHENTICATED=true`) disables Oyster's own bearer-token check. Use it only for an Oyster spoke whose listener is reachable exclusively through an authenticated llmbox proxy or an equivalent trusted authentication boundary. It does **not** disable authentication on Oyster Hub or llmbox.
 
 Do not use this mode merely because a reverse proxy provides TLS. The outer layer must authenticate every request, including SSE and mutating API calls, and the unauthenticated Oyster port must not be reachable by untrusted clients through another route.
 
 ## Protect the UI token
 
-- Generate a strong, unique `PI_UI_TOKEN` and store it outside source control.
+- Generate a strong, unique `OYSTER_TOKEN` and store it outside source control.
 - Treat a URL containing the token like a password.
 - Prefer the URL fragment used by `/#token=…`; fragments are not sent in HTTP requests, and the application removes it after capture.
 - Do not place tokens in logs, screenshots, issue reports, query strings, or shell history.

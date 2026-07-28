@@ -7,7 +7,7 @@ import { createAppSettings, APP_SETTING_KEYS } from "../server/persistence/appSe
 import { openAppStore } from "../server/persistence/appStore.mjs";
 
 test("typed app settings persist mutable workdir and default runner with documented precedence", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-settings-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-settings-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   let timestamp = 0;

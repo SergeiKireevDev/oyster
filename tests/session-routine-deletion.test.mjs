@@ -9,7 +9,7 @@ const ROUTINES_MODULE = new URL("../server/routines.mjs", import.meta.url).href;
 const APP_STORE_MODULE = new URL("../server/persistence/appStore.mjs", import.meta.url).href;
 
 test("deleting a session removes its owned routine definitions instead of releasing them", (t) => {
-  const home = mkdtempSync(join(tmpdir(), "pi-ui-routine-owner-delete-"));
+  const home = mkdtempSync(join(tmpdir(), "oyster-routine-owner-delete-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const script = `
     import { createRoutine, deleteSessionRoutines, listRoutines, releaseRoutine } from ${JSON.stringify(ROUTINES_MODULE)};

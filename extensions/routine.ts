@@ -1,9 +1,9 @@
 /**
- * routine.ts — pi extension exposing the pi-remote-ui "routines" feature
+ * routine.ts — pi extension exposing the Oyster "routines" feature
  * as the "routine" tool the LLM can call directly from the harness.
  *
  * A routine is a durable runnable script definition managed by oyster,
- * bound to the session using it and driven by the pi-remote-ui server
+ * bound to the session using it and driven by the Oyster server
  * (`server/server.mjs`) through a tiny protocol:
  *
  *   <script> run       – the main job (started via action=start)
@@ -19,8 +19,8 @@
  * instantly in the UI sidebar (via SSE), other sessions cannot start it
  * until released, and deleting the session stops and deletes it.
  *
- * Config: the UI server is found at PI_UI_URL (default http://127.0.0.1:8080)
- * and authenticated with PI_UI_TOKEN or the .ui-token file at the project
+ * Config: the UI server is found at OYSTER_URL (default http://127.0.0.1:8080)
+ * and authenticated with OYSTER_TOKEN or the .ui-token file at the project
  * project root.
  */
 
@@ -31,10 +31,10 @@ import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const BASE = process.env.PI_UI_URL ?? "http://127.0.0.1:8080";
+const BASE = process.env.OYSTER_URL ?? "http://127.0.0.1:8080";
 
 function uiToken(): string {
-  if (process.env.PI_UI_TOKEN) return process.env.PI_UI_TOKEN.trim();
+  if (process.env.OYSTER_TOKEN) return process.env.OYSTER_TOKEN.trim();
   const candidates = [
     join(process.cwd(), ".ui-token"),
     join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".ui-token"),
@@ -44,7 +44,7 @@ function uiToken(): string {
       return readFileSync(p, "utf8").trim();
     } catch {}
   }
-  throw new Error("pi-remote-ui token not found (set PI_UI_TOKEN or provide .ui-token)");
+  throw new Error("Oyster token not found (set OYSTER_TOKEN or provide .ui-token)");
 }
 
 async function api(method: string, path: string, body?: unknown) {
@@ -85,7 +85,7 @@ export default function routineExtension(pi: ExtensionAPI) {
     label: "Routine",
     description:
       "Manage routines — durable runnable scripts managed by oyster and bound to this session, " +
-      "with native progression reporting in the pi-remote-ui sidebar. When the user asks to " +
+      "with native progression reporting in the Oyster sidebar. When the user asks to " +
       "'create a routine' for some task, use action=create with a `script` implementing the " +
       "protocol: the script receives one argument, `run` (do the job) or `teardown` (remove " +
       "EVERY byproduct the run created), and reports progression by printing " +

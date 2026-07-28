@@ -3,6 +3,6 @@ export function createLifecycleLogger({ now = () => performance.now(), log = con
   const startedAt = now();
   return function lifecycleLog(label, data = {}) {
     const elapsed = Math.round(now() - startedAt);
-    log(`[pi-ui lifecycle +${elapsed}ms] ${label}`, { ...snapshot(), ...data });
+    log(`[oyster lifecycle +${elapsed}ms] ${label}`, { ...snapshot(), ...data });
   };
 }

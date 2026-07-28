@@ -265,7 +265,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 1. Add the app database foundation
 
-- [x] Add `PI_UI_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`.
+- [x] Add `OYSTER_DB_PATH`, defaulting to `~/.pi/agent/oyster.sqlite`.
 - [x] Create one stable-core-owned database service and expose repositories through `state.appStore`; define deterministic startup, hot-reload reuse, graceful close, and test teardown behavior.
 - [x] Enable WAL, foreign keys, a busy timeout, and `synchronous=NORMAL`.
 - [x] Add numbered, transactional, idempotent schema migrations.
@@ -275,7 +275,7 @@ Runner descriptors survive restarts. Runner processes remain in memory and resta
 
 ### 2. Wire the app store into the stable server core
 
-- [x] Resolve and validate `PI_UI_DB_PATH` in `server.mjs`, include the non-secret resolved path and migration status in startup logging and `/health`, and fail startup before listening when the store cannot be opened or migrated.
+- [x] Resolve and validate `OYSTER_DB_PATH` in `server.mjs`, include the non-secret resolved path and migration status in startup logging and `/health`, and fail startup before listening when the store cannot be opened or migrated.
 - [x] Open exactly one app-store instance during stable-core startup, assign it to `state.appStore` before the first `app.mjs` load, and reuse that same instance across every hot reload.
 - [x] Define a narrow app-store interface containing repositories and transaction/close operations; inject it from `state` into runner, checkpoint, routine, hublot, session, and settings composition instead of opening SQLite connections inside route modules or domain modules.
 - [x] Add startup hydration that reconstructs rebuildable in-memory indexes and runtime registries from the store without spawning runners, routines, services, or tunnels prematurely.

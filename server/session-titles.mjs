@@ -91,12 +91,12 @@ export function summarizeSessionTitle(piProcesses, { cwd, messages, model = null
     }, timeoutMs);
     timer.unref?.();
     proc.on("error", (error) => {
-      console.error(`[pi-ui] session title sub-agent failed: ${error.message}`);
+      console.error(`[oyster] session title sub-agent failed: ${error.message}`);
       settle(null);
     });
     proc.on("exit", (code) => {
       if (code !== 0) {
-        console.error(`[pi-ui] session title sub-agent failed (code=${code}): ${stderr.trim().split("\n").pop() ?? ""}`);
+        console.error(`[oyster] session title sub-agent failed (code=${code}): ${stderr.trim().split("\n").pop() ?? ""}`);
         settle(null);
         return;
       }

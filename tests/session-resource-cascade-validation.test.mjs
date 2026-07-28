@@ -8,7 +8,7 @@ import { createSessionDeletionWorkflow } from "../server/persistence/sessionDele
 import { reconcileSessionDeletions } from "../server/persistence/sessionDeletionReconciler.mjs";
 
 test("deleting one session removes all and only its checkpoints, routines, runs, logs, hublots, lifecycle, and runners", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-complete-session-cascade-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-complete-session-cascade-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const references = {
@@ -89,7 +89,7 @@ test("deleting one session removes all and only its checkpoints, routines, runs,
 });
 
 test("failed agent deletion preserves every owned durable resource and skips destructive callbacks", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-failed-agent-preservation-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-failed-agent-preservation-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const reference = { backend: "sqlite", id: "session-failed", storagePath: "/sessions/agent.sqlite" };
@@ -147,7 +147,7 @@ test("failed agent deletion preserves every owned durable resource and skips des
 });
 
 test("restart completes the owned-resource cascade after a crash following agent deletion", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-post-agent-delete-crash-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-post-agent-delete-crash-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
@@ -204,7 +204,7 @@ test("restart completes the owned-resource cascade after a crash following agent
 });
 
 test("fork deletion removes fork-owned rows without deleting ancestor-owned resources", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-fork-resource-isolation-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-fork-resource-isolation-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   const storagePath = "/sessions/family.sqlite";

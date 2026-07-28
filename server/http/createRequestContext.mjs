@@ -117,7 +117,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
       bearer: bearer?.startsWith("Bearer ") ? bearer.slice(7) : bearer,
       xAuthToken: req.headers["x-auth-token"],
       xApiKey: req.headers["x-api-key"],
-      cookie: parseCookies(req).pi_ui_token,
+      cookie: parseCookies(req).oyster_token,
     };
   }
 

@@ -343,7 +343,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
     // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
     // makes cloudflared print a URL that never actually registers (error 1033)
     const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
-    console.log(`[pi-ui] spawning tunnel: ${bin} ${args.join(" ")}`);
+    console.log(`[oyster] spawning tunnel: ${bin} ${args.join(" ")}`);
     const proc = spawnProcess(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
     registerHublotProcessHandle(state, tunnelProcess, proc);
@@ -382,7 +382,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
           return;
         }
         tunnel.url = m[0];
-        console.log(`[pi-ui] tunnel URL assigned; waiting for public readiness: ${tunnel.url}`);
+        console.log(`[oyster] tunnel URL assigned; waiting for public readiness: ${tunnel.url}`);
         const confirmPublicReadiness = state.config.SKIP_PUBLIC_HUBLOT_READINESS
           ? async () => true
           : waitForPublic;
@@ -393,7 +393,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
           const row = recordHublotTransition(state, id, "open", {
             desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
           });
-          console.log(`[pi-ui] tunnel ready: ${tunnel.url} -> localhost:${port}`);
+          console.log(`[oyster] tunnel ready: ${tunnel.url} -> localhost:${port}`);
           if (emitOpenedEvent) state.serverEvent({ type: "tunnel_opened", tunnel: persistedTunnelInfo(state, row) });
           resolvePromise(persistedTunnelInfo(state, row));
         }).catch((error) => {
@@ -442,13 +442,13 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
           desiredState: current.desired_state, publicUrl: null, closedAt,
           lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
         });
-        console.log(`[pi-ui] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
+        console.log(`[oyster] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
         const latest = hublotRepository(state).find(tunnel.id);
         if (latest && !isHublotTunnelPoolEntry(latest)) {
           state.serverEvent({ type: "tunnel_closed", tunnel: persistedTunnelInfo(state, latest) });
         }
         if (latest && isHublotTunnelPoolEntry(latest) && !state.hublotTunnelPoolStopping) {
-          void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+          void ensureHublotTunnelPool(state).catch((error) => console.error(`[oyster] tunnel pool refill failed: ${error.message}`));
         }
       }
     });
@@ -474,11 +474,11 @@ export function closeTunnel(state, id) {
     if (!trackedServicePids.includes(pid)) {
       const started = pidStartedAt(pid);
       if (!started || started.getTime() < createdAt) {
-        console.log(`[pi-ui] NOT killing pid ${pid} on port ${row.port} (predates the hublot)`);
+        console.log(`[oyster] NOT killing pid ${pid} on port ${row.port} (predates the hublot)`);
         continue;
       }
     }
-    if (killPid(pid)) console.log(`[pi-ui] killed hublot service pid ${pid} (port ${row.port})`);
+    if (killPid(pid)) console.log(`[oyster] killed hublot service pid ${pid} (port ${row.port})`);
     setTimeout(() => killPid(pid, "SIGKILL"), 3000).unref();
   }
 
@@ -740,7 +740,7 @@ export async function spawnHublotTunnelPoolDummy(state, hublot, {
       finishPersistedProcess(state, processRow, { exitCode, signal });
       const current = hublotRepository(state).find(row.id);
       if (ready && current?.status === "open" && isHublotTunnelPoolEntry(current) && !state.hublotTunnelPoolStopping) {
-        void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+        void ensureHublotTunnelPool(state).catch((error) => console.error(`[oyster] tunnel pool refill failed: ${error.message}`));
       } else if (!ready) {
         reject(new Error(`tunnel-pool dummy exited before serving port ${row.port} (code=${exitCode})`));
       }
@@ -822,7 +822,7 @@ export async function createHublotTunnelPoolEntry(state) {
       id: reserved.id, port: reserved.port, label: reserved.label, sessionId: null,
     }, { emitOpenedEvent: false });
     if (state.hublotTunnelPoolStopping) throw new Error("hublot tunnel pool is stopping");
-    console.log(`[pi-ui] reserved warm tunnel: ${tunnel.url} -> localhost:${tunnel.port}`);
+    console.log(`[oyster] reserved warm tunnel: ${tunnel.url} -> localhost:${tunnel.port}`);
     return tunnel;
   } catch (error) {
     if (dummy?.serviceProc?.exitCode === null) dummy.serviceProc.kill("SIGTERM");
@@ -864,7 +864,7 @@ export function ensureHublotTunnelPool(state, { createEntry = createHublotTunnel
     if (state.hublotTunnelPoolRefillRequested && !state.hublotTunnelPoolStopping) {
       state.hublotTunnelPoolRefillRequested = false;
       void ensureHublotTunnelPool(state, { createEntry })
-        .catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+        .catch((error) => console.error(`[oyster] tunnel pool refill failed: ${error.message}`));
     }
   };
   task.then(finished, finished);
@@ -928,7 +928,7 @@ export async function acquireHublotTunnelPoolEntry(state, {
     }
   });
   if (claimed) {
-    void ensureHublotTunnelPool(state).catch((error) => console.error(`[pi-ui] tunnel pool refill failed: ${error.message}`));
+    void ensureHublotTunnelPool(state).catch((error) => console.error(`[oyster] tunnel pool refill failed: ${error.message}`));
   }
   return claimed;
 }
@@ -999,7 +999,7 @@ export async function spawnMarkdownService(state, hublot, markdownPath, {
   });
   materializeHublotStartupScript(state, row.id);
 
-  console.log(`[pi-ui] starting Markdown reader for ${markdownPath} on :${hublot.port}`);
+  console.log(`[oyster] starting Markdown reader for ${markdownPath} on :${hublot.port}`);
   const serviceProc = spawnProcess(nodePath, [rendererPath, markdownPath, String(hublot.port)], {
     cwd: dirname(markdownPath),
     stdio: "ignore",
@@ -1082,7 +1082,7 @@ export async function spawnGitServerService(state, hublot, worktreePath, {
   });
   materializeHublotStartupScript(state, row.id);
 
-  console.log(`[pi-ui] starting read-only Git Smart HTTP server for ${worktreePath} on :${hublot.port}`);
+  console.log(`[oyster] starting read-only Git Smart HTTP server for ${worktreePath} on :${hublot.port}`);
   const serviceProc = spawnProcess(serverPath, ["--host", "127.0.0.1", "--port", String(hublot.port), "--state-dir", stateDir, worktreePath], {
     cwd: worktreePath,
     stdio: "ignore",
@@ -1230,7 +1230,7 @@ export function spawnHublotAgent(state, hublot, brief, {
 } = {}) {
   return new Promise((resolvePromise, reject) => {
     const prompt = hublotAgentPrompt(hublot, brief);
-    console.log(`[pi-ui] preparing local service for hublot :${hublot.port}`);
+    console.log(`[oyster] preparing local service for hublot :${hublot.port}`);
     // --no-session: these one-shot setup runs must not leave session files
     // behind (they would clutter the sessions list)
     const proc = state.piProcesses.ephemeral(["-p", prompt], {
@@ -1272,7 +1272,7 @@ export function spawnHublotAgent(state, hublot, brief, {
       const serviceProcess = servicePid
         ? persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: servicePid, startedAt: createdAt })
         : null;
-      if (servicePid) console.log(`[pi-ui] hublot :${hublot.port} served by pid ${servicePid}`);
+      if (servicePid) console.log(`[oyster] hublot :${hublot.port} served by pid ${servicePid}`);
       resolvePromise({ agentProc: proc, agentProcess, servicePid, serviceProcess, createdAt });
     };
 
@@ -1313,7 +1313,7 @@ export function spawnHublotAgent(state, hublot, brief, {
       finishPersistedProcess(state, agentProcess, { exitCode: code, signal });
       agentExited = true;
       agentExitAt = Date.now();
-      console.log(`[pi-ui] hublot service agent for :${hublot.port} exited (code=${code})`);
+      console.log(`[oyster] hublot service agent for :${hublot.port} exited (code=${code})`);
     });
     proc.on("error", (error) => {
       removeHublotProcessHandle(state, agentProcess, proc);

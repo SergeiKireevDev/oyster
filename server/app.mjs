@@ -51,7 +51,7 @@ export async function init(state) {
         if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
       }
     };
-    console.log("[pi-ui] migrated state: removed dead eventBuffer, patched broadcast");
+    console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
   }
 
   const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}`;
@@ -186,7 +186,7 @@ export async function init(state) {
   if (config.HUBLOT_TUNNEL_POOL_SIZE > 0 && !state.hublotTunnelPoolStopping) {
     void Promise.resolve(hublotReconciliation)
       .then(() => ensureHublotTunnelPool(state))
-      .catch((error) => console.error(`[pi-ui] initial tunnel pool failed: ${error.message}`));
+      .catch((error) => console.error(`[oyster] initial tunnel pool failed: ${error.message}`));
   }
   return {
     handleRequest, startPi, stopPi,

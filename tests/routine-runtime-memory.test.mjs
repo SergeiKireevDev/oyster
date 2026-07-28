@@ -8,7 +8,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createRoutine, startRoutine, stopRoutine } from "../server/routines.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-routine-runtime-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-routine-runtime-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, store };

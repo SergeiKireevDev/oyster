@@ -1,4 +1,4 @@
-export const AUTH_TOKEN_KEY = "pi_ui_token";
+export const AUTH_TOKEN_KEY = "oyster_token";
 
 /** Mount-scoped browser effects used by the authentication gate. */
 export function createAuthBrowserService({ storage, reload, fetchImpl = fetch }) {

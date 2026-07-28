@@ -40,14 +40,14 @@ The idempotent installer:
 3. builds pi and the Oyster UI, then runs the full test suite;
 4. registers Oyster's pi extensions and creates `~/oyster-workspace`;
 5. generates `.ui-token` with owner-only permissions; and
-6. enables a persistent `pi-ui.service` systemd user service on `127.0.0.1:8080`.
+6. enables a persistent `oyster.service` systemd user service on `127.0.0.1:8080`.
 
 Verify the local service:
 
 ```bash
 curl --fail http://127.0.0.1:8080/health
-systemctl --user status pi-ui.service
-journalctl --user -u pi-ui.service -f
+systemctl --user status oyster.service
+journalctl --user -u oyster.service -f
 ```
 
 ### Add secure remote access

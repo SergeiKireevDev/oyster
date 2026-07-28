@@ -15,9 +15,9 @@ const LOCK_DIR = join(HERE, "..", ".port-locks");
 const PORT_MIN = Number(process.env.E2E_PORT_MIN ?? 4000);
 const PORT_MAX = Number(process.env.E2E_PORT_MAX ?? 4018);
 
-const TOKEN = process.env.PI_UI_TOKEN ?? "e2e-test-token";
-const DEFAULT_IMAGE = process.env.PI_UI_IMAGE ?? "oyster:published";
-const SQLITE_IMAGE = process.env.PI_UI_SQLITE_IMAGE ?? "oyster:sqlite";
+const TOKEN = process.env.OYSTER_TOKEN ?? "e2e-test-token";
+const DEFAULT_IMAGE = process.env.OYSTER_IMAGE ?? "oyster:published";
+const SQLITE_IMAGE = process.env.OYSTER_SQLITE_IMAGE ?? "oyster:sqlite";
 
 let allocatedPort = null;
 let lockFile = null;
@@ -103,9 +103,9 @@ async function allocatePort() {
     container = staleContainer;
     agentVolume = `oyster-e2e-agent-${port}`;
     base = `http://localhost:${port}`;
-    process.env.PI_UI_URL = base;
-    process.env.PI_UI_CONTAINER = container;
-    process.env.PI_UI_TOKEN = TOKEN;
+    process.env.OYSTER_URL = base;
+    process.env.OYSTER_CONTAINER = container;
+    process.env.OYSTER_TOKEN = TOKEN;
     return;
   }
   throw new Error(`no free e2e ports in ${PORT_MIN}..${PORT_MAX}`);
@@ -126,7 +126,7 @@ async function waitUntilReachable() {
 
 function startContainer() {
   console.log(`[e2e] starting ${selectedStore} mock container ${container} on ${base} with volume ${agentVolume} …`);
-  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -v "${agentVolume}:/root/.pi/agent" -e "PI_UI_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" -e "PI_UI_SKIP_PUBLIC_HUBLOT_READINESS=1" -e "PERSISTENT_STORE=${selectedStore}" ${selectedImage}`);
+  sh(`docker run -d --name ${container} -p "${allocatedPort}:4000" -v "${agentVolume}:/root/.pi/agent" -e "OYSTER_TOKEN=${TOKEN}" -e "E2E_MOCK_LLM=1" -e "OYSTER_SKIP_PUBLIC_HUBLOT_READINESS=1" -e "PERSISTENT_STORE=${selectedStore}" ${selectedImage}`);
 }
 
 // Start a container if one isn't already reachable — records state so

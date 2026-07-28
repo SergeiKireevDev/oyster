@@ -77,7 +77,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   outputDir: process.env.E2E_VIDEO ? videoOutputDir : undefined,
   use: {
-    baseURL: process.env.PI_UI_URL ?? "http://localhost:4000",
+    baseURL: process.env.OYSTER_URL ?? "http://localhost:4000",
     viewport: { width: 1400, height: 900 }, // desktop is the default
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

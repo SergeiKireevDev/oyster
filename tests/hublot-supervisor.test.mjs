@@ -9,7 +9,7 @@ import { processIdentityMatches } from "../server/persistence/processIdentity.mj
 import { recordHublotTransition, reserveHublot } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-supervisor-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-supervisor-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });

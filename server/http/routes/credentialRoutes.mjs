@@ -84,14 +84,14 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
 
     try {
       const restart = await restartActiveRunners();
-      logger.info?.("[pi-ui] credential mutation", { operation: remove ? "remove" : "set", provider: input.provider, restart: restart?.status ?? "unknown" });
+      logger.info?.("[oyster] credential mutation", { operation: remove ? "remove" : "set", provider: input.provider, restart: restart?.status ?? "unknown" });
       if (restart?.status === "partial") {
         json(res, 503, { error: "credential saved but some pi runners failed to restart", credential, restart });
         return;
       }
       json(res, 200, { credential, restart });
     } catch {
-      logger.error?.("[pi-ui] credential mutation restart failed", { operation: remove ? "remove" : "set", provider: input.provider });
+      logger.error?.("[oyster] credential mutation restart failed", { operation: remove ? "remove" : "set", provider: input.provider });
       json(res, 503, {
         error: "credential saved but pi runners could not be restarted",
         credential,

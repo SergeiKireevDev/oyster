@@ -16,7 +16,7 @@ function response() {
 }
 
 test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable across restart", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-compat-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-compat-"));
   const databasePath = join(root, "app.sqlite");
   let store = openAppStore({ databasePath });
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });

@@ -9,7 +9,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { allocateHublot, isLocalPortAvailable, reserveHublot } from "../server/tunnels.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-hublot-port-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-port-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });

@@ -10,11 +10,11 @@ import { importLegacyAppData } from "../server/persistence/legacyDataImport.mjs"
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 test("migration command requires stopped-service confirmation and records dry runs", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-migrate-command-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-migrate-command-"));
   const databasePath = join(root, "app.sqlite");
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const script = fileURLToPath(new URL("../scripts/migrate-app-data.mjs", import.meta.url));
-  const env = { ...process.env, HOME: root, PI_UI_DB_PATH: databasePath, PI_CODING_AGENT_DIR: join(root, "agent") };
+  const env = { ...process.env, HOME: root, OYSTER_DB_PATH: databasePath, PI_CODING_AGENT_DIR: join(root, "agent") };
   const refused = spawnSync(process.execPath, [script], { env, encoding: "utf8" });
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /--service-stopped confirmation/);
@@ -29,7 +29,7 @@ test("migration command requires stopped-service confirmation and records dry ru
 });
 
 test("failed destination validation leaves every legacy source at its original path", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-import-validation-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-import-validation-"));
   const sourcePath = join(root, "checkpoints.json");
   const sessionPath = join(root, "sessions", "session.jsonl");
   writeFileSync(sourcePath, JSON.stringify({ s1: [{ hash: "hash", anchorId: "anchor", sessionRef: { backend: "jsonl", id: "s1", storagePath: sessionPath } }] }));
@@ -46,7 +46,7 @@ test("failed destination validation leaves every legacy source at its original p
 });
 
 test("stopped-service import plans then applies checkpoints, routine definitions, and bindings", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-ui-legacy-data-"));
+  const root = mkdtempSync(join(tmpdir(), "oyster-legacy-data-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
   const sessionsRoot = join(root, "sessions");
   const sessionPath = join(sessionsRoot, "workspace", "session.jsonl");

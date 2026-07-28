@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const FAKE_HOME = mkdtempSync(join(tmpdir(), "pi-ui-test-home-"));
+const FAKE_HOME = mkdtempSync(join(tmpdir(), "oyster-test-home-"));
 process.env.HOME = FAKE_HOME;
 
 const {

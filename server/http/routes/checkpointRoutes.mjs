@@ -20,7 +20,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
           const rec = recordCheckpoint(runner.sessionRef, runner.dir, out, { catalog: state.sessionCatalog, repository });
           if (rec) { out.recorded = true; out.anchorId = rec.anchorId; }
         } catch (e) {
-          logger.error(`[pi-ui] failed to record checkpoint: ${e.message}`);
+          logger.error(`[oyster] failed to record checkpoint: ${e.message}`);
         }
       }
       json(res, status, out);
@@ -130,7 +130,7 @@ export function createCheckpointRoutes({ state, config, requestContext, runnerFr
         rollbackOperation.advance("runner_opened", { runnerId: runner.id });
         sendToRunner(runner, { id: srvId(), type: "set_session_name", name: `\u23EA ${hash}` });
         runner.sessionName = `\u23EA ${hash}`; // optimistic — lets the first prompt auto-title the fork right away
-        logger.log(`[pi-ui] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
+        logger.log(`[oyster] rolled back ${cp.dir} to ${hash}, forked session ${fork.id}`);
         rollbackOperation.complete();
         json(res, 200, {
           rolledBack: hash,
