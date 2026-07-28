@@ -8,7 +8,7 @@ no network model calls, fully deterministic**.
 
 | Spec | Scenario |
 |---|---|
-| `hublot.spec.js` | Start a session → open a hublot for a simple **button interface** (background agent builds it, real cloudflared tunnel) → assert the button is served → close it. |
+| `pinned-widgets.spec.js` | Open native artifact widgets, create a managed **live-interface widget** for a button service, assert it uses a status tile without an iframe, and preserve the mobile widget drawer through operations. |
 | `routine.spec.js` | Start a session → create a **dummy routine** in the store → ▶ run it from the sidebar to completion → 🧹 tear it down. |
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; autocomplete composer paths and fall back to the file explorer for large result sets. |
@@ -79,10 +79,10 @@ and both interfaces read the same test token.
 - Specs run in parallel with **five workers by default**. Product specs isolate
   themselves by starting a fresh mock container in `beforeEach` and removing it
   in `afterEach`, so workspace/session state does not leak between scenarios.
-- The hublot spec opens a real cloudflared tunnel; the bundled mock serves
-  the button page deterministically in seconds (a real model would take
-  minutes). with the bundled mock the button
-  page is served deterministically in seconds. Per-test timeout is 6 min.
+- The Pinned Widgets spec exercises the compatibility tunnel lifecycle behind
+  a live-interface widget. The bundled mock serves its button page
+  deterministically in seconds without external model calls. Per-test timeout
+  is 6 min.
 - `npx playwright show-report` opens the HTML report after a run.
 - `video-*.example.js` files are scratch/manual video-recording examples. They
   intentionally do not match Playwright's `*.spec.js` pattern and are not part

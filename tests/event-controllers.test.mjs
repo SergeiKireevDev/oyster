@@ -221,7 +221,7 @@ test("carousel controller keeps drawers mounted until reverse swipe animations f
   assert.deepEqual([...hublots.classList.values], []);
 });
 
-test("mobile drawer controller closes only an open drawer on outside mobile taps and tears down", () => {
+test("mobile drawer controller preserves an open drawer during modal operations and closes on outside mobile taps", () => {
   let listener;
   let removed;
   const documentTarget = {
@@ -232,6 +232,7 @@ test("mobile drawer controller closes only an open drawer on outside mobile taps
   const hublots = { contains: () => false, classList: { contains: (name) => name === "open" } };
   const treebar = { contains: () => false, classList: { contains: () => false } };
   let resets = 0;
+  let overlayOpen = true;
   const controller = createMobileDrawerDismissController({
     documentTarget,
     windowTarget: { matchMedia: () => ({ matches: true }) },
@@ -240,8 +241,14 @@ test("mobile drawer controller closes only an open drawer on outside mobile taps
     treebar,
     getCarousel: () => ({ reset: () => { resets++; } }),
     isToggleTarget: () => false,
+    isOverlayOpen: () => overlayOpen,
   });
   controller.attach();
+  listener({ target: {} });
+  assert.equal(resets, 0);
+  overlayOpen = false;
+  listener({ target: { closest: () => ({ id: "modal" }) } });
+  assert.equal(resets, 0, "the closing modal click must not dismiss its underlying drawer");
   listener({ target: {} });
   controller.detach();
   assert.equal(resets, 1);

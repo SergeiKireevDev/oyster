@@ -9,7 +9,7 @@ export function createHublotRuntime(deps) {
   const visible = (tunnel) => deps.isVisible(tunnel, scopeAll, deps.getSessionId());
   let controller;
   const refresh = (options) => controller.refresh(options);
-  const manager = createHublotManagerController({ resetCarousel: deps.resetCarousel, openModal: deps.openModal, refresh, getScopeAll: () => scopeAll });
+  const manager = createHublotManagerController({ openModal: deps.openModal, refresh, getScopeAll: () => scopeAll });
   controller = createHublotFeature({ createController: deps.createController ?? createHublotController, dependencies: {
     ...deps, getSessionId: deps.getSessionId, setDescription: (desc) => { form.desc = desc; deps.setDescription(desc); },
     listSidebarHublots: () => deps.listSidebarHublots(visible), isVisible: visible,

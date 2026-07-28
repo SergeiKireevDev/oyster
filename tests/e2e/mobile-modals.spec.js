@@ -85,18 +85,18 @@ test("every modal keeps all buttons entirely visible on mobile", async ({ page }
       },
     },
     {
-      name: "hublot manager",
+      name: "widget manager",
       open: async () => {
         await page.evaluate(() => document.getElementById("hublots")?.classList.add("open"));
         await page.locator("#hublotAdd").click();
-        await expect(page.locator("#mTitle")).toContainText("Hublots");
+        await expect(page.locator("#mTitle")).toHaveText("Pin widget");
       },
     },
     {
       name: "file explorer",
       open: async () => {
         await page.evaluate(() => document.getElementById("hublots")?.classList.add("open"));
-        await page.locator("#hublotList .hublot-block").first().click();
+        await page.locator("#hublots .pinned-widget-cell", { hasText: "Files" }).first().locator(".pinned-widget-tile").click();
         await expect(page.locator("#mTitle")).toHaveText("File explorer");
       },
     },
