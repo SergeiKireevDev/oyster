@@ -9,6 +9,9 @@ export const emptyDialogOptionPicker = Object.freeze({
   searchable: false,
   query: "",
   active: -1,
+  selected: -1,
+  variant: "default",
+  placeholder: "Filter…",
 });
 
 /** Creates presentation state owned by one mounted application. */
@@ -103,12 +106,18 @@ export function createDialogService({ createStore = writable } = {}) {
     },
     answerConfirm: (answer) => settleConfirm(Boolean(answer)),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
-    openOption(title, options, { searchable = false } = {}) {
+    openOption(title, options, {
+      searchable = false, selected = -1, variant = "default", placeholder = "Filter…",
+    } = {}) {
       if (disposed) return Promise.resolve(null);
       pendingOption?.(null);
       return new Promise((resolve) => {
         pendingOption = resolve;
-        optionPicker.set({ title, options, searchable, query: "", active: -1 });
+        const selectedIndex = Number.isInteger(selected) && selected >= 0 && selected < options.length ? selected : -1;
+        optionPicker.set({
+          title, options, searchable, query: "", active: selectedIndex,
+          selected: selectedIndex, variant, placeholder,
+        });
         modalShell.open({ title, content: "optionPicker" });
       });
     },

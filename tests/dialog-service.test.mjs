@@ -37,6 +37,9 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.match(option, /event\.key === "Enter"/);
   assert.match(option, /event\.key === "Escape"/);
   assert.match(option, /onclick=\{dialogs\.cancelOption\}/);
+  assert.match(option, /model-autocomplete-search/);
+  assert.match(option, /model-autocomplete-option/);
+  assert.match(option, /Search providers and models|\$optionPicker\.placeholder/);
   assert.doesNotMatch(overlays, /dialogs\.|dialogServiceContext/);
 });
 
@@ -154,7 +157,10 @@ test("option picker preserves searchable state selection cancellation and teardo
   assert.equal(get(dialogs.optionPicker).searchable, true);
   dialogs.setOptionQuery("be");
   dialogs.setOptionActive(1);
-  assert.deepEqual(get(dialogs.optionPicker), { title: "Second", options: ["alpha", "beta"], searchable: true, query: "be", active: 1 });
+  assert.deepEqual(get(dialogs.optionPicker), {
+    title: "Second", options: ["alpha", "beta"], searchable: true, query: "be", active: 1,
+    selected: -1, variant: "default", placeholder: "Filter…",
+  });
   dialogs.chooseOption(1);
   assert.equal(await selected, 1);
 
