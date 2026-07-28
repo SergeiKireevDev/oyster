@@ -183,6 +183,10 @@ rm -rf /opt/oyster
 mv /opt/oyster.new /opt/oyster
 chown -R root:root /opt/oyster
 
+# install(1) only applies ownership to the final path, so create each writable
+# agent-data directory explicitly rather than leaving intermediate parents root-owned.
+install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi
+install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi/agent
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi/agent/extensions
 for extension in file-explorer.ts goal-loop.ts hublot.ts routine.ts; do
   test -f "/opt/oyster/extensions/$extension"
