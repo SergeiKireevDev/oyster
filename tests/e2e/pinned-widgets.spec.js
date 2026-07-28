@@ -108,6 +108,30 @@ async function body(page, { mobile = false } = {}) {
   expect(served).toMatch(/<button/i);
   expect(served).toMatch(/click me/i);
 
+  if (mobile) {
+    // Touch users should not have to rely on HTML drag-and-drop. Create a group,
+    // move the widget through its management menu, then open the group.
+    const groupName = `Mobile group ${Date.now()}`;
+    await page.locator('#hublots button[title="Create a widget group"]').click();
+    await expect(page.locator("#mTitle")).toHaveText("New widget group");
+    await page.locator("#mBody input[type=text]").fill(groupName);
+    await page.locator("#mActions .btn", { hasText: "OK" }).click();
+    await expectWidgetSidebarOpen(page, true);
+
+    const group = page.locator("#hublots .pinned-widget-group-cell", { hasText: groupName });
+    await expect(group).toBeVisible();
+    await expect(group.locator(".pinned-widget-count")).toHaveText("0");
+
+    await liveWidget.locator(".pinned-widget-menu").click();
+    await expect(page.locator("#mTitle")).toContainText("Manage");
+    await page.locator("#mBody .m-option", { hasText: `Move to ${groupName}` }).click();
+    await expectWidgetSidebarOpen(page, true);
+    await expect(group.locator(".pinned-widget-count")).toHaveText("1");
+    await group.locator(".pinned-widget-tile").click();
+    await expect(page.locator("#hublots .pinned-widget-folder-title")).toHaveText(groupName);
+    await expect(liveWidget).toBeVisible();
+  }
+
   // Manage the widget through its three-dot menu. Closing the live interface
   // is separate from unpinning and must not dismiss the mobile widget drawer.
   await liveWidget.locator(".pinned-widget-menu").click();
@@ -132,7 +156,7 @@ test.describe("desktop", () => {
 
 test.describe("mobile", () => {
   test.use({ viewport: MOBILE_VIEWPORT });
-  test("keep the widget sidebar open throughout widget operations", async ({ page }) => {
+  test("group a widget while keeping the sidebar open throughout mobile operations", async ({ page }) => {
     await body(page, { mobile: true });
   });
 });
