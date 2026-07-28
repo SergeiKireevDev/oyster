@@ -21,6 +21,7 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(grid, /onpointerdown=\{\(event\) => touchPointerDown\(event, widget\)\}/);
   assert.match(grid, /ownerDocument\.elementFromPoint\(event\.clientX, event\.clientY\)/);
   assert.match(grid, /touchDropGroupId/);
+  assert.match(styles, /--rightbar-width: 420px;/);
   assert.match(styles, /\.pinned-widget-grid\s*\{[\s\S]*grid-template-columns: repeat\(3/);
   assert.match(styles, /\.pinned-widget-cell\[draggable="true"\] \.pinned-widget-icon \{[\s\S]*touch-action: none;/);
   assert.match(styles, /\.pinned-widget-group-cell\.touch-drop-target/);
