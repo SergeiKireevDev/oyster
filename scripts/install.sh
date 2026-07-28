@@ -192,7 +192,7 @@ if (( INSTALL_SERVICE )); then
       'Wants=network-online.target' \
       '' \
       '[Service]'
-    printf 'WorkingDirectory=%s\n' "$(systemd_quote "$ROOT_DIR")"
+    printf 'WorkingDirectory=%s\n' "$ROOT_DIR"
     printf 'Environment=%s\n' "$(systemd_quote "PI_BIN=$ROOT_DIR/pi/packages/coding-agent/dist/cli.js")"
     printf 'Environment=%s\n' "$(systemd_quote "PI_DIR=$OYSTER_WORKSPACE")"
     printf 'Environment=%s\n' "$(systemd_quote "HOST=$OYSTER_HOST")"
