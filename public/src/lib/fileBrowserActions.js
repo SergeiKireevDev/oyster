@@ -16,7 +16,14 @@ export async function readFile(fetchImpl, path) {
 export async function uploadFileChunk(fetchImpl, { dir, name, offset, last, body }) {
   const url = `/file-upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(name)}` +
     `&offset=${offset}&last=${last ? 1 : 0}`;
-  const res = await fetchImpl(url, { method: "POST", body });
+  // Always mark chunks as opaque bytes. A selected .json file may otherwise
+  // retain application/json and make Hub treat an 8 MiB chunk as a buffered
+  // JSON request, triggering its smaller JSON-body limit (413).
+  const res = await fetchImpl(url, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body,
+  });
   return { res, data: await res.json().catch(() => ({})) };
 }
 

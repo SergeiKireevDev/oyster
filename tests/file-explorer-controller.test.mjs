@@ -124,6 +124,58 @@ test("file explorer uploads files, reports progress, and reloads the directory",
   assert.equal(calls[6][1], "/work");
 });
 
+test("file explorer splits large uploads below common proxy body limits", async () => {
+  const chunks = [];
+  const size = 9 * 1024 * 1024 + 17;
+  const controller = createFileExplorerController({
+    uploadChunk: async (options) => {
+      chunks.push(options);
+      const end = Number(options.body.split("-")[1]);
+      return { res: { ok: true }, data: options.last ? { saved: true } : { received: end } };
+    },
+    browse: async (path) => ({ path, dirs: [], files: [] }),
+    update: () => {}, updateTitle: () => {}, getShowHidden: () => true, getToken: () => "token",
+    setPath: () => {}, toast: () => {},
+  });
+
+  await controller.uploadFiles("/work", [{ name: "large.json", size, slice: (start, end) => `${start}-${end}` }]);
+
+  assert.equal(chunks.length, 19);
+  assert.equal(chunks[0].body, "0-524288");
+  assert.equal(chunks.at(-1).body, `9437184-${size}`);
+  assert.equal(chunks.at(-1).last, true);
+  for (const [index, chunk] of chunks.entries()) {
+    const [start, end] = chunk.body.split("-").map(Number);
+    assert.equal(chunk.offset, start);
+    assert.ok(end - start <= 512 * 1024);
+    if (index) assert.equal(start, Number(chunks[index - 1].body.split("-")[1]));
+  }
+});
+
+test("file explorer backs off its chunk size after intermediary 413 responses", async () => {
+  const attempts = [];
+  const accepted = [];
+  const size = 700 * 1024;
+  const controller = createFileExplorerController({
+    uploadChunk: async (options) => {
+      attempts.push(options.body);
+      const [start, end] = options.body.split("-").map(Number);
+      if (end - start > 64 * 1024) return { res: { ok: false, status: 413 }, data: {} };
+      accepted.push(options.body);
+      return { res: { ok: true }, data: options.last ? { saved: true } : { received: end } };
+    },
+    browse: async (path) => ({ path, dirs: [], files: [] }),
+    update: () => {}, updateTitle: () => {}, getShowHidden: () => true, getToken: () => "token",
+    setPath: () => {}, toast: () => {},
+  });
+
+  await controller.uploadFiles("/work", [{ name: "limited.bin", size, slice: (start, end) => `${start}-${end}` }]);
+
+  assert.deepEqual(attempts.slice(0, 4), ["0-524288", "0-262144", "0-131072", "0-65536"]);
+  assert.equal(accepted[0], "0-65536");
+  assert.equal(accepted.at(-1), `655360-${size}`);
+});
+
 test("file explorer reports an unrecoverable upload error and resets progress", async () => {
   const calls = [];
   const controller = createFileExplorerController({

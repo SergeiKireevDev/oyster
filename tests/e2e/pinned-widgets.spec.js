@@ -81,6 +81,36 @@ async function body(page, { mobile = false } = {}) {
   await expect(filesWidget).toBeVisible();
   await filesWidget.locator(".pinned-widget-tile").click();
   const sidebarFiles = await expectFileExplorerPopulated(page, markerName);
+
+  // Exercise the browser's real file chooser and raw upload request rather
+  // than seeding every explorer file through the JSON save API.
+  const uploadName = `e2e-upload-${Date.now()}.json`;
+  const uploadContent = Buffer.alloc(9 * 1024 * 1024 + 17, 0x78);
+  const uploadResponses = [];
+  const collectUploadResponse = (response) => {
+    const url = new URL(response.url());
+    if (response.request().method() === "POST"
+      && url.pathname === "/file-upload"
+      && url.searchParams.get("name") === uploadName) uploadResponses.push(response);
+  };
+  page.on("response", collectUploadResponse);
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator('#mActions button[title^="upload local files"]').click();
+  await (await chooser).setFiles({
+    name: uploadName,
+    // This MIME type previously made Hub buffer an 8 MiB chunk as JSON and
+    // reject it against the smaller JSON request limit with HTTP 413.
+    mimeType: "application/json",
+    buffer: uploadContent,
+  });
+  await expect(page.locator(".toast", { hasText: `uploaded 1 file to /workspace` })).toBeVisible();
+  await expect.poll(() => uploadResponses.length).toBe(19);
+  page.off("response", collectUploadResponse);
+  expect(uploadResponses).toHaveLength(19);
+  expect(uploadResponses.every((response) => response.status() === 200)).toBe(true);
+  await expect(page.locator("#mBody")).toContainText(uploadName);
+  expect(Number(dexec(`stat -c %s /workspace/${uploadName}`))).toBe(uploadContent.length);
+
   await page.locator("#mActions .chip", { hasText: "Close" }).click();
   await expectWidgetSidebarOpen(page, mobile);
 

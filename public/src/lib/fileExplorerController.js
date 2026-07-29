@@ -79,7 +79,11 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
   }
 
   async function uploadFiles(dir, files) {
-    const chunkSize = 8 * 1024 * 1024;
+    // Stay below common reverse-proxy body limits. If an intermediary has a
+    // smaller limit, a 413 transparently halves subsequent chunks and retries
+    // the same offset instead of failing the whole file.
+    let chunkSize = 512 * 1024;
+    const minChunkSize = 64 * 1024;
     const maxRetries = 6;
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
     let uploadedBytes = 0;
@@ -113,6 +117,11 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
           if (res.status === 409 && typeof data.have === "number") {
             if (++attempts > maxRetries) throw new Error(data.error || "upload out of sync");
             offset = data.have;
+            continue;
+          }
+          if (res.status === 413 && chunkSize > minChunkSize) {
+            chunkSize = Math.max(minChunkSize, Math.floor(chunkSize / 2));
+            attempts = 0;
             continue;
           }
           if (res.status >= 500 || res.status === 429) {
