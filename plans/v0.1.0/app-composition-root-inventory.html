@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>appCompositionRoot.js Ownership Inventory</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from app-composition-root-inventory.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#appcompositionroot-js-ownership-inventory">appCompositionRoot.js Ownership Inventory</a></li>
+<li class="level-2"><a href="#baseline">Baseline</a></li>
+<li class="level-2"><a href="#imports">Imports</a></li>
+<li class="level-2"><a href="#root-mutable-bindings">Root Mutable Bindings</a></li>
+<li class="level-2"><a href="#direct-dom-access">Direct DOM Access</a></li>
+<li class="level-2"><a href="#controller-and-factory-construction">Controller and Factory Construction</a></li>
+<li class="level-2"><a href="#action-registrations">Action Registrations</a></li>
+<li class="level-2"><a href="#teardown-registrations">Teardown Registrations</a></li>
+<li class="level-2"><a href="#owner-map">Owner Map</a></li>
+<li class="level-3"><a href="#mutable-state-owners">Mutable-State Owners</a></li>
+<li class="level-3"><a href="#dom-access-owners">DOM-Access Owners</a></li></ol></nav>
+      <article><h1 id="appcompositionroot-js-ownership-inventory"><code>appCompositionRoot.js</code> Ownership Inventory<a class="anchor" href="#appcompositionroot-js-ownership-inventory" aria-label="Link to this section">#</a></h1>
+<p>Recorded 2026-07-14 from <code>public/src/runtime/appCompositionRoot.js</code> before the assembly extraction plan begins. This is a factual inventory only; owner mapping is tracked by the next checklist item.</p>
+<h2 id="baseline">Baseline<a class="anchor" href="#baseline" aria-label="Link to this section">#</a></h2>
+<ul><li>Lines: <strong>1,477</strong></li><li>Import declarations: <strong>85</strong></li><li>Root <code>let</code> bindings: <strong>15</strong></li><li>Direct DOM lookup/access sites: <strong>18</strong></li><li>Root controller/factory construction assignments: <strong>44</strong></li><li>Direct feature action registrations: <strong>8</strong></li><li>Explicit detach operations in <code>detachRuntimeEventAdapters</code>: <strong>17</strong></li></ul>
+<h2 id="imports">Imports<a class="anchor" href="#imports" aria-label="Link to this section">#</a></h2>
+<p>All imported module specifiers, in source order:</p>
+<ol><li><code>svelte</code></li><li><code>svelte/store</code></li><li><code>./authClient.js</code></li><li><code>./transportRuntime.js</code></li><li><code>./eventStreamUtils.js</code></li><li><code>./transcriptRuntime.js</code></li><li><code>./eventStream.js</code></li><li><code>../platform/createManagedEventConnection.js</code></li><li><code>../platform/createPlatformEventDispatch.js</code></li><li><code>./debugHooks.js</code></li><li><code>./delayedTaskRegistry.js</code></li><li><code>./lifecycleLogger.js</code></li><li><code>./runtimeCleanup.js</code></li><li><code>./startController.js</code></li><li><code>./runtimeStarterDependencies.js</code></li><li><code>./runtimeDependencies.js</code></li><li><code>./sessionBootController.js</code></li><li><code>./sessionBootDependencies.js</code></li><li><code>./featureAssembly.js</code></li><li><code>../features/sessions/createSessionFeature.js</code></li><li><code>../features/sessions/createSessionPickerRuntime.js</code></li><li><code>../features/transcript/createTranscriptRuntime.js</code></li><li><code>./extensionUiAdapters.js</code></li><li><code>./runtimeEventAdapters.js</code></li><li><code>./runtimeAttachments.js</code></li><li><code>./sessionRuntime.js</code></li><li><code>./carouselController.js</code></li><li><code>./carouselEventDependencies.js</code></li><li><code>../stores/carousel.js</code></li><li><code>../stores/appSession.js</code></li><li><code>../stores/checkpointModelPicker.js</code></li><li><code>../stores/checkpointMarker.js</code></li><li><code>../stores/checkpointRestores.js</code></li><li><code>../stores/checkpointTree.js</code></li><li><code>../stores/commandPalette.js</code></li><li><code>../stores/fileExplorer.js</code></li><li><code>../stores/filePicker.js</code></li><li><code>../stores/folderBrowser.js</code></li><li><code>../stores/composer.js</code></li><li><code>../stores/header.js</code></li><li><code>../stores/hublotManager.js</code></li><li><code>../stores/hublots.js</code></li><li><code>../stores/dialogs.js</code></li><li><code>../stores/modal.js</code></li><li><code>../stores/optionPicker.js</code></li><li><code>../stores/routines.js</code></li><li><code>../stores/sessionPicker.js</code></li><li><code>../stores/toasts.js</code></li><li><code>../lib/messageUtils.js</code></li><li><code>../lib/markdownRenderer.js</code></li><li><code>../lib/transcriptUtils.js</code></li><li><code>../lib/transcriptBackfill.js</code></li><li><code>../lib/transcriptActions.js</code></li><li><code>../lib/checkpointActions.js</code></li><li><code>../features/checkpoints/checkpointFeature.js</code></li><li><code>../features/checkpoints/checkpointTreeActions.js</code></li><li><code>../lib/commandActions.js</code></li><li><code>../lib/commandController.js</code></li><li><code>../lib/promptActions.js</code></li><li><code>../lib/postSendTranscriptSyncController.js</code></li><li><code>../lib/textInsertion.js</code></li><li><code>../lib/composerHistoryController.js</code></li><li><code>../features/composer/composerActions.js</code></li><li><code>../lib/hublotActions.js</code></li><li><code>../lib/hublotController.js</code></li><li><code>../features/hublots/hublotActions.js</code></li><li><code>../features/hublots/createHublotFeature.js</code></li><li><code>../lib/hublotManagerController.js</code></li><li><code>../features/files/folderBrowserActions.js</code></li><li><code>../features/files/filesActions.js</code></li><li><code>../features/files/fileExplorerActions.js</code></li><li><code>../features/files/createFilesRuntime.js</code></li><li><code>../features/files/filePickerActions.js</code></li><li><code>../lib/routineActions.js</code></li><li><code>../lib/routineController.js</code></li><li><code>../features/routines/routineActions.js</code></li><li><code>../features/settings/createSettingsLayoutRuntime.js</code></li><li><code>../lib/settingsController.js</code></li><li><code>../features/settings/settingsActions.js</code></li><li><code>../features/settings/headerActions.js</code></li><li><code>../lib/storeSnapshot.js</code></li><li><code>../lib/fileBrowserActions.js</code></li><li><code>../lib/clipboardController.js</code></li><li><code>../lib/extensionUiController.js</code></li><li><code>../stores/transcriptItems.js</code></li></ol>
+<h2 id="root-mutable-bindings">Root Mutable Bindings<a class="anchor" href="#root-mutable-bindings" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Binding</th><th style="text-align:left">Initial value / purpose</th></tr></thead><tbody>
+<tr><td style="text-align:right">107</td><td style="text-align:left"><code>platformEvents</code></td><td style="text-align:left">deferred platform event runtime</td></tr>
+<tr><td style="text-align:right">230</td><td style="text-align:left"><code>composerHistory</code></td><td style="text-align:left">deferred composer history controller</td></tr>
+<tr><td style="text-align:right">325</td><td style="text-align:left"><code>transcriptRenderer</code></td><td style="text-align:left">deferred transcript renderer</td></tr>
+<tr><td style="text-align:right">357</td><td style="text-align:left"><code>state</code></td><td style="text-align:left">active hydrated session state</td></tr>
+<tr><td style="text-align:right">389</td><td style="text-align:left"><code>currentRunner</code></td><td style="text-align:left">active runner ID</td></tr>
+<tr><td style="text-align:right">390</td><td style="text-align:left"><code>runnersNow</code></td><td style="text-align:left">current runner list</td></tr>
+<tr><td style="text-align:right">393</td><td style="text-align:left"><code>afterTranscript</code></td><td style="text-align:left">one-shot post-render callback</td></tr>
+<tr><td style="text-align:right">433</td><td style="text-align:left"><code>sessionOpenController</code></td><td style="text-align:left">deferred session open controller</td></tr>
+<tr><td style="text-align:right">451</td><td style="text-align:left"><code>onRunnersUpdate</code></td><td style="text-align:left">picker runner-update hook</td></tr>
+<tr><td style="text-align:right">460</td><td style="text-align:left"><code>connected</code></td><td style="text-align:left">current connection state</td></tr>
+<tr><td style="text-align:right">486</td><td style="text-align:left"><code>transcriptGateRequired</code></td><td style="text-align:left">replay/render gate</td></tr>
+<tr><td style="text-align:right">583</td><td style="text-align:left"><code>sessionFile</code></td><td style="text-align:left">local durable-history query state</td></tr>
+<tr><td style="text-align:right">693</td><td style="text-align:left"><code>commandGuard</code></td><td style="text-align:left">resettable command guard</td></tr>
+<tr><td style="text-align:right">762</td><td style="text-align:left"><code>cmdState</code></td><td style="text-align:left">command palette match/selection state</td></tr>
+<tr><td style="text-align:right">835</td><td style="text-align:left"><code>commandPaletteInputController</code></td><td style="text-align:left">lazily attached input controller</td></tr>
+<tr><td style="text-align:right">1097</td><td style="text-align:left"><code>tunnelScopeAll</code></td><td style="text-align:left">hublot/routine scope toggle</td></tr>
+<tr><td style="text-align:right">1255</td><td style="text-align:left"><code>folders</code>, <code>currentFolder</code></td><td style="text-align:left">session-picker initial-load temporaries</td></tr>
+</tbody></table></div>
+<p>The baseline count of 15 refers to root-scoped <code>let</code> declarations; lines 583 and 1255 are function-local and are retained above because they are mutable bindings discovered in the complete file scan.</p>
+<h2 id="direct-dom-access">Direct DOM Access<a class="anchor" href="#direct-dom-access" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Access</th></tr></thead><tbody>
+<tr><td style="text-align:right">132</td><td style="text-align:left">Defines <code>$</code> via <code>document.getElementById</code></td></tr>
+<tr><td style="text-align:right">134</td><td style="text-align:left">Looks up <code>#gate</code></td></tr>
+<tr><td style="text-align:right">150</td><td style="text-align:left">Looks up <code>#messages</code></td></tr>
+<tr><td style="text-align:right">151</td><td style="text-align:left">Looks up <code>#scroller</code></td></tr>
+<tr><td style="text-align:right">187</td><td style="text-align:left">Queries assistant messages under <code>#messages</code></td></tr>
+<tr><td style="text-align:right">274</td><td style="text-align:left">Reads <code>#treebar.classList</code></td></tr>
+<tr><td style="text-align:right">637</td><td style="text-align:left">Looks up <code>#input</code></td></tr>
+<tr><td style="text-align:right">671</td><td style="text-align:left">Reads command-palette <code>classList</code></td></tr>
+<tr><td style="text-align:right">739</td><td style="text-align:left">Looks up <code>#cmdPalette</code></td></tr>
+<tr><td style="text-align:right">752</td><td style="text-align:left">Reads overlay <code>classList</code></td></tr>
+<tr><td style="text-align:right">872</td><td style="text-align:left">Reads command-palette <code>classList</code></td></tr>
+<tr><td style="text-align:right">996</td><td style="text-align:left">Looks up <code>#input</code> during text insertion</td></tr>
+<tr><td style="text-align:right">1161</td><td style="text-align:left">Looks up <code>#hublots</code></td></tr>
+<tr><td style="text-align:right">1162</td><td style="text-align:left">Looks up <code>#treebar</code></td></tr>
+<tr><td style="text-align:right">1314</td><td style="text-align:left">Queries a transcript element by entry ID</td></tr>
+<tr><td style="text-align:right">1339</td><td style="text-align:left">Looks up <code>#overlay</code></td></tr>
+<tr><td style="text-align:right">1369</td><td style="text-align:left">Looks up <code>#hublots</code> for layout assembly</td></tr>
+<tr><td style="text-align:right">1370</td><td style="text-align:left">Looks up <code>#treebar</code> for layout assembly</td></tr>
+</tbody></table></div>
+<h2 id="controller-and-factory-construction">Controller and Factory Construction<a class="anchor" href="#controller-and-factory-construction" aria-label="Link to this section">#</a></h2>
+<p>Root construction assignments, in source order:</p>
+<ul><li><code>lifecycleLog</code> → <code>createLifecycleLogger</code></li><li><code>delayedTasks</code> → <code>createDelayedTaskRegistry</code></li><li><code>transcriptScroll</code> → <code>createTranscriptScrollAdapter</code></li><li><code>toolCards</code> → <code>createToolCardRegistry</code></li><li><code>transcriptActions</code> → <code>createTranscriptActions</code></li><li><code>assistantStream</code> → <code>createAssistantStream</code></li><li><code>handleTranscriptStreamEvent</code> → <code>createTranscriptStreamEventHandler</code></li><li><code>checkpointFeature</code> → <code>createCheckpointFeature</code></li><li><code>applyState</code> → <code>createSessionStateApplier</code></li><li><code>runnerState</code> → <code>createSessionRunnerState</code></li><li><code>sessionFeature</code> → <code>createLazySessionFeature</code></li><li><code>previewController</code> → <code>createSessionPreviewController</code></li><li><code>sessionUi</code> → <code>createSessionUiRuntime</code></li><li><code>managedConnection</code> → <code>createManagedEventConnection</code></li><li><code>isDuplicateSseEvent</code> → <code>createLoggedSseDeduper</code></li><li><code>afterTranscriptRender</code> → <code>createTranscriptAfterRenderController</code></li><li><code>reloadTranscript</code> → <code>createCanonicalTranscriptController</code></li><li><code>transcriptSyncScheduler</code> → <code>createTranscriptSyncScheduler</code></li><li><code>postAgentTranscriptSyncController</code> → <code>createDebouncedTranscriptSyncController</code></li><li><code>agentStart</code> → <code>createAgentStartController</code></li><li><code>agentCompletion</code> → <code>createAgentCompletionController</code></li><li><code>postSendTranscriptSyncController</code> → <code>createPostSendTranscriptSyncController</code></li><li><code>refreshStateNow</code> → <code>createSessionStateRefresher</code></li><li><code>extensionUiAdapters</code> → <code>createExtensionUiAdapters</code></li><li><code>commandGuard</code> → <code>createCommandGuard</code></li><li>lazy command input controller → <code>createCommandPaletteInputController</code></li><li><code>commandPaletteRunController</code> → <code>createCommandPaletteRunController</code></li><li><code>commandPaletteKeyboardController</code> → <code>createCommandPaletteKeyboardController</code></li><li><code>menuEventController</code> → <code>createMenuEventController</code></li><li><code>filesRuntime</code> → <code>createFilesRuntime</code></li><li><code>hublotManagerController</code> → <code>createHublotManagerController</code></li><li><code>hublotController</code> → <code>createHublotFeature</code></li><li><code>mobileDrawerDismissController</code> → <code>createMobileDrawerDismissController</code></li><li><code>routineSidebarController</code> → <code>createRoutineSidebarController</code></li><li><code>routineController</code> → <code>createRoutineController</code></li><li><code>sessionPickerRuntime</code> → <code>createSessionPickerRuntime</code></li><li><code>transcriptRuntime</code> → <code>createTranscriptRuntime</code></li><li><code>settingsLayoutRuntime</code> → <code>createSettingsLayoutRuntime</code></li><li><code>runtimeAttachments</code> → <code>createRuntimeAttachments</code></li><li><code>boot</code> → <code>createSessionBootController</code></li><li><code>runtimeTeardown</code> → <code>createRuntimeCleanup</code></li><li><code>runtimeStarter</code> → <code>createRuntimeStarter</code></li><li><code>featureAssembly</code> → <code>createFeatureAssembly</code></li><li><code>runtimeEventAdapters</code> → <code>createRuntimeEventAdapters</code></li></ul>
+<h2 id="action-registrations">Action Registrations<a class="anchor" href="#action-registrations" aria-label="Link to this section">#</a></h2>
+<p>Direct action registrations in the root:</p>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Registration</th><th style="text-align:left">Detach handle</th></tr></thead><tbody>
+<tr><td style="text-align:right">284</td><td style="text-align:left"><code>configureCheckpointTreeActions</code></td><td style="text-align:left"><code>detachCheckpointTreeActions</code></td></tr>
+<tr><td style="text-align:right">728</td><td style="text-align:left"><code>configureComposerActions</code></td><td style="text-align:left"><code>detachComposerActions</code></td></tr>
+<tr><td style="text-align:right">987</td><td style="text-align:left"><code>configureFilePickerActions</code></td><td style="text-align:left"><code>detachFilePickerActions</code></td></tr>
+<tr><td style="text-align:right">1045</td><td style="text-align:left"><code>configureFolderBrowserActions</code></td><td style="text-align:left"><code>detachFolderBrowserActions</code></td></tr>
+<tr><td style="text-align:right">1084</td><td style="text-align:left"><code>configureFileExplorerActions</code></td><td style="text-align:left"><code>detachFileExplorerActions</code></td></tr>
+<tr><td style="text-align:right">1147</td><td style="text-align:left"><code>configureHublotActions</code></td><td style="text-align:left"><code>detachHublotActions</code></td></tr>
+<tr><td style="text-align:right">1169</td><td style="text-align:left"><code>configureFilesActions</code></td><td style="text-align:left"><code>detachFilesActions</code></td></tr>
+<tr><td style="text-align:right">1213</td><td style="text-align:left"><code>configureRoutineActions</code></td><td style="text-align:left"><code>detachRoutineActions</code></td></tr>
+</tbody></table></div>
+<p>Session-picker, settings, and header action registrations are constructed by their existing feature runtime factories, while their detach handles are still collected by the root.</p>
+<h2 id="teardown-registrations">Teardown Registrations<a class="anchor" href="#teardown-registrations" aria-label="Link to this section">#</a></h2>
+<p><code>detachRuntimeEventAdapters</code> currently releases, in order:</p>
+<ol><li>carousel event registration</li><li>mobile drawer dismiss controller</li><li>header actions</li><li>settings actions</li><li>menu event controller</li><li>composer actions</li><li>command-palette keyboard controller</li><li>command-palette run controller</li><li>checkpoint-tree actions</li><li>file-picker actions</li><li>folder-browser actions</li><li>file-explorer actions</li><li>hublot actions</li><li>routine actions</li><li>session-picker actions</li><li>files actions</li><li>optional command-palette input controller</li></ol>
+<p><code>createRuntimeCleanup</code> additionally owns these teardown callbacks:</p>
+<ul><li>disconnect the platform connection coordinator</li><li>clear the EventSource compatibility hook</li><li>dispose the RPC client</li><li>stop the reconnect watchdog</li><li>run <code>detachRuntimeEventAdapters</code></li><li>detach authenticated-fetch/debug attachments</li><li>cancel all delayed tasks</li><li>transition connection state to lost</li></ul>
+<p>The final lifecycle return delegates teardown to this <code>runtimeTeardown</code> controller.</p>
+<h2 id="owner-map">Owner Map<a class="anchor" href="#owner-map" aria-label="Link to this section">#</a></h2>
+<p>Every root block is assigned to exactly one extraction owner. Shared calls are owned by the assembly that constructs them; cross-feature callbacks remain narrow interfaces supplied by the final composition module.</p>
+<div class="table-wrap"><table><thead><tr><th style="text-align:left">Root lines / block</th><th style="text-align:left">Owner</th><th style="text-align:left">Destination boundary</th></tr></thead><tbody>
+<tr><td style="text-align:left">107–118 lifecycle logger and delayed-task setup</td><td style="text-align:left">lifecycle</td><td style="text-align:left"><code>runtime/createLifecycleAssembly.js</code></td></tr>
+<tr><td style="text-align:left">119–145 token, transport, auth gate, URL route parsing, URL synchronization</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">146–253 transcript DOM, scrolling, tool cards, transcript actions, assistant stream, local echoes, stream dispatch</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">254–315 checkpoint model picker, feature construction, marker/tree helpers, checkpoint action registration</td><td style="text-align:left">checkpoints</td><td style="text-align:left"><code>features/checkpoints/createCheckpointAssembly.js</code></td></tr>
+<tr><td style="text-align:left">316–354 transcript renderer, clear/render orchestration, tail-first backfill</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">355–382 hydrated state application and header/session store updates</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">383–457 runner state, lazy session runtime, session preview/open, session UI state</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">458–525 managed connection, replay gate bridge, platform event dispatch</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">526–618 canonical reload, transcript sync, agent completion, post-send reconciliation</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">619–634 debounced session state refresh</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">635–734 composer input, prompt history, send/abort, command guard, composer action registration</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">735–877 command palette state, positioning, input/run/keyboard controllers</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">878–914 menu action routing and browser menu controller</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">915–1009 file-picker state/dependencies/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1010–1051 folder-browser workflow/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1052–1066 agent-message helper used by resource actions</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1067–1096 file-explorer workflow/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1097–1144 hublot scope, manager, feature factory, scope refresh</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1145–1156 hublot action registration</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1157–1167 mobile drawer dismissal</td><td style="text-align:left">settings/layout</td><td style="text-align:left"><code>features/settings/createSettingsLayoutAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1168–1172 files open action registration</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1173–1214 routine visibility, sidebar/controller construction, routine actions</td><td style="text-align:left">routines</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1215–1290 session picker construction, initial data, search-hit callbacks</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1291–1299 search-hit focus adapter</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1300–1336 transcript permalink runtime, transcript element adapters, durable entry fetch</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1337–1349 modal close/settings modal shell helpers</td><td style="text-align:left">dialogs</td><td style="text-align:left"><code>platform/createDialogAdapters.js</code></td></tr>
+<tr><td style="text-align:left">1350–1377 settings, extension UI, header, carousel/layout construction</td><td style="text-align:left">settings/layout</td><td style="text-align:left"><code>features/settings/createSettingsLayoutAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1378–1393 authenticated-fetch and debug attachments</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1394–1477 session boot, aggregate detach order, runtime cleanup/start, feature assembly, event adapters, lifecycle return</td><td style="text-align:left">lifecycle</td><td style="text-align:left"><code>runtime/createLifecycleAssembly.js</code></td></tr>
+</tbody></table></div>
+<h3 id="mutable-state-owners">Mutable-State Owners<a class="anchor" href="#mutable-state-owners" aria-label="Link to this section">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th style="text-align:left">Binding</th><th style="text-align:left">Owner</th></tr></thead><tbody>
+<tr><td style="text-align:left"><code>platformEvents</code>, <code>connected</code>, <code>transcriptGateRequired</code></td><td style="text-align:left">platform</td></tr>
+<tr><td style="text-align:left"><code>composerHistory</code>, <code>commandGuard</code>, <code>cmdState</code>, <code>commandPaletteInputController</code></td><td style="text-align:left">composer</td></tr>
+<tr><td style="text-align:left"><code>transcriptRenderer</code>, <code>afterTranscript</code></td><td style="text-align:left">transcript</td></tr>
+<tr><td style="text-align:left"><code>state</code>, <code>currentRunner</code>, <code>runnersNow</code>, <code>sessionOpenController</code>, <code>onRunnersUpdate</code></td><td style="text-align:left">sessions</td></tr>
+<tr><td style="text-align:left"><code>tunnelScopeAll</code></td><td style="text-align:left">hublots/resources</td></tr>
+<tr><td style="text-align:left">function-local <code>sessionFile</code></td><td style="text-align:left">transcript</td></tr>
+<tr><td style="text-align:left">function-local <code>folders</code>, <code>currentFolder</code></td><td style="text-align:left">sessions</td></tr>
+</tbody></table></div>
+<h3 id="dom-access-owners">DOM-Access Owners<a class="anchor" href="#dom-access-owners" aria-label="Link to this section">#</a></h3>
+<ul><li>Transcript owns <code>#messages</code>, <code>#scroller</code>, transcript queries, and entry focus.</li><li>Composer owns <code>#input</code>, <code>#cmdPalette</code>, and command-palette class checks.</li><li>Checkpoints owns the tree-open query only through an injected layout adapter.</li><li>Settings/layout owns <code>#hublots</code>, <code>#treebar</code>, drawer class checks, and responsive</li></ul>
+<p>browser integration.</p>
+<ul><li>Dialogs owns <code>#gate</code> and <code>#overlay</code> through explicit browser/store adapters.</li><li>The final composition root must not perform these lookups directly.</li></ul></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"># `appCompositionRoot.js` Ownership Inventory
+
+Recorded 2026-07-14 from `public/src/runtime/appCompositionRoot.js` before the
+assembly extraction plan begins. This is a factual inventory only; owner mapping
+is tracked by the next checklist item.
+
+## Baseline
+
+- Lines: **1,477**
+- Import declarations: **85**
+- Root `let` bindings: **15**
+- Direct DOM lookup/access sites: **18**
+- Root controller/factory construction assignments: **44**
+- Direct feature action registrations: **8**
+- Explicit detach operations in `detachRuntimeEventAdapters`: **17**
+
+## Imports
+
+All imported module specifiers, in source order:
+
+1. `svelte`
+2. `svelte/store`
+3. `./authClient.js`
+4. `./transportRuntime.js`
+5. `./eventStreamUtils.js`
+6. `./transcriptRuntime.js`
+7. `./eventStream.js`
+8. `../platform/createManagedEventConnection.js`
+9. `../platform/createPlatformEventDispatch.js`
+10. `./debugHooks.js`
+11. `./delayedTaskRegistry.js`
+12. `./lifecycleLogger.js`
+13. `./runtimeCleanup.js`
+14. `./startController.js`
+15. `./runtimeStarterDependencies.js`
+16. `./runtimeDependencies.js`
+17. `./sessionBootController.js`
+18. `./sessionBootDependencies.js`
+19. `./featureAssembly.js`
+20. `../features/sessions/createSessionFeature.js`
+21. `../features/sessions/createSessionPickerRuntime.js`
+22. `../features/transcript/createTranscriptRuntime.js`
+23. `./extensionUiAdapters.js`
+24. `./runtimeEventAdapters.js`
+25. `./runtimeAttachments.js`
+26. `./sessionRuntime.js`
+27. `./carouselController.js`
+28. `./carouselEventDependencies.js`
+29. `../stores/carousel.js`
+30. `../stores/appSession.js`
+31. `../stores/checkpointModelPicker.js`
+32. `../stores/checkpointMarker.js`
+33. `../stores/checkpointRestores.js`
+34. `../stores/checkpointTree.js`
+35. `../stores/commandPalette.js`
+36. `../stores/fileExplorer.js`
+37. `../stores/filePicker.js`
+38. `../stores/folderBrowser.js`
+39. `../stores/composer.js`
+40. `../stores/header.js`
+41. `../stores/hublotManager.js`
+42. `../stores/hublots.js`
+43. `../stores/dialogs.js`
+44. `../stores/modal.js`
+45. `../stores/optionPicker.js`
+46. `../stores/routines.js`
+47. `../stores/sessionPicker.js`
+48. `../stores/toasts.js`
+49. `../lib/messageUtils.js`
+50. `../lib/markdownRenderer.js`
+51. `../lib/transcriptUtils.js`
+52. `../lib/transcriptBackfill.js`
+53. `../lib/transcriptActions.js`
+54. `../lib/checkpointActions.js`
+55. `../features/checkpoints/checkpointFeature.js`
+56. `../features/checkpoints/checkpointTreeActions.js`
+57. `../lib/commandActions.js`
+58. `../lib/commandController.js`
+59. `../lib/promptActions.js`
+60. `../lib/postSendTranscriptSyncController.js`
+61. `../lib/textInsertion.js`
+62. `../lib/composerHistoryController.js`
+63. `../features/composer/composerActions.js`
+64. `../lib/hublotActions.js`
+65. `../lib/hublotController.js`
+66. `../features/hublots/hublotActions.js`
+67. `../features/hublots/createHublotFeature.js`
+68. `../lib/hublotManagerController.js`
+69. `../features/files/folderBrowserActions.js`
+70. `../features/files/filesActions.js`
+71. `../features/files/fileExplorerActions.js`
+72. `../features/files/createFilesRuntime.js`
+73. `../features/files/filePickerActions.js`
+74. `../lib/routineActions.js`
+75. `../lib/routineController.js`
+76. `../features/routines/routineActions.js`
+77. `../features/settings/createSettingsLayoutRuntime.js`
+78. `../lib/settingsController.js`
+79. `../features/settings/settingsActions.js`
+80. `../features/settings/headerActions.js`
+81. `../lib/storeSnapshot.js`
+82. `../lib/fileBrowserActions.js`
+83. `../lib/clipboardController.js`
+84. `../lib/extensionUiController.js`
+85. `../stores/transcriptItems.js`
+
+## Root Mutable Bindings
+
+| Line | Binding | Initial value / purpose |
+|---:|---|---|
+| 107 | `platformEvents` | deferred platform event runtime |
+| 230 | `composerHistory` | deferred composer history controller |
+| 325 | `transcriptRenderer` | deferred transcript renderer |
+| 357 | `state` | active hydrated session state |
+| 389 | `currentRunner` | active runner ID |
+| 390 | `runnersNow` | current runner list |
+| 393 | `afterTranscript` | one-shot post-render callback |
+| 433 | `sessionOpenController` | deferred session open controller |
+| 451 | `onRunnersUpdate` | picker runner-update hook |
+| 460 | `connected` | current connection state |
+| 486 | `transcriptGateRequired` | replay/render gate |
+| 583 | `sessionFile` | local durable-history query state |
+| 693 | `commandGuard` | resettable command guard |
+| 762 | `cmdState` | command palette match/selection state |
+| 835 | `commandPaletteInputController` | lazily attached input controller |
+| 1097 | `tunnelScopeAll` | hublot/routine scope toggle |
+| 1255 | `folders`, `currentFolder` | session-picker initial-load temporaries |
+
+The baseline count of 15 refers to root-scoped `let` declarations; lines 583
+and 1255 are function-local and are retained above because they are mutable
+bindings discovered in the complete file scan.
+
+## Direct DOM Access
+
+| Line | Access |
+|---:|---|
+| 132 | Defines `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>appCompositionRoot.js Ownership Inventory</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from app-composition-root-inventory.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#appcompositionroot-js-ownership-inventory">appCompositionRoot.js Ownership Inventory</a></li>
+<li class="level-2"><a href="#baseline">Baseline</a></li>
+<li class="level-2"><a href="#imports">Imports</a></li>
+<li class="level-2"><a href="#root-mutable-bindings">Root Mutable Bindings</a></li>
+<li class="level-2"><a href="#direct-dom-access">Direct DOM Access</a></li>
+<li class="level-2"><a href="#controller-and-factory-construction">Controller and Factory Construction</a></li>
+<li class="level-2"><a href="#action-registrations">Action Registrations</a></li>
+<li class="level-2"><a href="#teardown-registrations">Teardown Registrations</a></li>
+<li class="level-2"><a href="#owner-map">Owner Map</a></li>
+<li class="level-3"><a href="#mutable-state-owners">Mutable-State Owners</a></li>
+<li class="level-3"><a href="#dom-access-owners">DOM-Access Owners</a></li></ol></nav>
+      <article><h1 id="appcompositionroot-js-ownership-inventory"><code>appCompositionRoot.js</code> Ownership Inventory<a class="anchor" href="#appcompositionroot-js-ownership-inventory" aria-label="Link to this section">#</a></h1>
+<p>Recorded 2026-07-14 from <code>public/src/runtime/appCompositionRoot.js</code> before the assembly extraction plan begins. This is a factual inventory only; owner mapping is tracked by the next checklist item.</p>
+<h2 id="baseline">Baseline<a class="anchor" href="#baseline" aria-label="Link to this section">#</a></h2>
+<ul><li>Lines: <strong>1,477</strong></li><li>Import declarations: <strong>85</strong></li><li>Root <code>let</code> bindings: <strong>15</strong></li><li>Direct DOM lookup/access sites: <strong>18</strong></li><li>Root controller/factory construction assignments: <strong>44</strong></li><li>Direct feature action registrations: <strong>8</strong></li><li>Explicit detach operations in <code>detachRuntimeEventAdapters</code>: <strong>17</strong></li></ul>
+<h2 id="imports">Imports<a class="anchor" href="#imports" aria-label="Link to this section">#</a></h2>
+<p>All imported module specifiers, in source order:</p>
+<ol><li><code>svelte</code></li><li><code>svelte/store</code></li><li><code>./authClient.js</code></li><li><code>./transportRuntime.js</code></li><li><code>./eventStreamUtils.js</code></li><li><code>./transcriptRuntime.js</code></li><li><code>./eventStream.js</code></li><li><code>../platform/createManagedEventConnection.js</code></li><li><code>../platform/createPlatformEventDispatch.js</code></li><li><code>./debugHooks.js</code></li><li><code>./delayedTaskRegistry.js</code></li><li><code>./lifecycleLogger.js</code></li><li><code>./runtimeCleanup.js</code></li><li><code>./startController.js</code></li><li><code>./runtimeStarterDependencies.js</code></li><li><code>./runtimeDependencies.js</code></li><li><code>./sessionBootController.js</code></li><li><code>./sessionBootDependencies.js</code></li><li><code>./featureAssembly.js</code></li><li><code>../features/sessions/createSessionFeature.js</code></li><li><code>../features/sessions/createSessionPickerRuntime.js</code></li><li><code>../features/transcript/createTranscriptRuntime.js</code></li><li><code>./extensionUiAdapters.js</code></li><li><code>./runtimeEventAdapters.js</code></li><li><code>./runtimeAttachments.js</code></li><li><code>./sessionRuntime.js</code></li><li><code>./carouselController.js</code></li><li><code>./carouselEventDependencies.js</code></li><li><code>../stores/carousel.js</code></li><li><code>../stores/appSession.js</code></li><li><code>../stores/checkpointModelPicker.js</code></li><li><code>../stores/checkpointMarker.js</code></li><li><code>../stores/checkpointRestores.js</code></li><li><code>../stores/checkpointTree.js</code></li><li><code>../stores/commandPalette.js</code></li><li><code>../stores/fileExplorer.js</code></li><li><code>../stores/filePicker.js</code></li><li><code>../stores/folderBrowser.js</code></li><li><code>../stores/composer.js</code></li><li><code>../stores/header.js</code></li><li><code>../stores/hublotManager.js</code></li><li><code>../stores/hublots.js</code></li><li><code>../stores/dialogs.js</code></li><li><code>../stores/modal.js</code></li><li><code>../stores/optionPicker.js</code></li><li><code>../stores/routines.js</code></li><li><code>../stores/sessionPicker.js</code></li><li><code>../stores/toasts.js</code></li><li><code>../lib/messageUtils.js</code></li><li><code>../lib/markdownRenderer.js</code></li><li><code>../lib/transcriptUtils.js</code></li><li><code>../lib/transcriptBackfill.js</code></li><li><code>../lib/transcriptActions.js</code></li><li><code>../lib/checkpointActions.js</code></li><li><code>../features/checkpoints/checkpointFeature.js</code></li><li><code>../features/checkpoints/checkpointTreeActions.js</code></li><li><code>../lib/commandActions.js</code></li><li><code>../lib/commandController.js</code></li><li><code>../lib/promptActions.js</code></li><li><code>../lib/postSendTranscriptSyncController.js</code></li><li><code>../lib/textInsertion.js</code></li><li><code>../lib/composerHistoryController.js</code></li><li><code>../features/composer/composerActions.js</code></li><li><code>../lib/hublotActions.js</code></li><li><code>../lib/hublotController.js</code></li><li><code>../features/hublots/hublotActions.js</code></li><li><code>../features/hublots/createHublotFeature.js</code></li><li><code>../lib/hublotManagerController.js</code></li><li><code>../features/files/folderBrowserActions.js</code></li><li><code>../features/files/filesActions.js</code></li><li><code>../features/files/fileExplorerActions.js</code></li><li><code>../features/files/createFilesRuntime.js</code></li><li><code>../features/files/filePickerActions.js</code></li><li><code>../lib/routineActions.js</code></li><li><code>../lib/routineController.js</code></li><li><code>../features/routines/routineActions.js</code></li><li><code>../features/settings/createSettingsLayoutRuntime.js</code></li><li><code>../lib/settingsController.js</code></li><li><code>../features/settings/settingsActions.js</code></li><li><code>../features/settings/headerActions.js</code></li><li><code>../lib/storeSnapshot.js</code></li><li><code>../lib/fileBrowserActions.js</code></li><li><code>../lib/clipboardController.js</code></li><li><code>../lib/extensionUiController.js</code></li><li><code>../stores/transcriptItems.js</code></li></ol>
+<h2 id="root-mutable-bindings">Root Mutable Bindings<a class="anchor" href="#root-mutable-bindings" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Binding</th><th style="text-align:left">Initial value / purpose</th></tr></thead><tbody>
+<tr><td style="text-align:right">107</td><td style="text-align:left"><code>platformEvents</code></td><td style="text-align:left">deferred platform event runtime</td></tr>
+<tr><td style="text-align:right">230</td><td style="text-align:left"><code>composerHistory</code></td><td style="text-align:left">deferred composer history controller</td></tr>
+<tr><td style="text-align:right">325</td><td style="text-align:left"><code>transcriptRenderer</code></td><td style="text-align:left">deferred transcript renderer</td></tr>
+<tr><td style="text-align:right">357</td><td style="text-align:left"><code>state</code></td><td style="text-align:left">active hydrated session state</td></tr>
+<tr><td style="text-align:right">389</td><td style="text-align:left"><code>currentRunner</code></td><td style="text-align:left">active runner ID</td></tr>
+<tr><td style="text-align:right">390</td><td style="text-align:left"><code>runnersNow</code></td><td style="text-align:left">current runner list</td></tr>
+<tr><td style="text-align:right">393</td><td style="text-align:left"><code>afterTranscript</code></td><td style="text-align:left">one-shot post-render callback</td></tr>
+<tr><td style="text-align:right">433</td><td style="text-align:left"><code>sessionOpenController</code></td><td style="text-align:left">deferred session open controller</td></tr>
+<tr><td style="text-align:right">451</td><td style="text-align:left"><code>onRunnersUpdate</code></td><td style="text-align:left">picker runner-update hook</td></tr>
+<tr><td style="text-align:right">460</td><td style="text-align:left"><code>connected</code></td><td style="text-align:left">current connection state</td></tr>
+<tr><td style="text-align:right">486</td><td style="text-align:left"><code>transcriptGateRequired</code></td><td style="text-align:left">replay/render gate</td></tr>
+<tr><td style="text-align:right">583</td><td style="text-align:left"><code>sessionFile</code></td><td style="text-align:left">local durable-history query state</td></tr>
+<tr><td style="text-align:right">693</td><td style="text-align:left"><code>commandGuard</code></td><td style="text-align:left">resettable command guard</td></tr>
+<tr><td style="text-align:right">762</td><td style="text-align:left"><code>cmdState</code></td><td style="text-align:left">command palette match/selection state</td></tr>
+<tr><td style="text-align:right">835</td><td style="text-align:left"><code>commandPaletteInputController</code></td><td style="text-align:left">lazily attached input controller</td></tr>
+<tr><td style="text-align:right">1097</td><td style="text-align:left"><code>tunnelScopeAll</code></td><td style="text-align:left">hublot/routine scope toggle</td></tr>
+<tr><td style="text-align:right">1255</td><td style="text-align:left"><code>folders</code>, <code>currentFolder</code></td><td style="text-align:left">session-picker initial-load temporaries</td></tr>
+</tbody></table></div>
+<p>The baseline count of 15 refers to root-scoped <code>let</code> declarations; lines 583 and 1255 are function-local and are retained above because they are mutable bindings discovered in the complete file scan.</p>
+<h2 id="direct-dom-access">Direct DOM Access<a class="anchor" href="#direct-dom-access" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Access</th></tr></thead><tbody>
+<tr><td style="text-align:right">132</td><td style="text-align:left">Defines <code>$</code> via <code>document.getElementById</code></td></tr>
+<tr><td style="text-align:right">134</td><td style="text-align:left">Looks up <code>#gate</code></td></tr>
+<tr><td style="text-align:right">150</td><td style="text-align:left">Looks up <code>#messages</code></td></tr>
+<tr><td style="text-align:right">151</td><td style="text-align:left">Looks up <code>#scroller</code></td></tr>
+<tr><td style="text-align:right">187</td><td style="text-align:left">Queries assistant messages under <code>#messages</code></td></tr>
+<tr><td style="text-align:right">274</td><td style="text-align:left">Reads <code>#treebar.classList</code></td></tr>
+<tr><td style="text-align:right">637</td><td style="text-align:left">Looks up <code>#input</code></td></tr>
+<tr><td style="text-align:right">671</td><td style="text-align:left">Reads command-palette <code>classList</code></td></tr>
+<tr><td style="text-align:right">739</td><td style="text-align:left">Looks up <code>#cmdPalette</code></td></tr>
+<tr><td style="text-align:right">752</td><td style="text-align:left">Reads overlay <code>classList</code></td></tr>
+<tr><td style="text-align:right">872</td><td style="text-align:left">Reads command-palette <code>classList</code></td></tr>
+<tr><td style="text-align:right">996</td><td style="text-align:left">Looks up <code>#input</code> during text insertion</td></tr>
+<tr><td style="text-align:right">1161</td><td style="text-align:left">Looks up <code>#hublots</code></td></tr>
+<tr><td style="text-align:right">1162</td><td style="text-align:left">Looks up <code>#treebar</code></td></tr>
+<tr><td style="text-align:right">1314</td><td style="text-align:left">Queries a transcript element by entry ID</td></tr>
+<tr><td style="text-align:right">1339</td><td style="text-align:left">Looks up <code>#overlay</code></td></tr>
+<tr><td style="text-align:right">1369</td><td style="text-align:left">Looks up <code>#hublots</code> for layout assembly</td></tr>
+<tr><td style="text-align:right">1370</td><td style="text-align:left">Looks up <code>#treebar</code> for layout assembly</td></tr>
+</tbody></table></div>
+<h2 id="controller-and-factory-construction">Controller and Factory Construction<a class="anchor" href="#controller-and-factory-construction" aria-label="Link to this section">#</a></h2>
+<p>Root construction assignments, in source order:</p>
+<ul><li><code>lifecycleLog</code> → <code>createLifecycleLogger</code></li><li><code>delayedTasks</code> → <code>createDelayedTaskRegistry</code></li><li><code>transcriptScroll</code> → <code>createTranscriptScrollAdapter</code></li><li><code>toolCards</code> → <code>createToolCardRegistry</code></li><li><code>transcriptActions</code> → <code>createTranscriptActions</code></li><li><code>assistantStream</code> → <code>createAssistantStream</code></li><li><code>handleTranscriptStreamEvent</code> → <code>createTranscriptStreamEventHandler</code></li><li><code>checkpointFeature</code> → <code>createCheckpointFeature</code></li><li><code>applyState</code> → <code>createSessionStateApplier</code></li><li><code>runnerState</code> → <code>createSessionRunnerState</code></li><li><code>sessionFeature</code> → <code>createLazySessionFeature</code></li><li><code>previewController</code> → <code>createSessionPreviewController</code></li><li><code>sessionUi</code> → <code>createSessionUiRuntime</code></li><li><code>managedConnection</code> → <code>createManagedEventConnection</code></li><li><code>isDuplicateSseEvent</code> → <code>createLoggedSseDeduper</code></li><li><code>afterTranscriptRender</code> → <code>createTranscriptAfterRenderController</code></li><li><code>reloadTranscript</code> → <code>createCanonicalTranscriptController</code></li><li><code>transcriptSyncScheduler</code> → <code>createTranscriptSyncScheduler</code></li><li><code>postAgentTranscriptSyncController</code> → <code>createDebouncedTranscriptSyncController</code></li><li><code>agentStart</code> → <code>createAgentStartController</code></li><li><code>agentCompletion</code> → <code>createAgentCompletionController</code></li><li><code>postSendTranscriptSyncController</code> → <code>createPostSendTranscriptSyncController</code></li><li><code>refreshStateNow</code> → <code>createSessionStateRefresher</code></li><li><code>extensionUiAdapters</code> → <code>createExtensionUiAdapters</code></li><li><code>commandGuard</code> → <code>createCommandGuard</code></li><li>lazy command input controller → <code>createCommandPaletteInputController</code></li><li><code>commandPaletteRunController</code> → <code>createCommandPaletteRunController</code></li><li><code>commandPaletteKeyboardController</code> → <code>createCommandPaletteKeyboardController</code></li><li><code>menuEventController</code> → <code>createMenuEventController</code></li><li><code>filesRuntime</code> → <code>createFilesRuntime</code></li><li><code>hublotManagerController</code> → <code>createHublotManagerController</code></li><li><code>hublotController</code> → <code>createHublotFeature</code></li><li><code>mobileDrawerDismissController</code> → <code>createMobileDrawerDismissController</code></li><li><code>routineSidebarController</code> → <code>createRoutineSidebarController</code></li><li><code>routineController</code> → <code>createRoutineController</code></li><li><code>sessionPickerRuntime</code> → <code>createSessionPickerRuntime</code></li><li><code>transcriptRuntime</code> → <code>createTranscriptRuntime</code></li><li><code>settingsLayoutRuntime</code> → <code>createSettingsLayoutRuntime</code></li><li><code>runtimeAttachments</code> → <code>createRuntimeAttachments</code></li><li><code>boot</code> → <code>createSessionBootController</code></li><li><code>runtimeTeardown</code> → <code>createRuntimeCleanup</code></li><li><code>runtimeStarter</code> → <code>createRuntimeStarter</code></li><li><code>featureAssembly</code> → <code>createFeatureAssembly</code></li><li><code>runtimeEventAdapters</code> → <code>createRuntimeEventAdapters</code></li></ul>
+<h2 id="action-registrations">Action Registrations<a class="anchor" href="#action-registrations" aria-label="Link to this section">#</a></h2>
+<p>Direct action registrations in the root:</p>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Line</th><th style="text-align:left">Registration</th><th style="text-align:left">Detach handle</th></tr></thead><tbody>
+<tr><td style="text-align:right">284</td><td style="text-align:left"><code>configureCheckpointTreeActions</code></td><td style="text-align:left"><code>detachCheckpointTreeActions</code></td></tr>
+<tr><td style="text-align:right">728</td><td style="text-align:left"><code>configureComposerActions</code></td><td style="text-align:left"><code>detachComposerActions</code></td></tr>
+<tr><td style="text-align:right">987</td><td style="text-align:left"><code>configureFilePickerActions</code></td><td style="text-align:left"><code>detachFilePickerActions</code></td></tr>
+<tr><td style="text-align:right">1045</td><td style="text-align:left"><code>configureFolderBrowserActions</code></td><td style="text-align:left"><code>detachFolderBrowserActions</code></td></tr>
+<tr><td style="text-align:right">1084</td><td style="text-align:left"><code>configureFileExplorerActions</code></td><td style="text-align:left"><code>detachFileExplorerActions</code></td></tr>
+<tr><td style="text-align:right">1147</td><td style="text-align:left"><code>configureHublotActions</code></td><td style="text-align:left"><code>detachHublotActions</code></td></tr>
+<tr><td style="text-align:right">1169</td><td style="text-align:left"><code>configureFilesActions</code></td><td style="text-align:left"><code>detachFilesActions</code></td></tr>
+<tr><td style="text-align:right">1213</td><td style="text-align:left"><code>configureRoutineActions</code></td><td style="text-align:left"><code>detachRoutineActions</code></td></tr>
+</tbody></table></div>
+<p>Session-picker, settings, and header action registrations are constructed by their existing feature runtime factories, while their detach handles are still collected by the root.</p>
+<h2 id="teardown-registrations">Teardown Registrations<a class="anchor" href="#teardown-registrations" aria-label="Link to this section">#</a></h2>
+<p><code>detachRuntimeEventAdapters</code> currently releases, in order:</p>
+<ol><li>carousel event registration</li><li>mobile drawer dismiss controller</li><li>header actions</li><li>settings actions</li><li>menu event controller</li><li>composer actions</li><li>command-palette keyboard controller</li><li>command-palette run controller</li><li>checkpoint-tree actions</li><li>file-picker actions</li><li>folder-browser actions</li><li>file-explorer actions</li><li>hublot actions</li><li>routine actions</li><li>session-picker actions</li><li>files actions</li><li>optional command-palette input controller</li></ol>
+<p><code>createRuntimeCleanup</code> additionally owns these teardown callbacks:</p>
+<ul><li>disconnect the platform connection coordinator</li><li>clear the EventSource compatibility hook</li><li>dispose the RPC client</li><li>stop the reconnect watchdog</li><li>run <code>detachRuntimeEventAdapters</code></li><li>detach authenticated-fetch/debug attachments</li><li>cancel all delayed tasks</li><li>transition connection state to lost</li></ul>
+<p>The final lifecycle return delegates teardown to this <code>runtimeTeardown</code> controller.</p>
+<h2 id="owner-map">Owner Map<a class="anchor" href="#owner-map" aria-label="Link to this section">#</a></h2>
+<p>Every root block is assigned to exactly one extraction owner. Shared calls are owned by the assembly that constructs them; cross-feature callbacks remain narrow interfaces supplied by the final composition module.</p>
+<div class="table-wrap"><table><thead><tr><th style="text-align:left">Root lines / block</th><th style="text-align:left">Owner</th><th style="text-align:left">Destination boundary</th></tr></thead><tbody>
+<tr><td style="text-align:left">107–118 lifecycle logger and delayed-task setup</td><td style="text-align:left">lifecycle</td><td style="text-align:left"><code>runtime/createLifecycleAssembly.js</code></td></tr>
+<tr><td style="text-align:left">119–145 token, transport, auth gate, URL route parsing, URL synchronization</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">146–253 transcript DOM, scrolling, tool cards, transcript actions, assistant stream, local echoes, stream dispatch</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">254–315 checkpoint model picker, feature construction, marker/tree helpers, checkpoint action registration</td><td style="text-align:left">checkpoints</td><td style="text-align:left"><code>features/checkpoints/createCheckpointAssembly.js</code></td></tr>
+<tr><td style="text-align:left">316–354 transcript renderer, clear/render orchestration, tail-first backfill</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">355–382 hydrated state application and header/session store updates</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">383–457 runner state, lazy session runtime, session preview/open, session UI state</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">458–525 managed connection, replay gate bridge, platform event dispatch</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">526–618 canonical reload, transcript sync, agent completion, post-send reconciliation</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">619–634 debounced session state refresh</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">635–734 composer input, prompt history, send/abort, command guard, composer action registration</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">735–877 command palette state, positioning, input/run/keyboard controllers</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">878–914 menu action routing and browser menu controller</td><td style="text-align:left">composer</td><td style="text-align:left"><code>features/composer/createComposerAssembly.js</code></td></tr>
+<tr><td style="text-align:left">915–1009 file-picker state/dependencies/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1010–1051 folder-browser workflow/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1052–1066 agent-message helper used by resource actions</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1067–1096 file-explorer workflow/actions</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1097–1144 hublot scope, manager, feature factory, scope refresh</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1145–1156 hublot action registration</td><td style="text-align:left">hublots</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1157–1167 mobile drawer dismissal</td><td style="text-align:left">settings/layout</td><td style="text-align:left"><code>features/settings/createSettingsLayoutAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1168–1172 files open action registration</td><td style="text-align:left">files</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1173–1214 routine visibility, sidebar/controller construction, routine actions</td><td style="text-align:left">routines</td><td style="text-align:left"><code>features/resources/createResourceAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1215–1290 session picker construction, initial data, search-hit callbacks</td><td style="text-align:left">sessions</td><td style="text-align:left"><code>features/sessions/createSessionAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1291–1299 search-hit focus adapter</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1300–1336 transcript permalink runtime, transcript element adapters, durable entry fetch</td><td style="text-align:left">transcript</td><td style="text-align:left"><code>features/transcript/createTranscriptAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1337–1349 modal close/settings modal shell helpers</td><td style="text-align:left">dialogs</td><td style="text-align:left"><code>platform/createDialogAdapters.js</code></td></tr>
+<tr><td style="text-align:left">1350–1377 settings, extension UI, header, carousel/layout construction</td><td style="text-align:left">settings/layout</td><td style="text-align:left"><code>features/settings/createSettingsLayoutAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1378–1393 authenticated-fetch and debug attachments</td><td style="text-align:left">platform</td><td style="text-align:left"><code>platform/createPlatformAssembly.js</code></td></tr>
+<tr><td style="text-align:left">1394–1477 session boot, aggregate detach order, runtime cleanup/start, feature assembly, event adapters, lifecycle return</td><td style="text-align:left">lifecycle</td><td style="text-align:left"><code>runtime/createLifecycleAssembly.js</code></td></tr>
+</tbody></table></div>
+<h3 id="mutable-state-owners">Mutable-State Owners<a class="anchor" href="#mutable-state-owners" aria-label="Link to this section">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th style="text-align:left">Binding</th><th style="text-align:left">Owner</th></tr></thead><tbody>
+<tr><td style="text-align:left"><code>platformEvents</code>, <code>connected</code>, <code>transcriptGateRequired</code></td><td style="text-align:left">platform</td></tr>
+<tr><td style="text-align:left"><code>composerHistory</code>, <code>commandGuard</code>, <code>cmdState</code>, <code>commandPaletteInputController</code></td><td style="text-align:left">composer</td></tr>
+<tr><td style="text-align:left"><code>transcriptRenderer</code>, <code>afterTranscript</code></td><td style="text-align:left">transcript</td></tr>
+<tr><td style="text-align:left"><code>state</code>, <code>currentRunner</code>, <code>runnersNow</code>, <code>sessionOpenController</code>, <code>onRunnersUpdate</code></td><td style="text-align:left">sessions</td></tr>
+<tr><td style="text-align:left"><code>tunnelScopeAll</code></td><td style="text-align:left">hublots/resources</td></tr>
+<tr><td style="text-align:left">function-local <code>sessionFile</code></td><td style="text-align:left">transcript</td></tr>
+<tr><td style="text-align:left">function-local <code>folders</code>, <code>currentFolder</code></td><td style="text-align:left">sessions</td></tr>
+</tbody></table></div>
+<h3 id="dom-access-owners">DOM-Access Owners<a class="anchor" href="#dom-access-owners" aria-label="Link to this section">#</a></h3>
+<ul><li>Transcript owns <code>#messages</code>, <code>#scroller</code>, transcript queries, and entry focus.</li><li>Composer owns <code>#input</code>, <code>#cmdPalette</code>, and command-palette class checks.</li><li>Checkpoints owns the tree-open query only through an injected layout adapter.</li><li>Settings/layout owns <code>#hublots</code>, <code>#treebar</code>, drawer class checks, and responsive</li></ul>
+<p>browser integration.</p>
+<ul><li>Dialogs owns <code>#gate</code> and <code>#overlay</code> through explicit browser/store adapters.</li><li>The final composition root must not perform these lookups directly.</li></ul></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"> via `document.getElementById` |
+| 134 | Looks up `#gate` |
+| 150 | Looks up `#messages` |
+| 151 | Looks up `#scroller` |
+| 187 | Queries assistant messages under `#messages` |
+| 274 | Reads `#treebar.classList` |
+| 637 | Looks up `#input` |
+| 671 | Reads command-palette `classList` |
+| 739 | Looks up `#cmdPalette` |
+| 752 | Reads overlay `classList` |
+| 872 | Reads command-palette `classList` |
+| 996 | Looks up `#input` during text insertion |
+| 1161 | Looks up `#hublots` |
+| 1162 | Looks up `#treebar` |
+| 1314 | Queries a transcript element by entry ID |
+| 1339 | Looks up `#overlay` |
+| 1369 | Looks up `#hublots` for layout assembly |
+| 1370 | Looks up `#treebar` for layout assembly |
+
+## Controller and Factory Construction
+
+Root construction assignments, in source order:
+
+- `lifecycleLog` → `createLifecycleLogger`
+- `delayedTasks` → `createDelayedTaskRegistry`
+- `transcriptScroll` → `createTranscriptScrollAdapter`
+- `toolCards` → `createToolCardRegistry`
+- `transcriptActions` → `createTranscriptActions`
+- `assistantStream` → `createAssistantStream`
+- `handleTranscriptStreamEvent` → `createTranscriptStreamEventHandler`
+- `checkpointFeature` → `createCheckpointFeature`
+- `applyState` → `createSessionStateApplier`
+- `runnerState` → `createSessionRunnerState`
+- `sessionFeature` → `createLazySessionFeature`
+- `previewController` → `createSessionPreviewController`
+- `sessionUi` → `createSessionUiRuntime`
+- `managedConnection` → `createManagedEventConnection`
+- `isDuplicateSseEvent` → `createLoggedSseDeduper`
+- `afterTranscriptRender` → `createTranscriptAfterRenderController`
+- `reloadTranscript` → `createCanonicalTranscriptController`
+- `transcriptSyncScheduler` → `createTranscriptSyncScheduler`
+- `postAgentTranscriptSyncController` → `createDebouncedTranscriptSyncController`
+- `agentStart` → `createAgentStartController`
+- `agentCompletion` → `createAgentCompletionController`
+- `postSendTranscriptSyncController` → `createPostSendTranscriptSyncController`
+- `refreshStateNow` → `createSessionStateRefresher`
+- `extensionUiAdapters` → `createExtensionUiAdapters`
+- `commandGuard` → `createCommandGuard`
+- lazy command input controller → `createCommandPaletteInputController`
+- `commandPaletteRunController` → `createCommandPaletteRunController`
+- `commandPaletteKeyboardController` → `createCommandPaletteKeyboardController`
+- `menuEventController` → `createMenuEventController`
+- `filesRuntime` → `createFilesRuntime`
+- `hublotManagerController` → `createHublotManagerController`
+- `hublotController` → `createHublotFeature`
+- `mobileDrawerDismissController` → `createMobileDrawerDismissController`
+- `routineSidebarController` → `createRoutineSidebarController`
+- `routineController` → `createRoutineController`
+- `sessionPickerRuntime` → `createSessionPickerRuntime`
+- `transcriptRuntime` → `createTranscriptRuntime`
+- `settingsLayoutRuntime` → `createSettingsLayoutRuntime`
+- `runtimeAttachments` → `createRuntimeAttachments`
+- `boot` → `createSessionBootController`
+- `runtimeTeardown` → `createRuntimeCleanup`
+- `runtimeStarter` → `createRuntimeStarter`
+- `featureAssembly` → `createFeatureAssembly`
+- `runtimeEventAdapters` → `createRuntimeEventAdapters`
+
+## Action Registrations
+
+Direct action registrations in the root:
+
+| Line | Registration | Detach handle |
+|---:|---|---|
+| 284 | `configureCheckpointTreeActions` | `detachCheckpointTreeActions` |
+| 728 | `configureComposerActions` | `detachComposerActions` |
+| 987 | `configureFilePickerActions` | `detachFilePickerActions` |
+| 1045 | `configureFolderBrowserActions` | `detachFolderBrowserActions` |
+| 1084 | `configureFileExplorerActions` | `detachFileExplorerActions` |
+| 1147 | `configureHublotActions` | `detachHublotActions` |
+| 1169 | `configureFilesActions` | `detachFilesActions` |
+| 1213 | `configureRoutineActions` | `detachRoutineActions` |
+
+Session-picker, settings, and header action registrations are constructed by
+their existing feature runtime factories, while their detach handles are still
+collected by the root.
+
+## Teardown Registrations
+
+`detachRuntimeEventAdapters` currently releases, in order:
+
+1. carousel event registration
+2. mobile drawer dismiss controller
+3. header actions
+4. settings actions
+5. menu event controller
+6. composer actions
+7. command-palette keyboard controller
+8. command-palette run controller
+9. checkpoint-tree actions
+10. file-picker actions
+11. folder-browser actions
+12. file-explorer actions
+13. hublot actions
+14. routine actions
+15. session-picker actions
+16. files actions
+17. optional command-palette input controller
+
+`createRuntimeCleanup` additionally owns these teardown callbacks:
+
+- disconnect the platform connection coordinator
+- clear the EventSource compatibility hook
+- dispose the RPC client
+- stop the reconnect watchdog
+- run `detachRuntimeEventAdapters`
+- detach authenticated-fetch/debug attachments
+- cancel all delayed tasks
+- transition connection state to lost
+
+The final lifecycle return delegates teardown to this `runtimeTeardown`
+controller.
+
+## Owner Map
+
+Every root block is assigned to exactly one extraction owner. Shared calls are
+owned by the assembly that constructs them; cross-feature callbacks remain
+narrow interfaces supplied by the final composition module.
+
+| Root lines / block | Owner | Destination boundary |
+|---|---|---|
+| 107–118 lifecycle logger and delayed-task setup | lifecycle | `runtime/createLifecycleAssembly.js` |
+| 119–145 token, transport, auth gate, URL route parsing, URL synchronization | platform | `platform/createPlatformAssembly.js` |
+| 146–253 transcript DOM, scrolling, tool cards, transcript actions, assistant stream, local echoes, stream dispatch | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 254–315 checkpoint model picker, feature construction, marker/tree helpers, checkpoint action registration | checkpoints | `features/checkpoints/createCheckpointAssembly.js` |
+| 316–354 transcript renderer, clear/render orchestration, tail-first backfill | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 355–382 hydrated state application and header/session store updates | sessions | `features/sessions/createSessionAssembly.js` |
+| 383–457 runner state, lazy session runtime, session preview/open, session UI state | sessions | `features/sessions/createSessionAssembly.js` |
+| 458–525 managed connection, replay gate bridge, platform event dispatch | platform | `platform/createPlatformAssembly.js` |
+| 526–618 canonical reload, transcript sync, agent completion, post-send reconciliation | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 619–634 debounced session state refresh | sessions | `features/sessions/createSessionAssembly.js` |
+| 635–734 composer input, prompt history, send/abort, command guard, composer action registration | composer | `features/composer/createComposerAssembly.js` |
+| 735–877 command palette state, positioning, input/run/keyboard controllers | composer | `features/composer/createComposerAssembly.js` |
+| 878–914 menu action routing and browser menu controller | composer | `features/composer/createComposerAssembly.js` |
+| 915–1009 file-picker state/dependencies/actions | files | `features/resources/createResourceAssembly.js` |
+| 1010–1051 folder-browser workflow/actions | files | `features/resources/createResourceAssembly.js` |
+| 1052–1066 agent-message helper used by resource actions | hublots | `features/resources/createResourceAssembly.js` |
+| 1067–1096 file-explorer workflow/actions | files | `features/resources/createResourceAssembly.js` |
+| 1097–1144 hublot scope, manager, feature factory, scope refresh | hublots | `features/resources/createResourceAssembly.js` |
+| 1145–1156 hublot action registration | hublots | `features/resources/createResourceAssembly.js` |
+| 1157–1167 mobile drawer dismissal | settings/layout | `features/settings/createSettingsLayoutAssembly.js` |
+| 1168–1172 files open action registration | files | `features/resources/createResourceAssembly.js` |
+| 1173–1214 routine visibility, sidebar/controller construction, routine actions | routines | `features/resources/createResourceAssembly.js` |
+| 1215–1290 session picker construction, initial data, search-hit callbacks | sessions | `features/sessions/createSessionAssembly.js` |
+| 1291–1299 search-hit focus adapter | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 1300–1336 transcript permalink runtime, transcript element adapters, durable entry fetch | transcript | `features/transcript/createTranscriptAssembly.js` |
+| 1337–1349 modal close/settings modal shell helpers | dialogs | `platform/createDialogAdapters.js` |
+| 1350–1377 settings, extension UI, header, carousel/layout construction | settings/layout | `features/settings/createSettingsLayoutAssembly.js` |
+| 1378–1393 authenticated-fetch and debug attachments | platform | `platform/createPlatformAssembly.js` |
+| 1394–1477 session boot, aggregate detach order, runtime cleanup/start, feature assembly, event adapters, lifecycle return | lifecycle | `runtime/createLifecycleAssembly.js` |
+
+### Mutable-State Owners
+
+| Binding | Owner |
+|---|---|
+| `platformEvents`, `connected`, `transcriptGateRequired` | platform |
+| `composerHistory`, `commandGuard`, `cmdState`, `commandPaletteInputController` | composer |
+| `transcriptRenderer`, `afterTranscript` | transcript |
+| `state`, `currentRunner`, `runnersNow`, `sessionOpenController`, `onRunnersUpdate` | sessions |
+| `tunnelScopeAll` | hublots/resources |
+| function-local `sessionFile` | transcript |
+| function-local `folders`, `currentFolder` | sessions |
+
+### DOM-Access Owners
+
+- Transcript owns `#messages`, `#scroller`, transcript queries, and entry focus.
+- Composer owns `#input`, `#cmdPalette`, and command-palette class checks.
+- Checkpoints owns the tree-open query only through an injected layout adapter.
+- Settings/layout owns `#hublots`, `#treebar`, drawer class checks, and responsive
+  browser integration.
+- Dialogs owns `#gate` and `#overlay` through explicit browser/store adapters.
+- The final composition root must not perform these lookups directly.
+</code></pre>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("view-toggle");
+      const copy = document.getElementById("copy-markdown");
+      const rendered = document.getElementById("rendered-view");
+      const raw = document.getElementById("raw-view");
+      const source = document.getElementById("raw-markdown").textContent;
+      let rawVisible = false;
+
+      toggle.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        rendered.hidden = rawVisible;
+        raw.hidden = !rawVisible;
+        copy.hidden = !rawVisible;
+        toggle.textContent = rawVisible ? "View rendered" : "View raw";
+        toggle.setAttribute("aria-pressed", String(rawVisible));
+      });
+
+      copy.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        } catch {
+          const field = document.createElement("textarea");
+          field.value = source;
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          copied = document.execCommand("copy");
+          field.remove();
+        }
+        const label = copied ? "Copied!" : "Copy failed";
+        copy.textContent = label;
+        setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1500);
+      });
+    })();
+  </script>
+</body>
+</html>
