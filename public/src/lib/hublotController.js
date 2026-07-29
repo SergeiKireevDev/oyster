@@ -28,6 +28,8 @@ export function createManagedHublotEventController({ windowTarget, create, openC
 }
 
 export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, isVisible, updateManager, getScopeAll, getDescription }) {
+  let sidebarRefreshGeneration = 0;
+
   async function create(description) {
     const text = (description ?? "").trim();
     setDescription(description ?? "");
@@ -44,9 +46,13 @@ export function createHublotController({ createHublot, getSessionId, setDescript
   }
   async function refreshSidebar() {
     if (!isAuthenticated()) return;
+    const generation = ++sidebarRefreshGeneration;
     setSidebarLoading(true);
     let tunnels = [];
     try { tunnels = await listSidebarHublots(); } catch { /* sidebar is best-effort */ }
+    // Session switches can overlap requests. Never let a slower response for
+    // the previous session replace the current session's pinned widgets.
+    if (generation !== sidebarRefreshGeneration) return;
     setSidebarTunnels(tunnels);
     setSidebarLoading(false);
   }
