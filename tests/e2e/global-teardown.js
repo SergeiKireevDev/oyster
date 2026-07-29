@@ -7,8 +7,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const LOCK_DIR = join(HERE, ".port-locks");
-const STATE_FILE = join(HERE, ".e2e-state.json");
+const LOCK_DIR = process.env.E2E_LOCK_DIR ?? join(HERE, ".port-locks");
+const STATE_FILE = process.env.E2E_STATE_FILE ?? join(HERE, ".e2e-state.json");
+const CONTAINER_PREFIX = process.env.E2E_CONTAINER_PREFIX ?? "oyster-e2e";
+if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(CONTAINER_PREFIX)) throw new Error("invalid E2E_CONTAINER_PREFIX");
 
 const sh = (args) => {
   try { return execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
@@ -16,12 +18,12 @@ const sh = (args) => {
 };
 
 export default async function globalTeardown() {
-  const names = sh(["ps", "-a", "--filter", "name=^oyster-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
+  const names = sh(["ps", "-a", "--filter", `name=^${CONTAINER_PREFIX}-[0-9]+$`, "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
   for (const name of names) {
     console.log(`[e2e] removing leftover container ${name}`);
     sh(["rm", "-f", name]);
   }
-  const volumes = sh(["volume", "ls", "--filter", "name=^oyster-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+  const volumes = sh(["volume", "ls", "--filter", `name=^${CONTAINER_PREFIX}-agent-[0-9]+$`, "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
   for (const volume of volumes) {
     console.log(`[e2e] removing leftover volume ${volume}`);
     sh(["volume", "rm", "-f", volume]);

@@ -14,6 +14,9 @@ const OUT = process.env.E2E_VIDEO_OUT ?? join(ROOT, "preview-videos");
 const RAW = process.env.E2E_VIDEO_DIR ?? join(OUT, "raw");
 const DELAY_MS = process.env.E2E_ACTION_DELAY_MS ?? "1000";
 const WORKERS = process.env.E2E_WORKERS ?? "1";
+const CONTAINER_PREFIX = process.env.E2E_CONTAINER_PREFIX ?? `oyster-preview-${process.pid}`;
+const LOCK_DIR = process.env.E2E_LOCK_DIR ?? join(HERE, `.port-locks-${CONTAINER_PREFIX}`);
+const STATE_FILE = process.env.E2E_STATE_FILE ?? join(HERE, `.e2e-state-${CONTAINER_PREFIX}.json`);
 
 function sh(cmd) {
   return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -84,8 +87,9 @@ function main() {
   }
   rmSync(RAW, { recursive: true, force: true });
   mkdirSync(RAW, { recursive: true });
-  rmSync(join(HERE, ".port-locks"), { recursive: true, force: true });
-  safeRmDocker("^oyster-e2e-[0-9]+$");
+  rmSync(LOCK_DIR, { recursive: true, force: true });
+  rmSync(STATE_FILE, { force: true });
+  safeRmDocker(`^${CONTAINER_PREFIX}-[0-9]+$`);
 
   console.log(`Recording e2e videos with E2E_ACTION_DELAY_MS=${DELAY_MS}, E2E_WORKERS=${WORKERS}`);
   const result = spawnSync("npx", ["playwright", "test"], {
@@ -97,30 +101,34 @@ function main() {
       E2E_ACTION_DELAY_MS: DELAY_MS,
       E2E_VIDEO_DIR: RAW,
       E2E_WORKERS: WORKERS,
+      E2E_CONTAINER_PREFIX: CONTAINER_PREFIX,
+      E2E_LOCK_DIR: LOCK_DIR,
+      E2E_STATE_FILE: STATE_FILE,
     },
   });
 
   const videos = walk(RAW).sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
-  const names = [];
-  const used = new Set();
+  // A passing retry should replace its failed first attempt, not create a
+  // duplicate gallery card. Serial-suite retries also replay earlier tests,
+  // so normalize every retry directory to the same stable test slug and keep
+  // only its newest recording.
+  const latestByName = new Map();
   for (const video of videos) {
     const parent = relative(RAW, dirname(video)).replace(/[/\\]/g, "-");
-    let base = slug(parent.replace(/-chromium(?:-retry\d+)?$/i, ""));
-    let name = `${base}.webm`;
-    let n = 2;
-    while (used.has(name)) name = `${base}-${n++}.webm`;
-    used.add(name);
-    copyFileSync(video, join(OUT, name));
-    names.push(name);
+    const base = slug(parent.replace(/-chromium(?:-retry\d+)?$/i, ""));
+    latestByName.set(`${base}.webm`, video);
   }
+  const names = [...latestByName.keys()].sort();
+  for (const name of names) copyFileSync(latestByName.get(name), join(OUT, name));
   writeGallery(names);
 
   console.log(`\nRecorded ${names.length} videos in ${OUT}:`);
   for (const name of names) console.log(`  ${name}`);
   console.log(`Gallery: ${join(OUT, "index.html")}`);
 
-  safeRmDocker("^oyster-e2e-[0-9]+$");
-  rmSync(join(HERE, ".port-locks"), { recursive: true, force: true });
+  safeRmDocker(`^${CONTAINER_PREFIX}-[0-9]+$`);
+  rmSync(LOCK_DIR, { recursive: true, force: true });
+  rmSync(STATE_FILE, { force: true });
   process.exit(result.status ?? 1);
 }
 

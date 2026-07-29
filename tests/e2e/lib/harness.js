@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const STATE_FILE = join(HERE, "..", ".e2e-state.json");
+const STATE_FILE = process.env.E2E_STATE_FILE ?? join(HERE, "..", ".e2e-state.json");
 
 export const BASE = process.env.OYSTER_URL ?? "http://localhost:4000";
 export const TOKEN = process.env.OYSTER_TOKEN ?? "e2e-test-token";
