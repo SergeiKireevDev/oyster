@@ -43,6 +43,27 @@ test("hublot controller refreshes the sidebar best-effort when authenticated", a
   await controller.refreshSidebar();
   assert.deepEqual(calls, [["loading", true], ["tunnels", [{ id: 1 }]], ["loading", false]]);
 });
+
+test("hublot controller ignores stale overlapping sidebar refreshes", async () => {
+  const pending = [];
+  const rendered = [];
+  const controller = createHublotController({
+    isAuthenticated: () => true,
+    listSidebarHublots: () => new Promise((resolve) => pending.push(resolve)),
+    setSidebarLoading: () => {},
+    setSidebarTunnels: (value) => rendered.push(value),
+  });
+
+  const staleRefresh = controller.refreshSidebar();
+  const currentRefresh = controller.refreshSidebar();
+  pending[1]([{ id: "current-session" }]);
+  await currentRefresh;
+  pending[0]([{ id: "previous-session" }]);
+  await staleRefresh;
+
+  assert.deepEqual(rendered, [[{ id: "current-session" }]]);
+});
+
 test("hublot controller refreshes filtered manager state", async () => {
   const updates = [];
   const controller = createHublotController({ getSessionId: () => "s", getScopeAll: () => false, getDescription: () => "", listHublots: async () => [{ id: 1 }, { id: 2 }], isVisible: (tunnel) => tunnel.id === 1, updateManager: (value) => updates.push(value), toast: () => {} });
