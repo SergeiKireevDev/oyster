@@ -69,10 +69,11 @@ async function body(page, { mobile }) {
   // the treebar starts closed
   await expect(page.locator("#treebar")).not.toHaveClass(/open/);
 
-  // ---- open it via the ⎇ chip and confirm empty state
+  // ---- open it via the ⎇ chip and confirm the new SQLite session has no checkpoints
   await openTreebar(page, mobile);
   await expect(page.locator("#treebar")).toHaveClass(/open/);
-  await expect(page.locator("#treeView")).toContainText("no session file yet");
+  await expect(page.locator("#treeView .t-session")).toHaveCount(1);
+  await expect(page.locator("#treeView .t-ckpt")).toHaveCount(0);
   // always close the drawer before sending prompts — on mobile it covers the
   // composer, and doing it everywhere keeps the test deterministic
   await closeTreebar(page, mobile);

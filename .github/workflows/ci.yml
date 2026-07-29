@@ -63,12 +63,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build release-fallback image
+      - name: Resolve bundled pi revision
+        id: pi-revision
+        run: echo "revision=$(git -C pi rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build SQLite E2E image
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.local-pi
+          build-contexts: |
+            pi-source=./pi
+          build-args: |
+            PI_LOCAL_REV=${{ steps.pi-revision.outputs.revision }}
           load: true
-          tags: oyster:published
+          tags: oyster:sqlite
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

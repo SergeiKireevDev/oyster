@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { currentSessionId, login, sendPrompt, swipe, waitFor } from "./lib/harness.js";
 import { ensureContainer, replaceContainer, teardownContainer } from "./lib/reset.js";
 
-test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
+test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
 test("agent display math is rendered by KaTeX", async ({ page }) => {
@@ -73,7 +73,7 @@ test("historical SQLite tool results do not return as waiting after reload", asy
     await sendPrompt(page, `SQLite transcript filler ${index}`);
   }
 
-  await replaceContainer({ sqlite: true });
+  await replaceContainer();
   await login(page);
   await waitFor(async () => (await currentSessionId(page)) === sessionId, {
     timeout: 30000,

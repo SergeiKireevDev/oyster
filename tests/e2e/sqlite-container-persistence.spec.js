@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { api, currentSessionId, dexec, login, sendPrompt, sqliteSessionManifest, waitFor } from "./lib/harness.js";
+import { api, currentSessionId, dexec, login, sendPrompt, waitFor } from "./lib/harness.js";
 import { ensureContainer, replaceContainer, teardownContainer } from "./lib/reset.js";
 
-test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
+test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
-test("SQLite conversation survives replacement and an intact JSONL rollback toggle", async ({ page }) => {
+test("SQLite conversation survives container replacement", async ({ page }) => {
   const token = `SQLITE-VOLUME-${Date.now()}`;
   await login(page);
   await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${token}.`);
@@ -25,7 +25,6 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
     const titled = await api("GET", "/sessions?dir=/workspace");
     return titled.json.sessions.find((session) => session.id === sessionId)?.name === token;
   }, { timeout: 30000, label: "generated SQLite session title" });
-  const sqliteManifest = sqliteSessionManifest();
 
   await replaceContainer();
   await login(page);
@@ -46,22 +45,4 @@ test("SQLite conversation survives replacement and an intact JSONL rollback togg
     label: "resumed SQLite session after search hit",
   });
   expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
-
-  // Toggle the same volume to the explicit release/JSONL rollback image. A
-  // JSONL conversation must not rewrite the dormant SQLite database.
-  await replaceContainer({ sqlite: false });
-  await login(page);
-  const jsonlToken = `JSONL-ROLLBACK-${Date.now()}`;
-  await sendPrompt(page, `Do not use any tools. Reply with exactly the word ${jsonlToken}.`);
-  expect(sqliteSessionManifest()).toBe(sqliteManifest);
-  const jsonlManifest = dexec("find /root/.pi/agent -type f -name '*.jsonl' -exec sha256sum {} + | sort");
-  expect(jsonlManifest).toContain(".jsonl");
-
-  // Toggle back to SQLite: the original database session and the independent
-  // JSONL rollback data must both still be present and readable/intact.
-  await replaceContainer({ sqlite: true });
-  await login(page);
-  const restored = await api("GET", "/sessions?dir=/workspace");
-  expect(restored.json.sessions.some((session) => session.id === sessionId)).toBe(true);
-  expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -exec sha256sum {} + | sort")).toBe(jsonlManifest);
 });

@@ -60,12 +60,13 @@ const projectUse = process.env.E2E_VIDEO
 // Specs run in isolated per-test containers. `lib/reset.js` allocates a host
 // port from 4000..4018 for each live test and tears that container down in
 // afterEach, so the suite can run in parallel without workspace/session bleed.
-// Use five workers by default; set E2E_WORKERS to tune concurrency for the host.
+// SQLite-backed pi containers are memory-intensive. Use three workers by
+// default; set E2E_WORKERS to tune concurrency for the host.
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
   fullyParallel: true,
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 5,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 3,
   // Container startup and SSE reconnection can transiently race under the full
   // Docker matrix. Retry once in a fresh per-test container; deterministic
   // product failures still fail on the second attempt with retained traces.
