@@ -46,11 +46,11 @@ export async function createPinnedWidgetGroup(fetchImpl, { name, sessionId = nul
   }), "cannot create widget group");
 }
 
-export async function updatePinnedWidgetGroup(fetchImpl, { id, name, sessionId = null }) {
+export async function updatePinnedWidgetGroup(fetchImpl, { id, name, scope, sessionId = null }) {
   return jsonResponse(await fetchImpl("/pinned-widget-groups", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id, name, sessionId }),
+    body: JSON.stringify({ id, name, scope, sessionId }),
   }), "cannot update widget group");
 }
 

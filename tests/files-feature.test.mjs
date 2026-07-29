@@ -49,11 +49,11 @@ test("file explorer component routes browse, edit, save, upload, back, and retur
   assert.doesNotMatch(source, /features\/files\/fileExplorerActions\.js/);
 });
 
-test("widget and manager entry points route file workflows through scoped actions", () => {
+test("the Files widget routes file workflows while the custom prompt stays focused on live interfaces", () => {
   const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
   const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
-  assert.match(manager, /getUiActionRegistry\(\)/);
-  assert.match(manager, /uiActions\.invoke\(FILE_EXPLORER_OPEN_ACTION\)/);
+  assert.doesNotMatch(manager, /FILE_EXPLORER_OPEN_ACTION|File explorer/);
+  assert.match(manager, /Create live interface widget/);
   assert.match(grid, /getUiActionRegistry\(\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
   for (const source of [manager, grid]) assert.doesNotMatch(source, /features\/files\/filesActions\.js/);

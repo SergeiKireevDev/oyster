@@ -38,6 +38,7 @@ export const HUBLOT_OPEN_COMMAND_PALETTE_ACTION = "hublot.openCommandPalette";
 export const PINNED_WIDGET_OPEN_ACTION = "pinnedWidget.open";
 export const PINNED_WIDGET_MANAGE_ACTION = "pinnedWidget.manage";
 export const PINNED_WIDGET_MOVE_ACTION = "pinnedWidget.move";
+export const PINNED_WIDGET_MOVE_GROUP_ACTION = "pinnedWidget.moveGroup";
 export const PINNED_WIDGET_PIN_PATH_ACTION = "pinnedWidget.pinPath";
 export const PINNED_WIDGET_PIN_LINK_ACTION = "pinnedWidget.pinLink";
 export const PINNED_WIDGET_CREATE_GROUP_ACTION = "pinnedWidget.createGroup";

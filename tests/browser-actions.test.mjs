@@ -34,8 +34,7 @@ test("pinned widget components use injected browser actions without direct windo
   const viewer = readFileSync(new URL("../public/src/components/PinnedWidgetViewerModal.svelte", import.meta.url), "utf8");
   const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
   const sidebar = readFileSync(new URL("../public/src/components/HublotSidebar.svelte", import.meta.url), "utf8");
-  assert.match(manager, /getBrowserActions\(\)/);
-  assert.match(manager, /browserActions\.openExternal\(tunnel\.url\)/);
+  assert.doesNotMatch(manager, /getBrowserActions|openExternal|tunnel\.url/);
   assert.match(viewer, /getBrowserActions\(\)/);
   assert.match(viewer, /browserActions\.fileDownload\(/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);

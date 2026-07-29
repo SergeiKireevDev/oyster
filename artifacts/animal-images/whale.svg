@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 280" role="img" aria-label="Stylized whale">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#bde8f3"/><stop offset="1" stop-color="#ffffff"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-opacity=".18"/></filter></defs>
+<rect width="320" height="280" rx="34" fill="url(#bg)"/><circle cx="48" cy="44" r="18" fill="#3d91c4" opacity=".16"/><circle cx="276" cy="224" r="30" fill="#3d91c4" opacity=".12"/>
+<g fill="#3d91c4" filter="url(#s)" stroke="#202631" stroke-width="3" stroke-linejoin="round"><style>.light{fill:#bde8f3}.dark{fill:#202631;stroke:none}</style><path d="M72 151q8-65 90-65 80 0 98 51 10 31-40 58-62 29-126-5-25-14-22-39z"/><path d="M78 151 35 116q-5 42 39 53M78 151 40 185q-9-35 34-48"/><path class="light" d="M106 171q71 27 124-10-46 56-124 10"/><circle class="dark" cx="197" cy="126" r="7"/><path class="dark" fill="none" stroke-width="5" d="M226 101q12-24 1-43m3 30q24-13 26-29"/></g>
+<text x="160" y="260" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="2" fill="#202631">WHALE</text></svg>

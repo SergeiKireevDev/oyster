@@ -118,6 +118,66 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   assert.equal(removed.status, 200);
 });
 
+test("widgets move between session-only and workspace-visible sections", async (t) => {
+  const { root, routes } = fixture(t);
+  writeFileSync(join(root, "shared.md"), "# Shared");
+
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path: join(root, "shared.md"), sessionId: "session-a" }), created);
+  assert.equal(created.body.widget.scope, "session");
+  assert.equal(created.body.widget.sessionId, "session-a");
+
+  const madeDirectoryVisible = response();
+  await routes["PATCH /pinned-widgets"](request({
+    id: created.body.widget.id, scope: "workspace", groupId: null, sessionId: "session-a",
+  }), madeDirectoryVisible);
+  assert.equal(madeDirectoryVisible.status, 200);
+  assert.equal(madeDirectoryVisible.body.widget.scope, "workspace");
+  assert.equal(madeDirectoryVisible.body.widget.sessionId, null);
+
+  const visibleToAnotherSession = response();
+  routes["GET /pinned-widgets"]({}, visibleToAnotherSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-b"));
+  assert.ok(visibleToAnotherSession.body.widgets.some((widget) => widget.id === created.body.widget.id));
+
+  const madeSessionOnly = response();
+  await routes["PATCH /pinned-widgets"](request({
+    id: created.body.widget.id, scope: "session", groupId: null, sessionId: "session-b",
+  }), madeSessionOnly);
+  assert.equal(madeSessionOnly.body.widget.scope, "session");
+  assert.equal(madeSessionOnly.body.widget.sessionId, "session-b");
+
+  const hiddenFromOriginalSession = response();
+  routes["GET /pinned-widgets"]({}, hiddenFromOriginalSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
+  assert.ok(!hiddenFromOriginalSession.body.widgets.some((widget) => widget.id === created.body.widget.id));
+});
+
+test("groups and their widgets move together between visibility sections", async (t) => {
+  const { root, routes } = fixture(t);
+  writeFileSync(join(root, "grouped.md"), "# Grouped");
+
+  const grouped = response();
+  await routes["POST /pinned-widget-groups"](request({ name: "Animals", scope: "workspace" }), grouped);
+  const created = response();
+  await routes["POST /pinned-widgets"](request({
+    path: join(root, "grouped.md"), scope: "workspace", groupId: grouped.body.group.id,
+  }), created);
+
+  const moved = response();
+  await routes["PATCH /pinned-widget-groups"](request({
+    id: grouped.body.group.id, scope: "session", sessionId: "session-a",
+  }), moved);
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.group.scope, "session");
+  assert.equal(moved.body.group.session_id, "session-a");
+
+  const listed = response();
+  routes["GET /pinned-widgets"]({}, listed, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
+  const widget = listed.body.widgets.find((item) => item.id === created.body.widget.id);
+  assert.equal(widget.scope, "session");
+  assert.equal(widget.sessionId, "session-a");
+  assert.equal(widget.groupId, grouped.body.group.id);
+});
+
 test("deleting a group with its widgets preserves the source artifacts", async (t) => {
   const { root, routes, appStore } = fixture(t);
   const paths = [join(root, "one.md"), join(root, "two.png")];
@@ -216,6 +276,7 @@ test("SVG artifacts stream only through the sandboxed native image viewer", asyn
   assert.equal(res.status, 200);
   assert.equal(res.headers["content-type"], "image/svg+xml");
   assert.match(res.headers["content-security-policy"], /default-src 'none'; sandbox/);
+  assert.match(res.headers["content-security-policy"], /style-src 'unsafe-inline'/);
   assert.deepEqual(res.body(), svg);
 });
 

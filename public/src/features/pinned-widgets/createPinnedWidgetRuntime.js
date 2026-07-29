@@ -61,9 +61,16 @@ export function createPinnedWidgetRuntime(deps) {
     }
   }
 
-  async function move({ id, groupId = null, beforeId = null }) {
+  async function move({ id, scope, groupId = null, beforeId = null }) {
     try {
-      await updatePinnedWidget(deps.fetchImpl, { id, groupId, beforeId, sessionId: sessionId() });
+      await updatePinnedWidget(deps.fetchImpl, { id, scope, groupId, beforeId, sessionId: sessionId() });
+      await refresh();
+    } catch (error) { deps.toast(error.message, "error"); }
+  }
+
+  async function moveGroup({ id, scope }) {
+    try {
+      await updatePinnedWidgetGroup(deps.fetchImpl, { id, scope, sessionId: sessionId() });
       await refresh();
     } catch (error) { deps.toast(error.message, "error"); }
   }
@@ -144,6 +151,6 @@ export function createPinnedWidgetRuntime(deps) {
 
   return Object.freeze({
     pinPath: pinArtifactPath,
-    actions: Object.freeze({ open, manage, move, pinPath: pinArtifactPath, pinLink: pinHttpsLink, createGroup, renameGroup: manageGroup, reveal }),
+    actions: Object.freeze({ open, manage, move, moveGroup, pinPath: pinArtifactPath, pinLink: pinHttpsLink, createGroup, renameGroup: manageGroup, reveal }),
   });
 }

@@ -19,8 +19,8 @@ test("hublot manager owns its footer actions", () => {
   const overlays = read("Overlays.svelte");
 
   assert.match(component, /class="m-actions"/);
-  assert.match(component, /onclick=\{toggleManagedHublotScope\}/);
   assert.match(component, /onclick=\{closeModalState\}/);
+  assert.doesNotMatch(component, /toggleManagedHublotScope/);
   assert.doesNotMatch(overlays, /toggleManagedHublotScope|\$hublotManager/);
 });
 
