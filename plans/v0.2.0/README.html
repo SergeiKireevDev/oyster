@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Oyster v0.2.0 Code-Quality Roadmap</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from README.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#oyster-v0-2-0-code-quality-roadmap">Oyster v0.2.0 Code-Quality Roadmap</a></li>
+<li class="level-2"><a href="#purpose">Purpose</a></li>
+<li class="level-2"><a href="#plans">Plans</a></li>
+<li class="level-2"><a href="#cross-cutting-guardrails">Cross-cutting guardrails</a></li>
+<li class="level-2"><a href="#delivery-sequence">Delivery sequence</a></li>
+<li class="level-2"><a href="#validation-policy">Validation policy</a></li>
+<li class="level-2"><a href="#completion-criteria">Completion criteria</a></li></ol></nav>
+      <article><h1 id="oyster-v0-2-0-code-quality-roadmap">Oyster v0.2.0 Code-Quality Roadmap<a class="anchor" href="#oyster-v0-2-0-code-quality-roadmap" aria-label="Link to this section">#</a></h1>
+<h2 id="purpose">Purpose<a class="anchor" href="#purpose" aria-label="Link to this section">#</a></h2>
+<p>Turn the broader findings from the July 2026 server audit into independently reviewable implementation plans. The audit covered the stable server core, hot-reloadable application, routes, persistence, process ownership, session catalogs, and browser-facing streaming paths.</p>
+<p>The critical loopback authentication bypass and generated-token persistence issue have already been addressed by <code>be924248</code> (**Require explicit authentication for local tools**). They are not repeated as future work here. This roadmap covers the remaining in-scope process-safety, configuration, resource-bounding, and maintainability work.</p>
+<h2 id="plans">Plans<a class="anchor" href="#plans" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th style="text-align:right">Order</th><th style="text-align:left">Plan</th><th style="text-align:left">Primary outcomes</th></tr></thead><tbody>
+<tr><td style="text-align:right">1</td><td style="text-align:left"><a href="safe-process-lifecycle.md">Safe process lifecycle</a></td><td style="text-align:left">Awaited termination, effective SIGKILL escalation, PID identity checks, generation-safe runner replacement</td></tr>
+<tr><td style="text-align:right">2</td><td style="text-align:left"><a href="harden-http-boundaries.md">Harden HTTP boundaries</a></td><td style="text-align:left">Trusted-proxy policy, bounded authentication throttling, minimal public health, authenticated diagnostics</td></tr>
+<tr><td style="text-align:right">3</td><td style="text-align:left"><a href="reliable-file-and-stream-io.md">Reliable file and stream I/O</a></td><td style="text-align:left">SSE backpressure, isolated resumable uploads, mode-preserving saves, bounded event-loop delay</td></tr>
+<tr><td style="text-align:right">4</td><td style="text-align:left"><a href="storage-configuration-and-schema-safety.md">Storage configuration and schema safety</a></td><td style="text-align:left">One session-root contract, private database files, downgrade rejection, operational integrity checks</td></tr>
+<tr><td style="text-align:right">5</td><td style="text-align:left"><a href="atomic-hot-reload-and-quality-gates.md">Atomic hot reload and quality gates</a></td><td style="text-align:left">Transactional reload lifecycle, complete reload coverage, lint/type/security/coverage automation</td></tr>
+</tbody></table></div>
+<h2 id="cross-cutting-guardrails">Cross-cutting guardrails<a class="anchor" href="#cross-cutting-guardrails" aria-label="Link to this section">#</a></h2>
+<ul><li>Preserve the stable-core rule: durable repositories and long-lived OS handles</li></ul>
+<p>belong to <code>server/server.mjs</code> state, not cache-busted module globals.</p>
+<ul><li>Preserve backend-neutral session identity as</li></ul>
+<p><code>{ backend, id, storagePath }</code>; never narrow identity to a bare ID or database path.</p>
+<ul><li>Treat a PID as an untrusted locator. Signal a persisted PID only after</li></ul>
+<p>verifying its recorded process identity immediately before each signal.</p>
+<ul><li>Make every multi-store workflow either atomic, serialized, or durably</li></ul>
+<p>recoverable. A journal without a reconciler is not a completed reliability boundary.</p>
+<ul><li>Bound memory, queue depth, request size, operation count, and shutdown time.</li></ul>
+<p>Slow clients and large workspaces must not stall unrelated runners or SSE clients.</p>
+<ul><li>Keep secrets, credentials, request bodies, and internal filesystem inventory</li></ul>
+<p>out of logs and public diagnostics.</p>
+<ul><li>Add focused tests before changing behavior. Preserve compatibility only when</li></ul>
+<p>it does not retain the unsafe behavior being removed.</p>
+<ul><li>Respect unrelated work in every worktree and keep each checklist item small</li></ul>
+<p>enough for one reviewed commit.</p>
+<h2 id="delivery-sequence">Delivery sequence<a class="anchor" href="#delivery-sequence" aria-label="Link to this section">#</a></h2>
+<ol><li>Land the shared process termination primitive before modifying runner,</li></ol>
+<p>hublot, routine, or one-shot process lifecycle code.</p>
+<ol><li>Land trusted-proxy parsing before changing throttling keys or diagnostics so</li></ol>
+<p>tests use one authoritative client identity.</p>
+<ol><li>Land per-client stream accounting before enforcing disconnect limits.</li><li>Land one configured session root before tightening database and migration</li></ol>
+<p>startup checks.</p>
+<ol><li>Add quality gates incrementally after the behavior-focused tests exist;</li></ol>
+<p>baseline suppressions must be explicit, narrow, and burn down over time.</p>
+<h2 id="validation-policy">Validation policy<a class="anchor" href="#validation-policy" aria-label="Link to this section">#</a></h2>
+<p>Run focused tests after every checklist item, followed by the repository suite:</p>
+<pre><code class="language-sh">npm test</code></pre>
+<p>Before completing each plan, run the broader matrix against freshly built artifacts rather than cached container tags:</p>
+<pre><code class="language-sh">npm run build
+npm test
+docker build -t oyster:quality-v0.2 .
+cd tests/e2e &amp;&amp; npm test</code></pre>
+<p>Plans touching the llmbox data path must additionally run its checks and cluster suite. Performance items must record event-loop delay, memory, and queue-depth results as diagnostics; normal CI assertions should use deterministic bounds, not fragile elapsed-time thresholds.</p>
+<h2 id="completion-criteria">Completion criteria<a class="anchor" href="#completion-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>Every remaining audit finding maps to a completed plan item or a documented,</li></ul>
+<p>evidence-based rejection.</p>
+<ul><li>Runner and hublot replacement cannot overlap an unconfirmed old process.</li><li>Public unauthenticated responses reveal no workspace or database inventory.</li><li>Slow SSE clients, concurrent uploads, and large catalog operations remain</li></ul>
+<p>bounded and observable.</p>
+<ul><li>Custom session roots and application database paths are honored consistently</li></ul>
+<p>and fail closed when unsafe or incompatible.</p>
+<ul><li>Hot reload either activates a complete new application or leaves the previous</li></ul>
+<p>application and its dependencies untouched.</p>
+<ul><li>Required CI checks cover style, types, architecture, security, dependencies,</li></ul>
+<p>secrets, unit tests, coverage, builds, and representative browser workflows.</p></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"># Oyster v0.2.0 Code-Quality Roadmap
+
+## Purpose
+
+Turn the broader findings from the July 2026 server audit into independently
+reviewable implementation plans. The audit covered the stable server core,
+hot-reloadable application, routes, persistence, process ownership, session
+catalogs, and browser-facing streaming paths.
+
+The critical loopback authentication bypass and generated-token persistence
+issue have already been addressed by `be924248` (**Require explicit
+authentication for local tools**). They are not repeated as future work here.
+This roadmap covers the remaining in-scope process-safety, configuration,
+resource-bounding, and maintainability work.
+
+## Plans
+
+| Order | Plan | Primary outcomes |
+|---:|---|---|
+| 1 | [Safe process lifecycle](safe-process-lifecycle.md) | Awaited termination, effective SIGKILL escalation, PID identity checks, generation-safe runner replacement |
+| 2 | [Harden HTTP boundaries](harden-http-boundaries.md) | Trusted-proxy policy, bounded authentication throttling, minimal public health, authenticated diagnostics |
+| 3 | [Reliable file and stream I/O](reliable-file-and-stream-io.md) | SSE backpressure, isolated resumable uploads, mode-preserving saves, bounded event-loop delay |
+| 4 | [Storage configuration and schema safety](storage-configuration-and-schema-safety.md) | One session-root contract, private database files, downgrade rejection, operational integrity checks |
+| 5 | [Atomic hot reload and quality gates](atomic-hot-reload-and-quality-gates.md) | Transactional reload lifecycle, complete reload coverage, lint/type/security/coverage automation |
+
+## Cross-cutting guardrails
+
+- Preserve the stable-core rule: durable repositories and long-lived OS handles
+  belong to `server/server.mjs` state, not cache-busted module globals.
+- Preserve backend-neutral session identity as
+  `{ backend, id, storagePath }`; never narrow identity to a bare ID or database
+  path.
+- Treat a PID as an untrusted locator. Signal a persisted PID only after
+  verifying its recorded process identity immediately before each signal.
+- Make every multi-store workflow either atomic, serialized, or durably
+  recoverable. A journal without a reconciler is not a completed reliability
+  boundary.
+- Bound memory, queue depth, request size, operation count, and shutdown time.
+  Slow clients and large workspaces must not stall unrelated runners or SSE
+  clients.
+- Keep secrets, credentials, request bodies, and internal filesystem inventory
+  out of logs and public diagnostics.
+- Add focused tests before changing behavior. Preserve compatibility only when
+  it does not retain the unsafe behavior being removed.
+- Respect unrelated work in every worktree and keep each checklist item small
+  enough for one reviewed commit.
+
+## Delivery sequence
+
+1. Land the shared process termination primitive before modifying runner,
+   hublot, routine, or one-shot process lifecycle code.
+2. Land trusted-proxy parsing before changing throttling keys or diagnostics so
+   tests use one authoritative client identity.
+3. Land per-client stream accounting before enforcing disconnect limits.
+4. Land one configured session root before tightening database and migration
+   startup checks.
+5. Add quality gates incrementally after the behavior-focused tests exist;
+   baseline suppressions must be explicit, narrow, and burn down over time.
+
+## Validation policy
+
+Run focused tests after every checklist item, followed by the repository suite:
+
+```sh
+npm test
+```
+
+Before completing each plan, run the broader matrix against freshly built
+artifacts rather than cached container tags:
+
+```sh
+npm run build
+npm test
+docker build -t oyster:quality-v0.2 .
+cd tests/e2e &amp;&amp; npm test
+```
+
+Plans touching the llmbox data path must additionally run its checks and cluster
+suite. Performance items must record event-loop delay, memory, and queue-depth
+results as diagnostics; normal CI assertions should use deterministic bounds,
+not fragile elapsed-time thresholds.
+
+## Completion criteria
+
+- Every remaining audit finding maps to a completed plan item or a documented,
+  evidence-based rejection.
+- Runner and hublot replacement cannot overlap an unconfirmed old process.
+- Public unauthenticated responses reveal no workspace or database inventory.
+- Slow SSE clients, concurrent uploads, and large catalog operations remain
+  bounded and observable.
+- Custom session roots and application database paths are honored consistently
+  and fail closed when unsafe or incompatible.
+- Hot reload either activates a complete new application or leaves the previous
+  application and its dependencies untouched.
+- Required CI checks cover style, types, architecture, security, dependencies,
+  secrets, unit tests, coverage, builds, and representative browser workflows.
+</code></pre>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("view-toggle");
+      const copy = document.getElementById("copy-markdown");
+      const rendered = document.getElementById("rendered-view");
+      const raw = document.getElementById("raw-view");
+      const source = document.getElementById("raw-markdown").textContent;
+      let rawVisible = false;
+
+      toggle.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        rendered.hidden = rawVisible;
+        raw.hidden = !rawVisible;
+        copy.hidden = !rawVisible;
+        toggle.textContent = rawVisible ? "View rendered" : "View raw";
+        toggle.setAttribute("aria-pressed", String(rawVisible));
+      });
+
+      copy.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        } catch {
+          const field = document.createElement("textarea");
+          field.value = source;
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          copied = document.execCommand("copy");
+          field.remove();
+        }
+        const label = copied ? "Copied!" : "Copy failed";
+        copy.textContent = label;
+        setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1500);
+      });
+    })();
+  </script>
+</body>
+</html>

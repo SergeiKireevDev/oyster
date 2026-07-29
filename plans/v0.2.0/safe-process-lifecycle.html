@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Safe Process Lifecycle and Ownership</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from safe-process-lifecycle.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#safe-process-lifecycle-and-ownership">Safe Process Lifecycle and Ownership</a></li>
+<li class="level-2"><a href="#goal">Goal</a></li>
+<li class="level-2"><a href="#guardrails">Guardrails</a></li>
+<li class="level-2"><a href="#1-characterize-current-termination-races">1. Characterize Current Termination Races</a></li>
+<li class="level-2"><a href="#2-introduce-one-awaited-termination-primitive">2. Introduce One Awaited Termination Primitive</a></li>
+<li class="level-2"><a href="#3-make-runner-stop-and-restart-generation-safe">3. Make Runner Stop and Restart Generation-Safe</a></li>
+<li class="level-2"><a href="#4-make-hublot-shutdown-identity-safe">4. Make Hublot Shutdown Identity-Safe</a></li>
+<li class="level-2"><a href="#5-converge-routine-and-helper-lifecycles">5. Converge Routine and Helper Lifecycles</a></li>
+<li class="level-2"><a href="#6-add-operational-visibility-and-complete-validation">6. Add Operational Visibility and Complete Validation</a></li>
+<li class="level-2"><a href="#completion-criteria">Completion criteria</a></li></ol></nav>
+      <article><h1 id="safe-process-lifecycle-and-ownership">Safe Process Lifecycle and Ownership<a class="anchor" href="#safe-process-lifecycle-and-ownership" aria-label="Link to this section">#</a></h1>
+<h2 id="goal">Goal<a class="anchor" href="#goal" aria-label="Link to this section">#</a></h2>
+<p>Replace fire-and-forget process signaling with one awaited, identity-aware lifecycle boundary. Stopping or replacing a runner, hublot process, routine, title helper, or ephemeral pi process must prove the old process exited before a replacement can claim its state.</p>
+<p>The plan addresses ineffective checks based on <code>ChildProcess.killed</code>, delayed signals that can target reused PIDs, and stale exit callbacks that can mutate a new runner generation.</p>
+<h2 id="guardrails">Guardrails<a class="anchor" href="#guardrails" aria-label="Link to this section">#</a></h2>
+<ul><li><code>child.killed</code> means Node successfully sent a signal; it does not prove the</li></ul>
+<p>process exited. Liveness is determined by <code>exitCode</code>, <code>signalCode</code>, an observed <code>exit</code>/<code>close</code>, or verified operating-system identity.</p>
+<ul><li>Verify persisted process identity immediately before <strong>every</strong> signal,</li></ul>
+<p>including delayed SIGKILL. A verification performed before a timer starts is stale when the timer fires.</p>
+<ul><li>Await SIGTERM, bounded escalation, and final exit before starting a</li></ul>
+<p>replacement. Report a failure if the process remains alive after SIGKILL.</p>
+<ul><li>Preserve process-group termination for routine scripts and descendants.</li><li>Preserve runner IDs, desired-state persistence, RPC replay behavior, and SSE</li></ul>
+<p>event ordering.</p>
+<ul><li>Old process callbacks may finalize only their own generation. They must not</li></ul>
+<p>clear readers, busy state, timers, or repository status owned by a newer process.</p>
+<ul><li>Keep long-lived process handles and generation counters in stable state, not</li></ul>
+<p>module-global reloadable code.</p>
+<h2 id="1-characterize-current-termination-races">1. Characterize Current Termination Races<a class="anchor" href="#1-characterize-current-termination-races" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add deterministic child fixtures that ignore SIGTERM, exit after SIGTERM,</li></ul>
+<p>spawn descendants, and expose a controllable delayed exit.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add regression tests proving the current <code>!proc.killed</code> escalation check</li></ul>
+<p>fails to send SIGKILL after SIGTERM and proving replacement can begin before exit.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add runner-generation tests where an old process exits after a replacement</li></ul>
+<p>starts; assert the old callback cannot clear the replacement reader or mark the runner dead.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add persisted-PID tests that simulate PID reuse between SIGTERM and the</li></ul>
+<p>escalation timer.</p>
+<p><strong>Acceptance:</strong> tests reproduce each race without wall-clock sleeps by using injected clocks, signal functions, and process-identity readers.</p>
+<h2 id="2-introduce-one-awaited-termination-primitive">2. Introduce One Awaited Termination Primitive<a class="anchor" href="#2-introduce-one-awaited-termination-primitive" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add a narrow process-lifecycle module with adapters for a <code>ChildProcess</code>,</li></ul>
+<p>a persisted process record, and a process group. The primitive must return a structured result containing observed exit, signals sent, escalation, timeout, and final identity state.</p>
+<ul><li class="task"><input type="checkbox" disabled> Send SIGTERM once, await <code>exit</code>/<code>close</code> up to a configured deadline, send</li></ul>
+<p>SIGKILL only when the same process is still alive, and await a second bounded deadline.</p>
+<ul><li class="task"><input type="checkbox" disabled> Handle already-exited processes, spawn errors, ESRCH, duplicate stop</li></ul>
+<p>calls, and concurrent stop callers idempotently. Remove listeners and timers on every completion path.</p>
+<ul><li class="task"><input type="checkbox" disabled> For persisted records, call <code>verifyPersistedProcessIdentity()</code> immediately</li></ul>
+<p>before SIGTERM and again immediately before SIGKILL. Treat an identity mismatch as “ownership lost,” never as permission to signal.</p>
+<p><strong>Acceptance:</strong> focused tests cover graceful exit, forced exit, timeout, identity loss, PID reuse, process groups, and duplicate callers with no leaked timers or listeners.</p>
+<h2 id="3-make-runner-stop-and-restart-generation-safe">3. Make Runner Stop and Restart Generation-Safe<a class="anchor" href="#3-make-runner-stop-and-restart-generation-safe" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Give each runner process start a monotonically increasing generation and</li></ul>
+<p>bind stdout readers, resume timers, exit callbacks, and busy state updates to that generation.</p>
+<ul><li class="task"><input type="checkbox" disabled> Make <code>stopRunner()</code> asynchronous. Persist <code>desired_state=stopped</code>, reject</li></ul>
+<p>or queue sends, terminate the captured generation, then publish the final stopped event only after exit is observed.</p>
+<ul><li class="task"><input type="checkbox" disabled> Make explicit restart, credential-triggered restart, watchdog restart,</li></ul>
+<p>workdir switching, and session deletion await the same stop promise before spawning a replacement.</p>
+<ul><li class="task"><input type="checkbox" disabled> Define concurrent start/stop/restart coalescing so only one process can own</li></ul>
+<p>a runner generation and the final requested desired state wins.</p>
+<ul><li class="task"><input type="checkbox" disabled> Preserve the old process's real exit code and signal in diagnostics rather</li></ul>
+<p>than synthesizing an exit before it occurs.</p>
+<p><strong>Acceptance:</strong> stress tests interleave stop, restart, watchdog timeout, and send operations while proving at most one live pi child exists for a runner.</p>
+<h2 id="4-make-hublot-shutdown-identity-safe">4. Make Hublot Shutdown Identity-Safe<a class="anchor" href="#4-make-hublot-shutdown-identity-safe" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Replace <code>closeTunnel()</code> direct PID signaling and delayed <code>killPid()</code> calls</li></ul>
+<p>with the shared termination primitive.</p>
+<ul><li class="task"><input type="checkbox" disabled> Verify every tracked service, setup agent, and tunnel process against its</li></ul>
+<p>persisted start time and executable identity before signaling it. Continue to protect unrelated listeners discovered on the same port.</p>
+<ul><li class="task"><input type="checkbox" disabled> Record “ownership lost,” “graceful,” “forced,” and “still alive” outcomes</li></ul>
+<p>in hublot process metadata before finalizing the hublot transition.</p>
+<ul><li class="task"><input type="checkbox" disabled> Reuse the same implementation for one-hublot close, session deletion,</li></ul>
+<p>server shutdown, startup reconciliation, and failed-open cleanup.</p>
+<ul><li class="task"><input type="checkbox" disabled> Do not mark a hublot closed while any verified owned process remains</li></ul>
+<p>alive; retain an actionable interrupted state for reconciliation.</p>
+<p><strong>Acceptance:</strong> tests simulate PID reuse and stubborn service/tunnel processes; no unrelated PID receives either signal, and durable status matches reality.</p>
+<h2 id="5-converge-routine-and-helper-lifecycles">5. Converge Routine and Helper Lifecycles<a class="anchor" href="#5-converge-routine-and-helper-lifecycles" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Route routine run/teardown process-group termination through the shared</li></ul>
+<p>primitive while preserving monotonic progress and descendant cleanup.</p>
+<ul><li class="task"><input type="checkbox" disabled> Route title generation, checkpoint summary agents, hublot preparation</li></ul>
+<p>agents, and other one-shot pi children through bounded termination adapters.</p>
+<ul><li class="task"><input type="checkbox" disabled> Inventory every <code>kill()</code>, <code>process.kill()</code>, SIGTERM timer, and SIGKILL timer</li></ul>
+<p>under <code>server/</code>; either migrate it or document why it is safe and tested.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add a static guard that rejects new ad hoc TERM-then-timeout-KILL sequences</li></ul>
+<p>outside the lifecycle module.</p>
+<p><strong>Acceptance:</strong> process termination policy has one implementation and one test matrix; remaining direct signals are narrow, documented exceptions.</p>
+<h2 id="6-add-operational-visibility-and-complete-validation">6. Add Operational Visibility and Complete Validation<a class="anchor" href="#6-add-operational-visibility-and-complete-validation" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add non-secret counters for graceful stops, forced stops, identity</li></ul>
+<p>mismatches, timeouts, and concurrent-stop coalescing. Expose details only in authenticated diagnostics.</p>
+<ul><li class="task"><input type="checkbox" disabled> Verify shutdown remains bounded and leaves no owned process groups after</li></ul>
+<p>service restart or container stop.</p>
+<ul><li class="task"><input type="checkbox" disabled> Run the complete build, unit, Docker, and e2e matrix, including session</li></ul>
+<p>stop/restart, credential restart, routine teardown, hublot close, and server replacement scenarios.</p>
+<h2 id="completion-criteria">Completion criteria<a class="anchor" href="#completion-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>SIGKILL escalation is based on observed liveness, never <code>child.killed</code>.</li><li>A replacement process never starts before the previous owned generation exits</li></ul>
+<p>or the operation reports a hard failure.</p>
+<ul><li>Every persisted PID is identity-verified immediately before every signal.</li><li>Stale callbacks cannot mutate a newer process generation.</li><li>Runner, hublot, routine, helper, shutdown, and reconciliation paths share the</li></ul>
+<p>same bounded and observable lifecycle semantics.</p></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"># Safe Process Lifecycle and Ownership
+
+## Goal
+
+Replace fire-and-forget process signaling with one awaited, identity-aware
+lifecycle boundary. Stopping or replacing a runner, hublot process, routine,
+title helper, or ephemeral pi process must prove the old process exited before
+a replacement can claim its state.
+
+The plan addresses ineffective checks based on `ChildProcess.killed`, delayed
+signals that can target reused PIDs, and stale exit callbacks that can mutate a
+new runner generation.
+
+## Guardrails
+
+- `child.killed` means Node successfully sent a signal; it does not prove the
+  process exited. Liveness is determined by `exitCode`, `signalCode`, an
+  observed `exit`/`close`, or verified operating-system identity.
+- Verify persisted process identity immediately before **every** signal,
+  including delayed SIGKILL. A verification performed before a timer starts is
+  stale when the timer fires.
+- Await SIGTERM, bounded escalation, and final exit before starting a
+  replacement. Report a failure if the process remains alive after SIGKILL.
+- Preserve process-group termination for routine scripts and descendants.
+- Preserve runner IDs, desired-state persistence, RPC replay behavior, and SSE
+  event ordering.
+- Old process callbacks may finalize only their own generation. They must not
+  clear readers, busy state, timers, or repository status owned by a newer
+  process.
+- Keep long-lived process handles and generation counters in stable state, not
+  module-global reloadable code.
+
+## 1. Characterize Current Termination Races
+
+- [ ] Add deterministic child fixtures that ignore SIGTERM, exit after SIGTERM,
+  spawn descendants, and expose a controllable delayed exit.
+- [ ] Add regression tests proving the current `!proc.killed` escalation check
+  fails to send SIGKILL after SIGTERM and proving replacement can begin before
+  exit.
+- [ ] Add runner-generation tests where an old process exits after a replacement
+  starts; assert the old callback cannot clear the replacement reader or mark
+  the runner dead.
+- [ ] Add persisted-PID tests that simulate PID reuse between SIGTERM and the
+  escalation timer.
+
+**Acceptance:** tests reproduce each race without wall-clock sleeps by using
+injected clocks, signal functions, and process-identity readers.
+
+## 2. Introduce One Awaited Termination Primitive
+
+- [ ] Add a narrow process-lifecycle module with adapters for a `ChildProcess`,
+  a persisted process record, and a process group. The primitive must return a
+  structured result containing observed exit, signals sent, escalation,
+  timeout, and final identity state.
+- [ ] Send SIGTERM once, await `exit`/`close` up to a configured deadline, send
+  SIGKILL only when the same process is still alive, and await a second bounded
+  deadline.
+- [ ] Handle already-exited processes, spawn errors, ESRCH, duplicate stop
+  calls, and concurrent stop callers idempotently. Remove listeners and timers
+  on every completion path.
+- [ ] For persisted records, call `verifyPersistedProcessIdentity()` immediately
+  before SIGTERM and again immediately before SIGKILL. Treat an identity
+  mismatch as “ownership lost,” never as permission to signal.
+
+**Acceptance:** focused tests cover graceful exit, forced exit, timeout,
+identity loss, PID reuse, process groups, and duplicate callers with no leaked
+timers or listeners.
+
+## 3. Make Runner Stop and Restart Generation-Safe
+
+- [ ] Give each runner process start a monotonically increasing generation and
+  bind stdout readers, resume timers, exit callbacks, and busy state updates to
+  that generation.
+- [ ] Make `stopRunner()` asynchronous. Persist `desired_state=stopped`, reject
+  or queue sends, terminate the captured generation, then publish the final
+  stopped event only after exit is observed.
+- [ ] Make explicit restart, credential-triggered restart, watchdog restart,
+  workdir switching, and session deletion await the same stop promise before
+  spawning a replacement.
+- [ ] Define concurrent start/stop/restart coalescing so only one process can own
+  a runner generation and the final requested desired state wins.
+- [ ] Preserve the old process&#x27;s real exit code and signal in diagnostics rather
+  than synthesizing an exit before it occurs.
+
+**Acceptance:** stress tests interleave stop, restart, watchdog timeout, and
+send operations while proving at most one live pi child exists for a runner.
+
+## 4. Make Hublot Shutdown Identity-Safe
+
+- [ ] Replace `closeTunnel()` direct PID signaling and delayed `killPid()` calls
+  with the shared termination primitive.
+- [ ] Verify every tracked service, setup agent, and tunnel process against its
+  persisted start time and executable identity before signaling it. Continue to
+  protect unrelated listeners discovered on the same port.
+- [ ] Record “ownership lost,” “graceful,” “forced,” and “still alive” outcomes
+  in hublot process metadata before finalizing the hublot transition.
+- [ ] Reuse the same implementation for one-hublot close, session deletion,
+  server shutdown, startup reconciliation, and failed-open cleanup.
+- [ ] Do not mark a hublot closed while any verified owned process remains
+  alive; retain an actionable interrupted state for reconciliation.
+
+**Acceptance:** tests simulate PID reuse and stubborn service/tunnel processes;
+no unrelated PID receives either signal, and durable status matches reality.
+
+## 5. Converge Routine and Helper Lifecycles
+
+- [ ] Route routine run/teardown process-group termination through the shared
+  primitive while preserving monotonic progress and descendant cleanup.
+- [ ] Route title generation, checkpoint summary agents, hublot preparation
+  agents, and other one-shot pi children through bounded termination adapters.
+- [ ] Inventory every `kill()`, `process.kill()`, SIGTERM timer, and SIGKILL timer
+  under `server/`; either migrate it or document why it is safe and tested.
+- [ ] Add a static guard that rejects new ad hoc TERM-then-timeout-KILL sequences
+  outside the lifecycle module.
+
+**Acceptance:** process termination policy has one implementation and one test
+matrix; remaining direct signals are narrow, documented exceptions.
+
+## 6. Add Operational Visibility and Complete Validation
+
+- [ ] Add non-secret counters for graceful stops, forced stops, identity
+  mismatches, timeouts, and concurrent-stop coalescing. Expose details only in
+  authenticated diagnostics.
+- [ ] Verify shutdown remains bounded and leaves no owned process groups after
+  service restart or container stop.
+- [ ] Run the complete build, unit, Docker, and e2e matrix, including session
+  stop/restart, credential restart, routine teardown, hublot close, and server
+  replacement scenarios.
+
+## Completion criteria
+
+- SIGKILL escalation is based on observed liveness, never `child.killed`.
+- A replacement process never starts before the previous owned generation exits
+  or the operation reports a hard failure.
+- Every persisted PID is identity-verified immediately before every signal.
+- Stale callbacks cannot mutate a newer process generation.
+- Runner, hublot, routine, helper, shutdown, and reconciliation paths share the
+  same bounded and observable lifecycle semantics.
+</code></pre>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("view-toggle");
+      const copy = document.getElementById("copy-markdown");
+      const rendered = document.getElementById("rendered-view");
+      const raw = document.getElementById("raw-view");
+      const source = document.getElementById("raw-markdown").textContent;
+      let rawVisible = false;
+
+      toggle.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        rendered.hidden = rawVisible;
+        raw.hidden = !rawVisible;
+        copy.hidden = !rawVisible;
+        toggle.textContent = rawVisible ? "View rendered" : "View raw";
+        toggle.setAttribute("aria-pressed", String(rawVisible));
+      });
+
+      copy.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        } catch {
+          const field = document.createElement("textarea");
+          field.value = source;
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          copied = document.execCommand("copy");
+          field.remove();
+        }
+        const label = copied ? "Copied!" : "Copy failed";
+        copy.textContent = label;
+        setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1500);
+      });
+    })();
+  </script>
+</body>
+</html>

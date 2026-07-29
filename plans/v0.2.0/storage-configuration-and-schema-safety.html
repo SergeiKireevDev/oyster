@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Storage Configuration and Schema Safety</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from storage-configuration-and-schema-safety.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#storage-configuration-and-schema-safety">Storage Configuration and Schema Safety</a></li>
+<li class="level-2"><a href="#goal">Goal</a></li>
+<li class="level-2"><a href="#guardrails">Guardrails</a></li>
+<li class="level-2"><a href="#1-define-one-session-storage-contract">1. Define One Session Storage Contract</a></li>
+<li class="level-2"><a href="#2-parameterize-the-jsonl-catalog-and-codec">2. Parameterize the JSONL Catalog and Codec</a></li>
+<li class="level-2"><a href="#3-enforce-private-application-database-files">3. Enforce Private Application Database Files</a></li>
+<li class="level-2"><a href="#4-reject-newer-or-inconsistent-schemas">4. Reject Newer or Inconsistent Schemas</a></li>
+<li class="level-2"><a href="#5-add-integrity-and-recovery-operations">5. Add Integrity and Recovery Operations</a></li>
+<li class="level-2"><a href="#6-complete-compatibility-validation">6. Complete Compatibility Validation</a></li>
+<li class="level-2"><a href="#completion-criteria">Completion criteria</a></li></ol></nav>
+      <article><h1 id="storage-configuration-and-schema-safety">Storage Configuration and Schema Safety<a class="anchor" href="#storage-configuration-and-schema-safety" aria-label="Link to this section">#</a></h1>
+<h2 id="goal">Goal<a class="anchor" href="#goal" aria-label="Link to this section">#</a></h2>
+<p>Use one validated storage configuration for pi processes, JSONL catalogs, SQLite catalogs, session references, and diagnostics. Protect Oyster-owned SQLite files on disk and fail closed when an older binary encounters a newer or inconsistent schema.</p>
+<h2 id="guardrails">Guardrails<a class="anchor" href="#guardrails" aria-label="Link to this section">#</a></h2>
+<ul><li>Resolve storage paths once in the stable server configuration and inject</li></ul>
+<p>them. Catalog modules must not derive independent paths from <code>homedir()</code>.</p>
+<ul><li>Keep JSONL and SQLite backends distinct. A configured session directory is not</li></ul>
+<p>inferred differently by the launcher, catalog, codec, and deletion workflow.</p>
+<ul><li>Preserve complete backend-neutral session references and confinement under the</li></ul>
+<p>configured root.</p>
+<ul><li>Do not chmod an arbitrary pre-existing shared parent directory. Create an</li></ul>
+<p>Oyster-owned private directory or reject an unsafe layout with an actionable error.</p>
+<ul><li>Database, WAL, and SHM files contain sensitive operational metadata and must</li></ul>
+<p>be private.</p>
+<ul><li>Never run an older migration set against a database whose ledger contains a</li></ul>
+<p>newer version.</p>
+<ul><li>Startup failures occur before listening or spawning runners.</li></ul>
+<h2 id="1-define-one-session-storage-contract">1. Define One Session Storage Contract<a class="anchor" href="#1-define-one-session-storage-contract" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add explicit stable config fields for <code>PI_AGENT_DIR</code>, the effective pi</li></ul>
+<p>session directory, JSONL session root, and SQLite database path. Parse <code>--session-dir</code> once and reject missing values or conflicting duplicate args.</p>
+<ul><li class="task"><input type="checkbox" disabled> Verify the exact <code>--session-dir</code> semantics against the configured local pi</li></ul>
+<p>build with process-contract tests for both JSONL and SQLite.</p>
+<ul><li class="task"><input type="checkbox" disabled> Include normalized storage fields in <code>--check-config</code> and authenticated</li></ul>
+<p>diagnostics. Public health exposes only a backend/readiness label.</p>
+<ul><li class="task"><input type="checkbox" disabled> Pass the same validated values to every long-lived and one-shot pi process</li></ul>
+<p>through the centralized launcher.</p>
+<p><strong>Acceptance:</strong> configuration tests prove every process and catalog names the same effective storage location.</p>
+<h2 id="2-parameterize-the-jsonl-catalog-and-codec">2. Parameterize the JSONL Catalog and Codec<a class="anchor" href="#2-parameterize-the-jsonl-catalog-and-codec" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Replace the hard-coded <code>~/.pi/agent/sessions</code> constant with</li></ul>
+<p><code>createJsonlSessionCatalog({ sessionsRoot })</code> and injected compatibility helpers.</p>
+<ul><li class="task"><input type="checkbox" disabled> Build the selected catalog once from stable config and close/replace it</li></ul>
+<p>only through an explicit lifecycle. Do not use a module-global default catalog in request workflows.</p>
+<ul><li class="task"><input type="checkbox" disabled> Configure the session-reference codec with the same JSONL root and reject</li></ul>
+<p>references outside it, including symlink escapes and references valid only under the old default root.</p>
+<ul><li class="task"><input type="checkbox" disabled> Route list, search, read, fork, delete, checkpoint, permalink, and runner</li></ul>
+<p>resume through the configured catalog.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add non-default-root integration tests proving pi-created sessions appear,</li></ul>
+<p>resume, fork, checkpoint, search, and delete from the configured location and never touch the default directory.</p>
+<p><strong>Acceptance:</strong> <code>PI_CODING_AGENT_DIR</code> and <code>--session-dir</code> cannot make pi write to one location while Oyster reads or deletes another.</p>
+<h2 id="3-enforce-private-application-database-files">3. Enforce Private Application Database Files<a class="anchor" href="#3-enforce-private-application-database-files" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Define an Oyster-owned application-data directory contract. Create a</li></ul>
+<p>missing directory with mode <code>0700</code>; reject symlinked, non-directory, or insecure custom layouts unless an explicit, documented deployment policy proves equivalent isolation.</p>
+<ul><li class="task"><input type="checkbox" disabled> Create/open the application database with mode <code>0600</code> and enforce <code>0600</code></li></ul>
+<p>on the database, <code>-wal</code>, and <code>-shm</code> files after SQLite creates them.</p>
+<ul><li class="task"><input type="checkbox" disabled> Validate file type, owner, and permissions before migration. Fail closed</li></ul>
+<p>rather than following a replaced symlink.</p>
+<ul><li class="task"><input type="checkbox" disabled> Recheck sidecar permissions after checkpoint/reopen and document backup</li></ul>
+<p>handling for WAL mode.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add temporary-directory tests with permissive umasks, existing insecure</li></ul>
+<p>files, custom paths, sidecar creation, restart, and failure cleanup.</p>
+<p><strong>Acceptance:</strong> no Oyster-owned database artifact is group/world-readable under a permissive process umask.</p>
+<h2 id="4-reject-newer-or-inconsistent-schemas">4. Reject Newer or Inconsistent Schemas<a class="anchor" href="#4-reject-newer-or-inconsistent-schemas" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Compare the highest ledger version with the highest migration known to the</li></ul>
+<p>binary before applying anything. Reject any newer version with a downgrade error that names versions but not sensitive paths.</p>
+<ul><li class="task"><input type="checkbox" disabled> Reject unknown gaps, duplicate/name mismatches, non-integer versions, and a</li></ul>
+<p>ledger claiming a migration whose expected schema invariant is absent.</p>
+<ul><li class="task"><input type="checkbox" disabled> Report the actual highest applied version rather than always reporting the</li></ul>
+<p>code's latest version.</p>
+<ul><li class="task"><input type="checkbox" disabled> Keep each migration atomic and verify rollback leaves both schema and</li></ul>
+<p>ledger unchanged.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add forward-version, downgrade, corrupt-ledger, partial-schema, and normal</li></ul>
+<p>upgrade tests; server startup must not listen after any rejection.</p>
+<p><strong>Acceptance:</strong> an older Oyster binary cannot silently operate on a newer application database.</p>
+<h2 id="5-add-integrity-and-recovery-operations">5. Add Integrity and Recovery Operations<a class="anchor" href="#5-add-integrity-and-recovery-operations" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Run bounded startup checks appropriate to database size (<code>quick_check</code>,</li></ul>
+<p>foreign-key check, migration invariants) before hydrating repositories.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add an authenticated diagnostic or offline command for full integrity</li></ul>
+<p>checks, orphan ownership records, interrupted operations, and sidecar state.</p>
+<ul><li class="task"><input type="checkbox" disabled> Document online backup, stopped-service backup including WAL/SHM,</li></ul>
+<p>restore-version matching, and downgrade prohibition.</p>
+<ul><li class="task"><input type="checkbox" disabled> Ensure a failed integrity check preserves all files and starts no runner,</li></ul>
+<p>routine, hublot, migration, or HTTP listener.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add backup/restore tests using temporary databases across supported schema</li></ul>
+<p>versions.</p>
+<p><strong>Acceptance:</strong> operators receive a fail-closed, actionable diagnosis without an automatic destructive repair.</p>
+<h2 id="6-complete-compatibility-validation">6. Complete Compatibility Validation<a class="anchor" href="#6-complete-compatibility-validation" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Run JSONL and SQLite process contracts under default agent storage,</li></ul>
+<p>alternate agent directories, explicit session directories, and custom app DB paths.</p>
+<ul><li class="task"><input type="checkbox" disabled> Extend static guards to reject new catalog-level <code>homedir()</code> defaults,</li></ul>
+<p>hard-coded session roots, direct database opens, and narrowed SQLite identity comparisons.</p>
+<ul><li class="task"><input type="checkbox" disabled> Update configuration, installation, systemd, Docker, backup, and rollback</li></ul>
+<p>documentation.</p>
+<ul><li class="task"><input type="checkbox" disabled> Run unit, build, Docker, server-restart, and browser persistence e2e tests.</li></ul>
+<h2 id="completion-criteria">Completion criteria<a class="anchor" href="#completion-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>One stable config determines all pi and Oyster session paths.</li><li>JSONL works fully outside <code>~/.pi/agent/sessions</code>.</li><li>Application database files and sidecars are private and non-symlinked.</li><li>Newer, inconsistent, or corrupt schemas fail before service startup.</li><li>Backup, restore, integrity, and rollback behavior is documented and tested.</li></ul></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"># Storage Configuration and Schema Safety
+
+## Goal
+
+Use one validated storage configuration for pi processes, JSONL catalogs,
+SQLite catalogs, session references, and diagnostics. Protect Oyster-owned
+SQLite files on disk and fail closed when an older binary encounters a newer or
+inconsistent schema.
+
+## Guardrails
+
+- Resolve storage paths once in the stable server configuration and inject
+  them. Catalog modules must not derive independent paths from `homedir()`.
+- Keep JSONL and SQLite backends distinct. A configured session directory is not
+  inferred differently by the launcher, catalog, codec, and deletion workflow.
+- Preserve complete backend-neutral session references and confinement under the
+  configured root.
+- Do not chmod an arbitrary pre-existing shared parent directory. Create an
+  Oyster-owned private directory or reject an unsafe layout with an actionable
+  error.
+- Database, WAL, and SHM files contain sensitive operational metadata and must
+  be private.
+- Never run an older migration set against a database whose ledger contains a
+  newer version.
+- Startup failures occur before listening or spawning runners.
+
+## 1. Define One Session Storage Contract
+
+- [ ] Add explicit stable config fields for `PI_AGENT_DIR`, the effective pi
+  session directory, JSONL session root, and SQLite database path. Parse
+  `--session-dir` once and reject missing values or conflicting duplicate args.
+- [ ] Verify the exact `--session-dir` semantics against the configured local pi
+  build with process-contract tests for both JSONL and SQLite.
+- [ ] Include normalized storage fields in `--check-config` and authenticated
+  diagnostics. Public health exposes only a backend/readiness label.
+- [ ] Pass the same validated values to every long-lived and one-shot pi process
+  through the centralized launcher.
+
+**Acceptance:** configuration tests prove every process and catalog names the
+same effective storage location.
+
+## 2. Parameterize the JSONL Catalog and Codec
+
+- [ ] Replace the hard-coded `~/.pi/agent/sessions` constant with
+  `createJsonlSessionCatalog({ sessionsRoot })` and injected compatibility
+  helpers.
+- [ ] Build the selected catalog once from stable config and close/replace it
+  only through an explicit lifecycle. Do not use a module-global default
+  catalog in request workflows.
+- [ ] Configure the session-reference codec with the same JSONL root and reject
+  references outside it, including symlink escapes and references valid only
+  under the old default root.
+- [ ] Route list, search, read, fork, delete, checkpoint, permalink, and runner
+  resume through the configured catalog.
+- [ ] Add non-default-root integration tests proving pi-created sessions appear,
+  resume, fork, checkpoint, search, and delete from the configured location and
+  never touch the default directory.
+
+**Acceptance:** `PI_CODING_AGENT_DIR` and `--session-dir` cannot make pi write to
+one location while Oyster reads or deletes another.
+
+## 3. Enforce Private Application Database Files
+
+- [ ] Define an Oyster-owned application-data directory contract. Create a
+  missing directory with mode `0700`; reject symlinked, non-directory, or
+  insecure custom layouts unless an explicit, documented deployment policy
+  proves equivalent isolation.
+- [ ] Create/open the application database with mode `0600` and enforce `0600`
+  on the database, `-wal`, and `-shm` files after SQLite creates them.
+- [ ] Validate file type, owner, and permissions before migration. Fail closed
+  rather than following a replaced symlink.
+- [ ] Recheck sidecar permissions after checkpoint/reopen and document backup
+  handling for WAL mode.
+- [ ] Add temporary-directory tests with permissive umasks, existing insecure
+  files, custom paths, sidecar creation, restart, and failure cleanup.
+
+**Acceptance:** no Oyster-owned database artifact is group/world-readable under
+a permissive process umask.
+
+## 4. Reject Newer or Inconsistent Schemas
+
+- [ ] Compare the highest ledger version with the highest migration known to the
+  binary before applying anything. Reject any newer version with a downgrade
+  error that names versions but not sensitive paths.
+- [ ] Reject unknown gaps, duplicate/name mismatches, non-integer versions, and a
+  ledger claiming a migration whose expected schema invariant is absent.
+- [ ] Report the actual highest applied version rather than always reporting the
+  code&#x27;s latest version.
+- [ ] Keep each migration atomic and verify rollback leaves both schema and
+  ledger unchanged.
+- [ ] Add forward-version, downgrade, corrupt-ledger, partial-schema, and normal
+  upgrade tests; server startup must not listen after any rejection.
+
+**Acceptance:** an older Oyster binary cannot silently operate on a newer
+application database.
+
+## 5. Add Integrity and Recovery Operations
+
+- [ ] Run bounded startup checks appropriate to database size (`quick_check`,
+  foreign-key check, migration invariants) before hydrating repositories.
+- [ ] Add an authenticated diagnostic or offline command for full integrity
+  checks, orphan ownership records, interrupted operations, and sidecar state.
+- [ ] Document online backup, stopped-service backup including WAL/SHM,
+  restore-version matching, and downgrade prohibition.
+- [ ] Ensure a failed integrity check preserves all files and starts no runner,
+  routine, hublot, migration, or HTTP listener.
+- [ ] Add backup/restore tests using temporary databases across supported schema
+  versions.
+
+**Acceptance:** operators receive a fail-closed, actionable diagnosis without an
+automatic destructive repair.
+
+## 6. Complete Compatibility Validation
+
+- [ ] Run JSONL and SQLite process contracts under default agent storage,
+  alternate agent directories, explicit session directories, and custom app DB
+  paths.
+- [ ] Extend static guards to reject new catalog-level `homedir()` defaults,
+  hard-coded session roots, direct database opens, and narrowed SQLite identity
+  comparisons.
+- [ ] Update configuration, installation, systemd, Docker, backup, and rollback
+  documentation.
+- [ ] Run unit, build, Docker, server-restart, and browser persistence e2e tests.
+
+## Completion criteria
+
+- One stable config determines all pi and Oyster session paths.
+- JSONL works fully outside `~/.pi/agent/sessions`.
+- Application database files and sidecars are private and non-symlinked.
+- Newer, inconsistent, or corrupt schemas fail before service startup.
+- Backup, restore, integrity, and rollback behavior is documented and tested.
+</code></pre>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("view-toggle");
+      const copy = document.getElementById("copy-markdown");
+      const rendered = document.getElementById("rendered-view");
+      const raw = document.getElementById("raw-view");
+      const source = document.getElementById("raw-markdown").textContent;
+      let rawVisible = false;
+
+      toggle.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        rendered.hidden = rawVisible;
+        raw.hidden = !rawVisible;
+        copy.hidden = !rawVisible;
+        toggle.textContent = rawVisible ? "View rendered" : "View raw";
+        toggle.setAttribute("aria-pressed", String(rawVisible));
+      });
+
+      copy.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        } catch {
+          const field = document.createElement("textarea");
+          field.value = source;
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          copied = document.execCommand("copy");
+          field.remove();
+        }
+        const label = copied ? "Copied!" : "Copy failed";
+        copy.textContent = label;
+        setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1500);
+      });
+    })();
+  </script>
+</body>
+</html>

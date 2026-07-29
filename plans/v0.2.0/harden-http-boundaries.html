@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Harden HTTP Trust and Diagnostic Boundaries</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --paper: #fff;
+      --text: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --accent: #0969da;
+      --code: #f0f2f4;
+      --quote: #d0d7de;
+      font: 17px/1.7 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --paper: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --code: #0d1117;
+        --quote: #3b434b;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    .page {
+      width: min(100% - 2rem, 880px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 6vw, 5rem);
+      background: var(--paper);
+      box-shadow: 0 0 35px rgb(0 0 0 / 8%);
+    }
+    [hidden] { display: none !important; }
+    .reader-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.5rem; }
+    .source { color: var(--muted); font-size: .82rem; }
+    .reader-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .reader-actions button {
+      padding: .4rem .7rem;
+      color: var(--text);
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      font-size: .78rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    .reader-actions button:hover { color: var(--accent); border-color: var(--accent); }
+    .reader-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    article { overflow-wrap: break-word; }
+    .raw-view pre { min-height: 60vh; white-space: pre-wrap; overflow-wrap: break-word; }
+    .raw-view code { font-size: .82rem; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2em 0 .7em; scroll-margin-top: 1rem; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 7vw, 3.2rem); letter-spacing: -.035em; }
+    h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.25rem; }
+    p, ul, ol, blockquote, pre, table { margin: 0 0 1.25rem; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    .anchor { margin-left: .4em; opacity: 0; font-weight: 400; text-decoration: none; }
+    h1:hover .anchor, h2:hover .anchor, h3:hover .anchor,
+    h4:hover .anchor, h5:hover .anchor, h6:hover .anchor, .anchor:focus { opacity: 1; }
+    img { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; border-radius: 6px; }
+    code { padding: .15em .35em; background: var(--code); border-radius: 4px; font: .88em/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow: auto; padding: 1rem 1.15rem; background: var(--code); border: 1px solid var(--border); border-radius: 7px; }
+    pre code { padding: 0; background: none; }
+    blockquote { margin-left: 0; padding: .1rem 1rem; color: var(--muted); border-left: 4px solid var(--quote); }
+    blockquote > :last-child { margin-bottom: 0; }
+    li + li { margin-top: .3em; }
+    .task { list-style: none; }
+    .task input { margin-left: -1.4rem; }
+    hr { height: 1px; margin: 2.5rem 0; border: 0; background: var(--border); }
+    .table-wrap { max-width: 100%; margin-bottom: 1.25rem; overflow-x: auto; }
+    table { width: 100%; border-spacing: 0; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: .55rem .75rem; border: 1px solid var(--border); }
+    th { background: var(--code); }
+    .toc { margin: 0 0 3rem; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--code); }
+    .toc ol { margin: .5rem 0 0; padding-left: 1.4rem; }
+    .toc li { margin: .1rem 0; }
+    .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 1rem; font-size: .92em; }
+    @media print {
+      :root { --bg: #fff; --paper: #fff; --text: #000; --muted: #444; --border: #bbb; --code: #f4f4f4; }
+      .page { width: 100%; padding: 0; box-shadow: none; }
+      .toc { break-inside: avoid; }
+      .reader-actions { display: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="reader-bar">
+      <div class="source">Rendered from harden-http-boundaries.md</div>
+      <div class="reader-actions">
+        <button id="view-toggle" type="button" aria-controls="rendered-view raw-view" aria-pressed="false">View raw</button>
+        <button id="copy-markdown" type="button" hidden>Copy Markdown</button>
+      </div>
+    </header>
+    <div id="rendered-view">
+      <nav class="toc" aria-label="Table of contents"><strong>On this page</strong><ol><li class="level-1"><a href="#harden-http-trust-and-diagnostic-boundaries">Harden HTTP Trust and Diagnostic Boundaries</a></li>
+<li class="level-2"><a href="#goal">Goal</a></li>
+<li class="level-2"><a href="#guardrails">Guardrails</a></li>
+<li class="level-2"><a href="#1-define-an-explicit-trusted-proxy-contract">1. Define an Explicit Trusted-Proxy Contract</a></li>
+<li class="level-2"><a href="#2-bound-authentication-throttling">2. Bound Authentication Throttling</a></li>
+<li class="level-2"><a href="#3-split-liveness-from-diagnostics">3. Split Liveness from Diagnostics</a></li>
+<li class="level-2"><a href="#4-harden-authentication-observability">4. Harden Authentication Observability</a></li>
+<li class="level-2"><a href="#5-add-edge-deployment-tests-and-documentation">5. Add Edge-Deployment Tests and Documentation</a></li>
+<li class="level-2"><a href="#completion-criteria">Completion criteria</a></li></ol></nav>
+      <article><h1 id="harden-http-trust-and-diagnostic-boundaries">Harden HTTP Trust and Diagnostic Boundaries<a class="anchor" href="#harden-http-trust-and-diagnostic-boundaries" aria-label="Link to this section">#</a></h1>
+<h2 id="goal">Goal<a class="anchor" href="#goal" aria-label="Link to this section">#</a></h2>
+<p>Make client identity, authentication throttling, health checks, and diagnostics safe for direct deployments and explicit reverse-proxy deployments. Forwarded headers must not become trusted merely because a client supplied them, and the public health endpoint must reveal readiness rather than internal inventory.</p>
+<h2 id="guardrails">Guardrails<a class="anchor" href="#guardrails" aria-label="Link to this section">#</a></h2>
+<ul><li>Authentication never depends on source IP or proxy headers. Trusted proxy</li></ul>
+<p>configuration affects attribution and throttling only.</p>
+<ul><li>By default, trust no forwarded header. Enable proxy trust through explicit,</li></ul>
+<p>validated CIDR/address configuration.</p>
+<ul><li>Parse proxy chains from the socket peer inward; do not blindly choose the</li></ul>
+<p>first <code>X-Forwarded-For</code> value.</p>
+<ul><li>Bound per-client and global throttle state, expire it periodically, and avoid</li></ul>
+<p>user-controlled unbounded map keys.</p>
+<ul><li>Keep <code>/health</code> unauthenticated and minimal for load balancers. Put paths,</li></ul>
+<p>runners, sessions, migrations, and process configuration behind normal Oyster authentication.</p>
+<ul><li>Never echo token prefixes, lengths, cookies, authorization values, or request</li></ul>
+<p>bodies in diagnostics or authentication logs.</p>
+<h2 id="1-define-an-explicit-trusted-proxy-contract">1. Define an Explicit Trusted-Proxy Contract<a class="anchor" href="#1-define-an-explicit-trusted-proxy-contract" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add a configuration value such as <code>OYSTER_TRUSTED_PROXIES</code> supporting a</li></ul>
+<p>documented list of exact addresses and CIDRs. Validate it at startup and report it in <code>--check-config</code> without resolving DNS dynamically.</p>
+<ul><li class="task"><input type="checkbox" disabled> Implement one client-address resolver that starts with</li></ul>
+<p><code>req.socket.remoteAddress</code>, trusts forwarded headers only when that peer is trusted, and walks a normalized forwarding chain from right to left.</p>
+<ul><li class="task"><input type="checkbox" disabled> Treat <code>CF-Connecting-IP</code> as authoritative only when the immediate peer is</li></ul>
+<p>an explicitly trusted Cloudflare/local proxy and deployment documentation requires that proxy to strip inbound spoofed copies.</p>
+<ul><li class="task"><input type="checkbox" disabled> Normalize IPv4-mapped IPv6, loopback forms, malformed lists, whitespace,</li></ul>
+<p>and duplicate headers. Return a bounded fallback bucket for invalid input.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add direct-client, one-proxy, multi-proxy, untrusted-peer, spoofed-header,</li></ul>
+<p>IPv4, and IPv6 tests.</p>
+<p><strong>Acceptance:</strong> an untrusted direct client cannot choose its throttle identity with either forwarded header.</p>
+<h2 id="2-bound-authentication-throttling">2. Bound Authentication Throttling<a class="anchor" href="#2-bound-authentication-throttling" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Replace arrays of timestamps per arbitrary string with a bounded sliding</li></ul>
+<p>window or token-bucket service owned by stable ephemeral state.</p>
+<ul><li class="task"><input type="checkbox" disabled> Set explicit limits for tracked clients, failures per client, global</li></ul>
+<p>failures, entry lifetime, and cleanup cadence. Evict expired/least-recently used entries before admitting new keys.</p>
+<ul><li class="task"><input type="checkbox" disabled> Apply a global fallback bucket so rotating valid client addresses cannot</li></ul>
+<p>allocate state or bypass all throttling indefinitely.</p>
+<ul><li class="task"><input type="checkbox" disabled> Keep successful-auth reset semantics narrowly scoped; a valid request must</li></ul>
+<p>not erase global abuse accounting.</p>
+<ul><li class="task"><input type="checkbox" disabled> Expose aggregate counts and rejected-request totals only through</li></ul>
+<p>authenticated diagnostics.</p>
+<p><strong>Acceptance:</strong> property/stress tests send many spoofed headers and addresses while memory and map size remain within deterministic limits.</p>
+<h2 id="3-split-liveness-from-diagnostics">3. Split Liveness from Diagnostics<a class="anchor" href="#3-split-liveness-from-diagnostics" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Reduce unauthenticated <code>GET /health</code> to a stable response such as service</li></ul>
+<p>identity, <code>ok</code>, readiness, and version/schema compatibility booleans. Do not include runners, clients, workdirs, session IDs, executable paths, or database paths.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add authenticated <code>GET /diagnostics</code> for operational inventory. Separate</li></ul>
+<p>safe summary fields from optional detailed runner/process/storage sections.</p>
+<ul><li class="task"><input type="checkbox" disabled> Redact home/workspace paths by default and require an explicit diagnostic</li></ul>
+<p>detail mode if absolute paths are operationally necessary.</p>
+<ul><li class="task"><input type="checkbox" disabled> Keep readiness false while migrations or domain reconcilers are pending or</li></ul>
+<p>failed; keep liveness available so supervisors can distinguish a crash from a fail-closed startup state.</p>
+<ul><li class="task"><input type="checkbox" disabled> Update documentation, service checks, Docker health checks, Hub health</li></ul>
+<p>consumption, and tests to use the minimal contract.</p>
+<p><strong>Acceptance:</strong> unauthenticated snapshots contain no filesystem path, session identity, runner identity, token metadata, or database inventory.</p>
+<h2 id="4-harden-authentication-observability">4. Harden Authentication Observability<a class="anchor" href="#4-harden-authentication-observability" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Replace credential-presence logging with a request ID, method, normalized</li></ul>
+<p>route, trusted client bucket, outcome, and user-agent policy that strips control characters and bounds length.</p>
+<ul><li class="task"><input type="checkbox" disabled> Ensure <code>/authcheck</code> reports only authorized/unauthorized and</li></ul>
+<p>unauthenticated-mode state; remove credential source, length, and validity details from the public response.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add structured counters for missing credentials, invalid credentials,</li></ul>
+<p>throttling, and trusted-proxy parse failures without retaining credential values.</p>
+<ul><li class="task"><input type="checkbox" disabled> Add canary tests proving secrets are absent from logs, responses, metrics,</li></ul>
+<p>thrown errors, and persisted application data.</p>
+<p><strong>Acceptance:</strong> operators can diagnose rates and route classes without learning anything about credential contents.</p>
+<h2 id="5-add-edge-deployment-tests-and-documentation">5. Add Edge-Deployment Tests and Documentation<a class="anchor" href="#5-add-edge-deployment-tests-and-documentation" aria-label="Link to this section">#</a></h2>
+<ul><li class="task"><input type="checkbox" disabled> Add integration fixtures for direct HTTP, loopback Nginx-style proxying,</li></ul>
+<p>Cloudflare-style proxying, and an untrusted proxy that forwards attacker headers.</p>
+<ul><li class="task"><input type="checkbox" disabled> Document secure examples for Nginx, Caddy, cloudflared, and an authenticated</li></ul>
+<p>outer llmbox boundary, including header stripping and trusted-proxy values.</p>
+<ul><li class="task"><input type="checkbox" disabled> Verify unauthenticated spoke mode remains explicit and cannot silently</li></ul>
+<p>change Hub authentication or diagnostic exposure.</p>
+<ul><li class="task"><input type="checkbox" disabled> Run unit, build, Docker, Hub/spoke, and browser authentication tests.</li></ul>
+<h2 id="completion-criteria">Completion criteria<a class="anchor" href="#completion-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>Forwarded addresses are trusted only through explicit proxy configuration.</li><li>Authentication throttle state is time- and size-bounded under address churn.</li><li><code>/health</code> is a minimal liveness/readiness contract.</li><li>Detailed operational inventory requires authentication and applies path and</li></ul>
+<p>secret redaction.</p>
+<ul><li>Direct and proxied deployment modes have tested, documented behavior.</li></ul></article>
+    </div>
+    <section id="raw-view" class="raw-view" aria-label="Raw Markdown" hidden>
+      <pre><code id="raw-markdown"># Harden HTTP Trust and Diagnostic Boundaries
+
+## Goal
+
+Make client identity, authentication throttling, health checks, and diagnostics
+safe for direct deployments and explicit reverse-proxy deployments. Forwarded
+headers must not become trusted merely because a client supplied them, and the
+public health endpoint must reveal readiness rather than internal inventory.
+
+## Guardrails
+
+- Authentication never depends on source IP or proxy headers. Trusted proxy
+  configuration affects attribution and throttling only.
+- By default, trust no forwarded header. Enable proxy trust through explicit,
+  validated CIDR/address configuration.
+- Parse proxy chains from the socket peer inward; do not blindly choose the
+  first `X-Forwarded-For` value.
+- Bound per-client and global throttle state, expire it periodically, and avoid
+  user-controlled unbounded map keys.
+- Keep `/health` unauthenticated and minimal for load balancers. Put paths,
+  runners, sessions, migrations, and process configuration behind normal Oyster
+  authentication.
+- Never echo token prefixes, lengths, cookies, authorization values, or request
+  bodies in diagnostics or authentication logs.
+
+## 1. Define an Explicit Trusted-Proxy Contract
+
+- [ ] Add a configuration value such as `OYSTER_TRUSTED_PROXIES` supporting a
+  documented list of exact addresses and CIDRs. Validate it at startup and
+  report it in `--check-config` without resolving DNS dynamically.
+- [ ] Implement one client-address resolver that starts with
+  `req.socket.remoteAddress`, trusts forwarded headers only when that peer is
+  trusted, and walks a normalized forwarding chain from right to left.
+- [ ] Treat `CF-Connecting-IP` as authoritative only when the immediate peer is
+  an explicitly trusted Cloudflare/local proxy and deployment documentation
+  requires that proxy to strip inbound spoofed copies.
+- [ ] Normalize IPv4-mapped IPv6, loopback forms, malformed lists, whitespace,
+  and duplicate headers. Return a bounded fallback bucket for invalid input.
+- [ ] Add direct-client, one-proxy, multi-proxy, untrusted-peer, spoofed-header,
+  IPv4, and IPv6 tests.
+
+**Acceptance:** an untrusted direct client cannot choose its throttle identity
+with either forwarded header.
+
+## 2. Bound Authentication Throttling
+
+- [ ] Replace arrays of timestamps per arbitrary string with a bounded sliding
+  window or token-bucket service owned by stable ephemeral state.
+- [ ] Set explicit limits for tracked clients, failures per client, global
+  failures, entry lifetime, and cleanup cadence. Evict expired/least-recently
+  used entries before admitting new keys.
+- [ ] Apply a global fallback bucket so rotating valid client addresses cannot
+  allocate state or bypass all throttling indefinitely.
+- [ ] Keep successful-auth reset semantics narrowly scoped; a valid request must
+  not erase global abuse accounting.
+- [ ] Expose aggregate counts and rejected-request totals only through
+  authenticated diagnostics.
+
+**Acceptance:** property/stress tests send many spoofed headers and addresses
+while memory and map size remain within deterministic limits.
+
+## 3. Split Liveness from Diagnostics
+
+- [ ] Reduce unauthenticated `GET /health` to a stable response such as service
+  identity, `ok`, readiness, and version/schema compatibility booleans. Do not
+  include runners, clients, workdirs, session IDs, executable paths, or database
+  paths.
+- [ ] Add authenticated `GET /diagnostics` for operational inventory. Separate
+  safe summary fields from optional detailed runner/process/storage sections.
+- [ ] Redact home/workspace paths by default and require an explicit diagnostic
+  detail mode if absolute paths are operationally necessary.
+- [ ] Keep readiness false while migrations or domain reconcilers are pending or
+  failed; keep liveness available so supervisors can distinguish a crash from a
+  fail-closed startup state.
+- [ ] Update documentation, service checks, Docker health checks, Hub health
+  consumption, and tests to use the minimal contract.
+
+**Acceptance:** unauthenticated snapshots contain no filesystem path, session
+identity, runner identity, token metadata, or database inventory.
+
+## 4. Harden Authentication Observability
+
+- [ ] Replace credential-presence logging with a request ID, method, normalized
+  route, trusted client bucket, outcome, and user-agent policy that strips
+  control characters and bounds length.
+- [ ] Ensure `/authcheck` reports only authorized/unauthorized and
+  unauthenticated-mode state; remove credential source, length, and validity
+  details from the public response.
+- [ ] Add structured counters for missing credentials, invalid credentials,
+  throttling, and trusted-proxy parse failures without retaining credential
+  values.
+- [ ] Add canary tests proving secrets are absent from logs, responses, metrics,
+  thrown errors, and persisted application data.
+
+**Acceptance:** operators can diagnose rates and route classes without learning
+anything about credential contents.
+
+## 5. Add Edge-Deployment Tests and Documentation
+
+- [ ] Add integration fixtures for direct HTTP, loopback Nginx-style proxying,
+  Cloudflare-style proxying, and an untrusted proxy that forwards attacker
+  headers.
+- [ ] Document secure examples for Nginx, Caddy, cloudflared, and an authenticated
+  outer llmbox boundary, including header stripping and trusted-proxy values.
+- [ ] Verify unauthenticated spoke mode remains explicit and cannot silently
+  change Hub authentication or diagnostic exposure.
+- [ ] Run unit, build, Docker, Hub/spoke, and browser authentication tests.
+
+## Completion criteria
+
+- Forwarded addresses are trusted only through explicit proxy configuration.
+- Authentication throttle state is time- and size-bounded under address churn.
+- `/health` is a minimal liveness/readiness contract.
+- Detailed operational inventory requires authentication and applies path and
+  secret redaction.
+- Direct and proxied deployment modes have tested, documented behavior.
+</code></pre>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const toggle = document.getElementById("view-toggle");
+      const copy = document.getElementById("copy-markdown");
+      const rendered = document.getElementById("rendered-view");
+      const raw = document.getElementById("raw-view");
+      const source = document.getElementById("raw-markdown").textContent;
+      let rawVisible = false;
+
+      toggle.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        rendered.hidden = rawVisible;
+        raw.hidden = !rawVisible;
+        copy.hidden = !rawVisible;
+        toggle.textContent = rawVisible ? "View rendered" : "View raw";
+        toggle.setAttribute("aria-pressed", String(rawVisible));
+      });
+
+      copy.addEventListener("click", async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        } catch {
+          const field = document.createElement("textarea");
+          field.value = source;
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          copied = document.execCommand("copy");
+          field.remove();
+        }
+        const label = copied ? "Copied!" : "Copy failed";
+        copy.textContent = label;
+        setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1500);
+      });
+    })();
+  </script>
+</body>
+</html>
