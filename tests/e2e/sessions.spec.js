@@ -488,7 +488,6 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       await page.locator("#mBody .m-option", { hasText: "Model:" }).click();
       await expect(page.locator("#mTitle")).toHaveText("Select model");
       await page.keyboard.press("ArrowDown");
-      await page.keyboard.press("ArrowDown");
       await expect(page.locator("#mBody .model-autocomplete-option.active")).toContainText("e2e-mock-b");
       await page.evaluate(() => history.back());
       await expect(page.locator("#overlay")).not.toHaveClass(/open/);
