@@ -830,6 +830,18 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
       return sendJson(res, 200, { routines: [{ name: "build", path: "/routines/build", sessionId: "shared", status: "running" }] });
     }
     if (url.pathname === "/tunnels") return sendJson(res, 200, { tunnels: [{ id: "h1", sessionId: "shared", status: "open", url: "https://example.test" }] });
+    if (url.pathname === "/pinned-widgets") return sendJson(res, 200, {
+      widgets: [{ id: "w1", label: "Cat", kind: "image", mimeType: "image/svg+xml", sessionId: "shared", availability: "ready" }],
+      groups: [],
+    });
+    if (url.pathname === "/pinned-widget-media") {
+      const image = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="5"/></svg>');
+      res.writeHead(200, {
+        "content-type": "image/svg+xml", "content-length": image.length,
+        "content-security-policy": "default-src 'none'; sandbox; style-src 'unsafe-inline'",
+      });
+      return res.end(image);
+    }
     if (url.pathname === "/forbidden-resource") return sendJson(res, 401, { error: "unauthorized" });
     if (url.pathname === "/rpc") return sendJson(res, 202, { runner: url.searchParams.get("runner") });
     if (url.pathname === "/events") {
@@ -923,6 +935,16 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
   const betaHublots = (await (await fetch(`${hubUrl}/tunnels`, { headers: betaHeaders })).json()).tunnels;
   assert.deepEqual(betaHublots.map((hublot) => [hublot.workspaceId, hublot.sessionId]), [["beta", sessions[1].id]]);
   assert.deepEqual(parseScopedValue(betaHublots[0].id), { workspaceId: "beta", kind: "hublot", value: "h1" });
+
+  const betaWidgets = (await (await fetch(`${hubUrl}/pinned-widgets`, { headers: betaHeaders })).json()).widgets;
+  assert.deepEqual(parseScopedValue(betaWidgets[0].id), { workspaceId: "beta", kind: "pinned-widget", value: "w1" });
+  const betaThumbnail = await fetch(`${hubUrl}/pinned-widget-media?id=${encodeURIComponent(betaWidgets[0].id)}`, { headers });
+  assert.equal(betaThumbnail.status, 200);
+  assert.equal(betaThumbnail.headers.get("content-type"), "image/svg+xml");
+  assert.match(betaThumbnail.headers.get("content-security-policy"), /style-src 'unsafe-inline'/);
+  assert.match(await betaThumbnail.text(), /^<svg/);
+  assert.equal(calls.at(-1).id, "beta");
+  assert.equal(calls.at(-1).query.id, "w1");
 
   const allHublotResponse = await fetch(`${hubUrl}/tunnels?all=1`, { headers });
   assert.equal(allHublotResponse.status, 200);

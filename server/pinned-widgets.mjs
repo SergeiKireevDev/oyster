@@ -166,15 +166,24 @@ function normalizeContainer(repository, identity, groupId) {
     .forEach((item, position) => repository.update(item.id, { position }));
 }
 
-function reorderWidget(state, row, { groupId, beforeId }, now) {
+function normalizeGroupContainer(repository, identity) {
+  repository.listGroups()
+    .filter((group) => group.scope === identity.scope && group.owner_id === identity.ownerId)
+    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
+    .forEach((group, position) => repository.updateGroup(group.id, { position }));
+}
+
+function reorderWidget(state, row, { groupId, beforeId, identity = null }, now) {
   const repository = state.appStore.repositories.pinnedWidgets;
-  const identity = { scope: row.scope, ownerId: row.owner_id };
-  const nextGroupId = groupId === undefined ? row.group_id : groupId || null;
-  assertGroup(repository, nextGroupId, identity);
+  const oldIdentity = { scope: row.scope, ownerId: row.owner_id };
+  const nextIdentity = identity ?? oldIdentity;
+  const scopeChanged = nextIdentity.scope !== oldIdentity.scope || nextIdentity.ownerId !== oldIdentity.ownerId;
+  const nextGroupId = groupId === undefined ? (scopeChanged ? null : row.group_id) : groupId || null;
+  assertGroup(repository, nextGroupId, nextIdentity);
   const oldGroupId = row.group_id ?? null;
-  if (beforeId === row.id && nextGroupId === oldGroupId) return row;
+  if (!scopeChanged && beforeId === row.id && nextGroupId === oldGroupId) return row;
   const siblings = repository.list()
-    .filter((item) => item.id !== row.id && item.scope === row.scope && item.owner_id === row.owner_id && item.group_id === nextGroupId)
+    .filter((item) => item.id !== row.id && item.scope === nextIdentity.scope && item.owner_id === nextIdentity.ownerId && item.group_id === nextGroupId)
     .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
   let index = beforeId ? siblings.findIndex((item) => item.id === beforeId) : siblings.length;
   if (beforeId && index < 0) throw Object.assign(new Error("reorder target is not in the destination group"), { statusCode: 409 });
@@ -182,9 +191,14 @@ function reorderWidget(state, row, { groupId, beforeId }, now) {
   state.appStore.transaction(() => {
     siblings.forEach((item, position) => repository.update(item.id, {
       position,
-      ...(item.id === row.id ? { group_id: nextGroupId, updated_at: now } : {}),
+      ...(item.id === row.id ? {
+        owner_id: nextIdentity.ownerId,
+        scope: nextIdentity.scope,
+        group_id: nextGroupId,
+        updated_at: now,
+      } : {}),
     }));
-    if (oldGroupId !== nextGroupId) normalizeContainer(repository, identity, oldGroupId);
+    if (scopeChanged || oldGroupId !== nextGroupId) normalizeContainer(repository, oldIdentity, oldGroupId);
   });
   return repository.find(row.id);
 }
@@ -379,10 +393,12 @@ export function createPinnedWidgetRoutes({
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         const now = new Date().toISOString();
         let updated = row;
-        if (body.groupId !== undefined || body.beforeId !== undefined) {
+        if (body.groupId !== undefined || body.beforeId !== undefined || body.scope !== undefined) {
+          const identity = body.scope === undefined ? null : scopeIdentity(body, ensureSessionOwner);
           updated = reorderWidget(state, row, {
             groupId: body.groupId === undefined ? undefined : body.groupId ? String(body.groupId) : null,
             beforeId: body.beforeId ? String(body.beforeId) : null,
+            identity,
           }, now);
         }
         if (body.label !== undefined) {
@@ -429,7 +445,29 @@ export function createPinnedWidgetRoutes({
       try {
         const group = repository.findGroup(String(body.id ?? ""));
         if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
-        repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, 80), updated_at: new Date().toISOString() });
+        const now = new Date().toISOString();
+        const oldIdentity = { scope: group.scope, ownerId: group.owner_id };
+        const nextIdentity = body.scope === undefined ? oldIdentity : scopeIdentity(body, ensureSessionOwner);
+        const scopeChanged = nextIdentity.scope !== oldIdentity.scope || nextIdentity.ownerId !== oldIdentity.ownerId;
+        state.appStore.transaction(() => {
+          if (scopeChanged) {
+            repository.updateGroup(group.id, {
+              owner_id: nextIdentity.ownerId,
+              scope: nextIdentity.scope,
+              position: repository.nextGroupPosition(nextIdentity),
+              updated_at: now,
+            });
+            repository.list()
+              .filter((widget) => widget.group_id === group.id)
+              .forEach((widget) => repository.update(widget.id, {
+                owner_id: nextIdentity.ownerId,
+                scope: nextIdentity.scope,
+                updated_at: now,
+              }));
+            normalizeGroupContainer(repository, oldIdentity);
+          }
+          if (body.name !== undefined) repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, 80), updated_at: now });
+        });
         const updated = repository.findGroup(group.id);
         emit("pinned_widget_updated", { group: updated });
         json(res, 200, { group: updated, ...currentCollection(body) });
@@ -529,7 +567,9 @@ export function createPinnedWidgetRoutes({
           "accept-ranges": "bytes",
           "cache-control": "private, no-cache",
           "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(displayName)}`,
-          "content-security-policy": "default-src 'none'; sandbox",
+          "content-security-policy": mimeType === "image/svg+xml"
+            ? "default-src 'none'; sandbox; style-src 'unsafe-inline'"
+            : "default-src 'none'; sandbox",
           "x-content-type-options": "nosniff",
           etag,
         };

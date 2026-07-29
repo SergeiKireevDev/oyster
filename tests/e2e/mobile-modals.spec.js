@@ -89,7 +89,7 @@ test("every modal keeps all buttons entirely visible on mobile", async ({ page }
       open: async () => {
         await page.evaluate(() => document.getElementById("hublots")?.classList.add("open"));
         await page.locator("#hublotAdd").click();
-        await expect(page.locator("#mTitle")).toHaveText("Pin widget");
+        await expect(page.locator("#mTitle")).toHaveText("New live interface widget");
       },
     },
     {

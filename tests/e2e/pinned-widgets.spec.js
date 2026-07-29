@@ -84,16 +84,12 @@ async function body(page, { mobile = false } = {}) {
   await page.locator("#mActions .chip", { hasText: "Close" }).click();
   await expectWidgetSidebarOpen(page, mobile);
 
-  // Widget management and nested file browsing also preserve drawer context.
+  // The custom prompt stays focused on creating a new live interface.
   await page.click("#hublotAdd");
   await expect(page.locator("#overlay")).toHaveClass(/open/);
-  await expect(page.locator("#mTitle")).toHaveText("Pin widget");
-  await expectWidgetSidebarOpen(page, mobile);
-  await page.getByRole("button", { name: /File explorer/ }).click();
-  const modalFiles = await expectFileExplorerPopulated(page, markerName);
-  expect(new Set(modalFiles)).toEqual(new Set(sidebarFiles));
-  await page.locator("#mActions .chip", { hasText: "← Widgets" }).click();
-  await expect(page.locator("#mTitle")).toHaveText("Pin widget");
+  await expect(page.locator("#mTitle")).toHaveText("New live interface widget");
+  await expect(page.getByText("New live interface widget", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /File explorer/ })).toHaveCount(0);
   await expectWidgetSidebarOpen(page, mobile);
 
   // Create through the compatibility tunnel API. The resulting public service

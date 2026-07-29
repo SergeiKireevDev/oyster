@@ -15,15 +15,26 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(grid, /PINNED_WIDGET_MOVE_ACTION/);
   assert.match(grid, /pinned-widget-group-icon/);
   assert.match(grid, /draggable=\{widget\.kind !== "builtin"\}/);
-  assert.ok(grid.indexOf("{#each builtinWidgets") < grid.indexOf("{#each visibleGroups"));
-  assert.ok(grid.indexOf("{#each visibleGroups") < grid.indexOf("{#each movableWidgets"));
+  assert.match(grid, /title: "Workspace visible"/);
+  assert.match(grid, /description: "All sessions in this workspace"/);
+  assert.match(grid, /title: "Session only"/);
+  assert.match(grid, /description: "Only this session · default"/);
+  assert.ok(grid.indexOf('scope: "workspace"') < grid.indexOf('scope: "session"'));
+  assert.match(grid, /application\/x-oyster-widget-group/);
+  assert.match(grid, /PINNED_WIDGET_MOVE_GROUP_ACTION/);
+  assert.match(grid, /dragStartGroup\(event, group\)/);
+  assert.ok(grid.indexOf("{#each builtinWidgets") < grid.indexOf("{#each groups"));
+  assert.ok(grid.indexOf("{#each groups") < grid.indexOf("{#each movableWidgets"));
   assert.doesNotMatch(grid, /!children\.length[^\n]*<FolderIcon/);
   assert.match(grid, /onpointerdown=\{\(event\) => touchPointerDown\(event, widget\)\}/);
   assert.match(grid, /ownerDocument\.elementFromPoint\(event\.clientX, event\.clientY\)/);
-  assert.match(grid, /touchDropGroupId/);
+  assert.match(grid, /touchDestination/);
+  assert.match(grid, /data-scope=\{section\.scope\}/);
+  assert.match(grid, /PINNED_WIDGET_MOVE_ACTION, \{ id, scope, groupId, beforeId \}/);
   assert.match(styles, /\.pinned-widget-grid\s*\{[\s\S]*grid-template-columns: repeat\(3/);
   assert.match(styles, /\.pinned-widget-cell\[draggable="true"\] \.pinned-widget-icon \{[\s\S]*touch-action: none;/);
   assert.match(styles, /\.pinned-widget-group-cell\.touch-drop-target/);
+  assert.match(styles, /\.pinned-widget-section\.touch-drop-target/);
   assert.match(styles, /\.pinned-widget-icon\s*\{[\s\S]*width: 50px;[\s\S]*height: 50px;/);
 });
 
@@ -61,6 +72,42 @@ test("pinned widget rail keeps creation compact and nests group destinations und
   ]);
   assert.equal(requests.length, 1);
   assert.equal(JSON.parse(requests[0].options.body).groupId, "group-b");
+});
+
+test("dragging a widget between visibility sections updates its scope", async () => {
+  const requests = [];
+  const runtime = createPinnedWidgetRuntime({
+    getSessionId: () => "session-1",
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      return { ok: true, json: async () => ({}) };
+    },
+    load: async () => {},
+  });
+
+  await runtime.actions.move({ id: "widget-1", scope: "workspace", groupId: null, beforeId: null });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    id: "widget-1", scope: "workspace", groupId: null, beforeId: null, sessionId: "session-1",
+  });
+});
+
+test("dragging a group between visibility sections moves the group scope", async () => {
+  const requests = [];
+  const runtime = createPinnedWidgetRuntime({
+    getSessionId: () => "session-1",
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      return { ok: true, json: async () => ({}) };
+    },
+    load: async () => {},
+  });
+
+  await runtime.actions.moveGroup({ id: "group-1", scope: "session" });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    id: "group-1", scope: "session", sessionId: "session-1",
+  });
 });
 
 test("standalone HTML opens its streaming viewer without buffering the artifact as JSON", async () => {

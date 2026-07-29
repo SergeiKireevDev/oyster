@@ -70,9 +70,8 @@ test("live-interface widgets route workflows through scoped actions without eage
   assert.match(sidebar, /uiActions\.invoke\(HUBLOT_SHOW_ACTION\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_MANAGE_ACTION, widget\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_CREATE_ACTION, description\)/);
-  assert.match(manager, /uiActions\.invoke\(HUBLOT_TOGGLE_SCOPE_ACTION\)/);
-  assert.match(manager, /uiActions\.invoke\(HUBLOT_REMOVE_ACTION, id\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node\)/);
+  assert.doesNotMatch(manager, /HUBLOT_TOGGLE_SCOPE_ACTION|HUBLOT_REMOVE_ACTION|hublot-grid/);
   assert.doesNotMatch(grid, /<iframe/);
   assert.doesNotMatch(manager, /<iframe/);
   assert.match(manager, /Waiting for Cloudflare/);

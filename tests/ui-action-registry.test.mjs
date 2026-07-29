@@ -28,6 +28,7 @@ const resourceActionNames = [
   "pinnedWidget.open",
   "pinnedWidget.manage",
   "pinnedWidget.move",
+  "pinnedWidget.moveGroup",
   "pinnedWidget.pinPath",
   "pinnedWidget.pinLink",
   "pinnedWidget.createGroup",
