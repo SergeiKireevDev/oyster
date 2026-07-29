@@ -82,10 +82,11 @@ test("file browser actions preserve save request contracts", async () => {
   assert.deepEqual(JSON.parse(call[1].body), { path: "/workspace/a.txt", content: "test" });
 });
 
-test("file browser chunk uploads preserve offset metadata", async () => {
-  let url;
-  await uploadFileChunk(async (nextUrl) => { url = nextUrl; return { ok: true, json: async () => ({}) }; }, { dir: "/workspace", name: "a b.txt", offset: 8, last: true, body: "x" });
-  assert.match(url, /name=a%20b.txt.*offset=8.*last=1/);
+test("file browser chunk uploads preserve offset metadata and stay opaque", async () => {
+  let call;
+  await uploadFileChunk(async (url, options) => { call = [url, options]; return { ok: true, json: async () => ({}) }; }, { dir: "/workspace", name: "a b.json", offset: 8, last: true, body: "x" });
+  assert.match(call[0], /name=a%20b.json.*offset=8.*last=1/);
+  assert.equal(call[1].headers["content-type"], "application/octet-stream");
 });
 
 test("API actions normalize server errors", async () => {
