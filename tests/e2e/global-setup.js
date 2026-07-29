@@ -11,9 +11,11 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..");
-const LOCK_DIR = join(HERE, ".port-locks");
+const LOCK_DIR = process.env.E2E_LOCK_DIR ?? join(HERE, ".port-locks");
 const IMAGE = process.env.OYSTER_IMAGE ?? "oyster:sqlite";
 const PI_SOURCE = process.env.PI_SOURCE_CONTEXT ?? join(REPO_ROOT, "pi");
+const CONTAINER_PREFIX = process.env.E2E_CONTAINER_PREFIX ?? "oyster-e2e";
+if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(CONTAINER_PREFIX)) throw new Error("invalid E2E_CONTAINER_PREFIX");
 
 const sh = (args, opts = {}) =>
   execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
@@ -23,12 +25,12 @@ const imageExists = () => { try { return !!sh(["images", "-q", IMAGE]).trim(); }
 export default async function globalSetup() {
   // Clean stale parallel-test containers and lock files from previous aborted runs.
   try {
-    const names = sh(["ps", "-a", "--filter", "name=^oyster-e2e-[0-9]+$", "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
+    const names = sh(["ps", "-a", "--filter", `name=^${CONTAINER_PREFIX}-[0-9]+$`, "--format", "{{.Names}}"]).trim().split("\n").filter(Boolean);
     for (const name of names) {
       console.log(`[e2e] removing stale container ${name}`);
       try { sh(["rm", "-f", name]); } catch {}
     }
-    const volumes = sh(["volume", "ls", "--filter", "name=^oyster-e2e-agent-[0-9]+$", "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
+    const volumes = sh(["volume", "ls", "--filter", `name=^${CONTAINER_PREFIX}-agent-[0-9]+$`, "--format", "{{.Name}}"]).trim().split("\n").filter(Boolean);
     for (const volume of volumes) {
       console.log(`[e2e] removing stale volume ${volume}`);
       try { sh(["volume", "rm", "-f", volume]); } catch {}

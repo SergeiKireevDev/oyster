@@ -32,6 +32,8 @@ async function installMockOAuthRoutes(page) {
   let flow = null;
   let selectRequestId = null;
   let autoComplete = true;
+  let completionReadyAt = 0;
+  const recordingDelay = Number(process.env.E2E_ACTION_DELAY_MS ?? 0);
   const responseBodies = [];
   const oauthResponses = [];
 
@@ -54,6 +56,7 @@ async function installMockOAuthRoutes(page) {
   });
   await page.route("**/oauth/start", async (route) => {
     flowSequence += 1;
+    completionReadyAt = 0;
     const suffix = flowSequence.toString(16);
     const flowId = `${"a".repeat(64 - suffix.length)}${suffix}`;
     selectRequestId = `${"b".repeat(64 - suffix.length)}${suffix}`;
@@ -77,10 +80,11 @@ async function installMockOAuthRoutes(page) {
       deviceCode: { userCode: "MOCK-DEVICE-CODE", verificationUri: "https://auth.invalid/device", expiresInSeconds: 900 },
       requests: [],
     };
+    completionReadyAt = Date.now() + (recordingDelay > 0 ? recordingDelay * 2 + 500 : 0);
     return fulfill(route, { flow }, 202);
   });
   await page.route("**/oauth/status", async (route) => {
-    if (!autoComplete) return fulfill(route, { flow });
+    if (!autoComplete || Date.now() < completionReadyAt) return fulfill(route, { flow });
     signedIn = true;
     generation += 1;
     writeMockOAuth(true, generation);

@@ -42,7 +42,9 @@ test("voice dictation shows a waveform while speech is detected", async ({ page 
 });
 
 test("Brave records audio and inserts local Whisper transcription", async ({ page }) => {
-  await page.addInitScript(() => {
+  const actionDelay = Number(process.env.E2E_ACTION_DELAY_MS ?? 0);
+  const resultDelayMs = actionDelay > 0 ? actionDelay * 2 + 200 : 80;
+  await page.addInitScript(({ resultDelayMs }) => {
     Object.defineProperty(navigator, "brave", { value: { isBrave: async () => true } });
     Object.defineProperty(navigator, "mediaDevices", {
       value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
@@ -71,14 +73,14 @@ test("Brave records audio and inserts local Whisper transcription", async ({ pag
     class MockWhisperWorker {
       postMessage(message) {
         setTimeout(() => this.onmessage?.({ data: { type: "progress", data: { progress: 50 } } }), 10);
-        setTimeout(() => this.onmessage?.({ data: { type: "result", id: message.id, text: "local whisper works" } }), 80);
+        setTimeout(() => this.onmessage?.({ data: { type: "result", id: message.id, text: "local whisper works" } }), resultDelayMs);
       }
       terminate() {}
     }
     window.MediaRecorder = MockMediaRecorder;
     window.AudioContext = MockAudioContext;
     window.Worker = MockWhisperWorker;
-  });
+  }, { resultDelayMs });
 
   await login(page);
   const input = page.locator("#input");

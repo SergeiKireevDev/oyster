@@ -10,10 +10,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const STATE_FILE = join(HERE, "..", ".e2e-state.json");
-const LOCK_DIR = join(HERE, "..", ".port-locks");
+const STATE_FILE = process.env.E2E_STATE_FILE ?? join(HERE, "..", ".e2e-state.json");
+const LOCK_DIR = process.env.E2E_LOCK_DIR ?? join(HERE, "..", ".port-locks");
 const PORT_MIN = Number(process.env.E2E_PORT_MIN ?? 4000);
 const PORT_MAX = Number(process.env.E2E_PORT_MAX ?? 4018);
+const CONTAINER_PREFIX = process.env.E2E_CONTAINER_PREFIX ?? "oyster-e2e";
+if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(CONTAINER_PREFIX)) throw new Error("invalid E2E_CONTAINER_PREFIX");
 
 const TOKEN = process.env.OYSTER_TOKEN ?? "e2e-test-token";
 const DEFAULT_IMAGE = process.env.OYSTER_IMAGE ?? "oyster:sqlite";
@@ -79,7 +81,7 @@ async function allocatePort() {
 
   for (const port of ports) {
     const file = join(LOCK_DIR, `${port}.lock`);
-    const staleContainer = `oyster-e2e-${port}`;
+    const staleContainer = `${CONTAINER_PREFIX}-${port}`;
     let claimed = false;
     try {
       claimLock(file);
@@ -100,7 +102,7 @@ async function allocatePort() {
     allocatedPort = port;
     lockFile = file;
     container = staleContainer;
-    agentVolume = `oyster-e2e-agent-${port}`;
+    agentVolume = `${CONTAINER_PREFIX}-agent-${port}`;
     base = `http://localhost:${port}`;
     process.env.OYSTER_URL = base;
     process.env.OYSTER_CONTAINER = container;
