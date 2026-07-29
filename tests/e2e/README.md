@@ -12,21 +12,20 @@ no network model calls, fully deterministic**.
 | `routine.spec.js` | Start a session → create a **dummy routine** in the store → ▶ run it from the sidebar to completion → 🧹 tear it down. |
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; autocomplete composer paths and fall back to the file explorer for large result sets. |
-| `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container on its isolated agent volume, verify picker/search/transcript resume and no JSONL files, then toggle SQLite → JSONL → SQLite and prove both stores remain intact. |
+| `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container on its isolated agent volume, and verify picker/search/transcript resume with no JSONL files. |
 | `transcript-rendering.spec.js` | Verify agent display math renders through KaTeX and completed historical SQLite tool calls remain completed after tail-first transcript reload. |
 | `hub.spec.js` | Start the ordinary isolated Docker spoke plus a temporary Hub process, connect through the Hub interface with one shared token file, and verify workspace-scoped mobile session creation. |
 
 ## Prerequisites
 
-- Docker. The suite uses `oyster:published` for the existing JSONL scenarios
-  and `oyster:sqlite` for the container-replacement contract. It builds
-  missing images automatically; the SQLite build uses `Dockerfile.local-pi`
-  with the repository's `pi` submodule (override with `PI_SOURCE_CONTEXT`).
+- Docker. Every scenario uses the `oyster:sqlite` image. The suite builds it
+  automatically with `Dockerfile.local-pi` and the repository's `pi` submodule
+  when it is missing (override the source with `PI_SOURCE_CONTEXT`).
 - Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
 
-Both images bundle a mock LLM, so no host credentials or external model access
+The image bundles a mock LLM, so no host credentials or external model access
 are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`,
-`E2E_MOCK_TUNNELS=1`, an explicit `PERSISTENT_STORE`, and a fresh named volume
+`E2E_MOCK_TUNNELS=1`, `PERSISTENT_STORE=sqlite`, and a fresh named volume
 at `/root/.pi/agent`. Set `E2E_MOCK_TUNNELS=0` in a persistent test/staging
 container to retain the deterministic model while using real Cloudflare Quick
 Tunnels.
@@ -39,10 +38,11 @@ replacement; every test removes its volume during teardown.
 cd tests/e2e
 npm install
 npx playwright install chromium   # one-time browser download
-npm test                           # runs with five workers by default
+npm test                           # runs with three workers by default
 ```
 
-The standard E2E run uses **five Playwright workers**. Override concurrency only
+The standard E2E run uses **three Playwright workers** to bound the memory used by
+SQLite-backed pi containers. Override concurrency only
 when needed for a constrained host or focused debugging, for example
 `E2E_WORKERS=1 npm test`.
 
@@ -71,15 +71,14 @@ and both interfaces read the same test token.
 |---|---|---|
 | `OYSTER_URL` | `http://localhost:4000` | UI base URL |
 | `OYSTER_TOKEN` | `e2e-test-token` | auth token |
-| `OYSTER_IMAGE` | `oyster:published` | published-package JSONL image for the existing scenarios |
-| `OYSTER_SQLITE_IMAGE` | `oyster:sqlite` | local-source image for the SQLite persistence scenario |
+| `OYSTER_IMAGE` | `oyster:sqlite` | local-source SQLite image used by every scenario |
 | `PI_SOURCE_CONTEXT` | `<repository>/pi` | named BuildKit source used when the SQLite image must be built |
 | `OYSTER_CONTAINER` | allocated per test | name for a container the suite starts |
-| `E2E_WORKERS` | `5` | Playwright worker count; lower it only for constrained hosts or debugging |
+| `E2E_WORKERS` | `3` | Playwright worker count; tune it for the host's available memory |
 
 ## Notes
 
-- Specs run in parallel with **five workers by default**. Product specs isolate
+- Specs run in parallel with **three workers by default**. Product specs isolate
   themselves by starting a fresh mock container in `beforeEach` and removing it
   in `afterEach`, so workspace/session state does not leak between scenarios.
 - The Pinned Widgets spec exercises the compatibility tunnel lifecycle behind

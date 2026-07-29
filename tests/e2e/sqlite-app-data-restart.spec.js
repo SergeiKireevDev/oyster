@@ -10,7 +10,7 @@ case "\${1:-run}" in
 esac
 `;
 
-test.beforeEach(async () => { await ensureContainer({ sqlite: true }); });
+test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
 test("routines and pinned live-interface records persist while ephemeral tunnel URLs retire", async ({ page }) => {

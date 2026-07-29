@@ -16,8 +16,7 @@ const PORT_MIN = Number(process.env.E2E_PORT_MIN ?? 4000);
 const PORT_MAX = Number(process.env.E2E_PORT_MAX ?? 4018);
 
 const TOKEN = process.env.OYSTER_TOKEN ?? "e2e-test-token";
-const DEFAULT_IMAGE = process.env.OYSTER_IMAGE ?? "oyster:published";
-const SQLITE_IMAGE = process.env.OYSTER_SQLITE_IMAGE ?? "oyster:sqlite";
+const DEFAULT_IMAGE = process.env.OYSTER_IMAGE ?? "oyster:sqlite";
 
 let allocatedPort = null;
 let lockFile = null;
@@ -25,7 +24,7 @@ let container = null;
 let agentVolume = null;
 let base = null;
 let selectedImage = DEFAULT_IMAGE;
-let selectedStore = "jsonl";
+let selectedStore = "sqlite";
 
 function sh(args) {
   return execSync(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -132,9 +131,9 @@ function startContainer() {
 // Start a container if one isn't already reachable — records state so
 // teardown knows to remove it. The named agent volume deliberately survives
 // replaceContainer() so persistence tests exercise a real container restart.
-export async function ensureContainer({ sqlite = false } = {}) {
-  selectedImage = sqlite ? SQLITE_IMAGE : DEFAULT_IMAGE;
-  selectedStore = sqlite ? "sqlite" : "jsonl";
+export async function ensureContainer() {
+  selectedImage = DEFAULT_IMAGE;
+  selectedStore = "sqlite";
   if (allocatedPort == null) await allocatePort();
   if (running(container) && (await reachable())) return;
 
@@ -177,10 +176,10 @@ export async function restartServerProcess() {
 }
 
 /** Replace the current container while retaining its agent volume. */
-export async function replaceContainer({ sqlite = selectedStore === "sqlite" } = {}) {
+export async function replaceContainer() {
   if (!container || !agentVolume) throw new Error("e2e container has not been allocated");
-  selectedImage = sqlite ? SQLITE_IMAGE : DEFAULT_IMAGE;
-  selectedStore = sqlite ? "sqlite" : "jsonl";
+  selectedImage = DEFAULT_IMAGE;
+  selectedStore = "sqlite";
   if (!imageExists(selectedImage)) throw new Error(`e2e image ${selectedImage} is missing`);
   try { sh(`docker rm -f ${container}`); } catch {}
   startContainer();
@@ -201,5 +200,5 @@ export function teardownContainer() {
   agentVolume = null;
   base = null;
   selectedImage = DEFAULT_IMAGE;
-  selectedStore = "jsonl";
+  selectedStore = "sqlite";
 }
