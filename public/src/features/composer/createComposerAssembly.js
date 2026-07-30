@@ -169,7 +169,7 @@ export function createComposerAssembly(deps) {
       commandDeps.windowTarget,
       mode === "path"
         ? { maxWidth: 860, minWidth: 860, maxHeight: 480 }
-        : { maxWidth: 420, minWidth: 280, maxHeight: 320 },
+        : { maxWidth: 860, minWidth: 280, maxHeight: Number.POSITIVE_INFINITY },
     ));
     const openCommands = (element, trigger, items) => { state = { mode: "command", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "command"); render(); };
     const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "path"); render(); };

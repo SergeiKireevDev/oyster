@@ -1,16 +1,25 @@
 /** Calculate the viewport-safe command palette position for a target input. */
 export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420, minWidth = 280, maxHeight = 320 } = {}) {
-  maxWidth = Math.min(maxWidth, viewport.innerWidth - gap * 2);
+  const availableWidth = Math.max(0, viewport.innerWidth - gap * 2);
+  maxWidth = Math.min(maxWidth, availableWidth);
   minWidth = Math.min(minWidth, maxWidth);
   const width = Math.min(maxWidth, Math.max(minWidth, rect.width));
-  let left = rect.left;
-  if (left + width > viewport.innerWidth - gap) left = viewport.innerWidth - width - gap;
-  if (rect.top > maxHeight + gap) {
-    const top = rect.top - gap;
-    return { left: `${left}px`, width: `${width}px`, bottom: `${viewport.innerHeight - top}px`, top: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - top - gap * 2)}px` };
+  const left = Math.max(gap, Math.min(rect.left, viewport.innerWidth - width - gap));
+  const availableAbove = Math.max(0, rect.top - gap * 2);
+  const availableBelow = Math.max(0, viewport.innerHeight - rect.bottom - gap * 2);
+  const openAbove = availableAbove > availableBelow;
+
+  if (openAbove) {
+    return {
+      left: `${left}px`, width: `${width}px`, top: "auto",
+      bottom: `${viewport.innerHeight - rect.top + gap}px`,
+      maxHeight: `${Math.min(maxHeight, availableAbove)}px`,
+    };
   }
-  const top = rect.bottom + gap;
-  return { left: `${left}px`, width: `${width}px`, top: `${top}px`, bottom: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - rect.bottom - gap * 2)}px` };
+  return {
+    left: `${left}px`, width: `${width}px`, top: `${rect.bottom + gap}px`, bottom: "auto",
+    maxHeight: `${Math.min(maxHeight, availableBelow)}px`,
+  };
 }
 
 /** Recognize a slash-command name while it is the whole leading message token. */
