@@ -4,7 +4,7 @@ export function createSessionPickerSearchController({ getSnapshot, update, fetch
   async function search() {
     const snap = getSnapshot();
     const q = snap.query.trim();
-    if (q.length < 2) return update({ searchStatus: "", searchResults: [], searching: false });
+    if (q.length < 3) return update({ searchStatus: "", searchResults: [], searching: false });
     const scope = snap.scope;
     let path = scope === "folder" ? (snap.folderPath ?? "") : "";
     if (scope === "session") {

@@ -104,9 +104,9 @@ async function body(page, { mobile = false } = {}) {
     buffer: uploadContent,
   });
   await expect(page.locator(".toast", { hasText: `uploaded 1 file to /workspace` })).toBeVisible();
-  await expect.poll(() => uploadResponses.length).toBe(19);
+  await expect.poll(() => uploadResponses.length).toBe(2);
   page.off("response", collectUploadResponse);
-  expect(uploadResponses).toHaveLength(19);
+  expect(uploadResponses).toHaveLength(2);
   expect(uploadResponses.every((response) => response.status() === 200)).toBe(true);
   await expect(page.locator("#mBody")).toContainText(uploadName);
   expect(Number(dexec(`stat -c %s /workspace/${uploadName}`))).toBe(uploadContent.length);
