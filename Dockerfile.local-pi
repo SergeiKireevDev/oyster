@@ -15,11 +15,11 @@ WORKDIR /src
 COPY --from=pi-source /package.json /package-lock.json /.npmrc /tsconfig.json /tsconfig.base.json /biome.json ./
 COPY --from=pi-source /scripts ./scripts
 COPY --from=pi-source /packages ./packages
-# Compile against the generated catalogs pinned in the source revision. The
-# package-level ai build regenerates them from live APIs and is not reproducible.
+# The AI package's generated TypeScript imports ignored JSON model data, so its
+# package build must hydrate that data before compiling a clean source checkout.
 RUN npm ci --ignore-scripts \
     && npx --no-install tsgo -p packages/tui/tsconfig.build.json \
-    && npx --no-install tsgo -p packages/ai/tsconfig.build.json \
+    && npm run build --workspace packages/ai \
     && npm run build --workspace packages/agent \
     && npm run build --workspace packages/storage/sqlite-node \
     && npm run build --workspace packages/coding-agent \

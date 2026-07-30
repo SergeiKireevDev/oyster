@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const fallback = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const local = readFileSync(new URL("../Dockerfile.local-pi", import.meta.url), "utf8");
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const containerDocs = readFileSync(new URL("../docs/operations/containers.md", import.meta.url), "utf8");
 
 test("published Docker fallback is explicit and version-labelled", () => {
@@ -22,6 +23,13 @@ test("local SQLite Docker build requires and packages the named pi source contex
   assert.match(local, /PERSISTENT_STORE=sqlite/);
   assert.match(local, /org\.opencontainers\.image\.pi-revision="\$\{PI_LOCAL_REV\}"/);
   assert.match(local, /FROM node:22-slim/);
+});
+
+test("clean pi builds hydrate generated AI model data through the package build", () => {
+  assert.match(packageJson.scripts["build:pi"], /npm run build --workspace packages\/ai/);
+  assert.doesNotMatch(packageJson.scripts["build:pi"], /tsgo -p packages\/ai/);
+  assert.match(local, /npm run build --workspace packages\/ai/);
+  assert.doesNotMatch(local, /tsgo -p packages\/ai/);
 });
 
 test("both runtime images include hublot process, Markdown reader, and Git server dependencies", () => {
