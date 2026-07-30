@@ -22,6 +22,33 @@ async function loadHelpers() {
   return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 }
 
+async function loadStreamHelper() {
+  const start = source.indexOf("async function readSubagentStream");
+  const end = source.indexOf("async function runSubagent", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const snippet = `
+    interface SubagentResult { ok?: boolean; output?: string; errorLog?: string; error?: string; }
+    ${source.slice(start, end)}
+    export { readSubagentStream };
+  `;
+  const { code } = await transform(snippet, { loader: "ts", format: "esm", target: "es2022" });
+  return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+}
+
+test("loop parses split NDJSON subagent events through terminal completion", async () => {
+  const { readSubagentStream } = await loadStreamHelper();
+  const encoder = new TextEncoder();
+  const response = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode('{"type":"started"}\n{"type":"heart'));
+      controller.enqueue(encoder.encode('beat"}\n{"type":"complete","ok":true,"output":"done"}\n'));
+      controller.close();
+    },
+  }));
+  assert.deepEqual(await readSubagentStream(response), { type: "complete", ok: true, output: "done" });
+});
+
 test("loop parses Markdown checklists and checks exactly the selected item", async () => {
   const { checklistItems, firstUncheckedItem, checkItem } = await loadHelpers();
   const plan = "# Plan\n\n- [x] done\n- [ ] first\n1. [ ] second\n";
@@ -77,6 +104,10 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.doesNotMatch(source, /"--no-session"/);
   assert.match(source, /ctx\.sessionManager\.isPersisted\(\)/);
   assert.match(source, /fetch\(`\$\{OYSTER_URL\}\/subagents`/);
+  assert.match(source, /accept: "application\/x-ndjson"/);
+  assert.match(source, /await readSubagentStream\(response\)/);
+  assert.match(source, /stream ended without a completion event/);
+  assert.doesNotMatch(source, /const result = await response\.json/);
   assert.match(source, /parentSessionId: ctx\.sessionManager\.getSessionId\(\)/);
   assert.match(source, /`Loop iteration \$\{iteration\}:/);
   assert.doesNotMatch(source, /getPiInvocation|--mode", "json"/);

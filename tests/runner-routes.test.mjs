@@ -4,11 +4,13 @@ import { EventEmitter } from "node:events";
 import { createRunnerRoutes } from "../server/http/routes/runnerRoutes.mjs";
 
 function response() {
-  return {
+  return Object.assign(new EventEmitter(), {
     chunks: [],
+    writableEnded: false,
     writeHead(status, headers) { this.status = status; this.headers = headers; },
     write(chunk) { this.chunks.push(chunk); return true; },
-  };
+    end() { this.writableEnded = true; },
+  });
 }
 
 function setup() {
@@ -189,8 +191,42 @@ test("managed subagent route runs a persisted child through an Oyster runner", a
   assert.equal(child.stopped, true);
   assert.equal(child.subagentStatus, "succeeded");
   assert.equal(res.status, 200);
-  assert.equal(res.body.ok, true);
-  assert.equal(res.body.output, "implemented it");
+  assert.equal(res.headers["content-type"], "application/x-ndjson; charset=utf-8");
+  assert.equal(res.headers["x-accel-buffering"], "no");
+  assert.equal(res.writableEnded, true);
+  const events = res.chunks.flatMap((chunk) => chunk.trim().split("\n")).map((line) => JSON.parse(line));
+  assert.deepEqual(events[0], { type: "started", runner: { id: "child-runner", dir: "/allowed/project" } });
+  assert.equal(events.at(-1).type, "complete");
+  assert.equal(events.at(-1).ok, true);
+  assert.equal(events.at(-1).output, "implemented it");
+});
+
+test("managed subagent stream sends heartbeats and cancels on disconnect", async () => {
+  const { state, intervals, cleared, dependencies } = setup();
+  const route = createRunnerRoutes(dependencies)["POST /subagents"];
+  const res = response();
+  const running = route({ body: {
+    parentSessionId: "parent-id",
+    dir: "/allowed/project",
+    name: "Loop iteration 1: item",
+    prompt: "implement item",
+  } }, res);
+  await Promise.resolve();
+
+  assert.equal(res.status, 200, "headers must be acknowledged before the subagent completes");
+  assert.equal(JSON.parse(res.chunks[0]).type, "started");
+  const heartbeat = intervals.find((entry) => entry.delay === 25_000);
+  assert.ok(heartbeat);
+  heartbeat.callback();
+  assert.equal(JSON.parse(res.chunks.at(-1)).type, "heartbeat");
+
+  res.emit("close");
+  await running;
+  const child = state.runners.get("child-runner");
+  assert.equal(child.subagentStatus, "failed");
+  assert.equal(child.stopped, true);
+  assert.ok(cleared.length > 0, "disconnect must clear the heartbeat interval");
+  assert.equal(res.writableEnded, false, "a disconnected stream must not write a completion event");
 });
 
 test("managed subagent route validates its parent, prompt, and working directory", async () => {
