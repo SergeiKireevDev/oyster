@@ -29,13 +29,23 @@
   const send = () => uiActions.invoke(COMPOSER_SEND_ACTION);
   const abort = () => uiActions.invoke(COMPOSER_ABORT_ACTION);
   const toggleVoice = () => uiActions.invoke(COMPOSER_VOICE_ACTION);
+
+  $: highlightSegments = composerHighlightSegments($composerText);
+  $: voiceButtonLabel = $composerVoice.transcribing
+    ? "Transcribing voice input"
+    : $composerVoice.listening ? "Stop voice input" : "Start voice input";
+  $: voiceButtonTitle = $composerVoice.transcribing
+    ? $composerVoice.status
+    : $composerVoice.listening
+      ? "Stop listening"
+      : $composerVoice.local ? "Record with on-device Whisper" : "Dictate message";
 </script>
 
 <div id="composer">
   <div class="inner">
     <div class="composer-prompt" aria-hidden="true">›</div>
     <div class="composer-editor">
-      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each composerHighlightSegments($composerText) as segment}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
+      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
       <textarea
         id="input"
         rows="1"
@@ -55,9 +65,9 @@
         id="voiceBtn"
         type="button"
         disabled={$composerVoice.transcribing}
-        aria-label={$composerVoice.transcribing ? "Transcribing voice input" : $composerVoice.listening ? "Stop voice input" : "Start voice input"}
+        aria-label={voiceButtonLabel}
         aria-pressed={$composerVoice.listening}
-        title={$composerVoice.transcribing ? $composerVoice.status : $composerVoice.listening ? "Stop listening" : $composerVoice.local ? "Record with on-device Whisper" : "Dictate message"}
+        title={voiceButtonTitle}
         onclick={toggleVoice}
       >
         {#if $composerVoice.transcribing}

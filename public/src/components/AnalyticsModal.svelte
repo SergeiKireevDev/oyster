@@ -27,6 +27,10 @@
     return [...buckets.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
   };
   const chartTitle = (item) => [bucketLabel(item.bucket), `Total: ${money(item.cost)}`, ...item.rows.map((row) => `${row.model}: ${money(row.cost)}`)].join("\n");
+  const modelBarWidth = (model) => `${maxModelCost ? Math.max(2, model.cost / maxModelCost * 100) : 0}%`;
+  const chartBarHeight = (item) => `${maxChartCost ? Math.max(1, item.cost / maxChartCost * 100) : 0}%`;
+  const chartSegmentBasis = (row, item) => `${item.cost ? row.cost / item.cost * 100 : 0}%`;
+  const chartLabelVisible = (index) => index % chartLabelEvery === 0 || index === chartData.length - 1;
   $: maxModelCost = Math.max(0, ...$analytics.models.map((model) => model.cost));
   $: chartData = makeChart($analytics.series);
   $: maxChartCost = Math.max(0, ...chartData.map((item) => item.cost));
@@ -74,7 +78,7 @@
       {#each $analytics.models as model (model.model)}
         <div class="analytics-model-row">
           <div class="analytics-model-name" title={model.model}>{model.model}</div>
-          <div class="analytics-bar"><i style:width={`${maxModelCost ? Math.max(2, model.cost / maxModelCost * 100) : 0}%`}></i></div>
+          <div class="analytics-bar"><i style:width={modelBarWidth(model)}></i></div>
           <span>{money(model.cost)}</span><span>{number(model.totalTokens)} tok</span><span>{number(model.requests)} calls</span>
         </div>
       {/each}
@@ -89,12 +93,12 @@
         <div class="analytics-chart-bars">
           {#each chartData as item, index (item.bucket)}
             <div class="analytics-chart-column" title={chartTitle(item)}>
-              <div class="analytics-chart-bar" style:height={`${maxChartCost ? Math.max(1, item.cost / maxChartCost * 100) : 0}%`}>
+              <div class="analytics-chart-bar" style:height={chartBarHeight(item)}>
                 {#each item.rows as row (`${row.bucket}:${row.model}`)}
-                  <i style:flex-basis={`${item.cost ? row.cost / item.cost * 100 : 0}%`} style:background={chartColor(row.model)}></i>
+                  <i style:flex-basis={chartSegmentBasis(row, item)} style:background={chartColor(row.model)}></i>
                 {/each}
               </div>
-              <time class:visible={index % chartLabelEvery === 0 || index === chartData.length - 1}>{bucketLabel(item.bucket)}</time>
+              <time class:visible={chartLabelVisible(index)}>{bucketLabel(item.bucket)}</time>
             </div>
           {/each}
         </div>

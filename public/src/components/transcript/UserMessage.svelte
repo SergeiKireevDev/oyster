@@ -26,24 +26,23 @@
   <details class="block tool" class:ckpt-frozen={!!restore} data-role="user" bind:this={root}>
     <summary><span class="tname">opening interface</span><span class="targ">{interfaceTitle}</span></summary>
     <div class="body"><pre>{interfaceBody}</pre></div>
-    {#if $checkpointMarker.target === root}
-      <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
-    {/if}
-    {#if restore}
-      <CheckpointRestoreButton {restore} {onRollback} />
-    {/if}
+    {@render CheckpointActions()}
   </details>
 {:else}
   <div class="message-row user-message-row" data-role="user" bind:this={root}>
     <div class="msg user" class:ckpt-frozen={!!restore} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {text}<PermalinkButton target={root} {onPermalink} />
       <CopyMessageButton {text} {onCopy} />
-      {#if $checkpointMarker.target === root}
-        <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
-      {/if}
-      {#if restore}
-        <CheckpointRestoreButton {restore} {onRollback} />
-      {/if}
+      {@render CheckpointActions()}
     </div>
   </div>
 {/if}
+
+{#snippet CheckpointActions()}
+  {#if $checkpointMarker.target === root}
+    <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
+  {/if}
+  {#if restore}
+    <CheckpointRestoreButton {restore} {onRollback} />
+  {/if}
+{/snippet}

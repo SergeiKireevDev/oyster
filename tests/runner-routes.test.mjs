@@ -136,6 +136,8 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
 
 test("runner stop and restart routes preserve selection, status, and delayed restart", () => {
   const { runner, state, intervals, dependencies } = setup();
+  const familyStops = [];
+  dependencies.stopRunnerFamily = (selected) => { familyStops.push(selected.id); dependencies.stopRunner(selected); };
   const routes = createRunnerRoutes(dependencies);
 
   const missing = response();
@@ -146,6 +148,7 @@ test("runner stop and restart routes preserve selection, status, and delayed res
   routes["DELETE /runners"]({}, stopped, new URL("http://localhost/runners?id=runner-1"));
   assert.equal(stopped.status, 200);
   assert.equal(runner.stopped, true);
+  assert.deepEqual(familyStops, ["runner-1"]);
 
   runner.stopped = false;
   const restarted = response();
@@ -184,6 +187,7 @@ test("managed subagent route runs a persisted child through an Oyster runner", a
     "--parent-session", "parent-id", "--name", "Loop iteration 1: item", "--exclude-tools", "loop",
   ]);
   assert.equal(child.stopped, true);
+  assert.equal(child.subagentStatus, "succeeded");
   assert.equal(res.status, 200);
   assert.equal(res.body.ok, true);
   assert.equal(res.body.output, "implemented it");

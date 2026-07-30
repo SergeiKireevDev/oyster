@@ -146,6 +146,35 @@ test("session picker keeps the user's child-session expansion choice", () => {
   assert.match(source, /expandedChildFamilies:/);
 });
 
+test("session picker presents loops as non-navigable run cards with iteration timelines", () => {
+  const source = readFileSync(new URL("../public/src/components/SessionPickerModal.svelte", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+  assert.match(source, /\{#if isLoopFamily\(family\)\}[\s\S]*class=\{`s-loopgroup status-\$\{summary\.status\}`\}/);
+  assert.match(source, /Sequential loop · \{family\.forks\.length\} iteration/);
+  assert.match(source, /loopFamilySummary\(family\)/);
+  assert.match(source, /sessionRow\(fork, loopSessionStatus\(fork\)\)/);
+  assert.match(styles, /#modal \.s-loopgroup/);
+  assert.match(styles, /#modal \.s-loop-timeline::before/);
+  assert.match(styles, /#modal \.m-option\.s-loop-iteration\.status-running::before/);
+});
+
+test("session sidebar expands loop children as a status timeline", () => {
+  const sidebar = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+  assert.match(sidebar, /expandedSessionFamilies/);
+  assert.match(sidebar, /if \(familyKey\) \{[\s\S]*toggleSessionFamily\(familyKey\);[\s\S]*return;/);
+  assert.match(sidebar, /LoopFamilyHeader/);
+  assert.match(sidebar, /session-loop-card/);
+  assert.match(sidebar, /session-sidebar-loop-timeline/);
+  assert.match(sidebar, /subagentStatus/);
+  assert.match(sidebar, /status-running/);
+  assert.match(sidebar, /status-succeeded/);
+  assert.match(sidebar, /status-failed/);
+  assert.match(styles, /@keyframes session-timeline-glow/);
+  assert.match(styles, /\.session-timeline-entry\.status-succeeded/);
+  assert.match(styles, /\.session-timeline-entry\.status-failed/);
+});
+
 test("session navigation omits the redundant full-picker buttons", () => {
   const sidebar = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
   const menu = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");

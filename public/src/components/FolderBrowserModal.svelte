@@ -19,6 +19,9 @@
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
   }
+
+  $: visibleDirectories = visibleBrowserEntries($folderBrowser.dirs, $folderBrowser.showHidden);
+  $: hasVisibleDirectories = visibleDirectories.length > 0;
 </script>
 
 {#if $folderBrowser.loading}
@@ -62,7 +65,7 @@
     showPath={false}
     onBrowse={browseFolderBrowser}
   />
-  {#if !visibleBrowserEntries($folderBrowser.dirs, $folderBrowser.showHidden).length}
+  {#if !hasVisibleDirectories}
     <div class="m-path">(no subfolders)</div>
   {/if}
 {/if}

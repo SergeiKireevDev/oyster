@@ -1,5 +1,4 @@
 import { writable } from "svelte/store";
-import { renderMarkdown } from "../../lib/markdownRenderer.js";
 import { assistantMessageText, shouldShowThinking, toolResultText, userMessageText } from "../../lib/messageUtils.js";
 import { backfillTranscriptTurns } from "../../lib/transcriptBackfill.js";
 import { createMessageCopyController } from "../../lib/clipboardController.js";
@@ -41,7 +40,6 @@ export function createTranscriptAssembly(deps) {
       onCheckpoint: deps.handleCheckpoint,
       onRollback: deps.rollbackCheckpoint,
     },
-    renderMarkdown,
     shouldShowThinking,
     assistantMessageText,
     storage: deps.storage,

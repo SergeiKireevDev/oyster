@@ -87,7 +87,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     const maxRetries = 6;
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
     let uploadedBytes = 0;
-    const setProgress = () => update({ uploading: true, uploadText: `<span class="spin">⟳</span> ${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%` });
+    const setProgress = () => update({ uploading: true, uploadText: `${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%` });
     setProgress();
     let done = 0;
     for (const file of files) {

@@ -28,7 +28,7 @@ test("local SQLite Docker build requires and packages the named pi source contex
 test("clean pi builds hydrate generated AI model data through the package build", () => {
   assert.match(packageJson.scripts["build:pi"], /npm run build --workspace packages\/ai/);
   assert.doesNotMatch(packageJson.scripts["build:pi"], /tsgo -p packages\/ai/);
-  assert.match(local, /npm run build --workspace packages\/ai/);
+  assert.match(local, /rm -rf packages\/ai\/src\/providers\/data[\s\S]*npm run build --workspace packages\/ai/);
   assert.doesNotMatch(local, /tsgo -p packages\/ai/);
 });
 

@@ -30,6 +30,18 @@
     return (node.children ?? []).filter((child) => child.forkedAtHash === hash);
   }
 
+  function checkpointTitle(checkpoint) {
+    return capabilities.rollback
+      ? `${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`
+      : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`;
+  }
+
+  function rollbackFrom(checkpoint, target) {
+    if (capabilities.rollback) rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, target);
+  }
+
+  $: hasChildren = Boolean(node.checkpoints?.length || unslottedChildren.length);
+
   $: unslottedChildren = (node.children ?? []).filter((child) =>
     !(node.checkpoints ?? []).some((checkpoint) => checkpoint.hash === child.forkedAtHash)
   );
@@ -50,17 +62,15 @@
     {/if}
   </button>
 
-  {#if (node.checkpoints?.length || 0) || unslottedChildren.length}
+  {#if hasChildren}
     <div class="t-kids">
       {#each node.checkpoints ?? [] as checkpoint}
         <button
           type="button"
           class="t-ckpt"
-          title={capabilities.rollback
-            ? `${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`
-            : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`}
+          title={checkpointTitle(checkpoint)}
           disabled={!capabilities.rollback}
-          onclick={(event) => capabilities.rollback && rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, event.currentTarget)}
+          onclick={(event) => rollbackFrom(checkpoint, event.currentTarget)}
         >
           🧊<span class="t-hash">{checkpoint.hash}</span><span class="t-msg">{checkpointMessage(checkpoint)}</span><span class="t-time">{checkpointTime(checkpoint)}</span>
         </button>

@@ -141,6 +141,73 @@ test("search validates scope and preserves filtering options, snippets, and resp
   }]);
 });
 
+test("JSONL session archive and unarchive cascade through nested children", async () => {
+  const summaries = [
+    { id: "root", path: "/sessions/folder/root.jsonl", parentSession: null },
+    { id: "child", path: "/sessions/folder/child.jsonl", parentSession: "/sessions/folder/root.jsonl" },
+    { id: "nested", path: "/sessions/folder/nested.jsonl", parentSession: "/sessions/folder/child.jsonl" },
+    { id: "other", path: "/sessions/folder/other.jsonl", parentSession: null },
+  ];
+  const owners = new Map();
+  let nextOwnerId = 1;
+  const repository = {
+    upsert({ backend, sessionId, storagePath }) {
+      if (!owners.has(storagePath)) owners.set(storagePath, { id: nextOwnerId++, backend, session_id: sessionId, storage_path: storagePath, archived: 0 });
+      return owners.get(storagePath);
+    },
+    find({ storagePath }) { return owners.get(storagePath) ?? null; },
+    setArchived(id, archived) {
+      const owner = [...owners.values()].find((candidate) => candidate.id === id);
+      owner.archived = archived ? 1 : 0;
+    },
+  };
+  const routes = createSessionRoutes({
+    state: {
+      currentDir: "/work",
+      runners: new Map(),
+      sessionReferences: {
+        serialize: (reference) => `key-${reference.id}`,
+        parse: (key) => {
+          const id = key.replace(/^key-/, "");
+          const session = summaries.find((candidate) => candidate.id === id);
+          return { backend: "jsonl", id, storagePath: session.path };
+        },
+        equals: () => false,
+      },
+      appStore: { repositories: { sessions: repository } },
+    },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      async readJsonBody(req) { return req.body; },
+    },
+    sessions: {
+      catalog: {
+        backend: "jsonl", root: "/sessions",
+        list: () => summaries,
+        folders: () => [{ dir: "/sessions/folder" }],
+      },
+      sessionReferenceFor: (session) => ({ backend: "jsonl", id: session.id, storagePath: session.path }),
+      sessionTargetFromSearch() {},
+      readSessionHeaderInfo() {},
+    },
+    runners: { stopRunner() {}, runnersChanged() {} },
+    resources: { closeTunnel() {}, releaseSessionRoutines() {} },
+    resolvePath: (path) => path,
+  });
+  const listed = response();
+  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
+
+  for (const archived of [true, false]) {
+    const res = response();
+    await routes["POST /session/archive"]({ body: { sessionKey: "key-root", archived } }, res);
+    assert.deepEqual(res.body, { sessionKey: "key-root", archived });
+    for (const path of ["root", "child", "nested"].map((id) => `/sessions/folder/${id}.jsonl`)) {
+      assert.equal(Boolean(owners.get(path).archived), archived);
+    }
+    assert.equal(Boolean(owners.get("/sessions/folder/other.jsonl").archived), false);
+  }
+});
+
 test("deleting a session isolates cross-session, global, rebound, and fork resources", async () => {
   const { state, stopped, closed, unlinked, deletedRoutineOwners, routes } = setup();
   state.runners.set("r-fork", { id: "r-fork", sessionFile: "/sessions/folder/fork.jsonl", sessionId: "fork" });

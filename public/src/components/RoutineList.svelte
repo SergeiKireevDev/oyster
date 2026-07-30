@@ -4,6 +4,13 @@
   const dotClass = (status) => ({ running: "running", stopping: "running", teardown: "teardown", done: "done", failed: "failed", stopped: "stopped" }[status] ?? "");
   const msg = (routine) => routine.message ?? routine.log?.[routine.log.length - 1] ?? null;
   const title = (routine) => `${routine.path}\nstatus: ${routine.status}${routine.exitCode !== null ? ` (exit ${routine.exitCode})` : ""}${routine.sessionId ? `\nbound to session ${routine.sessionId}` : "\nnot bound to a session yet"}${routine.cwd ? `\nruns in ${routine.cwd}` : ""}`;
+  const isActive = (routine) => ["running", "stopping", "teardown"].includes(routine.status);
+  const progressClass = (routine) => `r-bar${routine.status === "teardown" || !routine.progress ? " indet" : ""}`;
+  const progressWidth = (routine) => `${routine.progress ?? 0}%`;
+  const scopeLabel = (routine) => routine.sessionId === $routineCurrentSessionId ? "this session" : String(routine.sessionId).slice(0, 8);
+  const logTitle = (routine) => (routine.log ?? []).slice(-15).join("\n") || msg(routine);
+  const stopTitle = (routine) => routine.status === "teardown" ? "kill the teardown script" : "stop this routine (SIGTERM its process group)";
+  const teardownTitle = (routine) => `remove this routine's byproducts${routine.cwd ? ` (runs in ${routine.cwd})` : ""}`;
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { ROUTINE_RUN_ACTION } from "../runtime/uiActionNames.js";
 
@@ -24,18 +31,18 @@
           <span class={`r-dot ${dotClass(routine.status)}`} title={routine.status}></span>
           <span class="r-name" title={title(routine)}>{routine.name}</span>
           {#if routine.status === "running" && routine.progress !== null}<span class="r-pct">{routine.progress}%</span>{/if}
-          {#if $routineScopeAll && routine.sessionId}<span class="r-pct" title={`bound to session ${routine.sessionId}`}>{routine.sessionId === $routineCurrentSessionId ? "this session" : String(routine.sessionId).slice(0, 8)}</span>{/if}
+          {#if $routineScopeAll && routine.sessionId}<span class="r-pct" title={`bound to session ${routine.sessionId}`}>{scopeLabel(routine)}</span>{/if}
         </div>
-        {#if ["running", "stopping", "teardown"].includes(routine.status)}
-          <div class={`r-bar${routine.status === "teardown" || !routine.progress ? " indet" : ""}`}><div style:width={`${routine.progress ?? 0}%`}></div></div>
+        {#if isActive(routine)}
+          <div class={progressClass(routine)}><div style:width={progressWidth(routine)}></div></div>
         {/if}
-        {#if msg(routine)}<div class="r-msg" title={(routine.log ?? []).slice(-15).join("\n") || msg(routine)}>{msg(routine)}</div>{/if}
+        {#if msg(routine)}<div class="r-msg" title={logTitle(routine)}>{msg(routine)}</div>{/if}
         <div class="r-actions">
           {#if routine.alive}
-            <button class="r-btn stop" title={routine.status === "teardown" ? "kill the teardown script" : "stop this routine (SIGTERM its process group)"} disabled={routine.status === "stopping"} onclick={() => runRoutineAction(routine.name, "stop")}>■ stop</button>
+            <button class="r-btn stop" title={stopTitle(routine)} disabled={routine.status === "stopping"} onclick={() => runRoutineAction(routine.name, "stop")}>■ stop</button>
           {:else}
             <button class="r-btn" title="run this routine" onclick={() => runRoutineAction(routine.name, "start")}>▶ start</button>
-            <button class="r-btn" title={`remove this routine's byproducts${routine.cwd ? ` (runs in ${routine.cwd})` : ""}`} onclick={() => runRoutineAction(routine.name, "teardown")}>🧹 teardown</button>
+            <button class="r-btn" title={teardownTitle(routine)} onclick={() => runRoutineAction(routine.name, "teardown")}>🧹 teardown</button>
             {#if routine.sessionId}<button class="r-btn" title="unbind this routine from its session (byproducts stay — teardown first if needed)" onclick={() => runRoutineAction(routine.name, "release")}>✕ release</button>{/if}
             <button class="r-btn stop" title="delete this routine's script (byproducts stay — teardown first if needed)" onclick={() => confirmDelete(routine)}>🗑</button>
           {/if}

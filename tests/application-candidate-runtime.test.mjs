@@ -116,6 +116,6 @@ test("application construction defers candidate resource acquisition until activ
   assert.doesNotMatch(appSource, /state\.sessionCatalog\?\.close/);
   assert.match(appSource, /scope\.defer\(\(\) => candidateCatalog\.close/);
   assert.match(appSource, /scope\.defer\(\(\) => \{ clearInterval\(reaperTimer\); clearInterval\(watchdogTimer\); \}\)/);
-  assert.match(appSource, /createRunnerManager\(state, \{ appStore, ensureSessionOwner, guardCallback: scope\.guard \}\)/);
+  assert.match(appSource, /createRunnerManager\(state, \{ appStore, ensureSessionOwner, unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*guardCallback: scope\.guard \}\)/);
   assert.match(appSource, /setTimer: \(callback, delay\) => setTimeout\(scope\.guard\(callback\), delay\)/);
 });

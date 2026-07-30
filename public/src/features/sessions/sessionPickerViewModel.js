@@ -57,8 +57,9 @@ export function groupSessionsByCwd(sessions, runners) {
 
 /** A stopped session is archived manually or when its latest head is older than two days. */
 export function isSessionEntryArchived(entry, now = Date.now()) {
-  if (!entry.session || entry.runner?.alive) return false;
+  if (!entry.session) return false;
   if (entry.session.archived) return true;
+  if (entry.runner?.alive) return false;
   const headTime = Date.parse(entry.session.modifiedAt ?? "");
   return Number.isFinite(headTime) && now - headTime > SESSION_ARCHIVE_AGE_MS;
 }

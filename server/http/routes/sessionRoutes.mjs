@@ -1,5 +1,98 @@
 import { unlinkSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+
+/** Resolve a root session and every transitive child across catalog folders. */
+export function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
+  const sqlite = catalog.backend === "sqlite";
+  const referenceFor = (session) => !sqlite && typeof sessionReferences.validate !== "function"
+    ? sessionReferenceFor(session)
+    : sessionReferences.validate(sqlite
+      ? { backend: "sqlite", id: session.id, storagePath: catalog.storagePath }
+      : { backend: "jsonl", id: session.id, storagePath: session.path });
+  let summaries;
+  if (sqlite) {
+    summaries = catalog.list({});
+  } else {
+    const locations = new Set([dirname(rootReference.storagePath)]);
+    for (const folder of catalog.folders?.() ?? []) {
+      const location = typeof folder === "string" ? folder : folder?.dir;
+      if (location) locations.add(location);
+    }
+    summaries = [...locations].flatMap((location) => catalog.list({ location }));
+  }
+
+  const identity = (session) => sqlite ? session.id : session.path;
+  const parentIdentity = (session) => sqlite ? session.parentSessionId : session.parentSession;
+  const unique = new Map(summaries.filter((session) => identity(session)).map((session) => [identity(session), session]));
+  const children = new Map();
+  for (const session of unique.values()) {
+    const parent = parentIdentity(session);
+    if (!parent) continue;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(session);
+  }
+
+  let rootIdentity = sqlite ? rootReference.id : rootReference.storagePath;
+  if (includeAncestors) {
+    const seenAncestors = new Set();
+    while (unique.has(rootIdentity) && parentIdentity(unique.get(rootIdentity)) && unique.has(parentIdentity(unique.get(rootIdentity))) && !seenAncestors.has(rootIdentity)) {
+      seenAncestors.add(rootIdentity);
+      rootIdentity = parentIdentity(unique.get(rootIdentity));
+    }
+  }
+  const familyRoot = unique.get(rootIdentity);
+  const references = [familyRoot ? referenceFor(familyRoot) : rootReference];
+  const pending = [rootIdentity];
+  const seen = new Set(pending);
+  while (pending.length) {
+    for (const child of children.get(pending.shift()) ?? []) {
+      const childIdentity = identity(child);
+      if (seen.has(childIdentity)) continue;
+      seen.add(childIdentity);
+      pending.push(childIdentity);
+      references.push(referenceFor(child));
+    }
+  }
+  return references;
+}
+
+/** Persist one archive state across a root session and every transitive child. */
+export function setSessionFamilyArchived({ state, catalog, sessionReferenceFor = null, rootReference, archived, includeAncestors = false, now = () => Date.now() }) {
+  const references = collectSessionFamilyReferences({ catalog, sessionReferences: state.sessionReferences, sessionReferenceFor, rootReference, includeAncestors });
+  const repository = state.appStore?.repositories?.sessions;
+  const updateFamily = (repositories) => {
+    for (const reference of references) {
+      const owner = repositories.sessions.find({
+        backend: reference.backend,
+        sessionId: reference.id,
+        storagePath: reference.storagePath ?? null,
+      }) ?? repositories.sessions.upsert({
+        backend: reference.backend,
+        sessionId: reference.id,
+        storagePath: reference.storagePath ?? null,
+        createdAt: new Date(now()).toISOString(),
+      });
+      repositories.sessions.setArchived(owner.id, archived);
+    }
+  };
+  if (typeof state.appStore?.transaction === "function") state.appStore.transaction(updateFamily);
+  else updateFamily({ sessions: repository });
+  return references;
+}
+
+/** Stop the runner for a parent session and every transitive child. */
+export function stopSessionFamilyRunners({ state, catalog, rootRunner, stopRunner }) {
+  const references = rootRunner.sessionRef ? collectSessionFamilyReferences({
+    catalog,
+    sessionReferences: state.sessionReferences,
+    rootReference: rootRunner.sessionRef,
+  }) : [];
+  const matching = references.length ? [...state.runners.values()].filter((runner) => runner.sessionRef
+    ? references.some((reference) => state.sessionReferences.equals(runner.sessionRef, reference))
+    : references.some((reference) => reference.backend === "jsonl" && runner.sessionFile === reference.storagePath)) : [rootRunner];
+  for (const runner of matching) stopRunner(runner);
+  return matching;
+}
 
 /** Build saved-session and history routes from the configured catalog. */
 export function createSessionRoutes({
@@ -150,7 +243,15 @@ export function createSessionRoutes({
         return;
       }
       const archived = body.archived !== false;
-      repository.setArchived(owner.id, archived);
+      const references = setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
+      if (archived) {
+        for (const runner of state.runners.values()) {
+          const belongsToFamily = runner.sessionRef
+            ? references.some((familyReference) => state.sessionReferences.equals(runner.sessionRef, familyReference))
+            : references.some((familyReference) => familyReference.backend === "jsonl" && runner.sessionFile === familyReference.storagePath);
+          if (belongsToFamily && runner.proc) stopRunner(runner);
+        }
+      }
       json(res, 200, { sessionKey: body.sessionKey, archived });
     },
 

@@ -105,20 +105,41 @@ test("SQLite routes list distinct shared-database identities and parent keys", (
   assert.equal(res.body.sessions[1].parentSessionKey, codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" }));
 });
 
-test("SQLite session archive route persists and returns the archived flag", async () => {
-  const { routes, codec } = setup();
+test("SQLite session archive route cascades archive and unarchive through descendants", async () => {
+  const { routes, codec, sessions, state, lifecycle } = setup();
+  sessions.push(
+    { id: "nested", cwd: "/work", storagePath: "/agent/sessions.sqlite", parentSessionId: "fork", preview: "nested", messageCount: 1 },
+    { id: "independent", cwd: "/work", storagePath: "/agent/sessions.sqlite", parentSessionId: null, preview: "independent", messageCount: 1 },
+  );
+  state.runners.set("r-fork", { id: "r-fork", sessionRef: { backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" }, proc: {} });
+  state.runners.set("r-nested", { id: "r-nested", sessionRef: { backend: "sqlite", id: "nested", storagePath: "/agent/sessions.sqlite" }, proc: {} });
+  state.runners.set("r-independent", { id: "r-independent", sessionRef: { backend: "sqlite", id: "independent", storagePath: "/agent/sessions.sqlite" }, proc: {} });
   const listed = response();
   routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?dir=/work"));
-  const key = codec.serialize({ backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" });
-  assert.equal(listed.body.sessions.find((session) => session.id === "fork").archived, false);
+  const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
 
   const archived = response();
   await routes["POST /session/archive"]({ body: { sessionKey: key, archived: true } }, archived);
   assert.deepEqual(archived.body, { sessionKey: key, archived: true });
 
-  const refreshed = response();
-  routes["GET /sessions"]({}, refreshed, new URL("http://localhost/sessions?dir=/work"));
-  assert.equal(refreshed.body.sessions.find((session) => session.id === "fork").archived, true);
+  const afterArchive = response();
+  routes["GET /sessions"]({}, afterArchive, new URL("http://localhost/sessions?dir=/work"));
+  assert.equal(afterArchive.body.sessions.find((session) => session.id === "root").archived, true);
+  assert.equal(afterArchive.body.sessions.find((session) => session.id === "fork").archived, true);
+  assert.equal(afterArchive.body.sessions.find((session) => session.id === "nested").archived, true);
+  assert.equal(afterArchive.body.sessions.find((session) => session.id === "independent").archived, false);
+  assert.deepEqual(lifecycle.filter(([event]) => event === "stop").map(([, id]) => id).sort(), ["r-fork", "r-nested", "r1"]);
+
+  const nestedKey = codec.serialize({ backend: "sqlite", id: "nested", storagePath: "/agent/sessions.sqlite" });
+  const unarchived = response();
+  await routes["POST /session/archive"]({ body: { sessionKey: nestedKey, archived: false } }, unarchived);
+  assert.deepEqual(unarchived.body, { sessionKey: nestedKey, archived: false });
+
+  const afterUnarchive = response();
+  routes["GET /sessions"]({}, afterUnarchive, new URL("http://localhost/sessions?dir=/work"));
+  for (const id of ["root", "fork", "nested"]) {
+    assert.equal(afterUnarchive.body.sessions.find((session) => session.id === id).archived, false);
+  }
 });
 
 test("SQLite routes resolve lookup, entries, messages, folders, and search by key", () => {

@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createFileExplorerController, createOpenFileExplorerEventController } from "../public/src/lib/fileExplorerController.js";
+
+const fileExplorerComponent = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
+
+test("file explorer renders upload progress without injecting controller markup", () => {
+  assert.doesNotMatch(fileExplorerComponent, /\{@html/);
+  assert.match(fileExplorerComponent, /<span class="spin" aria-hidden="true">⟳<\/span>/);
+});
 
 test("file explorer loads a directory into its list state", async () => {
   const calls = [];
@@ -115,9 +123,9 @@ test("file explorer uploads files, reports progress, and reloads the directory",
   await controller.uploadFiles("/work", [file]);
 
   assert.deepEqual(calls.slice(0, 5), [
-    ["update", { uploading: true, uploadText: '<span class="spin">⟳</span> 0%' }],
+    ["update", { uploading: true, uploadText: "0%" }],
     ["chunk", { dir: "/work", name: "a.txt", offset: 0, last: true, body: "0-3" }],
-    ["update", { uploading: true, uploadText: '<span class="spin">⟳</span> 100%' }],
+    ["update", { uploading: true, uploadText: "100%" }],
     ["toast", "uploaded 1 file to /work"],
     ["update", { uploading: false, uploadText: "⬆ Upload…" }],
   ]);
@@ -189,7 +197,7 @@ test("file explorer reports an unrecoverable upload error and resets progress", 
   await controller.uploadFiles("/work", [{ name: "a.txt", size: 1, slice: () => "body" }]);
 
   assert.deepEqual(calls.slice(0, 3), [
-    { uploading: true, uploadText: '<span class="spin">⟳</span> 0%' },
+    { uploading: true, uploadText: "0%" },
     ["a.txt: invalid file", "error"],
     { uploading: false, uploadText: "⬆ Upload…" },
   ]);

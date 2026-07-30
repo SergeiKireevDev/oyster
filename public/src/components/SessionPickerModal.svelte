@@ -1,5 +1,6 @@
 <script>
   import FolderIcon from "./FolderIcon.svelte";
+  import SearchHitSnippet from "./SearchHitSnippet.svelte";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     SESSION_PICKER_CANCEL_ACTION,
@@ -19,7 +20,6 @@
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { isHubRuntime } from "../runtime/workspaceScope.js";
-  import { highlightSearchSnippet } from "../lib/sessionSearchHighlight.js";
 
   const uiActions = getUiActionRegistry();
   const hubMode = isHubRuntime();
@@ -68,7 +68,8 @@
     const choices = $sessionPicker.expandedChildFamilies ?? {};
     return Object.hasOwn(choices, key)
       ? choices[key]
-      : family.forks.some((fork) => fork.id === $sessionPicker.currentId);
+      : family.forks.some((fork) => fork.id === $sessionPicker.currentId)
+        || (isLoopFamily(family) && family.forks.some(isAlive));
   }
 
   function setChildSessionsOpen(family, open) {
@@ -77,6 +78,52 @@
       expandedChildFamilies: { ...($sessionPicker.expandedChildFamilies ?? {}), [key]: open },
     });
   }
+
+  function isLoopFamily(family) {
+    return family.forks.some((session) => /^Loop iteration \d+:/i.test(session.name || session.preview || ""));
+  }
+
+  function loopSessions(family) {
+    return [...family.forks].sort((left, right) => {
+      const iteration = (session) => Number((session.name || "").match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
+      return iteration(left) - iteration(right);
+    });
+  }
+
+  function loopSessionStatus(session) {
+    const runner = runnerFor(session);
+    if (runner?.alive) return "running";
+    if (["succeeded", "failed"].includes(runner?.subagentStatus)) return runner.subagentStatus;
+    return "succeeded";
+  }
+
+  function loopFamilySummary(family) {
+    const statuses = family.forks.map(loopSessionStatus);
+    const running = statuses.filter((status) => status === "running").length;
+    const failed = statuses.filter((status) => status === "failed").length;
+    const complete = statuses.length - running;
+    if (running) return { status: "running", label: `${complete}/${statuses.length} complete · running` };
+    if (failed) return { status: "failed", label: `${failed} failed · ${complete}/${statuses.length} complete` };
+    return { status: "succeeded", label: `${complete}/${statuses.length} complete` };
+  }
+
+  function searchGroupMeta(group) {
+    const workspace = hubMode && group.first.workspaceName ? `${group.first.workspaceName} · ` : "";
+    const folder = $sessionPicker.scope === "all" ? `${abbreviateHomePath(group.first.folderLabel)} · ` : "";
+    return `${workspace}${folder}${group.hits.length} hit${group.hits.length === 1 ? "" : "s"}`;
+  }
+
+  function sessionsForPaths(dir, paths) {
+    return ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path));
+  }
+
+  function inactiveSessionsInFolder(dir) {
+    return ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => !isAlive(session));
+  }
+
+  const sessionDotClass = (alive, busy) => `s-dot${busy ? " busy" : alive ? " on" : ""}`;
+  const sessionDotTitle = (alive, busy) => busy ? "agent working" : alive ? "process running (idle)" : "no running process";
+  const sessionDateMeta = (session) => `${hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}${fmtSessionDate(session.modifiedAt)} · ${session.messageCount} msgs`;
 
   $: currentPartition = partitionSessionFamilies($sessionPicker.sessions, isAlive);
   $: otherFolders = $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder);
@@ -146,12 +193,11 @@
     }}>
       <div class="s-title">
         <span class="s-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
-        <span class="s-date">{hubMode && group.first.workspaceName ? `${group.first.workspaceName} · ` : ""}{$sessionPicker.scope === "all" ? `${abbreviateHomePath(group.first.folderLabel)} · ` : ""}{group.hits.length} hit{group.hits.length === 1 ? "" : "s"}</span>
+        <span class="s-date">{searchGroupMeta(group)}</span>
       </div>
       {#each group.hits.slice(0, 3) as hit, index}
         <div class="s-snippet" data-hit-index={index}>
-          <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
-          {" "}{#each highlightSearchSnippet(hit.snippet, $sessionPicker.query) as segment}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}
+          <SearchHitSnippet role={hit.role} kind={hit.kind} snippet={hit.snippet} query={$sessionPicker.query} />
         </div>
       {/each}
       {#if group.hits.length > 3}
@@ -168,7 +214,7 @@
     {/if}
     {#each [...activeOtherFolders.entries()] as [dir, paths] (dir)}
       {@render FolderLabel({ label: labelFor(dir) })}
-      {@render SessionRows({ sessions: ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path)) })}
+      {@render SessionRows({ sessions: sessionsForPaths(dir, paths) })}
     {/each}
   {/if}
 
@@ -188,7 +234,7 @@
           {#if $sessionPicker.loadingFolders[folder.dir]}
             <div class="m-path"><span class="spin"></span> loading…</div>
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
-            {@const inactive = $sessionPicker.otherFolderSessions[folder.dir].filter((session) => !isAlive(session))}
+            {@const inactive = inactiveSessionsInFolder(folder.dir)}
             {#if inactive.length}
               {@render SessionRows({ sessions: inactive })}
             {:else}
@@ -201,16 +247,16 @@
   {/if}
 {/if}
 
-{#snippet sessionRow(session)}
+{#snippet sessionRow(session, timelineStatus = null)}
   {@const current = session.id === $sessionPicker.currentId}
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
-  <div class={`m-option session-row${current ? " current" : ""}`}>
+  <div class={`m-option session-row${current ? " current" : ""}${timelineStatus ? ` s-loop-iteration status-${timelineStatus}` : ""}`}>
     <button class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
       <div class="s-title">
-        <span class={`s-dot${busy ? " busy" : alive ? " on" : ""}`} title={busy ? "agent working" : alive ? "process running (idle)" : "no running process"}></span>
+        {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
         <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
-        <span class="s-date">{hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}{fmtSessionDate(session.modifiedAt)} · {session.messageCount} msgs</span>
+        <span class="s-date">{sessionDateMeta(session)}</span>
       </div>
       {#if session.name && session.preview}
         <div class="s-preview">{session.preview}</div>
@@ -225,18 +271,42 @@
 
 {#snippet SessionRows({ sessions })}
   {#each groupSessionFamilies(sessions) as family (sessionIdentity(family.session))}
-    {@render sessionRow(family.session)}
-    {#if family.forks.length}
+    {#if isLoopFamily(family)}
+      {@const summary = loopFamilySummary(family)}
       <details
-        class="s-forkgroup"
+        class={`s-loopgroup status-${summary.status}`}
         open={childSessionsOpen(family)}
         ontoggle={(event) => setChildSessionsOpen(family, event.currentTarget.open)}
       >
-        <summary>{family.forks.length} child session{family.forks.length === 1 ? "" : "s"}</summary>
-        {#each family.forks as fork (sessionIdentity(fork))}
-          {@render sessionRow(fork)}
-        {/each}
+        <summary>
+          <span class="s-loop-icon" aria-hidden="true">↻</span>
+          <span class="s-loop-copy">
+            <span class="s-loop-kicker">Sequential loop · {family.forks.length} iteration{family.forks.length === 1 ? "" : "s"}</span>
+            <strong>{family.session.name || family.session.preview || "Loop run"}</strong>
+          </span>
+          <span class={`s-loop-status status-${summary.status}`}>{summary.label}</span>
+          <span class="s-loop-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="s-loop-timeline">
+          {#each loopSessions(family) as fork (sessionIdentity(fork))}
+            {@render sessionRow(fork, loopSessionStatus(fork))}
+          {/each}
+        </div>
       </details>
+    {:else}
+      {@render sessionRow(family.session)}
+      {#if family.forks.length}
+        <details
+          class="s-forkgroup"
+          open={childSessionsOpen(family)}
+          ontoggle={(event) => setChildSessionsOpen(family, event.currentTarget.open)}
+        >
+          <summary>{family.forks.length} child session{family.forks.length === 1 ? "" : "s"}</summary>
+          {#each family.forks as fork (sessionIdentity(fork))}
+            {@render sessionRow(fork)}
+          {/each}
+        </details>
+      {/if}
     {/if}
   {/each}
 {/snippet}
