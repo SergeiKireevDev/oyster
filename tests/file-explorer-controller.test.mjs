@@ -140,14 +140,14 @@ test("file explorer splits large uploads below common proxy body limits", async 
 
   await controller.uploadFiles("/work", [{ name: "large.json", size, slice: (start, end) => `${start}-${end}` }]);
 
-  assert.equal(chunks.length, 19);
-  assert.equal(chunks[0].body, "0-524288");
+  assert.equal(chunks.length, 10);
+  assert.equal(chunks[0].body, "0-1048576");
   assert.equal(chunks.at(-1).body, `9437184-${size}`);
   assert.equal(chunks.at(-1).last, true);
   for (const [index, chunk] of chunks.entries()) {
     const [start, end] = chunk.body.split("-").map(Number);
     assert.equal(chunk.offset, start);
-    assert.ok(end - start <= 512 * 1024);
+    assert.ok(end - start <= 1024 * 1024);
     if (index) assert.equal(start, Number(chunks[index - 1].body.split("-")[1]));
   }
 });
@@ -171,7 +171,7 @@ test("file explorer backs off its chunk size after intermediary 413 responses", 
 
   await controller.uploadFiles("/work", [{ name: "limited.bin", size, slice: (start, end) => `${start}-${end}` }]);
 
-  assert.deepEqual(attempts.slice(0, 4), ["0-524288", "0-262144", "0-131072", "0-65536"]);
+  assert.deepEqual(attempts.slice(0, 5), ["0-716800", "0-524288", "0-262144", "0-131072", "0-65536"]);
   assert.equal(accepted[0], "0-65536");
   assert.equal(accepted.at(-1), `655360-${size}`);
 });

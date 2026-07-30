@@ -82,7 +82,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     // Stay below common reverse-proxy body limits. If an intermediary has a
     // smaller limit, a 413 transparently halves subsequent chunks and retries
     // the same offset instead of failing the whole file.
-    let chunkSize = 512 * 1024;
+    let chunkSize = 1024 * 1024;
     const minChunkSize = 64 * 1024;
     const maxRetries = 6;
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
