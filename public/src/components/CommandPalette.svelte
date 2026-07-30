@@ -21,6 +21,7 @@
   id="cmdPalette"
   class:open={$commandPalette.open}
   class:path={$commandPalette.mode === "path"}
+  class:command={$commandPalette.mode === "command"}
   style:left={$commandPalette.left}
   style:top={$commandPalette.top}
   style:bottom={$commandPalette.bottom}

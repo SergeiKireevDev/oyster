@@ -13,6 +13,37 @@ export function commandPalettePosition(rect, viewport, { gap = 8, maxWidth = 420
   return { left: `${left}px`, width: `${width}px`, top: `${top}px`, bottom: "auto", maxHeight: `${Math.min(maxHeight, viewport.innerHeight - rect.bottom - gap * 2)}px` };
 }
 
+/** Recognize a slash-command name while it is the whole leading message token. */
+export function commandTrigger(target) {
+  const value = String(target?.value ?? "");
+  const caret = target?.selectionStart ?? value.length;
+  if (caret !== value.length) return null;
+  const match = value.match(/^\/([^\s/]*)$/);
+  return match ? { text: value, query: match[1] } : null;
+}
+
+/** Create palette state for supported pi slash commands. */
+export function commandPaletteView(items, trigger, active) {
+  return {
+    open: true,
+    mode: "command",
+    match: trigger.text,
+    emptyText: items.length ? "" : `no pi commands match "${trigger.text}"`,
+    items: items.map((item, index) => {
+      const name = item.name ?? "";
+      const highlighted = name.toLowerCase().startsWith(trigger.query.toLowerCase()) ? trigger.query.length : 0;
+      return {
+        icon: item.icon ?? "›",
+        desc: item.description ?? item.desc ?? "pi command",
+        prefix: "/",
+        highlight: name.slice(0, highlighted),
+        rest: name.slice(highlighted),
+        active: index === active,
+      };
+    }),
+  };
+}
+
 /** Create palette state for path matches or the file-explorer fallback. */
 export function pathPaletteView(items, trigger, active) {
   return {

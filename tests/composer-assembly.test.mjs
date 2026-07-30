@@ -129,11 +129,13 @@ test("composer path autocomplete debounces refreshes and discards stale drafts",
   assert.match(source, /\}, 140\);/);
 });
 
-test("composer autocomplete is path-only and exposes no colon commands", () => {
+test("composer autocompletes supported pi slash commands before paths", () => {
   const source = readFileSync(new URL("../public/src/features/composer/createComposerAssembly.js", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /name: "sessions"/);
-  assert.doesNotMatch(source, /commandTrigger|commandPaletteView|openCommand/);
-  assert.match(source, /pathTrigger\(element\)/);
+  assert.match(source, /const command = commandTrigger\(element\)/);
+  assert.match(source, /guard\.getKnownCommands\(\)/);
+  assert.match(source, /commandPaletteView/);
+  assert.match(source, /insertAtTextarea\(element, trigger\.text, `\/\$\{command\.name\} `\)/);
+  assert.match(source, /const path = command \? null : pathTrigger\(element\)/);
 });
 
 test("composer assembly owns command guard palette menu and listener construction", async () => {

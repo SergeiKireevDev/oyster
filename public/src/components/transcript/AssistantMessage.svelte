@@ -1,15 +1,14 @@
 <script>
   import { writable } from "svelte/store";
+  import ActivityStack from "./ActivityStack.svelte";
   import AssistantPartActions from "./AssistantPartActions.svelte";
-  import ToolCard from "./ToolCard.svelte";
-  import ToolGroup from "./ToolGroup.svelte";
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
-  let { assistantStore = writable({ blocks: [], copyText: "", errorMessage: "" }), role = "assistant", onPermalink = () => {}, onCopy = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
+  let { assistantStore = writable({ blocks: [], copyText: "", errorMessage: "" }), activityBlocks = [], role = "assistant", activityActive = false, activityUnsettled = false, onPermalink = () => {}, onCopy = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
   let root = $state();
   const data = $derived($assistantStore);
-  const displayBlocks = $derived(groupConsecutiveTools(data.blocks));
+  const displayBlocks = $derived(arrangeActivity(data.blocks, activityBlocks));
   const restore = $derived($checkpointRestores.find((item) => item.target === root));
   $effect(() => { if (root) onRoot(root); });
 
@@ -19,56 +18,32 @@
     event.currentTarget.focus({ preventScroll: true });
   }
 
-  function thinkingPreview(text, maxLength = 110) {
+  function thinkingPreview(text, maxLength = 150) {
     const compact = String(text ?? "").replace(/\s+/g, " ").trim();
     if (compact.length <= maxLength) return compact;
-    return `${compact.slice(0, maxLength).trimEnd()}…`;
+    return `…${compact.slice(-maxLength).trimStart()}`;
   }
 
-  function groupConsecutiveTools(blocks = []) {
-    const grouped = [];
-    for (let index = 0; index < blocks.length;) {
-      const block = blocks[index];
-      if (block.type !== "toolCall") {
-        grouped.push(block);
-        index += 1;
-        continue;
-      }
+  function arrangeActivity(blocks = [], activities = []) {
+    const visible = blocks.filter((block) => block.type !== "thinking" && block.type !== "toolCall");
+    if (!activities.length) return visible;
 
-      const tools = [];
-      while (index < blocks.length && blocks[index].type === "toolCall") {
-        tools.push(blocks[index]);
-        index += 1;
-      }
-      grouped.push(tools.length === 1 ? tools[0] : {
-        type: "toolGroup",
-        key: `tool-group:${tools[0].key ?? tools[0].id ?? grouped.length}`,
-        blocks: tools,
-      });
-    }
-    return grouped;
+    visible.unshift({
+      type: "activityStack",
+      key: `activity:${activities[0].key ?? activities[0].id ?? "current"}`,
+      blocks: activities,
+    });
+    return visible;
   }
 </script>
 
-<div class="assistant-entry" data-role={role} bind:this={root}>
+<div class="assistant-entry" class:empty={displayBlocks.length === 0 && !data.errorMessage} data-role={role} bind:this={root}>
   {#each displayBlocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
     <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {#if block.type === "text"}
         <div class="md">{@html block.html}</div>
-      {:else if block.type === "thinking"}
-        <details class="block thinking">
-          <summary>
-            <span class="thinking-label">thinking</span>
-            {#if thinkingPreview(block.text)}
-              <span class="thinking-preview">{thinkingPreview(block.text)}</span>
-            {/if}
-          </summary>
-          <div class="body">{block.text}</div>
-        </details>
-      {:else if block.type === "toolCall"}
-        <ToolCard cardStore={block.cardStore} />
-      {:else if block.type === "toolGroup"}
-        <ToolGroup blocks={block.blocks} />
+      {:else if block.type === "activityStack"}
+        <ActivityStack blocks={block.blocks} active={activityActive} unsettled={activityUnsettled} {thinkingPreview} />
       {/if}
       <AssistantPartActions
         target={root}

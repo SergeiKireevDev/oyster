@@ -65,7 +65,7 @@ test("historical SQLite tool results do not return as waiting after reload", asy
     label: "SQLite tool session id",
   });
   const liveTool = page.locator(".block.tool", { hasText: "persisted-tool-result" }).first();
-  await expect(liveTool.locator(".status")).toHaveText("✓");
+  await expect(liveTool.locator(".status.ok")).toHaveText("Done");
 
   // Push the tool turn outside the initial 40-message tail. Older chunks are
   // prepended in reverse DOM order, which previously lost their tool result.
@@ -81,8 +81,11 @@ test("historical SQLite tool results do not return as waiting after reload", asy
   });
 
   const restoredTool = page.locator(".block.tool", { hasText: "persisted-tool-result" }).first();
-  await expect(restoredTool).toBeVisible({ timeout: 30000 });
-  await expect(restoredTool.locator(".status")).toHaveText("✓");
+  const restoredHistory = restoredTool.locator("xpath=ancestor::details[contains(@class, 'activity-history')]");
+  await expect(restoredHistory).toHaveCount(1, { timeout: 30000 });
+  await restoredHistory.locator(":scope > summary").click();
+  await expect(restoredTool).toBeVisible();
+  await expect(restoredTool.locator(".status.ok")).toHaveText("Done");
   await expect(page.locator(".block.tool .status.running")).toHaveCount(0);
-  await expect(page.locator(".block.tool .status", { hasText: "⏳" })).toHaveCount(0);
+  await expect(page.locator(".block.tool .status", { hasText: "Running" })).toHaveCount(0);
 });

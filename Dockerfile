@@ -51,7 +51,7 @@ COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build
 
-# Register the bundled pi extensions (hublot, routine, file-explorer)
+# Register the bundled pi extensions (file-explorer, hublot, loop, routine)
 RUN mkdir -p /root/.pi/agent/extensions \
     && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
 
