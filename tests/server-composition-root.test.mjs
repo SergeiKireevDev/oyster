@@ -6,8 +6,11 @@ const stableSource = readFileSync(new URL("../server/server.mjs", import.meta.ur
 const appStoreSource = readFileSync(new URL("../server/persistence/appStore.mjs", import.meta.url), "utf8");
 
 test("app is a small disposable composition root", () => {
-  assert.ok(source.split("\n").length < 200);
+  assert.ok(source.split("\n").length < 260);
+  assert.match(source, /export async function buildCandidate\(stableState, \{ generation/);
   assert.match(source, /export async function init\(state\)/);
+  assert.match(source, /createCandidateState\(stableState\)/);
+  assert.match(source, /dispose: \(\) => \{[\s\S]*disposed = true; return disposal \?\?= requests\.retire\(\)\.then\(\(\) => scope\.dispose\(\)\)[\s\S]*\.catch/);
   assert.match(source, /createRequestContext\(state\)/);
   assert.match(source, /createRouteTable\(\{/);
   assert.match(source, /await import\(bust\("runners\.mjs"\)\)/);
@@ -21,6 +24,7 @@ test("stable core owns one app-store service across application reloads", () => 
   assert.equal((stableSource.match(/openAppStore\(\{/g) ?? []).length, 1);
   assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.OYSTER_DB_PATH \}\);/);
   assert.match(stableSource, /const state = \{[\s\S]*?appStore,/);
+  assert.match(stableSource, /const generation = \+\+nextApplicationGeneration;[\s\S]*buildCandidate\(state, \{ generation \}\)/);
   assert.match(stableSource, /if \(shutdownPromise\) return shutdownPromise;/);
   assert.match(stableSource, /server\.close\(\);[\s\S]*Promise\.race\(\[cleanup, timeout\]\)[\s\S]*state\.appStore\.flush\(\);[\s\S]*state\.appStore\.close\(\);/);
   assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("appStore.reconcileInterruptedOperations()"));
@@ -39,7 +43,7 @@ test("composition injects the narrow app store into persistent domains", () => {
   assert.equal(appStoreSource.includes("database,"), false, "raw database handle must remain private");
   assert.match(source, /if \(!state\.sessionDeletionReconciled\)[\s\S]*await reconcileSessionDeletions[\s\S]*state\.sessionDeletionReconciled = true/);
   assert.ok(source.indexOf("await reconcileSessionDeletions") < source.indexOf("createRunnerManager(state"));
-  assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner \}\)/);
+  assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner, guardCallback: scope\.guard \}\)/);
   assert.match(source, /createCheckpointRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createRoutineRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createTunnelRoutes\(\{[\s\S]*?state, appStore,/);

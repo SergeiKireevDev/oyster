@@ -574,6 +574,19 @@
   }
   .session-sidebar-entry:hover { background: var(--panel-2); border-color: var(--border); }
   .session-sidebar-entry.current { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .session-sidebar-child-sessions { min-width: 0; margin-left: 17px; }
+  .session-sidebar-child-sessions > summary {
+    padding: 3px 5px;
+    color: var(--muted);
+    font-size: 10px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .session-sidebar-child-sessions > summary::-webkit-details-marker { display: none; }
+  .session-sidebar-child-sessions > summary::before { content: "▸ "; }
+  .session-sidebar-child-sessions[open] > summary::before { content: "▾ "; }
+  .session-sidebar-child-sessions > summary:hover { color: var(--text); }
+  .session-sidebar-child-list { display: flex; flex-direction: column; gap: 4px; padding-left: 8px; }
   .session-sidebar-action {
     width: 28px; height: 28px;
     flex-shrink: 0;

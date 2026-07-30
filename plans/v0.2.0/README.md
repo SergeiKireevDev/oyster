@@ -1,27 +1,59 @@
-# Oyster v0.2.0 Code-Quality Roadmap
+# Oyster v0.2.0 Implementation Roadmap
 
 ## Purpose
 
-Turn the broader findings from the July 2026 server audit into independently
-reviewable implementation plans. The audit covered the stable server core,
-hot-reloadable application, routes, persistence, process ownership, session
-catalogs, and browser-facing streaming paths.
+Turn the remaining July 2026 server-audit findings into ordered, standalone
+Markdown checklists. Each linked plan can be supplied directly as a checklist
+plan argument, with `plans/v0.2.0/validate.sh` as its executable validator. The
+executor advances one unchecked item at a time only after validation succeeds.
 
 The critical loopback authentication bypass and generated-token persistence
-issue have already been addressed by `be924248` (**Require explicit
-authentication for local tools**). They are not repeated as future work here.
-This roadmap covers the remaining in-scope process-safety, configuration,
-resource-bounding, and maintainability work.
+issue were already fixed by `be924248` (**Require explicit authentication for
+local tools**) and are not repeated here.
 
-## Plans
+`validate.sh` runs `npm test`. Phase acceptance statements may require broader
+build, Docker, browser, llmbox, security, or performance checks in addition to
+the per-iteration validator.
 
-| Order | Plan | Primary outcomes |
-|---:|---|---|
-| 1 | [Safe process lifecycle](safe-process-lifecycle.md) | Awaited termination, effective SIGKILL escalation, PID identity checks, generation-safe runner replacement |
-| 2 | [Harden HTTP boundaries](harden-http-boundaries.md) | Trusted-proxy policy, bounded authentication throttling, minimal public health, authenticated diagnostics |
-| 3 | [Reliable file and stream I/O](reliable-file-and-stream-io.md) | SSE backpressure, isolated resumable uploads, mode-preserving saves, bounded event-loop delay |
-| 4 | [Storage configuration and schema safety](storage-configuration-and-schema-safety.md) | One session-root contract, private database files, downgrade rejection, operational integrity checks |
-| 5 | [Atomic hot reload and quality gates](atomic-hot-reload-and-quality-gates.md) | Transactional reload lifecycle, complete reload coverage, lint/type/security/coverage automation |
+## Plan status and order
+
+- [x] Convert the v0.2.0 roadmap to loop-compatible checklists with a shared
+  executable validator.
+- [ ] Complete [Safe process lifecycle](safe-process-lifecycle.md): awaited
+  termination, effective SIGKILL escalation, PID identity checks, and
+  generation-safe runner replacement.
+- [ ] Complete [Harden HTTP boundaries](harden-http-boundaries.md): trusted proxy
+  policy, bounded authentication throttling, minimal public health, and
+  authenticated diagnostics.
+- [ ] Complete [Reliable file and stream I/O](reliable-file-and-stream-io.md):
+  SSE backpressure, isolated resumable uploads, mode-preserving saves, and
+  bounded event-loop delay.
+- [ ] Complete [Storage configuration and schema safety](storage-configuration-and-schema-safety.md):
+  one session-root contract, private database files, downgrade rejection, and
+  operational integrity checks.
+- [ ] Complete [Atomic hot reload and quality gates](atomic-hot-reload-and-quality-gates.md):
+  transactional reload lifecycle, complete reload coverage, and required
+  lint/type/security/coverage automation.
+- [ ] Reconcile the already-landed [Pinned Widgets](pinned-widgets.md)
+  implementation against its checklist, checking only items supported by code
+  and test evidence and leaving genuine gaps for later loop iterations.
+
+Run plans in this order unless a plan explicitly identifies a prerequisite that
+has already landed. Each linked document is a standalone plan argument; this
+index is only a status overview.
+
+## Checklist rules
+
+- [x] Keep every implementation item as a Markdown task (`- [ ]` or `- [x]`).
+- [x] Keep checklist order dependency-safe; the first unchecked item is always
+  the next permitted unit of work.
+- [x] Require focused tests in the same iteration as behavior changes.
+- [x] Let only the checklist executor mark an implementation item complete after
+  the validator exits successfully.
+- [x] Preserve unrelated work and keep one item small enough for one reviewed
+  commit.
+- [x] Treat acceptance and completion criteria as phase gates, not substitutes
+  for executable tests.
 
 ## Cross-cutting guardrails
 
@@ -30,59 +62,40 @@ resource-bounding, and maintainability work.
 - Preserve backend-neutral session identity as
   `{ backend, id, storagePath }`; never narrow identity to a bare ID or database
   path.
-- Treat a PID as an untrusted locator. Signal a persisted PID only after
-  verifying its recorded process identity immediately before each signal.
-- Make every multi-store workflow either atomic, serialized, or durably
-  recoverable. A journal without a reconciler is not a completed reliability
-  boundary.
+- Treat a PID as an untrusted locator and verify recorded process identity
+  immediately before every signal.
+- Make every multi-store workflow atomic, serialized, or durably recoverable. A
+  journal without a reconciler is not a completed reliability boundary.
 - Bound memory, queue depth, request size, operation count, and shutdown time.
-  Slow clients and large workspaces must not stall unrelated runners or SSE
-  clients.
 - Keep secrets, credentials, request bodies, and internal filesystem inventory
   out of logs and public diagnostics.
-- Add focused tests before changing behavior. Preserve compatibility only when
-  it does not retain the unsafe behavior being removed.
-- Respect unrelated work in every worktree and keep each checklist item small
-  enough for one reviewed commit.
 
-## Delivery sequence
+## Validation ladder
 
-1. Land the shared process termination primitive before modifying runner,
-   hublot, routine, or one-shot process lifecycle code.
-2. Land trusted-proxy parsing before changing throttling keys or diagnostics so
-   tests use one authoritative client identity.
-3. Land per-client stream accounting before enforcing disconnect limits.
-4. Land one configured session root before tightening database and migration
-   startup checks.
-5. Add quality gates incrementally after the behavior-focused tests exist;
-   baseline suppressions must be explicit, narrow, and burn down over time.
-
-## Validation policy
-
-Run focused tests after every checklist item, followed by the repository suite:
+Per iteration, the shared executable runs:
 
 ```sh
 npm test
 ```
 
-Before completing each plan, run the broader matrix against freshly built
-artifacts rather than cached container tags:
+At each phase boundary, run the checks named by that plan. Before declaring a
+plan complete, run freshly built artifacts through the broad matrix:
 
 ```sh
 npm run build
 npm test
 docker build -t oyster:quality-v0.2 .
-cd tests/e2e && npm test
+./scripts/run-e2e-tests.sh
 ```
 
-Plans touching the llmbox data path must additionally run its checks and cluster
-suite. Performance items must record event-loop delay, memory, and queue-depth
-results as diagnostics; normal CI assertions should use deterministic bounds,
-not fragile elapsed-time thresholds.
+Plans touching llmbox must also run its checks and cluster suite. Performance
+items must record event-loop delay, memory, and queue-depth diagnostics; normal
+CI assertions should use deterministic resource bounds rather than fragile wall
+clock thresholds.
 
-## Completion criteria
+## Release completion criteria
 
-- Every remaining audit finding maps to a completed plan item or a documented,
+- Every remaining audit finding maps to a checked plan item or a documented,
   evidence-based rejection.
 - Runner and hublot replacement cannot overlap an unconfirmed old process.
 - Public unauthenticated responses reveal no workspace or database inventory.
@@ -91,6 +104,6 @@ not fragile elapsed-time thresholds.
 - Custom session roots and application database paths are honored consistently
   and fail closed when unsafe or incompatible.
 - Hot reload either activates a complete new application or leaves the previous
-  application and its dependencies untouched.
+  application and dependencies untouched.
 - Required CI checks cover style, types, architecture, security, dependencies,
   secrets, unit tests, coverage, builds, and representative browser workflows.

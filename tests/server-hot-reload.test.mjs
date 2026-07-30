@@ -67,6 +67,41 @@ export function init(state) {
 `;
 }
 
+function transactionalFixture(version, { activationError = false, disposalFailures = 0 } = {}) {
+  return `
+export async function buildCandidate(state) {
+  let disposed = false;
+  let disposalAttempts = 0;
+  return {
+    async activate() {
+      state.fixtureLifecycle ??= [];
+      state.fixtureLifecycle.push("activate:${version}");
+      ${activationError ? 'throw new Error("injected activation failure");' : ""}
+    },
+    async handleRequest(req, res) {
+      if (req.url === "/events?token=test-token") {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        state.sseClients.add(res);
+        req.on("close", () => state.sseClients.delete(res));
+        res.write(": connected\\n\\n");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ version: ${JSON.stringify(version)}, reloadCount: state.reloadCount, lifecycle: state.fixtureLifecycle }));
+    },
+    async dispose() {
+      if (disposed) return;
+      disposalAttempts++;
+      state.fixtureLifecycle.push("dispose:${version}:" + disposalAttempts);
+      if (disposalAttempts <= ${disposalFailures}) throw new Error("injected disposal failure");
+      disposed = true;
+    },
+    startPi() {}, stopPi() {}, stopTunnels() {}, stopRoutines() {},
+  };
+}
+`;
+}
+
 async function waitForOutput(child, match) {
   let output = "";
   await new Promise((resolve, reject) => {
@@ -113,6 +148,26 @@ async function nextServerEvent(reader) {
     const match = pending.match(/(?:^|\n)data: (.+)\n\n/);
     if (match) return JSON.parse(match[1]);
   }
+}
+
+function createServerEventReader(reader) {
+  const decoder = new TextDecoder();
+  let pending = "";
+  const queued = [];
+  return async function next() {
+    while (queued.length === 0) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("SSE response ended before a server event arrived");
+      pending += decoder.decode(value, { stream: true });
+      const frames = pending.split("\n\n");
+      pending = frames.pop();
+      for (const frame of frames) {
+        const data = frame.split("\n").find((line) => line.startsWith("data: "));
+        if (data) queued.push(JSON.parse(data.slice(6)));
+      }
+    }
+    return queued.shift();
+  };
 }
 
 test("the stable server persists an owner-only default token across restarts", async (t) => {
@@ -175,6 +230,103 @@ test("the stable server atomically replaces its active application handler", asy
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
+});
+
+test("transactional reload activates, swaps, and only then retires the old application", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "oyster-transactional-reload-"));
+  const port = await availablePort();
+  await copyStableServer(root);
+  await writeFile(join(root, "server", "app.mjs"), transactionalFixture("before"));
+
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+  });
+  t.after(async () => {
+    if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await waitForOutput(child, "listening on");
+  assert.deepEqual(await readJson(port), {
+    version: "before", reloadCount: 1, lifecycle: ["activate:before"],
+  });
+
+  const replacement = join(root, "server", "app.replacement.mjs");
+  await writeFile(replacement, transactionalFixture("after"));
+  await rename(replacement, join(root, "server", "app.mjs"));
+  await waitForOutput(child, "hot-reloaded app.mjs");
+
+  assert.deepEqual(await readJson(port), {
+    version: "after", reloadCount: 2,
+    lifecycle: ["activate:before", "activate:after", "dispose:before:1"],
+  });
+});
+
+test("activation failure disposes only the candidate and preserves the active handler", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "oyster-transactional-activation-failure-"));
+  const port = await availablePort();
+  await copyStableServer(root);
+  await writeFile(join(root, "server", "app.mjs"), transactionalFixture("working"));
+
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+  });
+  t.after(async () => {
+    if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await waitForOutput(child, "listening on");
+  const replacement = join(root, "server", "app.replacement.mjs");
+  await writeFile(replacement, transactionalFixture("broken", { activationError: true }));
+  await rename(replacement, join(root, "server", "app.mjs"));
+  await waitForOutput(child, "reload FAILED");
+
+  assert.deepEqual(await readJson(port), {
+    version: "working", reloadCount: 1,
+    lifecycle: ["activate:working", "activate:broken", "dispose:broken:1"],
+  });
+});
+
+test("post-swap disposal failures keep the new handler active and emit bounded authenticated diagnostics", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "oyster-retirement-retry-"));
+  const port = await availablePort();
+  await copyStableServer(root);
+  await writeFile(join(root, "server", "app.mjs"), transactionalFixture("leaky", { disposalFailures: 99 }));
+
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+  });
+  t.after(async () => {
+    if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await waitForOutput(child, "listening on");
+  const eventsResponse = await fetch(`http://127.0.0.1:${port}/events?token=test-token`);
+  assert.equal(eventsResponse.headers.get("content-type"), "text/event-stream");
+  const reader = eventsResponse.body.getReader();
+  const nextEvent = createServerEventReader(reader);
+  t.after(async () => { try { await reader.cancel(); } catch {} });
+
+  const replacement = join(root, "server", "app.replacement.mjs");
+  await writeFile(replacement, transactionalFixture("active"));
+  await rename(replacement, join(root, "server", "app.mjs"));
+
+  assert.equal((await nextEvent()).type, "code_reloaded");
+  const failures = [];
+  for (let attempt = 1; attempt <= 3; attempt++) failures.push(await nextEvent());
+  assert.deepEqual(failures.map(({ type, committed, attempt, maxAttempts, willRetry, error }) => ({
+    type, committed, attempt, maxAttempts, willRetry, error,
+  })), [
+    { type: "code_reload_cleanup_failed", committed: true, attempt: 1, maxAttempts: 3, willRetry: true, error: "injected disposal failure" },
+    { type: "code_reload_cleanup_failed", committed: true, attempt: 2, maxAttempts: 3, willRetry: true, error: "injected disposal failure" },
+    { type: "code_reload_cleanup_failed", committed: true, attempt: 3, maxAttempts: 3, willRetry: false, error: "injected disposal failure" },
+  ]);
+  assert.deepEqual(await readJson(port), {
+    version: "active", reloadCount: 2,
+    lifecycle: ["activate:leaky", "activate:active", "dispose:leaky:1", "dispose:leaky:2", "dispose:leaky:3"],
+  });
 });
 
 test("full restart restores app-store data and shutdown awaits callbacks before closing it", async (t) => {

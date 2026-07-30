@@ -4,7 +4,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openAppStore } from "../server/persistence/appStore.mjs";
-import { assertStableStateInventory, STABLE_STATE_INVENTORY } from "../server/persistence/stateInventory.mjs";
+import {
+  assertStableStateInventory,
+  RELOAD_OWNERSHIP_CLASSIFICATIONS,
+  STABLE_STATE_INVENTORY,
+} from "../server/persistence/stateInventory.mjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
@@ -39,11 +43,34 @@ test("every stable state field has a repository or explicit non-durable classifi
   t.after(() => { store.close(); rmSync(dbRoot, { recursive: true, force: true }); });
   for (const [field, metadata] of Object.entries(STABLE_STATE_INVENTORY)) {
     assert.ok(["persistent", "rebuildable", "ephemeral", "startup"].includes(metadata.classification), `invalid classification for ${field}`);
+    assert.ok(RELOAD_OWNERSHIP_CLASSIFICATIONS.includes(metadata.reloadOwnership), `${field} must name a reload owner`);
     if (["persistent", "rebuildable"].includes(metadata.classification)) {
       assert.ok(metadata.repository, `${field} must name its authoritative repository`);
       assert.ok(store.repositories[metadata.repository], `${field} names missing repository ${metadata.repository}`);
     }
   }
+});
+
+test("stable state reload ownership exceptions are explicit", () => {
+  const byOwner = Object.groupBy(
+    Object.entries(STABLE_STATE_INVENTORY),
+    ([, metadata]) => metadata.reloadOwnership,
+  );
+  assert.deepEqual(
+    (byOwner["candidate-owned"] ?? []).map(([field]) => field).sort(),
+    [
+      "piProcesses",
+      "runnerReaperTimer",
+      "runnerWatchdogTimer",
+      "sessionCatalog",
+      "sessionCatalogKey",
+      "sessionOperations",
+      "sessionReferences",
+    ],
+  );
+  assert.deepEqual((byOwner["shared-immutable"] ?? []).map(([field]) => field), ["config"]);
+  assert.equal(byOwner["restart-required"], undefined, "restart-required resources must not be injected into app state");
+  assert.ok(byOwner.stable.length > 0);
 });
 
 test("stable-core construction rejects an unclassified field", () => {

@@ -100,7 +100,9 @@ export function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = state.appStore, now = () => new Date().toISOString(),
   summarizeTitle = summarizeSessionTitle,
+  guardCallback = (callback) => callback,
 } = {}) {
+  if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
   const { config, serverEvent, sessionReferences } = state;
   const runnerRepository = appStore?.repositories?.runners ?? null;
   const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
@@ -624,7 +626,7 @@ export function createRunnerManager(state, {
   // one interval, owned by the CURRENT module version: clear the previous
   // one on hot reload so ticks never double up or run stale closures
   clearInterval(state.runnerWatchdogTimer);
-  state.runnerWatchdogTimer = setInterval(watchdogTick, WATCHDOG_INTERVAL_MS);
+  state.runnerWatchdogTimer = setInterval(guardCallback(watchdogTick), WATCHDOG_INTERVAL_MS);
   state.runnerWatchdogTimer.unref?.();
 
   // ------------------------------------------------------------ orphan reaper
@@ -649,7 +651,7 @@ export function createRunnerManager(state, {
   }
 
   clearInterval(state.runnerReaperTimer);
-  state.runnerReaperTimer = setInterval(reaperTick, ORAPHA_REAP_INTERVAL_MS);
+  state.runnerReaperTimer = setInterval(guardCallback(reaperTick), ORAPHA_REAP_INTERVAL_MS);
   state.runnerReaperTimer.unref?.();
 
   // Startup and read-only session selection only restore descriptors. An RPC

@@ -11,7 +11,7 @@
   import { openModal } from "../stores/modal.js";
   import { workspaceChanges } from "../stores/workspaces.js";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
-  import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
+  import { groupSessionCwdsByHierarchy, groupSessionEntriesByFamily, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
     SESSION_PICKER_CHOOSE_ACTION,
@@ -436,42 +436,56 @@
   }
 </script>
 
+{#snippet SessionEntry({ entry, archived = false, cwd = "" })}
+  {@const session = entry.session}
+  {@const runner = entry.runner}
+  {@const current = runner?.id === $appSession.currentRunner || (!runner && session?.id === $sessionPicker.currentId)}
+  <div class="session-sidebar-entry" class:current>
+    <button
+      type="button"
+      class:busy={runner?.busy}
+      class="session-sidebar-row"
+      title={`${label(session, runner)}\n${abbreviateHomePath(cwd)}`}
+      onclick={() => runner ? switchRunner(runner.id) : openSavedSession(session)}
+    >
+      <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
+      <span class="session-sidebar-copy">
+        <span class="session-sidebar-name">{label(session, runner)}</span>
+        {#if sessionMeta(session, runner)}
+          <span class="session-sidebar-meta">{sessionMeta(session, runner)}</span>
+        {/if}
+      </span>
+    </button>
+    {#if runner?.alive}
+      <button type="button" class="session-sidebar-action stop" title="Stop this session's process" aria-label="Stop this session's process" onclick={() => stopSession(runner)}></button>
+    {:else if archived && !current}
+      <button type="button" class="session-sidebar-action delete" title="Delete archived session" aria-label="Delete archived session" onclick={() => deleteSession(session ?? runner)}>✕</button>
+    {:else if !archived && session}
+      <button
+        type="button"
+        class="session-sidebar-lifecycle archive"
+        title="Archive session"
+        aria-label="Archive session"
+        onclick={() => archiveSession(session)}
+      ></button>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet SessionRows({ entries, archived = false, cwd = "" })}
   <div class="session-sidebar-workspace-sessions">
-    {#each entries as entry (entry.session ? sessionIdentity(entry.session) : entry.runner.id)}
-      {@const session = entry.session}
-      {@const runner = entry.runner}
-      {@const current = runner?.id === $appSession.currentRunner || (!runner && session?.id === $sessionPicker.currentId)}
-      <div class="session-sidebar-entry" class:current>
-        <button
-          type="button"
-          class:busy={runner?.busy}
-          class="session-sidebar-row"
-          title={`${label(session, runner)}\n${abbreviateHomePath(cwd)}`}
-          onclick={() => runner ? switchRunner(runner.id) : openSavedSession(session)}
-        >
-          <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
-          <span class="session-sidebar-copy">
-            <span class="session-sidebar-name">{label(session, runner)}</span>
-            {#if sessionMeta(session, runner)}
-              <span class="session-sidebar-meta">{sessionMeta(session, runner)}</span>
-            {/if}
-          </span>
-        </button>
-        {#if runner?.alive}
-          <button type="button" class="session-sidebar-action stop" title="Stop this session's process" aria-label="Stop this session's process" onclick={() => stopSession(runner)}></button>
-        {:else if archived && !current}
-          <button type="button" class="session-sidebar-action delete" title="Delete archived session" aria-label="Delete archived session" onclick={() => deleteSession(session ?? runner)}>✕</button>
-        {:else if !archived && session}
-          <button
-            type="button"
-            class="session-sidebar-lifecycle archive"
-            title="Archive session"
-            aria-label="Archive session"
-            onclick={() => archiveSession(session)}
-          ></button>
-        {/if}
-      </div>
+    {#each groupSessionEntriesByFamily(entries) as family (family.entry.session ? sessionIdentity(family.entry.session) : family.entry.runner.id)}
+      {@render SessionEntry({ entry: family.entry, archived, cwd })}
+      {#if family.children.length}
+        <details class="session-sidebar-child-sessions" open={family.children.some((entry) => entry.runner?.id === $appSession.currentRunner || (!entry.runner && entry.session?.id === $sessionPicker.currentId))}>
+          <summary>{family.children.length} child session{family.children.length === 1 ? "" : "s"}</summary>
+          <div class="session-sidebar-child-list">
+            {#each family.children as entry (entry.session ? sessionIdentity(entry.session) : entry.runner.id)}
+              {@render SessionEntry({ entry, archived, cwd })}
+            {/each}
+          </div>
+        </details>
+      {/if}
     {/each}
   </div>
 {/snippet}

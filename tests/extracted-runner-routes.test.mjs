@@ -20,5 +20,5 @@ test("app contains no extracted runner route bodies and retains lifecycle export
   ]) {
     assert.equal(appSource.includes(`"${route}":`), false, `stale runner route body: ${route}`);
   }
-  assert.match(appSource, /return \{\s*handleRequest, startPi, stopPi,/);
+  assert.match(appSource, /application = \{\s*handleRequest, startPi, stopPi,/);
 });

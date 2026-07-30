@@ -26,15 +26,15 @@ deployment.
 
 ## 1. Specify the Reload Lifecycle
 
-- [ ] Inventory every mutation performed by `app.mjs:init()`: catalog
+- [x] Inventory every mutation performed by `app.mjs:init()`: catalog
   replacement, timer replacement, runner manager creation, state patching,
   reconciler flags, supervisor scheduling, event subscriptions, and service
   closure.
-- [ ] Classify each dependency as stable, candidate-owned, shared immutable, or
+- [x] Classify each dependency as stable, candidate-owned, shared immutable, or
   restart-required. Add the classification to the stable-state inventory tests.
-- [ ] Define a candidate interface with side-effect-free construction plus
+- [x] Define a candidate interface with side-effect-free construction plus
   explicit `activate()`, `handleRequest()`, and idempotent `dispose()` phases.
-- [ ] Define failure semantics for import, construction, activation, swap, old
+- [x] Define failure semantics for import, construction, activation, swap, old
   disposal, and requests already executing during the swap.
 
 **Acceptance:** the lifecycle specification identifies one owner and cleanup
@@ -42,17 +42,17 @@ path for every timer, listener, catalog handle, and process-facing service.
 
 ## 2. Build Candidate Applications Transactionally
 
-- [ ] Refactor `init()` so candidate construction does not mutate active stable
+- [x] Refactor `init()` so candidate construction does not mutate active stable
   fields or close active dependencies. Stage candidate-owned resources in a
   disposable scope.
-- [ ] Validate route uniqueness, repository availability, catalog access, and
+- [x] Validate route uniqueness, repository availability, catalog access, and
   dependency construction before activation.
-- [ ] Activate the candidate, atomically swap the request handler, then retire
+- [x] Activate the candidate, atomically swap the request handler, then retire
   the old application. If pre-swap work fails, dispose only the candidate.
-- [ ] If old disposal fails after swap, keep the new application active, report
+- [x] If old disposal fails after swap, keep the new application active, report
   the leak through authenticated diagnostics, and retry bounded cleanup without
   rolling back to partially retired state.
-- [ ] Attach a generation to timers/listeners so stale callbacks cannot mutate
+- [x] Attach a generation to timers/listeners so stale callbacks cannot mutate
   candidate-owned state after disposal.
 
 **Acceptance:** injected failures at every phase leave exactly one usable

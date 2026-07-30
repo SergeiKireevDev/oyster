@@ -265,15 +265,15 @@ deployment.
 
 ## 1. Specify the Reload Lifecycle
 
-- [ ] Inventory every mutation performed by `app.mjs:init()`: catalog
+- [x] Inventory every mutation performed by `app.mjs:init()`: catalog
   replacement, timer replacement, runner manager creation, state patching,
   reconciler flags, supervisor scheduling, event subscriptions, and service
   closure.
-- [ ] Classify each dependency as stable, candidate-owned, shared immutable, or
+- [x] Classify each dependency as stable, candidate-owned, shared immutable, or
   restart-required. Add the classification to the stable-state inventory tests.
-- [ ] Define a candidate interface with side-effect-free construction plus
+- [x] Define a candidate interface with side-effect-free construction plus
   explicit `activate()`, `handleRequest()`, and idempotent `dispose()` phases.
-- [ ] Define failure semantics for import, construction, activation, swap, old
+- [x] Define failure semantics for import, construction, activation, swap, old
   disposal, and requests already executing during the swap.
 
 **Acceptance:** the lifecycle specification identifies one owner and cleanup

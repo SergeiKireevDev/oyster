@@ -25,10 +25,14 @@ function stableState() {
     appStore: {
       path: "/tmp/oyster.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
-        sessions: { upsert: (owner) => owner }, operations: { listIncomplete: () => [] },
-        checkpoints: { load: () => ({}), save() {} },
+        sessions: { find: () => null, upsert: (owner) => owner },
+        operations: { listIncomplete: () => [] },
+        checkpoints: { listForSession: () => [], load: () => ({}), save() {} },
         routines: { list: () => [] },
         hublots: { list: () => [], listProcesses: () => [] },
+        pinnedWidgets: { list: () => [], listGroups: () => [] },
+        runners: { list: () => [] },
+        runnerEvents: { list: () => [] },
       },
       hydrate: () => ({ incompleteOperations: [] }),
     },
