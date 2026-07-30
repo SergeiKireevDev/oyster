@@ -20,6 +20,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { rescoreSearchResults } from "./searchRescore.mjs";
+const searchQueryUrl = new URL("./searchQuery.mjs", import.meta.url);
+const { matchSearchText, parseSearchQuery } = await import(`${searchQueryUrl}?v=${statSync(searchQueryUrl).mtimeMs}`);
 
 export const SESSIONS_ROOT = join(homedir(), ".pi", "agent", "sessions");
 
@@ -253,7 +256,10 @@ function makeSnippet(text, idx, qLen, ctx = 70) {
 }
 
 export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
-  const q = query.toLowerCase();
+  const parsedQuery = Array.isArray(query) ? { terms: query, operator: "AND" }
+    : typeof query === "object" ? query : parseSearchQuery(query);
+  const { terms, operator } = parsedQuery;
+  if (!terms.length) return [];
   let parsed;
   try { parsed = parseSessionFile(path); } catch { return []; }
   const { header, name, entries, byId } = parsed;
@@ -277,14 +283,14 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
       const isTextResponse = t.kind === "name" ||
         (t.kind === "text" && (t.role === "user" || t.role === "assistant"));
       if (!includeTools && !isTextResponse) continue;
-      const idx = t.text.toLowerCase().indexOf(q);
-      if (idx === -1) continue;
+      const match = matchSearchText(t.text, terms, operator);
+      if (!match) continue;
       hits.push({
         entryId: e.id ?? null,
         role: t.role ?? null,
         kind: t.kind,
         timestamp: e.timestamp ?? null,
-        snippet: makeSnippet(t.text, idx, q.length),
+        snippet: makeSnippet(t.text, match.index, match.length),
       });
       if (hits.length >= maxHitsPerFile) break outer;
     }
@@ -299,6 +305,9 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
  *   all     -> every folder under SESSIONS_ROOT
  */
 export function searchSessions({ q, scope, path, includeTools = false, defaultDir = null }, maxResults = 200) {
+  const parsedQuery = parseSearchQuery(q);
+  const { terms } = parsedQuery;
+  if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
   const files = [];
   if (scope === "session") {
     files.push(path);
@@ -318,7 +327,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
   const results = [];
   let truncated = false;
   for (const file of files) {
-    const hits = searchSessionFile(file, q, 25, includeTools);
+    const hits = searchSessionFile(file, parsedQuery, 25, includeTools);
     if (!hits.length) continue;
     const folderName = dirname(file).split("/").pop();
     for (const h of hits) {
@@ -337,7 +346,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
     }
     if (truncated) break;
   }
-  return { results, truncated, filesSearched: files.length };
+  return { results: rescoreSearchResults(results, q), truncated, filesSearched: files.length };
 }
 
 // ---------------------------------------------------------------- tree views

@@ -54,11 +54,11 @@ export async function init(state) {
     console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
   }
 
-  const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}`;
+  const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${statSync(join(__dirname, catalogModule)).mtimeMs}`;
   if (state.sessionCatalogKey !== catalogKey) {
     state.sessionCatalog?.close?.();
     state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
-      ? (await import(bust("sessions/sqliteCatalog.mjs"))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
+      ? (await import(bust(catalogModule))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
       : jsonlSessionCatalog;
     state.sessionCatalogKey = catalogKey;
   }

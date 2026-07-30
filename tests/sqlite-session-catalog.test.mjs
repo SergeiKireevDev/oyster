@@ -33,7 +33,7 @@ async function mockModel() {
     if (request.method !== "POST" || request.url !== "/v1/chat/completions") return response.writeHead(404).end();
     let body = "";
     for await (const chunk of request) body += chunk;
-    const text = body.includes("fork prompt") ? "fork response" : "durable phrase";
+    const text = body.includes("fork prompt") ? "fork response" : "durable phrase foo-bar";
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     response.write(`data: ${JSON.stringify({ id: "catalog", object: "chat.completion.chunk", created: 0, model: "sqlite-catalog", choices: [{ index: 0, delta: { role: "assistant", content: text }, finish_reason: null }] })}\n\n`);
     response.write(`data: ${JSON.stringify({ id: "catalog", object: "chat.completion.chunk", created: 0, model: "sqlite-catalog", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 } })}\n\n`);
@@ -95,6 +95,18 @@ if (SKIP_LOCAL) {
   test("SQLite catalog preserves process-created parent session IDs", async () => {
     const { catalog, rootId } = await createProcessFixture();
     assert.equal(catalog.list().find((session) => session.id !== rootId).parentSessionId, rootId);
+  });
+
+  test("SQLite full-text search supports punctuation, AND, OR, and phrases", async () => {
+    const { catalog, rootIdentity } = await createProcessFixture();
+    const punctuation = catalog.search({ q: "foo-bar", scope: "session", path: rootIdentity });
+    assert.equal(punctuation.results.length, 1);
+    assert.equal(punctuation.results[0].snippet.match, "foo-bar");
+    assert.equal(catalog.search({ q: "bar durable", scope: "session", path: rootIdentity }).results.length, 1);
+    assert.equal(catalog.search({ q: "root durable", scope: "session", path: rootIdentity }).results.length, 0);
+    assert.equal(catalog.search({ q: "missing OR durable", scope: "session", path: rootIdentity }).results.length, 1);
+    assert.equal(catalog.search({ q: '"durable phrase"', scope: "session", path: rootIdentity }).results.length, 1);
+    assert.equal(catalog.search({ q: '"phrase durable"', scope: "session", path: rootIdentity }).results.length, 0);
   });
 }
 

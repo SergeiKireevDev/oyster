@@ -112,8 +112,9 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
 test("search validates scope and preserves filtering options, snippets, and response shape", () => {
   const { searches, routes } = setup();
   const short = response();
-  routes["GET /search"]({}, short, new URL("http://localhost/search?q=x"));
+  routes["GET /search"]({}, short, new URL("http://localhost/search?q=xy"));
   assert.equal(short.status, 400);
+  assert.deepEqual(short.body, { error: "query must be at least 3 characters" });
 
   const escaped = response();
   routes["GET /search"]({}, escaped, new URL("http://localhost/search?q=find&scope=folder&path=/sessions-escape"));

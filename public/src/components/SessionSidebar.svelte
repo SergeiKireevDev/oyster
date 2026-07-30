@@ -6,6 +6,7 @@
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
+  import { highlightSearchSnippet } from "../lib/sessionSearchHighlight.js";
   import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
   import { workspaceChanges } from "../stores/workspaces.js";
@@ -67,10 +68,10 @@
   function updateQuery(value) {
     updateSessionPicker({
       query: value,
-      ...(value.trim().length < 2 ? { searchStatus: "", searchResults: [], searching: false } : {}),
+      ...(value.trim().length < 3 ? { searchStatus: "", searchResults: [], searching: false } : {}),
     });
     clearTimeout(searchTimer);
-    if (value.trim().length < 2) return;
+    if (value.trim().length < 3) return;
     searchTimer = setTimeout(() => {
       uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
       uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
@@ -193,7 +194,7 @@
   });
 
   let selectedEnvironmentId = null;
-  $: searching = $sessionPicker.query.trim().length >= 2;
+  $: searching = $sessionPicker.query.trim().length >= 3;
   $: searchEnvironments = hubMode ? groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults) : [];
   $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
   $: currentRunner = $appSession.runners.find((runner) => runner.id === $appSession.currentRunner);
@@ -511,7 +512,7 @@
           >
             <span class="session-sidebar-snippet">
               <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
-              <span class="session-sidebar-snippet-copy">{snippetBefore(hit.snippet.before)}<mark>{hit.snippet.match}</mark>{snippetAfter(hit.snippet.after)}</span>
+              <span class="session-sidebar-snippet-copy">{#each highlightSearchSnippet({ before: snippetBefore(hit.snippet.before), match: hit.snippet.match, after: snippetAfter(hit.snippet.after) }, $sessionPicker.query) as segment}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}</span>
             </span>
           </button>
         {/each}
@@ -580,7 +581,7 @@
     value={$sessionPicker.query}
     oninput={(event) => updateQuery(event.currentTarget.value)}
     onkeydown={(event) => {
-      if (event.key === "Enter" && event.currentTarget.value.trim().length >= 2) {
+      if (event.key === "Enter" && event.currentTarget.value.trim().length >= 3) {
         clearTimeout(searchTimer);
         uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
         uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);

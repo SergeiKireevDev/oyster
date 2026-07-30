@@ -205,6 +205,18 @@ test("search finds user/assistant text but not tools by default", () => {
   assert.equal(r4.results[0].kind, "thinking");
 });
 
+test("search supports AND and OR keywords and preserves quoted phrases", () => {
+  const ordered = searchSessions({ q: "other path", scope: "folder", path: FOLDER });
+  const reversed = searchSessions({ q: "path other", scope: "folder", path: FOLDER });
+  const either = searchSessions({ q: "missing OR other", scope: "folder", path: FOLDER });
+  const phrase = searchSessions({ q: '"other path"', scope: "folder", path: FOLDER });
+  const reversedPhrase = searchSessions({ q: '"path other"', scope: "folder", path: FOLDER });
+  assert.equal(reversed.results.length, ordered.results.length);
+  assert.equal(either.results.length, ordered.results.length);
+  assert.equal(phrase.results.length, ordered.results.length);
+  assert.equal(reversedPhrase.results.length, 0);
+});
+
 test("search matches session names and builds snippets", () => {
   const hits = searchSessionFile(MAIN, "my session");
   assert.equal(hits[0].kind, "name");

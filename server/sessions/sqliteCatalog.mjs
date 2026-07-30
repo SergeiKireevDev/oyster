@@ -1,8 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { labelOf, textOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
+import { rescoreSearchResults } from "./searchRescore.mjs";
+const searchQueryUrl = new URL("./searchQuery.mjs", import.meta.url);
+const { ftsSearchExpression, matchSearchText, parseSearchQuery } = await import(`${searchQueryUrl}?v=${statSync(searchQueryUrl).mtimeMs}`);
 
 function decodeEntry(row) {
   let payload;
@@ -188,26 +191,50 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
   }
 
   function search({ q, scope = "folder", path, cwd = path, includeTools = false }, maxResults = 200) {
-    const query = q.toLowerCase();
-    const selected = scope === "session" ? [findById(identityId(path))].filter(Boolean)
+    const { terms, operator } = parseSearchQuery(q);
+    let selected = scope === "session" ? [findById(identityId(path))].filter(Boolean)
       : scope === "all" ? list() : list({ cwd });
+    if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
+    const indexedEntries = withDatabase((database) => {
+      const hasSearchIndex = database.prepare(
+        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'",
+      ).get();
+      if (!hasSearchIndex) return null;
+      const searchableFilter = includeTools
+        ? ""
+        : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
+      const rows = database.prepare(`
+        SELECT DISTINCT f.session_id, f.entry_id
+        FROM session_search_fts f
+        WHERE session_search_fts MATCH ? ${searchableFilter}
+      `).all(ftsSearchExpression(terms, operator));
+      const matches = new Map();
+      for (const row of rows) {
+        if (!matches.has(row.session_id)) matches.set(row.session_id, new Set());
+        matches.get(row.session_id).add(row.entry_id);
+      }
+      return matches;
+    }, null);
+    if (indexedEntries) selected = selected.filter((session) => indexedEntries.has(session.id));
+    const filesSearched = selected.length;
     const results = [];
     let truncated = false;
     for (const session of selected) {
       const loaded = activeBranch(session.id);
       const hits = [];
       for (const entry of loaded.branch) {
+        if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
         for (const part of searchableParts(entry)) {
           const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
           if (!includeTools && !isText) continue;
-          const index = part.text.toLowerCase().indexOf(query);
-          if (index < 0) continue;
+          const match = matchSearchText(part.text, terms, operator);
+          if (!match) continue;
           hits.push({
             entryId: entry.id ?? null,
             role: part.role ?? null,
             kind: part.kind,
             timestamp: entry.timestamp ?? null,
-            snippet: snippet(part.text, index, query.length),
+            snippet: snippet(part.text, match.index, match.length),
           });
           if (hits.length >= 25) break;
         }
@@ -227,7 +254,7 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
       }
       if (truncated) break;
     }
-    return { results, truncated, filesSearched: selected.length };
+    return { results: rescoreSearchResults(results, q), truncated, filesSearched };
   }
 
   function usageAnalytics({ bucket = "day", since = null } = {}) {

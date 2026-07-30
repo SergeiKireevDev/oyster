@@ -282,7 +282,7 @@ export function createSessionRoutes({
           if (reference.backend === catalog.backend) sessionIdentity = sqlite ? reference.id : reference.storagePath;
         } catch {}
       }
-      if (query.length < 2) { json(res, 400, { error: "query must be at least 2 characters" }); return; }
+      if (query.length < 3) { json(res, 400, { error: "query must be at least 3 characters" }); return; }
       if (!["session", "folder", "all"].includes(scope)) { json(res, 400, { error: `invalid scope: ${scope}` }); return; }
       if (scope === "session") {
         if (sqlite && !sessionIdentity) { json(res, 400, { error: "scope=session requires a session key" }); return; }

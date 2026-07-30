@@ -19,6 +19,7 @@
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { isHubRuntime } from "../runtime/workspaceScope.js";
+  import { highlightSearchSnippet } from "../lib/sessionSearchHighlight.js";
 
   const uiActions = getUiActionRegistry();
   const hubMode = isHubRuntime();
@@ -37,7 +38,7 @@
     return formatRelativeTime(ts);
   }
 
-  $: isSearching = $sessionPicker.query.trim().length >= 2;
+  $: isSearching = $sessionPicker.query.trim().length >= 3;
 
   function folderOf(path) {
     return String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
@@ -83,7 +84,7 @@
   function queryInput(value) {
     updateSessionPicker({
       query: value,
-      ...(value.trim().length < 2 ? { searchStatus: "", searchResults: [], searching: false } : {}),
+      ...(value.trim().length < 3 ? { searchStatus: "", searchResults: [], searching: false } : {}),
     });
     clearTimeout(debounce);
     debounce = setTimeout(() => runSessionPickerSearch(), 250);
@@ -135,7 +136,7 @@
       {#each group.hits.slice(0, 3) as hit, index}
         <div class="s-snippet" data-hit-index={index}>
           <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
-          {" "}{hit.snippet.before}<mark>{hit.snippet.match}</mark>{hit.snippet.after}
+          {" "}{#each highlightSearchSnippet(hit.snippet, $sessionPicker.query) as segment}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}
         </div>
       {/each}
       {#if group.hits.length > 3}

@@ -407,13 +407,28 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 
     await openSessionSidebar(page, mobile);
     const searchBox = page.locator("#sessions .session-sidebar-search");
-    await searchBox.fill(NEEDLE);
+    const reversedKeywords = `${RUN} XYZZYKITE`;
+    await searchBox.fill(reversedKeywords);
+    await expect(searchBox).toHaveValue(reversedKeywords);
 
-    // our needle surfaces as a highlighted sidebar hit (it matches the user
-    // message and the assistant's echoed reply).
+    // Both keywords occur in each matching message as XYZZYKITE-<RUN>, but
+    // the query deliberately supplies them in reverse order. The UI must show
+    // the matching rows and highlight both keywords in message order.
     const hit = page.locator("#sessions .session-sidebar-hit").filter({ hasText: NEEDLE }).first();
     await expect(hit).toBeVisible({ timeout: 15000 });
-    await expect(hit.locator("mark").first()).toHaveText(NEEDLE);
+    await expect(hit.locator("mark")).toHaveText(["XYZZYKITE", String(RUN)]);
+
+    // Explicit OR returns the row even though its other unique operand is absent.
+    const orQuery = `XYZZYKITE OR ABSENT-${RUN}`;
+    await searchBox.fill(orQuery);
+    await expect(hit).toBeVisible({ timeout: 15000 });
+    await expect(hit.locator("mark")).toHaveText(["XYZZYKITE"]);
+
+    // A quoted query remains one contiguous, ordered phrase.
+    const quotedQuery = `"${NEEDLE}"`;
+    await searchBox.fill(quotedQuery);
+    await expect(hit).toBeVisible({ timeout: 15000 });
+    await expect(hit.locator("mark")).toHaveText([NEEDLE]);
 
     // clicking the hit switches to that session and flashes the matching message
     await hit.click();
