@@ -162,6 +162,30 @@ export function groupSessionFamilies(sessions) {
   return [...families.values()];
 }
 
+/** Groups sidebar entries beneath the entry for their root persisted session. */
+export function groupSessionEntriesByFamily(entries) {
+  const identityOf = (entry) => entry.session ? sessionIdentity(entry.session) : runnerSessionIdentity(entry.runner);
+  const byIdentity = new Map(entries.map((entry) => [identityOf(entry), entry]));
+  const rootOf = (input) => {
+    let entry = input;
+    const seen = new Set();
+    while (entry.session && parentSessionIdentity(entry.session) && byIdentity.has(parentSessionIdentity(entry.session)) && !seen.has(identityOf(entry))) {
+      seen.add(identityOf(entry));
+      entry = byIdentity.get(parentSessionIdentity(entry.session));
+    }
+    return entry;
+  };
+
+  const families = new Map();
+  for (const entry of entries) {
+    const root = rootOf(entry);
+    const rootIdentity = identityOf(root);
+    if (!families.has(rootIdentity)) families.set(rootIdentity, { entry: root, children: [] });
+    if (identityOf(entry) !== rootIdentity) families.get(rootIdentity).children.push(entry);
+  }
+  return [...families.values()];
+}
+
 /** Keeps each session family together in the active or inactive partition. */
 export function partitionSessionFamilies(sessions, isAlive) {
   const active = [];

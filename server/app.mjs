@@ -2,11 +2,15 @@
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createCandidateState, createDisposableScope, createRequestLifecycle, validateCatalogAccess,
+  validateDependencyConstruction, validateRepositoryAvailability,
+} from "./application-candidate.mjs?reload=1";
 // sibling modules are imported with a cache-busting query so hot reloads of
 // app.mjs pick up their current versions instead of stale cached modules
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
-export async function init(state) {
+export async function buildCandidate(stableState, { generation = Symbol("application-candidate") } = {}) {
   const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureHublotTunnelPool, acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry, stopHublotTunnelPool } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
@@ -39,8 +43,22 @@ export async function init(state) {
       "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
+
+  const scope = createDisposableScope({ generation });
+  const requests = createRequestLifecycle();
+  let application = null;
+  let activation = null;
+  let disposal = null;
+  let disposed = false;
+  async function activate() {
+    if (disposed) throw new Error("candidate application is disposed");
+    if (application) return application;
+    if (activation) return activation;
+    activation = (async () => {
+      const state = createCandidateState(stableState);
+      try {
   const { config, appStore } = state;
-  if (!appStore) throw new Error("stable core did not provide state.appStore");
+  const hydratedStore = validateRepositoryAvailability(appStore);
   const checkpointRepository = appStore.repositories.checkpoints;
 
   // Patch state created by an older stable core; migrations are idempotent.
@@ -55,13 +73,18 @@ export async function init(state) {
   }
 
   const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${statSync(join(__dirname, catalogModule)).mtimeMs}`;
-  if (state.sessionCatalogKey !== catalogKey) {
-    state.sessionCatalog?.close?.();
-    state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
-      ? (await import(bust(catalogModule))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
-      : jsonlSessionCatalog;
-    state.sessionCatalogKey = catalogKey;
+  state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
+    ? (await import(bust(catalogModule))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
+    : jsonlSessionCatalog;
+  state.sessionCatalogKey = catalogKey;
+  if (config.PERSISTENT_STORE === "sqlite") {
+    const candidateCatalog = state.sessionCatalog;
+    scope.defer(() => candidateCatalog.close?.());
   }
+  validateCatalogAccess(state.sessionCatalog, {
+    backend: config.PERSISTENT_STORE ?? "jsonl",
+    cwd: config.PI_DIR,
+  });
   state.sessionReferences = createSessionReferenceCodec({
     agentDir: config.PI_AGENT_DIR ?? dirname(SESSIONS_ROOT),
     jsonlRoot: SESSIONS_ROOT,
@@ -71,19 +94,28 @@ export async function init(state) {
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, closeSessionHublots: (id) => closeSessionHublots(state, id), deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
-    state.incompleteOperations = new Map(appStore.hydrate().incompleteOperations.map((entry) => [entry.id, entry]));
+    state.incompleteOperations = new Map(hydratedStore.incompleteOperations.map((entry) => [entry.id, entry]));
     state.sessionDeletionReconciled = true;
   }
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
-  const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
+  const runners = createRunnerManager(state, { appStore, ensureSessionOwner, guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
+  validateDependencyConstruction({
+    sessionReferences: { value: state.sessionReferences, methods: ["validate", "serialize"] },
+    sessionOperations: { value: state.sessionOperations, methods: ["deleteSession", "forkSession"] },
+    piProcesses: { value: state.piProcesses, methods: ["launch", "ephemeral"] },
+    runnerManager: { value: runners, methods: ["startRunner", "stopRunner", "runnerFromReq", "startPi", "stopPi"] },
+  });
+  const watchdogTimer = state.runnerWatchdogTimer;
+  const reaperTimer = state.runnerReaperTimer;
+  scope.defer(() => { clearInterval(reaperTimer); clearInterval(watchdogTimer); });
   const requestContext = createRequestContext(state);
   const {
     json, checkAuth,
@@ -121,7 +153,7 @@ export async function init(state) {
   const credentialService = createPiCredentialService({ config });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners });
-  state.oauthFlows ??= new Map(); const oauthFlowService = createPiOAuthFlowService({ registry: state.oauthFlows, credentialService, restartActiveRunners }); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });
+  state.oauthFlows ??= new Map(); const oauthFlowService = createPiOAuthFlowService({ registry: state.oauthFlows, credentialService, restartActiveRunners, setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); scope.defer(() => oauthFlowService.shutdown()); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
@@ -190,9 +222,37 @@ export async function init(state) {
       .then(() => ensureHublotTunnelPool(state))
       .catch((error) => console.error(`[oyster] initial tunnel pool failed: ${error.message}`));
   }
-  return {
+  application = {
     handleRequest, startPi, stopPi,
     stopTunnels: () => { stopHublotTunnelPool(state); state.hublotSupervisor?.stop(); return shutdownHublots(state); },
     stopRoutines: () => stopAllRoutines(state), stopOAuth: () => oauthFlowService.shutdown(),
   };
+  return application;
+      } catch (error) {
+        disposed = true;
+        await scope.dispose().catch((cleanupError) => { error.cleanupError = cleanupError; });
+        throw error;
+      }
+    })();
+    return activation;
+  }
+  return {
+    activate,
+    handleRequest: (...args) => {
+      if (!application) throw new Error("candidate application is not active");
+      return requests.handle(application.handleRequest, args);
+    },
+    dispose: () => {
+      disposed = true; return disposal ??= requests.retire().then(() => scope.dispose()).catch((error) => { disposal = null; throw error; });
+    },
+    generation, get startPi() { return application?.startPi; },
+    get stopPi() { return application?.stopPi; },
+    get stopTunnels() { return application?.stopTunnels; },
+    get stopRoutines() { return application?.stopRoutines; },
+    get stopOAuth() { return application?.stopOAuth; },
+  };
+}
+/** Compatibility entry point for embedders; stable core uses buildCandidate(). */
+export async function init(state) {
+  const candidate = await buildCandidate(state); await candidate.activate(); return candidate;
 }

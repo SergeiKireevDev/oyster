@@ -234,16 +234,79 @@ const APP_PATH = join(SERVER_DIR, "app.mjs");
 /** current request handler; swapped atomically on reload */
 let app = null;
 
+const RETIREMENT_MAX_ATTEMPTS = 3;
+const RETIREMENT_RETRY_DELAY_MS = 100;
+
+async function retireApplication(application, retiredReloadCount) {
+  for (let attempt = 1; attempt <= RETIREMENT_MAX_ATTEMPTS; attempt++) {
+    try {
+      await application.dispose();
+      if (attempt > 1) console.log(`[oyster] retired application cleanup recovered on attempt ${attempt}`);
+      return;
+    } catch (error) {
+      const willRetry = attempt < RETIREMENT_MAX_ATTEMPTS;
+      console.error(`[oyster] retired application cleanup failed (attempt ${attempt}/${RETIREMENT_MAX_ATTEMPTS}): ${error.message}`);
+      // SSE registration is behind the application's authenticated route. Do
+      // not put cleanup details on the unauthenticated health endpoint.
+      state.serverEvent({
+        type: "code_reload_cleanup_failed",
+        committed: true,
+        reloadCount: retiredReloadCount,
+        attempt,
+        maxAttempts: RETIREMENT_MAX_ATTEMPTS,
+        willRetry,
+        error: error.message,
+      });
+      if (!willRetry) {
+        console.error(`[oyster] retired application cleanup abandoned after ${RETIREMENT_MAX_ATTEMPTS} attempts; the new application remains active`);
+        return;
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, RETIREMENT_RETRY_DELAY_MS));
+    }
+  }
+}
+
+let nextApplicationGeneration = 0;
+
 async function loadApp() {
+  // Allocate before import so failed attempts cannot reuse a generation token.
+  const generation = ++nextApplicationGeneration;
   const url = `${pathToFileURL(APP_PATH)}?v=${statSync(APP_PATH).mtimeMs}`;
   const mod = await import(url);
-  const next = await mod.init(state); // { handleRequest }
-  app = next;
+  let candidate = null;
+  try {
+    // init() remains supported for small embedders and older application
+    // modules. Transactional applications expose buildCandidate().
+    candidate = typeof mod.buildCandidate === "function"
+      ? await mod.buildCandidate(state, { generation })
+      : await mod.init(state);
+    if (!candidate || typeof candidate.handleRequest !== "function") {
+      throw new Error("candidate application is missing handleRequest()");
+    }
+    if (typeof candidate.activate === "function") await candidate.activate();
+    if (typeof candidate.dispose !== "function" && typeof mod.buildCandidate === "function") {
+      throw new Error("candidate application is missing dispose()");
+    }
+  } catch (error) {
+    // Nothing active is touched before the single assignment below. A failed
+    // activated candidate owns and cleans only its staged resources.
+    if (candidate?.dispose) {
+      try { await candidate.dispose(); } catch (cleanupError) { error.cleanupError = cleanupError; }
+    }
+    throw error;
+  }
+
+  const previous = app;
+  app = candidate; // commit point: synchronous, non-throwing handler swap
   state.reloadCount++;
   console.log(`[oyster] app.mjs loaded (reload #${state.reloadCount})`);
   if (state.reloadCount > 1) {
     state.serverEvent({ type: "code_reloaded", reloadCount: state.reloadCount });
   }
+
+  // Retirement is deliberately post-commit. New requests can only enter the
+  // candidate, while its dispose() drains requests already admitted by old.
+  if (previous?.dispose) await retireApplication(previous, state.reloadCount);
 }
 
 let reloadTimer = null;
@@ -306,8 +369,10 @@ function watchApp() {
 // ---------------------------------------------------------------- server
 
 const server = http.createServer((req, res) => {
-  // delegate to whatever version of app.mjs is current
-  app.handleRequest(req, res).catch((e) => {
+  // Read once: this request belongs entirely to the selected generation even
+  // when a reload commits before its handler settles.
+  const selectedApplication = app;
+  selectedApplication.handleRequest(req, res).catch((e) => {
     console.error(`[oyster] handler error: ${e.stack ?? e}`);
     if (!res.headersSent) {
       res.writeHead(500, { "content-type": "application/json" });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   groupRunnersByCwd,
   groupSessionCwdsByHierarchy,
+  groupSessionEntriesByFamily,
   groupSessionSearchByHierarchy,
   groupSessionsByCwd,
   groupSessionFamilies,
@@ -20,6 +21,17 @@ test("session sidebar groups runners by cwd in stable activity order", () => {
   assert.deepEqual(groupRunnersByCwd(runners), [
     { cwd: "/work/one", runners: [runners[0], runners[2]] },
     { cwd: "/work/two", runners: [runners[1]] },
+  ]);
+});
+
+test("session sidebar nests persisted child-session entries beneath their launcher", () => {
+  const root = { session: { sessionKey: "root", name: "Loop: plan.md" }, runner: null };
+  const child = { session: { sessionKey: "child", parentSessionKey: "root", name: "Loop iteration 1" }, runner: null };
+  const standalone = { session: null, runner: { id: "runner", sessionKey: "standalone" } };
+
+  assert.deepEqual(groupSessionEntriesByFamily([child, standalone, root]), [
+    { entry: root, children: [child] },
+    { entry: standalone, children: [] },
   ]);
 });
 
