@@ -11,6 +11,7 @@ async function copyStableServer(root) {
   await mkdir(join(root, "server", "persistence"), { recursive: true });
   await Promise.all([
     copyFile(new URL("../server/server.mjs", import.meta.url), join(root, "server", "server.mjs")),
+    copyFile(new URL("../server/reload-manifest.mjs", import.meta.url), join(root, "server", "reload-manifest.mjs")),
     copyFile(new URL("../server/persistence/appStore.mjs", import.meta.url), join(root, "server", "persistence", "appStore.mjs")),
     copyFile(new URL("../server/persistence/appSettings.mjs", import.meta.url), join(root, "server", "persistence", "appSettings.mjs")),
     copyFile(new URL("../server/persistence/stateInventory.mjs", import.meta.url), join(root, "server", "persistence", "stateInventory.mjs")),
@@ -323,11 +324,11 @@ test("editing a route factory reloads its response without disconnecting SSE", a
   const port = await availablePort();
   await mkdir(join(root, "server", "http", "routes"), { recursive: true });
   await copyStableServer(root);
-  await writeFile(join(root, "server", "http", "routes", "value.mjs"), 'export const value = "before";\n');
+  await writeFile(join(root, "server", "http", "routes", "runnerRoutes.mjs"), 'export const value = "before";\n');
   await writeFile(join(root, "server", "app.mjs"), `
 import { statSync } from "node:fs";
 export async function init(state) {
-  const path = new URL("./http/routes/value.mjs", import.meta.url);
+  const path = new URL("./http/routes/runnerRoutes.mjs", import.meta.url);
   const route = await import(\`\${path}?v=\${statSync(path).mtimeMs}\`);
   return {
     async handleRequest(req, res) {
@@ -353,8 +354,8 @@ export async function init(state) {
   await new Promise((resolve) => setTimeout(resolve, 20));
   const replacement = join(root, "server", "http", "routes", "replacement.mjs");
   await writeFile(replacement, 'export const value = "after";\n');
-  await rename(replacement, join(root, "server", "http", "routes", "value.mjs"));
-  await waitForOutput(child, "hot-reloaded app.mjs after http/routes/value.mjs");
+  await rename(replacement, join(root, "server", "http", "routes", "runnerRoutes.mjs"));
+  await waitForOutput(child, "hot-reloaded app.mjs after http/routes/runnerRoutes.mjs");
   const response = await fetch(`http://127.0.0.1:${port}/`);
   assert.deepEqual(await response.json(), { value: "after" });
   assert.equal((await eventPromise).type, "code_reloaded");
