@@ -2676,6 +2676,12 @@ details.block.activity-step > .body {
   border-radius: 13px;
   transition: border-color .14s ease, background .14s ease, box-shadow .14s ease, transform .14s ease;
 }
+#cmdPalette.command .cmd-desc {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
 #cmdPalette.command .cmd-row:last-child { border-bottom: 1px solid rgba(255,255,255,.13); }
 #cmdPalette.command .cmd-ico {
   display: grid;

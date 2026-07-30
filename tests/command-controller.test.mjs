@@ -48,6 +48,17 @@ test("command palette position opens upward when there is room", () => {
   assert.equal(patch.bottom, "308px");
 });
 
+test("command palette uses the larger viewport side and remains fully on screen", () => {
+  const patch = commandPalettePosition(
+    { left: -12, width: 360, top: 260, bottom: 300 },
+    { innerWidth: 390, innerHeight: 320 },
+    { maxWidth: 860, minWidth: 280, maxHeight: Number.POSITIVE_INFINITY },
+  );
+  assert.deepEqual(patch, {
+    left: "8px", width: "360px", top: "auto", bottom: "68px", maxHeight: "244px",
+  });
+});
+
 test("command palette input controller attaches and detaches input and blur listeners", () => {
   const listeners = new Map();
   const removed = [];
