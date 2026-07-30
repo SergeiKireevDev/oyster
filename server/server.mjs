@@ -29,6 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { openAppStore } from "./persistence/appStore.mjs";
 import { createAppSettings } from "./persistence/appSettings.mjs";
 import { assertStableStateInventory, createStableEphemeralState } from "./persistence/stateInventory.mjs";
+import { RELOADABLE_SERVER_MODULES } from "./reload-manifest.mjs";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SERVER_DIR, "..");
@@ -264,16 +265,18 @@ function watchApp() {
     }, 150);
   };
 
-  watch(SERVER_DIR, (_event, filename) => {
-    if (filename === "app.mjs") scheduleReload("server/app.mjs");
-  });
-
-  const httpDir = join(SERVER_DIR, "http");
-  const routeDir = join(httpDir, "routes");
-  for (const directory of [httpDir, routeDir]) {
+  // The manifest is the single claim about what can participate in a
+  // transactional candidate. Watch each containing directory once and ignore
+  // unrelated files instead of maintaining ad hoc watcher lists here.
+  const reloadable = new Set(RELOADABLE_SERVER_MODULES);
+  const reloadDirectories = new Set(RELOADABLE_SERVER_MODULES.map((module) => dirname(module)));
+  for (const relativeDirectory of reloadDirectories) {
+    const directory = relativeDirectory === "." ? SERVER_DIR : join(SERVER_DIR, relativeDirectory);
     if (!existsSync(directory)) continue;
     watch(directory, (_event, filename) => {
-      if (filename?.endsWith(".mjs")) scheduleReload(`http/${directory === routeDir ? "routes/" : ""}${filename}`);
+      if (!filename) return;
+      const relativeModule = relativeDirectory === "." ? String(filename) : join(relativeDirectory, String(filename));
+      if (reloadable.has(relativeModule)) scheduleReload(relativeModule);
     });
   }
 
@@ -331,7 +334,7 @@ server.listen(config.PORT, config.HOST, () => {
     console.log(`[oyster] auth token: ${config.TOKEN}`);
     console.log(`[oyster] open: http://localhost:${config.PORT}/#token=${config.TOKEN}`);
   }
-  console.log(`[oyster] hot reload: watching server/app.mjs, server/http/, dist/`);
+  console.log(`[oyster] hot reload: watching ${RELOADABLE_SERVER_MODULES.length} server modules and dist/`);
   app.startPi();
 });
 
