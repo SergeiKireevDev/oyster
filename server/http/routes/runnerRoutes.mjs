@@ -10,6 +10,7 @@ export function createRunnerRoutes({
   requestContext,
   sendToRunner,
   stopRunner,
+  stopRunnerFamily = stopRunner,
   spawnRunner,
   observeRunner,
   runnerInfo,
@@ -94,7 +95,7 @@ export function createRunnerRoutes({
         json(res, 404, { error: "no such runner" });
         return;
       }
-      stopRunner(runner);
+      stopRunnerFamily(runner);
       json(res, 200, { stopped: runner.id });
     },
 
@@ -190,11 +191,13 @@ export function createRunnerRoutes({
         if (!res.writableEnded) finish({ ok: false, output: assistantOutput, errorLog: "Subagent request was cancelled." });
       };
       res.on?.("close", cancel);
+      runner.subagentStatus = "running";
       if (!sendToRunner(runner, { type: "prompt", message: prompt })) {
         finish({ ok: false, output: "", errorLog: "Subagent process was unavailable." });
       }
       const result = await completion;
       res.off?.("close", cancel);
+      runner.subagentStatus = result.ok ? "succeeded" : "failed";
       stopRunner(runner);
       if (!res.writableEnded && !res.destroyed) {
         json(res, 200, { ...result, runner: runnerInfo(runner) });

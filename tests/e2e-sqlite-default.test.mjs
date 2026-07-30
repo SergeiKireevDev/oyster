@@ -7,6 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 test("every Playwright scenario defaults to the local SQLite image", () => {
   const reset = source("tests/e2e/lib/reset.js");
   const setup = source("tests/e2e/global-setup.js");
+  const runner = source("scripts/run-e2e-tests.sh");
 
   assert.match(reset, /process\.env\.OYSTER_IMAGE \?\? "oyster:sqlite"/);
   assert.match(reset, /selectedStore = "sqlite"/);
@@ -14,6 +15,11 @@ test("every Playwright scenario defaults to the local SQLite image", () => {
   assert.match(setup, /"Dockerfile\.local-pi"/);
   assert.match(setup, /`pi-source=\$\{PI_SOURCE\}`/);
   assert.doesNotMatch(setup, /oyster:published|published JSONL/);
+  assert.match(runner, /E2E_IMAGE="\$\{OYSTER_IMAGE:-oyster:sqlite\}"/);
+  assert.match(runner, /docker build/);
+  assert.match(runner, /--file "\$ROOT_DIR\/Dockerfile\.local-pi"/);
+  assert.match(runner, /--build-context "pi-source=\$PI_SOURCE"/);
+  assert.match(runner, /--tag "\$E2E_IMAGE"/);
 
   const workflowUrl = new URL("../.github/workflows/ci.yml", import.meta.url);
   if (existsSync(workflowUrl)) {

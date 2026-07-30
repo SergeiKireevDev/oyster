@@ -415,6 +415,8 @@
   }
 
   $: selectedMethod = methodsFor(selectedProvider).find((method) => method.id === selectedMethodId) || primaryMethod(selectedProvider);
+  $: advancedMethods = methodsFor(selectedProvider).filter((method) => method.advanced);
+  $: handoffExpiryLabel = handoffFlow ? new Date(handoffFlow.expiresAt).toLocaleTimeString() : "";
   $: credentialFields = selectedMethod?.fields || [];
   $: googleComputeConsoleUrl = projectId ? `https://console.cloud.google.com/apis/library/compute.googleapis.com?project=${encodeURIComponent(projectId)}` : "https://console.cloud.google.com/apis/library/compute.googleapis.com";
   $: availableSizes = options.sizes.filter((item) => sizeAvailableInRegion(item, region));
@@ -524,7 +526,7 @@
         {#if handoffFlow}
           <p>Authenticate to this Hub on the other device, then open this one-time link:</p>
           <div><input value={handoffFlow.url} readonly aria-label="One-time device handoff link" /><button type="button" onclick={copyHandoffUrl}>Copy</button></div>
-          <small>Expires at {new Date(handoffFlow.expiresAt).toLocaleTimeString()}.</small>
+          <small>Expires at {handoffExpiryLabel}.</small>
           <button type="button" class="cloud-handoff-cancel" onclick={cancelHandoff}>Cancel handoff</button>
         {/if}
       </div>
@@ -534,13 +536,13 @@
       <button type="button" class="cloud-handoff-cancel" onclick={cancelHandoff}>Cancel device handoff</button>
     {/if}
 
-    {#if methodsFor(selectedProvider).some((method) => method.advanced)}
+    {#if advancedMethods.length}
       <button class="cloud-advanced-toggle" type="button" aria-expanded={advancedMethods} onclick={() => { advancedMethods = !advancedMethods; }}>
         Advanced connection options
       </button>
       {#if advancedMethods}
         <div class="cloud-method-list" role="list">
-          {#each methodsFor(selectedProvider).filter((method) => method.advanced) as method (method.id)}
+          {#each advancedMethods as method (method.id)}
             <button type="button" class:active={selectedMethod?.id === method.id} onclick={() => chooseMethod(method.id)}>{method.label}</button>
           {/each}
         </div>

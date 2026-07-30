@@ -37,12 +37,15 @@ test("component browser and imperative listener inventory is explicit", () => {
 });
 
 test("Svelte-managed document and element integrations stay on the approved list", () => {
-  assert.deepEqual(locations(/<svelte:(?:document|window)\b|\buse:[\w]+/), [
-    "components/CredentialsModal.svelte:204:use:trackOAuthInput",
-    "components/FolderBrowserModal.svelte:50:use:focusOnMount",
-    "components/HublotManagerModal.svelte:18:use:commandPalette",
-    "components/Menu.svelte:24:<svelte:document onclick={close} />",
-    "components/OptionPickerModal.svelte:75:<svelte:document onkeydowncapture={onKey} />",
-    "components/SessionPickerModal.svelte:116:use:focusOnMount",
+  const integrations = locations(/<svelte:(?:document|window)\b|\buse:[\w]+/)
+    .map((location) => location.replace(/:\d+:/, ":"));
+
+  assert.deepEqual(integrations, [
+    "components/CredentialsModal.svelte:use:trackOAuthInput",
+    "components/FolderBrowserModal.svelte:use:focusOnMount",
+    "components/HublotManagerModal.svelte:use:commandPalette",
+    "components/Menu.svelte:<svelte:document onclick={close} />",
+    "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={onKey} />",
+    "components/SessionPickerModal.svelte:use:focusOnMount",
   ]);
 });

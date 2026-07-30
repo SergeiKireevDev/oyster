@@ -53,7 +53,12 @@
   let now = Date.now();
   let workPeriod;
 
+  const isCurrentTurnActivity = (item) => $appSession.busy && item.id === $latestTurnActivityId;
+
   $: workPeriod = latestTranscriptWorkPeriod($transcriptItems, $appSession.workTimerResetAt);
+  $: workDuration = workPeriod
+    ? formatWorkDuration(($appSession.busy ? now : workPeriod.endedAt) - workPeriod.startedAt)
+    : "";
 
   onMount(() => {
     const timer = setInterval(() => { if ($appSession.busy) now = Date.now(); }, 1000);
@@ -83,8 +88,8 @@
         onCheckpoint={item.onCheckpoint}
         onRollback={item.onRollback}
         onRoot={item.setRoot}
-        activityActive={$appSession.busy && item.id === $latestTurnActivityId}
-        activityUnsettled={$appSession.busy && item.id === $latestTurnActivityId}
+        activityActive={isCurrentTurnActivity(item)}
+        activityUnsettled={isCurrentTurnActivity(item)}
         activityBlocks={$turnActivityGroups.get(item.id) ?? []}
       />
     {/if}
@@ -92,7 +97,7 @@
   {#if workPeriod}
     <div class="work-duration" aria-live="off">
       {#if $appSession.busy && !$appSession.compacting}<span class="spin" aria-hidden="true"></span>{/if}
-      <span>worked for {formatWorkDuration(($appSession.busy ? now : workPeriod.endedAt) - workPeriod.startedAt)}</span>
+      <span>worked for {workDuration}</span>
     </div>
   {/if}
   {#if $appSession.compacting}

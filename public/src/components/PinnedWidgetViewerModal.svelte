@@ -19,6 +19,7 @@
   $: htmlSource = widget.id ? pinnedWidgetHtmlUrl(widget.id) : "";
   $: download = widget.path ? browserActions.fileDownload(null, widget.path) : null;
   $: isHtml = String(widget.mimeType ?? "").startsWith("text/html");
+  $: copyRawLabel = copyRawState === "copied" ? "Copied" : copyRawState === "failed" ? "Copy failed" : "Copy raw";
   let copyRawState = "idle";
   let copyRawTimer;
 
@@ -36,7 +37,7 @@
     <div class="pinned-markdown-toolbar">
       <span>Markdown preview</span>
       <button type="button" class="chip" onclick={copyRawMarkdown} aria-live="polite">
-        {copyRawState === "copied" ? "Copied" : copyRawState === "failed" ? "Copy failed" : "Copy raw"}
+        {copyRawLabel}
       </button>
     </div>
   {/if}

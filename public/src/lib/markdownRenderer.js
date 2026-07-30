@@ -99,7 +99,10 @@ function inlineMd(s) {
   return rendered;
 }
 
-function renderMarkdown(src) {
+// Security boundary for every Svelte {@html} use. User/model/file input is
+// escaped before supported markup is generated; links are restricted to HTTP(S),
+// and KaTeX runs with trust disabled.
+function renderSanitizedMarkdown(src) {
   const lines = src.split("\n");
   const out = [];
   let i = 0;
@@ -199,4 +202,4 @@ function renderMarkdown(src) {
 // ------------------------------------------------------------ message rendering
 
 
-export { renderMarkdown };
+export { renderSanitizedMarkdown };

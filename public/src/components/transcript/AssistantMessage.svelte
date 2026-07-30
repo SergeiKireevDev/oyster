@@ -2,6 +2,7 @@
   import { writable } from "svelte/store";
   import ActivityStack from "./ActivityStack.svelte";
   import AssistantPartActions from "./AssistantPartActions.svelte";
+  import SanitizedMarkdown from "../SanitizedMarkdown.svelte";
   import { checkpointMarker } from "../../stores/checkpointMarker.js";
   import { checkpointRestores } from "../../stores/checkpointRestores.js";
 
@@ -41,7 +42,7 @@
   {#each displayBlocks as block, index (`${block.type}:${index}:${block.key ?? ""}`)}
     <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {#if block.type === "text"}
-        <div class="md">{@html block.html}</div>
+        <SanitizedMarkdown className="md" source={block.text} />
       {:else if block.type === "activityStack"}
         <ActivityStack blocks={block.blocks} active={activityActive} unsettled={activityUnsettled} {thinkingPreview} />
       {/if}

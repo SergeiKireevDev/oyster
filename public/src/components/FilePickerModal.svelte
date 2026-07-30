@@ -17,7 +17,12 @@
   const useFilePickerFolder = () => uiActions.invoke(FILE_PICKER_USE_FOLDER_ACTION);
   const cancelFilePicker = () => uiActions.invoke(FILE_PICKER_CANCEL_ACTION);
 
+  const toggleHiddenFiles = () => updateFilePicker({ showHidden: !$filePicker.showHidden });
+
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
+  $: directories = visibleBrowserEntries($filePicker.dirs, $filePicker.showHidden);
+  $: folderIsEmpty = !directories.length && !files.length;
+  $: hiddenFilesLabel = $filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
 </script>
 
 {#if $filePicker.loading}
@@ -39,13 +44,13 @@
       {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
     </button>
   {/each}
-  {#if !visibleBrowserEntries($filePicker.dirs, $filePicker.showHidden).length && !files.length}
+  {#if folderIsEmpty}
     <div class="m-path">(empty folder)</div>
   {/if}
 {/if}
 
 <div class="m-actions" id="mActions">
   <button class="chip folder-action" title="Insert the current folder path" onclick={useFilePickerFolder}><FolderIcon size={14} /> Use this folder</button>
-  <button class="chip toggle-hidden" onclick={() => updateFilePicker({ showHidden: !$filePicker.showHidden })}>{$filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
+  <button class="chip toggle-hidden" onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
   <button class="chip" data-modal-cancel onclick={cancelFilePicker}>Cancel</button>
 </div>

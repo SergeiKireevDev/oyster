@@ -1,12 +1,8 @@
 <script>
-  import { renderMarkdown } from "../lib/markdownRenderer.js";
+  import SanitizedMarkdown from "./SanitizedMarkdown.svelte";
 
   export let source = "";
   export let label = "Markdown artifact";
-
-  $: rendered = renderMarkdown(String(source ?? ""));
 </script>
 
-<article class="pinned-markdown-viewer" aria-label={label}>
-  {@html rendered}
-</article>
+<SanitizedMarkdown element="article" className="pinned-markdown-viewer" {source} {label} />

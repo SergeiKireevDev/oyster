@@ -61,7 +61,7 @@ const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
-  "titleProcess", "titleSessionId", "initialArgs", "eventListeners",
+  "titleProcess", "titleSessionId", "initialArgs", "eventListeners", "subagentStatus",
 ]);
 export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
 
@@ -83,6 +83,7 @@ function initializeRunnerRuntime(descriptor) {
     titleSessionId: null,
     initialArgs: Array.isArray(descriptor.initialArgs) ? [...descriptor.initialArgs] : [],
     eventListeners: descriptor.eventListeners instanceof Set ? descriptor.eventListeners : new Set(),
+    subagentStatus: descriptor.subagentStatus ?? null,
   };
 }
 
@@ -100,6 +101,7 @@ export function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = state.appStore, now = () => new Date().toISOString(),
   summarizeTitle = summarizeSessionTitle,
+  unarchiveSession = null,
   guardCallback = (callback) => callback,
 } = {}) {
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
@@ -194,6 +196,7 @@ export function createRunnerManager(state, {
       sessionName: r.sessionName,
       busy: r.busy,
       alive: !!r.proc,
+      ...(r.subagentStatus ? { subagentStatus: r.subagentStatus } : {}),
     };
   }
 
@@ -531,15 +534,31 @@ export function createRunnerManager(state, {
     runnersChanged(runner);
   }
 
+  function unarchivePromptedSession(runner) {
+    if (!runner.sessionRef) return;
+    if (unarchiveSession) {
+      unarchiveSession(runner.sessionRef);
+      return;
+    }
+    const repository = appStore?.repositories?.sessions;
+    const owner = repository?.find({
+      backend: runner.sessionRef.backend,
+      sessionId: runner.sessionRef.id,
+      storagePath: runner.sessionRef.storagePath ?? null,
+    });
+    if (owner?.archived) repository.setArchived(owner.id, false);
+  }
+
   function sendToRunner(runner, obj, { autostart = true } = {}) {
     if (!runner.proc && autostart) startRunner(runner);
     if (!runner.proc || !runner.proc.stdin.writable) return false;
     if (runner.resumeId) {
       // a session resume is in flight; deliver after it completes
       (runner.resumeQueue ??= []).push(obj);
-      return true;
+    } else {
+      runner.proc.stdin.write(JSON.stringify(obj) + "\n");
     }
-    runner.proc.stdin.write(JSON.stringify(obj) + "\n");
+    if (obj.type === "prompt") unarchivePromptedSession(runner);
     return true;
   }
 

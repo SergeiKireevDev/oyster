@@ -1,12 +1,12 @@
 <script>
   import { onDestroy, onMount } from "svelte";
+  import SearchHitSnippet from "./SearchHitSnippet.svelte";
   import { appSession } from "../stores/appSession.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
-  import { highlightSearchSnippet } from "../lib/sessionSearchHighlight.js";
   import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { openModal } from "../stores/modal.js";
   import { workspaceChanges } from "../stores/workspaces.js";
@@ -388,6 +388,53 @@
     else next.delete(key);
     expandedCwds = next;
   }
+  let expandedSessionFamilies = new Set();
+  function entryIdentity(entry) {
+    return entry.session ? sessionIdentity(entry.session) : runnerSessionIdentity(entry.runner);
+  }
+  function toggleSessionFamily(familyKey) {
+    if (!familyKey) return;
+    const next = new Set(expandedSessionFamilies);
+    if (next.has(familyKey)) next.delete(familyKey); else next.add(familyKey);
+    expandedSessionFamilies = next;
+  }
+  function selectSessionEntry(session, runner, familyKey = null) {
+    if (familyKey) {
+      toggleSessionFamily(familyKey);
+      return;
+    }
+    return runner ? switchRunner(runner.id) : openSavedSession(session);
+  }
+  function isLoopFamily(family) {
+    return family.children.some((entry) => /^Loop iteration \d+:/i.test(label(entry.session, entry.runner)));
+  }
+  function loopEntries(entries) {
+    return [...entries].sort((left, right) => {
+      const iteration = (entry) => Number(label(entry.session, entry.runner).match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
+      return iteration(left) - iteration(right);
+    });
+  }
+  function loopEntryStatus(entry) {
+    if (entry.runner?.alive) return "running";
+    if (["succeeded", "failed"].includes(entry.runner?.subagentStatus)) return entry.runner.subagentStatus;
+    return "succeeded";
+  }
+  function loopStatusLabel(status) {
+    return status === "running" ? "Running" : status === "failed" ? "Failed" : "Succeeded";
+  }
+  function loopFamilySummary(family) {
+    const statuses = family.children.map(loopEntryStatus);
+    const running = statuses.filter((status) => status === "running").length;
+    const failed = statuses.filter((status) => status === "failed").length;
+    const complete = statuses.length - running;
+    if (running || family.entry.runner?.busy) return { status: "running", label: `${complete}/${statuses.length}` };
+    if (failed) return { status: "failed", label: `${failed} failed` };
+    return { status: "succeeded", label: `${complete}/${statuses.length}` };
+  }
+  function familyIsCurrent(family) {
+    return family.children.some((entry) => entry.runner?.id === $appSession.currentRunner || (!entry.runner && entry.session?.id === $sessionPicker.currentId));
+  }
+
   let runnerSignature = "";
   $: {
     const nextSignature = sidebarRunners.map((runner) => [
@@ -436,19 +483,23 @@
   }
 </script>
 
-{#snippet SessionEntry({ entry, archived = false, cwd = "" })}
+{#snippet SessionEntry({ entry, archived = false, cwd = "", familyKey = null, timelineStatus = null })}
   {@const session = entry.session}
   {@const runner = entry.runner}
   {@const current = runner?.id === $appSession.currentRunner || (!runner && session?.id === $sessionPicker.currentId)}
-  <div class="session-sidebar-entry" class:current>
+  <div class="session-sidebar-entry" class:current class:session-family-parent={Boolean(familyKey)} class:session-timeline-entry={Boolean(timelineStatus)} class:status-running={timelineStatus === "running"} class:status-succeeded={timelineStatus === "succeeded"} class:status-failed={timelineStatus === "failed"}>
     <button
       type="button"
       class:busy={runner?.busy}
       class="session-sidebar-row"
-      title={`${label(session, runner)}\n${abbreviateHomePath(cwd)}`}
-      onclick={() => runner ? switchRunner(runner.id) : openSavedSession(session)}
+      title={`${label(session, runner)}\n${timelineStatus ? `${loopStatusLabel(timelineStatus)}\n` : ""}${abbreviateHomePath(cwd)}`}
+      onclick={() => selectSessionEntry(session, runner, familyKey)}
     >
-      <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
+      {#if timelineStatus}
+        <span class="session-timeline-marker" aria-label={loopStatusLabel(timelineStatus)}></span>
+      {:else}
+        <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
+      {/if}
       <span class="session-sidebar-copy">
         <span class="session-sidebar-name">{label(session, runner)}</span>
         {#if sessionMeta(session, runner)}
@@ -472,15 +523,58 @@
   </div>
 {/snippet}
 
+{#snippet LoopFamilyHeader({ family, familyKey, archived = false })}
+  {@const session = family.entry.session}
+  {@const runner = family.entry.runner}
+  {@const summary = loopFamilySummary(family)}
+  {@const expanded = expandedSessionFamilies.has(familyKey) || familyIsCurrent(family)}
+  <div class={`session-loop-card status-${summary.status}`}>
+    <button
+      type="button"
+      class="session-loop-header"
+      aria-expanded={expanded}
+      title={`${label(session, runner)}\n${family.children.length} loop iterations`}
+      onclick={() => toggleSessionFamily(familyKey)}
+    >
+      <span class="session-loop-icon" aria-hidden="true">↻</span>
+      <span class="session-loop-copy">
+        <span class="session-loop-kicker">Loop · {family.children.length} iteration{family.children.length === 1 ? "" : "s"}</span>
+        <span class="session-sidebar-name">{label(session, runner)}</span>
+      </span>
+      <span class={`session-loop-progress status-${summary.status}`}>{summary.label}</span>
+      <span class="session-loop-chevron" aria-hidden="true"></span>
+    </button>
+    {#if runner?.alive}
+      <button type="button" class="session-sidebar-action stop" title="Stop this loop" aria-label="Stop this loop" onclick={() => stopSession(runner)}></button>
+    {:else if archived && session}
+      <button type="button" class="session-sidebar-action delete" title="Delete archived loop" aria-label="Delete archived loop" onclick={() => deleteSession(session)}>✕</button>
+    {:else if session}
+      <button type="button" class="session-sidebar-lifecycle archive" title="Archive loop" aria-label="Archive loop" onclick={() => archiveSession(session)}></button>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet SessionRows({ entries, archived = false, cwd = "" })}
   <div class="session-sidebar-workspace-sessions">
-    {#each groupSessionEntriesByFamily(entries) as family (family.entry.session ? sessionIdentity(family.entry.session) : family.entry.runner.id)}
-      {@render SessionEntry({ entry: family.entry, archived, cwd })}
-      {#if family.children.length}
-        <details class="session-sidebar-child-sessions" open={family.children.some((entry) => entry.runner?.id === $appSession.currentRunner || (!entry.runner && entry.session?.id === $sessionPicker.currentId))}>
+    {#each groupSessionEntriesByFamily(entries) as family (entryIdentity(family.entry))}
+      {@const familyKey = entryIdentity(family.entry)}
+      {@const loopFamily = isLoopFamily(family)}
+      {#if loopFamily}
+        {@render LoopFamilyHeader({ family, familyKey, archived })}
+      {:else}
+        {@render SessionEntry({ entry: family.entry, archived, cwd })}
+      {/if}
+      {#if loopFamily && (expandedSessionFamilies.has(familyKey) || familyIsCurrent(family))}
+        <div class="session-sidebar-loop-timeline" aria-label={`${family.children.length} loop iteration${family.children.length === 1 ? "" : "s"}`}>
+          {#each loopEntries(family.children) as entry (entryIdentity(entry))}
+            {@render SessionEntry({ entry, archived, cwd, timelineStatus: loopEntryStatus(entry) })}
+          {/each}
+        </div>
+      {:else if family.children.length && !loopFamily}
+        <details class="session-sidebar-child-sessions" open={familyIsCurrent(family)}>
           <summary>{family.children.length} child session{family.children.length === 1 ? "" : "s"}</summary>
           <div class="session-sidebar-child-list">
-            {#each family.children as entry (entry.session ? sessionIdentity(entry.session) : entry.runner.id)}
+            {#each family.children as entry (entryIdentity(entry))}
               {@render SessionEntry({ entry, archived, cwd })}
             {/each}
           </div>
@@ -525,8 +619,13 @@
             onclick={() => openSearchHit(group, hit)}
           >
             <span class="session-sidebar-snippet">
-              <span class="s-role">{hit.role === "user" ? "you" : hit.role === "assistant" ? "ai" : hit.role === "toolResult" ? "tool" : hit.kind}</span>
-              <span class="session-sidebar-snippet-copy">{#each highlightSearchSnippet({ before: snippetBefore(hit.snippet.before), match: hit.snippet.match, after: snippetAfter(hit.snippet.after) }, $sessionPicker.query) as segment}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}</span>
+              <SearchHitSnippet
+                role={hit.role}
+                kind={hit.kind}
+                snippet={{ before: snippetBefore(hit.snippet.before), match: hit.snippet.match, after: snippetAfter(hit.snippet.after) }}
+                query={$sessionPicker.query}
+                copyClass="session-sidebar-snippet-copy"
+              />
             </span>
           </button>
         {/each}

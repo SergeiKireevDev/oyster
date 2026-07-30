@@ -54,21 +54,24 @@ test("session query partitions stopped sessions by two-day head age", () => {
   const old = { sessionKey: "old", cwd: "/work", modifiedAt: "2026-07-15T11:59:59.000Z" };
   const oldButAlive = { sessionKey: "alive", cwd: "/work", modifiedAt: "2026-07-01T00:00:00.000Z" };
   const manuallyArchived = { sessionKey: "manual", cwd: "/work", modifiedAt: "2026-07-17T11:59:00.000Z", archived: true };
+  const archivedWhileAlive = { sessionKey: "archived-alive", cwd: "/work", modifiedAt: "2026-07-17T11:59:00.000Z", archived: true };
   const aliveRunner = { id: "runner", alive: true };
   const groups = [{ cwd: "/work", entries: [
     { session: recent, runner: null },
     { session: old, runner: null },
     { session: oldButAlive, runner: aliveRunner },
     { session: manuallyArchived, runner: null },
+    { session: archivedWhileAlive, runner: aliveRunner },
   ] }];
 
   assert.equal(isSessionEntryArchived(groups[0].entries[0], now), false);
   assert.equal(isSessionEntryArchived(groups[0].entries[1], now), true);
   assert.equal(isSessionEntryArchived(groups[0].entries[2], now), false);
   assert.equal(isSessionEntryArchived(groups[0].entries[3], now), true);
+  assert.equal(isSessionEntryArchived(groups[0].entries[4], now), true);
   assert.deepEqual(partitionSessionGroupsByArchive(groups, now), [
     { cwd: "/work", entries: [groups[0].entries[0], groups[0].entries[2]], archived: false },
-    { cwd: "/work", entries: [groups[0].entries[1], groups[0].entries[3]], archived: true, firstArchived: true },
+    { cwd: "/work", entries: [groups[0].entries[1], groups[0].entries[3], groups[0].entries[4]], archived: true, firstArchived: true },
   ]);
 });
 

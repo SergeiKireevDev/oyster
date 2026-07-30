@@ -17,7 +17,10 @@ COPY --from=pi-source /scripts ./scripts
 COPY --from=pi-source /packages ./packages
 # The AI package's generated TypeScript imports ignored JSON model data, so its
 # package build must hydrate that data before compiling a clean source checkout.
-RUN npm ci --ignore-scripts \
+# Remove copied model data first: Docker OverlayFS can keep that directory in a
+# lower layer, which makes the generator's atomic rename fail with EXDEV.
+RUN rm -rf packages/ai/src/providers/data \
+    && npm ci --ignore-scripts \
     && npx --no-install tsgo -p packages/tui/tsconfig.build.json \
     && npm run build --workspace packages/ai \
     && npm run build --workspace packages/agent \

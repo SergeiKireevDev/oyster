@@ -33,7 +33,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const [
     { createRequestContext }, { createRouteTable },
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
-    { createSessionRoutes }, { createFileRoutes }, { createWorkdirRoutes },
+    { createSessionRoutes, setSessionFamilyArchived, stopSessionFamilyRunners }, { createFileRoutes }, { createWorkdirRoutes },
     { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
     { createCredentialRoutes }, { createOAuthRoutes },
   ] = await Promise.all([
@@ -101,7 +101,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
-  const runners = createRunnerManager(state, { appStore, ensureSessionOwner, guardCallback: scope.guard });
+  const runners = createRunnerManager(state, { appStore, ensureSessionOwner, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
@@ -135,8 +135,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
   const runnerRoutes = createRunnerRoutes({
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
-    sendToRunner, stopRunner, spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner,
-    sessionReferenceParam,
+    sendToRunner, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
+    spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
     lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
       ? state.sessionCatalog.findById(reference.id)
       : null,

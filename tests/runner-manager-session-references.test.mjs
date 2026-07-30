@@ -90,6 +90,28 @@ test("SQLite runners start and restart by ID with explicit store environment", (
   assert.deepEqual(spawns[1].args, spawns[0].args);
 });
 
+test("sending a prompt invokes session-family revival", (t) => {
+  const updates = [];
+  const revived = [];
+  const owner = { id: 7, archived: 1 };
+  const appStore = { repositories: { sessions: {
+    find: ({ backend, sessionId }) => backend === "sqlite" && sessionId === "archived-session" ? owner : null,
+    setArchived: (id, archived) => updates.push([id, archived]),
+  } } };
+  const { manager, sqlitePath } = setup(t, { appStore, unarchiveSession: (reference) => revived.push(reference) });
+  const runner = manager.spawnRunner({
+    dir: "/workspace",
+    sessionRef: { backend: "sqlite", id: "archived-session", storagePath: sqlitePath },
+  });
+
+  assert.equal(manager.sendToRunner(runner, { type: "get_state" }), true);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(revived, []);
+  assert.equal(manager.sendToRunner(runner, { type: "prompt", message: "continue" }), true);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(revived, [{ backend: "sqlite", id: "archived-session", storagePath: sqlitePath }]);
+});
+
 test("managed child runners consume startup lineage arguments and expose their event stream", async (t) => {
   const { manager, spawns } = setup(t);
   const runner = manager.spawnRunner({

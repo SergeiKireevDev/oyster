@@ -27,7 +27,12 @@
   const backFileExplorer = () => uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
   const backFileExplorerToHublots = () => uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
 
+  const toggleHiddenFiles = () => updateFileExplorer({ showHidden: !$fileExplorer.showHidden });
+
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
+  $: directories = visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden);
+  $: folderIsEmpty = !directories.length && !files.length;
+  $: hiddenFilesLabel = $fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
   $: editedFileDownload = browserActions.fileDownload($fileExplorer.token, $fileExplorer.editPath);
 </script>
 
@@ -77,7 +82,7 @@
       <button class="chip" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
     </div>
   {/each}
-  {#if !visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden).length && !files.length}
+  {#if folderIsEmpty}
     <div class="m-path">(empty folder)</div>
   {/if}
 {/if}
@@ -88,9 +93,12 @@
     <a class="chip" href={editedFileDownload.href} download={editedFileDownload.filename} style="text-decoration:none">Download</a>
     <button class="chip" onclick={backFileExplorer}>← Back</button>
   {:else}
-    <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>{$fileExplorer.uploading ? "" : ""}{@html $fileExplorer.uploadText}</button>
+    <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>
+      {#if $fileExplorer.uploading}<span class="spin" aria-hidden="true">⟳</span>{/if}
+      {$fileExplorer.uploadText}
+    </button>
     <button class="chip" title={`pin ${$fileExplorer.path}`} onclick={() => pinExploredPath($fileExplorer.path)}>⌖ Pin folder</button>
-    <button class="chip toggle-hidden" onclick={() => updateFileExplorer({ showHidden: !$fileExplorer.showHidden })}>{$fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles"}</button>
+    <button class="chip toggle-hidden" onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
     <button class="chip" onclick={backFileExplorerToHublots}>← Widgets</button>
   {/if}
   <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>

@@ -36,9 +36,10 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(transcript, /turnAnchorId \?\?= item\.id/);
   assert.match(transcript, /groups\.set\(turnAnchorId, turnActivities\)/);
   assert.match(transcript, /items\.slice\(boundary \+ 1\)\.find\(\(item\) => groups\.has\(item\.id\)\)/);
-  assert.match(transcript, /activityActive=\{\$appSession\.busy && item\.id === \$latestTurnActivityId\}/);
+  assert.match(transcript, /const isCurrentTurnActivity = \(item\) => \$appSession\.busy && item\.id === \$latestTurnActivityId/);
+  assert.match(transcript, /activityActive=\{isCurrentTurnActivity\(item\)\}/);
   assert.match(transcript, /activityBlocks=\{\$turnActivityGroups\.get\(item\.id\) \?\? \[\]\}/);
-  assert.match(transcript, /activityUnsettled=\{\$appSession\.busy && item\.id === \$latestTurnActivityId\}/);
+  assert.match(transcript, /activityUnsettled=\{isCurrentTurnActivity\(item\)\}/);
   assert.match(assistant, /arrangeActivity\(data\.blocks, activityBlocks\)/);
   assert.match(assistant, /visible\.unshift\(\{[\s\S]*?type: "activityStack"/);
   assert.doesNotMatch(assistant, /latestActivityIndex|insertionIndex|visible\.splice/);

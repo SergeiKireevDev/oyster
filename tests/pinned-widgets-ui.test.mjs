@@ -154,6 +154,7 @@ test("group management can delete the group together with all of its widgets", a
 test("Markdown raster images SVG vectors and video use native Svelte artifact displays", () => {
   const viewer = component("PinnedWidgetViewerModal.svelte");
   const markdown = component("MarkdownArtifact.svelte");
+  const sanitizedMarkdown = component("SanitizedMarkdown.svelte");
   const html = component("HtmlArtifact.svelte");
   const image = component("ImageArtifact.svelte");
   const svg = component("SvgArtifact.svelte");
@@ -164,13 +165,14 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(viewer, /widget\.mimeType === "image\/svg\+xml"/);
   assert.match(viewer, /<SvgArtifact/);
   assert.match(viewer, /<VideoArtifact/);
-  assert.match(markdown, /renderMarkdown/);
+  assert.match(markdown, /<SanitizedMarkdown/);
+  assert.match(sanitizedMarkdown, /renderSanitizedMarkdown/);
   assert.match(html, /<iframe/);
   assert.match(html, /\{src\}/);
   assert.match(html, /sandbox=""/);
   assert.doesNotMatch(html, /srcdoc/);
   assert.match(viewer, /pinnedWidgetHtmlUrl\(widget\.id\)/);
-  assert.match(markdown, /<article class="pinned-markdown-viewer" aria-label=\{label\}/);
+  assert.match(markdown, /element="article" className="pinned-markdown-viewer"/);
   assert.match(viewer, /class:markdown-stage=\{widget\.kind === "markdown"\}/);
   assert.match(viewer, /copyTextToClipboard\(String\(widget\.content \?\? ""\)\)/);
   assert.match(viewer, /"Copy raw"/);
