@@ -61,7 +61,7 @@ const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
-  "titleProcess", "titleSessionId",
+  "titleProcess", "titleSessionId", "initialArgs", "eventListeners",
 ]);
 export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
 
@@ -81,13 +81,17 @@ function initializeRunnerRuntime(descriptor) {
     watchdogOk: false,
     titleProcess: null,
     titleSessionId: null,
+    initialArgs: Array.isArray(descriptor.initialArgs) ? [...descriptor.initialArgs] : [],
+    eventListeners: descriptor.eventListeners instanceof Set ? descriptor.eventListeners : new Set(),
   };
 }
 
 function ensureRunnerRuntimeFields(runner) {
   const defaults = initializeRunnerRuntime({});
   for (const field of RUNNER_EPHEMERAL_FIELDS) {
-    if (!(field in runner)) runner[field] = field === "resumeQueue" ? [] : defaults[field];
+    if (!(field in runner)) runner[field] = field === "resumeQueue" || field === "initialArgs"
+      ? []
+      : field === "eventListeners" ? new Set() : defaults[field];
   }
   return runner;
 }
@@ -222,8 +226,12 @@ export function createRunnerManager(state, {
   /** deliver a line only to SSE clients subscribed to this runner */
   function runnerWrite(runner, line) {
     const eventLine = withSseId(line);
+    let event = null;
     let sseId = null;
-    try { sseId = JSON.parse(eventLine)._sseId ?? null; } catch {}
+    try {
+      event = JSON.parse(eventLine);
+      sseId = event._sseId ?? null;
+    } catch {}
     runnerEventRepository?.append({
       runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
     });
@@ -232,6 +240,18 @@ export function createRunnerManager(state, {
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
       res.write(`data: ${eventLine}\n\n`);
     }
+    if (event) {
+      for (const listener of runner.eventListeners ?? []) {
+        try { listener(event); }
+        catch (error) { console.error(`[oyster] runner observer failed: ${error.message}`); }
+      }
+    }
+  }
+
+  function observeRunner(runner, listener) {
+    if (typeof listener !== "function") throw new TypeError("runner observer must be a function");
+    (runner.eventListeners ??= new Set()).add(listener);
+    return () => runner.eventListeners?.delete(listener);
   }
 
   function runnerEvent(runner, obj) {
@@ -361,7 +381,7 @@ export function createRunnerManager(state, {
     throw new Error("runner ID generator repeatedly returned an existing ID");
   }
 
-  function spawnRunner({ dir, sessionRef = null, autostart = true }) {
+  function spawnRunner({ dir, sessionRef = null, autostart = true, initialArgs = [] }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
     const owner = reference ? ensureSessionOwner(reference) : null;
     const id = allocateRunnerId();
@@ -383,6 +403,7 @@ export function createRunnerManager(state, {
       sessionId: reference?.id ?? null,
       sessionName: null,
       startCount: 0,
+      initialArgs: [...initialArgs],
     });
     state.runners.set(runner.id, runner);
     if (autostart) startRunner(runner);
@@ -404,9 +425,12 @@ export function createRunnerManager(state, {
       desired_state: "running", last_status: "starting", start_count: runner.startCount, last_started_at: startedAt,
     });
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
+    const initialArgs = Array.isArray(runner.initialArgs) ? runner.initialArgs : [];
+    runner.initialArgs = [];
     const args = [
       "--mode", "rpc",
       ...sqliteResumeArgs,
+      ...initialArgs,
       ...config.PI_EXTRA_ARGS,
       "--append-system-prompt", PINNED_ARTIFACT_SYSTEM_PROMPT,
     ];
@@ -635,7 +659,7 @@ export function createRunnerManager(state, {
 
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner,
+    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
     defaultRunner, runnerFromReq, openSessionRunner,
     startPi, stopPi,
   };

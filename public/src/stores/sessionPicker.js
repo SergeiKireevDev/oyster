@@ -19,6 +19,7 @@ export const sessionPicker = writable({
   searching: false,
   otherFolderSessions: {},
   loadingFolders: {},
+  expandedChildFamilies: {},
 });
 
 export function updateSessionPicker(patch) {

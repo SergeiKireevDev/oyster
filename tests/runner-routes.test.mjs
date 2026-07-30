@@ -37,7 +37,16 @@ function setup() {
       resolveSafePath: (path) => path.startsWith("/allowed") ? path : null,
     },
     sendToRunner: (_selected, command) => command.type !== "unavailable",
-    stopRunner: (selected) => { selected.stopped = true; },
+    stopRunner: (selected) => { selected.stopped = true; selected.proc = null; },
+    spawnRunner: ({ dir, initialArgs }) => {
+      const child = { id: "child-runner", dir, initialArgs, proc: { pid: 43 } };
+      state.runners.set(child.id, child);
+      return child;
+    },
+    observeRunner: (_selected, listener) => {
+      dependencies.subagentListener = listener;
+      return () => { dependencies.subagentListener = null; };
+    },
     runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir, ...(selected.sessionRef ? { sessionRef: selected.sessionRef } : {}) }),
     openSessionRunner: ({ sessionRef, dir }) => ({ id: "opened", sessionRef, dir }),
     sessionReferenceParam: ({ sessionKey, sessionPath }) => {
@@ -48,6 +57,7 @@ function setup() {
     srvId: () => "srv-1",
     runnersChanged: () => {}, 
     setTimeoutImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
+    clearTimeoutImpl: () => {},
     resolvePath: (path) => path,
     isDirectory: (path) => path !== "/allowed/file",
   };
@@ -145,6 +155,50 @@ test("runner stop and restart routes preserve selection, status, and delayed res
   intervals[0].callback();
   assert.deepEqual(runner.proc, { pid: 42 });
   assert.equal(state.runners.has(runner.id), true);
+});
+
+test("managed subagent route runs a persisted child through an Oyster runner", async () => {
+  const { state, dependencies } = setup();
+  dependencies.sendToRunner = (runner, command) => {
+    assert.equal(command.type, "prompt");
+    queueMicrotask(() => {
+      dependencies.subagentListener({
+        type: "message_end",
+        message: { role: "assistant", content: [{ type: "text", text: "implemented it" }], stopReason: "stop" },
+      });
+      dependencies.subagentListener({ type: "agent_settled" });
+    });
+    return !!runner.proc;
+  };
+  const route = createRunnerRoutes(dependencies)["POST /subagents"];
+  const res = response();
+  await route({ body: {
+    parentSessionId: "parent-id",
+    dir: "/allowed/project",
+    name: "Loop iteration 1: item",
+    prompt: "implement item",
+  } }, res);
+
+  const child = state.runners.get("child-runner");
+  assert.deepEqual(child.initialArgs, [
+    "--parent-session", "parent-id", "--name", "Loop iteration 1: item", "--exclude-tools", "loop",
+  ]);
+  assert.equal(child.stopped, true);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.output, "implemented it");
+});
+
+test("managed subagent route validates its parent, prompt, and working directory", async () => {
+  const { dependencies } = setup();
+  const route = createRunnerRoutes(dependencies)["POST /subagents"];
+  const missingParent = response();
+  await route({ body: { prompt: "work", name: "child" } }, missingParent);
+  assert.equal(missingParent.status, 400);
+
+  const forbidden = response();
+  await route({ body: { parentSessionId: "parent", prompt: "work", name: "child", dir: "/outside" } }, forbidden);
+  assert.equal(forbidden.status, 403);
 });
 
 test("open-session validates session and directory inputs before opening a runner", async () => {

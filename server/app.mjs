@@ -81,7 +81,7 @@ export async function init(state) {
   const runners = createRunnerManager(state, { appStore, ensureSessionOwner });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner,
+    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
   const requestContext = createRequestContext(state);
@@ -103,7 +103,7 @@ export async function init(state) {
   });
   const runnerRoutes = createRunnerRoutes({
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
-    sendToRunner, stopRunner, runnerInfo, replayRunnerEvents, openSessionRunner,
+    sendToRunner, stopRunner, spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner,
     sessionReferenceParam,
     lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
       ? state.sessionCatalog.findById(reference.id)
