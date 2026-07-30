@@ -8,9 +8,9 @@ This repo ships the pi extensions that power its features in `extensions/`:
 |---|---|---|
 | `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
 | `extensions/hublot.ts` | `hublot` tool | Open/close/list public live-interface widgets, including deterministic Markdown and read-only Git servers. |
+| `extensions/loop.ts` | `/loop` command + `loop` tool | Execute Markdown checklist items sequentially in isolated subagents, advancing only after an executable validation script passes. |
 | `extensions/pinned-widget.ts` | `pinned_widget` tool | Pin/list/group private files, media, Markdown, directories, and HTTPS links in the right sidebar. |
 | `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
-| `extensions/goal-loop.ts` | `/goal-loop` + `goal_loop` tool | Execute a plan one verified commit at a time; full validation failures reset to the previous commit for retry. |
 
 pi loads extensions from `~/.pi/agent/extensions/`. To make these bundled files
 available (and keep them in sync with the repo), symlink or copy them:

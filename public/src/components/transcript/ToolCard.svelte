@@ -8,7 +8,7 @@
   const args = $derived(card.toolCall?.arguments);
   const argSummary = $derived(summarizeToolArgs(name, args));
   const isEdit = $derived(name.toLowerCase() === "edit" && args && Array.isArray(args.edits));
-  const statusText = $derived(card.status === "running" ? "⏳" : card.status === "error" ? "✗" : "✓");
+  const statusText = $derived(card.status === "running" ? "Running" : card.status === "error" ? "Failed" : "Done");
   const statusClass = $derived(card.status === "running" ? "running" : card.status === "error" ? "err" : "ok");
   const resultText = $derived((card.resultText ?? "").length > 20000
     ? `${(card.resultText ?? "").slice(0, 20000)}\n… (truncated)`
@@ -26,8 +26,13 @@
   }
 </script>
 
-<details class="block tool" bind:this={root}>
-  <summary><span class="tname">{name}</span><span class="targ">{argSummary}</span><span class={`status ${statusClass}`}>{statusText}</span></summary>
+<details class="block tool activity-step" bind:this={root}>
+  <summary title={`Show ${name || "tool"} details`}>
+    <span class={`activity-indicator ${statusClass}`} aria-hidden="true"></span>
+    <span class="tname">{name || "Tool"}</span>
+    <span class="targ">{argSummary}</span>
+    <span class={`status ${statusClass}`}>{statusText}</span>
+  </summary>
   <div class="body">
     <pre class="args-pre">{isEdit ? "" : argsText}</pre>
     {#if isEdit}

@@ -1,5 +1,5 @@
 import { createCommandGuard } from "../../lib/commandActions.js";
-import { commandPalettePosition, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, commandTrigger, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
@@ -160,13 +160,18 @@ export function createComposerAssembly(deps) {
     const visibleItems = () => state?.items ?? [];
     const render = () => {
       if (!state) return;
-      commandDeps.setPaletteState(pathPaletteView(visibleItems(), state.trigger, state.active));
+      commandDeps.setPaletteState(state.mode === "command"
+        ? commandPaletteView(visibleItems(), state.trigger, state.active)
+        : pathPaletteView(visibleItems(), state.trigger, state.active));
     };
-    const position = (element) => commandDeps.setPaletteState(commandPalettePosition(
+    const position = (element, mode) => commandDeps.setPaletteState(commandPalettePosition(
       element.getBoundingClientRect(),
       commandDeps.windowTarget,
-      { maxWidth: 860, minWidth: 860, maxHeight: 480 },
+      mode === "path"
+        ? { maxWidth: 860, minWidth: 860, maxHeight: 480 }
+        : { maxWidth: 420, minWidth: 280, maxHeight: 320 },
     ));
+    const openCommands = (element, trigger, items) => { state = { mode: "command", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "command"); render(); };
     const openPaths = (element, trigger, items) => { state = { mode: "path", target: element, match: trigger.text, active: 0, trigger, items }; position(element, "path"); render(); };
     function close() { requestVersion++; state = null; commandDeps.closePaletteState(); }
     const move = (direction) => {
@@ -191,6 +196,19 @@ export function createComposerAssembly(deps) {
       return true;
     };
     const runIndex = (index) => { if (!state) return false; setActive(index); return runActive(); };
+    async function updateCommandCompletions(element, trigger, version) {
+      const commands = await guard.getKnownCommands();
+      if (version !== requestVersion || commandTrigger(element)?.text !== trigger.text) return;
+      const query = trigger.query.toLowerCase();
+      const matches = commands.filter((command) => command.name?.toLowerCase().startsWith(query));
+      openCommands(element, trigger, matches.map((command) => ({
+        ...command,
+        run() {
+          close();
+          insertAtTextarea(element, trigger.text, `/${command.name} `);
+        },
+      })));
+    }
     async function updatePathCompletions(element, trigger, version) {
       try {
         let workdir = commandDeps.getWorkdir();
@@ -234,8 +252,15 @@ export function createComposerAssembly(deps) {
         target: element,
         onInput() {
           const version = ++requestVersion;
-          const path = pathTrigger(element);
-          if (path) {
+          const command = commandTrigger(element);
+          const path = command ? null : pathTrigger(element);
+          if (command) {
+            commandDeps.schedule(() => {
+              if (version === requestVersion && commandTrigger(element)?.text === command.text) {
+                updateCommandCompletions(element, command, version);
+              }
+            }, 80);
+          } else if (path) {
             commandDeps.schedule(() => {
               if (version === requestVersion && pathTrigger(element)?.text === path.text) {
                 updatePathCompletions(element, path, version);

@@ -1,16 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commandPalettePosition, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../public/src/lib/commandController.js";
+import { commandPalettePosition, commandPaletteView, commandTrigger, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../public/src/lib/commandController.js";
 
 test("command palette navigation wraps active command selection", () => {
   assert.equal(moveCommandPaletteActive(0, 3, -1), 2);
   assert.equal(moveCommandPaletteActive(2, 3, 1), 0);
 });
 
-test("path palette view labels files without a command colon", () => {
+test("path palette view labels files without a command slash", () => {
   const view = pathPaletteView([{ path: "./src/app.js", name: "app.js", directory: false }], { text: "./src/a" }, 0);
   assert.equal(view.mode, "path");
   assert.deepEqual(view.items[0], { icon: "📄", desc: "file", prefix: "", highlight: "a", rest: "pp.js", active: true });
+});
+
+test("command trigger recognizes only a leading slash command token", () => {
+  assert.deepEqual(commandTrigger({ value: "/lo", selectionStart: 3 }), { text: "/lo", query: "lo" });
+  assert.deepEqual(commandTrigger({ value: "/", selectionStart: 1 }), { text: "/", query: "" });
+  assert.equal(commandTrigger({ value: "hello /lo", selectionStart: 9 }), null);
+  assert.equal(commandTrigger({ value: "/loop plan.md", selectionStart: 13 }), null);
+  assert.equal(commandTrigger({ value: "/tmp/file", selectionStart: 9 }), null);
+});
+
+test("command palette presents supported pi commands with slash prefixes", () => {
+  const view = commandPaletteView([{ name: "loop", description: "Run a plan" }], { text: "/lo", query: "lo" }, 0);
+  assert.equal(view.mode, "command");
+  assert.deepEqual(view.items[0], { icon: "›", desc: "Run a plan", prefix: "/", highlight: "lo", rest: "op", active: true });
 });
 
 test("command palette position stays within the viewport", () => {

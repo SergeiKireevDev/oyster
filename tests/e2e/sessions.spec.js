@@ -438,7 +438,7 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
     );
   });
 
-  test("autocomplete paths and offer the explorer for large result sets", async ({ page }) => {
+  test("autocomplete pi commands and paths, with explorer fallback for large results", async ({ page }) => {
     const small = `path-completion-${RUN}`;
     const large = `path-many-${RUN}`;
     dexec(`mkdir -p /workspace/${small} /workspace/${large}; touch /workspace/${small}/alpha.txt /workspace/${small}/alpine.txt; for i in {01..11}; do touch /workspace/${large}/match-$i.txt; done`);
@@ -446,6 +446,15 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 
     const palette = page.locator("#cmdPalette");
     const highlight = page.locator(".composer-highlight");
+
+    await page.fill("#input", "/lo");
+    const loopCommand = palette.locator(".cmd-row", { hasText: "loop" });
+    await expect(loopCommand).toBeVisible();
+    await expect(loopCommand.locator(".cmd-name")).toHaveText("/loop");
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#input")).toHaveValue("/loop ");
+    await expect(palette).not.toHaveClass(/open/);
+
     const partialDirectory = `./${small.slice(0, -1)}`;
     await page.fill("#input", partialDirectory);
     await expect(palette.locator(".cmd-row", { hasText: small })).toBeVisible();
