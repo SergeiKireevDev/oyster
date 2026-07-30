@@ -90,6 +90,45 @@ function assertInputs(planPath: string, validationPath: string): void {
   }
 }
 
+interface SubagentResult {
+  ok?: boolean;
+  output?: string;
+  errorLog?: string;
+  error?: string;
+}
+
+async function readSubagentStream(response: Response): Promise<SubagentResult> {
+  if (!response.body) throw new Error("Oyster subagent response had no stream body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let terminal: SubagentResult | undefined;
+
+  const consumeLines = (flush = false) => {
+    const lines = buffered.split("\n");
+    buffered = flush ? "" : lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let event: ({ type?: string } & SubagentResult);
+      try { event = JSON.parse(line); } catch { throw new Error("Oyster subagent returned invalid NDJSON"); }
+      if (event.type === "complete") terminal = event;
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value, { stream: !done });
+      consumeLines(done);
+      if (done) break;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (!terminal) throw new Error("Oyster subagent stream ended without a completion event");
+  return terminal;
+}
+
 async function runSubagent(
   ctx: ExtensionContext,
   prompt: string,
@@ -105,6 +144,7 @@ async function runSubagent(
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
+      accept: "application/x-ndjson",
     },
     body: JSON.stringify({
       parentSessionId: ctx.sessionManager.getSessionId(),
@@ -114,13 +154,11 @@ async function runSubagent(
     }),
     signal,
   });
-  const result = await response.json().catch(() => ({})) as {
-    ok?: boolean;
-    output?: string;
-    errorLog?: string;
-    error?: string;
-  };
-  if (!response.ok) throw new Error(result.error ?? `Oyster subagent request failed (${response.status})`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({})) as SubagentResult;
+    throw new Error(error.error ?? `Oyster subagent request failed (${response.status})`);
+  }
+  const result = await readSubagentStream(response);
   return {
     ok: result.ok === true,
     output: result.output?.trim() || "(subagent produced no final text output)",

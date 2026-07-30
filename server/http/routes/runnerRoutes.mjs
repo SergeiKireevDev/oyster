@@ -147,8 +147,18 @@ export function createRunnerRoutes({
         autostart: false,
         initialArgs: ["--parent-session", parentSessionId, "--name", name, "--exclude-tools", "loop"],
       });
+      const writeEvent = (event) => res.write(`${JSON.stringify(event)}\n`);
+      res.writeHead(200, {
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "x-accel-buffering": "no",
+      });
+      res.flushHeaders?.();
+      writeEvent({ type: "started", runner: runnerInfo(runner) });
+
       let dispose = () => {};
       let timer = null;
+      let heartbeat = null;
       let finish;
       let assistantOutput = "";
       let assistantError = "";
@@ -159,6 +169,7 @@ export function createRunnerRoutes({
           done = true;
           dispose();
           if (timer) clearTimeoutImpl(timer);
+          if (heartbeat) clearIntervalImpl(heartbeat);
           resolveCompletion(result);
         };
         dispose = observeRunner(runner, (event) => {
@@ -181,13 +192,19 @@ export function createRunnerRoutes({
             finish({ ok: false, output: assistantOutput, errorLog: `Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.` });
           }
         });
+        heartbeat = setIntervalImpl(() => {
+          if (!res.writableEnded && !res.destroyed) writeEvent({ type: "heartbeat", timestamp: Date.now() });
+        }, 25_000);
+        heartbeat?.unref?.();
         timer = setTimeoutImpl(() => {
           finish({ ok: false, output: assistantOutput, errorLog: "Subagent timed out." });
         }, subagentTimeoutMs);
         timer?.unref?.();
       });
 
+      let disconnected = false;
       const cancel = () => {
+        disconnected = true;
         if (!res.writableEnded) finish({ ok: false, output: assistantOutput, errorLog: "Subagent request was cancelled." });
       };
       res.on?.("close", cancel);
@@ -199,8 +216,9 @@ export function createRunnerRoutes({
       res.off?.("close", cancel);
       runner.subagentStatus = result.ok ? "succeeded" : "failed";
       stopRunner(runner);
-      if (!res.writableEnded && !res.destroyed) {
-        json(res, 200, { ...result, runner: runnerInfo(runner) });
+      if (!disconnected && !res.writableEnded && !res.destroyed) {
+        writeEvent({ type: "complete", ...result, runner: runnerInfo(runner) });
+        res.end();
       }
     },
 
