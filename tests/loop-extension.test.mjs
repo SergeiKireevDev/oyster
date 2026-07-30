@@ -39,7 +39,8 @@ test("loop first iteration context contains only instructions and plan", async (
   const { buildIterationPrompt } = await loadHelpers();
   const prompt = buildIterationPrompt("- [ ] implement it");
   assert.match(prompt, /# Plan\n\n- \[ \] implement it/);
-  assert.doesNotMatch(prompt, /Previous iteration output|Validation executable error log/);
+  assert.match(prompt, /state what you attempted, what succeeded, what failed/);
+  assert.doesNotMatch(prompt, /Previous iteration output|Previous iteration failure log/);
 });
 
 test("loop successful follow-up context contains checked plan and prior output", async () => {
@@ -50,10 +51,10 @@ test("loop successful follow-up context contains checked plan and prior output",
   });
   assert.match(prompt, /- \[x\] first\n- \[ \] second/);
   assert.match(prompt, /# Previous iteration output\n\nimplemented first/);
-  assert.doesNotMatch(prompt, /Validation executable error log/);
+  assert.doesNotMatch(prompt, /Previous iteration failure log/);
 });
 
-test("loop failed follow-up context keeps item unchecked and includes validation errors", async () => {
+test("loop failed follow-up context keeps item unchecked and includes failure details", async () => {
   const { buildIterationPrompt } = await loadHelpers();
   const prompt = buildIterationPrompt("- [x] first\n- [ ] second", {
     succeeded: false,
@@ -62,18 +63,27 @@ test("loop failed follow-up context keeps item unchecked and includes validation
   });
   assert.match(prompt, /- \[x\] first\n- \[ \] second/);
   assert.match(prompt, /# Previous iteration output\n\nattempted second/);
-  assert.match(prompt, /# Validation executable error log\n\ntests failed/);
+  assert.match(prompt, /# Previous iteration failure log\n\ntests failed/);
 });
 
 test("loop registers the /loop command", () => {
   assert.match(source, /pi\.registerCommand\("loop"/);
   assert.match(source, /\/loop <plan\.md> <executable-validation-script> \[max-iterations\]/);
+  assert.match(source, /pi\.setSessionName\(`Loop: \$\{basename\(planPath\)\}`\)/);
   assert.match(source, /await runLoop\(pi, ctx/);
 });
 
-test("loop uses isolated pi JSON subprocesses and directly executes validation", () => {
-  assert.match(source, /\["--mode", "json", "-p", "--no-session", "--exclude-tools", "loop", prompt\]/);
+test("loop uses Oyster-managed persisted child runners and directly executes validation", () => {
+  assert.doesNotMatch(source, /"--no-session"/);
+  assert.match(source, /ctx\.sessionManager\.isPersisted\(\)/);
+  assert.match(source, /fetch\(`\$\{OYSTER_URL\}\/subagents`/);
+  assert.match(source, /parentSessionId: ctx\.sessionManager\.getSessionId\(\)/);
+  assert.match(source, /`Loop iteration \$\{iteration\}:/);
+  assert.doesNotMatch(source, /getPiInvocation|--mode", "json"/);
+  assert.match(source, /if \(subagent\.ok\) \{/);
+  assert.match(source, /validation = await runValidation/);
+  assert.match(source, /subagent failed; retrying/);
   assert.match(source, /pi\.exec\(validationPath, \[\]/);
   assert.match(source, /writeFileSync\(planPath, planBefore/);
-  assert.match(source, /validation\.ok/);
+  assert.match(source, /validation\?\.ok === true/);
 });

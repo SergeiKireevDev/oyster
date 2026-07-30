@@ -1,13 +1,14 @@
 // Runs a Markdown checklist through isolated pi subagents, one item at a time.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const DEFAULT_MAX_ITERATIONS = 50;
 const VALIDATION_TIMEOUT_MS = 30 * 60 * 1000;
 const CONTEXT_OUTPUT_LIMIT = 50 * 1024;
+const OYSTER_URL = process.env.OYSTER_URL ?? "http://127.0.0.1:8080";
 
 interface ChecklistItem {
   line: number;
@@ -61,12 +62,12 @@ function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
 function buildIterationPrompt(plan: string, previous?: PreviousIteration): string {
   const sections = [
     "You are one isolated iteration of a sequential implementation loop.",
-    "Implement exactly the first unchecked checklist item in the plan. Work directly in the current repository, add or update focused tests, and do not edit the plan file or its checkboxes. Finish with a concise account of what you changed and any concerns for the next iteration.",
+    "Implement exactly the first unchecked checklist item in the plan. Work directly in the current repository, add or update focused tests, and do not edit the plan file or its checkboxes. Always finish with a useful final response, even when you cannot complete the item: state what you attempted, what succeeded, what failed, and what the next iteration should do.",
     `# Plan\n\n${plan}`,
   ];
   if (previous) sections.push(`# Previous iteration output\n\n${clipTail(previous.output || "(no output)")}`);
   if (previous && !previous.succeeded) {
-    sections.push(`# Validation executable error log\n\n${clipTail(previous.validationLog || "(no validation output)")}`);
+    sections.push(`# Previous iteration failure log\n\n${clipTail(previous.validationLog || "(no failure details)")}`);
   }
   return sections.join("\n\n");
 }
@@ -89,53 +90,41 @@ function assertInputs(planPath: string, validationPath: string): void {
   }
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
-  const currentScript = process.argv[1];
-  if (currentScript && !currentScript.startsWith("/$bunfs/root/") && existsSync(currentScript)) {
-    return { command: process.execPath, args: [currentScript, ...args] };
-  }
-  const executable = process.execPath.split(/[\\/]/).pop()?.toLowerCase() ?? "";
-  return /^(node|bun)(\.exe)?$/.test(executable)
-    ? { command: process.env.PI_BIN || "pi", args }
-    : { command: process.execPath, args };
-}
-
-function assistantOutput(stdout: string): string {
-  let output = "";
-  for (const line of stdout.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line);
-      if (event.type !== "message_end" || event.message?.role !== "assistant") continue;
-      const text = event.message.content
-        ?.filter((part: { type?: string }) => part.type === "text")
-        .map((part: { text?: string }) => part.text || "")
-        .join("\n");
-      if (text) output = text;
-    } catch {
-      // JSON mode may coexist with incidental non-JSON process output.
-    }
-  }
-  return output.trim();
-}
-
 async function runSubagent(
-  pi: ExtensionAPI,
   ctx: ExtensionContext,
   prompt: string,
+  iteration: number,
+  item: string,
   signal: AbortSignal | undefined,
 ): Promise<{ ok: boolean; output: string; errorLog: string }> {
-  const invocation = getPiInvocation(["--mode", "json", "-p", "--no-session", "--exclude-tools", "loop", prompt]);
-  const result = await pi.exec(invocation.command, invocation.args, {
-    cwd: ctx.cwd,
+  if (!ctx.sessionManager.isPersisted()) throw new Error("Loop requires a persisted Oyster parent session");
+  const token = process.env.OYSTER_TOKEN?.trim();
+  if (!token) throw new Error("OYSTER_TOKEN is required to start a managed loop subagent");
+  const response = await fetch(`${OYSTER_URL}/subagents`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      parentSessionId: ctx.sessionManager.getSessionId(),
+      dir: ctx.cwd,
+      name: `Loop iteration ${iteration}: ${item.slice(0, 80)}`,
+      prompt,
+    }),
     signal,
-    timeout: VALIDATION_TIMEOUT_MS,
   });
-  const output = assistantOutput(result.stdout);
+  const result = await response.json().catch(() => ({})) as {
+    ok?: boolean;
+    output?: string;
+    errorLog?: string;
+    error?: string;
+  };
+  if (!response.ok) throw new Error(result.error ?? `Oyster subagent request failed (${response.status})`);
   return {
-    ok: result.code === 0 && !result.killed,
-    output: output || "(subagent produced no final text output)",
-    errorLog: clipTail([result.stderr.trim(), result.code ? `Subagent exit code: ${result.code}` : ""].filter(Boolean).join("\n")),
+    ok: result.ok === true,
+    output: result.output?.trim() || "(subagent produced no final text output)",
+    errorLog: clipTail(result.errorLog || ""),
   };
 }
 
@@ -197,15 +186,31 @@ async function runLoop(
       content: [{ type: "text", text: `Iteration ${iteration}: running subagent for “${item.text}”…` }],
       details: { planPath, validationPath, complete: false, results },
     });
-    const subagent = await runSubagent(pi, ctx, buildIterationPrompt(planBefore, previous), signal);
+    const subagent = await runSubagent(
+      ctx,
+      buildIterationPrompt(planBefore, previous),
+      iteration,
+      item.text,
+      signal,
+    );
 
-    onUpdate?.({
-      content: [{ type: "text", text: `Iteration ${iteration}: validating “${item.text}”…` }],
-      details: { planPath, validationPath, complete: false, results },
-    });
-    const validation = await runValidation(pi, ctx, validationPath, signal);
-    const succeeded = subagent.ok && validation.ok;
-    const validationLog = [subagent.errorLog, validation.log].filter(Boolean).join("\n\n");
+    let validation: { ok: boolean; log: string } | undefined;
+    if (subagent.ok) {
+      onUpdate?.({
+        content: [{ type: "text", text: `Iteration ${iteration}: validating “${item.text}”…` }],
+        details: { planPath, validationPath, complete: false, results },
+      });
+      validation = await runValidation(pi, ctx, validationPath, signal);
+    } else {
+      onUpdate?.({
+        content: [{ type: "text", text: `Iteration ${iteration}: subagent failed; retrying “${item.text}” without validation…` }],
+        details: { planPath, validationPath, complete: false, results },
+      });
+    }
+    const succeeded = subagent.ok && validation?.ok === true;
+    const validationLog = subagent.ok
+      ? validation?.log ?? "Validation failed without output."
+      : subagent.errorLog || "Subagent failed without process output.";
 
     if (succeeded) {
       writeFileSync(planPath, checkItem(planBefore, item), "utf8");
@@ -268,6 +273,8 @@ export default function loopExtension(pi: ExtensionAPI) {
       }
 
       try {
+        const hasConversation = ctx.sessionManager.getEntries().some((entry) => entry.type === "message");
+        if (!pi.getSessionName() && !hasConversation) pi.setSessionName(`Loop: ${basename(planPath)}`);
         const result = await runLoop(pi, ctx, { planPath, validationScript, maxIterations }, undefined, (partial) => {
           ctx.ui.setStatus("loop", `🔁 ${partial.content[0].text}`);
         });

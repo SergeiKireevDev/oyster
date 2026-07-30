@@ -75,6 +75,11 @@ test("composed dispatch keeps open routes public and authenticated routes protec
   assert.equal(unauthorizedCredentials.status, 401);
   assert.deepEqual(JSON.parse(unauthorizedCredentials.body), { error: "unauthorized" });
 
+  const unauthorizedSubagent = response();
+  await application.handleRequest(request("/subagents", {}, { method: "POST" }), unauthorizedSubagent);
+  assert.equal(unauthorizedSubagent.status, 401);
+  assert.deepEqual(JSON.parse(unauthorizedSubagent.body), { error: "unauthorized" });
+
   const oauthRequest = request("/oauth/start");
   oauthRequest.method = "POST";
   const unauthorizedOAuth = response();

@@ -10,6 +10,8 @@ export function createRunnerRoutes({
   requestContext,
   sendToRunner,
   stopRunner,
+  spawnRunner,
+  observeRunner,
   runnerInfo,
   replayRunnerEvents = () => [],
   openSessionRunner,
@@ -18,6 +20,8 @@ export function createRunnerRoutes({
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+  subagentTimeoutMs = 30 * 60 * 1000,
   resolvePath = resolve,
   isDirectory = (path) => statSync(path).isDirectory(),
 }) {
@@ -101,6 +105,100 @@ export function createRunnerRoutes({
         if (state.runners.has(runner.id)) startRunner(runner);
       }, 300);
       json(res, 202, { restarting: true, runner: runner.id });
+    },
+
+    "POST /subagents": async (req, res) => {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      const prompt = typeof body?.prompt === "string" ? body.prompt : "";
+      const parentSessionId = typeof body?.parentSessionId === "string" ? body.parentSessionId.trim() : "";
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      if (!prompt || prompt.length > 5 * 1024 * 1024) {
+        json(res, 400, { error: "prompt must be a non-empty string no larger than 5 MiB" });
+        return;
+      }
+      if (!parentSessionId || parentSessionId.length > 512) {
+        json(res, 400, { error: "parentSessionId must be a non-empty session identity" });
+        return;
+      }
+      if (!name || name.length > 256) {
+        json(res, 400, { error: "name must be a non-empty string no longer than 256 characters" });
+        return;
+      }
+      const dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : state.currentDir;
+      if (!dir) {
+        json(res, 403, { error: `path outside the allowed roots: ${body?.dir}` });
+        return;
+      }
+      let validDirectory = false;
+      try { validDirectory = isDirectory(dir); } catch {}
+      if (!validDirectory) {
+        json(res, 400, { error: `not a directory: ${dir}` });
+        return;
+      }
+      if (typeof spawnRunner !== "function" || typeof observeRunner !== "function") {
+        json(res, 503, { error: "managed subagents are unavailable" });
+        return;
+      }
+
+      const runner = spawnRunner({
+        dir,
+        autostart: false,
+        initialArgs: ["--parent-session", parentSessionId, "--name", name, "--exclude-tools", "loop"],
+      });
+      let dispose = () => {};
+      let timer = null;
+      let finish;
+      let assistantOutput = "";
+      let assistantError = "";
+      const completion = new Promise((resolveCompletion) => {
+        let done = false;
+        finish = (result) => {
+          if (done) return;
+          done = true;
+          dispose();
+          if (timer) clearTimeoutImpl(timer);
+          resolveCompletion(result);
+        };
+        dispose = observeRunner(runner, (event) => {
+          if (event.type === "message_end" && event.message?.role === "assistant") {
+            const text = event.message.content
+              ?.filter((part) => part.type === "text")
+              .map((part) => part.text || "")
+              .join("\n");
+            if (text) assistantOutput = text;
+            if (["error", "aborted"].includes(event.message.stopReason)) {
+              assistantError = event.message.errorMessage || `assistant stopped: ${event.message.stopReason}`;
+            }
+          } else if (event.type === "agent_settled") {
+            finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
+          } else if (event.type === "response" && event.command === "prompt" && event.success === false) {
+            finish({ ok: false, output: assistantOutput, errorLog: event.error || "Subagent prompt was rejected." });
+          } else if (event.type === "pi_error") {
+            finish({ ok: false, output: assistantOutput, errorLog: event.error || "Subagent process failed." });
+          } else if (event.type === "pi_exit") {
+            finish({ ok: false, output: assistantOutput, errorLog: `Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.` });
+          }
+        });
+        timer = setTimeoutImpl(() => {
+          finish({ ok: false, output: assistantOutput, errorLog: "Subagent timed out." });
+        }, subagentTimeoutMs);
+        timer?.unref?.();
+      });
+
+      const cancel = () => {
+        if (!res.writableEnded) finish({ ok: false, output: assistantOutput, errorLog: "Subagent request was cancelled." });
+      };
+      res.on?.("close", cancel);
+      if (!sendToRunner(runner, { type: "prompt", message: prompt })) {
+        finish({ ok: false, output: "", errorLog: "Subagent process was unavailable." });
+      }
+      const result = await completion;
+      res.off?.("close", cancel);
+      stopRunner(runner);
+      if (!res.writableEnded && !res.destroyed) {
+        json(res, 200, { ...result, runner: runnerInfo(runner) });
+      }
     },
 
     "POST /open-session": async (req, res) => {

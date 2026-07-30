@@ -139,6 +139,13 @@ test("session picker component routes every workflow through scoped actions", ()
   assert.doesNotMatch(source, /features\/sessions\/sessionPickerActions\.js/);
 });
 
+test("session picker keeps the user's child-session expansion choice", () => {
+  const source = readFileSync(new URL("../public/src/components/SessionPickerModal.svelte", import.meta.url), "utf8");
+  assert.match(source, /open=\{childSessionsOpen\(family\)\}/);
+  assert.match(source, /ontoggle=\{\(event\) => setChildSessionsOpen\(family, event\.currentTarget\.open\)\}/);
+  assert.match(source, /expandedChildFamilies:/);
+});
+
 test("session navigation omits the redundant full-picker buttons", () => {
   const sidebar = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
   const menu = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");

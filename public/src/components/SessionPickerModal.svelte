@@ -63,6 +63,21 @@
     return !!(runner?.busy ?? session.busy);
   }
 
+  function childSessionsOpen(family) {
+    const key = sessionIdentity(family.session);
+    const choices = $sessionPicker.expandedChildFamilies ?? {};
+    return Object.hasOwn(choices, key)
+      ? choices[key]
+      : family.forks.some((fork) => fork.id === $sessionPicker.currentId);
+  }
+
+  function setChildSessionsOpen(family, open) {
+    const key = sessionIdentity(family.session);
+    updateSessionPicker({
+      expandedChildFamilies: { ...($sessionPicker.expandedChildFamilies ?? {}), [key]: open },
+    });
+  }
+
   $: currentPartition = partitionSessionFamilies($sessionPicker.sessions, isAlive);
   $: otherFolders = $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder);
   $: activeOtherFolders = (() => {
@@ -212,8 +227,12 @@
   {#each groupSessionFamilies(sessions) as family (sessionIdentity(family.session))}
     {@render sessionRow(family.session)}
     {#if family.forks.length}
-      <details class="s-forkgroup" open={family.forks.some((fork) => fork.id === $sessionPicker.currentId)}>
-        <summary>🌿 {family.forks.length} fork{family.forks.length === 1 ? "" : "s"}</summary>
+      <details
+        class="s-forkgroup"
+        open={childSessionsOpen(family)}
+        ontoggle={(event) => setChildSessionsOpen(family, event.currentTarget.open)}
+      >
+        <summary>{family.forks.length} child session{family.forks.length === 1 ? "" : "s"}</summary>
         {#each family.forks as fork (sessionIdentity(fork))}
           {@render sessionRow(fork)}
         {/each}

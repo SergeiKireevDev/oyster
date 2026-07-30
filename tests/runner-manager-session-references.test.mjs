@@ -90,6 +90,30 @@ test("SQLite runners start and restart by ID with explicit store environment", (
   assert.deepEqual(spawns[1].args, spawns[0].args);
 });
 
+test("managed child runners consume startup lineage arguments and expose their event stream", async (t) => {
+  const { manager, spawns } = setup(t);
+  const runner = manager.spawnRunner({
+    dir: "/workspace",
+    autostart: false,
+    initialArgs: ["--parent-session", "parent-id", "--name", "Loop child"],
+  });
+  const events = [];
+  const dispose = manager.observeRunner(runner, (event) => events.push(event.type));
+
+  assert.equal(manager.sendToRunner(runner, { type: "prompt", message: "work" }), true);
+  assert.deepEqual(spawns[0].args.slice(0, 7), [
+    "--mode", "rpc", "--parent-session", "parent-id", "--name", "Loop child", "--thinking",
+  ]);
+  spawns[0].proc.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["pi_started", "agent_start"]);
+
+  dispose();
+  spawns[0].proc.stdout.write(`${JSON.stringify({ type: "agent_settled" })}\n`);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["pi_started", "agent_start"]);
+});
+
 test("runner busy state follows compaction through the final settled event", async (t) => {
   const { manager, spawns } = setup(t);
   const runner = manager.spawnRunner({ dir: "/workspace" });
