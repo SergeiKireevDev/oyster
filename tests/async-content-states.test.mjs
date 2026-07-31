@@ -33,7 +33,7 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
 
   const video = component("VideoArtifact.svelte");
   assert.match(video, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
-  assert.match(video, /<ArtifactLoadState kind="video" available=\{!!src\} \{status\} onRetry=\{retry\}/);
+  assert.match(video, /<ArtifactLoadState kind="video" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
 
   const html = component("HtmlArtifact.svelte");
   assert.match(html, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);

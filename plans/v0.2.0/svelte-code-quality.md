@@ -57,7 +57,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/ToastItem.svelte`
 - [x] `public/src/components/Toasts.svelte`
 - [x] `public/src/components/Transcript.svelte`
-- [ ] `public/src/components/VideoArtifact.svelte`
+- [x] `public/src/components/VideoArtifact.svelte`
 
 ## Transcript components
 
