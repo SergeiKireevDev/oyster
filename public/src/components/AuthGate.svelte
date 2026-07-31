@@ -2,17 +2,20 @@
   import oysterIcon from "../assets/oyster.svg";
   import { getAuthBrowser } from "../runtime/authBrowserContext.js";
 
+  const AUTHENTICATION_FAILED = "Authentication failed. Check the token and try again.";
   const authBrowser = getAuthBrowser();
-  const authenticationFailed = "Authentication failed. Check the token and try again.";
-  let tokenInput = "";
-  let errorMessage = "";
-  let connecting = false;
+
+  let tokenInput = $state("");
+  let errorMessage = $state("");
+  let connecting = $state(false);
+  let inputDescription = $derived(errorMessage ? "gateInstructions gateError" : "gateInstructions");
 
   async function connect() {
     if (connecting) return;
+
     const token = tokenInput.trim();
     if (!token) {
-      errorMessage = authenticationFailed;
+      errorMessage = AUTHENTICATION_FAILED;
       return;
     }
 
@@ -20,43 +23,66 @@
     errorMessage = "";
     try {
       if (!await authBrowser.validateToken(token)) {
-        errorMessage = authenticationFailed;
+        errorMessage = AUTHENTICATION_FAILED;
         return;
       }
+
       authBrowser.saveToken(token);
+      tokenInput = "";
       authBrowser.reload();
     } catch {
-      errorMessage = authenticationFailed;
+      errorMessage = AUTHENTICATION_FAILED;
     } finally {
       connecting = false;
     }
   }
 
+  /** @param {SubmitEvent} event */
   function submit(event) {
     event.preventDefault();
-    connect();
+    void connect();
   }
 
   function clearError() {
-    errorMessage = "";
+    if (errorMessage) errorMessage = "";
   }
 </script>
 
-<div id="gate"><form class="card" onsubmit={submit}>
-  <div class="gate-brand"><img src={oysterIcon} alt="" /> <span>Oyster</span></div>
-  <label class="gate-instructions" for="gateInput">Enter the auth token printed by the server on startup.</label>
-  <input
-    type="password"
-    id="gateInput"
-    name="token"
-    placeholder="token"
-    bind:value={tokenInput}
-    oninput={clearError}
-    aria-invalid={errorMessage ? "true" : undefined}
-    aria-describedby={errorMessage ? "gateError" : undefined}
-    disabled={connecting}
-    required
-  >
-  {#if errorMessage}<div class="gate-error" id="gateError" role="alert">{errorMessage}</div>{/if}
-  <button class="btn" id="gateBtn" type="submit" disabled={connecting}>{connecting ? "Checking…" : "Connect"}</button>
-</form></div>
+<div
+  id="gate"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="gateTitle"
+  aria-describedby="gateInstructions"
+>
+  <form class="card" onsubmit={submit} aria-busy={connecting}>
+    <div class="gate-brand" id="gateTitle">
+      <img src={oysterIcon} alt="">
+      <span>Oyster</span>
+    </div>
+    <label for="gateInput">Authentication token</label>
+    <div class="gate-instructions" id="gateInstructions">
+      Enter the auth token printed by the server on startup.
+    </div>
+    <input
+      type="password"
+      id="gateInput"
+      name="token"
+      autocomplete="current-password"
+      autocapitalize="none"
+      spellcheck="false"
+      bind:value={tokenInput}
+      oninput={clearError}
+      aria-invalid={errorMessage ? "true" : undefined}
+      aria-describedby={inputDescription}
+      readonly={connecting}
+      required
+    >
+    {#if errorMessage}
+      <div class="gate-error" id="gateError" role="alert" aria-atomic="true">{errorMessage}</div>
+    {/if}
+    <button class="btn" id="gateBtn" type="submit" disabled={connecting}>
+      {connecting ? "Checking…" : "Connect"}
+    </button>
+  </form>
+</div>

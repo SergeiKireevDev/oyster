@@ -6,8 +6,8 @@ const component = (name) => readFileSync(new URL(`../public/src/components/${nam
 
 test("single-field workflows use native form submission instead of Enter key handlers", () => {
   const auth = component("AuthGate.svelte");
-  assert.match(auth, /<form class="card" onsubmit=\{submit\}>/);
-  assert.match(auth, /<label[^>]*for="gateInput"/);
+  assert.match(auth, /<form class="card" onsubmit=\{submit\} aria-busy=\{connecting\}>/);
+  assert.match(auth, /<label[^>]*for="gateInput">Authentication token<\/label>/);
   assert.match(auth, /id="gateBtn" type="submit"/);
   assert.doesNotMatch(auth, /onkeydown=\{onKeydown\}/);
 
@@ -57,8 +57,8 @@ test("search and constrained credential entry use semantic field types and nativ
 
   const auth = component("AuthGate.svelte");
   assert.match(auth, /aria-invalid=\{errorMessage \? "true" : undefined\}/);
-  assert.match(auth, /aria-describedby=\{errorMessage \? "gateError" : undefined\}/);
-  assert.match(auth, /id="gateError" role="alert"/);
+  assert.match(auth, /aria-describedby=\{inputDescription\}/);
+  assert.match(auth, /id="gateError" role="alert" aria-atomic="true"/);
 });
 
 test("workspace forms pair native constraints with actionable validation guidance", () => {
