@@ -41,7 +41,7 @@ test("controls that start work use native disabled semantics while busy", () => 
   assert.match(explorer, /disabled=\{\$fileExplorer\.uploading\}[^>]*onclick=\{uploadFileExplorer\}/);
 
   const analytics = component("AnalyticsModal.svelte");
-  assert.match(analytics, /<button class="chip" disabled=\{\$analytics\.loading\} onclick=\{\(\) => load\(\)\}>/);
+  assert.match(analytics, /<button type="button" class="chip" disabled=\{\$analytics\.loading\} onclick=\{\(\) => load\(\)\}>/);
   assert.equal((analytics.match(/<select[^>]*disabled=\{\$analytics\.loading\}/g) ?? []).length, 2);
 
   assert.match(component("AuthGate.svelte"), /type="submit" disabled=\{connecting\}/);
