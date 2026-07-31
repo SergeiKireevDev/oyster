@@ -121,11 +121,11 @@
     flex-shrink: 0;
     align-items: center;
     gap: 10px;
-    padding: 0 14px 4px;
-    border-bottom: 1px solid var(--header-border, rgba(255, 255, 255, 0.07));
-    background: var(--header-bg, rgba(13, 16, 22, 0.82));
-    box-shadow: var(--header-shadow, 0 1px 0 rgba(0, 0, 0, 0.25));
-    backdrop-filter: blur(18px) saturate(1.25);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--header-border, color-mix(in srgb, var(--border) 78%, transparent));
+    background: var(--header-bg, color-mix(in srgb, var(--panel) 86%, transparent));
+    box-shadow: var(--header-shadow, 0 1px 0 color-mix(in srgb, var(--bg) 72%, transparent));
+    backdrop-filter: blur(18px) saturate(1.15);
   }
 
   .brand-mark {
@@ -134,24 +134,24 @@
     height: 32px;
     flex: none;
     place-items: center;
-    border: 1px solid var(--header-brand-border, rgba(157, 169, 255, 0.35));
-    border-radius: 11px;
-    background: var(--header-brand-bg, linear-gradient(145deg, rgba(157, 169, 255, 0.22), rgba(104, 117, 223, 0.07)));
-    box-shadow: var(--header-brand-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(83, 93, 180, 0.12));
-    color: var(--header-brand-color, #cbd1ff);
+    border: 1px solid var(--header-brand-border, color-mix(in srgb, var(--accent) 34%, var(--border)));
+    border-radius: 10px;
+    background: var(--header-brand-bg, linear-gradient(145deg, color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent-dim) 28%, transparent)));
+    box-shadow: var(--header-brand-shadow, inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent), 0 7px 20px color-mix(in srgb, var(--accent-dim) 22%, transparent));
+    color: var(--header-brand-color, var(--accent));
   }
 
   .brand-mark.hub-mode {
-    outline: 2px solid rgba(157, 169, 255, 0.9);
+    outline: 2px solid var(--accent);
     outline-offset: -3px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 0 9px rgba(157, 169, 255, 0.24), 0 0 8px rgba(157, 169, 255, 0.58), 0 0 18px rgba(157, 169, 255, 0.38);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent), inset 0 0 8px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 42%, transparent);
   }
 
   .brand-mark img {
     display: block;
     width: 26px;
     height: 26px;
-    filter: drop-shadow(0 0 6px rgba(157, 169, 255, 0.4));
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 32%, transparent));
   }
 
   .header-context {
@@ -179,7 +179,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--header-status-color, #717a8e);
+    color: var(--header-status-color, var(--muted));
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -194,7 +194,7 @@
     margin: 0;
     border-radius: 50%;
     background: var(--stopped);
-    box-shadow: var(--header-dot-shadow, 0 0 0 3px rgba(255, 255, 255, 0.035));
+    box-shadow: var(--header-dot-shadow, 0 0 0 3px color-mix(in srgb, var(--border) 58%, transparent));
   }
 
   .dot.ok {
@@ -215,10 +215,10 @@
     align-items: center;
     gap: 2px;
     padding: 3px;
-    border: 1px solid var(--header-actions-border, rgba(255, 255, 255, 0.065));
-    border-radius: 11px;
-    background: var(--header-actions-bg, rgba(255, 255, 255, 0.025));
-    box-shadow: var(--header-actions-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.025));
+    border: 1px solid var(--header-actions-border, color-mix(in srgb, var(--border) 72%, transparent));
+    border-radius: 10px;
+    background: var(--header-actions-bg, color-mix(in srgb, var(--panel-2) 34%, transparent));
+    box-shadow: var(--header-actions-shadow, inset 0 1px 0 color-mix(in srgb, var(--text) 3%, transparent));
   }
 
   .app-header .chip {
@@ -231,21 +231,28 @@
     border-color: transparent;
     border-radius: 7px;
     background: transparent;
-    color: #8e97aa;
+    color: var(--muted);
     font-size: 10.5px;
     font-weight: 600;
   }
 
   .app-header .chip:hover {
-    border-color: var(--header-chip-hover-border, rgba(157, 169, 255, 0.12));
-    background: var(--header-chip-hover-bg, rgba(157, 169, 255, 0.1));
-    color: var(--header-chip-hover-color, #dfe2ff);
+    border-color: var(--header-chip-hover-border, color-mix(in srgb, var(--accent) 22%, var(--border)));
+    background: var(--header-chip-hover-bg, color-mix(in srgb, var(--accent) 10%, transparent));
+    color: var(--header-chip-hover-color, var(--text));
     transform: none;
   }
 
   .app-header .chip:focus-visible {
-    outline: 2px solid rgba(157, 169, 255, 0.7);
-    outline-offset: 1px;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .app-header .chip[aria-expanded="true"] {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: inset 0 -2px 0 var(--accent);
+    color: var(--text);
   }
 
   #treeChip,
@@ -274,15 +281,11 @@
     max-width: 170px;
   }
 
-  #thinkChip {
-    color: #a4a0bc;
-  }
-
   .header-action-divider {
     width: 1px;
     height: 17px;
     margin: 0 2px;
-    background: var(--header-divider-bg, rgba(255, 255, 255, 0.08));
+    background: var(--header-divider-bg, var(--border));
   }
 
   @keyframes pulse {
@@ -299,9 +302,9 @@
 
   @media (max-width: 760px) {
     .app-header {
-      min-height: 44px;
+      min-height: 48px;
       gap: 7px;
-      padding: 0 9px 3px;
+      padding: 0 9px;
     }
 
     .brand-mark {
@@ -328,6 +331,10 @@
       padding: 2px;
     }
 
+    .app-header .chip {
+      min-height: 40px;
+    }
+
     #modelChip,
     #thinkChip,
     #treeChip {
@@ -337,6 +344,10 @@
     #cfgChip {
       display: inline-flex;
       max-width: 42vw;
+    }
+
+    #menuBtn {
+      width: 40px;
     }
 
     #cfgChip span {
