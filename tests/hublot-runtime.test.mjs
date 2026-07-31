@@ -79,3 +79,19 @@ test("live-interface widgets route workflows through scoped actions without eage
     assert.doesNotMatch(source, /features\/hublots\/hublotActions\.js|removeHublot\(fetch|addToast/);
   }
 });
+
+test("hublot manager prevents duplicate submissions and cleans up its command palette binding", () => {
+  const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(manager, /function submitHublot\(event\)/);
+  assert.match(manager, /if \(\$hublotManager\.creating \|\| !\$hublotManager\.desc\.trim\(\)\) return/);
+  assert.match(manager, /aria-busy=\{\$hublotManager\.creating\}/);
+  assert.match(manager, /disabled=\{\$hublotManager\.creating \|\| !\$hublotManager\.desc\.trim\(\)\}/);
+  assert.match(manager, /controller\?\.detach\?\.\(\)/);
+  assert.match(manager, /<span class="spin" aria-hidden="true"><\/span>/);
+  assert.match(manager, /<span role="status">Waiting for Cloudflare…<\/span>/);
+  assert.doesNotMatch(manager, /onsubmit=\{\(event\) =>|oninput=\{\(event\) =>/);
+  assert.match(manager, /<style>[\s\S]*?\.hublot-create-form\s*\{/);
+  assert.doesNotMatch(styles, /\.hublot-create-form|\.hublot-description(?:\s|\{|,)/);
+});

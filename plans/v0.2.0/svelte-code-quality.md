@@ -33,7 +33,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/FolderIcon.svelte`
 - [x] `public/src/components/Header.svelte`
 - [x] `public/src/components/HtmlArtifact.svelte`
-- [ ] `public/src/components/HublotManagerModal.svelte`
+- [x] `public/src/components/HublotManagerModal.svelte`
 - [ ] `public/src/components/HublotSidebar.svelte`
 - [ ] `public/src/components/ImageArtifact.svelte`
 - [ ] `public/src/components/LlmboxWorkspaceModal.svelte`
