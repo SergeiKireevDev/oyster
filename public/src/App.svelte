@@ -32,8 +32,23 @@
   });
 </script>
 
-<Header />
-<Menu />
-<ChatLayout />
-<Overlays />
-<AuthGate />
+<div class="app-shell">
+  <Header />
+  <Menu />
+  <ChatLayout />
+  <Overlays />
+  <AuthGate />
+</div>
+
+<style>
+  .app-shell {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+</style>
