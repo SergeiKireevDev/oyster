@@ -52,6 +52,17 @@ test("the necessary dynamic HTML exception is documented and owned by the saniti
   assert.deepEqual(rendererReferences, ["components/SanitizedMarkdown.svelte"]);
 });
 
+test("the Markdown boundary limits its root markup and omits empty accessible names", () => {
+  const boundary = source("public/src/components/SanitizedMarkdown.svelte");
+
+  assert.match(boundary, /element\?: "article" \| "div"/);
+  assert.match(boundary, /this=\{rootElement\}/);
+  assert.match(boundary, /element === "article" \? "article" : "div"/);
+  assert.match(boundary, /label\?\.trim\(\) \|\| undefined/);
+  assert.match(boundary, /aria-label=\{accessibleLabel\}/);
+  assert.doesNotMatch(boundary, /this=\{element\}|aria-label=\{label\}/);
+});
+
 test("model and file Markdown reach the boundary as raw text, not caller-provided HTML", () => {
   const assistant = source("public/src/components/transcript/AssistantMessage.svelte");
   const artifact = source("public/src/components/MarkdownArtifact.svelte");
