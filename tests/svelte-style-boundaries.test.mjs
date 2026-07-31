@@ -53,3 +53,11 @@ test("Header owns its layout and presentation styles", () => {
   assert.doesNotMatch(styles, /\.app-header|\.brand-mark|\.header-actions|\.header-status|\.header-action-divider/);
   assert.doesNotMatch(selectors, /^[\t ]*(?:html[^\n{]*[\t ]+)?header(?:[\t ]|\{|[.:#\[])/m);
 });
+
+test("HTML artifact owns its iframe presentation styles", () => {
+  const htmlArtifact = readFileSync(new URL("../public/src/components/HtmlArtifact.svelte", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(htmlArtifact, /<style>[\s\S]*?\.pinned-html-preview\s*\{/);
+  assert.doesNotMatch(styles, /\.pinned-html-preview/);
+});

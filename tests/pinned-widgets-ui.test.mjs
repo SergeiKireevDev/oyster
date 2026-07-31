@@ -196,6 +196,10 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(html, /<iframe/);
   assert.match(html, /\{src\}/);
   assert.match(html, /sandbox=""/);
+  assert.match(html, /referrerpolicy="no-referrer"/);
+  assert.match(html, /aria-busy=\{status === "loading"\}/);
+  assert.match(html, /onload=\{handleLoad\}/);
+  assert.match(html, /onerror=\{handleError\}/);
   assert.doesNotMatch(html, /srcdoc/);
   assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
   assert.match(markdown, /element="article" className="pinned-markdown-viewer"/);
