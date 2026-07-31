@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
+import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -53,8 +54,15 @@ function checkItem(markdown: string, target: ChecklistItem): string {
   return lines.join("\n");
 }
 
-function commitMessage(item: string): string {
-  return item.replace(/\s+/g, " ").trim().slice(0, 72).trimEnd();
+function commitMessage(summary: string, fallback: string): string {
+  const firstLine = summary
+    .replace(/^\s*(?:commit (?:message|subject)\s*:\s*)/i, "")
+    .split(/\r?\n/, 1)[0]
+    .trim()
+    .replace(/^[`"']+|[`"']+$/g, "")
+    .replace(/\s+/g, " ");
+  const normalized = firstLine || fallback.replace(/\s+/g, " ").trim();
+  return normalized.slice(0, 72).trimEnd();
 }
 
 function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
@@ -193,10 +201,47 @@ async function runValidation(
   };
 }
 
+async function generateCommitMessage(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  item: string,
+  subagentOutput: string,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  if (!ctx.model) return commitMessage("", item);
+
+  try {
+    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+    if (!auth.ok || !auth.apiKey) return commitMessage("", item);
+    const diff = await pi.exec("git", ["diff", "--cached", "--no-ext-diff", "--unified=2"], { cwd: ctx.cwd, signal });
+    const prompt = [
+      "Write a meaningful Git commit subject for this completed loop step.",
+      "Return only one imperative sentence of at most 72 characters: no quotes, prefix, bullet, or trailing period.",
+      "Describe the actual change, not the checklist, validation, or process.",
+      `Checklist item: ${item}`,
+      `Implementation summary:\n${clipTail(subagentOutput)}`,
+      `Staged diff:\n${clipTail(diff.stdout || "(no staged diff; this is an empty step commit)")}`,
+    ].join("\n\n");
+    const response = await complete(
+      ctx.model,
+      { messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] },
+      { apiKey: auth.apiKey, headers: auth.headers, env: auth.env, signal },
+    );
+    const summary = response.content
+      .filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    return commitMessage(summary, item);
+  } catch {
+    return commitMessage("", item);
+  }
+}
+
 async function commitSuccessfulStep(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   item: string,
+  subagentOutput: string,
   signal: AbortSignal | undefined,
 ): Promise<{ ok: boolean; hash?: string; log: string }> {
   const staged = await pi.exec("git", ["add", "-A"], { cwd: ctx.cwd, signal });
@@ -204,7 +249,8 @@ async function commitSuccessfulStep(
     return { ok: false, log: clipTail([staged.stdout, staged.stderr, "Unable to stage the validated loop changes."].filter(Boolean).join("\n")) };
   }
 
-  const committed = await pi.exec("git", ["commit", "--allow-empty", "--no-gpg-sign", "-m", commitMessage(item)], { cwd: ctx.cwd, signal });
+  const message = await generateCommitMessage(pi, ctx, item, subagentOutput, signal);
+  const committed = await pi.exec("git", ["commit", "--allow-empty", "--no-gpg-sign", "-m", message], { cwd: ctx.cwd, signal });
   if (committed.code !== 0 || committed.killed) {
     return { ok: false, log: clipTail([committed.stdout, committed.stderr, "Unable to commit the validated loop changes."].filter(Boolean).join("\n")) };
   }
@@ -291,7 +337,7 @@ async function runLoop(
         content: [{ type: "text", text: `Iteration ${iteration}: committing “${item.text}”…` }],
         details: { planPath, validationPath, complete: false, results },
       });
-      const commit = await commitSuccessfulStep(pi, ctx, item.text, signal);
+      const commit = await commitSuccessfulStep(pi, ctx, item.text, subagent.output, signal);
       succeeded = commit.ok;
       commitHash = commit.hash;
       if (!commit.ok) validationLog = `Validation passed, but the step could not be committed.\n${commit.log}`;

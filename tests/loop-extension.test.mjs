@@ -62,10 +62,11 @@ test("loop parses Markdown checklists and checks exactly the selected item", asy
   assert.equal(checkItem(plan, target), "# Plan\n\n- [x] done\n- [x] first\n1. [ ] second\n");
 });
 
-test("loop derives concise meaningful commit messages from checklist items", async () => {
+test("loop normalizes generated commit subjects and falls back to the checklist item", async () => {
   const { commitMessage } = await loadHelpers();
-  assert.equal(commitMessage("  Add   retry handling\nfor failed jobs  "), "Add retry handling for failed jobs");
-  assert.equal(commitMessage("x".repeat(100)), "x".repeat(72));
+  assert.equal(commitMessage('Commit message: "Handle failed job retries"', "fallback"), "Handle failed job retries");
+  assert.equal(commitMessage("", "  Add   retry handling\nfor failed jobs  "), "Add retry handling for failed jobs");
+  assert.equal(commitMessage("x".repeat(100), "fallback"), "x".repeat(72));
 });
 
 test("loop first iteration context contains only instructions and plan", async () => {
@@ -125,9 +126,14 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.match(source, /writeFileSync\(planPath, planBefore/);
   assert.match(source, /validation\?\.ok === true/);
   assert.match(source, /writeFileSync\(planPath, checkItem\(planBefore, item\)/);
-  assert.match(source, /await commitSuccessfulStep\(pi, ctx, item\.text, signal\)/);
+  assert.match(source, /await commitSuccessfulStep\(pi, ctx, item\.text, subagent\.output, signal\)/);
   assert.match(source, /pi\.exec\("git", \["add", "-A"\]/);
-  assert.match(source, /pi\.exec\("git", \["commit", "--allow-empty", "--no-gpg-sign", "-m", commitMessage\(item\)\]/);
+  assert.match(source, /await generateCommitMessage\(pi, ctx, item, subagentOutput, signal\)/);
+  assert.match(source, /ctx\.modelRegistry\.getApiKeyAndHeaders\(ctx\.model\)/);
+  assert.match(source, /pi\.exec\("git", \["diff", "--cached"/);
+  assert.match(source, /await complete\(/);
+  assert.match(source, /Describe the actual change, not the checklist, validation, or process/);
+  assert.match(source, /pi\.exec\("git", \["commit", "--allow-empty", "--no-gpg-sign", "-m", message\]/);
   assert.ok(
     source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
     "validation must pass before a loop step is committed",
