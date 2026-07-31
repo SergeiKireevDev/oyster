@@ -1,10 +1,26 @@
 <script>
+  /**
+   * @typedef {object} Props
+   * @property {number} [tokensBefore]
+   */
+
+  /** @type {Props} */
   let { tokensBefore = 0 } = $props();
-  const title = $derived(tokensBefore > 0
-    ? `Context compacted after ${Number(tokensBefore).toLocaleString()} tokens`
-    : "Context compacted");
+
+  const label = $derived.by(() => {
+    if (!Number.isFinite(tokensBefore) || tokensBefore <= 0) return "Context compacted";
+
+    const tokenLabel = tokensBefore === 1 ? "token" : "tokens";
+    return `Context compacted after ${tokensBefore.toLocaleString()} ${tokenLabel}`;
+  });
 </script>
 
-<div class="compaction-marker" role="separator" aria-label={title} {title}>
-  <span>context compacted</span>
+<div
+  class="compaction-marker"
+  role="separator"
+  aria-orientation="horizontal"
+  aria-label={label}
+  title={label}
+>
+  <span>Context compacted</span>
 </div>
