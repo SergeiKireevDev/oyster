@@ -3,35 +3,40 @@
   import { getSettingsPreferences } from "../runtime/settingsPreferenceContext.js";
 
   const preferences = getSettingsPreferences();
-  const settings = [
-    ["pi_show_thinking", "Show thinking blocks"],
-    ["pi_theme", "Light mode"],
-  ];
+  const preferenceOptions = $state([
+    {
+      id: "show-thinking",
+      label: "Show thinking blocks",
+      checked: preferences.isThinkingVisible(),
+      save: (checked) => preferences.setThinkingVisible(checked),
+    },
+    {
+      id: "light-mode",
+      label: "Light mode",
+      checked: preferences.isLightMode(),
+      save: (checked) => preferences.setLightMode(checked),
+    },
+  ]);
 
-  function checked(key) {
-    if (key === "pi_show_thinking") return preferences.isThinkingVisible();
-    if (key === "pi_theme") return preferences.isLightMode();
-    return false;
-  }
-
-  function changed(key, event) {
-    if (key === "pi_show_thinking") preferences.setThinkingVisible(event.currentTarget.checked);
-    if (key === "pi_theme") preferences.setLightMode(event.currentTarget.checked);
+  function updatePreference(option, event) {
+    const checked = event.currentTarget.checked;
+    option.save(checked);
+    option.checked = checked;
   }
 </script>
 
-{#each settings as [key, label] (key)}
+{#each preferenceOptions as option (option.id)}
   <label class="m-option settings-option">
     <input
       class="settings-checkbox"
       type="checkbox"
-      checked={checked(key)}
-      onchange={(event) => changed(key, event)}
+      checked={option.checked}
+      onchange={(event) => updatePreference(option, event)}
     />
-    <span>{label}</span>
+    <span>{option.label}</span>
   </label>
 {/each}
 
 <div class="m-actions" id="mActions">
-  <button class="btn" data-modal-cancel onclick={closeModalState}>Done</button>
+  <button class="btn" type="button" data-modal-cancel onclick={closeModalState}>Done</button>
 </div>
