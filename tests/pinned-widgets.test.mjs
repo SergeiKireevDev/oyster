@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -26,7 +26,7 @@ function fixture(t, routeOptions = {}) {
   const ensureSessionOwner = (sessionId) => appStore.repositories.sessions.upsert({
     backend: "sqlite", sessionId, storagePath: join(root, "agent.sqlite"), createdAt: "created",
   });
-  const routes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels: () => [], ...routeOptions });
+  const routes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels: () => [], monitorRoot: join(root, ".oyster", "monitoring-widgets"), ...routeOptions });
   t.after(() => { appStore.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, state, appStore, requestContext, routes, ensureSessionOwner };
 }
@@ -200,6 +200,35 @@ test("deleting a group with its widgets preserves the source artifacts", async (
   assert.equal(appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id), null);
   assert.ok(widgetIds.every((id) => appStore.repositories.pinnedWidgets.find(id) === null));
   assert.ok(paths.every(existsSync));
+});
+
+test("monitoring widgets persist scripts and execute preview and viewer content on demand", async (t) => {
+  const { root, routes } = fixture(t);
+  writeFileSync(join(root, "tracked.txt"), "ready\n");
+  const created = response();
+  await routes["POST /pinned-widgets"](request({
+    label: "Repository state",
+    previewScript: "#!/bin/sh\nprintf '3 staged · 2 unstaged'\n",
+    contentScript: "#!/bin/sh\nprintf 'status: '; cat tracked.txt\n",
+    cwd: root,
+    format: "text",
+    sessionId: "session-a",
+  }), created);
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.widget.kind, "monitoring");
+  assert.equal(created.body.widget.availability, "ready");
+  assert.ok(created.body.widget.scriptDirectory.startsWith(join(root, ".oyster")));
+  assert.equal(readFileSync(join(created.body.widget.scriptDirectory, "preview.sh"), "utf8"), "#!/bin/sh\nprintf '3 staged · 2 unstaged'\n");
+
+  const preview = response();
+  await routes["GET /pinned-widget-monitor-preview"]({}, preview, new URL(`http://localhost/pinned-widget-monitor-preview?id=${created.body.widget.id}`));
+  assert.equal(preview.body.preview, "3 staged · 2 unstaged");
+
+  const content = response();
+  await routes["GET /pinned-widget-monitor-content"]({}, content, new URL(`http://localhost/pinned-widget-monitor-content?id=${created.body.widget.id}`));
+  assert.equal(content.body.content, "status: ready");
+  assert.equal(content.body.format, "text");
 });
 
 test("standalone HTML of any size is streamed as a sandboxed pinned preview artifact", async (t) => {

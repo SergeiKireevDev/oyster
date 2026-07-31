@@ -64,3 +64,7 @@ export async function deletePinnedWidgetGroup(fetchImpl, id, { ungroup = false, 
 export async function readPinnedTextArtifact(fetchImpl, id) {
   return jsonResponse(await fetchImpl(`/pinned-widget-content?id=${encodeURIComponent(id)}`), "cannot display text artifact");
 }
+
+export async function readPinnedMonitorContent(fetchImpl, id) {
+  return jsonResponse(await fetchImpl(`/pinned-widget-monitor-content?id=${encodeURIComponent(id)}`), "cannot refresh monitoring widget");
+}

@@ -111,6 +111,30 @@ test("dragging a group between visibility sections moves the group scope", async
   });
 });
 
+test("monitoring widgets poll visible previews and fetch fresh content when opened", async () => {
+  const requests = [];
+  const modals = [];
+  const runtime = createPinnedWidgetRuntime({
+    getSessionId: () => "session-1",
+    fetchImpl: async (url) => {
+      requests.push(url);
+      return { ok: true, json: async () => ({ content: "diff --git a/a b/a\n+new", format: "diff" }) };
+    },
+    openModal: (modal) => modals.push(modal),
+  });
+
+  await runtime.actions.open({ id: "monitor-1", label: "Git diff", kind: "monitoring", availability: "ready" });
+  assert.deepEqual(requests, ["/pinned-widget-monitor-content?id=monitor-1"]);
+  assert.equal(modals[0].context.widget.format, "diff");
+  assert.match(modals[0].context.widget.content, /\+new/);
+
+  const grid = component("PinnedWidgetGrid.svelte");
+  assert.match(grid, /setInterval\(refresh, 3_000\)/);
+  assert.match(grid, /getBoundingClientRect\(\)/);
+  assert.match(grid, /visibilityState === "hidden"/);
+  assert.match(grid, /readPinnedWidgetMonitorPreview\(widget\.id\)/);
+});
+
 test("standalone HTML opens its streaming viewer without buffering the artifact as JSON", async () => {
   const modals = [];
   let fetched = false;
@@ -166,6 +190,7 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(viewer, /widget\.mimeType === "image\/svg\+xml"/);
   assert.match(viewer, /<SvgArtifact/);
   assert.match(viewer, /<VideoArtifact/);
+  assert.match(viewer, /<MonitoringArtifact/);
   assert.match(markdown, /<SanitizedMarkdown/);
   assert.match(sanitizedMarkdown, /renderSanitizedMarkdown/);
   assert.match(html, /<iframe/);

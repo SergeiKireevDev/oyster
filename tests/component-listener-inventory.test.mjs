@@ -47,6 +47,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={onKey} />",
     "components/Overlays.svelte:use:modalKeyboardNavigation={{ isOpen: () => $modalState.open, content: () => $modalState.content }}",
     "components/Overlays.svelte:use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}",
+    "components/PinnedWidgetGrid.svelte:<span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden=\"true\" use:monitorPreview={widget}>",
     "components/SessionPickerModal.svelte:use:focusOnMount",
     "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={isEmptyMessage()} data-role={role} bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<details class=\"block tool\" class:ckpt-frozen={!!restore} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",

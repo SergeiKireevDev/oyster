@@ -17,7 +17,7 @@
   $: modalContent = resolveModalContent($modalState.content, $modalState.context);
   $: hasFolderTitleIcon = folderModalContents.has($modalState.content);
   $: isMarkdownReaderModal = $modalState.content === "pinnedWidgetViewer" && (
-    $modalState.context?.widget?.kind === "markdown"
+    ["markdown", "monitoring"].includes($modalState.context?.widget?.kind)
     || String($modalState.context?.widget?.mimeType ?? "").startsWith("text/html")
   );
 

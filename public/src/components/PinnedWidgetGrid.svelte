@@ -33,6 +33,7 @@
   let touchDestination = null;
   let touchPreview = null;
   let suppressClickUntil = 0;
+  let monitorPreviews = {};
   const touchMoveFrame = createFrameScheduler(updateTouchPointer);
   $: activeGroup = $pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null;
   $: widgetView = buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, sectionDefinitions);
@@ -121,6 +122,33 @@
     if (touchDrag?.pointerId === event.pointerId) clearTouchDrag();
   }
 
+  function monitorPreview(node, widget) {
+    if (widget.kind !== "monitoring") return {};
+    let fetching = false;
+    let disposed = false;
+    const visible = () => {
+      if (node.ownerDocument.visibilityState === "hidden" || !node.getClientRects().length) return false;
+      const bounds = node.getBoundingClientRect();
+      const viewport = node.ownerDocument.documentElement;
+      return bounds.bottom > 0 && bounds.right > 0 && bounds.top < viewport.clientHeight && bounds.left < viewport.clientWidth;
+    };
+    const refresh = async () => {
+      if (fetching || disposed || !visible()) return;
+      fetching = true;
+      try {
+        const data = await browserActions.readPinnedWidgetMonitorPreview(widget.id);
+        if (!disposed) monitorPreviews = { ...monitorPreviews, [widget.id]: { value: data.preview || "—", error: false } };
+      } catch {
+        if (!disposed) monitorPreviews = { ...monitorPreviews, [widget.id]: { value: "unavailable", error: true } };
+      } finally {
+        fetching = false;
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 3_000);
+    return { destroy() { disposed = true; clearInterval(timer); } };
+  }
+
   function openWidget(event, widget) {
     if (Date.now() < suppressClickUntil) {
       event.preventDefault();
@@ -164,6 +192,7 @@
     if (widget.kind === "directory") return "▰";
     if (widget.kind === "link") return "↗";
     if (widget.kind === "live_interface") return "◉";
+    if (widget.kind === "monitoring") return "···";
     return "•";
   }
 </script>
@@ -184,7 +213,7 @@
     onpointercancel={touchPointerCancel}
   >
     <button type="button" class="pinned-widget-tile" onclick={(event) => openWidget(event, widget)} title={widgetTitle(widget)}>
-      <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true">
+      <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true" use:monitorPreview={widget}>
         {#if readyMedia(widget, "image")}
           <img src={browserActions.pinnedWidgetMediaSource(widget.id)} alt="" loading="lazy" />
         {:else if readyMedia(widget, "video")}
@@ -197,6 +226,8 @@
           ></video><span class="pinned-widget-play">▶</span>
         {:else if isFolderWidget(widget)}
           <FolderIcon size={30} />
+        {:else if widget.kind === "monitoring" && monitorPreviews[widget.id]}
+          <span class:monitor-preview-error={monitorPreviews[widget.id].error} class="pinned-widget-monitor-preview">{monitorPreviews[widget.id].value}</span>
         {:else}
           <span class="pinned-widget-glyph">{glyph(widget)}</span>
         {/if}

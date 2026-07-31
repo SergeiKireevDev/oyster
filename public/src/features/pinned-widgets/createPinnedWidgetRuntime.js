@@ -3,6 +3,7 @@ import {
   deletePinnedWidgetGroup,
   pinLink,
   pinPath,
+  readPinnedMonitorContent,
   readPinnedTextArtifact,
   unpinWidget,
   updatePinnedWidget,
@@ -37,6 +38,13 @@ export function createPinnedWidgetRuntime(deps) {
     }
     if (widget.kind === "directory") {
       await deps.showFileExplorer(widget.path);
+      return;
+    }
+    if (widget.kind === "monitoring") {
+      try {
+        const data = await readPinnedMonitorContent(deps.fetchImpl, widget.id);
+        deps.openModal({ title: widget.label, wide: true, content: "pinnedWidgetViewer", context: { widget: { ...widget, content: data.content, format: data.format } } });
+      } catch (error) { deps.toast(error.message, "error"); }
       return;
     }
     if (["image", "video"].includes(widget.kind)) {
