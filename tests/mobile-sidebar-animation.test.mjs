@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const css = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+const header = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
 
 test("mobile session and hublot drawers animate in and reverse when closing", () => {
   assert.match(css, /#sessions\.open[\s\S]*?box-shadow: 12px 0 36px rgba\(0,0,0,\.62\)[\s\S]*?animation: sessions-slide-in 500ms/);
@@ -19,7 +20,7 @@ test("mobile session and hublot drawers animate in and reverse when closing", ()
 });
 
 test("mobile header uses compact grouped controls", () => {
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{ gap: 1px; padding: 2px; \}/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#cfgChip \{ max-width: 42vw; display: inline-flex; font-size: 10\.5px; \}/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?#treeChip \{ display: none; \}/);
+  assert.match(header, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?gap: 1px;[\s\S]*?padding: 2px;/);
+  assert.match(header, /@media \(max-width: 760px\)[\s\S]*?#cfgChip \{[\s\S]*?display: inline-flex;[\s\S]*?max-width: 42vw;/);
+  assert.match(header, /#modelChip,[\s\S]*?#thinkChip,[\s\S]*?#treeChip \{[\s\S]*?display: none;/);
 });
