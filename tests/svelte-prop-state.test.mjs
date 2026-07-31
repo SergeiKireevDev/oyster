@@ -95,7 +95,11 @@ test("artifact resource state resets explicitly whenever the src prop changes", 
   assert.match(html, /\$effect\.pre\(\(\) => \{\s*resetResourceState\(src\);/);
   assert.match(html, /function resetResourceState\(nextSource\)\s*\{[\s\S]*nextSource === activeSource[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
 
-  for (const name of ["ImageArtifact.svelte", "SvgArtifact.svelte", "VideoArtifact.svelte"]) {
+  const image = readFileSync(new URL("../public/src/components/ImageArtifact.svelte", import.meta.url), "utf8");
+  assert.match(image, /\$effect\.pre\(\(\) => \{\s*resetResourceState\(src\);/);
+  assert.match(image, /function resetResourceState\(nextSource\)\s*\{[\s\S]*nextSource === activeSource[\s\S]*zoomed = false;[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
+
+  for (const name of ["SvgArtifact.svelte", "VideoArtifact.svelte"]) {
     const source = readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
     assert.match(source, /\$:\s*resetResourceState\(src\)/);
     assert.match(source, /function resetResourceState\(\)\s*\{[\s\S]*status = "loading";[\s\S]*attempt = 0;/);

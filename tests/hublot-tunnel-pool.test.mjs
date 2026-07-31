@@ -10,10 +10,12 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
   HUBLOT_TUNNEL_POOL_LABEL,
   acquireHublotTunnelPoolEntry,
+  ensureHublotTunnelPool,
   listTunnels,
   persistHublotProcessIdentity,
   recordHublotTransition,
   reserveHublot,
+  scheduleHublotTunnelPoolRetry,
   shutdownHublots,
   spawnHublotTunnelPoolDummy,
 } from "../server/tunnels.mjs";
@@ -128,4 +130,72 @@ test("claiming a warm tunnel kills only the dummy and preserves its cloudflared 
     workdir: root,
     createdAt: claimed.created_at,
   }]);
+});
+
+test("an empty warm pool returns a cache miss while requesting background refill", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-miss-"));
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const state = {
+    appStore: store,
+    config: { PI_AGENT_DIR: join(root, "agent"), HUBLOT_TUNNEL_POOL_SIZE: 2 },
+    currentDir: root,
+    hublotProcessHandles: new Map(),
+    hublotTunnelPoolQueue: Promise.resolve(),
+  };
+  t.after(() => {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  let refillRequests = 0;
+
+  const claimed = await acquireHublotTunnelPoolEntry(state, { label: "app", brief: "serve app" }, {
+    scheduleRefill: () => { refillRequests += 1; },
+  });
+
+  assert.equal(claimed, null);
+  assert.equal(refillRequests, 1);
+});
+
+test("failed pool fills schedule bounded retries and a retry runs automatically", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-retry-"));
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const state = {
+    appStore: store,
+    config: { PI_AGENT_DIR: join(root, "agent"), HUBLOT_TUNNEL_POOL_SIZE: 2 },
+    currentDir: root,
+    hublotProcessHandles: new Map(),
+    hublotTunnelPoolRefillTask: null,
+    hublotTunnelPoolRefillRequested: false,
+    hublotTunnelPoolRetryTimer: null,
+    hublotTunnelPoolRetryAttempt: 0,
+    hublotTunnelPoolStopping: false,
+  };
+  t.after(() => {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  let scheduled = 0;
+  await assert.rejects(
+    ensureHublotTunnelPool(state, {
+      createEntry: async () => { throw new Error("rate limited"); },
+      scheduleRetry: () => { scheduled += 1; },
+    }),
+    /rate limited/,
+  );
+  assert.equal(scheduled, 1);
+
+  let callback = null;
+  let ensured = 0;
+  const timer = { unref() {} };
+  const delay = scheduleHublotTunnelPoolRetry(state, {
+    ensurePool: async () => { ensured += 1; return []; },
+    setTimer(fn) { callback = fn; return timer; },
+    random: () => 0.5,
+  });
+  assert.equal(delay, 5_000);
+  assert.equal(state.hublotTunnelPoolRetryTimer, timer);
+  callback();
+  await Promise.resolve();
+  assert.equal(ensured, 1);
+  assert.equal(state.hublotTunnelPoolRetryTimer, null);
 });
