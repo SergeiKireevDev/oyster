@@ -17,14 +17,28 @@ test("file picker component routes browse, choose, use-folder, and cancel throug
   assert.doesNotMatch(source, /features\/files\/filePickerActions\.js/);
 });
 
-test("shared directory lists separate navigation shortcuts from child folders", () => {
+test("shared directory lists separate navigation shortcuts from semantic child folder rows", () => {
   const list = readFileSync(new URL("../public/src/components/BrowserDirectoryList.svelte", import.meta.url), "utf8");
-  assert.match(list, /hasNavigation && visibleDirs\.length/);
+  assert.match(list, /hasNavigation && visibleDirectories\.length/);
+  assert.match(list, /<nav class="browser-directory-navigation" aria-label="Directory shortcuts">/);
   assert.match(list, /class="browser-directory-separator" role="separator"/);
+  assert.match(list, /class="browser-directory-list" role="list" aria-label="Folders"/);
+  assert.match(list, /class="browser-directory-row" role="listitem"/);
+  assert.match(list, /aria-label="Parent folder"/);
+  assert.equal((list.match(/<button/g) ?? []).length, (list.match(/<button[^>]*type="button"/g) ?? []).length);
   for (const component of ["FileExplorerModal.svelte", "FilePickerModal.svelte", "FolderBrowserModal.svelte"]) {
     const source = readFileSync(new URL(`../public/src/components/${component}`, import.meta.url), "utf8");
     assert.match(source, /<BrowserDirectoryList/);
   }
+});
+
+test("shared directory list owns typed reactive paging state", () => {
+  const list = readFileSync(new URL("../public/src/components/BrowserDirectoryList.svelte", import.meta.url), "utf8");
+  assert.match(list, /BrowserDirectory\[\]/);
+  assert.match(list, /\} = \$props\(\)/);
+  assert.match(list, /requestedDirectories = \$state\(DEFAULT_COLLECTION_PAGE_SIZE\)/);
+  assert.match(list, /\$effect\.pre\(\(\) =>/);
+  assert.doesNotMatch(list, /export let|\$:/);
 });
 
 test("folder browser component routes browse, create, submit, and cancel through scoped actions", () => {
