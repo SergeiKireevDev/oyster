@@ -30,3 +30,16 @@ test("routine list prevents duplicate actions and exposes accessible state", () 
   assert.match(source, /role="img"\s+aria-label=\{`Status: \$\{routine\.status\}`\}/);
   assert.match(source, /routine\.progress === null \? " indet"/);
 });
+
+test("routine manager normalizes submissions and exposes its busy state", () => {
+  const source = readFileSync(new URL("../public/src/components/RoutineManagerModal.svelte", import.meta.url), "utf8");
+
+  assert.match(source, /const brief = \$routineManager\.brief\.trim\(\)/);
+  assert.match(source, /if \(\$routineManager\.creating \|\| !brief\) return/);
+  assert.match(source, /uiActions\.invoke\(ROUTINE_GENERATE_ACTION, brief\)/);
+  assert.match(source, /<form aria-busy=\{\$routineManager\.creating\} onsubmit=\{submitRoutine\}>/);
+  assert.match(source, /<textarea[\s\S]*?disabled=\{\$routineManager\.creating\}[\s\S]*?oninput=\{updateBrief\}/);
+  assert.match(source, /<span role="status" aria-atomic="true">Building routine…<\/span>/);
+  assert.doesNotMatch(source, /onsubmit=\{\(event\) =>/);
+  assert.doesNotMatch(source, /oninput=\{\(event\) =>/);
+});
