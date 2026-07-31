@@ -64,8 +64,8 @@ test("loop parses Markdown checklists and checks exactly the selected item", asy
 
 test("loop derives concise meaningful commit messages from checklist items", async () => {
   const { commitMessage } = await loadHelpers();
-  assert.equal(commitMessage("  Add   retry handling\nfor failed jobs  "), "loop: Add retry handling for failed jobs");
-  assert.equal(commitMessage("x".repeat(100)), `loop: ${"x".repeat(66)}`);
+  assert.equal(commitMessage("  Add   retry handling\nfor failed jobs  "), "Add retry handling for failed jobs");
+  assert.equal(commitMessage("x".repeat(100)), "x".repeat(72));
 });
 
 test("loop first iteration context contains only instructions and plan", async () => {
@@ -101,7 +101,8 @@ test("loop failed follow-up context keeps item unchecked and includes failure de
 
 test("loop registers the /loop command", () => {
   assert.match(source, /pi\.registerCommand\("loop"/);
-  assert.match(source, /\/loop <plan\.md> <executable-validation-script> \[max-iterations\]/);
+  assert.match(source, /\/loop <plan\.md> <executable-validation-script>/);
+  assert.doesNotMatch(source, /\[max-iterations\]|DEFAULT_MAX_ITERATIONS|maxIterations/);
   assert.match(source, /pi\.setSessionName\(`Loop: \$\{basename\(planPath\)\}`\)/);
   assert.match(source, /await runLoop\(pi, ctx/);
 });
@@ -131,4 +132,12 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
     source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
     "validation must pass before a loop step is committed",
   );
+});
+
+test("loop has no total iteration limit and stops after one step stalls 20 times", () => {
+  assert.match(source, /const MAX_STALLED_ITERATIONS = 20/);
+  assert.match(source, /for \(let iteration = 1; ; iteration \+= 1\)/);
+  assert.match(source, /if \(succeeded\) \{[\s\S]*stalledIterations = 0;[\s\S]*stalledIterations \+= 1/);
+  assert.match(source, /stalledIterations >= MAX_STALLED_ITERATIONS/);
+  assert.match(source, /failed to advance for \$\{MAX_STALLED_ITERATIONS\} consecutive iterations/);
 });
