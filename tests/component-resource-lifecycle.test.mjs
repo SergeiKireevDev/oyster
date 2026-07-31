@@ -39,6 +39,16 @@ test("debounced session search and toast transition work are cancelled on destro
   const toast = readFileSync(new URL("ToastItem.svelte", componentsRoot), "utf8");
 
   assert.match(picker, /onDestroy\(\(\) => clearTimeout\(debounce\)\)/);
-  assert.match(toast, /onDestroy\(\(\) => \{[\s\S]*for \(const timer of timers\) clearTimeout\(timer\);[\s\S]*timers\.clear\(\);/);
+  assert.match(toast, /function clearTimers\(\) \{[\s\S]*for \(const timer of timers\) clearTimeout\(timer\);[\s\S]*timers\.clear\(\);/);
+  assert.match(toast, /onDestroy\(\(\) => \{[\s\S]*swipeFrame\.cancel\(\);[\s\S]*clearTimers\(\);/);
   assert.equal(toast.match(/\bsetTimeout\(/g)?.length, 1, "toast delays must go through its owned scheduler");
+});
+
+test("toast swipe cancellation resets the gesture without dismissing", () => {
+  const toast = readFileSync(new URL("ToastItem.svelte", componentsRoot), "utf8");
+
+  assert.match(toast, /function handlePointerCancel\(event\) \{\s*finishSwipe\(event, false\);\s*\}/);
+  assert.match(toast, /onlostpointercapture=\{handleLostPointerCapture\}/);
+  assert.match(toast, /swipeFrame\.schedule\(event\.clientX\);\s*swipeFrame\.flush\(\);/);
+  assert.match(toast, /if \(dismissed\) return false;/);
 });
