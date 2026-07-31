@@ -23,7 +23,7 @@ function locations(pattern) {
 
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
-    "components/Menu.svelte:24:<svelte:document onclick={close} />",
+    "components/Menu.svelte:94:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:48:<svelte:document onkeydowncapture={onKey} />",
   ]);
 
@@ -43,6 +43,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
     "components/Menu.svelte:<svelte:document onclick={close} />",
+    "components/Menu.svelte:<button type=\"button\" role=\"menuitem\" tabindex=\"-1\" data-action=\"analytics\" use:focusWhenOpened={$menuOpen} onclick={openAnalytics}>",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
     "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={onKey} />",

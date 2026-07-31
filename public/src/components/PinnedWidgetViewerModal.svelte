@@ -10,8 +10,10 @@
   import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { PINNED_WIDGET_REVEAL_ACTION } from "../runtime/uiActionNames.js";
+  import { PINNED_WIDGET_OPEN_ACTION, PINNED_WIDGET_REVEAL_ACTION } from "../runtime/uiActionNames.js";
   import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
+  import { pinnedWidgets } from "../stores/pinnedWidgets.js";
+  import { buildPinnedWidgetViewerNavigation } from "../features/pinned-widgets/pinnedWidgetViewModel.js";
 
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
@@ -20,10 +22,15 @@
   $: htmlSource = widget.id ? browserActions.pinnedWidgetHtmlSource(widget.id) : "";
   $: download = widget.path ? browserActions.fileDownload(widget.path) : null;
   $: isHtml = String(widget.mimeType ?? "").startsWith("text/html");
+  $: navigation = buildPinnedWidgetViewerNavigation($pinnedWidgets, widget.id);
   $: copyRawLabel = copyRawState === "copied" ? "Copied" : copyRawState === "failed" ? "Copy failed" : "Copy raw";
   let copyRawState = "idle";
   let copyRawTimer;
   const copyRequests = createAsyncRequestGuard();
+
+  function openAdjacentWidget(target) {
+    if (target) uiActions.invoke(PINNED_WIDGET_OPEN_ACTION, target);
+  }
 
   async function copyRawMarkdown() {
     const request = copyRequests.begin();
@@ -74,6 +81,27 @@
     {/if}
   </div>
   <div class="m-actions pinned-widget-viewer-actions">
+    {#if navigation.total > 1}
+      <div class="pinned-widget-viewer-navigation" aria-label="Pinned widget navigation">
+        <button
+          type="button"
+          class="chip pinned-widget-viewer-arrow"
+          aria-label="Previous pinned widget"
+          title={navigation.previous ? `Previous: ${navigation.previous.label}` : "No previous pinned widget"}
+          disabled={!navigation.previous}
+          onclick={() => openAdjacentWidget(navigation.previous)}
+        >←</button>
+        <span aria-live="polite">{navigation.index + 1} / {navigation.total}</span>
+        <button
+          type="button"
+          class="chip pinned-widget-viewer-arrow"
+          aria-label="Next pinned widget"
+          title={navigation.next ? `Next: ${navigation.next.label}` : "No next pinned widget"}
+          disabled={!navigation.next}
+          onclick={() => openAdjacentWidget(navigation.next)}
+        >→</button>
+      </div>
+    {/if}
     {#if download}<a class="chip" href={download.href} download={download.filename}>Download</a>{/if}
     {#if widget.path}<button class="chip" onclick={() => uiActions.invoke(PINNED_WIDGET_REVEAL_ACTION, widget)}>Reveal in Files</button>{/if}
     <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
