@@ -1376,36 +1376,7 @@
   .tool .diff .diff-add { color: var(--green); background: rgba(80, 255, 120, 0.08); }
   .tool .diff .diff-hdr { color: var(--muted); margin-top: 6px; }
 
-  /* ---------- composer ---------- */
-  #composer {
-    flex-shrink: 0;
-    background: var(--panel);
-    border-top: 1px solid var(--border);
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  }
-  #composer .inner {
-    max-width: 860px;
-    margin: 0 auto;
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-    position: relative;
-  }
-  #input {
-    flex: 1;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    color: var(--text);
-    font: inherit;
-    padding: 9px 12px;
-    resize: none;
-    max-height: 200px;
-    overflow-y: hidden;
-    outline: none;
-  }
-  #input:focus { border-color: var(--accent-dim); }
-
+  /* ---------- shared primary actions ---------- */
   .btn {
     background: var(--accent);
     color: #10131a;
@@ -1419,38 +1390,6 @@
   }
   .btn:disabled { opacity: .45; cursor: default; }
   .btn.stop { background: var(--red); }
-  .voice-btn {
-    width: 40px;
-    height: 40px;
-    padding: 9px;
-    flex: none;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-  }
-  .voice-btn svg { width: 100%; height: 100%; fill: currentColor; display: block; }
-  .voice-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
-  .voice-btn.recording { color: #ff8ba0; background: rgba(255,125,145,.14); animation: voice-pulse 1.4s ease-in-out infinite; }
-  .voice-waveform { height: 20px; display: flex; align-items: center; justify-content: center; gap: 2px; }
-  .voice-waveform i { width: 3px; height: 5px; border-radius: 2px; background: currentColor; animation: voice-wave .72s ease-in-out infinite alternate; }
-  .voice-waveform i:nth-child(2), .voice-waveform i:nth-child(4) { animation-delay: -.24s; }
-  .voice-waveform i:nth-child(3) { animation-delay: -.48s; }
-  .voice-btn.transcribing { cursor: wait; color: var(--accent); background: rgba(157,169,255,.12); animation: none; }
-  .voice-loading { width: 18px; height: 18px; display: block; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: voice-spin .8s linear infinite; }
-  @keyframes voice-spin { to { transform: rotate(360deg); } }
-  @keyframes voice-pulse { 50% { box-shadow: 0 0 0 5px rgba(255,125,145,.08); } }
-  @keyframes voice-wave { from { height: 5px; } to { height: 19px; } }
-  #statusbar {
-    max-width: 860px;
-    margin: 4px auto 0;
-    font-size: 11.5px;
-    color: var(--muted);
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-  }
 
   /* ---------- modal ---------- */
   #overlay {
@@ -1928,7 +1867,6 @@ body {
 }
 button, input, textarea, select { letter-spacing: inherit; }
 .folder-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-#workdirInfo { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -2295,59 +2233,9 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
 }
 .activity-history-body details.block.activity-step > summary { min-height: 25px; opacity: .82; }
 .permalink, .message-copy, .checkpoint, .ckpt-restore { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
-/* Floating composer */
-#composer {
-  padding: 10px 20px calc(16px + env(safe-area-inset-bottom));
-  border-top: 0;
-  background: linear-gradient(0deg, var(--bg) 55%, rgba(11,13,18,.9) 78%, transparent);
-}
-#composer .inner {
-  max-width: 900px;
-  min-height: 54px;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 7px 6px 14px;
-  border: 1px solid #2c3240;
-  border-radius: 17px;
-  background: rgba(24,28,37,.96);
-  box-shadow: 0 14px 38px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.035);
-  transition: border-color .16s, box-shadow .16s;
-}
-#composer .inner:focus-within { border-color: rgba(157,169,255,.52); box-shadow: 0 16px 42px rgba(0,0,0,.38), 0 0 0 3px rgba(157,169,255,.07); }
-.composer-prompt { flex: none; align-self: flex-start; margin-top: 8px; color: #7f8af0; font: 500 23px/1 var(--mono); }
-.composer-editor { position: relative; flex: 1; min-width: 0; }
-.composer-highlight {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  margin: 0;
-  padding: 9px 4px;
-  overflow: hidden;
-  pointer-events: none;
-  color: var(--text);
-  font: inherit;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-.composer-highlight .code {
-  color: #d7ddff;
-  background: rgba(157,169,255,.11);
-  box-shadow: 0 0 0 2px rgba(157,169,255,.11);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.composer-highlight .fence { color: #8f9cf3; font-weight: 600; }
-#input { position: relative; z-index: 1; width: 100%; min-height: 40px; padding: 9px 4px; border: 0; border-radius: 0; background: transparent; color: transparent; caret-color: var(--text); line-height: 1.45; }
-#input:focus { border: 0; }
-#input::placeholder { color: #6f7789; }
-#input::selection { background: rgba(157,169,255,.3); }
 .btn { min-height: 40px; padding: 8px 17px; border-radius: 11px; background: linear-gradient(145deg, #b0b9ff, #8f9cf3); box-shadow: 0 5px 16px rgba(106,120,225,.2); color: #10131e; font-size: 13px; transition: transform .15s, filter .15s; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .btn.stop { background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
-.voice-btn { transition: color .15s, background .15s, box-shadow .15s; }
-#statusbar { max-width: 900px; margin-top: 7px; padding: 0 5px; gap: 9px; font-size: 10px; }
-#statusbar span + span::before { content: "·"; margin-right: 9px; color: #4e5668; }
 
 /* Right rail cards */
 .hublot-block { border-color: rgba(255,255,255,.075); border-radius: 12px; background: rgba(255,255,255,.03); box-shadow: 0 8px 24px rgba(0,0,0,.1); transition: transform .16s, border-color .16s; }
@@ -2395,13 +2283,7 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
   #messages { padding: 17px 16px 12px; gap: 4px; }
   .msg.user { max-width: 88%; padding: 8px 12px; }
   .msg.assistant { font-size: 13.75px; line-height: 1.52; }
-  #composer { padding: 8px 10px calc(11px + env(safe-area-inset-bottom)); }
-  #composer .inner { min-height: 50px; padding-left: 11px; border-radius: 15px; }
-  .composer-prompt { display: none; }
-  #input, .composer-highlight { padding-left: 3px; }
   .btn { min-height: 38px; padding-inline: 14px; }
-  #statusbar { padding-inline: 4px; white-space: nowrap; overflow: hidden; }
-  #workdirInfo { overflow: hidden; text-overflow: ellipsis; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2539,20 +2421,6 @@ html[data-theme="light"] .tok-kw { color: #7a3eb1; }
 html[data-theme="light"] .tok-fn { color: #3656b3; }
 html[data-theme="light"] .tok-lit { color: #8a5b13; }
 html[data-theme="light"] .tok-var { color: #126a87; }
-
-html[data-theme="light"] #composer {
-  background: linear-gradient(0deg, var(--bg) 55%, rgba(245,247,251,.92) 78%, transparent);
-}
-html[data-theme="light"] #composer .inner {
-  border-color: var(--border);
-  background: rgba(255,255,255,.97);
-  box-shadow: 0 14px 38px rgba(35,43,65,.13), inset 0 1px 0 #fff;
-}
-html[data-theme="light"] #composer .inner:focus-within { box-shadow: 0 16px 42px rgba(35,43,65,.14), 0 0 0 3px rgba(82,99,216,.1); }
-html[data-theme="light"] .composer-prompt,
-html[data-theme="light"] .composer-highlight .fence { color: #5263d8; }
-html[data-theme="light"] .composer-highlight .code { color: #35429f; background: rgba(82,99,216,.1); box-shadow: 0 0 0 2px rgba(82,99,216,.1); }
-html[data-theme="light"] #input::placeholder { color: #7b8598; }
 
 html[data-theme="light"] .hublot-block,
 html[data-theme="light"] .routine-block { border-color: var(--border); background: rgba(255,255,255,.68); box-shadow: 0 8px 24px rgba(35,43,65,.08); }
