@@ -91,7 +91,11 @@ test("components do not initialize mutable local state from props", () => {
 });
 
 test("artifact resource state resets explicitly whenever the src prop changes", () => {
-  for (const name of ["HtmlArtifact.svelte", "ImageArtifact.svelte", "SvgArtifact.svelte", "VideoArtifact.svelte"]) {
+  const html = readFileSync(new URL("../public/src/components/HtmlArtifact.svelte", import.meta.url), "utf8");
+  assert.match(html, /\$effect\.pre\(\(\) => \{\s*resetResourceState\(src\);/);
+  assert.match(html, /function resetResourceState\(nextSource\)\s*\{[\s\S]*nextSource === activeSource[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
+
+  for (const name of ["ImageArtifact.svelte", "SvgArtifact.svelte", "VideoArtifact.svelte"]) {
     const source = readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
     assert.match(source, /\$:\s*resetResourceState\(src\)/);
     assert.match(source, /function resetResourceState\(\)\s*\{[\s\S]*status = "loading";[\s\S]*attempt = 0;/);

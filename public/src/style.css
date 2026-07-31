@@ -3314,7 +3314,6 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .diff-line.diff-hunk { background: rgba(104, 132, 230, .13); color: #b8c5ff; }
 .diff-line.diff-meta { color: #95a3b7; font-weight: 650; }
 .pinned-widget-viewer-stage.html-stage { display: block; background: #fff; }
-.pinned-html-preview { display: block; width: 100%; height: 100%; min-height: 100%; border: 0; background: #fff; }
 .pinned-markdown-viewer {
   box-sizing: border-box;
   width: min(100%, 78ch);

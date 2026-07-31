@@ -27,12 +27,15 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
     ["ImageArtifact.svelte", "image"],
     ["VideoArtifact.svelte", "video"],
     ["SvgArtifact.svelte", "svg"],
-    ["HtmlArtifact.svelte", "html"],
   ]) {
     const source = component(name);
     assert.match(source, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
     assert.match(source, new RegExp(`<ArtifactLoadState kind="${kind}" available=\\{!!src\\} \\{status\\} onRetry=\\{retry\\}`));
   }
+
+  const html = component("HtmlArtifact.svelte");
+  assert.match(html, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
+  assert.match(html, /<ArtifactLoadState kind="html" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
   assert.match(component("MarkdownArtifact.svelte"), /Markdown artifact is empty/);
 });
 
