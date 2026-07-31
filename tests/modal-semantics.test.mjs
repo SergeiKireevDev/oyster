@@ -91,7 +91,7 @@ test("file folder session and overlay controls use native semantics", () => {
     assert.match(explorer, new RegExp(`<button[^>]*onclick=\\{${action}\\}`));
   }
   const filePicker = read("FilePickerModal.svelte");
-  assert.match(filePicker, /<button class="chip folder-action" type="button" title="Insert the current folder path" onclick=\{useFilePickerFolder\}>/);
+  assert.match(filePicker, /<button class="btn modal-primary-action folder-action" type="button" title="Insert the current folder path" onclick=\{useFilePickerFolder\}>/);
   assert.match(filePicker, /class:active=\{\$filePicker\.showHidden\}[\s\S]*aria-pressed=\{\$filePicker\.showHidden\}/);
   assert.equal((filePicker.match(/<button/g) ?? []).length, (filePicker.match(/<button[^>]*type="button"/g) ?? []).length);
   const folderBrowser = read("FolderBrowserModal.svelte");
