@@ -108,7 +108,8 @@ test("high-frequency component events avoid per-event reactive and global update
   assert.doesNotMatch(modalDom, /addEventListener\("mousemove"/);
   assert.match(modalDom, /option === keyboardOption/);
   assert.match(modalDom, /addEventListener\("pointermove"/);
-  assert.match(command, /items\[index\]\?\.active\) return/);
+  assert.doesNotMatch(command, /onmouseenter|setCommandPaletteState/);
+  assert.match(command, /use:keepActiveVisible=\{cmd\.active\}/);
   assert.match(picker, /clearTimeout\(debounce\)[\s\S]*setTimeout\(\(\) => runSessionPickerSearch\(\), 250\)/);
   assert.match(sidebar, /clearTimeout\(searchTimer\)[\s\S]*searchTimer = setTimeout/);
 });

@@ -52,7 +52,7 @@ test("loading, connection, voice, and search updates expose polite status semant
 });
 
 test("dynamic empty results are announced as polite statuses", () => {
-  assert.match(component("CommandPalette.svelte"), /class="cmd-empty" role="status"/);
+  assert.match(component("CommandPalette.svelte"), /role=\{\$commandPalette\.emptyText \? "status" : "listbox"\}/);
   assert.match(component("OptionPickerModal.svelte"), /class="option-picker-empty" role="status"/);
   assert.match(component("FileExplorerModal.svelte"), /class="m-path" role="status">\(empty folder\)/);
   assert.match(component("RoutineList.svelte"), /class="r-empty" role="status">No routines yet/);

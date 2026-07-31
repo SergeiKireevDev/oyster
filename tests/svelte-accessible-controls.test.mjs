@@ -48,10 +48,13 @@ test("controls that start work use native disabled semantics while busy", () => 
   assert.match(component("Composer.svelte"), /id="sendBtn"[^>]*type="submit"[^>]*disabled=\{\$composerUi\.sendDisabled\}/);
 });
 
-test("command palette choices activate through native click behavior", () => {
+test("command palette choices expose suggestion semantics and native click behavior", () => {
   const palette = component("CommandPalette.svelte");
 
-  assert.match(palette, /onmousedown=\{\(event\) => event\.preventDefault\(\)\}/);
-  assert.match(palette, /onclick=\{\(event\) => choose\(event, i\)\}/);
-  assert.doesNotMatch(palette, /onmousedown=\{\(event\) => choose\(event, i\)\}/);
+  assert.match(palette, /role=\{\$commandPalette\.emptyText \? "status" : "listbox"\}/);
+  assert.match(palette, /aria-hidden=\{!\$commandPalette\.open\}/);
+  assert.match(palette, /role="option"[\s\S]*aria-selected=\{cmd\.active\}/);
+  assert.match(palette, /onmousedown=\{keepComposerFocus\}/);
+  assert.match(palette, /onclick=\{\(\) => choose\(i\)\}/);
+  assert.doesNotMatch(palette, /onmousedown=\{[^}]*choose/);
 });

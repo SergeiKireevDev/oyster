@@ -44,8 +44,8 @@ test("Header presents session controls as a consistent icon action group", () =>
 });
 
 test("CommandPalette routes native activation through the scoped registry", () => {
-  assert.match(commandPaletteSource, /onclick=\{\(event\) => choose\(event, i\)\}/);
-  assert.match(commandPaletteSource, /onmousedown=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(commandPaletteSource, /onclick=\{\(\) => choose\(i\)\}/);
+  assert.match(commandPaletteSource, /onmousedown=\{keepComposerFocus\}/);
   assert.match(commandPaletteSource, /uiActions\.invoke\(COMMAND_PALETTE_RUN_ACTION, index\)/);
   assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|CustomEvent/);
 });

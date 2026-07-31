@@ -188,7 +188,8 @@ async function body(page, { mobile = false } = {}) {
   await expect(liveWidget).toHaveClass(/unavailable/);
 }
 
-test("git status monitor refreshes its visible preview and viewer content", async ({ page }) => {
+test("git status monitor refreshes without cropping mobile viewer text", async ({ page }) => {
+  await page.setViewportSize(MOBILE_VIEWPORT);
   dexec(`
     cd /workspace
     rm -rf .git
@@ -204,6 +205,9 @@ test("git status monitor refreshes its visible preview and viewer content", asyn
   const sessionId = await waitFor(() => currentSessionId(page), {
     timeout: 30000, label: "a session id",
   });
+  await swipe(page, "left");
+  await page.waitForFunction(() => document.getElementById("hublots")?.classList.contains("open"));
+
   const created = await api("POST", "/pinned-widgets", {
     label: "Git status",
     previewScript: `#!/bin/sh
@@ -240,12 +244,22 @@ git --no-pager status --branch --untracked-files=all
   await expect(page.locator(".pinned-monitor-output")).toContainText("nothing to commit, working tree clean");
   await page.locator(".pinned-widget-viewer-actions .chip", { hasText: "Close" }).click();
 
-  dexec("touch /workspace/local-change.txt");
+  const localFile = "local-change-with-a-very-long-name-that-scrolls-inside-the-monitor-viewer.txt";
+  dexec(`touch /workspace/${localFile}`);
   await expect(preview).toContainText("1 untracked", { timeout: 10000 });
 
   await widget.locator(".pinned-widget-tile").click();
-  await expect(page.locator(".pinned-monitor-output")).toContainText("Untracked files:");
-  await expect(page.locator(".pinned-monitor-output")).toContainText("local-change.txt");
+  const output = page.locator(".pinned-monitor-output");
+  await expect(output).toContainText("Untracked files:");
+  await expect(output).toContainText(localFile);
+  const geometry = await page.locator(".pinned-widget-viewer-stage.monitoring-stage").evaluate((stage) => {
+    const stageBounds = stage.getBoundingClientRect();
+    const outputBounds = stage.querySelector(".pinned-monitor-output").getBoundingClientRect();
+    return { stageLeft: stageBounds.left, stageRight: stageBounds.right, outputLeft: outputBounds.left, viewportWidth: innerWidth };
+  });
+  expect(geometry.stageLeft).toBeGreaterThanOrEqual(0);
+  expect(geometry.stageRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.outputLeft).toBeGreaterThanOrEqual(geometry.stageLeft - 1);
 });
 
 test.describe("desktop", () => {

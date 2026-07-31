@@ -22,7 +22,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/CheckpointTreebar.svelte`
 - [x] `public/src/components/CheckpointTreeNode.svelte`
 - [x] `public/src/components/CloudWorkspaceModal.svelte`
-- [ ] `public/src/components/CommandPalette.svelte`
+- [x] `public/src/components/CommandPalette.svelte`
 - [ ] `public/src/components/Composer.svelte`
 - [ ] `public/src/components/ConfirmPromptModal.svelte`
 - [ ] `public/src/components/CredentialsModal.svelte`

@@ -8,6 +8,7 @@ test("monitoring output is constrained to the mobile viewer instead of being cro
   assert.match(styles, /\.pinned-widget-viewer-stage\.monitoring-stage \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*max-width: 100%;[^}]*overflow: auto;/);
   assert.match(styles, /\.pinned-monitor-output \{[^}]*width: max-content;[^}]*min-width: 100%;/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.pinned-monitor-output \{ padding: 12px; \}/);
+  assert.match(styles, /\.pinned-monitor-output:not\(\.diff-output\) \{ width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; \}/);
 });
 
 test("monitoring output has explicit high-contrast light-theme colors", () => {
