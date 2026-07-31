@@ -1,20 +1,12 @@
 <script>
-  import { onMount, tick } from "svelte";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
 
   const dialogs = getDialogService();
   const editorPrompt = dialogs.editorPrompt;
-
-  let inputEl;
-
-  onMount(() => {
-    tick().then(() => inputEl?.focus());
-  });
 </script>
 
 <form onsubmit={(event) => { event.preventDefault(); dialogs.submitEditor(); }}>
   <textarea
-    bind:this={inputEl}
     aria-label={$editorPrompt.placeholder || "Editor response"}
     placeholder={$editorPrompt.placeholder}
     value={$editorPrompt.value}

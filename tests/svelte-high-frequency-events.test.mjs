@@ -36,6 +36,25 @@ test("frame scheduler coalesces event bursts, flushes the latest value, and canc
   assert.deepEqual(calls, ["latest", "flushed"]);
 });
 
+test("composer highlight mirrors the latest native scroll position once per frame", () => {
+  const source = component("Composer.svelte");
+  assert.match(source, /bind:this=\{highlight\}/);
+  assert.match(source, /highlight\.scrollTop = top;[\s\S]*highlight\.scrollLeft = left;/);
+
+  const frames = [];
+  const highlight = { scrollTop: 0, scrollLeft: 0 };
+  const scheduler = createFrameScheduler(
+    (top, left) => { highlight.scrollTop = top; highlight.scrollLeft = left; },
+    (callback) => { frames.push(callback); return frames.length; },
+    () => {},
+  );
+  scheduler.schedule(10, 2);
+  scheduler.schedule(90, 7);
+  assert.equal(frames.length, 1, "an input/scroll burst schedules one layout update");
+  frames[0]();
+  assert.deepEqual(highlight, { scrollTop: 90, scrollLeft: 7 });
+});
+
 test("carousel resize bursts apply layout once per frame and teardown cancels pending work", () => {
   const listeners = new Map();
   const target = {
