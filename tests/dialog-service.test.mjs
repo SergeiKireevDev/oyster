@@ -21,7 +21,9 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.match(modal, /dialogs\.(?:submitText|cancelText|setTextValue)/);
   assert.doesNotMatch(modal, /stores\/dialogs\.js/);
   assert.match(modal, /onclick=\{dialogs\.cancelText\}/);
-  assert.match(modal, /<form onsubmit=.*dialogs\.submitText\(\)/);
+  assert.match(modal, /<form onsubmit=\{submitTextPrompt\}>/);
+  assert.match(modal, /function submitTextPrompt\(event\)[^]*dialogs\.submitText\(\)/);
+  assert.match(modal, /function updateTextValue\(event\)[^]*dialogs\.setTextValue\(event\.currentTarget\.value\)/);
   assert.match(editor, /getDialogService\(\)/);
   assert.match(editor, /dialogs\.(?:submitEditor|cancelEditor|setEditorValue)/);
   assert.doesNotMatch(editor, /stores\/dialogs\.js/);

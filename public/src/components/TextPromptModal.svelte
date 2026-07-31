@@ -3,15 +3,27 @@
 
   const dialogs = getDialogService();
   const textPrompt = dialogs.textPrompt;
+
+  let placeholder = $derived(String($textPrompt.placeholder ?? "").trim());
+  let inputLabel = $derived(placeholder || String($textPrompt.title ?? "").trim() || "Response");
+
+  function submitTextPrompt(event) {
+    event.preventDefault();
+    dialogs.submitText();
+  }
+
+  function updateTextValue(event) {
+    dialogs.setTextValue(event.currentTarget.value);
+  }
 </script>
 
-<form onsubmit={(event) => { event.preventDefault(); dialogs.submitText(); }}>
+<form onsubmit={submitTextPrompt}>
   <input
     type="text"
-    aria-label={$textPrompt.placeholder || "Response"}
-    placeholder={$textPrompt.placeholder}
+    aria-label={inputLabel}
+    placeholder={placeholder}
     value={$textPrompt.value}
-    oninput={(event) => dialogs.setTextValue(event.currentTarget.value)}
+    oninput={updateTextValue}
   />
 
   <div class="m-actions" id="mActions">
