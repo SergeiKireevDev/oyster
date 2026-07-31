@@ -101,13 +101,14 @@ export function modalFocusManagement(dialog, parameters) {
     update,
     destroy() {
       focusGeneration += 1;
-      if (isOpen && opener?.isConnected !== false && typeof opener?.focus === "function") {
-        opener.focus({ preventScroll: true });
-      }
+      const restoreTarget = isOpen ? opener : null;
+      isOpen = false;
       dialog.removeEventListener("keydown", keydown, true);
       dialog.ownerDocument.removeEventListener("focusin", focusin, true);
+      if (restoreTarget?.isConnected !== false && typeof restoreTarget?.focus === "function") {
+        restoreTarget.focus({ preventScroll: true });
+      }
       opener = null;
-      isOpen = false;
     },
   };
 }
