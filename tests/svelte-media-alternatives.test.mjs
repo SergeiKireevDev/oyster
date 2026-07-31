@@ -33,6 +33,10 @@ test("decorative branding, icons, and media thumbnails are hidden from assistive
 
   const grid = component("PinnedWidgetGrid.svelte");
   assert.match(grid, /class=\{`pinned-widget-icon kind-\$\{widget\.kind\}`\} aria-hidden="true"/);
+  assert.match(grid, /class="pinned-widget-icon pinned-widget-group-icon" aria-hidden="true"/);
+  assert.match(grid, /aria-label=\{widgetTitle\(widget\)\}/);
+  assert.match(grid, /aria-label=\{groupButtonLabel\(group\)\}/);
+  assert.match(grid, /class="pinned-widget-touch-preview"[\s\S]*aria-hidden="true"/);
   assert.match(grid, /<img[^>]*alt=""/);
 
   const cloud = component("CloudWorkspaceModal.svelte");

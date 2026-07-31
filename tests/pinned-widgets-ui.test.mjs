@@ -30,6 +30,13 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(grid, /onpointerdown=\{\(event\) => touchPointerDown\(event, widget\)\}/);
   assert.match(grid, /touchMoveFrame\.schedule\(event\.pointerId, event\.currentTarget\.ownerDocument, event\.clientX, event\.clientY\)/);
   assert.match(grid, /documentTarget\.elementFromPoint\(x, y\)/);
+  assert.match(grid, /setPointerCapture\?\.\(drag\.pointerId\)/);
+  assert.match(grid, /releasePointerCapture\?\.\(drag\.pointerId\)/);
+  assert.match(grid, /touchDrag\?\.token !== drag\.token/);
+  assert.doesNotMatch(grid, /touchDrag !== drag/);
+  assert.match(grid, /TOUCH_DRAG_MOVE_TOLERANCE_PX/);
+  assert.match(grid, /groupId: section\.dataset\.groupId \|\| null/);
+  assert.match(grid, /data-group-id=\{activeGroup\.id\}/);
   assert.match(grid, /touchDestination/);
   assert.match(grid, /data-scope=\{section\.scope\}/);
   assert.match(grid, /PINNED_WIDGET_MOVE_ACTION, \{ id, scope, groupId, beforeId \}/);
@@ -141,10 +148,13 @@ test("monitoring widgets poll visible previews and fetch fresh content when open
   assert.match(modals[0].context.widget.content, /\+new/);
 
   const grid = component("PinnedWidgetGrid.svelte");
-  assert.match(grid, /setInterval\(refresh, 3_000\)/);
+  assert.match(grid, /setInterval\(refresh, MONITOR_REFRESH_INTERVAL_MS\)/);
   assert.match(grid, /getBoundingClientRect\(\)/);
   assert.match(grid, /visibilityState === "hidden"/);
-  assert.match(grid, /readPinnedWidgetMonitorPreview\(widget\.id\)/);
+  assert.match(grid, /readPinnedWidgetMonitorPreview\(widgetId\)/);
+  assert.match(grid, /update\(nextWidget\)/);
+  assert.match(grid, /requestGeneration === generation/);
+  assert.match(grid, /destroy\(\) \{\s*stop\(\);/);
 });
 
 test("standalone HTML opens its streaming viewer without buffering the artifact as JSON", async () => {
