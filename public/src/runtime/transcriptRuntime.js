@@ -1,3 +1,4 @@
+import { createFrameScheduler } from "../lib/frameScheduler.js";
 import { loadCanonicalTranscript } from "../lib/transcriptReloadActions.js";
 
 export const REPLAY_GATED_EVENT_TYPES = new Set([
@@ -304,7 +305,12 @@ export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
   return res.json();
 }
 
-export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
+export function createTranscriptScrollAdapter({
+  scroller,
+  threshold = 120,
+  requestFrame,
+  cancelFrame,
+}) {
   const distanceFromBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
   let lastScrollTop = scroller.scrollTop;
   let followingHead = distanceFromBottom() < threshold;
@@ -317,6 +323,7 @@ export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
     else if (distanceFromBottom() <= 1) followingHead = true;
     lastScrollTop = scrollTop;
   };
+  const scrollFrame = createFrameScheduler(onScroll, requestFrame, cancelFrame);
   const setBottom = () => {
     followingHead = true;
     scroller.scrollTop = scroller.scrollHeight;
@@ -327,7 +334,7 @@ export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
     if (followingHead) setBottom();
   };
 
-  scroller.addEventListener?.("scroll", onScroll, { passive: true });
+  scroller.addEventListener?.("scroll", scrollFrame.schedule, { passive: true });
   scroller.addEventListener?.("load", onLoad, true);
 
   return {
@@ -350,8 +357,9 @@ export function createTranscriptScrollAdapter({ scroller, threshold = 120 }) {
       return true;
     },
     teardown() {
-      scroller.removeEventListener?.("scroll", onScroll, { passive: true });
+      scroller.removeEventListener?.("scroll", scrollFrame.schedule, { passive: true });
       scroller.removeEventListener?.("load", onLoad, true);
+      scrollFrame.cancel();
     },
   };
 }

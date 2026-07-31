@@ -347,6 +347,40 @@ test("scroll adapter lets upward scrolling override transcript head follow", () 
   assert.deepEqual([...listeners.keys()], []);
 });
 
+test("scroll adapter coalesces scroll bursts and cancels pending layout reads", () => {
+  const listeners = new Map();
+  const frames = new Map();
+  let nextFrame = 0;
+  const scroller = {
+    scrollHeight: 1000,
+    scrollTop: 350,
+    clientHeight: 600,
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) { if (listeners.get(type) === listener) listeners.delete(type); },
+  };
+  const scroll = createTranscriptScrollAdapter({
+    scroller,
+    requestFrame(callback) { const id = ++nextFrame; frames.set(id, callback); return id; },
+    cancelFrame(id) { frames.delete(id); },
+  });
+
+  scroller.scrollTop = 345;
+  listeners.get("scroll")();
+  scroller.scrollTop = 340;
+  listeners.get("scroll")();
+  assert.equal(frames.size, 1, "a scroll burst schedules one layout read");
+  const [frameId, frame] = frames.entries().next().value;
+  frames.delete(frameId);
+  frame();
+  assert.equal(scroll.isFollowingHead(), false);
+
+  scroller.scrollTop = 350;
+  listeners.get("scroll")();
+  scroll.teardown();
+  assert.equal(frames.size, 0, "teardown cancels a pending scroll frame");
+  assert.deepEqual([...listeners.keys()], []);
+});
+
 test("tool card registry assembles and completes streamed tool cards", () => {
   let state;
   const registry = createToolCardRegistry({
