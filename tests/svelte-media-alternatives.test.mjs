@@ -8,7 +8,9 @@ const component = (name) => readFileSync(new URL(name, componentsRoot), "utf8");
 test("content images and videos receive alternatives from their artifact labels", () => {
   assert.match(component("ImageArtifact.svelte"), /<img\s+[\s\S]*?\{src\}[\s\S]*?\{alt\}/);
   assert.match(component("SvgArtifact.svelte"), /<img\s+[\s\S]*?\{src\}[\s\S]*?alt=\{accessibleLabel\}/);
-  assert.match(component("VideoArtifact.svelte"), /<video[\s\S]*?aria-label=\{label\}/);
+  const video = component("VideoArtifact.svelte");
+  assert.match(video, /accessibleLabel = \$derived\(String\(label \|\| ""\)\.trim\(\) \|\| "Pinned video"\)/);
+  assert.match(video, /<video[\s\S]*?aria-label=\{thumbnail \? undefined : accessibleLabel\}/);
 
   const viewer = component("PinnedWidgetViewerModal.svelte");
   assert.match(viewer, /<SvgArtifact src=\{source\} alt=\{widget\.label\}/);
@@ -46,6 +48,10 @@ test("decorative branding, icons, and media thumbnails are hidden from assistive
   assert.match(grid, /aria-label=\{groupButtonLabel\(group\)\}/);
   assert.match(grid, /class="pinned-widget-touch-preview"[\s\S]*aria-hidden="true"/);
   assert.match(grid, /<img[^>]*alt=""/);
+
+  const video = component("VideoArtifact.svelte");
+  assert.match(video, /aria-hidden=\{thumbnail\}/);
+  assert.match(video, /controls=\{!thumbnail\}/);
 
   const cloud = component("CloudWorkspaceModal.svelte");
   assert.match(cloud, /class=\{`cloud-provider-icon \$\{provider\.id\}`\} aria-hidden="true"/);
