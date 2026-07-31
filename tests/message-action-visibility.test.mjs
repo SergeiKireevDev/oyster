@@ -41,9 +41,14 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(transcript, /const isCurrentTurnActivity = \(item\) => \$appSession\.busy && item\.id === \$latestTurnActivityId/);
   assert.match(transcript, /activityActive=\{isCurrentTurnActivity\(item\)\}/);
   assert.match(transcript, /activityBlocks=\{\$turnActivityGroups\.get\(item\.id\) \?\? \[\]\}/);
+  assert.match(transcript, /activityKey=\{item\.id\}/);
   assert.match(transcript, /activityUnsettled=\{isCurrentTurnActivity\(item\)\}/);
-  assert.match(assistant, /arrangeActivity\(data\.blocks, activityBlocks\)/);
+  assert.match(assistant, /arrangeActivity\(data\.blocks, activityBlocks, activityKey\)/);
   assert.match(assistant, /visible\.unshift\(\{[\s\S]*?type: "activityStack"/);
+  assert.match(assistant, /key: `activity:\$\{identity\}`/);
+  assert.match(assistant, /block\.type === "activityStack" \? block\.key : block/);
+  assert.match(activityStack, /let historyOpen = \$state\(false\)/);
+  assert.match(activityStack, /class="activity-history" bind:open=\{historyOpen\}/);
   assert.doesNotMatch(assistant, /latestActivityIndex|insertionIndex|visible\.splice/);
   assert.match(activityStack, /const latestThinking = \$derived\(active \? thinkingBlocks\.at\(-1\) : null\)/);
   assert.match(activityStack, /const headBlock = \$derived\(active \? blocks\.at\(-1\) : null\)/);

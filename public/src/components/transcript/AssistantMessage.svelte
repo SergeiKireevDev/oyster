@@ -8,6 +8,7 @@
   let {
     assistantStore = writable({ blocks: [], copyText: "", errorMessage: "" }),
     activityBlocks = [],
+    activityKey = "current",
     role = "assistant",
     activityActive = false,
     activityUnsettled = false,
@@ -21,7 +22,7 @@
   } = $props();
   let root = $state();
   const data = $derived($assistantStore);
-  const displayBlocks = $derived(arrangeActivity(data.blocks, activityBlocks));
+  const displayBlocks = $derived(arrangeActivity(data.blocks, activityBlocks, activityKey));
   const restore = $derived(restores.find((item) => item.target === root));
 
   function selectOnFirstTouch(event) {
@@ -51,21 +52,25 @@
     };
   }
 
-  function arrangeActivity(blocks = [], activities = []) {
+  function arrangeActivity(blocks = [], activities = [], identity = "current") {
     const visible = blocks.filter((block) => block.type !== "thinking" && block.type !== "toolCall");
     if (!activities.length) return visible;
 
     visible.unshift({
       type: "activityStack",
-      key: `activity:${activities[0].key ?? activities[0].id ?? "current"}`,
+      key: `activity:${identity}`,
       blocks: activities,
     });
     return visible;
   }
+
+  function blockIdentity(block) {
+    return block.type === "activityStack" ? block.key : block;
+  }
 </script>
 
 <div class="assistant-entry" class:empty={isEmptyMessage()} data-role={role} bind:this={root} use:reportNode={onRoot}>
-  {#each displayBlocks as block, index (block)}
+  {#each displayBlocks as block, index (blockIdentity(block))}
     {@const actions = partActions(block, index)}
     <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {#if block.type === "text"}
