@@ -13,3 +13,20 @@ test("routine list routes session-scoped run requests through the UI registry", 
   assert.match(source, /uiActions\.invoke\(ROUTINE_RUN_ACTION, name, action\)/);
   assert.doesNotMatch(source, /features\/routines\/routineActions\.js/);
 });
+
+test("routine list prevents duplicate actions and exposes accessible state", () => {
+  const source = readFileSync(new URL("../public/src/components/RoutineList.svelte", import.meta.url), "utf8");
+  const actionButtons = [...source.matchAll(/<button[\s\S]*?<\/button>/g)]
+    .map(([button]) => button)
+    .filter((button) => /runRoutineAction|confirmDelete/.test(button));
+
+  assert.ok(actionButtons.length >= 5);
+  for (const button of actionButtons) {
+    assert.match(button, /type="button"/);
+    assert.match(button, /disabled=/);
+  }
+  assert.match(source, /if \(pendingActions\[name\]\) return/);
+  assert.match(source, /aria-busy=\{routinePending\(routine\)\}/);
+  assert.match(source, /role="img"\s+aria-label=\{`Status: \$\{routine\.status\}`\}/);
+  assert.match(source, /routine\.progress === null \? " indet"/);
+});
