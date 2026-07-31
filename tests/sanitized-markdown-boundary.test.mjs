@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { compile } from "svelte/compiler";
 
 const sourceRoot = resolve("public/src");
 
@@ -44,7 +45,7 @@ test("the necessary dynamic HTML exception is documented and owned by the saniti
   assert.match(boundary, /renderSanitizedMarkdown\(source\)/);
   assert.match(boundary, /Runtime Markdown and KaTeX produce variable nested structures/);
   assert.match(boundary, /Never pass caller-provided HTML to this component/);
-  assert.match(boundary, /\{@html rendered\}/);
+  assert.match(boundary, /\{@html renderedHtml\}/);
 
   const rendererReferences = svelteFiles(sourceRoot)
     .filter((path) => /renderSanitizedMarkdown/.test(source(path)))
@@ -52,15 +53,29 @@ test("the necessary dynamic HTML exception is documented and owned by the saniti
   assert.deepEqual(rendererReferences, ["components/SanitizedMarkdown.svelte"]);
 });
 
-test("the Markdown boundary limits its root markup and omits empty accessible names", () => {
+test("the Markdown boundary limits its root markup and omits empty attributes", () => {
   const boundary = source("public/src/components/SanitizedMarkdown.svelte");
 
-  assert.match(boundary, /element\?: "article" \| "div"/);
+  assert.match(boundary, /@typedef \{"article" \| "div"\} RootElement/);
+  assert.match(boundary, /element\?: RootElement/);
   assert.match(boundary, /this=\{rootElement\}/);
   assert.match(boundary, /element === "article" \? "article" : "div"/);
-  assert.match(boundary, /label\?\.trim\(\) \|\| undefined/);
-  assert.match(boundary, /aria-label=\{accessibleLabel\}/);
-  assert.doesNotMatch(boundary, /this=\{element\}|aria-label=\{label\}/);
+  assert.match(boundary, /typeof value !== "string"/);
+  assert.match(boundary, /value\.trim\(\) \|\| undefined/);
+  assert.match(boundary, /rootClass = \$derived\(optionalTrimmedString\(className\)\)/);
+  assert.match(boundary, /accessibleLabel = \$derived\(optionalTrimmedString\(label\)\)/);
+  assert.match(boundary, /class=\{rootClass\} aria-label=\{accessibleLabel\}/);
+  assert.doesNotMatch(boundary, /this=\{element\}|class=\{className\}|aria-label=\{label\}/);
+});
+
+test("the Markdown boundary compiles without Svelte or accessibility warnings", () => {
+  const boundary = source("public/src/components/SanitizedMarkdown.svelte");
+  const { warnings } = compile(boundary, {
+    filename: "SanitizedMarkdown.svelte",
+    generate: false,
+  });
+
+  assert.deepEqual(warnings, []);
 });
 
 test("model and file Markdown reach the boundary as raw text, not caller-provided HTML", () => {
