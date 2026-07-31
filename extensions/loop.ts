@@ -82,7 +82,7 @@ function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
 function buildIterationPrompt(plan: string, previous?: PreviousIteration): string {
   const sections = [
     "You are one isolated iteration of a sequential implementation loop.",
-    "Implement exactly the first unchecked checklist item in the plan. Work directly in the current repository, add or update focused tests, and do not edit the plan file or its checkboxes. Always finish with a useful final response, even when you cannot complete the item: state what you attempted, what succeeded, what failed, and what the next iteration should do.",
+    "Implement exactly the first unchecked checklist item in the plan. Work directly in the current repository, add or update focused tests, and do not edit the plan file or its checkboxes. Do not create, amend, or otherwise modify Git commits: leave every change in the working tree because the parent loop owns validation and commits only after validation passes. Always finish with a useful final response, even when you cannot complete the item: state what you attempted, what succeeded, what failed, and what the next iteration should do.",
     `# Plan\n\n${plan}`,
   ];
   if (previous) sections.push(`# Previous iteration output\n\n${clipTail(previous.output || "(no output)")}`);
@@ -183,6 +183,45 @@ async function runSubagent(
     ok: result.ok === true,
     output: result.output?.trim() || "(subagent produced no final text output)",
     errorLog: clipTail(result.errorLog || ""),
+  };
+}
+
+async function currentGitHead(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  const result = await pi.exec("git", ["rev-parse", "--verify", "HEAD"], { cwd: ctx.cwd, signal });
+  const head = result.stdout.trim();
+  if (result.code !== 0 || result.killed || !head) {
+    throw new Error(clipTail([result.stdout, result.stderr, "Loop requires an existing Git HEAD."].filter(Boolean).join("\n")));
+  }
+  return head;
+}
+
+async function restoreLoopOwnedHead(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  expectedHead: string,
+  signal: AbortSignal | undefined,
+): Promise<{ ok: boolean; log: string }> {
+  const actualHead = await currentGitHead(pi, ctx, signal);
+  if (actualHead === expectedHead) return { ok: true, log: "" };
+
+  const reset = await pi.exec("git", ["reset", "--soft", expectedHead], { cwd: ctx.cwd, signal });
+  if (reset.code !== 0 || reset.killed) {
+    return {
+      ok: false,
+      log: clipTail([
+        reset.stdout,
+        reset.stderr,
+        `Subagent changed Git HEAD from ${expectedHead} to ${actualHead}, and the loop could not restore it.`,
+      ].filter(Boolean).join("\n")),
+    };
+  }
+  return {
+    ok: true,
+    log: `Subagent-created commit history was reset to ${expectedHead}; its changes remain staged for validation.`,
   };
 }
 
@@ -316,6 +355,7 @@ async function runLoop(
       content: [{ type: "text", text: `Iteration ${iteration}: running subagent for “${item.text}”…` }],
       details: { planPath, validationPath, complete: false, results },
     });
+    const headBefore = await currentGitHead(pi, ctx, signal);
     const subagent = await runSubagent(
       ctx,
       buildIterationPrompt(planBefore, previous),
@@ -323,6 +363,11 @@ async function runLoop(
       item.text,
       signal,
     );
+    const restoredHead = await restoreLoopOwnedHead(pi, ctx, headBefore, signal);
+    if (!restoredHead.ok) {
+      subagent.ok = false;
+      subagent.errorLog = restoredHead.log;
+    }
 
     let validation: { ok: boolean; log: string } | undefined;
     if (subagent.ok) {
