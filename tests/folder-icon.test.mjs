@@ -16,12 +16,18 @@ test("FolderIcon sanitizes its CSS size and remains decorative", () => {
   assert.match(source, /style:--folder-icon-size=\{`\$\{normalizedSize\}px`\}/);
   assert.match(source, /aria-hidden="true"/);
   assert.match(source, /<svg[^>]*focusable="false"/);
+  assert.match(source, /pointer-events: none/);
 });
 
-test("FolderIcon owns its presentation styles", () => {
+test("FolderIcon owns its restrained current-color presentation", () => {
   assert.match(source, /<style>[\s\S]*\.folder-icon \{/);
   assert.match(source, /width: var\(--folder-icon-size\);/);
-  assert.match(source, /path \{[\s\S]*stroke: currentColor;/);
+  assert.match(source, /color: inherit;/);
+  assert.match(source, /vertical-align: -0\.125em;/);
+  assert.match(source, /\.folder-icon > svg \{[\s\S]*display: block;/);
+  assert.match(source, /\.folder-icon path \{[\s\S]*stroke: currentColor;/);
+  assert.match(source, /stroke-width: 1\.65;/);
+  assert.doesNotMatch(source, /filter:|text-shadow:|box-shadow:|--folder-neon/);
   assert.doesNotMatch(globalStyles, /\.folder-icon(?:\s|\{|\.)/);
 });
 

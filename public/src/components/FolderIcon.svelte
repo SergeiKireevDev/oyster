@@ -27,25 +27,26 @@
 
 <style>
   .folder-icon {
-    --folder-neon: var(--accent);
     display: inline-flex;
-    flex: none;
     width: var(--folder-icon-size);
     height: var(--folder-icon-size);
+    flex: none;
     align-items: center;
     justify-content: center;
-    color: var(--folder-neon);
-    filter: drop-shadow(0 0 4px rgba(157, 169, 255, 0.42));
-    vertical-align: -0.15em;
+    color: inherit;
+    line-height: 0;
+    pointer-events: none;
+    vertical-align: -0.125em;
   }
 
-  svg {
+  .folder-icon > svg {
+    display: block;
     width: 100%;
     height: 100%;
     overflow: visible;
   }
 
-  path {
+  .folder-icon path {
     stroke: currentColor;
     stroke-width: 1.65;
     stroke-linecap: round;
