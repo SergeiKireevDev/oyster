@@ -99,9 +99,11 @@ test("artifact resource state resets explicitly whenever the src prop changes", 
   assert.match(image, /\$effect\.pre\(\(\) => \{\s*resetResourceState\(src\);/);
   assert.match(image, /function resetResourceState\(nextSource\)\s*\{[\s\S]*nextSource === activeSource[\s\S]*zoomed = false;[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
 
-  for (const name of ["SvgArtifact.svelte", "VideoArtifact.svelte"]) {
-    const source = readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
-    assert.match(source, /\$:\s*resetResourceState\(src\)/);
-    assert.match(source, /function resetResourceState\(\)\s*\{[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
-  }
+  const svg = readFileSync(new URL("../public/src/components/SvgArtifact.svelte", import.meta.url), "utf8");
+  assert.match(svg, /\$effect\.pre\(\(\) => \{\s*resetResourceState\(src\);/);
+  assert.match(svg, /function resetResourceState\(nextSource\)\s*\{[\s\S]*nextSource === activeSource[\s\S]*zoomed = false;[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
+
+  const video = readFileSync(new URL("../public/src/components/VideoArtifact.svelte", import.meta.url), "utf8");
+  assert.match(video, /\$:\s*resetResourceState\(src\)/);
+  assert.match(video, /function resetResourceState\(\)\s*\{[\s\S]*status = "loading";[\s\S]*attempt = 0;/);
 });

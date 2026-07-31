@@ -241,7 +241,7 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*#modal\.markdown-reader-modal[^}]*100dvh/);
   assert.match(image, /<img\s+[\s\S]*?\{src\}[\s\S]*?\{alt\}/);
   assert.match(svg, /SVG remains in the browser's inert image context/);
-  assert.match(svg, /<img \{src\} \{alt\}/);
+  assert.match(svg, /<img\s+[\s\S]*?\{src\}[\s\S]*?alt=\{accessibleLabel\}/);
   assert.match(video, /<video/);
   assert.match(video, /controls=\{!thumbnail\}/);
   for (const source of [viewer, markdown, image, svg, video]) assert.doesNotMatch(source, /<iframe/);
