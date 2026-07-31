@@ -1,9 +1,26 @@
 <script>
-  let { name, size = 16, class: className = "" } = $props();
+  const DEFAULT_SIZE = 16;
+
+  /** @param {unknown} value */
+  function normalizeSize(value) {
+    const numericSize = Number(value);
+    return Number.isFinite(numericSize) && numericSize > 0 ? numericSize : DEFAULT_SIZE;
+  }
+
+  /**
+   * @type {{
+   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more";
+   *   size?: number;
+   *   class?: string;
+   * }}
+   */
+  let { name, size = DEFAULT_SIZE, class: className = "" } = $props();
+
+  let normalizedSize = $derived(normalizeSize(size));
 </script>
 
-<span class={`app-icon ${className}`.trim()} style={`--app-icon-size:${size}px`} aria-hidden="true">
-  <svg viewBox="0 0 24 24" fill="none">
+<span class={`app-icon ${className}`.trim()} style:--app-icon-size={`${normalizedSize}px`} aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" focusable="false">
     {#if name === "analytics"}
       <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     {:else if name === "key"}
@@ -33,18 +50,30 @@
 
 <style>
   .app-icon {
+    display: inline-grid;
+    flex: none;
     width: var(--app-icon-size);
     height: var(--app-icon-size);
-    display: inline-grid;
     place-items: center;
-    flex: none;
   }
-  svg { width: 100%; height: 100%; overflow: visible; }
-  path, circle, rect {
+
+  svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  path,
+  circle,
+  rect {
     stroke: currentColor;
     stroke-width: 1.8;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .filled { fill: currentColor; stroke: none; }
+
+  .filled {
+    fill: currentColor;
+    stroke: none;
+  }
 </style>
