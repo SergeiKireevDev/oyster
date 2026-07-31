@@ -188,6 +188,66 @@ async function body(page, { mobile = false } = {}) {
   await expect(liveWidget).toHaveClass(/unavailable/);
 }
 
+test("git status monitor refreshes its visible preview and viewer content", async ({ page }) => {
+  dexec(`
+    cd /workspace
+    rm -rf .git
+    git init -q
+    git config user.name "Oyster E2E"
+    git config user.email "oyster-e2e@example.test"
+    printf 'baseline\\n' > tracked.txt
+    git add -A
+    git commit -qm baseline
+  `);
+
+  await login(page);
+  const sessionId = await waitFor(() => currentSessionId(page), {
+    timeout: 30000, label: "a session id",
+  });
+  const created = await api("POST", "/pinned-widgets", {
+    label: "Git status",
+    previewScript: `#!/bin/sh
+set -eu
+git status --porcelain=v1 --untracked-files=all | awk '
+BEGIN { staged=0; unstaged=0; untracked=0 }
+substr($0,1,2) == "??" { untracked++; next }
+substr($0,1,1) != " " { staged++ }
+substr($0,2,1) != " " { unstaged++ }
+END { printf "%d staged\\n%d unstaged\\n%d untracked\\n", staged, unstaged, untracked }
+'
+`,
+    contentScript: `#!/bin/sh
+set -eu
+git --no-pager status --branch --untracked-files=all
+`,
+    cwd: "/workspace",
+    format: "text",
+    sessionId,
+    scope: "session",
+  });
+  expect(created.status).toBe(201);
+  expect(created.json.widget.kind).toBe("monitoring");
+
+  const widget = page.locator("#hublots .pinned-widget-cell", { hasText: "Git status" }).first();
+  const preview = widget.locator(".pinned-widget-monitor-preview");
+  await expect(widget).toBeVisible();
+  await expect(preview).toContainText("0 staged", { timeout: 10000 });
+  await expect(preview).toContainText("0 unstaged");
+  await expect(preview).toContainText("0 untracked");
+
+  await widget.locator(".pinned-widget-tile").click();
+  await expect(page.locator("#mTitle")).toHaveText("Git status");
+  await expect(page.locator(".pinned-monitor-output")).toContainText("nothing to commit, working tree clean");
+  await page.locator(".pinned-widget-viewer-actions .chip", { hasText: "Close" }).click();
+
+  dexec("touch /workspace/local-change.txt");
+  await expect(preview).toContainText("1 untracked", { timeout: 10000 });
+
+  await widget.locator(".pinned-widget-tile").click();
+  await expect(page.locator(".pinned-monitor-output")).toContainText("Untracked files:");
+  await expect(page.locator(".pinned-monitor-output")).toContainText("local-change.txt");
+});
+
 test.describe("desktop", () => {
   test("drag a live-interface widget into a group", async ({ page }) => {
     await body(page);
