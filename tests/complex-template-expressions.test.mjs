@@ -46,5 +46,5 @@ test("chart, modal, routine, and checkpoint markup delegates business rules to h
   assert.doesNotMatch(routinesMarkup, /\["running", "stopping", "teardown"\]|routine\.log \?\?|routine\.progress \?\?/);
   assert.match(routinesMarkup, /class=\{progressClass\(routine\)\}/);
   assert.doesNotMatch(checkpointMarkup, /capabilities\.rollback\s*\?|capabilities\.rollback\s*&&/);
-  assert.match(checkpointMarkup, /title=\{checkpointTitle\(row\.checkpoint\)\}/);
+  assert.match(checkpointMarkup, /title=\{checkpointTitle\(row\)\}/);
 });

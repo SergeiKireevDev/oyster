@@ -11,6 +11,18 @@
   export let currentSessionId = null;
   export let runners = [];
   export let capabilities = { rollback: true, reason: null };
+  // Recursive instances share this index so a large tree scans the runner list only once.
+  export let liveRunnerIndex = null;
+
+  function indexLiveRunners(items) {
+    const index = new Map();
+    for (const runner of items) {
+      if (!runner.alive) continue;
+      const identity = runnerSessionIdentity(runner);
+      if (identity != null && !index.has(identity)) index.set(identity, runner);
+    }
+    return index;
+  }
 
   function checkpointMessage(checkpoint) {
     const text = (checkpoint.message ?? "").replace(/^checkpoint:?\s*/i, "").trim();
@@ -46,14 +58,16 @@
     return { rows, unslotted };
   }
 
-  function checkpointTitle(checkpoint) {
-    return capabilities.rollback
-      ? `${checkpoint.message ?? "checkpoint"}\nroll the workdir back to ${checkpoint.hash} and fork the session there`
-      : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`;
+  function checkpointTitle(row) {
+    if (!capabilities.rollback) {
+      return `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`;
+    }
+    const summary = row.message || row.time || "Checkpoint";
+    return `${summary}\nRoll the workdir back to ${row.checkpoint.hash} and fork the session there`;
   }
 
   function checkpointLabel(row) {
-    if (!capabilities.rollback) return checkpointTitle(row.checkpoint);
+    if (!capabilities.rollback) return checkpointTitle(row);
     const details = [row.message, row.time].filter(Boolean).join(", ");
     return `Roll back to checkpoint ${row.checkpoint.hash}${details ? `, ${details}` : ""}`;
   }
@@ -64,7 +78,8 @@
 
   $: isCurrent = node.id === currentSessionId;
   $: isFork = Boolean(node.parentId ?? node.parentSession);
-  $: live = runners.find((runner) => runner.alive && runnerSessionIdentity(runner) === sessionIdentity(node));
+  $: activeRunnerIndex = liveRunnerIndex ?? indexLiveRunners(runners);
+  $: live = activeRunnerIndex.get(sessionIdentity(node));
   $: sessionName = node.name || node.id.slice(0, 8);
   $: sessionLabel = [
     sessionName,
@@ -89,7 +104,7 @@
     <span aria-hidden="true">{isFork ? "🌿" : "🌱"}</span>
     <span class="t-name">{sessionName}</span>
     {#if live}
-      <span class="t-dot" class:busy={live.busy} aria-hidden="true" title={live.busy ? "working" : "live"}></span>
+      <span class="t-dot" class:busy={live.busy} aria-hidden="true"></span>
     {/if}
   </button>
 
@@ -100,7 +115,7 @@
           type="button"
           class="t-ckpt"
           aria-label={checkpointLabel(row)}
-          title={checkpointTitle(row.checkpoint)}
+          title={checkpointTitle(row)}
           disabled={!capabilities.rollback}
           onclick={() => rollbackFrom(row.checkpoint)}
         >
@@ -109,13 +124,13 @@
         {#if row.forks.length}
           <div class="t-forks">
             {#each row.forks as child (child.id)}
-              <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
+              <svelte:self node={child} {currentSessionId} {runners} {capabilities} liveRunnerIndex={activeRunnerIndex} />
             {/each}
           </div>
         {/if}
       {/each}
       {#each layout.unslotted as child (child.id)}
-        <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
+        <svelte:self node={child} {currentSessionId} {runners} {capabilities} liveRunnerIndex={activeRunnerIndex} />
       {/each}
     </div>
   {/if}

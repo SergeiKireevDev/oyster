@@ -26,7 +26,18 @@ test("checkpoint tree node exposes session, activity, and rollback context acces
   assert.match(source, /aria-label=\{checkpointLabel\(row\)\}/);
   assert.match(source, /disabled=\{!capabilities\.rollback\}/);
   assert.match(source, /class="t-dot"[^>]*aria-hidden="true"/);
+  assert.doesNotMatch(source, /class="t-dot"[^>]*title=/);
   assert.match(source, /<span aria-hidden="true">🧊<\/span>/);
+});
+
+test("checkpoint tree node shares one live-runner index across recursive instances", () => {
+  const source = readFileSync(new URL("../public/src/components/CheckpointTreeNode.svelte", import.meta.url), "utf8");
+
+  assert.match(source, /function indexLiveRunners\(items\)/);
+  assert.match(source, /activeRunnerIndex = liveRunnerIndex \?\? indexLiveRunners\(runners\)/);
+  assert.match(source, /live = activeRunnerIndex\.get\(sessionIdentity\(node\)\)/);
+  assert.match(source, /liveRunnerIndex=\{activeRunnerIndex\}/);
+  assert.doesNotMatch(source, /runners\.find\(/);
 });
 
 test("checkpoint tree node partitions fork children once and renders each in one branch", () => {
