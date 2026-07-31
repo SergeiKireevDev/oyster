@@ -5,7 +5,7 @@ import { basename, isAbsolute, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-const DEFAULT_MAX_ITERATIONS = 50;
+const MAX_STALLED_ITERATIONS = 20;
 const VALIDATION_TIMEOUT_MS = 30 * 60 * 1000;
 const CONTEXT_OUTPUT_LIMIT = 50 * 1024;
 const OYSTER_URL = process.env.OYSTER_URL ?? "http://127.0.0.1:8080";
@@ -54,9 +54,7 @@ function checkItem(markdown: string, target: ChecklistItem): string {
 }
 
 function commitMessage(item: string): string {
-  const prefix = "loop: ";
-  const summary = item.replace(/\s+/g, " ").trim();
-  return `${prefix}${summary.slice(0, 72 - prefix.length).trimEnd()}`;
+  return item.replace(/\s+/g, " ").trim().slice(0, 72).trimEnd();
 }
 
 function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
@@ -222,7 +220,6 @@ async function commitSuccessfulStep(
 interface LoopParams {
   planPath: string;
   validationScript: string;
-  maxIterations?: number;
 }
 
 type LoopUpdate = (partial: { content: Array<{ type: "text"; text: string }>; details: unknown }) => void;
@@ -238,17 +235,23 @@ async function runLoop(
   const validationPath = resolveFromCwd(ctx, params.validationScript);
   assertInputs(planPath, validationPath);
 
-  const maxIterations = params.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const results: IterationResult[] = [];
   let previous: PreviousIteration | undefined;
+  let stalledItemKey: string | undefined;
+  let stalledIterations = 0;
 
-  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+  for (let iteration = 1; ; iteration += 1) {
     if (signal?.aborted) throw new Error("Loop aborted");
     const planBefore = readFileSync(planPath, "utf8");
     const item = firstUncheckedItem(planBefore);
     if (!item) {
       const summary = `Loop complete after ${results.length} iteration${results.length === 1 ? "" : "s"}; every checklist item is checked.`;
       return { content: [{ type: "text" as const, text: summary }], details: { planPath, validationPath, complete: true, results } };
+    }
+    const itemKey = `${item.line}:${item.text}`;
+    if (itemKey !== stalledItemKey) {
+      stalledItemKey = itemKey;
+      stalledIterations = 0;
     }
 
     onUpdate?.({
@@ -309,19 +312,23 @@ async function runLoop(
     };
     results.push(record);
     previous = { output: record.output, succeeded, validationLog: record.validationLog };
-  }
 
-  const remaining = firstUncheckedItem(readFileSync(planPath, "utf8"));
-  const complete = !remaining;
-  return {
-    content: [{
-      type: "text" as const,
-      text: complete
-        ? `Loop complete after ${results.length} iterations; every checklist item is checked.`
-        : `Loop stopped at the ${maxIterations}-iteration safety limit with “${remaining.text}” still unchecked.`,
-    }],
-    details: { planPath, validationPath, complete, results },
-  };
+    if (succeeded) {
+      stalledItemKey = undefined;
+      stalledIterations = 0;
+    } else {
+      stalledIterations += 1;
+      if (stalledIterations >= MAX_STALLED_ITERATIONS) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Loop stopped after “${item.text}” failed to advance for ${MAX_STALLED_ITERATIONS} consecutive iterations.`,
+          }],
+          details: { planPath, validationPath, complete: false, stalled: true, results },
+        };
+      }
+    }
+  }
 }
 
 function commandArguments(input: string): string[] {
@@ -335,7 +342,7 @@ function commandArguments(input: string): string[] {
 
 export default function loopExtension(pi: ExtensionAPI) {
   pi.registerCommand("loop", {
-    description: "Run a Markdown checklist: /loop <plan.md> <executable-validation-script> [max-iterations]",
+    description: "Run a Markdown checklist: /loop <plan.md> <executable-validation-script>",
     handler: async (args, ctx) => {
       const values = commandArguments(args);
       let planPath = values[0];
@@ -343,19 +350,18 @@ export default function loopExtension(pi: ExtensionAPI) {
       if (!planPath && ctx.hasUI) planPath = await ctx.ui.input("Loop plan", "PLAN.md");
       if (!validationScript && ctx.hasUI) validationScript = await ctx.ui.input("Validation executable", "./validate.sh");
       if (!planPath || !validationScript) {
-        ctx.ui.notify("Usage: /loop <plan.md> <executable-validation-script> [max-iterations]", "warning");
+        ctx.ui.notify("Usage: /loop <plan.md> <executable-validation-script>", "warning");
         return;
       }
-      const maxIterations = values[2] === undefined ? undefined : Number(values[2]);
-      if (maxIterations !== undefined && (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 500)) {
-        ctx.ui.notify("max-iterations must be an integer from 1 to 500.", "error");
+      if (values.length > 2) {
+        ctx.ui.notify("The loop no longer accepts a total iteration limit; it stops only after one step fails to advance for 20 consecutive iterations.", "error");
         return;
       }
 
       try {
         const hasConversation = ctx.sessionManager.getEntries().some((entry) => entry.type === "message");
         if (!pi.getSessionName() && !hasConversation) pi.setSessionName(`Loop: ${basename(planPath)}`);
-        const result = await runLoop(pi, ctx, { planPath, validationScript, maxIterations }, undefined, (partial) => {
+        const result = await runLoop(pi, ctx, { planPath, validationScript }, undefined, (partial) => {
           ctx.ui.setStatus("loop", `🔁 ${partial.content[0].text}`);
         });
         ctx.ui.notify(result.content[0].text, result.details.complete ? "info" : "warning");
@@ -370,7 +376,7 @@ export default function loopExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "loop",
     label: "Loop",
-    description: "Execute a Markdown checklist sequentially. Each iteration runs in a fresh isolated pi subagent, then an executable validation script decides whether that checklist item is checked and committed. Failed validation or commit retries the same item with the previous output and failure log. Output is capped at 50 KB per context section.",
+    description: "Execute a Markdown checklist sequentially. Each iteration runs in a fresh isolated pi subagent, then an executable validation script decides whether that checklist item is checked and committed. Failed validation or commit retries the same item with the previous output and failure log; the loop stops only when one step fails to advance for 20 consecutive iterations. Output is capped at 50 KB per context section.",
     promptSnippet: "Run a Markdown checklist through isolated, validated subagent iterations",
     promptGuidelines: [
       "Use loop when the user provides a Markdown checklist plan and an executable validation script for autonomous sequential implementation.",
@@ -378,7 +384,6 @@ export default function loopExtension(pi: ExtensionAPI) {
     parameters: Type.Object({
       planPath: Type.String({ description: "Path to the Markdown checklist plan, relative to the working directory or absolute" }),
       validationScript: Type.String({ description: "Path to an executable validation script, relative to the working directory or absolute" }),
-      maxIterations: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, description: `Safety limit across successful and failed attempts; default ${DEFAULT_MAX_ITERATIONS}` })),
     }),
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       return runLoop(pi, ctx, params, signal, onUpdate as LoopUpdate | undefined);
