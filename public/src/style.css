@@ -3444,8 +3444,8 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .pinned-markdown-toolbar { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px 8px; color: var(--muted); font-size: 11px; }
 .pinned-markdown-toolbar .chip { min-height: 30px; padding: 5px 11px; font-size: 11px; }
 .pinned-widget-viewer-stage.markdown-stage { display: block; overflow: auto; overscroll-behavior: contain; background: #0f131b; scrollbar-gutter: stable; }
-.pinned-widget-viewer-stage.monitoring-stage { display: block; overflow: auto; background: #0b0f14; }
-.pinned-monitor-output { box-sizing: border-box; min-width: 100%; min-height: 100%; margin: 0; padding: 18px; color: #d9e1ec; font: 12px/1.55 var(--mono); white-space: pre; tab-size: 4; }
+.pinned-widget-viewer-stage.monitoring-stage { box-sizing: border-box; display: block; width: 100%; min-width: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: #0b0f14; }
+.pinned-monitor-output { box-sizing: border-box; width: max-content; min-width: 100%; min-height: 100%; margin: 0; padding: 18px; color: #d9e1ec; font: 12px/1.55 var(--mono); white-space: pre; tab-size: 4; }
 .pinned-monitor-output.diff-output { display: table; padding: 10px 0; }
 .diff-line { display: table-row; }
 .diff-line > i { display: table-cell; width: 1%; padding: 0 12px; color: #596473; font-style: normal; text-align: right; user-select: none; }
@@ -3647,6 +3647,8 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
   .pinned-widget-label { font-size: 10px; }
   .pinned-widget-viewer { min-height: calc(100dvh - 130px); }
   .pinned-widget-viewer-stage { border-radius: 8px; }
+  .pinned-monitor-output { padding: 12px; }
+  .pinned-monitor-output.diff-output { padding-inline: 0; }
   .pinned-image-frame { min-height: calc(100dvh - 190px); }
   .pinned-markdown-viewer { min-height: 100%; padding: 26px clamp(17px, 5vw, 28px) 42px; border-inline: 0; font-size: clamp(15px, 4vw, 17px); }
 }

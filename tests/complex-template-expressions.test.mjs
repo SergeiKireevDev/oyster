@@ -12,6 +12,7 @@ test("render-time collection and formatting work uses named reactive values", ()
   const composer = source("public/src/components/Composer.svelte");
   const transcript = source("public/src/components/Transcript.svelte");
   const sessionPickerMarkup = markup("public/src/components/SessionPickerModal.svelte");
+  const cloudWorkspace = source("public/src/components/CloudWorkspaceModal.svelte");
   const cloudWorkspaceMarkup = markup("public/src/components/CloudWorkspaceModal.svelte");
 
   assert.match(filePicker, /\$: folderIsEmpty = !directories\.length && !files\.length/);
@@ -27,7 +28,10 @@ test("render-time collection and formatting work uses named reactive values", ()
   assert.doesNotMatch(sessionPickerMarkup, /otherFolderSessions\[[^\]]+\][^}]*\.filter|fmtSessionDate\(|hit\{group\.hits\.length/);
   assert.match(sessionPickerMarkup, /\{searchGroupMeta\(group\)\}/);
   assert.doesNotMatch(cloudWorkspaceMarkup, /methodsFor\([^)]*\)\.(?:filter|some)|new Date\(/);
-  assert.match(cloudWorkspaceMarkup, /\{#each advancedMethods as method/);
+  assert.match(cloudWorkspace, /let advancedMethodsOpen = false/);
+  assert.match(cloudWorkspace, /\$: advancedAuthMethods = methodsFor\(selectedProvider\)\.filter/);
+  assert.match(cloudWorkspaceMarkup, /\{#each advancedAuthMethods as method/);
+  assert.match(cloudWorkspaceMarkup, /aria-expanded=\{advancedMethodsOpen\}/);
 });
 
 test("chart, modal, routine, and checkpoint markup delegates business rules to helpers", () => {

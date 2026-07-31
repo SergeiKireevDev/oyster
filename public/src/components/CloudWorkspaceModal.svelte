@@ -3,10 +3,10 @@
   import { closeModalState } from "../stores/modal.js";
   import { publishWorkspace } from "../stores/workspaces.js";
   import { getWorkspaceService } from "../runtime/workspaceServiceContext.js";
+  import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
   import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
 
   export let providerId = "";
-  import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
 
   const workspaceService = getWorkspaceService();
 
@@ -17,7 +17,7 @@
   let error = "";
   let credentialValues = {};
   let selectedMethodId = "";
-  let advancedMethods = false;
+  let advancedMethodsOpen = false;
   let authorizationFlow = null;
   let awsAccountId = "";
   let awsRoleFlow = null;
@@ -34,9 +34,11 @@
   let size = "";
   let image = "";
   let createdWorkspace = null;
-  let destroyed = false;
+  let handoffCheckInFlight = false;
+  let awsRoleCheckInFlight = false;
   const lifecycleRequests = createAsyncRequestGuard();
   const lifecycle = lifecycleRequests.begin();
+  const actionRequests = createAsyncRequestGuard();
   const providerRequests = createAsyncRequestGuard();
   const projectRequests = createAsyncRequestGuard();
   const optionRequests = createAsyncRequestGuard();
@@ -52,14 +54,47 @@
       const availableProviders = await workspaceService.listCloudProviders();
       if (request.isCurrent()) providers = availableProviders;
     } catch (cause) {
-      if (request.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Cloud providers could not be loaded");
     } finally {
       if (request.isCurrent()) loading = false;
     }
   }
 
+  function errorMessage(cause, fallback = "Something went wrong") {
+    return cause instanceof Error && cause.message ? cause.message : fallback;
+  }
+
   function methodsFor(provider) {
     return (provider?.authMethods || []).filter((method) => method.available !== false);
+  }
+
+  function stopHandoffPolling() {
+    clearInterval(handoffTimer);
+    handoffTimer = null;
+  }
+
+  function stopAwsRolePolling() {
+    clearInterval(awsRoleTimer);
+    awsRoleTimer = null;
+  }
+
+  function returnToProviders() {
+    actionRequests.begin();
+    projectRequests.begin();
+    optionRequests.begin();
+    handoffRequests.begin();
+    awsRoleRequests.begin();
+    credentialFileRequests.begin();
+    stopHandoffPolling();
+    stopAwsRolePolling();
+    handoffFlow = null;
+    handoffId = "";
+    awsRoleFlow = null;
+    authorizationFlow = null;
+    selectedProvider = null;
+    loading = false;
+    error = "";
+    step = "providers";
   }
 
   function primaryMethod(provider) {
@@ -77,9 +112,17 @@
   }
 
   function chooseProvider(provider) {
+    projectRequests.begin();
+    optionRequests.begin();
+    stopHandoffPolling();
+    stopAwsRolePolling();
+    handoffFlow = null;
+    handoffId = "";
+    awsRoleFlow = null;
+    authorizationFlow = null;
     selectedProvider = provider;
     credentialValues = {};
-    advancedMethods = false;
+    advancedMethodsOpen = false;
     selectedMethodId = primaryMethod(provider)?.id || "";
     error = "";
     if (provider.configured && provider.requiresProject) loadProjects();
@@ -88,70 +131,75 @@
   }
 
   async function disconnectProvider() {
-    const upstream = selectedProvider.id === "gcp"
+    const provider = selectedProvider;
+    const upstream = provider.id === "gcp"
       ? "Oyster will also request Google token revocation."
       : "This removes Hub's credential but may not revoke it at the provider.";
-    if (!confirm(`Disconnect ${selectedProvider.name}?\n\n${upstream}`)) return;
+    if (!confirm(`Disconnect ${provider.name}?\n\n${upstream}`)) return;
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
-      await workspaceService.disconnectCloudProvider(selectedProvider.id);
-      if (!lifecycle.isCurrent()) return;
+      await workspaceService.disconnectCloudProvider(provider.id);
+      if (!request.isCurrent()) return;
       await loadProviders();
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       selectedProvider = null;
       step = "providers";
     } catch (cause) {
-      if (lifecycle.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Cloud provider could not be disconnected");
     } finally {
-      if (lifecycle.isCurrent()) loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
 
   function configureCredentials() {
     credentialValues = {};
-    advancedMethods = false;
+    advancedMethodsOpen = false;
     selectedMethodId = primaryMethod(selectedProvider)?.id || "";
     error = "";
     step = "credentials";
   }
 
   async function startAuthorization() {
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
       const flow = await workspaceService.startCloudAuthorization(selectedProvider.id);
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       authorizationFlow = flow;
       cloudBrowser.navigate(authorizationFlow.authorizationUrl);
     } catch (cause) {
-      if (lifecycle.isCurrent()) {
-        error = cause.message;
+      if (request.isCurrent()) {
+        error = errorMessage(cause, "Cloud sign-in could not be started");
         loading = false;
       }
     }
   }
 
   async function startAwsRole() {
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
       const flow = await workspaceService.startAwsRole(awsAccountId);
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       awsRoleFlow = flow;
-      clearInterval(awsRoleTimer);
-      awsRoleTimer = setInterval(() => { if (!cloudBrowser.hidden()) verifyAwsRole({ quiet: true }); }, 4_000);
+      stopAwsRolePolling();
+      awsRoleTimer = setInterval(() => { void verifyAwsRole({ quiet: true }); }, 4_000);
     } catch (cause) {
-      if (lifecycle.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "AWS setup could not be started");
     } finally {
-      if (lifecycle.isCurrent()) loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
 
   async function verifyAwsRole({ quiet = false } = {}) {
-    if (!awsRoleFlow || loading || cloudBrowser.hidden()) return;
+    if (!awsRoleFlow || loading || awsRoleCheckInFlight || cloudBrowser.hidden()) return;
     const request = awsRoleRequests.begin();
     const flowId = awsRoleFlow.id;
+    awsRoleCheckInFlight = true;
     if (!quiet) loading = true;
     if (!quiet) error = "";
     try {
@@ -159,15 +207,16 @@
       if (!request.isCurrent()) return;
       awsRoleFlow = flow;
       if (awsRoleFlow.status === "succeeded") {
-        clearInterval(awsRoleTimer);
+        stopAwsRolePolling();
         await loadProviders();
         if (!request.isCurrent()) return;
         selectedProvider = providers.find((provider) => provider.id === "aws");
         await loadOptions();
       } else if (!quiet) error = awsRoleFlow.error || "The AWS role is not ready yet.";
     } catch (cause) {
-      if (request.isCurrent() && !quiet) error = cause.message;
+      if (request.isCurrent() && !quiet) error = errorMessage(cause, "AWS connection could not be verified");
     } finally {
+      awsRoleCheckInFlight = false;
       if (request.isCurrent() && !quiet) loading = false;
     }
   }
@@ -192,7 +241,7 @@
       else await loadOptions();
     } catch (cause) {
       if (lifecycle.isCurrent()) {
-        error = cause.message;
+        error = errorMessage(cause, "Cloud sign-in could not be restored");
         loading = false;
       }
     }
@@ -210,7 +259,7 @@
       projects = availableProjects;
       projectId = projects[0]?.id || "";
     } catch (cause) {
-      if (request.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Cloud projects could not be loaded");
     } finally {
       if (request.isCurrent()) loading = false;
     }
@@ -218,46 +267,49 @@
 
   async function selectProject(event) {
     event.preventDefault();
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
       await workspaceService.selectCloudProject(selectedProvider.id, projectId);
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       await loadOptions();
     } catch (cause) {
-      if (lifecycle.isCurrent()) {
-        error = cause.message;
+      if (request.isCurrent()) {
+        error = errorMessage(cause, "Cloud project could not be selected");
         loading = false;
       }
     }
   }
 
   async function startHandoff() {
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
       const flow = await workspaceService.startCloudHandoff(selectedProvider.id);
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       handoffFlow = { ...flow, url: cloudBrowser.handoffUrl(flow.id) };
-      clearInterval(handoffTimer);
-      handoffTimer = setInterval(checkHandoff, 2_000);
+      stopHandoffPolling();
+      handoffTimer = setInterval(() => { void checkHandoff(); }, 2_000);
     } catch (cause) {
-      if (lifecycle.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Device handoff could not be started");
     } finally {
-      if (lifecycle.isCurrent()) loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
 
   async function checkHandoff() {
-    if (!handoffFlow || destroyed || cloudBrowser.hidden()) return;
+    if (!handoffFlow || handoffCheckInFlight || cloudBrowser.hidden()) return;
     const request = handoffRequests.begin();
     const flowId = handoffFlow.id;
+    handoffCheckInFlight = true;
     try {
       const flow = await workspaceService.getCloudHandoff(flowId);
       if (!request.isCurrent()) return;
       handoffFlow = { ...handoffFlow, ...flow };
       if (flow.status === "succeeded") {
-        clearInterval(handoffTimer);
+        stopHandoffPolling();
         await loadProviders();
         if (!request.isCurrent()) return;
         selectedProvider = providers.find((provider) => provider.id === flow.provider);
@@ -266,8 +318,10 @@
       }
     } catch (cause) {
       if (!request.isCurrent()) return;
-      clearInterval(handoffTimer);
-      error = cause.message;
+      stopHandoffPolling();
+      error = errorMessage(cause, "Device handoff status could not be checked");
+    } finally {
+      handoffCheckInFlight = false;
     }
   }
 
@@ -282,8 +336,8 @@
     handoffRequests.begin();
     try { await workspaceService.cancelCloudHandoff(id); }
     catch {}
-    if (destroyed) return;
-    clearInterval(handoffTimer);
+    if (!lifecycle.isCurrent()) return;
+    stopHandoffPolling();
     handoffFlow = null;
     if (handoffId) {
       handoffId = "";
@@ -294,6 +348,7 @@
 
   async function saveCredentials(event) {
     event.preventDefault();
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
@@ -301,16 +356,16 @@
         ...credentialValues,
         ...(handoffId ? { handoffId } : {}),
       });
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       providers = providers.map((provider) => provider.id === selectedProvider.id ? { ...provider, configured: true } : provider);
       selectedProvider = providers.find((provider) => provider.id === selectedProvider.id);
       credentialValues = {};
       if (selectedProvider.id === "gcp" && selectedMethodId === "oauth_redirect") await loadProjects();
       else await loadOptions();
     } catch (cause) {
-      if (lifecycle.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Cloud credentials could not be saved");
     } finally {
-      if (lifecycle.isCurrent()) loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
 
@@ -330,7 +385,7 @@
       const regionImages = options.images.filter((item) => imageAvailableForSelection(item, region, size));
       image = regionImages.some((item) => item.id === options.defaults.image) ? options.defaults.image : regionImages[0]?.id || "";
     } catch (cause) {
-      if (request.isCurrent()) error = cause.message;
+      if (request.isCurrent()) error = errorMessage(cause, "Cloud instance options could not be loaded");
     } finally {
       if (request.isCurrent()) loading = false;
     }
@@ -383,6 +438,7 @@
 
   async function provision(event) {
     event.preventDefault();
+    const request = actionRequests.begin();
     loading = true;
     error = "";
     try {
@@ -393,14 +449,14 @@
         size,
         image,
       });
-      if (!lifecycle.isCurrent()) return;
+      if (!request.isCurrent()) return;
       createdWorkspace = workspace;
       step = "done";
       publishWorkspace(createdWorkspace);
     } catch (cause) {
-      if (lifecycle.isCurrent()) error = provisioningError(cause);
+      if (request.isCurrent()) error = provisioningError(cause);
     } finally {
-      if (lifecycle.isCurrent()) loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
 
@@ -415,27 +471,29 @@
       error = "Credential file is too large";
       return;
     }
+    error = "";
     try {
       const content = await file.text();
       if (request.isCurrent()) updateCredential(fieldId, content);
     } catch (cause) {
-      if (request.isCurrent()) error = cause?.message || "Credential file could not be read";
+      if (request.isCurrent()) error = errorMessage(cause, "Credential file could not be read");
     }
   }
 
   function resumeExternalSetup() {
     if (cloudBrowser.hidden()) return;
-    if (handoffFlow) checkHandoff();
-    if (awsRoleFlow) verifyAwsRole({ quiet: true });
+    if (handoffFlow) void checkHandoff();
+    if (awsRoleFlow) void verifyAwsRole({ quiet: true });
   }
 
   async function initialize() {
     releaseBrowserResume = cloudBrowser.onResume(resumeExternalSetup);
     await loadProviders();
+    if (!lifecycle.isCurrent()) return;
     const flowId = cloudBrowser.query("cloud-connect");
-    if (flowId && !destroyed) await restoreAuthorization(flowId);
+    if (flowId) await restoreAuthorization(flowId);
     const deviceFlowId = cloudBrowser.query("cloud-handoff");
-    if (deviceFlowId && !destroyed) {
+    if (deviceFlowId && lifecycle.isCurrent()) {
       try {
         const flow = await workspaceService.getCloudHandoff(deviceFlowId);
         if (!lifecycle.isCurrent()) return;
@@ -443,17 +501,19 @@
         cloudBrowser.removeQuery("cloud-handoff");
         selectedProvider = providers.find((provider) => provider.id === flow.provider);
         selectedMethodId = methodsFor(selectedProvider).find((method) => ["api_token", "access_key", "service_account_file"].includes(method.id))?.id || primaryMethod(selectedProvider)?.id || "";
-        advancedMethods = true;
+        advancedMethodsOpen = true;
         step = "credentials";
-      } catch (cause) { if (lifecycle.isCurrent()) error = cause.message; }
-    } else if (!flowId && providerId && !destroyed) {
+      } catch (cause) {
+        if (lifecycle.isCurrent()) error = errorMessage(cause, "Device handoff could not be restored");
+      }
+    } else if (!flowId && providerId && lifecycle.isCurrent()) {
       const provider = providers.find((candidate) => candidate.id === providerId);
       if (provider) chooseProvider(provider);
     }
   }
 
   $: selectedMethod = methodsFor(selectedProvider).find((method) => method.id === selectedMethodId) || primaryMethod(selectedProvider);
-  $: advancedMethods = methodsFor(selectedProvider).filter((method) => method.advanced);
+  $: advancedAuthMethods = methodsFor(selectedProvider).filter((method) => method.advanced);
   $: handoffExpiryLabel = handoffFlow ? new Date(handoffFlow.expiresAt).toLocaleTimeString() : "";
   $: credentialFields = selectedMethod?.fields || [];
   $: googleComputeConsoleUrl = workspaceService.googleComputeConsoleUrl(projectId);
@@ -462,24 +522,24 @@
   $: selectedSizeAvailability = selectedProvider?.id === "digitalocean" && selectedSize ? regionAvailability(selectedSize) : "";
   $: availableImages = options.images.filter((item) => imageAvailableForSelection(item, region, size));
 
-  onMount(initialize);
+  onMount(() => { void initialize(); });
   onDestroy(() => {
-    destroyed = true;
     lifecycleRequests.invalidate();
+    actionRequests.invalidate();
     providerRequests.invalidate();
     projectRequests.invalidate();
     optionRequests.invalidate();
     handoffRequests.invalidate();
     awsRoleRequests.invalidate();
     credentialFileRequests.invalidate();
-    clearInterval(handoffTimer);
-    clearInterval(awsRoleTimer);
+    stopHandoffPolling();
+    stopAwsRolePolling();
     releaseBrowserResume();
     credentialValues = {};
   });
 </script>
 
-<section class="cloud-workspace-modal" aria-label="Cloud workspace provisioning">
+<section class="cloud-workspace-modal" aria-label="Cloud workspace provisioning" aria-busy={loading}>
   <nav class="cloud-steps" aria-label="Provisioning steps">
     <span class:active={step === "providers"} class:complete={step !== "providers"}>1 <b>Provider</b></span>
     <i></i>
@@ -491,6 +551,9 @@
   {#if step === "providers"}
     <p class="cloud-intro">Choose the cloud-provider environment for the new workspace. Hub provisions an Ubuntu VM, installs Oyster from source with cloud-init, and registers it over outbound WSS. Provider credentials remain on Hub.</p>
     {#if loading}<p class="cloud-state" role="status">Loading cloud providers…</p>{/if}
+    {#if !loading && !providers.length && !error}
+      <p class="cloud-state" role="status">No cloud providers are available.</p>
+    {/if}
     <div class="cloud-provider-grid">
       {#each providers as provider (provider.id)}
         <button class="cloud-provider-card" type="button" onclick={() => chooseProvider(provider)} disabled={loading}>
@@ -505,7 +568,7 @@
     </div>
   {:else if step === "credentials"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={() => { step = "providers"; error = ""; }}>←</button>
+      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Cloud provider</small><h3>{selectedProvider.name}</h3></div>
     </header>
     <div class="cloud-auth-note">
@@ -580,21 +643,21 @@
       <button type="button" class="cloud-handoff-cancel" onclick={cancelHandoff}>Cancel device handoff</button>
     {/if}
 
-    {#if advancedMethods.length}
-      <button class="cloud-advanced-toggle" type="button" aria-expanded={advancedMethods} onclick={() => { advancedMethods = !advancedMethods; }}>
+    {#if advancedAuthMethods.length}
+      <button class="cloud-advanced-toggle" type="button" aria-expanded={advancedMethodsOpen} aria-controls="cloudAdvancedMethods" onclick={() => { advancedMethodsOpen = !advancedMethodsOpen; }}>
         Advanced connection options
       </button>
-      {#if advancedMethods}
-        <div class="cloud-method-list" role="list">
-          {#each advancedMethods as method (method.id)}
-            <button type="button" class:active={selectedMethod?.id === method.id} onclick={() => chooseMethod(method.id)}>{method.label}</button>
+      {#if advancedMethodsOpen}
+        <div id="cloudAdvancedMethods" class="cloud-method-list" aria-label="Advanced connection methods">
+          {#each advancedAuthMethods as method (method.id)}
+            <button type="button" class:active={selectedMethod?.id === method.id} aria-pressed={selectedMethod?.id === method.id} onclick={() => chooseMethod(method.id)}>{method.label}</button>
           {/each}
         </div>
       {/if}
     {/if}
   {:else if step === "project"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={() => { step = "providers"; error = ""; }}>←</button>
+      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Google Cloud</small><h3>Choose a project</h3></div>
     </header>
     {#if loading}
@@ -620,7 +683,7 @@
     {/if}
   {:else if step === "instance"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={() => { step = "providers"; error = ""; }}>←</button>
+      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Provision with</small><h3>{selectedProvider.name}</h3></div>
       <div class="cloud-credential-actions">
         <button class="cloud-manage-credentials" type="button" onclick={configureCredentials}>Replace connection</button>
