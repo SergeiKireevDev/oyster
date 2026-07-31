@@ -63,7 +63,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 
 - [x] `public/src/components/transcript/ActivityStack.svelte`
 - [x] `public/src/components/transcript/AssistantMessage.svelte`
-- [ ] `public/src/components/transcript/AssistantPartActions.svelte`
+- [x] `public/src/components/transcript/AssistantPartActions.svelte`
 - [ ] `public/src/components/transcript/CheckpointButton.svelte`
 - [ ] `public/src/components/transcript/CheckpointRestoreButton.svelte`
 - [ ] `public/src/components/transcript/CompactionMarker.svelte`

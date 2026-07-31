@@ -21,7 +21,7 @@ test("message actions stay hidden until hover or focus selection", () => {
 test("text assistant parts always own a clipboard control", () => {
   assert.match(assistant, /const isText = block\.type === "text";[\s\S]*?copy: isText/);
   assert.match(assistant, /copy=\{actions\.copy\}/);
-  assert.match(assistantActions, /\{#if copy\}[\s\S]*?<CopyMessageButton/);
+  assert.match(assistantActions, /\{#if showCopy\}[\s\S]*?<CopyMessageButton/);
 });
 
 test("transcript uses spacious turns and a single borderless activity signal", () => {
