@@ -65,6 +65,11 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(css, /\.activity-history-body \{[\s\S]*?border-left:/);
 });
 
+test("activity rows stay bounded by the transcript width", () => {
+  assert.match(css, /\.activity-stack \{[\s\S]*?width: 100%;[\s\S]*?max-width: 100%;[\s\S]*?min-width: 0;/);
+  assert.match(css, /\.activity-stack > details,[\s\S]*?\.activity-history-body,[\s\S]*?details\.block\.activity-step \{ min-width: 0; max-width: 100%; \}/);
+});
+
 test("touching a message selects it before its controls can be activated", () => {
   for (const source of [user, assistant]) {
     assert.match(source, /pointerType !== "touch"/);
