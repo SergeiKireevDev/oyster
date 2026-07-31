@@ -6,7 +6,7 @@ const componentsRoot = new URL("../public/src/components/", import.meta.url);
 const component = (name) => readFileSync(new URL(name, componentsRoot), "utf8");
 
 test("content images and videos receive alternatives from their artifact labels", () => {
-  assert.match(component("ImageArtifact.svelte"), /<img \{src\} \{alt\}/);
+  assert.match(component("ImageArtifact.svelte"), /<img\s+[\s\S]*?\{src\}[\s\S]*?\{alt\}/);
   assert.match(component("SvgArtifact.svelte"), /<img \{src\} \{alt\}/);
   assert.match(component("VideoArtifact.svelte"), /<video[\s\S]*?aria-label=\{label\}/);
 
@@ -14,6 +14,14 @@ test("content images and videos receive alternatives from their artifact labels"
   assert.match(viewer, /<SvgArtifact src=\{source\} alt=\{widget\.label\}/);
   assert.match(viewer, /<ImageArtifact src=\{source\} alt=\{widget\.label\}/);
   assert.match(viewer, /<VideoArtifact src=\{source\} label=\{widget\.label\}/);
+});
+
+test("the image viewer exposes its zoom state and an accessible toggle name", () => {
+  const image = component("ImageArtifact.svelte");
+
+  assert.match(image, /aria-label=\{`\$\{zoomed \? "Fit" : "View original size"\}: \$\{alt \|\| "Pinned image"\}`\}/);
+  assert.match(image, /aria-pressed=\{zoomed\}/);
+  assert.match(image, /onclick=\{toggleZoom\}/);
 });
 
 test("decorative branding, icons, and media thumbnails are hidden from assistive technology", () => {

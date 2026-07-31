@@ -27,6 +27,8 @@ const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
 export const HUBLOT_TUNNEL_POOL_LABEL = "__oyster_reserved_tunnel__";
 const HUBLOT_TUNNEL_POOL_BRIEF = "__oyster_reserved_tunnel_waiting_for_hublot__";
 const HUBLOT_TUNNEL_POOL_PAGE = "tunnel to be created here";
+const HUBLOT_TUNNEL_POOL_RETRY_BASE_MS = 5_000;
+const HUBLOT_TUNNEL_POOL_RETRY_MAX_MS = 5 * 60_000;
 
 export function isHublotTunnelPoolEntry(row) {
   return row?.label === HUBLOT_TUNNEL_POOL_LABEL && row?.brief === HUBLOT_TUNNEL_POOL_BRIEF;
@@ -838,19 +840,50 @@ async function fillHublotTunnelPool(state, targetSize, createEntry = createHublo
   for (const stale of poolRows(state)) {
     if (!availableIds.has(stale.id) && !["opening", "closing"].includes(stale.status)) closeTunnel(state, stale.id);
   }
-  const missing = Math.max(0, targetSize - available.length);
-  if (!missing) return available;
-  const results = await Promise.allSettled(Array.from({ length: missing }, () => createEntry(state)));
-  const created = results
-    .filter((result) => result.status === "fulfilled")
-    .map((result) => hublotRepository(state).find(result.value.id));
-  const failed = results.find((result) => result.status === "rejected");
-  if (failed) throw failed.reason;
-  return available.concat(created);
+  const filled = [...available];
+  // Quick Tunnel issuance is rate-limited per public IP. Refill sequentially so
+  // one Oyster process never turns a pool deficit into a concurrent API burst.
+  while (filled.length < targetSize && !state.hublotTunnelPoolStopping) {
+    const created = await createEntry(state);
+    filled.push(hublotRepository(state).find(created.id));
+  }
+  return filled;
+}
+
+function clearHublotTunnelPoolRetry(state, clearTimer = clearTimeout) {
+  if (state.hublotTunnelPoolRetryTimer) clearTimer(state.hublotTunnelPoolRetryTimer);
+  state.hublotTunnelPoolRetryTimer = null;
+}
+
+/** Retry failed background refills until the configured warm-pool limit is restored. */
+export function scheduleHublotTunnelPoolRetry(state, {
+  createEntry = createHublotTunnelPoolEntry,
+  ensurePool = ensureHublotTunnelPool,
+  setTimer = setTimeout,
+  random = Math.random,
+} = {}) {
+  if (!poolSize(state) || state.hublotTunnelPoolStopping || state.hublotTunnelPoolRetryTimer) return null;
+  const attempt = Math.max(0, Number(state.hublotTunnelPoolRetryAttempt) || 0);
+  const backoff = Math.min(HUBLOT_TUNNEL_POOL_RETRY_MAX_MS, HUBLOT_TUNNEL_POOL_RETRY_BASE_MS * (2 ** Math.min(attempt, 16)));
+  const delay = Math.round(backoff * (0.8 + (0.4 * random())));
+  state.hublotTunnelPoolRetryAttempt = attempt + 1;
+  const timer = setTimer(() => {
+    if (state.hublotTunnelPoolRetryTimer === timer) state.hublotTunnelPoolRetryTimer = null;
+    if (state.hublotTunnelPoolStopping) return;
+    void ensurePool(state, { createEntry })
+      .catch((error) => console.error(`[oyster] tunnel pool refill retry failed: ${error.message}`));
+  }, delay);
+  timer?.unref?.();
+  state.hublotTunnelPoolRetryTimer = timer;
+  console.warn(`[oyster] tunnel pool refill scheduled in ${delay}ms (attempt ${attempt + 1})`);
+  return delay;
 }
 
 /** Keep the configured number of quick tunnels connected in the background. */
-export function ensureHublotTunnelPool(state, { createEntry = createHublotTunnelPoolEntry } = {}) {
+export function ensureHublotTunnelPool(state, {
+  createEntry = createHublotTunnelPoolEntry,
+  scheduleRetry = scheduleHublotTunnelPoolRetry,
+} = {}) {
   if (!poolSize(state) || state.hublotTunnelPoolStopping) return Promise.resolve([]);
   if (state.hublotTunnelPoolRefillTask) {
     state.hublotTunnelPoolRefillRequested = true;
@@ -859,31 +892,39 @@ export function ensureHublotTunnelPool(state, { createEntry = createHublotTunnel
   state.hublotTunnelPoolRefillRequested = false;
   const task = fillHublotTunnelPool(state, poolSize(state), createEntry);
   state.hublotTunnelPoolRefillTask = task;
-  const finished = () => {
+  task.then(() => {
     if (state.hublotTunnelPoolRefillTask === task) state.hublotTunnelPoolRefillTask = null;
+    state.hublotTunnelPoolRetryAttempt = 0;
+    clearHublotTunnelPoolRetry(state);
     if (state.hublotTunnelPoolRefillRequested && !state.hublotTunnelPoolStopping) {
       state.hublotTunnelPoolRefillRequested = false;
-      void ensureHublotTunnelPool(state, { createEntry })
+      void ensureHublotTunnelPool(state, { createEntry, scheduleRetry })
         .catch((error) => console.error(`[oyster] tunnel pool refill failed: ${error.message}`));
     }
-  };
-  task.then(finished, finished);
+  }, () => {
+    if (state.hublotTunnelPoolRefillTask === task) state.hublotTunnelPoolRefillTask = null;
+    state.hublotTunnelPoolRefillRequested = false;
+    if (!state.hublotTunnelPoolStopping) scheduleRetry(state, { createEntry });
+  });
   return task;
 }
 
-/** Claim the oldest warm tunnel, stop its waiting page, and turn it into a real hublot reservation. */
+/** Claim the oldest warm tunnel, or return null so callers can open directly. */
 export async function acquireHublotTunnelPoolEntry(state, {
   label = null, brief = null, ownerId = null,
+} = {}, {
+  scheduleRefill = scheduleHublotTunnelPoolRetry,
 } = {}) {
   const claimed = await enqueueHublotTunnelPoolOperation(state, async () => {
     if (!poolSize(state)) return null;
-    let available = await availablePoolRows(state);
+    const available = await availablePoolRows(state);
     if (!available.length) {
-      try { await ensureHublotTunnelPool(state); } catch {}
-      available = await availablePoolRows(state);
+      // Prioritize the user-requested direct tunnel. Pool recovery starts after
+      // a backoff instead of competing for the same rate-limited issuance API.
+      scheduleRefill(state);
+      return null;
     }
     const pooled = available[0];
-    if (!pooled) throw new Error("no warm hublot tunnel is available");
     const current = hublotRepository(state).find(pooled.id);
     if (!current?.public_url || !currentHublotTunnelProcessIsHealthy(state, current.id)) {
       throw new Error("reserved hublot tunnel is no longer healthy");
@@ -957,6 +998,8 @@ export async function activateHublotTunnelPoolEntry(state, id, {
 export function stopHublotTunnelPool(state) {
   state.hublotTunnelPoolStopping = true;
   state.hublotTunnelPoolRefillRequested = false;
+  clearHublotTunnelPoolRetry(state);
+  state.hublotTunnelPoolRetryAttempt = 0;
 }
 
 function shellQuote(value) {

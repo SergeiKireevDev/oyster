@@ -83,6 +83,40 @@ test("auto-allocated hublots replace a warm tunnel origin without spawning cloud
   assert.equal(created.body.tunnel.servicePid, 321);
 });
 
+test("auto-allocated hublots fall back to a direct tunnel when the warm pool is empty", async () => {
+  const order = [];
+  const reserved = {
+    id: "direct-1", port: 4020, status: "opening",
+    service_start_script_path: "/agent/hublots/direct-1/start.sh",
+  };
+  const routes = createTunnelRoutes({
+    state: { serverEvent: () => {} }, config: { TUNNEL_BIN: "cloudflared" },
+    requestContext: {
+      json(res, status, body) { res.status = status; res.body = body; },
+      readJsonBody: async (req) => req.body,
+    },
+    listTunnels: () => [],
+    acquireHublotTunnelPoolEntry: async () => { order.push("claim-miss"); return null; },
+    allocateHublot: async () => { order.push("allocate"); return reserved; },
+    reserveHublot: () => { throw new Error("auto-allocation must not reserve an explicit port"); },
+    openTunnel: async (_state, options) => {
+      order.push("tunnel");
+      return { id: options.id, port: options.port, status: "open", url: "https://direct.test" };
+    },
+    closeTunnel: () => null,
+    rebindHublot: () => null,
+    spawnHublotAgent: async () => { order.push("service"); return { servicePid: 654, agentProc: { exitCode: 0 } }; },
+  });
+
+  const created = response();
+  await routes["POST /tunnels"]({ body: { label: "preview", brief: "serve preview" } }, created);
+
+  assert.equal(created.status, 201);
+  assert.deepEqual(order, ["claim-miss", "allocate", "service", "tunnel"]);
+  assert.equal(created.body.tunnel.url, "https://direct.test");
+  assert.equal(created.body.tunnel.servicePid, 654);
+});
+
 test("tunnel routes reject opens without an agent brief", async () => {
   let reserved = false;
   const routes = createTunnelRoutes({

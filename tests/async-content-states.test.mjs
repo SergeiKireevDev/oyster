@@ -23,8 +23,11 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
     assert.match(states, new RegExp(message));
   }
 
+  const image = component("ImageArtifact.svelte");
+  assert.match(image, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
+  assert.match(image, /<ArtifactLoadState kind="image" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
+
   for (const [name, kind] of [
-    ["ImageArtifact.svelte", "image"],
     ["VideoArtifact.svelte", "video"],
     ["SvgArtifact.svelte", "svg"],
   ]) {
