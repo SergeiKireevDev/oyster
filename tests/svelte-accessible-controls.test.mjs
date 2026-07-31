@@ -27,7 +27,7 @@ test("symbol-only controls expose explicit accessible names", () => {
   assert.match(picker, /aria-label="Delete session"/);
 
   const explorer = component("FileExplorerModal.svelte");
-  assert.match(explorer, /<div role="list" aria-label="Files">/);
+  assert.match(explorer, /<div role="list" aria-label="Files" class="file-explorer-files">/);
   assert.match(explorer, /class="file-explorer-row" role="listitem"/);
   assert.match(explorer, /aria-label=\{`Download \$\{file\.name\}`\}/);
   assert.match(explorer, /aria-label=\{`Pin \$\{file\.name\}`\}/);

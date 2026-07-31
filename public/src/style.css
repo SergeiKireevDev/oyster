@@ -1699,7 +1699,6 @@
     white-space: pre;
     tab-size: 4;
   }
-  #modal .file-editor { height: 50vh; margin-top: 6px; }
   #modal .settings-option { display: flex; align-items: center; gap: 10px; cursor: pointer; }
   #modal .settings-checkbox {
     width: 16px;
@@ -1707,7 +1706,6 @@
     flex-shrink: 0;
     accent-color: var(--accent);
   }
-  #modal .file-explorer-row { display: flex; align-items: center; gap: 6px; }
   #modal .chip-link { text-decoration: none; }
   #routineList { display: contents; }
   #modal.wide { max-width: 760px; }

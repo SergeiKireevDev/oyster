@@ -73,7 +73,7 @@
   $: filePage = incrementalCollectionPage(files, requestedFiles);
   $: nextFilePageSize = Math.min(filePage.pageSize, filePage.remainingCount);
   $: folderIsEmpty = !directories.length && !files.length;
-  $: hiddenFilesLabel = $fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+  $: hiddenFilesLabel = $fileExplorer.showHidden ? "Hide hidden files" : "Show hidden files";
   $: editedFileDownload = browserActions.fileDownload($fileExplorer.editPath);
 
   function revealFiles() {
@@ -86,27 +86,36 @@
 </script>
 
 {#if $fileExplorer.loading}
-  <div class="m-path" role="status"><span class="spin" aria-hidden="true"></span> loading files…</div>
+  <div class="file-explorer-state" role="status">
+    <span class="spin" aria-hidden="true"></span>
+    <span>Loading files…</span>
+  </div>
 {:else if $fileExplorer.error}
-  <div class="m-path async-error" role="alert">
+  <div class="file-explorer-state file-explorer-error async-error" role="alert">
     <span>Could not load files: {$fileExplorer.error}</span>
     <button class="chip" type="button" onclick={retryFileExplorer}>Retry</button>
   </div>
 {:else if $fileExplorer.mode === "edit"}
-  <form id="fileEditorForm" aria-busy={$fileExplorer.saving} onsubmit={submitFileEditor}>
-    <div class="m-path" title={$fileExplorer.editPath}>{$fileExplorer.editPath}</div>
-    <textarea
-      aria-label={`Edit ${$fileExplorer.editPath}`}
-      value={$fileExplorer.editContent}
-      spellcheck="false"
-      class="modal-code-editor file-editor"
-      aria-keyshortcuts="Control+S Meta+S"
-      oninput={updateEditorContent}
-      onkeydown={handleEditorKeydown}
-    ></textarea>
-    {#if $fileExplorer.saveError}<div class="m-path async-error" role="alert">{$fileExplorer.saveError} — correct the problem and retry Save.</div>{/if}
+  <form id="fileEditorForm" class="file-editor-form" aria-busy={$fileExplorer.saving} onsubmit={submitFileEditor}>
+    <div class="m-path file-editor-path" title={$fileExplorer.editPath}>{$fileExplorer.editPath}</div>
+    <label class="file-editor-field">
+      <span>File contents</span>
+      <textarea
+        aria-label={`Edit ${$fileExplorer.editPath}`}
+        aria-describedby="fileEditorHint"
+        value={$fileExplorer.editContent}
+        spellcheck="false"
+        class="modal-code-editor file-editor"
+        aria-keyshortcuts="Control+S Meta+S"
+        oninput={updateEditorContent}
+        onkeydown={handleEditorKeydown}
+      ></textarea>
+    </label>
+    <p class="file-editor-hint" id="fileEditorHint"><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> to save</p>
+    {#if $fileExplorer.saveError}<div class="file-editor-error async-error" role="alert">{$fileExplorer.saveError} — correct the problem and retry Save.</div>{/if}
   </form>
 {:else}
+  <div class="file-explorer-list">
   <BrowserDirectoryList
     path={$fileExplorer.path}
     home={$fileExplorer.home}
@@ -119,7 +128,7 @@
     onPin={pinExploredPath}
   />
   {#if filePage.items.length}
-    <div role="list" aria-label="Files">
+    <div role="list" aria-label="Files" class="file-explorer-files">
       {#each filePage.items as file (file.name)}
         {@const fullPath = browserPathFor($fileExplorer.path, file)}
         {@const download = browserActions.fileDownload(fullPath)}
@@ -131,9 +140,9 @@
             download={download.filename}
             title={`download ${file.name}`}
             aria-label={`Download ${file.name}`}
-          >⬇</a>
-          <button type="button" class="chip" title={`pin ${file.name}`} aria-label={`Pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}>⌖</button>
-          <button type="button" class="chip" title={`edit ${file.name}`} aria-label={`Edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
+          ><span aria-hidden="true">↓</span></a>
+          <button type="button" class="chip" title={`pin ${file.name}`} aria-label={`Pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}><span aria-hidden="true">⌖</span></button>
+          <button type="button" class="chip" title={`edit ${file.name}`} aria-label={`Edit ${file.name}`} onclick={() => editExploredFile(fullPath)}><span aria-hidden="true">✎</span></button>
         </div>
       {/each}
     </div>
@@ -142,8 +151,9 @@
     <button type="button" class="collection-load-more" onclick={revealFiles}>Show {nextFilePageSize} more files</button>
   {/if}
   {#if folderIsEmpty}
-    <div class="m-path" role="status">(empty folder)</div>
+    <div class="file-explorer-empty" role="status">This folder is empty.</div>
   {/if}
+  </div>
 {/if}
 
 {#if $fileExplorer.mode === "list" && !$fileExplorer.loading && !$fileExplorer.error && $fileExplorer.uploadError}
@@ -152,7 +162,7 @@
 
 <div class="m-actions" id="mActions">
   {#if $fileExplorer.mode === "edit"}
-    <button class="chip" type="submit" form="fileEditorForm" disabled={$fileExplorer.saving}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
+    <button class="btn modal-primary-action" type="submit" form="fileEditorForm" disabled={$fileExplorer.saving}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
     <a class="chip chip-link" href={editedFileDownload.href} download={editedFileDownload.filename}>Download</a>
     <button class="chip" type="button" onclick={backFileExplorer}>← Back</button>
   {:else}
@@ -161,8 +171,137 @@
       {$fileExplorer.uploadText}
     </button>
     <button class="chip" type="button" title={`pin ${$fileExplorer.path}`} onclick={() => pinExploredPath($fileExplorer.path)}>⌖ Pin folder</button>
-    <button class="chip toggle-hidden" type="button" onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
+    <button class="chip toggle-hidden" class:active={$fileExplorer.showHidden} type="button" aria-pressed={$fileExplorer.showHidden} onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
     <button class="chip" type="button" onclick={backFileExplorerToHublots}>← Widgets</button>
   {/if}
   <button class="chip" type="button" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>
+
+<style>
+  .file-explorer-list,
+  .file-editor-form,
+  .file-editor-field {
+    display: grid;
+    min-width: 0;
+  }
+
+  .file-explorer-list { gap: 5px; }
+  .file-editor-form { gap: 7px; }
+  .file-editor-field { gap: 5px; }
+
+  .file-explorer-files {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .file-explorer-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .file-explorer-row > .chip {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+  }
+
+  .file-explorer-state,
+  .file-explorer-empty,
+  .file-editor-error {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .file-explorer-state {
+    display: flex;
+    min-height: 80px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .file-explorer-error {
+    flex-wrap: wrap;
+    color: var(--red);
+  }
+
+  .file-explorer-empty {
+    padding: 22px 12px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--panel-2) 42%, transparent);
+    text-align: center;
+  }
+
+  .file-editor-path {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .file-editor-field > span,
+  .file-editor-hint {
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+
+  .file-editor-field > span { font-weight: 620; }
+
+  .file-editor-form .file-editor {
+    height: clamp(260px, 50vh, 560px);
+    min-height: 180px;
+    max-height: 58vh;
+    margin: 0;
+    overflow: auto;
+    overflow-wrap: normal;
+  }
+
+  .file-editor-hint {
+    margin: 0;
+    line-height: 1.45;
+    text-align: right;
+  }
+
+  .file-editor-hint kbd {
+    padding: 1px 4px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: 9.5px/1.4 var(--mono);
+  }
+
+  .file-editor-error {
+    color: var(--red);
+  }
+
+  .toggle-hidden.active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .file-explorer-row > .chip {
+      width: 40px;
+      min-width: 40px;
+      min-height: 40px;
+    }
+
+    .file-editor-form .file-editor { height: clamp(220px, 44vh, 420px); }
+    .m-actions > :is(button, a) { min-height: 40px; }
+  }
+
+  @media (max-width: 520px) {
+    .file-explorer-row { gap: 5px; }
+    .file-explorer-row > .chip { width: 38px; min-width: 38px; }
+    .file-editor-hint { text-align: left; }
+    .m-actions > :is(button, a) { flex: 1 1 118px; }
+  }
+</style>
