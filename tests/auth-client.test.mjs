@@ -109,13 +109,12 @@ test("auth browser service validates the submitted token rather than another bro
 
 test("AuthGate retains failed authentication and exposes an inline error", () => {
   const source = readFileSync(new URL("../public/src/components/AuthGate.svelte", import.meta.url), "utf8");
-  const style = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
   assert.match(source, /getAuthBrowser\(\)/);
   assert.match(source, /if \(!await authBrowser\.validateToken\(token\)\)/);
   assert.ok(source.indexOf("validateToken(token)") < source.indexOf("saveToken(token)"));
   assert.match(source, /class="gate-error"[^>]*role="alert"[^>]*aria-atomic="true"/);
   assert.match(source, /Authentication failed/);
-  assert.match(style, /#gate \.gate-error\s*\{[^}]*color: var\(--red\)/s);
+  assert.match(source, /\.gate-error\s*\{[^}]*color: var\(--red\)/s);
   assert.match(source, /authBrowser\.saveToken\(token\)/);
   assert.match(source, /tokenInput = "";\s*authBrowser\.reload\(\)/);
   assert.doesNotMatch(source, /localStorage|location\.reload/);
@@ -132,4 +131,20 @@ test("AuthGate exposes an accessible, password-manager-friendly authentication d
   assert.match(source, /aria-describedby=\{inputDescription\}/);
   assert.match(source, /readonly=\{connecting\}/);
   assert.doesNotMatch(source, /disabled=\{connecting\}[\s\S]*required/);
+  assert.match(source, /gate-error-mark" aria-hidden="true"/);
+  assert.match(source, /gate-spinner" aria-hidden="true"/);
+});
+
+test("AuthGate owns a responsive, theme-token-based visual contract", () => {
+  const source = readFileSync(new URL("../public/src/components/AuthGate.svelte", import.meta.url), "utf8");
+  const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(source, /<style>[\s\S]*#gate\s*\{[\s\S]*var\(--bg\)/);
+  assert.match(source, /\.card\s*\{[\s\S]*border: 1px solid var\(--border\);[\s\S]*box-shadow: var\(--shadow-lg\)/);
+  assert.match(source, /input\s*\{[\s\S]*font: 12\.5px var\(--mono\)/);
+  assert.match(source, /input\[aria-invalid="true"\][^{]*\{[^}]*var\(--red\)/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*env\(safe-area-inset-bottom\)/);
+  assert.match(source, /@media \(max-width: 520px\)/);
+  assert.match(globalStyles, /#gate\.open \{ display: flex; \}/, "runtime visibility remains a global class hook");
+  assert.doesNotMatch(globalStyles, /#gate\s+(?!\.open)/, "gate presentation stays component-scoped");
 });

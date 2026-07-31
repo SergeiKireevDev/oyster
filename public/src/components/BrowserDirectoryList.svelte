@@ -1,4 +1,5 @@
 <script>
+  import FolderIcon from "./FolderIcon.svelte";
   import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import {
     DEFAULT_COLLECTION_PAGE_SIZE,
@@ -70,13 +71,13 @@
 {#if hasNavigation}
   <nav class="browser-directory-navigation" aria-label="Directory shortcuts">
     {#if path !== home}
-      <button type="button" class="m-option dir homeDir" title={home} onclick={() => onBrowse(home)}>home</button>
+      <button type="button" class="m-option dir browser-directory-shortcut" title={home} onclick={() => onBrowse(home)}>Home</button>
     {/if}
     {#if showWorkdir && workdir && path !== workdir}
-      <button type="button" class="m-option dir" title={workdir} onclick={() => onBrowse(workdir)}>workdir</button>
+      <button type="button" class="m-option dir browser-directory-shortcut" title={workdir} onclick={() => onBrowse(workdir)}>Workdir</button>
     {/if}
     {#if parent}
-      <button type="button" class="m-option dir up" title={parent} aria-label="Parent folder" onclick={() => onBrowse(parent)}>..</button>
+      <button type="button" class="m-option dir browser-directory-shortcut" title={parent} aria-label="Parent folder" onclick={() => onBrowse(parent)}>Parent</button>
     {/if}
   </nav>
 {/if}
@@ -92,11 +93,14 @@
       <div class="browser-directory-row" role="listitem">
         <button
           type="button"
-          class="m-option dir"
+          class="m-option dir browser-directory-button"
           class:hidden-entry={dir.hidden}
           title={fullPath}
           onclick={() => onBrowse(fullPath)}
-        >{dir.name}</button>
+        >
+          <FolderIcon size={15} />
+          <span class="browser-directory-name">{dir.name}</span>
+        </button>
         {#if onPin}
           <button
             type="button"
@@ -116,3 +120,58 @@
     Show {nextPageSize} more folders
   </button>
 {/if}
+
+<style>
+  .browser-directory-navigation {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    gap: 5px;
+  }
+
+  .browser-directory-separator {
+    height: 1px;
+    margin: 10px 2px;
+    background: var(--border);
+  }
+
+  .browser-directory-list {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .browser-directory-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .browser-directory-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .browser-directory-row > .chip {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+  }
+
+  @media (max-width: 760px) {
+    .browser-directory-navigation { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+
+    .browser-directory-row > .chip {
+      width: 40px;
+      min-width: 40px;
+      min-height: 40px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .browser-directory-navigation { grid-template-columns: 1fr; }
+  }
+</style>
