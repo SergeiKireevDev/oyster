@@ -48,7 +48,7 @@ test("loading, connection, voice, and search updates expose polite status semant
   assert.match(component("Header.svelte"), /class="header-status" role="status" aria-atomic="true"/);
   assert.match(component("Composer.svelte"), /id="voiceStatus" role="status" aria-atomic="true"/);
   assert.match(component("SessionSidebar.svelte"), /class="session-sidebar-status" role="status" aria-atomic="true"/);
-  assert.match(component("SessionPickerModal.svelte"), /class="m-path" role="status" aria-atomic="true">\{\$sessionPicker\.searchStatus\}/);
+  assert.match(component("SessionPickerModal.svelte"), /class="m-path" role="status" aria-atomic="true" aria-busy=\{\$sessionPicker\.searching\}>\{\$sessionPicker\.searchStatus\}/);
 });
 
 test("dynamic empty results are announced as polite statuses", () => {
