@@ -4,6 +4,7 @@ import test from "node:test";
 import { compile } from "svelte/compiler";
 
 const source = readFileSync(new URL("../public/src/components/FolderIcon.svelte", import.meta.url), "utf8");
+const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("FolderIcon exposes typed size and class props", () => {
   assert.match(source, /size\?: number;/);
@@ -15,6 +16,13 @@ test("FolderIcon sanitizes its CSS size and remains decorative", () => {
   assert.match(source, /style:--folder-icon-size=\{`\$\{normalizedSize\}px`\}/);
   assert.match(source, /aria-hidden="true"/);
   assert.match(source, /<svg[^>]*focusable="false"/);
+});
+
+test("FolderIcon owns its presentation styles", () => {
+  assert.match(source, /<style>[\s\S]*\.folder-icon \{/);
+  assert.match(source, /width: var\(--folder-icon-size\);/);
+  assert.match(source, /path \{[\s\S]*stroke: currentColor;/);
+  assert.doesNotMatch(globalStyles, /\.folder-icon(?:\s|\{|\.)/);
 });
 
 test("FolderIcon compiles without Svelte warnings", () => {

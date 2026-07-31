@@ -2353,21 +2353,6 @@ body {
   letter-spacing: -.006em;
 }
 button, input, textarea, select { letter-spacing: inherit; }
-.folder-icon {
-  --folder-neon: var(--accent);
-  width: var(--folder-icon-size, 16px);
-  height: var(--folder-icon-size, 16px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  color: var(--folder-neon);
-  filter: drop-shadow(0 0 4px rgba(157,169,255,.42));
-  vertical-align: -.15em;
-}
-.folder-icon svg { width: 100%; height: 100%; overflow: visible; }
-.folder-icon path { stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
-.folder-icon-hero { filter: drop-shadow(0 0 9px rgba(157,169,255,.52)); }
 .folder-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 #workdirInfo { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
