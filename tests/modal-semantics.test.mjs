@@ -21,7 +21,10 @@ test("prompt picker checkpoint and hublot modal controls use native buttons", ()
 
   assert.match(read("TextPromptModal.svelte"), /<button class="chip" type="button" data-modal-cancel onclick=\{dialogs\.cancelText\}>Cancel<\/button>/);
   assert.match(read("EditorPromptModal.svelte"), /<button class="chip" type="button" data-modal-cancel onclick=\{dialogs\.cancelEditor\}>Cancel<\/button>/);
-  assert.match(read("ConfirmPromptModal.svelte"), /<button class="chip" data-modal-cancel onclick=\{\(\) => dialogs\.answerConfirm\(false\)\}>No<\/button>/);
+  const confirmPrompt = read("ConfirmPromptModal.svelte");
+  assert.match(confirmPrompt, /<p>\{\$confirmPrompt\.message\}<\/p>/);
+  assert.match(confirmPrompt, /<button class="chip" type="button" data-modal-cancel onclick=\{answerNo\}>No<\/button>/);
+  assert.match(confirmPrompt, /<button class="btn modal-primary-action" type="button" onclick=\{answerYes\}>Yes<\/button>/);
   assert.match(read("OptionPickerModal.svelte"), /<button class="chip" data-modal-cancel onclick=\{dialogs\.cancelOption\}>Cancel<\/button>/);
   assert.match(read("CheckpointModelPickerModal.svelte"), /<button class="chip" type="button" data-modal-cancel onclick=\{cancelCheckpointModelPicker\}>Cancel<\/button>/);
 

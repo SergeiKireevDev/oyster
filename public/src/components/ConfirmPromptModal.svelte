@@ -3,11 +3,19 @@
 
   const dialogs = getDialogService();
   const confirmPrompt = dialogs.confirmPrompt;
+
+  function answerNo() {
+    dialogs.answerConfirm(false);
+  }
+
+  function answerYes() {
+    dialogs.answerConfirm(true);
+  }
 </script>
 
-{$confirmPrompt.message}
+<p>{$confirmPrompt.message}</p>
 
 <div class="m-actions" id="mActions">
-  <button class="chip" data-modal-cancel onclick={() => dialogs.answerConfirm(false)}>No</button>
-  <button class="btn modal-primary-action" onclick={() => dialogs.answerConfirm(true)}>Yes</button>
+  <button class="chip" type="button" data-modal-cancel onclick={answerNo}>No</button>
+  <button class="btn modal-primary-action" type="button" onclick={answerYes}>Yes</button>
 </div>
