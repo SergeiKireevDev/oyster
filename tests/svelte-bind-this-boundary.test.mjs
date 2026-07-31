@@ -36,8 +36,8 @@ const retainedElementBindings = new Map([
     regression: ["api-keys-modal.test.mjs", "API Keys modal form keeps submitted keys local and clears them on every exit"],
   }],
   ["Overlays.svelte", {
-    bindings: ["div:modalElement", "div:overlayElement"],
-    reason: "Modal history, cancellation, and focus ownership operate on runtime-selected dialog content.",
+    bindings: ["div:overlayElement"],
+    reason: "Modal history cancellation needs the overlay node to discover runtime-selected cancel controls.",
     regression: ["modal-dom-behavior.test.mjs", "modal focus behavior is accessible to users and releases its lifecycle listeners"],
   }],
   ["UserMessage.svelte", {
