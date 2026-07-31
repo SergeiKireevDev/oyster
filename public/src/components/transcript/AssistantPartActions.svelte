@@ -4,27 +4,44 @@
   import CheckpointButton from "./CheckpointButton.svelte";
   import CheckpointRestoreButton from "./CheckpointRestoreButton.svelte";
 
+  /** @typedef {{ hash: string } & Record<string, unknown>} Checkpoint */
+  /** @typedef {{ busy?: boolean, checkpoint: Checkpoint }} RestoreState */
+  /**
+   * @typedef {object} Props
+   * @property {HTMLElement | null} [target]
+   * @property {string} [copyText]
+   * @property {boolean} [copy]
+   * @property {(target: HTMLElement | null) => void} [onPermalink]
+   * @property {(text: string) => void} [onCopy]
+   * @property {() => void} [onCheckpoint]
+   * @property {(checkpoint: Checkpoint) => void} [onRollback]
+   * @property {boolean} [checkpoint]
+   * @property {boolean} [checkpointBusy]
+   * @property {RestoreState | null} [restore]
+   */
+
+  /** @type {Props} */
   let {
     target = null,
     copyText = "",
-    copy = false,
+    copy: showCopy = false,
     onPermalink = () => {},
     onCopy = () => {},
     onCheckpoint = () => {},
     onRollback = () => {},
-    checkpoint = false,
+    checkpoint: showCheckpoint = false,
     checkpointBusy = false,
-    restore = null,
+    restore: restoreState = null,
   } = $props();
 </script>
 
 <PermalinkButton {target} {onPermalink} />
-{#if copy}
+{#if showCopy}
   <CopyMessageButton text={copyText} {onCopy} />
 {/if}
-{#if checkpoint}
+{#if showCheckpoint}
   <CheckpointButton {onCheckpoint} busy={checkpointBusy} />
 {/if}
-{#if restore}
-  <CheckpointRestoreButton {restore} {onRollback} />
+{#if restoreState}
+  <CheckpointRestoreButton restore={restoreState} {onRollback} />
 {/if}
