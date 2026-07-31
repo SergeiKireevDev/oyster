@@ -40,11 +40,18 @@
 </script>
 
 {#if !available}
-  <div class="artifact-state" role="status" aria-atomic="true">{message.empty}</div>
+  <div class="artifact-state artifact-state-empty" role="status" aria-atomic="true">
+    <span>{message.empty}</span>
+  </div>
 {:else if status === "loading"}
-  <div class="artifact-state" role="status" aria-atomic="true">{message.loading}</div>
+  <div class="artifact-state artifact-state-loading" role="status" aria-atomic="true">
+    <span class="spin" aria-hidden="true"></span>
+    <span>{message.loading}</span>
+  </div>
 {:else if status === "error"}
-  <div class="artifact-state" role="alert" aria-atomic="true">
-    {message.error} <button type="button" class="chip" onclick={onRetry}>Retry</button>
+  <div class="artifact-state artifact-state-error" role="alert" aria-atomic="true">
+    <span class="artifact-state-error-mark" aria-hidden="true">!</span>
+    <span>{message.error}</span>
+    <button type="button" class="chip" onclick={onRetry}>Retry</button>
   </div>
 {/if}
