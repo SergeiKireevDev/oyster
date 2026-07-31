@@ -30,8 +30,8 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.deepEqual([...new Set(transcriptGaps)], [4]);
   assert.match(css, /\.assistant-entry \{[^}]*gap: 4px;/);
   assert.match(css, /\.assistant-entry\.empty \{ display: none; \}/);
-  assert.match(assistant, /function isEmptyMessage\(\)[\s\S]*?displayBlocks\.length === 0 && !data\.errorMessage/);
-  assert.match(assistant, /class:empty=\{isEmptyMessage\(\)\}/);
+  assert.match(assistant, /const empty = \$derived\(displayBlocks\.length === 0 && !data\.errorMessage\)/);
+  assert.match(assistant, /class:empty=\{empty\}/);
   assert.match(css, /#messages > \[data-role="user"\] \+ \.assistant-entry,[\s\S]*?margin-top: 12px;/);
   assert.match(transcript, /const turnActivityGroups = derived\(transcriptItems/);
   assert.match(transcript, /item\.kind === "user" \|\| item\.kind === "compaction"/);
@@ -46,9 +46,9 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(transcript, /activityKey=\{item\.id\}/);
   assert.match(transcript, /activityUnsettled=\{activityCurrent\}/);
   assert.match(assistant, /arrangeActivity\(data\.blocks, activityBlocks, activityKey\)/);
-  assert.match(assistant, /visible\.unshift\(\{[\s\S]*?type: "activityStack"/);
-  assert.match(assistant, /key: `activity:\$\{identity\}`/);
-  assert.match(assistant, /block\.type === "activityStack" \? block\.key : block/);
+  assert.match(assistant, /visible\.push\(\{[\s\S]*?type: "activityStack"/);
+  assert.match(assistant, /renderKey: `activity:\$\{identity\}`/);
+  assert.match(assistant, /return block\.renderKey/);
   assert.match(activityStack, /let historyOpen = \$state\(false\)/);
   assert.match(activityStack, /class="activity-history" bind:open=\{historyOpen\}/);
   assert.doesNotMatch(assistant, /latestActivityIndex|insertionIndex|visible\.splice/);

@@ -1,12 +1,11 @@
 <script>
-  import { writable } from "svelte/store";
   import ActivityStack from "./ActivityStack.svelte";
   import AssistantPartActions from "./AssistantPartActions.svelte";
   import SanitizedMarkdown from "../SanitizedMarkdown.svelte";
   import { reportNode } from "../../lib/nodeReporter.js";
 
   let {
-    assistantStore = writable({ blocks: [], copyText: "", errorMessage: "" }),
+    assistantStore,
     activityBlocks = [],
     activityKey = "current",
     role = "assistant",
@@ -20,10 +19,11 @@
     onRollback = () => {},
     onRoot = () => {},
   } = $props();
-  let root = $state();
+  let root = $state(null);
   const data = $derived($assistantStore);
   const displayBlocks = $derived(arrangeActivity(data.blocks, activityBlocks, activityKey));
   const restore = $derived(restores.find((item) => item.target === root));
+  const empty = $derived(displayBlocks.length === 0 && !data.errorMessage);
 
   function selectOnFirstTouch(event) {
     if (event.pointerType !== "touch" || event.currentTarget.matches(":focus-within")) return;
@@ -37,39 +37,44 @@
     return `…${compact.slice(-maxLength).trimStart()}`;
   }
 
-  function isEmptyMessage() {
-    return displayBlocks.length === 0 && !data.errorMessage;
-  }
-
   function partActions(block, index) {
     const isText = block.type === "text";
     const isLast = index === displayBlocks.length - 1;
     return {
       copyText: isText ? block.text : "",
       copy: isText,
-      checkpoint: checkpoint.target === root && isLast,
+      checkpoint: isLast && checkpoint.target === root,
       restore: isLast ? restore : null,
     };
   }
 
   function arrangeActivity(blocks = [], activities = [], identity = "current") {
-    const visible = blocks.filter((block) => block.type !== "thinking" && block.type !== "toolCall");
-    if (!activities.length) return visible;
+    const visible = [];
+    if (activities.length) {
+      visible.push({
+        type: "activityStack",
+        renderKey: `activity:${identity}`,
+        blocks: activities,
+      });
+    }
 
-    visible.unshift({
-      type: "activityStack",
-      key: `activity:${identity}`,
-      blocks: activities,
-    });
+    let textPosition = 0;
+    for (const block of blocks) {
+      if (block.type !== "text") continue;
+      const renderKey = `text:${textPosition}`;
+      textPosition += 1;
+      if (!block.text) continue;
+      visible.push({ ...block, renderKey });
+    }
     return visible;
   }
 
   function blockIdentity(block) {
-    return block.type === "activityStack" ? block.key : block;
+    return block.renderKey;
   }
 </script>
 
-<div class="assistant-entry" class:empty={isEmptyMessage()} data-role={role} bind:this={root} use:reportNode={onRoot}>
+<div class="assistant-entry" class:empty={empty} data-role={role} bind:this={root} use:reportNode={onRoot}>
   {#each displayBlocks as block, index (blockIdentity(block))}
     {@const actions = partActions(block, index)}
     <div class="msg assistant assistant-part" class:ckpt-frozen={!!restore} data-assistant-part={block.type} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
@@ -93,7 +98,7 @@
     </div>
   {/each}
   {#if data.errorMessage}
-    <div class="msg assistant assistant-part error-msg" class:ckpt-frozen={!!restore} data-assistant-part="error" role="alert" tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
+    <div class="msg assistant assistant-part error-msg" class:ckpt-frozen={!!restore} data-assistant-part="error" role="alert" aria-atomic="true" tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {data.errorMessage}
       {#if displayBlocks.length === 0}
         <AssistantPartActions
