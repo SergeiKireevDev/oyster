@@ -8,33 +8,31 @@
   const latestThinking = $derived(active ? thinkingBlocks.at(-1) : null);
   const headBlock = $derived(active ? blocks.at(-1) : null);
   const headTool = $derived(headBlock?.type === "toolCall" ? headBlock : null);
-  const toolBlocks = $derived(blocks.filter((block) => block.type === "toolCall"));
-  const cardStores = $derived(toolBlocks.map((block) => block.cardStore));
-  let cards = $state([]);
-  let historyOpen = $state(false);
-
-  $effect(() => subscribeStoreGroup(cardStores, updateCards));
-
-  function updateCards(values) {
-    cards = values;
-  }
-
   const pastBlocks = $derived(blocks.filter((block) => (
     block !== latestThinking && block !== headTool
   )));
-  const failed = $derived(toolBlocks.filter((block) => {
-    if (!pastBlocks.includes(block)) return false;
-    return cards[toolBlocks.indexOf(block)]?.status === "error";
-  }).length);
-  const pastStepLabel = $derived(`${pastBlocks.length} past ${pluralize(pastBlocks.length, "step", "steps")}`);
-  const pastSummary = $derived(pastBlocks
-    .map((block) => block.type === "thinking" ? "thinking" : block.toolCall?.name || "tool")
-    .slice(-4)
-    .join(" · "));
+  const pastCardStores = $derived(pastBlocks
+    .filter((block) => block.type === "toolCall")
+    .map((block) => block.cardStore));
+  let pastCards = $state([]);
+  let historyOpen = $state(false);
 
-  function pluralize(count, singular, plural) {
-    return count === 1 ? singular : plural;
+  $effect(() => subscribeStoreGroup(pastCardStores, updatePastCards));
+
+  function updatePastCards(values) {
+    pastCards = values;
   }
+
+  const failedCount = $derived(pastCards.reduce(
+    (count, card) => count + (card?.status === "error" ? 1 : 0),
+    0,
+  ));
+  const pastStepLabel = $derived(`${pastBlocks.length} past ${pastBlocks.length === 1 ? "step" : "steps"}`);
+  const pastSummary = $derived(pastBlocks
+    .slice(-4)
+    .map((block) => block.type === "thinking" ? "thinking" : block.toolCall?.name || "tool")
+    .join(" · "));
+  const latestThinkingPreview = $derived(latestThinking ? thinkingPreview(latestThinking.text) : "");
 </script>
 
 <div class="activity-stack">
@@ -44,16 +42,17 @@
         <span class="activity-history-chevron" aria-hidden="true">›</span>
         <span>{pastStepLabel}</span>
         {#if pastSummary}<span class="activity-history-preview">{pastSummary}</span>{/if}
-        {#if failed}<span class="activity-history-failed">{failed} failed</span>{/if}
+        {#if failedCount}<span class="activity-history-failed">{failedCount} failed</span>{/if}
       </summary>
       <div class="activity-history-body">
         {#each pastBlocks as block (block)}
           {#if block.type === "thinking"}
+            {@const preview = thinkingPreview(block.text)}
             <details class="block thinking activity-step">
               <summary title="Show thinking details">
                 <span class="activity-indicator" aria-hidden="true"></span>
                 <span class="thinking-label">Thinking</span>
-                {#if thinkingPreview(block.text)}<span class="thinking-preview">{thinkingPreview(block.text)}</span>{/if}
+                {#if preview}<span class="thinking-preview">{preview}</span>{/if}
               </summary>
               <div class="body">{block.text}</div>
             </details>
@@ -70,8 +69,8 @@
       <summary title="Show thinking details">
         <span class="activity-indicator" class:glowing={unsettled} aria-hidden="true"></span>
         <span class="thinking-label">Thinking</span>
-        {#if thinkingPreview(latestThinking.text)}
-          <span class="thinking-preview">{thinkingPreview(latestThinking.text)}</span>
+        {#if latestThinkingPreview}
+          <span class="thinking-preview">{latestThinkingPreview}</span>
         {/if}
       </summary>
       <div class="body">{latestThinking.text}</div>
