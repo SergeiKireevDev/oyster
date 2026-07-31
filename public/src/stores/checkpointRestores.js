@@ -8,8 +8,10 @@ export function setCheckpointRestores(restores) {
   checkpointRestores.set(restores);
 }
 
-export function setCheckpointRestoreBusy(target, busy) {
+export function setCheckpointRestoreBusy(checkpoint, busy) {
   checkpointRestores.update((restores) => restores.map((restore) =>
-    restore.target === target ? { ...restore, busy: !!busy } : restore
+    restore.checkpoint.hash === checkpoint.hash && restore.checkpoint.sessionId === checkpoint.sessionId
+      ? { ...restore, busy: !!busy }
+      : restore
   ));
 }

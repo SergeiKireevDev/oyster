@@ -35,6 +35,31 @@
     return sourceLabels[source] ?? "not configured";
   }
 
+  function oauthRequestInputType(request) {
+    return request.kind === "manual_code" ? "password" : "text";
+  }
+
+  function cancelledFlowMessage(flow) {
+    return flow.failureCode === "oauth_flow_expired" ? "Sign-in expired." : "Sign-in cancelled.";
+  }
+
+  function oauthActionLabel(provider) {
+    return provider?.credentialType === "oauth" ? "Re-authenticate" : "Sign in with OAuth";
+  }
+
+  function apiKeyActionLabel(provider) {
+    return provider?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi";
+  }
+
+  function providerOAuthLabel(provider) {
+    return provider.credentialType === "api_key" ? "Sign in instead" : "Sign in";
+  }
+
+  function restartProcessLabel(runnerIds) {
+    const count = runnerIds.length;
+    return `${count} pi ${count === 1 ? "process" : "processes"}`;
+  }
+
   $: activeProviders = $credentialsState.providers.filter((provider) => provider.configured);
   $: selectableProviders = $credentialsState.providers.filter((provider) =>
     provider.credentialType !== "oauth" && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
@@ -202,7 +227,7 @@
                 <input
                   name="oauthResponse"
                   use:trackOAuthInput
-                  type={request.kind === "manual_code" ? "password" : "text"}
+                  type={oauthRequestInputType(request)}
                   placeholder={request.placeholder ?? ""}
                   autocomplete="off"
                   autocapitalize="none"
@@ -223,7 +248,7 @@
       {:else if $credentialsState.flow.status === "succeeded"}
         <p role="status">Sign-in completed.</p>
       {:else if $credentialsState.flow.status === "cancelled"}
-        <p role="status">{$credentialsState.flow.failureCode === "oauth_flow_expired" ? "Sign-in expired." : "Sign-in cancelled."}</p>
+        <p role="status">{cancelledFlowMessage($credentialsState.flow)}</p>
       {:else}
         <p class="api-keys-state error" role="alert">Sign-in failed. Try again.</p>
       {/if}
@@ -267,7 +292,7 @@
               {/if}
               {#if provider.oauthCapable}
                 <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading}>
-                  {provider.credentialType === "api_key" ? "Sign in instead" : "Sign in"}
+                  {providerOAuthLabel(provider)}
                 </button>
               {/if}
             {/if}
@@ -283,7 +308,7 @@
     <p class="api-keys-state" role="status">
       Restart status: {$credentialsState.lastRestart.status}
       {#if $credentialsState.lastRestart.runnerIds?.length}
-        ({$credentialsState.lastRestart.runnerIds.length} pi process{$credentialsState.lastRestart.runnerIds.length === 1 ? "" : "es"})
+        ({restartProcessLabel($credentialsState.lastRestart.runnerIds)})
       {/if}
     </p>
   {/if}
@@ -295,7 +320,7 @@
   <form class="api-key-form" onsubmit={saveKey}>
     <label>
       <span>Provider</span>
-      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !selectableProviders.length}>
+      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !selectableProviders.length} required>
         {#each selectableProviders as provider (provider.provider)}
           <option value={provider.provider}>{provider.displayName}</option>
         {/each}
@@ -312,7 +337,7 @@
         disabled={$credentialsState.loading || !selectedProvider}
         onclick={() => startOAuth(selectedProvider)}
       >
-        {selected?.credentialType === "oauth" ? "Re-authenticate" : "Sign in with OAuth"}
+        {oauthActionLabel(selected)}
       </button>
       <button class="api-key-method-toggle" type="button" onclick={() => { authenticationMethod = "api_key"; }}>
         Use an API key instead
@@ -329,11 +354,12 @@
           spellcheck="false"
           placeholder="Enter a new API key"
           disabled={$credentialsState.loading || !selectedProvider}
+          required
           oninput={(event) => { hasKey = Boolean(event.currentTarget.value.trim()); }}
         />
       </label>
       <button class="btn" type="submit" disabled={$credentialsState.loading || !selectedProvider || !hasKey}>
-        {selected?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi"}
+        {apiKeyActionLabel(selected)}
       </button>
       {#if selected?.oauthCapable}
         <button class="api-key-method-toggle" type="button" onclick={() => { clearKey(); authenticationMethod = "oauth"; }}>

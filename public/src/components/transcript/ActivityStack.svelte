@@ -9,12 +9,14 @@
   const headBlock = $derived(active ? blocks.at(-1) : null);
   const headTool = $derived(headBlock?.type === "toolCall" ? headBlock : null);
   const toolBlocks = $derived(blocks.filter((block) => block.type === "toolCall"));
+  const cardStores = $derived(toolBlocks.map((block) => block.cardStore));
   let cards = $state([]);
 
-  $effect(() => subscribeStoreGroup(
-    toolBlocks.map((block) => block.cardStore),
-    (values) => { cards = values; },
-  ));
+  $effect(() => subscribeStoreGroup(cardStores, updateCards));
+
+  function updateCards(values) {
+    cards = values;
+  }
 
   const pastBlocks = $derived(blocks.filter((block) => (
     block !== latestThinking && block !== headTool
@@ -23,10 +25,15 @@
     if (!pastBlocks.includes(block)) return false;
     return cards[toolBlocks.indexOf(block)]?.status === "error";
   }).length);
+  const pastStepLabel = $derived(`${pastBlocks.length} past ${pluralize(pastBlocks.length, "step", "steps")}`);
   const pastSummary = $derived(pastBlocks
     .map((block) => block.type === "thinking" ? "thinking" : block.toolCall?.name || "tool")
     .slice(-4)
     .join(" · "));
+
+  function pluralize(count, singular, plural) {
+    return count === 1 ? singular : plural;
+  }
 </script>
 
 <div class="activity-stack">
@@ -34,12 +41,12 @@
     <details class="activity-history">
       <summary>
         <span class="activity-history-chevron" aria-hidden="true">›</span>
-        <span>{pastBlocks.length} past {pastBlocks.length === 1 ? "step" : "steps"}</span>
+        <span>{pastStepLabel}</span>
         {#if pastSummary}<span class="activity-history-preview">{pastSummary}</span>{/if}
         {#if failed}<span class="activity-history-failed">{failed} failed</span>{/if}
       </summary>
       <div class="activity-history-body">
-        {#each pastBlocks as block, index (`${block.key ?? block.id ?? block.type}:${index}`)}
+        {#each pastBlocks as block (block)}
           {#if block.type === "thinking"}
             <details class="block thinking activity-step">
               <summary title="Show thinking details">

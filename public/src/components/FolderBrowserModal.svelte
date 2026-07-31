@@ -25,7 +25,12 @@
 </script>
 
 {#if $folderBrowser.loading}
-  <div class="m-path"><span class="spin"></span> loading folders…</div>
+  <div class="m-path" role="status"><span class="spin"></span> loading folders…</div>
+{:else if $folderBrowser.error}
+  <div class="m-path async-error" role="alert">
+    <span>Could not load folders: {$folderBrowser.error}</span>
+    <button class="chip" type="button" onclick={() => browseFolderBrowser($folderBrowser.path || undefined)}>Retry</button>
+  </div>
 {:else}
   <div class="m-path">{$folderBrowser.path}</div>
 
@@ -40,20 +45,20 @@
   </div>
 
   {#if $folderBrowser.createOpen}
-    <div class="newdir-row">
+    <form class="newdir-row" onsubmit={(event) => { event.preventDefault(); createFolderBrowser(); }}>
+      <label for="newFolderName">New folder name</label>
       <input
+        id="newFolderName"
         type="text"
         placeholder="new folder name"
         value={$folderBrowser.newName}
         oninput={(event) => updateFolderBrowser({ newName: event.currentTarget.value })}
-        onkeydown={(event) => {
-          if (event.key === "Enter") createFolderBrowser();
-          else if (event.key === "Escape") updateFolderBrowser({ createOpen: false, newName: "" });
-        }}
         use:focusOnMount
+        required
       />
-      <button class="btn" disabled={$folderBrowser.creating} onclick={createFolderBrowser}>Create</button>
-    </div>
+      <button class="btn" type="submit" disabled={$folderBrowser.creating}>{$folderBrowser.creating ? "Creating…" : "Create"}</button>
+    </form>
+    {#if $folderBrowser.createError}<div class="m-path async-error" role="alert">{$folderBrowser.createError} — edit the name and try again.</div>{/if}
   {/if}
 
   <BrowserDirectoryList
@@ -72,5 +77,5 @@
 
 <div class="m-actions" id="mActions">
   <button class="chip" data-modal-cancel onclick={cancelFolderBrowser}>Cancel</button>
-  <button class="btn" style="padding:6px 16px;" onclick={submitFolderBrowser}>Start session here</button>
+  <button class="btn modal-primary-action" onclick={submitFolderBrowser}>Start session here</button>
 </div>

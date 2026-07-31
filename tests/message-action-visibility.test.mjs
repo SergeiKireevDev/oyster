@@ -19,7 +19,8 @@ test("message actions stay hidden until hover or focus selection", () => {
 });
 
 test("text assistant parts always own a clipboard control", () => {
-  assert.match(assistant, /copy=\{block\.type === "text"\}/);
+  assert.match(assistant, /const isText = block\.type === "text";[\s\S]*?copy: isText/);
+  assert.match(assistant, /copy=\{actions\.copy\}/);
   assert.match(assistantActions, /\{#if copy\}[\s\S]*?<CopyMessageButton/);
 });
 
@@ -29,7 +30,8 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.deepEqual([...new Set(transcriptGaps)], [4]);
   assert.match(css, /\.assistant-entry \{[^}]*gap: 4px;/);
   assert.match(css, /\.assistant-entry\.empty \{ display: none; \}/);
-  assert.match(assistant, /class:empty=\{displayBlocks\.length === 0 && !data\.errorMessage\}/);
+  assert.match(assistant, /function isEmptyMessage\(\)[\s\S]*?displayBlocks\.length === 0 && !data\.errorMessage/);
+  assert.match(assistant, /class:empty=\{isEmptyMessage\(\)\}/);
   assert.match(css, /#messages > \[data-role="user"\] \+ \.assistant-entry,[\s\S]*?margin-top: 12px;/);
   assert.match(transcript, /const turnActivityGroups = derived\(transcriptItems/);
   assert.match(transcript, /item\.kind === "user" \|\| item\.kind === "compaction"/);

@@ -149,8 +149,8 @@ test("session picker keeps the user's child-session expansion choice", () => {
 test("session picker presents loops as non-navigable run cards with iteration timelines", () => {
   const source = readFileSync(new URL("../public/src/components/SessionPickerModal.svelte", import.meta.url), "utf8");
   const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
-  assert.match(source, /\{#if isLoopFamily\(family\)\}[\s\S]*class=\{`s-loopgroup status-\$\{summary\.status\}`\}/);
-  assert.match(source, /Sequential loop · \{family\.forks\.length\} iteration/);
+  assert.match(source, /\{#if family\.loop\}[\s\S]*class=\{`s-loopgroup status-\$\{summary\.status\}`\}/);
+  assert.match(source, /Sequential loop · \{family\.forks\.length\} \{plural\(family\.forks\.length, "iteration"\)\}/);
   assert.match(source, /loopFamilySummary\(family\)/);
   assert.match(source, /sessionRow\(fork, loopSessionStatus\(fork\)\)/);
   assert.match(styles, /#modal \.s-loopgroup/);
@@ -199,8 +199,8 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /groupSessionSearchByHierarchy\(\$sessionPicker\.searchResults, hierarchyDefaults\)/);
   assert.match(source, /\{#if hubMode && environmentOptions\.length\}[\s\S]*session-sidebar-environment-selector/);
   assert.match(source, /\{#if !hubMode && !searching\}[\s\S]*id="newSessionHere"[\s\S]*id="newSessionFolder"/);
-  assert.match(source, /listEnvironments\(\)/);
-  assert.match(source, /listWorkspaces\(\)/);
+  assert.match(source, /workspaceService\.listEnvironments\(\)/);
+  assert.match(source, /workspaceService\.listWorkspaces\(\)/);
   assert.match(source, /effectiveWorkspaceStatus\(workspace\)/);
   assert.match(source, /<select\s+aria-label="Environment"/);
   assert.match(source, /preferredEnvironmentId\(environmentOptions\)/);
@@ -228,7 +228,8 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /\["cloud", "llmbox"\]\.includes\(workspace\.provider\?\.type\)/);
   assert.match(source, /manageWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
   assert.match(source, /manageWorkspace\(workspace, "destroy"\)/);
-  assert.match(source, /\/api\/v1\/workspaces\/\$\{encodeURIComponent\(workspace\.workspaceId\)\}/);
+  assert.match(source, /workspaceService\.manageWorkspace\(workspace\.workspaceId, action\)/);
+  assert.doesNotMatch(source, /\bfetch\s*\(|["'`]\/api\//);
   assert.match(source, /session-sidebar-workspace-create/);
   assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);
   assert.match(source, /class:current-cwd=\{isCurrentCwd\(group\)\}/);

@@ -23,11 +23,8 @@ function locations(pattern) {
 
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
-    "App.svelte:28:rootElement: document.documentElement,",
-    "App.svelte:29:themeColorElement: document.querySelector('meta[name=\"theme-color\"]'),",
-    "App.svelte:40:const browserActions = provideBrowserActions(createBrowserActions({ windowTarget: window }));",
     "components/Menu.svelte:24:<svelte:document onclick={close} />",
-    "components/OptionPickerModal.svelte:75:<svelte:document onkeydowncapture={onKey} />",
+    "components/OptionPickerModal.svelte:57:<svelte:document onkeydowncapture={onKey} />",
   ]);
 
   const transcript = source(new URL("components/Transcript.svelte", root));
@@ -45,7 +42,14 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
     "components/Menu.svelte:<svelte:document onclick={close} />",
+    "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
+    "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
     "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={onKey} />",
+    "components/Overlays.svelte:use:modalKeyboardNavigation={{ isOpen: () => $modalState.open, content: () => $modalState.content }}",
+    "components/Overlays.svelte:use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}",
     "components/SessionPickerModal.svelte:use:focusOnMount",
+    "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={isEmptyMessage()} data-role={role} bind:this={root} use:reportNode={onRoot}>",
+    "components/transcript/UserMessage.svelte:<details class=\"block tool\" class:ckpt-frozen={!!restore} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",
+    "components/transcript/UserMessage.svelte:<div class=\"message-row user-message-row\" data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",
   ]);
 });

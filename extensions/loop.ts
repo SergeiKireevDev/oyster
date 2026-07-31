@@ -22,6 +22,7 @@ interface IterationResult {
   succeeded: boolean;
   output: string;
   validationLog?: string;
+  commitHash?: string;
 }
 
 interface PreviousIteration {
@@ -50,6 +51,12 @@ function checkItem(markdown: string, target: ChecklistItem): string {
   if (!match || match[4] !== target.text) throw new Error(`Plan item changed during iteration: ${target.text}`);
   lines[target.line] = `${match[1]}[x]${match[3]}${match[4]}`;
   return lines.join("\n");
+}
+
+function commitMessage(item: string): string {
+  const prefix = "loop: ";
+  const summary = item.replace(/\s+/g, " ").trim();
+  return `${prefix}${summary.slice(0, 72 - prefix.length).trimEnd()}`;
 }
 
 function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
@@ -188,6 +195,30 @@ async function runValidation(
   };
 }
 
+async function commitSuccessfulStep(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  item: string,
+  signal: AbortSignal | undefined,
+): Promise<{ ok: boolean; hash?: string; log: string }> {
+  const staged = await pi.exec("git", ["add", "-A"], { cwd: ctx.cwd, signal });
+  if (staged.code !== 0 || staged.killed) {
+    return { ok: false, log: clipTail([staged.stdout, staged.stderr, "Unable to stage the validated loop changes."].filter(Boolean).join("\n")) };
+  }
+
+  const committed = await pi.exec("git", ["commit", "--allow-empty", "--no-gpg-sign", "-m", commitMessage(item)], { cwd: ctx.cwd, signal });
+  if (committed.code !== 0 || committed.killed) {
+    return { ok: false, log: clipTail([committed.stdout, committed.stderr, "Unable to commit the validated loop changes."].filter(Boolean).join("\n")) };
+  }
+
+  const head = await pi.exec("git", ["rev-parse", "--short", "HEAD"], { cwd: ctx.cwd, signal });
+  return {
+    ok: true,
+    hash: head.code === 0 && !head.killed ? head.stdout.trim() || undefined : undefined,
+    log: clipTail(committed.stdout.trim()),
+  };
+}
+
 interface LoopParams {
   planPath: string;
   validationScript: string;
@@ -245,14 +276,25 @@ async function runLoop(
         details: { planPath, validationPath, complete: false, results },
       });
     }
-    const succeeded = subagent.ok && validation?.ok === true;
-    const validationLog = subagent.ok
+    let succeeded = subagent.ok && validation?.ok === true;
+    let validationLog = subagent.ok
       ? validation?.log ?? "Validation failed without output."
       : subagent.errorLog || "Subagent failed without process output.";
+    let commitHash: string | undefined;
 
     if (succeeded) {
       writeFileSync(planPath, checkItem(planBefore, item), "utf8");
-    } else {
+      onUpdate?.({
+        content: [{ type: "text", text: `Iteration ${iteration}: committing “${item.text}”…` }],
+        details: { planPath, validationPath, complete: false, results },
+      });
+      const commit = await commitSuccessfulStep(pi, ctx, item.text, signal);
+      succeeded = commit.ok;
+      commitHash = commit.hash;
+      if (!commit.ok) validationLog = `Validation passed, but the step could not be committed.\n${commit.log}`;
+    }
+
+    if (!succeeded) {
       // The extension owns plan progression. A failed attempt must expose the
       // same unchecked plan to the retry even if the subagent touched it.
       writeFileSync(planPath, planBefore, "utf8");
@@ -263,7 +305,7 @@ async function runLoop(
       item: item.text,
       succeeded,
       output: clipTail(subagent.output),
-      ...(succeeded ? {} : { validationLog: validationLog || "Validation failed without output." }),
+      ...(succeeded ? { commitHash } : { validationLog: validationLog || "Validation failed without output." }),
     };
     results.push(record);
     previous = { output: record.output, succeeded, validationLog: record.validationLog };
@@ -328,7 +370,7 @@ export default function loopExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "loop",
     label: "Loop",
-    description: "Execute a Markdown checklist sequentially. Each iteration runs in a fresh isolated pi subagent, then an executable validation script decides whether that checklist item is checked. Failed validation retries the same item with the previous output and validation error log. Output is capped at 50 KB per context section.",
+    description: "Execute a Markdown checklist sequentially. Each iteration runs in a fresh isolated pi subagent, then an executable validation script decides whether that checklist item is checked and committed. Failed validation or commit retries the same item with the previous output and failure log. Output is capped at 50 KB per context section.",
     promptSnippet: "Run a Markdown checklist through isolated, validated subagent iterations",
     promptGuidelines: [
       "Use loop when the user provides a Markdown checklist plan and an executable validation script for autonomous sequential implementation.",

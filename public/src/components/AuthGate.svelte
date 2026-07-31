@@ -32,8 +32,9 @@
     }
   }
 
-  function onKeydown(event) {
-    if (event.key === "Enter") connect();
+  function submit(event) {
+    event.preventDefault();
+    connect();
   }
 
   function clearError() {
@@ -41,20 +42,21 @@
   }
 </script>
 
-<div id="gate"><div class="card">
+<div id="gate"><form class="card" onsubmit={submit}>
   <div class="gate-brand"><img src={oysterIcon} alt="" /> <span>Oyster</span></div>
-  <div style="color:var(--muted);font-size:13.5px">Enter the auth token printed by the server on startup.</div>
+  <label class="gate-instructions" for="gateInput">Enter the auth token printed by the server on startup.</label>
   <input
     type="password"
     id="gateInput"
+    name="token"
     placeholder="token"
     bind:value={tokenInput}
     oninput={clearError}
-    onkeydown={onKeydown}
     aria-invalid={errorMessage ? "true" : undefined}
     aria-describedby={errorMessage ? "gateError" : undefined}
     disabled={connecting}
+    required
   >
   {#if errorMessage}<div class="gate-error" id="gateError" role="alert">{errorMessage}</div>{/if}
-  <button class="btn" id="gateBtn" onclick={connect} disabled={connecting}>{connecting ? "Checking…" : "Connect"}</button>
-</div></div>
+  <button class="btn" id="gateBtn" type="submit" disabled={connecting}>{connecting ? "Checking…" : "Connect"}</button>
+</form></div>

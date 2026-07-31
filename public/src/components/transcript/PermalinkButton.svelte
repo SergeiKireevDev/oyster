@@ -6,5 +6,6 @@
   type="button"
   class="permalink"
   title="copy a permalink to this message"
+  aria-label="Copy a permalink to this message"
   onclick={(event) => { event.stopPropagation(); onPermalink(target); }}
 >🔗</button>

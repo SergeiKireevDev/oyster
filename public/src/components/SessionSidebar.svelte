@@ -7,11 +7,13 @@
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
-  import { effectiveWorkspaceStatus, isHubRuntime, listEnvironments, listWorkspaces, setActiveWorkspace } from "../runtime/workspaceScope.js";
+  import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
+  import { effectiveWorkspaceStatus, isHubRuntime, setActiveWorkspace } from "../runtime/workspaceScope.js";
+  import { getWorkspaceService } from "../runtime/workspaceServiceContext.js";
   import { openModal } from "../stores/modal.js";
   import { workspaceChanges } from "../stores/workspaces.js";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
-  import { groupSessionCwdsByHierarchy, groupSessionEntriesByFamily, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive } from "../features/sessions/sessionPickerViewModel.js";
+  import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive, prepareSessionEntryFamilies } from "../features/sessions/sessionPickerViewModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
     SESSION_PICKER_CHOOSE_ACTION,
@@ -27,6 +29,7 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
+  const workspaceService = getWorkspaceService();
   const runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__ ?? {};
   const hubMode = isHubRuntime(runtimeConfig);
   const hierarchyDefaults = {
@@ -80,18 +83,24 @@
   let availableEnvironments = [];
   let availableWorkspaces = [];
   let availableWorkspacesLoaded = !hubMode;
+  const catalogRequests = createAsyncRequestGuard();
   let environmentInfoOpen = false;
   let environmentInfoEnvironmentId = null;
   async function refreshEnvironmentCatalog(preferredId = null) {
     if (!hubMode) return;
+    const request = catalogRequests.begin();
     try {
-      [availableEnvironments, availableWorkspaces] = await Promise.all([
-        listEnvironments(),
-        listWorkspaces(),
+      const [environments, workspaces] = await Promise.all([
+        workspaceService.listEnvironments(),
+        workspaceService.listWorkspaces(),
       ]);
+      if (!request.isCurrent()) return;
+      availableEnvironments = environments;
+      availableWorkspaces = workspaces;
       availableWorkspacesLoaded = true;
       if (preferredId) selectedEnvironmentId = preferredId;
     } catch {
+      if (!request.isCurrent()) return;
       // Keep session-derived environment options when discovery is temporarily unavailable.
     }
   }
@@ -151,14 +160,7 @@
     if (!confirm(warning)) return;
     workspaceActions = new Set([...workspaceActions, workspace.workspaceId]);
     try {
-      const path = `/api/v1/workspaces/${encodeURIComponent(workspace.workspaceId)}${action === "destroy" ? "" : "/actions"}`;
-      const response = await fetch(path, action === "destroy" ? { method: "DELETE" } : {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || `${verb} failed (${response.status})`);
+      await workspaceService.manageWorkspace(workspace.workspaceId, action);
       if (action === "destroy" && currentRunner?.workspaceId === workspace.workspaceId) {
         const replacement = availableWorkspaces.find((candidate) => candidate.id !== workspace.workspaceId && effectiveWorkspaceStatus(candidate) === "online");
         if (replacement) setActiveWorkspace(replacement.id);
@@ -188,6 +190,7 @@
   let clock = Date.now();
   const clockTimer = setInterval(() => { clock = Date.now(); }, 60_000);
   onDestroy(() => {
+    catalogRequests.invalidate();
     clearTimeout(searchTimer);
     clearInterval(environmentRefreshTimer);
     clearInterval(clockTimer);
@@ -201,7 +204,7 @@
   $: currentCwd = currentRunner?.dir ?? null;
   $: sessionGroups = partitionSessionGroupsByArchive(
     groupSessionsByCwd($sessionPicker.allSessions, sidebarRunners),
-  );
+  ).map((group) => ({ ...group, families: prepareSessionEntryFamilies(group.entries) }));
   $: spokeRecentGroups = hubMode ? [] : sessionGroups.filter((group) => !group.archived);
   $: spokeArchivedGroups = hubMode ? [] : sessionGroups.filter((group) => group.archived);
   $: spokeArchivedCount = spokeArchivedGroups.reduce((count, group) => count + group.entries.length, 0);
@@ -405,15 +408,6 @@
     }
     return runner ? switchRunner(runner.id) : openSavedSession(session);
   }
-  function isLoopFamily(family) {
-    return family.children.some((entry) => /^Loop iteration \d+:/i.test(label(entry.session, entry.runner)));
-  }
-  function loopEntries(entries) {
-    return [...entries].sort((left, right) => {
-      const iteration = (entry) => Number(label(entry.session, entry.runner).match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
-      return iteration(left) - iteration(right);
-    });
-  }
   function loopEntryStatus(entry) {
     if (entry.runner?.alive) return "running";
     if (["succeeded", "failed"].includes(entry.runner?.subagentStatus)) return entry.runner.subagentStatus;
@@ -554,11 +548,11 @@
   </div>
 {/snippet}
 
-{#snippet SessionRows({ entries, archived = false, cwd = "" })}
+{#snippet SessionRows({ families, archived = false, cwd = "" })}
   <div class="session-sidebar-workspace-sessions">
-    {#each groupSessionEntriesByFamily(entries) as family (entryIdentity(family.entry))}
+    {#each families as family (entryIdentity(family.entry))}
       {@const familyKey = entryIdentity(family.entry)}
-      {@const loopFamily = isLoopFamily(family)}
+      {@const loopFamily = family.loop}
       {#if loopFamily}
         {@render LoopFamilyHeader({ family, familyKey, archived })}
       {:else}
@@ -566,7 +560,7 @@
       {/if}
       {#if loopFamily && (expandedSessionFamilies.has(familyKey) || familyIsCurrent(family))}
         <div class="session-sidebar-loop-timeline" aria-label={`${family.children.length} loop iteration${family.children.length === 1 ? "" : "s"}`}>
-          {#each loopEntries(family.children) as entry (entryIdentity(entry))}
+          {#each family.children as entry (entryIdentity(entry))}
             {@render SessionEntry({ entry, archived, cwd, timelineStatus: loopEntryStatus(entry) })}
           {/each}
         </div>
@@ -596,7 +590,7 @@
       <span class="session-sidebar-cwd-label">{abbreviateHomePath(group.cwd)}</span>
       <span class="session-sidebar-count">{group.entries.length}</span>
     </summary>
-    {@render SessionRows({ entries: group.entries, archived, cwd: group.cwd })}
+    {@render SessionRows({ families: group.families, archived, cwd: group.cwd })}
   </details>
 {/snippet}
 
@@ -687,20 +681,22 @@
 
 <aside id="sessions" aria-label="Sessions">
   <div class="side-head">Sessions</div>
-  <input
-    class="session-sidebar-search"
-    type="search"
-    placeholder="search sessions…"
-    value={$sessionPicker.query}
-    oninput={(event) => updateQuery(event.currentTarget.value)}
-    onkeydown={(event) => {
-      if (event.key === "Enter" && event.currentTarget.value.trim().length >= 3) {
-        clearTimeout(searchTimer);
-        uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
-        uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
-      }
-    }}
-  />
+  <form role="search" onsubmit={(event) => {
+    event.preventDefault();
+    if ($sessionPicker.query.trim().length < 3) return;
+    clearTimeout(searchTimer);
+    uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
+    uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
+  }}>
+    <input
+      class="session-sidebar-search"
+      type="search"
+      aria-label="Search sessions"
+      placeholder="search sessions…"
+      value={$sessionPicker.query}
+      oninput={(event) => updateQuery(event.currentTarget.value)}
+    />
+  </form>
   {#if !hubMode && !searching}
     <div class="session-sidebar-new">
       <button
@@ -793,7 +789,7 @@
     {#if hubMode && availableWorkspacesLoaded && !environmentOptions.length}
       <div class="r-empty">(no available environments)</div>
     {:else if searching}
-      {#if $sessionPicker.searchStatus}<div class="session-sidebar-status">{$sessionPicker.searchStatus}</div>{/if}
+      {#if $sessionPicker.searchStatus}<div class="session-sidebar-status" role="status" aria-atomic="true">{$sessionPicker.searchStatus}</div>{/if}
       {#if hubMode}
         {#each visibleSearchEnvironments as environment (environment.environmentId)}
           <section class="session-sidebar-environment-view">

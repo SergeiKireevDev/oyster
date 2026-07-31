@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const modal = readFileSync(new URL("../public/src/components/CredentialsModal.svelte", import.meta.url), "utf8");
-const overlays = readFileSync(new URL("../public/src/components/Overlays.svelte", import.meta.url), "utf8");
+const modalRegistry = readFileSync(new URL("../public/src/runtime/modalContentRegistry.js", import.meta.url), "utf8");
 const store = readFileSync(new URL("../public/src/stores/credentials.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("Credentials modal is owned by the overlay and covers safe provider states", () => {
-  assert.match(overlays, /import CredentialsModal from "\.\/CredentialsModal\.svelte"/);
-  assert.match(overlays, /\$modalState\.content === "credentials"[\s\S]*?<CredentialsModal/);
+  assert.match(modalRegistry, /import CredentialsModal from "\.\.\/components\/CredentialsModal\.svelte"/);
+  assert.match(modalRegistry, /credentials: CredentialsModal/);
   for (const label of ["stored API key", "stored OAuth", "environment", "models.json", "not configured"]) {
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
@@ -44,7 +44,8 @@ test("the status list shows only active providers while the selector includes in
 
 test("selecting an OAuth-capable provider defaults to OAuth instead of requesting an API key", () => {
   assert.match(modal, /selectedProvider !== methodProvider[\s\S]*?authenticationMethod = selected\?\.oauthCapable \? "oauth" : "api_key"/);
-  assert.match(modal, /selected\?\.oauthCapable && authenticationMethod === "oauth"[\s\S]*?Sign in with OAuth/);
+  assert.match(modal, /selected\?\.oauthCapable && authenticationMethod === "oauth"[\s\S]*?oauthActionLabel\(selected\)/);
+  assert.match(modal, /function oauthActionLabel\(provider\)[\s\S]*?"Sign in with OAuth"/);
   assert.match(modal, /onclick=\{\(\) => startOAuth\(selectedProvider\)\}/);
   assert.match(modal, /Use an API key instead/);
   assert.match(modal, /Use OAuth instead/);

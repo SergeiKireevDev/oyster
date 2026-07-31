@@ -14,24 +14,28 @@
   ];
 </script>
 
-<div class="search-row">
-  <select
-    style="flex:1;max-width:100%;"
-    value={selected}
-    onchange={(event) => setCheckpointModel(event.currentTarget.value)}
-  >
-    {#each options as option (option.value)}
-      <option value={option.value}>{option.label}</option>
-    {/each}
-  </select>
-</div>
-<div class="m-path">
-  {$checkpointModelPicker.hint}
-  {#if $checkpointModelPicker.loading}
-    <span class="spin" title="loading models">⟳</span>
-  {/if}
-</div>
-<div class="m-actions">
-  <button class="chip" data-modal-cancel onclick={cancelCheckpointModelPicker}>Cancel</button>
-  <button class="btn" style="padding:6px 16px;" onclick={submitCheckpointModelPicker}>{$checkpointModelPicker.okLabel}</button>
-</div>
+<form onsubmit={(event) => { event.preventDefault(); submitCheckpointModelPicker(); }}>
+  <div class="search-row">
+    <label for="checkpointSummaryModel">Checkpoint summary model</label>
+    <select
+      id="checkpointSummaryModel"
+      class="modal-flex-control"
+      value={selected}
+      onchange={(event) => setCheckpointModel(event.currentTarget.value)}
+    >
+      {#each options as option (option.value)}
+        <option value={option.value}>{option.label}</option>
+      {/each}
+    </select>
+  </div>
+  <div class="m-path">
+    {$checkpointModelPicker.hint}
+    {#if $checkpointModelPicker.loading}
+      <span role="status"><span class="spin" aria-hidden="true">⟳</span> Loading models…</span>
+    {/if}
+  </div>
+  <div class="m-actions">
+    <button class="chip" type="button" data-modal-cancel onclick={cancelCheckpointModelPicker}>Cancel</button>
+    <button class="btn modal-primary-action" type="submit">{$checkpointModelPicker.okLabel}</button>
+  </div>
+</form>

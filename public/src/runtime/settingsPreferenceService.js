@@ -19,6 +19,10 @@ export function createSettingsPreferenceService({
   onThinkingVisibilityChanged = () => {},
   onThemeChanged = () => {},
 }) {
+  let disposed = false;
+  let notifyThinkingVisibilityChanged = onThinkingVisibilityChanged;
+  let notifyThemeChanged = onThemeChanged;
+
   const applyTheme = (theme) => {
     rootElement?.setAttribute?.("data-theme", theme);
     themeColorElement?.setAttribute?.("content", THEME_COLORS[theme]);
@@ -32,18 +36,26 @@ export function createSettingsPreferenceService({
       return storage.getItem(THINKING_VISIBILITY_KEY) !== "0";
     },
     setThinkingVisible(visible) {
+      if (disposed) return undefined;
       storage.setItem(THINKING_VISIBILITY_KEY, visible ? "1" : "0");
-      return onThinkingVisibilityChanged(visible);
+      return notifyThinkingVisibilityChanged(visible);
     },
     isLightMode() {
       return readTheme(storage) === LIGHT_THEME;
     },
     setLightMode(enabled) {
+      if (disposed) return readTheme(storage);
       const theme = enabled ? LIGHT_THEME : DARK_THEME;
       storage.setItem(THEME_KEY, theme);
       applyTheme(theme);
-      onThemeChanged(theme);
+      notifyThemeChanged(theme);
       return theme;
+    },
+    teardown() {
+      if (disposed) return;
+      disposed = true;
+      notifyThinkingVisibilityChanged = () => {};
+      notifyThemeChanged = () => {};
     },
   });
 }

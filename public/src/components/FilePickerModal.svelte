@@ -1,7 +1,8 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
+  import BrowserFileEntry from "./BrowserFileEntry.svelte";
   import FolderIcon from "./FolderIcon.svelte";
-  import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
+  import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
@@ -26,7 +27,12 @@
 </script>
 
 {#if $filePicker.loading}
-  <div class="m-path"><span class="spin"></span> loading files…</div>
+  <div class="m-path" role="status"><span class="spin"></span> loading files…</div>
+{:else if $filePicker.error}
+  <div class="m-path async-error" role="alert">
+    <span>Could not load files: {$filePicker.error}</span>
+    <button class="chip" type="button" onclick={() => browseFilePicker($filePicker.path || undefined)}>Retry</button>
+  </div>
 {:else}
   <BrowserDirectoryList
     path={$filePicker.path}
@@ -40,9 +46,7 @@
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($filePicker.path, file)}
-    <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} title={fullPath} onclick={() => pickFilePicker(fullPath)}>
-      {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
-    </button>
+    <BrowserFileEntry {file} path={fullPath} onOpen={pickFilePicker} />
   {/each}
   {#if folderIsEmpty}
     <div class="m-path">(empty folder)</div>

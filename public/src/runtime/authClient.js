@@ -4,10 +4,10 @@ export const UNAUTHENTICATED_CLIENT_TOKEN = "__oyster_unauthenticated__";
 
 export function initializeAuth({
   runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__,
-  locationTarget = location,
-  historyTarget = history,
-  storage = localStorage,
-  documentTarget = document,
+  locationTarget = globalThis.location,
+  historyTarget = globalThis.history,
+  storage = globalThis.localStorage,
+  documentTarget = globalThis.document,
 } = {}) {
   // The marker is deliberately not persisted or sent as a cookie. It only lets
   // token-oriented browser transports boot; the server remains authoritative
@@ -42,7 +42,7 @@ export function clearAuthToken({ storage, documentTarget }) {
  * Confirm an RPC unauthorized response before discarding a saved token. This
  * avoids logging the user out for transient proxy or network failures.
  */
-export function createUnauthorizedHandler({ fetchImpl = fetch, storage, documentTarget, requireToken, toast }) {
+export function createUnauthorizedHandler({ fetchImpl = globalThis.fetch, storage, documentTarget, requireToken, toast }) {
   let verifying = false;
   return async () => {
     if (verifying) return;
@@ -67,14 +67,14 @@ export function createUnauthorizedHandler({ fetchImpl = fetch, storage, document
   };
 }
 
-export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }) {
+export function createAuthProbe({ fetchImpl = globalThis.fetch, getToken, onUnauthorized, intervalMs = 10000 }) {
   let lastProbeAt = 0;
   return async () => {
     const now = Date.now();
     if (now - lastProbeAt < intervalMs || !getToken()) return;
     lastProbeAt = now;
     try {
-      const res = await fetch("/authcheck");
+      const res = await fetchImpl("/authcheck");
       if (!res.ok) return;
       const data = await res.json();
       if (data.authorized === false) onUnauthorized();
@@ -82,12 +82,15 @@ export function createAuthProbe({ getToken, onUnauthorized, intervalMs = 10000 }
   };
 }
 
-export function installAuthenticatedFetch(token, { windowTarget = window } = {}) {
+export function installAuthenticatedFetch(token, {
+  windowTarget = globalThis.window,
+  storage = globalThis.localStorage,
+} = {}) {
   const originalFetch = windowTarget.fetch;
   const rawFetch = originalFetch.bind(windowTarget);
   const authenticatedFetch = (input, opts = {}) => {
     if (typeof input === "string" && input.startsWith("/") && token) {
-      const workspace = isHubRuntime() ? getActiveWorkspace(windowTarget.localStorage) : null;
+      const workspace = isHubRuntime() ? getActiveWorkspace(storage) : null;
       opts = {
         ...opts,
         headers: {

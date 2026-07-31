@@ -34,7 +34,9 @@ const resourceActionNames = [
   "pinnedWidget.createGroup",
   "pinnedWidget.renameGroup",
   "pinnedWidget.reveal",
+  "pinnedWidget.refresh",
   "routine.run",
+  "routine.refresh",
   "routine.showGenerator",
   "routine.generate",
 ];

@@ -23,14 +23,28 @@ export function createAppRuntimeStarter({ browser, stores, loadDependencies }) {
   };
 }
 
-let browserStarter;
-
-/** Starts the explicit application composition root without a compatibility adapter. */
-export function startAppRuntime(services = {}) {
-  browserStarter ??= createAppRuntimeStarter({
-    browser: { window, document, location, history, find: (id) => document.getElementById(id) },
+/**
+ * Creates the browser composition root for one application mount.
+ * Lifecycle state stays in the returned starter instead of leaking between mounts.
+ */
+export function createBrowserAppRuntimeStarter({
+  windowTarget,
+  documentTarget,
+  locationTarget,
+  historyTarget,
+  storage,
+  loadDependencies = () => import("./appComposition.js"),
+}) {
+  return createAppRuntimeStarter({
+    browser: {
+      window: windowTarget,
+      document: documentTarget,
+      location: locationTarget,
+      history: historyTarget,
+      storage,
+      find: (id) => documentTarget.getElementById(id),
+    },
     stores: {},
-    loadDependencies: () => import("./appComposition.js"),
+    loadDependencies,
   });
-  return browserStarter(services);
 }

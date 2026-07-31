@@ -1,25 +1,14 @@
-export function createFilePickerEventController({ windowTarget, useFolder, browse, pick, cancel }) {
-  const listeners = [
-    ["pi-file-picker-use-folder", () => useFolder()],
-    ["pi-file-picker-browse", (event) => browse(event.detail)],
-    ["pi-file-picker-pick", (event) => pick(event.detail)],
-    ["pi-file-picker-cancel", () => cancel()],
-  ];
-  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
-  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
-  return { attach, detach };
-}
-
 export function createFilePickerController({ browse, update, updateTitle, openModal, closeModal, showHublots, getShowHidden, getWorkdir, setPath, resetState, toast }) {
   async function load(path) {
-    update({ loading: true });
+    update({ loading: true, error: "" });
     let data;
     try {
       data = await browse(path);
     } catch (error) {
-      update({ loading: false });
-      toast(error.message, "error");
+      const message = error.message || "Cannot load files";
+      toast(message, "error");
       if (path !== getWorkdir()) return load(getWorkdir());
+      update({ loading: false, error: message });
       return;
     }
     setPath(data.path);
@@ -29,7 +18,7 @@ export function createFilePickerController({ browse, update, updateTitle, openMo
 
   async function show({ path, onPick, onCancel, returnToHublot }) {
     resetState({ path, onPick, onCancel, returnToHublot });
-    update({ path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true });
+    update({ path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, error: "" });
     openModal({ title: "Attach file", content: "filePicker" });
     await load(path);
   }

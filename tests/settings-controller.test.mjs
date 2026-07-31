@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSettingsChangeController, createSettingsController } from "../public/src/lib/settingsController.js";
+import { createSettingsController } from "../public/src/lib/settingsController.js";
 test("settings controller selects and applies a model", async () => {
   const calls = []; const toasts = []; let picker;
   const controller = createSettingsController({
@@ -15,17 +15,4 @@ test("settings controller selects and applies a model", async () => {
     searchable: true, selected: 0, variant: "model", placeholder: "Search providers and models…",
   }]);
   assert.deepEqual(toasts, [["model: m"]]);
-});
-
-test("settings change controller registers and tears down its typed event", () => {
-  let listener;
-  let removed;
-  const windowTarget = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
-  let changed = 0;
-  const controller = createSettingsChangeController({ windowTarget, changed: () => changed++ });
-  controller.attach();
-  listener();
-  controller.detach();
-  assert.equal(changed, 1);
-  assert.equal(removed, listener);
 });

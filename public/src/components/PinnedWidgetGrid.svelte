@@ -1,24 +1,29 @@
 <script>
   import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
-  import { pinnedWidgetMediaUrl } from "../lib/pinnedWidgetActions.js";
+  import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import {
     pinnedWidgetActiveGroup,
     pinnedWidgetGroups,
     pinnedWidgets,
+    pinnedWidgetsError,
     pinnedWidgetsLoading,
   } from "../stores/pinnedWidgets.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { buildPinnedWidgetViewModel } from "../features/pinned-widgets/pinnedWidgetViewModel.js";
   import {
     PINNED_WIDGET_MANAGE_ACTION,
     PINNED_WIDGET_MOVE_ACTION,
     PINNED_WIDGET_MOVE_GROUP_ACTION,
     PINNED_WIDGET_OPEN_ACTION,
     PINNED_WIDGET_RENAME_GROUP_ACTION,
+    PINNED_WIDGET_REFRESH_ACTION,
   } from "../runtime/uiActionNames.js";
 
+  const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
-  const sections = [
+  const refreshPinnedWidgets = () => uiActions.invoke(PINNED_WIDGET_REFRESH_ACTION);
+  const sectionDefinitions = [
     { scope: "workspace", title: "Workspace visible", description: "All sessions in this workspace" },
     { scope: "session", title: "Session only", description: "Only this session · default" },
   ];
@@ -28,18 +33,8 @@
   let touchPreview = null;
   let suppressClickUntil = 0;
   $: activeGroup = $pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null;
-
-  function scopedWidgets(scope, groupId = null) {
-    return $pinnedWidgets
-      .filter((widget) => widget.scope === scope && (widget.groupId ?? null) === groupId)
-      .sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
-  }
-
-  function scopedGroups(scope) {
-    return $pinnedWidgetGroups
-      .filter((group) => group.scope === scope)
-      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
-  }
+  $: widgetView = buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, sectionDefinitions);
+  $: activeGroupWidgets = activeGroup ? widgetView.groupWidgets.get(activeGroup.id) ?? [] : [];
 
   function dragStart(event, widget) {
     event.dataTransfer.effectAllowed = "move";
@@ -128,6 +123,31 @@
 
   onDestroy(clearTouchDrag);
 
+  function widgetTitle(widget) {
+    const availability = widget.availability === "ready" ? "" : ` · ${widget.availability}`;
+    return `${widget.label}${availability}`;
+  }
+
+  function readyMedia(widget, kind) {
+    return widget.kind === kind && widget.availability === "ready";
+  }
+
+  function isFolderWidget(widget) {
+    return widget.kind === "directory" || widget.builtin === "file-explorer";
+  }
+
+  function widgetDropGroupId() {
+    return activeGroup?.id ?? null;
+  }
+
+  function isSectionTouchTarget(section) {
+    return touchDestination?.scope === section.scope && !touchDestination?.groupId;
+  }
+
+  function scopeTitle(scope) {
+    return scope === "workspace" ? "Workspace visible" : "Session only";
+  }
+
   function glyph(widget) {
     if (widget.kind === "markdown") return "M↓";
     if (String(widget.mimeType ?? "").startsWith("text/html")) return "HTML";
@@ -148,25 +168,25 @@
     draggable={widget.kind !== "builtin"}
     ondragstart={(event) => dragStart(event, widget)}
     ondragover={(event) => event.preventDefault()}
-    ondrop={(event) => dropped(event, destinationScope, activeGroup?.id ?? null, widget.id)}
+    ondrop={(event) => dropped(event, destinationScope, widgetDropGroupId(), widget.id)}
     onpointerdown={(event) => touchPointerDown(event, widget)}
     onpointermove={touchPointerMove}
     onpointerup={touchPointerUp}
     onpointercancel={touchPointerCancel}
   >
-    <button type="button" class="pinned-widget-tile" onclick={(event) => openWidget(event, widget)} title={`${widget.label}${widget.availability !== "ready" ? ` · ${widget.availability}` : ""}`}>
-      <span class={`pinned-widget-icon kind-${widget.kind}`}>
-        {#if widget.kind === "image" && widget.availability === "ready"}
-          <img src={pinnedWidgetMediaUrl(widget.id)} alt="" loading="lazy" />
-        {:else if widget.kind === "video" && widget.availability === "ready"}
+    <button type="button" class="pinned-widget-tile" onclick={(event) => openWidget(event, widget)} title={widgetTitle(widget)}>
+      <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true">
+        {#if readyMedia(widget, "image")}
+          <img src={browserActions.pinnedWidgetMediaSource(widget.id)} alt="" loading="lazy" />
+        {:else if readyMedia(widget, "video")}
           <video
-            src={pinnedWidgetMediaUrl(widget.id)}
+            src={browserActions.pinnedWidgetMediaSource(widget.id)}
             muted
             preload="metadata"
             playsinline
             onloadedmetadata={(event) => { if (event.currentTarget.duration > 0) event.currentTarget.currentTime = Math.min(0.1, event.currentTarget.duration / 2); }}
           ></video><span class="pinned-widget-play">▶</span>
-        {:else if widget.kind === "directory" || widget.builtin === "file-explorer"}
+        {:else if isFolderWidget(widget)}
           <FolderIcon size={30} />
         {:else}
           <span class="pinned-widget-glyph">{glyph(widget)}</span>
@@ -182,13 +202,9 @@
 {/snippet}
 
 {#snippet WidgetSection(section)}
-  {@const widgets = scopedWidgets(section.scope)}
-  {@const builtinWidgets = widgets.filter((widget) => widget.kind === "builtin")}
-  {@const movableWidgets = widgets.filter((widget) => widget.kind !== "builtin")}
-  {@const groups = scopedGroups(section.scope)}
   <section
     class="pinned-widget-section"
-    class:touch-drop-target={touchDestination?.scope === section.scope && !touchDestination?.groupId}
+    class:touch-drop-target={isSectionTouchTarget(section)}
     data-scope={section.scope}
     aria-label={`${section.title} widgets`}
     ondragover={(event) => event.preventDefault()}
@@ -199,11 +215,10 @@
       <span>{section.description}</span>
     </div>
     <div class="pinned-widget-grid" role="list">
-      {#each builtinWidgets as widget (widget.id)}
+      {#each section.builtinWidgets as widget (widget.id)}
         {@render WidgetCell(widget, section.scope)}
       {/each}
-      {#each groups as group (group.id)}
-        {@const children = $pinnedWidgets.filter((widget) => widget.groupId === group.id)}
+      {#each section.groups as group (group.id)}
         <div
           role="listitem"
           class="pinned-widget-cell pinned-widget-group-cell"
@@ -222,34 +237,35 @@
         >
           <button type="button" class="pinned-widget-tile" onclick={() => pinnedWidgetActiveGroup.set(group.id)} title={`Open ${group.name}`}>
             <span class="pinned-widget-icon pinned-widget-group-icon">
-              {#each children.slice(0, 4) as child (child.id)}<span>{glyph(child)}</span>{/each}
+              {#each group.children.slice(0, 4) as child (child.id)}<span>{glyph(child)}</span>{/each}
             </span>
             <span class="pinned-widget-label">{group.name}</span>
-            <span class="pinned-widget-count">{children.length}</span>
+            <span class="pinned-widget-count">{group.children.length}</span>
           </button>
           <button type="button" class="pinned-widget-menu" aria-label={`Manage ${group.name}`} onclick={() => uiActions.invoke(PINNED_WIDGET_RENAME_GROUP_ACTION, group)}>•••</button>
         </div>
       {/each}
-      {#each movableWidgets as widget (widget.id)}
+      {#each section.movableWidgets as widget (widget.id)}
         {@render WidgetCell(widget, section.scope)}
       {/each}
     </div>
-    {#if !widgets.length && !groups.length}
+    {#if section.empty}
       <div class="pinned-widget-empty">Drag a widget here to change its visibility.</div>
     {/if}
   </section>
 {/snippet}
 
 {#if $pinnedWidgetsLoading}
-  <div class="sidebar-loading"><span class="spin"></span> loading widgets…</div>
+  <div class="sidebar-loading" role="status"><span class="spin"></span> loading widgets…</div>
+{:else if $pinnedWidgetsError}
+  <div class="pinned-widget-empty async-error" role="alert">Could not load pinned widgets: {$pinnedWidgetsError} <button type="button" class="chip" onclick={refreshPinnedWidgets}>Retry</button></div>
 {:else if activeGroup}
-  {@const groupWidgets = scopedWidgets(activeGroup.scope, activeGroup.id)}
   <div class="pinned-widget-folder-head">
     <button type="button" class="pinned-widget-back" onclick={() => pinnedWidgetActiveGroup.set(null)} aria-label="Back to pinned widgets">←</button>
     <button type="button" class="pinned-widget-folder-title" onclick={() => uiActions.invoke(PINNED_WIDGET_RENAME_GROUP_ACTION, activeGroup)} title="Rename group">{activeGroup.name}</button>
   </div>
   <section class="pinned-widget-section" data-scope={activeGroup.scope}>
-    <div class="pinned-widget-section-head"><strong>{activeGroup.scope === "workspace" ? "Workspace visible" : "Session only"}</strong></div>
+    <div class="pinned-widget-section-head"><strong>{scopeTitle(activeGroup.scope)}</strong></div>
     <div
       class="pinned-widget-grid"
       role="list"
@@ -257,14 +273,14 @@
       ondragover={(event) => event.preventDefault()}
       ondrop={(event) => dropped(event, activeGroup.scope, activeGroup.id)}
     >
-      {#each groupWidgets as widget (widget.id)}
+      {#each activeGroupWidgets as widget (widget.id)}
         {@render WidgetCell(widget, activeGroup.scope)}
       {/each}
     </div>
-    {#if !groupWidgets.length}<div class="pinned-widget-empty">This group is empty. Drag widgets here or use their manage menu.</div>{/if}
+    {#if !activeGroupWidgets.length}<div class="pinned-widget-empty">This group is empty. Drag widgets here or use their manage menu.</div>{/if}
   </section>
 {:else}
-  {#each sections as section (section.scope)}
+  {#each widgetView.sections as section (section.scope)}
     {@render WidgetSection(section)}
   {/each}
 {/if}

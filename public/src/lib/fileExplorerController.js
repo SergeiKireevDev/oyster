@@ -1,17 +1,3 @@
-export function createOpenFileExplorerEventController({ windowTarget, open }) {
-  const onOpen = () => open();
-  function attach() { windowTarget.addEventListener("pi-open-file-explorer", onOpen); return detach; }
-  function detach() { windowTarget.removeEventListener("pi-open-file-explorer", onOpen); }
-  return { attach, detach };
-}
-
-export function createFileExplorerEventController({ windowTarget, browse, edit, save, upload, backToList, backToHublots }) {
-  const listeners = [["pi-file-explorer-browse", (event) => browse(event.detail)], ["pi-file-explorer-edit", (event) => edit(event.detail)], ["pi-file-explorer-save", save], ["pi-file-explorer-upload", upload], ["pi-file-explorer-back-list", backToList], ["pi-file-explorer-back-hublots", backToHublots]];
-  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
-  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
-  return { attach, detach };
-}
-
 export function registerFileUploadInput(target, onChange) {
   target.addEventListener("change", onChange);
   return () => target.removeEventListener("change", onChange);
@@ -19,14 +5,15 @@ export function registerFileUploadInput(target, onChange) {
 
 export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), createUploadInput, registerUploadInput = registerFileUploadInput, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
-    update({ loading: true, mode: "list" });
+    update({ loading: true, mode: "list", error: "" });
     let data;
     try {
       data = await browse(path);
     } catch (error) {
-      update({ loading: false });
-      toast(error.message, "error");
+      const message = error.message || "Cannot load files";
+      toast(message, "error");
       if (path !== getWorkdir()) return load(getWorkdir());
+      update({ loading: false, error: message });
       return;
     }
     setPath(data.path);
@@ -49,7 +36,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
 
   async function show(path) {
     resetState(path);
-    update({ mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: getToken(), editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…" });
+    update({ mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: getToken(), editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…", error: "", saveError: "", uploadError: "" });
     openModal({ title: "File explorer", content: "fileExplorer" });
     await load(path);
   }
@@ -79,6 +66,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
   }
 
   async function uploadFiles(dir, files) {
+    update({ uploadError: "" });
     // Stay below common reverse-proxy body limits. If an intermediary has a
     // smaller limit, a 413 transparently halves subsequent chunks and retries
     // the same offset instead of failing the whole file.
@@ -132,7 +120,11 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
           throw new Error(data.error || `upload failed (${res.status})`);
         }
         done++;
-      } catch (error) { toast(`${file.name}: ${error.message}`, "error"); }
+      } catch (error) {
+        const message = `${file.name}: ${error.message}`;
+        toast(message, "error");
+        update({ uploadError: message });
+      }
     }
     if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
     update({ uploading: false, uploadText: "⬆ Upload…" });
@@ -140,12 +132,13 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
   }
 
   async function saveEditor(path, content) {
-    update({ saving: true });
+    update({ saving: true, saveError: "" });
     try {
       const data = await saveFile({ path, content });
       toast(`saved ${path.split("/").pop()} (${data.bytes} bytes)`);
     } catch (error) {
       toast(error.message, "error");
+      update({ saveError: error.message || "Save failed" });
     } finally {
       update({ saving: false });
     }

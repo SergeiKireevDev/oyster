@@ -5,7 +5,7 @@
 
   const uiActions = getUiActionRegistry();
   const openCheckpointTreeSession = (node) => uiActions.invoke(CHECKPOINT_TREE_OPEN_ACTION, node);
-  const rollbackCheckpoint = (checkpoint, target) => uiActions.invoke(CHECKPOINT_TREE_ROLLBACK_ACTION, checkpoint, target);
+  const rollbackCheckpoint = (checkpoint) => uiActions.invoke(CHECKPOINT_TREE_ROLLBACK_ACTION, checkpoint);
 
   export let node;
   export let currentSessionId = null;
@@ -36,8 +36,8 @@
       : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`;
   }
 
-  function rollbackFrom(checkpoint, target) {
-    if (capabilities.rollback) rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id }, target);
+  function rollbackFrom(checkpoint) {
+    if (capabilities.rollback) rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id });
   }
 
   $: hasChildren = Boolean(node.checkpoints?.length || unslottedChildren.length);
@@ -64,13 +64,13 @@
 
   {#if hasChildren}
     <div class="t-kids">
-      {#each node.checkpoints ?? [] as checkpoint}
+      {#each node.checkpoints ?? [] as checkpoint (checkpoint.hash)}
         <button
           type="button"
           class="t-ckpt"
           title={checkpointTitle(checkpoint)}
           disabled={!capabilities.rollback}
-          onclick={(event) => rollbackFrom(checkpoint, event.currentTarget)}
+          onclick={() => rollbackFrom(checkpoint)}
         >
           🧊<span class="t-hash">{checkpoint.hash}</span><span class="t-msg">{checkpointMessage(checkpoint)}</span><span class="t-time">{checkpointTime(checkpoint)}</span>
         </button>

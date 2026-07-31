@@ -84,6 +84,38 @@ test("session state refresher discards an in-flight response after a runner swit
   assert.deepEqual(applied, []);
 });
 
+test("session state refresher cancels scheduled and in-flight work on teardown", async () => {
+  const cleared = [];
+  const applied = [];
+  let runTimer;
+  let release;
+  const refresh = createSessionStateRefresher({
+    rpc: () => new Promise((resolve) => { release = resolve; }),
+    applyState: (state) => applied.push(state),
+    setTimeoutImpl: (callback) => { runTimer = callback; return "refresh-timer"; },
+    clearTimeoutImpl: (timer) => cleared.push(timer),
+  });
+
+  refresh();
+  refresh.teardown();
+  assert.deepEqual(cleared, ["refresh-timer"]);
+  await runTimer();
+  assert.equal(release, undefined);
+
+  const activeRefresh = createSessionStateRefresher({
+    rpc: () => new Promise((resolve) => { release = resolve; }),
+    applyState: (state) => applied.push(state),
+    setTimeoutImpl: (callback) => { runTimer = callback; return "active-timer"; },
+    clearTimeoutImpl: () => {},
+  });
+  activeRefresh();
+  const pending = runTimer();
+  activeRefresh.teardown();
+  release({ sessionId: "stale" });
+  await pending;
+  assert.deepEqual(applied, []);
+});
+
 test("session state refresher does not send get_state to a dormant runner", async () => {
   let runTimer;
   let rpcCalls = 0;

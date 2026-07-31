@@ -21,11 +21,11 @@
   }
 </script>
 
-<header>
+<header class="app-header">
   <div class="brand-mark" class:hub-mode={hubMode} aria-hidden="true"><img src={oysterIcon} alt="" /></div>
   <div class="header-context">
     <span class="title" id="sessionTitle">{$appHeader.sessionTitle}</span>
-    <span class="header-status"><span class={$appHeader.connectionClass} id="connDot"></span>{$appHeader.connectionLabel}</span>
+    <span class="header-status" role="status" aria-atomic="true"><span class={$appHeader.connectionClass} id="connDot" aria-hidden="true"></span>{$appHeader.connectionLabel}</span>
   </div>
   <span class="spacer"></span>
   <nav class="header-actions" aria-label="Session controls">

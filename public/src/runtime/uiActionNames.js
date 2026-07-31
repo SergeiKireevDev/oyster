@@ -44,8 +44,10 @@ export const PINNED_WIDGET_PIN_LINK_ACTION = "pinnedWidget.pinLink";
 export const PINNED_WIDGET_CREATE_GROUP_ACTION = "pinnedWidget.createGroup";
 export const PINNED_WIDGET_RENAME_GROUP_ACTION = "pinnedWidget.renameGroup";
 export const PINNED_WIDGET_REVEAL_ACTION = "pinnedWidget.reveal";
+export const PINNED_WIDGET_REFRESH_ACTION = "pinnedWidget.refresh";
 
 export const ROUTINE_RUN_ACTION = "routine.run";
+export const ROUTINE_REFRESH_ACTION = "routine.refresh";
 export const ROUTINE_SHOW_GENERATOR_ACTION = "routine.showGenerator";
 export const ROUTINE_GENERATE_ACTION = "routine.generate";
 

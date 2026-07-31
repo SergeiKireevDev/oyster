@@ -2,7 +2,6 @@
   import { summarizeToolArgs } from "../../lib/messageUtils.js";
 
   let { cardStore } = $props();
-  let root = $state();
   const card = $derived($cardStore);
   const name = $derived(card.toolCall?.name ?? "");
   const args = $derived(card.toolCall?.arguments);
@@ -14,6 +13,7 @@
     ? `${(card.resultText ?? "").slice(0, 20000)}\n… (truncated)`
     : (card.resultText ?? ""));
   const argsText = $derived(JSON.stringify(args, null, 2) ?? "");
+  const renderedDiffLines = $derived(isEdit ? diffLines(args.edits) : []);
 
   function diffLines(edits = []) {
     const lines = [];
@@ -26,18 +26,18 @@
   }
 </script>
 
-<details class="block tool activity-step" bind:this={root}>
+<details class="block tool activity-step">
   <summary title={`Show ${name || "tool"} details`}>
     <span class={`activity-indicator ${statusClass}`} aria-hidden="true"></span>
     <span class="tname">{name || "Tool"}</span>
     <span class="targ">{argSummary}</span>
-    <span class={`status ${statusClass}`}>{statusText}</span>
+    <span class={`status ${statusClass}`} aria-live="off">{statusText}</span>
   </summary>
   <div class="body">
     <pre class="args-pre">{isEdit ? "" : argsText}</pre>
     {#if isEdit}
       <div class="diff">
-        {#each diffLines(args.edits) as line}
+        {#each renderedDiffLines as line (line)}
           <div class={`diff-line ${line.className}`}>{line.text}</div>
         {/each}
       </div>

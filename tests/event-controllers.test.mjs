@@ -1,9 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createHeaderEventController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
-import { createComposerEventController } from "../public/src/lib/composerController.js";
-import { createSessionPickerEventController } from "../public/src/lib/sessionPickerController.js";
-import { createManagedHublotEventController } from "../public/src/lib/hublotController.js";
+import { createCarouselController, createCarouselEventRegistration, createCarouselHeaderController, createCarouselSwipeController, createMobileDrawerDismissController, swipeAxis } from "../public/src/runtime/carouselController.js";
 import { createExtensionUiEventController, createHublotEventController, createReplayDoneEventController, createRunnerPingEventController } from "../public/src/runtime/eventControllers.js";
 
 test("extension UI event controller delegates stream requests", () => {
@@ -253,62 +250,5 @@ test("mobile drawer controller preserves an open drawer during modal operations 
   controller.detach();
   assert.equal(resets, 1);
   assert.equal(removed, listener);
-});
-
-test("header event controller routes typed header actions", () => {
-  let listener;
-  let removed;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
-  const calls = [];
-  const controller = createHeaderEventController({
-    documentTarget: target,
-    chooseModel: () => calls.push("model"), cycleThinking: () => calls.push("thinking"), openConfig: () => calls.push("config"),
-    toggleHublots: (event) => calls.push(["hublots", event]), toggleTree: (event) => calls.push(["tree", event]),
-  });
-  controller.attach();
-  listener({ detail: { action: "chooseModel" } });
-  listener({ detail: { action: "toggleTree", sourceEvent: "event" } });
-  controller.detach();
-  assert.deepEqual(calls, ["model", ["tree", "event"]]);
-  assert.equal(removed, listener);
-});
-
-test("composer event controller routes each composer action", () => {
-  let listener;
-  let removed;
-  const target = { addEventListener(_name, fn) { listener = fn; }, removeEventListener(_name, fn) { removed = fn; } };
-  const calls = [];
-  const controller = createComposerEventController({
-    documentTarget: target,
-    inputChanged: () => calls.push("input"), keydown: (event) => calls.push(["keydown", event]), send: () => calls.push("send"), abort: () => calls.push("abort"),
-  });
-  controller.attach();
-  listener({ detail: { action: "inputChanged" } });
-  listener({ detail: { action: "keydown", sourceEvent: "event" } });
-  listener({ detail: { action: "send" } }); listener({ detail: { action: "abort" } });
-  controller.detach();
-  assert.deepEqual(calls, ["input", ["keydown", "event"], "send", "abort"]);
-  assert.equal(removed, listener);
-});
-
-test("managed hublot event adapter routes management actions", () => {
-  const listeners = new Map();
-  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
-  const calls = [];
-  createManagedHublotEventController({ windowTarget: target, create: (detail) => calls.push(["create", detail]), openCommandPalette: (detail) => calls.push(["palette", detail]), toggleScope: () => calls.push(["scope"]) }).attach();
-  listeners.get("pi-managed-hublot-create")({ detail: { port: 3000 } });
-  listeners.get("pi-managed-command-palette")({ detail: "hublot" });
-  listeners.get("pi-managed-hublot-toggle-scope")();
-  assert.deepEqual(calls, [["create", { port: 3000 }], ["palette", "hublot"], ["scope"]]);
-});
-
-test("session picker event adapter dispatches actions and cancellation", () => {
-  const listeners = new Map();
-  const target = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
-  const calls = [];
-  createSessionPickerEventController({ windowTarget: target, dispatch: (type, ...args) => calls.push([type, args]), cancel: () => calls.push(["cancel"]) }).attach();
-  listeners.get("pi-session-picker-action")({ detail: { type: "open", args: ["/a"] } });
-  listeners.get("pi-session-picker-cancel")();
-  assert.deepEqual(calls, [["open", ["/a"]], ["cancel"]]);
 });
 

@@ -7,7 +7,7 @@ const browserSources = [
   "../public/src/runtime/settingsPreferenceService.js",
   "../public/src/runtime/carouselController.js",
   "../public/src/runtime/sessionRuntime.js",
-  "../public/src/App.svelte",
+  "../public/src/runtime/createBrowserApplicationScope.js",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
 test("non-secret browser preferences deliberately remain device-local", () => {

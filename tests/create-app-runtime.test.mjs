@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppRuntime } from "../public/src/runtime/createAppRuntime.js";
-import { createAppRuntimeStarter } from "../public/src/runtime/appRuntime.js";
+import { createAppRuntimeStarter, createBrowserAppRuntimeStarter } from "../public/src/runtime/appRuntime.js";
 
 test("application composition factory injects browser adapters and stores", () => {
   const browser = { window: {}, document: {}, location: {}, history: {}, find: () => null };
@@ -26,6 +26,40 @@ test("application composition factory injects browser adapters and stores", () =
   runtime.start();
   runtime.teardown();
   assert.deepEqual(calls, ["auth", "adapters", "debug", "start", "teardown"]);
+});
+
+test("browser runtime lifecycle state is scoped to each application mount", async () => {
+  const calls = [];
+  const browser = {
+    windowTarget: {},
+    documentTarget: { getElementById: (id) => `node:${id}` },
+    locationTarget: {},
+    historyTarget: {},
+    async loadDependencies() {
+      return {
+        createApplicationRuntimeDependencies(injectedBrowser) {
+          assert.equal(injectedBrowser.find("composer"), "node:composer");
+          const mount = calls.filter((call) => call.startsWith("start:")).length + 1;
+          return {
+            attachAuthenticatedFetch() {},
+            attachEventAdapters() {},
+            attachDebugHooks() {},
+            start: () => calls.push(`start:${mount}`),
+            teardown: () => calls.push(`teardown:${mount}`),
+          };
+        },
+      };
+    },
+  };
+
+  const firstMount = createBrowserAppRuntimeStarter(browser);
+  const secondMount = createBrowserAppRuntimeStarter(browser);
+  const teardownFirst = await firstMount();
+  const teardownSecond = await secondMount();
+  teardownFirst();
+  teardownSecond();
+
+  assert.deepEqual(calls, ["start:1", "start:2", "teardown:1", "teardown:2"]);
 });
 
 test("application runtime starter creates fresh dependencies after teardown", async () => {

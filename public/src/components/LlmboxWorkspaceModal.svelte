@@ -1,7 +1,11 @@
 <script>
+  import { onDestroy } from "svelte";
   import { closeModalState } from "../stores/modal.js";
   import { publishWorkspace } from "../stores/workspaces.js";
+  import { getWorkspaceService } from "../runtime/workspaceServiceContext.js";
+  import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
 
+  const workspaceService = getWorkspaceService();
   export let spoke = "";
   export let environmentName = "";
 
@@ -10,9 +14,11 @@
   let diskGiB = "";
   let loading = false;
   let error = "";
+  const createRequests = createAsyncRequestGuard();
 
   async function createWorkspace(event) {
     event.preventDefault();
+    const request = createRequests.begin();
     loading = true;
     error = "";
     try {
@@ -23,21 +29,18 @@
       };
       const size = Number(diskGiB);
       if (Number.isFinite(size) && size > 0) payload.diskBytes = size * 1024 * 1024 * 1024;
-      const response = await fetch("/api/v1/workspaces", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || `Workspace creation failed (${response.status})`);
-      publishWorkspace(data.workspace);
+      const workspace = await workspaceService.createLlmboxWorkspace(payload);
+      if (!request.isCurrent()) return;
+      publishWorkspace(workspace);
       closeModalState();
     } catch (cause) {
-      error = cause.message;
+      if (request.isCurrent()) error = cause.message;
     } finally {
-      loading = false;
+      if (request.isCurrent()) loading = false;
     }
   }
+
+  onDestroy(() => createRequests.invalidate());
 </script>
 
 <section class="llmbox-workspace-modal" aria-label="llmbox workspace creation">

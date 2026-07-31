@@ -15,7 +15,12 @@ export function createTransportRuntime({
   onInvalidToken,
   toast,
 }) {
-  const token = initializeAuth();
+  const token = initializeAuth({
+    locationTarget: browser.location,
+    historyTarget: browser.history,
+    storage: browser.storage,
+    documentTarget: browser.document,
+  });
   const requireToken = () => showAuthGate({ gate, input: browser.document.getElementById("gateInput") });
   const handleUnauthorized = createUnauthorizedHandler({
     storage: browser.storage,
@@ -24,6 +29,7 @@ export function createTransportRuntime({
     toast,
   });
   const probeTokenValidity = createAuthProbe({
+    fetchImpl: browser.fetch,
     getToken: () => token,
     onUnauthorized: () => {
       clearAuthToken({ storage: browser.storage, documentTarget: browser.document });

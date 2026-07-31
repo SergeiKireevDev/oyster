@@ -6,30 +6,42 @@
   import VideoArtifact from "./VideoArtifact.svelte";
   import MarkdownArtifact from "./MarkdownArtifact.svelte";
   import { closeModalState, modalState } from "../stores/modal.js";
-  import { pinnedWidgetHtmlUrl, pinnedWidgetMediaUrl } from "../lib/pinnedWidgetActions.js";
   import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import { PINNED_WIDGET_REVEAL_ACTION } from "../runtime/uiActionNames.js";
+  import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
 
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
   $: widget = $modalState.context?.widget ?? {};
-  $: source = widget.id ? pinnedWidgetMediaUrl(widget.id) : "";
-  $: htmlSource = widget.id ? pinnedWidgetHtmlUrl(widget.id) : "";
-  $: download = widget.path ? browserActions.fileDownload(null, widget.path) : null;
+  $: source = widget.id ? browserActions.pinnedWidgetMediaSource(widget.id) : "";
+  $: htmlSource = widget.id ? browserActions.pinnedWidgetHtmlSource(widget.id) : "";
+  $: download = widget.path ? browserActions.fileDownload(widget.path) : null;
   $: isHtml = String(widget.mimeType ?? "").startsWith("text/html");
   $: copyRawLabel = copyRawState === "copied" ? "Copied" : copyRawState === "failed" ? "Copy failed" : "Copy raw";
   let copyRawState = "idle";
   let copyRawTimer;
+  const copyRequests = createAsyncRequestGuard();
 
   async function copyRawMarkdown() {
+    const request = copyRequests.begin();
     clearTimeout(copyRawTimer);
-    copyRawState = await copyTextToClipboard(String(widget.content ?? "")) ? "copied" : "failed";
+    try {
+      const copied = await copyTextToClipboard(String(widget.content ?? ""));
+      if (!request.isCurrent()) return;
+      copyRawState = copied ? "copied" : "failed";
+    } catch {
+      if (!request.isCurrent()) return;
+      copyRawState = "failed";
+    }
     copyRawTimer = setTimeout(() => { copyRawState = "idle"; }, 1800);
   }
 
-  onDestroy(() => clearTimeout(copyRawTimer));
+  onDestroy(() => {
+    copyRequests.invalidate();
+    clearTimeout(copyRawTimer);
+  });
 </script>
 
 <section class="pinned-widget-viewer">

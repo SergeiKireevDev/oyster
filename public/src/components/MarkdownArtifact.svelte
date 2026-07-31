@@ -5,4 +5,8 @@
   export let label = "Markdown artifact";
 </script>
 
-<SanitizedMarkdown element="article" className="pinned-markdown-viewer" {source} {label} />
+{#if source.trim()}
+  <SanitizedMarkdown element="article" className="pinned-markdown-viewer" {source} {label} />
+{:else}
+  <div class="artifact-state">This Markdown artifact is empty.</div>
+{/if}

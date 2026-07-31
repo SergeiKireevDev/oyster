@@ -199,20 +199,28 @@ export function createSessionPreviewController({ fetchPreview, render, log = () 
 /** Debounce authoritative state refresh requests. */
 export function createSessionStateRefresher({ rpc, applyState, isRunnerAlive = () => true, getGeneration = () => 0, onError = () => {}, delay = 150, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;
-  return () => {
+  let disposed = false;
+  const refresh = () => {
+    if (disposed) return;
     if (timer) clearTimeoutImpl(timer);
     const generation = getGeneration();
     timer = setTimeoutImpl(async () => {
       timer = null;
-      if (generation !== getGeneration() || !isRunnerAlive()) return;
+      if (disposed || generation !== getGeneration() || !isRunnerAlive()) return;
       try {
         const incoming = await rpc({ type: "get_state" });
-        if (generation === getGeneration()) applyState(incoming);
+        if (!disposed && generation === getGeneration()) applyState(incoming);
       } catch (error) {
-        if (generation === getGeneration()) onError(error);
+        if (!disposed && generation === getGeneration()) onError(error);
       }
     }, delay);
   };
+  refresh.teardown = () => {
+    disposed = true;
+    if (timer) clearTimeoutImpl(timer);
+    timer = null;
+  };
+  return refresh;
 }
 
 export function transcriptGateRequired({ runner, messageCount, emptySessionRunners }) {

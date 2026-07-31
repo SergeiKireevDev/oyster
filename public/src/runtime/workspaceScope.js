@@ -4,18 +4,18 @@ export function isHubRuntime(runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG_
   return runtimeConfig?.hub === true;
 }
 
-export function getActiveWorkspace(storage = localStorage) {
+export function getActiveWorkspace(storage = globalThis.localStorage) {
   return isHubRuntime() ? (storage.getItem(ACTIVE_WORKSPACE_KEY) || null) : null;
 }
 
-export function setActiveWorkspace(workspaceId, storage = localStorage) {
+export function setActiveWorkspace(workspaceId, storage = globalThis.localStorage) {
   if (!isHubRuntime() || !workspaceId) return false;
   storage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
   return true;
 }
 
 /** List Hub connections: configured local, one per llmbox spoke, and one per connected cloud provider. */
-export async function listEnvironments({ fetchImpl = fetch } = {}) {
+export async function listEnvironments({ fetchImpl = globalThis.fetch } = {}) {
   const response = await fetchImpl("/api/v1/environments");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `failed to list environments (${response.status})`);
@@ -32,7 +32,7 @@ export function effectiveWorkspaceStatus(workspace) {
 }
 
 /** List every workspace, including ones that cannot host a session yet. */
-export async function listWorkspaces({ fetchImpl = fetch } = {}) {
+export async function listWorkspaces({ fetchImpl = globalThis.fetch } = {}) {
   const response = await fetchImpl("/api/v1/workspaces?probe=0");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `failed to list workspaces (${response.status})`);
@@ -45,7 +45,7 @@ export async function listOnlineWorkspaces(options = {}) {
 }
 
 /** Require an explicit workspace choice before starting a Hub session. */
-export async function chooseOnlineWorkspace({ fetchImpl = fetch, choose }) {
+export async function chooseOnlineWorkspace({ fetchImpl = globalThis.fetch, choose }) {
   if (typeof choose !== "function") throw new TypeError("choose is required");
   const workspaces = await listOnlineWorkspaces({ fetchImpl });
   if (!workspaces.length) throw new Error("no online workspaces available — create a workspace first");
@@ -56,8 +56,8 @@ export async function chooseOnlineWorkspace({ fetchImpl = fetch, choose }) {
 /** Resolve an explicit workspace before the Hub opens any workspace-scoped stream. */
 export async function ensureActiveWorkspace({
   runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__,
-  storage = localStorage,
-  fetchImpl = fetch,
+  storage = globalThis.localStorage,
+  fetchImpl = globalThis.fetch,
 } = {}) {
   if (!isHubRuntime(runtimeConfig)) return null;
   const available = await listOnlineWorkspaces({ fetchImpl });

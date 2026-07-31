@@ -6,5 +6,10 @@
   class:busy
   class="checkpoint"
   title="checkpoint — commit all workdir changes"
-  onclick={(event) => onCheckpoint(event)}
+  aria-label="Checkpoint all workdir changes"
+  disabled={busy}
+  onclick={(event) => {
+    event.stopPropagation();
+    onCheckpoint();
+  }}
 >🧊</button>

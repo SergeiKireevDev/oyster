@@ -32,7 +32,9 @@ import {
   PINNED_WIDGET_CREATE_GROUP_ACTION,
   PINNED_WIDGET_RENAME_GROUP_ACTION,
   PINNED_WIDGET_REVEAL_ACTION,
+  PINNED_WIDGET_REFRESH_ACTION,
   ROUTINE_RUN_ACTION,
+  ROUTINE_REFRESH_ACTION,
   ROUTINE_SHOW_GENERATOR_ACTION,
   ROUTINE_GENERATE_ACTION,
 } from "../../runtime/uiActionNames.js";
@@ -107,7 +109,9 @@ export function createResourceAssembly(deps) {
         deps.uiActions.register(PINNED_WIDGET_CREATE_GROUP_ACTION, actions.pinnedWidgets?.createGroup ?? (() => {})),
         deps.uiActions.register(PINNED_WIDGET_RENAME_GROUP_ACTION, actions.pinnedWidgets?.renameGroup ?? (() => {})),
         deps.uiActions.register(PINNED_WIDGET_REVEAL_ACTION, actions.pinnedWidgets?.reveal ?? (() => {})),
+        deps.uiActions.register(PINNED_WIDGET_REFRESH_ACTION, operations.loadHublots),
         deps.uiActions.register(ROUTINE_RUN_ACTION, actions.routine.run),
+        deps.uiActions.register(ROUTINE_REFRESH_ACTION, operations.loadRoutines),
         deps.uiActions.register(ROUTINE_SHOW_GENERATOR_ACTION, actions.routine.showGenerator),
         deps.uiActions.register(ROUTINE_GENERATE_ACTION, actions.routine.generate),
       );

@@ -20,5 +20,5 @@
   </div>
   <div class="side-head routines">Routines</div>
   <RoutineList />
-  <button type="button" id="routineAdd" title="Build a new routine" onclick={showRoutineGenerator}>+</button>
+  <button type="button" id="routineAdd" title="Build a new routine" aria-label="Build a new routine" onclick={showRoutineGenerator}>+</button>
 </aside>

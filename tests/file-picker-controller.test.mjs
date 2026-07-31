@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFilePickerController, createFilePickerEventController } from "../public/src/lib/filePickerController.js";
+import { createFilePickerController } from "../public/src/lib/filePickerController.js";
 
 test("file picker loads a directory into picker state", async () => {
   const calls = [];
@@ -16,7 +16,7 @@ test("file picker loads a directory into picker state", async () => {
   await controller.load("/work");
 
   assert.deepEqual(calls, [
-    ["update", { loading: true }],
+    ["update", { loading: true, error: "" }],
     ["path", "/work"],
     ["title", "Attach file"],
     ["update", { path: "/work", home: "/home", workdir: "/work", parent: "/", dirs: [], files: [{ name: "a.txt" }], showHidden: false, loading: false }],
@@ -41,9 +41,9 @@ test("file picker initializes its modal before loading the current workdir", asy
 
   assert.deepEqual(calls.slice(0, 4), [
     ["reset", { path: "/work", onPick, onCancel: null, returnToHublot: true }],
-    ["update", { path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true }],
+    ["update", { path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, error: "" }],
     ["modal", { title: "Attach file", content: "filePicker" }],
-    ["update", { loading: true }],
+    ["update", { loading: true, error: "" }],
   ]);
   assert.equal(calls[4][1], "/work");
 });
@@ -86,11 +86,7 @@ test("file picker falls back to its workdir after a failed browse", async () => 
   await controller.load("/gone");
 
   assert.deepEqual(calls.slice(0, 5), [
-    ["update", { loading: true }], ["browse", "/gone"], ["update", { loading: false }],
-    ["toast", "cannot open folder", "error"], ["update", { loading: true }],
+    ["update", { loading: true, error: "" }], ["browse", "/gone"],
+    ["toast", "cannot open folder", "error"], ["update", { loading: true, error: "" }], ["browse", "/work"],
   ]);
-  assert.equal(calls[5][1], "/work");
 });
-
-
-test("file picker event controller routes typed actions", () => { const listeners = new Map(); const target = { addEventListener: (n, f) => listeners.set(n, f), removeEventListener() {} }; const calls=[]; createFilePickerEventController({ windowTarget:target, useFolder:()=>calls.push("folder"), browse:(p)=>calls.push(p), pick:(p)=>calls.push(["pick",p]), cancel:()=>calls.push("cancel") }).attach(); listeners.get("pi-file-picker-browse")({detail:"/x"}); listeners.get("pi-file-picker-cancel")(); assert.deepEqual(calls,["/x","cancel"]); });

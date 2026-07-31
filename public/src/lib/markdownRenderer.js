@@ -102,8 +102,10 @@ function inlineMd(s) {
 // Security boundary for every Svelte {@html} use. User/model/file input is
 // escaped before supported markup is generated; links are restricted to HTTP(S),
 // and KaTeX runs with trust disabled.
-function renderSanitizedMarkdown(src) {
-  const lines = src.split("\n");
+function renderSanitizedMarkdown(source) {
+  // Normalize at the renderer boundary so callers can only pass source data;
+  // components never prepare or forward an HTML-shaped value.
+  const lines = String(source ?? "").split("\n");
   const out = [];
   let i = 0;
   let para = [];

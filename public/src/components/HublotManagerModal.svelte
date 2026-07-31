@@ -12,25 +12,28 @@
   const commandPalette = (node) => uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node);
 </script>
 
-<div style="display:flex;flex-direction:column;gap:8px;">
-  <div style="display:flex;gap:6px;align-items:flex-start;">
+<form class="hublot-create-form" onsubmit={(event) => { event.preventDefault(); createManagedHublot($hublotManager.desc); }}>
+  <label for="hublotDescription">Describe the live interface to create</label>
+  <div class="hublot-description-row">
     <textarea
+      id="hublotDescription"
+      class="hublot-description"
       use:commandPalette
       rows="3"
       placeholder="What should the agent expose? (e.g. “the Vite dashboard with hot reload”)"
-      style="resize:vertical;flex:1;min-width:0;"
       value={$hublotManager.desc}
       oninput={(event) => updateHublotManager({ desc: event.currentTarget.value })}
+      required
     ></textarea>
   </div>
-  <button class="btn" disabled={$hublotManager.creating} onclick={() => createManagedHublot($hublotManager.desc)}>
+  <button class="btn" type="submit" disabled={$hublotManager.creating}>
     {#if $hublotManager.creating}
       <span class="spin"></span> Waiting for Cloudflare…
     {:else}
       Create live interface widget
     {/if}
   </button>
-</div>
+</form>
 <div class="m-actions" id="mActions">
   <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>

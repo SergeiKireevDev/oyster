@@ -17,7 +17,23 @@ function source(path) {
   return readFileSync(resolve(path), "utf8");
 }
 
-test("all necessary Svelte HTML injection is owned by the sanitized Markdown boundary", () => {
+test("Svelte components do not inject hard-coded markup", () => {
+  const components = svelteFiles(sourceRoot).map((path) => ({
+    name: relative(sourceRoot, path),
+    contents: source(path),
+  }));
+  const imperativeInjections = components
+    .filter(({ contents }) => /\b(?:innerHTML|outerHTML|insertAdjacentHTML)\b/.test(contents))
+    .map(({ name }) => name);
+  const literalHtmlBlocks = components
+    .filter(({ contents }) => /\{@html\s+(?:['"`]|String\.raw\b)/.test(contents))
+    .map(({ name }) => name);
+
+  assert.deepEqual(imperativeInjections, []);
+  assert.deepEqual(literalHtmlBlocks, []);
+});
+
+test("the necessary dynamic HTML exception is documented and owned by the sanitized Markdown boundary", () => {
   const injections = svelteFiles(sourceRoot)
     .filter((path) => /\{@html\b/.test(source(path)))
     .map((path) => relative(sourceRoot, path));
@@ -25,8 +41,15 @@ test("all necessary Svelte HTML injection is owned by the sanitized Markdown bou
   assert.deepEqual(injections, ["components/SanitizedMarkdown.svelte"]);
 
   const boundary = source("public/src/components/SanitizedMarkdown.svelte");
-  assert.match(boundary, /renderSanitizedMarkdown\(String\(source \?\? ""\)\)/);
+  assert.match(boundary, /renderSanitizedMarkdown\(source\)/);
+  assert.match(boundary, /Runtime Markdown and KaTeX produce variable nested structures/);
+  assert.match(boundary, /Never pass caller-provided HTML to this component/);
   assert.match(boundary, /\{@html rendered\}/);
+
+  const rendererReferences = svelteFiles(sourceRoot)
+    .filter((path) => /renderSanitizedMarkdown/.test(source(path)))
+    .map((path) => relative(sourceRoot, path));
+  assert.deepEqual(rendererReferences, ["components/SanitizedMarkdown.svelte"]);
 });
 
 test("model and file Markdown reach the boundary as raw text, not caller-provided HTML", () => {
