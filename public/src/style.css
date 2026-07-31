@@ -1452,85 +1452,6 @@
     flex-wrap: wrap;
   }
 
-  /* ---------- command palette ---------- */
-  #cmdPalette {
-    position: fixed;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 8px 30px rgba(0,0,0,.5);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 80;
-    min-width: 280px;
-    max-width: 420px;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-  #cmdPalette.open { display: flex; }
-  #cmdPalette.path {
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 8px;
-    max-width: calc(100vw - 16px);
-    max-height: none !important;
-    overflow: visible;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-  }
-  #cmdPalette.path .cmd-row {
-    flex: 0 1 auto;
-    max-width: 100%;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--panel-2);
-    box-shadow: 0 4px 14px rgba(0,0,0,.35);
-  }
-  #cmdPalette.path .cmd-row:last-child { border-bottom: 1px solid var(--border); }
-  #cmdPalette.path .cmd-ico { width: auto; font-size: 14px; }
-  #cmdPalette.path .cmd-body { flex: 0 1 auto; }
-  #cmdPalette.path .cmd-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #cmdPalette.path .cmd-desc,
-  #cmdPalette.path .cmd-hint { display: none; }
-  #cmdPalette.path .cmd-row:hover,
-  #cmdPalette.path .cmd-row.active { background: var(--accent-dim); border-color: var(--accent); }
-  #cmdPalette.path .cmd-empty {
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--panel-2);
-    box-shadow: 0 4px 14px rgba(0,0,0,.35);
-  }
-  .cmd-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 9px 12px;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    background: transparent;
-    cursor: pointer;
-    user-select: none;
-    border: 0;
-    border-bottom: 1px solid rgba(255,255,255,.04);
-  }
-  .cmd-row:last-child { border-bottom: none; }
-  .cmd-row:hover, .cmd-row.active { background: var(--accent-dim); }
-  .cmd-ico { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
-  .cmd-body { flex: 1; min-width: 0; }
-  .cmd-name { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
-  .cmd-name mark { background: none; color: var(--accent); font-weight: 700; padding: 0; }
-  .cmd-desc { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cmd-hint { color: var(--muted); font-size: 11px; flex-shrink: 0; opacity: 0; transition: opacity .1s; }
-  .cmd-row.active .cmd-hint { opacity: 1; }
-  .cmd-empty { padding: 14px; color: var(--muted); font-size: 13px; text-align: center; }
-
   /* ---------- modal ---------- */
   #overlay {
     position: fixed; inset: 0;
@@ -2455,59 +2376,6 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
 }
 #modal .browser-directory-shortcut { color: var(--muted); font-size: 11.5px; font-weight: 620; text-align: center; }
 #modal .browser-directory-button { display: flex; flex: 1; align-items: center; gap: 8px; }
-#cmdPalette { border-color: rgba(255,255,255,.1); border-radius: 14px; background: rgba(25,29,38,.98); box-shadow: var(--shadow-lg); backdrop-filter: blur(18px); }
-#cmdPalette.command {
-  gap: 6px;
-  padding: 7px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-.cmd-row { padding: 10px 12px; border-bottom-color: rgba(255,255,255,.045); }
-#cmdPalette.command .cmd-row,
-#cmdPalette.path .cmd-row,
-#cmdPalette.path .cmd-empty {
-  border-color: rgba(255,255,255,.13);
-  background: linear-gradient(145deg, rgba(35,40,53,.84), rgba(20,24,33,.76));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 10px 30px rgba(0,0,0,.3);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
-}
-#cmdPalette.command .cmd-row {
-  min-height: 52px;
-  border: 1px solid rgba(255,255,255,.13);
-  border-radius: 13px;
-  transition: border-color .14s ease, background .14s ease, box-shadow .14s ease, transform .14s ease;
-}
-#cmdPalette.command .cmd-desc {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  line-height: 1.35;
-}
-#cmdPalette.command .cmd-row:last-child { border-bottom: 1px solid rgba(255,255,255,.13); }
-#cmdPalette.command .cmd-ico {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid rgba(157,169,255,.2);
-  border-radius: 9px;
-  background: rgba(157,169,255,.1);
-  color: var(--accent);
-  font-weight: 800;
-}
-.cmd-row:hover, .cmd-row.active { background: rgba(157,169,255,.12); }
-#cmdPalette.command .cmd-row:hover,
-#cmdPalette.command .cmd-row.active,
-#cmdPalette.path .cmd-row:hover,
-#cmdPalette.path .cmd-row.active {
-  border-color: rgba(157,169,255,.58);
-  background: linear-gradient(145deg, rgba(61,69,108,.88), rgba(35,40,61,.82));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 12px 32px rgba(0,0,0,.34), 0 0 0 1px rgba(157,169,255,.08);
-}
-#cmdPalette.command .cmd-row.active { transform: translateX(2px); }
 .toast { border-color: rgba(255,255,255,.1); border-radius: 10px; background: rgba(28,33,43,.96); box-shadow: 0 12px 32px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
 
 @media (max-width: 1080px) and (min-width: 761px) {
@@ -2708,32 +2576,6 @@ html[data-theme="light"] .analytics-modal {
 }
 html[data-theme="light"] #modal .m-option { border-color: var(--border); background: #f8f9fc; }
 html[data-theme="light"] #modal .m-option:hover { border-color: rgba(82,99,216,.5); background: rgba(82,99,216,.07); }
-html[data-theme="light"] #cmdPalette { border-color: var(--border); background: rgba(255,255,255,.98); }
-html[data-theme="light"] #cmdPalette.command { border: 0; background: transparent; box-shadow: none; }
-html[data-theme="light"] .cmd-row { border-bottom-color: var(--border); }
-html[data-theme="light"] #cmdPalette.command .cmd-row,
-html[data-theme="light"] #cmdPalette.path .cmd-row,
-html[data-theme="light"] #cmdPalette.path .cmd-empty {
-  border-color: rgba(82,99,216,.18);
-  background: linear-gradient(145deg, rgba(255,255,255,.9), rgba(238,242,250,.82));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 10px 28px rgba(35,43,65,.14);
-}
-html[data-theme="light"] #cmdPalette.command .cmd-row:last-child { border-bottom-color: rgba(82,99,216,.18); }
-html[data-theme="light"] #cmdPalette.command .cmd-ico {
-  border-color: rgba(82,99,216,.2);
-  background: rgba(82,99,216,.09);
-  color: #4656c4;
-}
-html[data-theme="light"] .cmd-row:hover,
-html[data-theme="light"] .cmd-row.active { background: var(--accent-dim); }
-html[data-theme="light"] #cmdPalette.command .cmd-row:hover,
-html[data-theme="light"] #cmdPalette.command .cmd-row.active,
-html[data-theme="light"] #cmdPalette.path .cmd-row:hover,
-html[data-theme="light"] #cmdPalette.path .cmd-row.active {
-  border-color: rgba(82,99,216,.48);
-  background: linear-gradient(145deg, rgba(238,241,255,.96), rgba(222,228,255,.9));
-  box-shadow: inset 0 1px 0 #fff, 0 12px 30px rgba(55,68,145,.16), 0 0 0 1px rgba(82,99,216,.05);
-}
 html[data-theme="light"] .toast { border-color: var(--border); background: rgba(255,255,255,.97); box-shadow: 0 12px 32px rgba(35,43,65,.16); }
 
 @media (max-width: 760px) {
