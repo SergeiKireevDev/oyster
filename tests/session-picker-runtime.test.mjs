@@ -182,6 +182,18 @@ test("session navigation omits the redundant full-picker buttons", () => {
   assert.doesNotMatch(menu, /data-action="sessions"|Sessions…/);
 });
 
+test("session sidebar owns reactive state and browser resources safely", () => {
+  const source = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
+  assert.match(source, /let clock = \$state\(Date\.now\(\)\)/);
+  assert.match(source, /const sessionGroups = \$derived/);
+  assert.match(source, /onMount\(\(\) => \{[\s\S]*setInterval\(refreshEnvironmentCatalog, ENVIRONMENT_REFRESH_MS\)/);
+  assert.match(source, /onDestroy\(\(\) => \{[\s\S]*catalogRequests\.invalidate\(\)[\s\S]*clearTimeout\(searchTimer\)[\s\S]*clearInterval\(environmentRefreshTimer\)[\s\S]*clearInterval\(clockTimer\)/);
+  assert.match(source, /if \(!workspace\?\.workspaceId \|\| workspaceActions\.has\(workspace\.workspaceId\)\) return/);
+  assert.match(source, /disabled=\{managing \|\| !\["online", "paused"\]\.includes\(status\)/);
+  assert.match(source, /aria-busy=\{\$sessionPicker\.searching\}/);
+  assert.match(source, /aria-controls="sessionSidebarEnvironmentInfo"/);
+});
+
 test("session sidebar routes switching and management through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/SessionSidebar.svelte", import.meta.url), "utf8");
   assert.match(source, /uiActions\.invoke\(SESSION_SWITCH_RUNNER_ACTION/);
@@ -197,7 +209,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /partitionSessionGroupsByArchive/);
   assert.match(source, /groupSessionCwdsByHierarchy\(sessionGroups, hierarchyDefaults\)/);
   assert.match(source, /groupSessionSearchByHierarchy\(\$sessionPicker\.searchResults, hierarchyDefaults\)/);
-  assert.match(source, /\{#if hubMode && environmentOptions\.length\}[\s\S]*session-sidebar-environment-selector/);
+  assert.match(source, /\{#if hubMode && environmentOptions\.length && selectedEnvironment\}[\s\S]*session-sidebar-environment-selector/);
   assert.match(source, /\{#if !hubMode && !searching\}[\s\S]*id="newSessionHere"[\s\S]*id="newSessionFolder"/);
   assert.match(source, /workspaceService\.listEnvironments\(\)/);
   assert.match(source, /workspaceService\.listWorkspaces\(\)/);
@@ -207,12 +219,12 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /options\.find\(\(environment\) => isLocalEnvironment/);
   assert.match(source, /options\.find\(\(environment\) => environment\.local\)/);
   assert.match(source, /availableWorkspaceIds/);
-  assert.match(source, /visibleSessionEnvironments = availableWorkspaceIds/);
+  assert.match(source, /visibleSessionEnvironments = \$derived\(availableWorkspaceIds/);
   assert.match(source, /availableEnvironmentView\(sessionEnvironments, selectedEnvironmentId, availableWorkspaces\)/);
   assert.match(source, /session-sidebar-workspace-empty/);
-  assert.match(source, /visibleSearchEnvironments = searchEnvironmentView\(searchEnvironments, availableWorkspaces\)/);
+  assert.match(source, /visibleSearchEnvironments = \$derived\(searchEnvironmentView\(searchEnvironments, availableWorkspaces\)\)/);
   assert.match(source, /session-sidebar-search-environment-heading/);
-  assert.match(source, /selectedEnvironmentId = hit\.environmentId \|\| group\.first\?\.environmentId/);
+  assert.match(source, /requestedEnvironmentId = hit\.environmentId \|\| group\.first\?\.environmentId/);
   assert.match(source, /setActiveWorkspace\(hit\.workspaceId \|\| group\.first\?\.workspaceId\)/);
   assert.match(source, /session-sidebar-workspace-container/);
   assert.match(source, /session-sidebar-cwd-label/);
@@ -225,7 +237,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /status-\$\{status\}/);
   assert.match(source, /disabled=\{!online\}/);
   assert.match(source, /session-sidebar-workspace-cloud-actions/);
-  assert.match(source, /\["cloud", "llmbox"\]\.includes\(workspace\.provider\?\.type\)/);
+  assert.match(source, /MANAGED_WORKSPACE_TYPES\.has\(workspace\.provider\?\.type\)/);
   assert.match(source, /manageWorkspace\(workspace, status === "paused" \? "resume" : "pause"\)/);
   assert.match(source, /manageWorkspace\(workspace, "destroy"\)/);
   assert.match(source, /workspaceService\.manageWorkspace\(workspace\.workspaceId, action\)/);
@@ -233,8 +245,8 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /session-sidebar-workspace-create/);
   assert.match(source, /class:current-workspace=\{isCurrentWorkspace\(environment, workspace\)\}/);
   assert.match(source, /class:current-cwd=\{isCurrentCwd\(group\)\}/);
-  assert.match(source, /sessionEnvironments = hubMode \? groupSessionCwdsByHierarchy/);
-  assert.match(source, /environmentOptions = !hubMode[\s\S]*? \? \[\]/);
+  assert.match(source, /sessionEnvironments = \$derived\(hubMode \? groupSessionCwdsByHierarchy/);
+  assert.match(source, /environmentOptions = \$derived\(!hubMode[\s\S]*? \? \[\]/);
   assert.match(source, /\{:else if !hubMode && sessionGroups\.length\}/);
   assert.match(source, /\{@render SearchGroups\(\{ groups: \$sessionPicker\.searchResults, listKey: "local" \}\)\}/);
   assert.match(source, /createSessionInFolder\(\{ id: workspace\.workspaceId, name: workspace\.workspaceName \}\)/);

@@ -4,7 +4,7 @@
   import { appSession } from "../stores/appSession.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
+  import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
   import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
@@ -39,17 +39,47 @@
     workspaceId: runtimeConfig.workspace?.id || "local",
     workspaceName: runtimeConfig.workspace?.name || "Workspace",
   };
+  const SEARCH_QUERY_MIN_LENGTH = 3;
+  const SEARCH_DEBOUNCE_MS = 250;
+  const ENVIRONMENT_REFRESH_MS = 5_000;
+  const CLOCK_REFRESH_MS = 60_000;
+  const SESSION_PAGE_SIZE = 40;
+  const SEARCH_GROUP_PAGE_SIZE = 20;
+  const SEARCH_HIT_PAGE_SIZE = 10;
+  const LOOP_COMPLETION_STATUSES = new Set(["succeeded", "failed"]);
+  const MANAGED_WORKSPACE_TYPES = new Set(["cloud", "llmbox"]);
+  const KNOWN_WORKSPACE_STATUSES = new Set([
+    "online", "provisioning", "provisioned", "awaiting_agent", "initializing", "resuming",
+    "paused", "pausing", "destroying", "offline", "failed",
+  ]);
+  const STATUS_LABELS = {
+    online: "Online",
+    provisioning: "Provisioning",
+    provisioned: "Setup needed",
+    awaiting_agent: "Awaiting agent",
+    initializing: "Initializing",
+    resuming: "Resuming",
+    paused: "Paused",
+    pausing: "Pausing",
+    destroying: "Destroying",
+    offline: "Offline",
+    failed: "Failed",
+    unknown: "Unknown",
+  };
+
+  let requestedEnvironmentId = $state(null);
+
   const switchRunner = (id) => {
     const runner = $appSession.runners.find((candidate) => candidate.id === id);
     if (hubMode) {
-      if (runner?.environmentId) selectedEnvironmentId = runner.environmentId;
+      if (runner?.environmentId) requestedEnvironmentId = runner.environmentId;
       setActiveWorkspace(runner?.workspaceId);
     }
     return uiActions.invoke(SESSION_SWITCH_RUNNER_ACTION, id);
   };
   const openSavedSession = (session) => {
     if (hubMode) {
-      if (session?.environmentId) selectedEnvironmentId = session.environmentId;
+      if (session?.environmentId) requestedEnvironmentId = session.environmentId;
       setActiveWorkspace(session?.workspaceId);
     }
     return uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, sessionIdentity(session));
@@ -59,7 +89,7 @@
   const createSessionInFolder = (workspace = null) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, workspace);
   const openSearchHit = (group, hit) => {
     if (hubMode) {
-      selectedEnvironmentId = hit.environmentId || group.first?.environmentId || selectedEnvironmentId;
+      requestedEnvironmentId = hit.environmentId || group.first?.environmentId || selectedEnvironmentId;
       setActiveWorkspace(hit.workspaceId || group.first?.workspaceId);
     }
     return uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, group.sessionKey, hit);
@@ -69,24 +99,32 @@
   const deleteSession = (runner) => uiActions.invoke(SESSION_PICKER_DELETE_ACTION, savedSession(runner) ?? runner);
 
   let searchTimer = null;
+  function runSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+    if ($sessionPicker.query.trim().length < SEARCH_QUERY_MIN_LENGTH) return;
+    uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
+    uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
+  }
   function updateQuery(value) {
+    const query = String(value ?? "");
+    const queryIsLongEnough = query.trim().length >= SEARCH_QUERY_MIN_LENGTH;
     updateSessionPicker({
-      query: value,
-      ...(value.trim().length < 3 ? { searchStatus: "", searchResults: [], searching: false } : {}),
+      query,
+      ...(!queryIsLongEnough ? { searchStatus: "", searchResults: [], searching: false } : {}),
     });
     clearTimeout(searchTimer);
-    if (value.trim().length < 3) return;
-    searchTimer = setTimeout(() => {
-      uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
-      uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
-    }, 250);
+    searchTimer = null;
+    if (!queryIsLongEnough) return;
+    searchTimer = setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
   }
-  let availableEnvironments = [];
-  let availableWorkspaces = [];
-  let availableWorkspacesLoaded = !hubMode;
+
+  let availableEnvironments = $state([]);
+  let availableWorkspaces = $state([]);
+  let availableWorkspacesLoaded = $state(!hubMode);
   const catalogRequests = createAsyncRequestGuard();
-  let environmentInfoOpen = false;
-  let environmentInfoEnvironmentId = null;
+  let environmentInfoOpen = $state(false);
+  let environmentInfoEnvironmentId = $state(null);
   async function refreshEnvironmentCatalog(preferredId = null) {
     if (!hubMode) return;
     const request = catalogRequests.begin();
@@ -99,7 +137,7 @@
       availableEnvironments = environments;
       availableWorkspaces = workspaces;
       availableWorkspacesLoaded = true;
-      if (preferredId) selectedEnvironmentId = preferredId;
+      if (preferredId) requestedEnvironmentId = preferredId;
     } catch {
       if (!request.isCurrent()) return;
       // Keep session-derived environment options when discovery is temporarily unavailable.
@@ -132,12 +170,12 @@
     });
   }
   function chooseEnvironment(event) {
-    selectedEnvironmentId = event.currentTarget.value;
+    requestedEnvironmentId = event.currentTarget.value;
     closeEnvironmentInfo();
   }
   function toggleEnvironmentInfo() {
     if (!selectedEnvironment) return;
-    if (environmentInfoOpen) closeEnvironmentInfo();
+    if (environmentInfoVisible) closeEnvironmentInfo();
     else {
       environmentInfoEnvironmentId = selectedEnvironment.environmentId;
       environmentInfoOpen = true;
@@ -146,11 +184,12 @@
   function handleEnvironmentInfoKeydown(event) {
     if (event.key === "Escape") closeEnvironmentInfo();
   }
-  let workspaceActions = new Set();
+  let workspaceActions = $state(new Set());
   function managedWorkspace(workspace) {
-    return ["cloud", "llmbox"].includes(workspace.provider?.type);
+    return MANAGED_WORKSPACE_TYPES.has(workspace.provider?.type);
   }
   async function manageWorkspace(workspace, action) {
+    if (!workspace?.workspaceId || workspaceActions.has(workspace.workspaceId)) return;
     const verb = action === "destroy" ? "Destroy" : action === "resume" ? "Resume" : "Pause";
     const llmbox = workspace.provider?.type === "llmbox";
     const warning = action === "destroy"
@@ -163,85 +202,99 @@
     try {
       await workspaceService.manageWorkspace(workspace.workspaceId, action);
       if (action === "destroy" && currentRunner?.workspaceId === workspace.workspaceId) {
-        const replacement = availableWorkspaces.find((candidate) => candidate.id !== workspace.workspaceId && effectiveWorkspaceStatus(candidate) === "online");
+        const replacement = availableWorkspaces.find((candidate) => (
+          candidate.id !== workspace.workspaceId
+          && candidate.environmentId === selectedEnvironmentId
+          && effectiveWorkspaceStatus(candidate) === "online"
+        ));
         if (replacement) setActiveWorkspace(replacement.id);
       }
       await refreshEnvironmentCatalog();
-      refreshSessions();
+      if (!destroyed) refreshSessions();
     } catch (cause) {
-      alert(`${verb} failed: ${cause.message}`);
+      if (!destroyed) alert(`${verb} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
     } finally {
-      const next = new Set(workspaceActions);
-      next.delete(workspace.workspaceId);
-      workspaceActions = next;
+      if (!destroyed) {
+        const next = new Set(workspaceActions);
+        next.delete(workspace.workspaceId);
+        workspaceActions = next;
+      }
     }
   }
+  let destroyed = false;
   let environmentRefreshTimer = null;
+  let clockTimer = null;
+  let unsubscribeWorkspaceChanges = null;
+  let unsubscribeRunnerChanges = null;
+  let clock = $state(Date.now());
+  let workspaceRevision = 0;
+  let runnerSignature = "";
+  let runnerSignatureInitialized = false;
+
   onMount(() => {
     refreshEnvironmentCatalog();
-    environmentRefreshTimer = setInterval(refreshEnvironmentCatalog, 5_000);
+    environmentRefreshTimer = setInterval(refreshEnvironmentCatalog, ENVIRONMENT_REFRESH_MS);
+    clockTimer = setInterval(() => { clock = Date.now(); }, CLOCK_REFRESH_MS);
+    unsubscribeWorkspaceChanges = workspaceChanges.subscribe((change) => {
+      if (change.revision <= workspaceRevision) return;
+      workspaceRevision = change.revision;
+      refreshEnvironmentCatalog(change.workspace?.environmentId);
+    });
+    unsubscribeRunnerChanges = appSession.subscribe(({ runners }) => refreshForRunnerChanges(runners));
     if (hubMode && cloudBrowser.hasConnectionReturn()) openWorkspaceProvisioning();
   });
-  let workspaceRevision = 0;
-  $: if ($workspaceChanges.revision > workspaceRevision) {
-    workspaceRevision = $workspaceChanges.revision;
-    refreshEnvironmentCatalog($workspaceChanges.workspace?.environmentId);
-  }
 
-  let clock = Date.now();
-  const clockTimer = setInterval(() => { clock = Date.now(); }, 60_000);
   onDestroy(() => {
+    destroyed = true;
     catalogRequests.invalidate();
     clearTimeout(searchTimer);
     clearInterval(environmentRefreshTimer);
     clearInterval(clockTimer);
+    unsubscribeWorkspaceChanges?.();
+    unsubscribeRunnerChanges?.();
   });
 
-  let selectedEnvironmentId = null;
-  $: searching = $sessionPicker.query.trim().length >= 3;
-  $: searchEnvironments = hubMode ? groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults) : [];
-  $: sidebarRunners = $appSession.runners.filter((runner) => runner.sessionId);
-  $: currentRunner = $appSession.runners.find((runner) => runner.id === $appSession.currentRunner);
-  $: currentCwd = currentRunner?.dir ?? null;
-  $: sessionGroups = partitionSessionGroupsByArchive(
+  const searching = $derived($sessionPicker.query.trim().length >= SEARCH_QUERY_MIN_LENGTH);
+  const searchEnvironments = $derived(hubMode ? groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults) : []);
+  const sidebarRunners = $derived($appSession.runners.filter((runner) => runner.sessionId));
+  const currentRunner = $derived($appSession.runners.find((runner) => runner.id === $appSession.currentRunner));
+  const currentCwd = $derived(currentRunner?.dir ?? null);
+  const sessionGroups = $derived(partitionSessionGroupsByArchive(
     groupSessionsByCwd($sessionPicker.allSessions, sidebarRunners),
-  ).map((group) => ({ ...group, families: prepareSessionEntryFamilies(group.entries) }));
-  $: spokeRecentGroups = hubMode ? [] : sessionGroups.filter((group) => !group.archived);
-  $: spokeArchivedGroups = hubMode ? [] : sessionGroups.filter((group) => group.archived);
-  $: spokeArchivedCount = spokeArchivedGroups.reduce((count, group) => count + group.entries.length, 0);
-  $: sessionEnvironments = hubMode ? groupSessionCwdsByHierarchy(sessionGroups, hierarchyDefaults) : [];
-  $: discoveredEnvironmentOptions = environmentOptionsFromCatalog(availableEnvironments);
-  $: environmentOptions = !hubMode
+  ).map((group) => ({ ...group, families: prepareSessionEntryFamilies(group.entries) })));
+  const spokeRecentGroups = $derived(hubMode ? [] : sessionGroups.filter((group) => !group.archived));
+  const spokeArchivedGroups = $derived(hubMode ? [] : sessionGroups.filter((group) => group.archived));
+  const spokeArchivedCount = $derived(spokeArchivedGroups.reduce((count, group) => count + group.entries.length, 0));
+  const sessionEnvironments = $derived(hubMode ? groupSessionCwdsByHierarchy(sessionGroups, hierarchyDefaults) : []);
+  const discoveredEnvironmentOptions = $derived(environmentOptionsFromCatalog(availableEnvironments));
+  const environmentOptions = $derived(!hubMode
     ? []
     : availableWorkspacesLoaded
       ? discoveredEnvironmentOptions
-      : mergeEnvironmentOptions(sessionEnvironments, searchEnvironments);
-  $: if (environmentOptions.length && !environmentOptions.some((environment) => environment.environmentId === selectedEnvironmentId)) {
-    selectedEnvironmentId = preferredEnvironmentId(environmentOptions);
-  }
-  $: selectedEnvironment = environmentOptions.find((environment) => environment.environmentId === selectedEnvironmentId) ?? null;
-  $: if (environmentInfoOpen && (!selectedEnvironment || selectedEnvironment.environmentId !== environmentInfoEnvironmentId)) closeEnvironmentInfo();
-  $: selectedEnvironmentInfo = selectedEnvironment ? environmentInfo(selectedEnvironment) : [];
-  $: availableWorkspaceIds = hubMode && availableWorkspacesLoaded
+      : mergeEnvironmentOptions(sessionEnvironments, searchEnvironments));
+  const selectedEnvironmentId = $derived(
+    environmentOptions.some((environment) => environment.environmentId === requestedEnvironmentId)
+      ? requestedEnvironmentId
+      : preferredEnvironmentId(environmentOptions),
+  );
+  const selectedEnvironment = $derived(environmentOptions.find((environment) => environment.environmentId === selectedEnvironmentId) ?? null);
+  const environmentInfoVisible = $derived(Boolean(
+    environmentInfoOpen
+    && selectedEnvironment
+    && selectedEnvironment.environmentId === environmentInfoEnvironmentId,
+  ));
+  const selectedEnvironmentInfo = $derived(selectedEnvironment ? environmentInfo(selectedEnvironment) : []);
+  const availableWorkspaceIds = $derived(hubMode && availableWorkspacesLoaded
     ? new Set(availableWorkspaces
       .filter((workspace) => workspace.environmentId === selectedEnvironmentId)
       .map((workspace) => workspace.id))
-    : null;
-  $: visibleSessionEnvironments = availableWorkspaceIds
+    : null);
+  const visibleSessionEnvironments = $derived(availableWorkspaceIds
     ? availableEnvironmentView(sessionEnvironments, selectedEnvironmentId, availableWorkspaces)
-    : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null);
-  $: visibleSearchEnvironments = searchEnvironmentView(searchEnvironments, availableWorkspaces);
-  let expandedCwds = new Set();
-  let initializedCwdExpansion = false;
-  $: if (!initializedCwdExpansion && currentCwd) {
-    initializedCwdExpansion = true;
-    expandedCwds = new Set([cwdExpansionKey({
-      cwd: currentCwd,
-      environmentId: currentRunner?.environmentId,
-      workspaceId: currentRunner?.workspaceId,
-      archived: false,
-    })]);
-  }
+    : filterEnvironmentWorkspaces(sessionEnvironments, selectedEnvironmentId, null));
+  const visibleSearchEnvironments = $derived(searchEnvironmentView(searchEnvironments, availableWorkspaces));
+
+  let cwdExpansionChoices = $state(new Map());
   function environmentOptionsFromCatalog(environments) {
     return environments.map((environment) => ({
       ...environment,
@@ -290,7 +343,7 @@
       environmentId,
       environmentName: available[0].environmentName || environmentId,
       workspaces: available.map((workspace) => ({
-        ...(existing?.workspaces.find((candidate) => candidate.workspaceId === workspace.id) ?? {
+        ...(existing?.workspaces?.find((candidate) => candidate.workspaceId === workspace.id) ?? {
           workspaceId: workspace.id,
           workspaceName: workspace.name || workspace.id,
           recentGroups: [],
@@ -348,23 +401,10 @@
   }
   function workspaceStatus(workspace) {
     const status = effectiveWorkspaceStatus(workspace);
-    return ["online", "provisioning", "provisioned", "awaiting_agent", "initializing", "resuming", "paused", "pausing", "destroying", "offline", "failed"].includes(status) ? status : "unknown";
+    return KNOWN_WORKSPACE_STATUSES.has(status) ? status : "unknown";
   }
   function statusLabel(status) {
-    return ({
-      online: "Online",
-      provisioning: "Provisioning",
-      provisioned: "Setup needed",
-      awaiting_agent: "Awaiting agent",
-      initializing: "Initializing",
-      resuming: "Resuming",
-      paused: "Paused",
-      pausing: "Pausing",
-      destroying: "Destroying",
-      offline: "Offline",
-      failed: "Failed",
-      unknown: "Unknown",
-    })[status] || "Unknown";
+    return STATUS_LABELS[status] ?? STATUS_LABELS.unknown;
   }
   function environmentStatusLabel(status) {
     return status === "online" ? "" : ` · ${statusLabel(status)}`;
@@ -386,15 +426,16 @@
       ? `${prefix}${group.environmentId ?? hierarchyDefaults.environmentId}:${group.workspaceId ?? hierarchyDefaults.workspaceId}:${group.cwd}`
       : `${prefix}${group.cwd}`;
   }
-  function setCwdExpanded(key, open) {
-    const next = new Set(expandedCwds);
-    if (open) next.add(key);
-    else next.delete(key);
-    expandedCwds = next;
+  function cwdIsExpanded(group) {
+    const key = cwdExpansionKey(group);
+    return cwdExpansionChoices.has(key) ? cwdExpansionChoices.get(key) : isCurrentCwd(group);
   }
-  let expandedSessionFamilies = new Set();
-  let collectionLimits = new Map();
-  function collectionPage(items, limits, key, pageSize = 40) {
+  function setCwdExpanded(key, open) {
+    cwdExpansionChoices = new Map(cwdExpansionChoices).set(key, open);
+  }
+  let expandedSessionFamilies = $state(new Set());
+  let collectionLimits = $state(new Map());
+  function collectionPage(items, limits, key, pageSize = SESSION_PAGE_SIZE) {
     return incrementalCollectionPage(items, limits.get(key), pageSize);
   }
   function revealCollectionPage(key, page) {
@@ -420,46 +461,61 @@
   }
   function loopEntryStatus(entry) {
     if (entry.runner?.alive) return "running";
-    if (["succeeded", "failed"].includes(entry.runner?.subagentStatus)) return entry.runner.subagentStatus;
+    if (LOOP_COMPLETION_STATUSES.has(entry.runner?.subagentStatus)) return entry.runner.subagentStatus;
     return "succeeded";
   }
   function loopStatusLabel(status) {
     return status === "running" ? "Running" : status === "failed" ? "Failed" : "Succeeded";
   }
   function loopFamilySummary(family) {
-    const statuses = family.children.map(loopEntryStatus);
-    const running = statuses.filter((status) => status === "running").length;
-    const failed = statuses.filter((status) => status === "failed").length;
-    const complete = statuses.length - running;
-    if (running || family.entry.runner?.busy) return { status: "running", label: `${complete}/${statuses.length}` };
+    let running = 0;
+    let failed = 0;
+    for (const entry of family.children) {
+      const status = loopEntryStatus(entry);
+      if (status === "running") running += 1;
+      else if (status === "failed") failed += 1;
+    }
+    const total = family.children.length;
+    const complete = total - running;
+    if (running || family.entry.runner?.busy) return { status: "running", label: `${complete}/${total}` };
     if (failed) return { status: "failed", label: `${failed} failed` };
-    return { status: "succeeded", label: `${complete}/${statuses.length}` };
+    return { status: "succeeded", label: `${complete}/${total}` };
   }
   function familyIsCurrent(family) {
     return family.children.some((entry) => entry.runner?.id === $appSession.currentRunner || (!entry.runner && entry.session?.id === $sessionPicker.currentId));
   }
 
-  let runnerSignature = "";
-  $: {
-    const nextSignature = sidebarRunners.map((runner) => [
+  function refreshForRunnerChanges(runners) {
+    const nextSignature = runners.filter((runner) => runner.sessionId).map((runner) => [
       runner.id,
       runner.sessionKey ?? runner.sessionId,
       runner.sessionName ?? "",
       runner.alive ? (runner.busy ? "busy" : "idle") : "stopped",
     ].join(":")).join("|");
-    if (nextSignature && nextSignature !== runnerSignature) {
-      runnerSignature = nextSignature;
-      queueMicrotask(refreshSessions);
-    }
+    const shouldRefresh = nextSignature !== runnerSignature && (runnerSignatureInitialized || Boolean(nextSignature));
+    runnerSignature = nextSignature;
+    runnerSignatureInitialized = true;
+    if (shouldRefresh) queueMicrotask(() => {
+      if (!destroyed) refreshSessions();
+    });
   }
 
-  function savedSession(runner) {
-    const identity = runnerSessionIdentity(runner);
-    return [
+  const savedSessionsByIdentity = $derived.by(() => {
+    const sessions = [
       ...$sessionPicker.allSessions,
       ...$sessionPicker.sessions,
       ...Object.values($sessionPicker.otherFolderSessions).flat(),
-    ].find((session) => sameSession(session, identity));
+    ];
+    const byIdentity = new Map();
+    for (const session of sessions) {
+      const identity = sessionIdentity(session);
+      if (identity && !byIdentity.has(identity)) byIdentity.set(identity, session);
+    }
+    return byIdentity;
+  });
+
+  function savedSession(runner) {
+    return savedSessionsByIdentity.get(runnerSessionIdentity(runner));
   }
 
   function label(session, runner) {
@@ -490,6 +546,7 @@
 {#snippet SessionEntry({ entry, archived = false, cwd = "", familyKey = null, timelineStatus = null })}
   {@const session = entry.session}
   {@const runner = entry.runner}
+  {@const meta = sessionMeta(session, runner)}
   {@const current = runner?.id === $appSession.currentRunner || (!runner && session?.id === $sessionPicker.currentId)}
   <div class="session-sidebar-entry" class:current class:session-family-parent={Boolean(familyKey)} class:session-timeline-entry={Boolean(timelineStatus)} class:status-running={timelineStatus === "running"} class:status-succeeded={timelineStatus === "succeeded"} class:status-failed={timelineStatus === "failed"}>
     <button
@@ -502,12 +559,12 @@
       {#if timelineStatus}
         <span class="session-timeline-marker" aria-label={loopStatusLabel(timelineStatus)}></span>
       {:else}
-        <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy}></span>
+        <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy} aria-hidden="true"></span>
       {/if}
       <span class="session-sidebar-copy">
         <span class="session-sidebar-name">{label(session, runner)}</span>
-        {#if sessionMeta(session, runner)}
-          <span class="session-sidebar-meta">{sessionMeta(session, runner)}</span>
+        {#if meta}
+          <span class="session-sidebar-meta">{meta}</span>
         {/if}
       </span>
     </button>
@@ -576,7 +633,7 @@
             {@render SessionEntry({ entry, archived, cwd, timelineStatus: loopEntryStatus(entry) })}
           {/each}
           {#if childPage.remainingCount}
-            <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(40, childPage.remainingCount)} more iterations</button>
+            <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(SESSION_PAGE_SIZE, childPage.remainingCount)} more iterations</button>
           {/if}
         </div>
       {:else if family.children.length && !loopFamily}
@@ -587,14 +644,14 @@
               {@render SessionEntry({ entry, archived, cwd })}
             {/each}
             {#if childPage.remainingCount}
-              <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(40, childPage.remainingCount)} more child sessions</button>
+              <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(SESSION_PAGE_SIZE, childPage.remainingCount)} more child sessions</button>
             {/if}
           </div>
         </details>
       {/if}
     {/each}
     {#if familyPage.remainingCount}
-      <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(40, familyPage.remainingCount)} more sessions</button>
+      <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(SESSION_PAGE_SIZE, familyPage.remainingCount)} more sessions</button>
     {/if}
   </div>
 {/snippet}
@@ -603,7 +660,7 @@
   <details
     class="session-sidebar-cwd"
     class:current-cwd={isCurrentCwd(group)}
-    open={expandedCwds.has(cwdExpansionKey(group))}
+    open={cwdIsExpanded(group)}
     ontoggle={(event) => setCwdExpanded(cwdExpansionKey(group), event.currentTarget.open)}
   >
     <summary title={group.cwd}>
@@ -616,9 +673,9 @@
 {/snippet}
 
 {#snippet SearchGroups({ groups, listKey })}
-  {@const groupPage = collectionPage(groups, collectionLimits, `search:${listKey}`, 20)}
+  {@const groupPage = collectionPage(groups, collectionLimits, `search:${listKey}`, SEARCH_GROUP_PAGE_SIZE)}
   {#each groupPage.items as group (group.sessionKey)}
-    {@const hitPage = collectionPage(group.hits, collectionLimits, `search-hits:${group.sessionKey}`, 10)}
+    {@const hitPage = collectionPage(group.hits, collectionLimits, `search-hits:${group.sessionKey}`, SEARCH_HIT_PAGE_SIZE)}
     <section class="session-sidebar-hit-group" title={group.sessionKey}>
       <div class="session-sidebar-hit-heading">
         <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
@@ -647,13 +704,13 @@
           </button>
         {/each}
         {#if hitPage.remainingCount}
-          <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search-hits:${group.sessionKey}`, hitPage)}>Show {Math.min(10, hitPage.remainingCount)} more matches</button>
+          <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search-hits:${group.sessionKey}`, hitPage)}>Show {Math.min(SEARCH_HIT_PAGE_SIZE, hitPage.remainingCount)} more matches</button>
         {/if}
       </div>
     </section>
   {/each}
   {#if groupPage.remainingCount}
-    <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search:${listKey}`, groupPage)}>Show {Math.min(20, groupPage.remainingCount)} more matching sessions</button>
+    <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search:${listKey}`, groupPage)}>Show {Math.min(SEARCH_GROUP_PAGE_SIZE, groupPage.remainingCount)} more matching sessions</button>
   {/if}
 {/snippet}
 
@@ -684,7 +741,7 @@
           class:resume={status === "paused"}
           title={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
           aria-label={status === "paused" ? `Resume ${workspace.workspaceName}` : `Pause ${workspace.workspaceName}`}
-          disabled={managing || ["provisioning", "awaiting_agent", "initializing", "resuming", "pausing", "destroying"].includes(status)}
+          disabled={managing || !["online", "paused"].includes(status)}
           onclick={() => manageWorkspace(workspace, status === "paused" ? "resume" : "pause")}
         >{status === "paused" ? "▶" : "Ⅱ"}</button>
         <button
@@ -712,10 +769,7 @@
   <div class="side-head">Sessions</div>
   <form role="search" onsubmit={(event) => {
     event.preventDefault();
-    if ($sessionPicker.query.trim().length < 3) return;
-    clearTimeout(searchTimer);
-    uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, "all");
-    uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
+    runSearch();
   }}>
     <input
       class="session-sidebar-search"
@@ -723,6 +777,7 @@
       aria-label="Search sessions"
       placeholder="search sessions…"
       value={$sessionPicker.query}
+      aria-busy={$sessionPicker.searching}
       oninput={(event) => updateQuery(event.currentTarget.value)}
     />
   </form>
@@ -751,7 +806,7 @@
       ><span class="session-sidebar-create-chevron" aria-hidden="true"></span></button>
     </div>
   {/if}
-  {#if hubMode && environmentOptions.length}
+  {#if hubMode && environmentOptions.length && selectedEnvironment}
     <div class="session-sidebar-environment-picker">
       <div class="session-sidebar-environment-selector">
         <label class="session-sidebar-environment-control">
@@ -772,10 +827,11 @@
         <button
           type="button"
           class="session-sidebar-environment-info"
-          class:active={environmentInfoOpen}
+          class:active={environmentInfoVisible}
           title={`Environment information for ${selectedEnvironment.environmentName}`}
-          aria-label={`${environmentInfoOpen ? "Hide" : "Show"} environment information for ${selectedEnvironment.environmentName}`}
-          aria-expanded={environmentInfoOpen}
+          aria-label={`${environmentInfoVisible ? "Hide" : "Show"} environment information for ${selectedEnvironment.environmentName}`}
+          aria-expanded={environmentInfoVisible}
+          aria-controls="sessionSidebarEnvironmentInfo"
           onclick={toggleEnvironmentInfo}
           onkeydown={handleEnvironmentInfoKeydown}
         >i</button>
@@ -787,9 +843,9 @@
           onclick={openWorkspaceProvisioning}
         >+</button>
       </div>
-      {#if environmentInfoOpen && selectedEnvironment}
+      {#if environmentInfoVisible && selectedEnvironment}
         <button class="session-sidebar-instance-tooltip-dismiss" type="button" tabindex="-1" aria-label="Dismiss environment information backdrop" onclick={dismissEnvironmentInfo}></button>
-        <section class="session-sidebar-instance-tooltip" aria-label={`Environment information for ${selectedEnvironment.environmentName}`}>
+        <section id="sessionSidebarEnvironmentInfo" class="session-sidebar-instance-tooltip" aria-label={`Environment information for ${selectedEnvironment.environmentName}`}>
           <header>
             <span>
               <small>Environment · {selectedEnvironment.kind}</small>

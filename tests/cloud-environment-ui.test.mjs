@@ -23,9 +23,9 @@ test("Hub environment selector creates workspaces in the selected connection env
 test("environment information describes connection boundaries rather than VM instances", () => {
   const sidebar = component("SessionSidebar.svelte");
   assert.match(sidebar, /\.\.\.environment,[\s\S]*environmentId: environment\.id/);
-  assert.match(sidebar, /function chooseEnvironment\(event\)[\s\S]*selectedEnvironmentId = event\.currentTarget\.value;[\s\S]*closeEnvironmentInfo\(\)/);
+  assert.match(sidebar, /function chooseEnvironment\(event\)[\s\S]*requestedEnvironmentId = event\.currentTarget\.value;[\s\S]*closeEnvironmentInfo\(\)/);
   assert.match(sidebar, /function toggleEnvironmentInfo\(\)[\s\S]*environmentInfoOpen = true/);
-  assert.match(sidebar, /selectedEnvironment\.environmentId !== environmentInfoEnvironmentId/);
+  assert.match(sidebar, /selectedEnvironment\.environmentId === environmentInfoEnvironmentId/);
   assert.match(sidebar, /function environmentInfo\(environment\)/);
   for (const label of ["Environment ID", "Type", "Status", "Provider", "Connection", "Spoke", "Default", "Workspaces"]) {
     assert.match(sidebar, new RegExp(`\\["${label}"`));
