@@ -1,3 +1,5 @@
+import { createFrameScheduler } from "../lib/frameScheduler.js";
+
 /** Classify a gesture once it has moved beyond the tap dead zone. */
 export function swipeAxis(dx, dy) {
   if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return null;
@@ -159,13 +161,16 @@ export function createCarouselEventRegistration({
   onTouchEnd,
   onTouchCancel,
   onResize,
+  requestFrame,
+  cancelFrame,
 }) {
+  const resizeFrame = createFrameScheduler(onResize, requestFrame, cancelFrame);
   const listeners = [
     [documentTarget, "touchstart", onTouchStart, { passive: true, capture: true }],
     [documentTarget, "touchmove", onTouchMove, { passive: false, capture: true }],
     [documentTarget, "touchend", onTouchEnd, { passive: true, capture: true }],
     [documentTarget, "touchcancel", onTouchCancel, { passive: true, capture: true }],
-    [windowTarget, "resize", onResize],
+    [windowTarget, "resize", resizeFrame.schedule],
   ];
   let attached = false;
 
@@ -179,6 +184,7 @@ export function createCarouselEventRegistration({
   function detach() {
     if (!attached) return;
     for (const [target, type, listener, options] of listeners) target.removeEventListener(type, listener, options);
+    resizeFrame.cancel();
     attached = false;
   }
 

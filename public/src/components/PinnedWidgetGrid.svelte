@@ -1,6 +1,7 @@
 <script>
   import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
+  import { createFrameScheduler } from "../lib/frameScheduler.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import {
     pinnedWidgetActiveGroup,
@@ -32,6 +33,7 @@
   let touchDestination = null;
   let touchPreview = null;
   let suppressClickUntil = 0;
+  const touchMoveFrame = createFrameScheduler(updateTouchPointer);
   $: activeGroup = $pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null;
   $: widgetView = buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, sectionDefinitions);
   $: activeGroupWidgets = activeGroup ? widgetView.groupWidgets.get(activeGroup.id) ?? [] : [];
@@ -59,6 +61,7 @@
   }
 
   function clearTouchDrag() {
+    touchMoveFrame.cancel();
     if (touchDrag?.timer) clearTimeout(touchDrag.timer);
     touchDrag = null;
     touchDraggingId = null;
@@ -80,10 +83,9 @@
     touchDrag = drag;
   }
 
-  function touchPointerMove(event) {
-    if (!touchDrag || touchDrag.pointerId !== event.pointerId || !touchDrag.active) return;
-    event.preventDefault();
-    const target = event.currentTarget.ownerDocument.elementFromPoint(event.clientX, event.clientY);
+  function updateTouchPointer(pointerId, documentTarget, x, y) {
+    if (!touchDrag || touchDrag.pointerId !== pointerId || !touchDrag.active) return;
+    const target = documentTarget.elementFromPoint(x, y);
     const groupCell = target?.closest(".pinned-widget-group-cell");
     const section = target?.closest(".pinned-widget-section");
     touchDestination = groupCell
@@ -91,7 +93,13 @@
       : section
         ? { scope: section.dataset.scope, groupId: null }
         : null;
-    touchPreview = { x: event.clientX, y: event.clientY, label: touchDrag.item.label ?? touchDrag.item.name };
+    touchPreview = { x, y, label: touchDrag.item.label ?? touchDrag.item.name };
+  }
+
+  function touchPointerMove(event) {
+    if (!touchDrag || touchDrag.pointerId !== event.pointerId || !touchDrag.active) return;
+    event.preventDefault();
+    touchMoveFrame.schedule(event.pointerId, event.currentTarget.ownerDocument, event.clientX, event.clientY);
   }
 
   function touchPointerUp(event) {
@@ -99,6 +107,7 @@
     const drag = touchDrag;
     if (!drag.active) { clearTouchDrag(); return; }
     event.preventDefault();
+    touchMoveFrame.flush();
     suppressClickUntil = Date.now() + 500;
     const destination = touchDestination;
     clearTouchDrag();

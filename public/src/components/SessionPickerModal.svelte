@@ -157,8 +157,8 @@
   ]));
 
   let collectionLimits = new Map();
-  function collectionPage(items, key, pageSize = 40) {
-    return incrementalCollectionPage(items, collectionLimits.get(key), pageSize);
+  function collectionPage(items, limits, key, pageSize = 40) {
+    return incrementalCollectionPage(items, limits.get(key), pageSize);
   }
   function revealCollectionPage(key, page) {
     const next = new Map(collectionLimits);
@@ -214,7 +214,7 @@
     exclude tool output (search only user/ai text)
   </label>
   <div class="m-path" role="status" aria-atomic="true">{$sessionPicker.searchStatus}</div>
-  {@const searchPage = collectionPage($sessionPicker.searchResults, "search", 20)}
+  {@const searchPage = collectionPage($sessionPicker.searchResults, collectionLimits, "search", 20)}
   {#each searchPage.items as group (group.sessionKey)}
     <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
       <div class="s-title">
@@ -301,11 +301,11 @@
 {/snippet}
 
 {#snippet SessionRows({ families, listKey })}
-  {@const familyPage = collectionPage(families, `families:${listKey}`)}
+  {@const familyPage = collectionPage(families, collectionLimits, `families:${listKey}`)}
   {#each familyPage.items as family (sessionIdentity(family.session))}
     {#if family.loop}
       {@const summary = loopFamilySummary(family)}
-      {@const forkPage = collectionPage(family.forks, `forks:${sessionIdentity(family.session)}`)}
+      {@const forkPage = collectionPage(family.forks, collectionLimits, `forks:${sessionIdentity(family.session)}`)}
       <details
         class={`s-loopgroup status-${summary.status}`}
         open={childSessionsOpen(family)}
@@ -332,7 +332,7 @@
     {:else}
       {@render sessionRow(family.session)}
       {#if family.forks.length}
-        {@const forkPage = collectionPage(family.forks, `forks:${sessionIdentity(family.session)}`)}
+        {@const forkPage = collectionPage(family.forks, collectionLimits, `forks:${sessionIdentity(family.session)}`)}
         <details
           class="s-forkgroup"
           open={childSessionsOpen(family)}

@@ -394,8 +394,8 @@
   }
   let expandedSessionFamilies = new Set();
   let collectionLimits = new Map();
-  function collectionPage(items, key, pageSize = 40) {
-    return incrementalCollectionPage(items, collectionLimits.get(key), pageSize);
+  function collectionPage(items, limits, key, pageSize = 40) {
+    return incrementalCollectionPage(items, limits.get(key), pageSize);
   }
   function revealCollectionPage(key, page) {
     const next = new Map(collectionLimits);
@@ -559,7 +559,7 @@
 {/snippet}
 
 {#snippet SessionRows({ families, archived = false, cwd = "", listKey = cwd })}
-  {@const familyPage = collectionPage(families, `families:${listKey}`)}
+  {@const familyPage = collectionPage(families, collectionLimits, `families:${listKey}`)}
   <div class="session-sidebar-workspace-sessions">
     {#each familyPage.items as family (entryIdentity(family.entry))}
       {@const familyKey = entryIdentity(family.entry)}
@@ -569,7 +569,7 @@
       {:else}
         {@render SessionEntry({ entry: family.entry, archived, cwd })}
       {/if}
-      {@const childPage = collectionPage(family.children, `children:${familyKey}`)}
+      {@const childPage = collectionPage(family.children, collectionLimits, `children:${familyKey}`)}
       {#if loopFamily && (expandedSessionFamilies.has(familyKey) || familyIsCurrent(family))}
         <div class="session-sidebar-loop-timeline" aria-label={`${family.children.length} loop iteration${family.children.length === 1 ? "" : "s"}`}>
           {#each childPage.items as entry (entryIdentity(entry))}
@@ -616,9 +616,9 @@
 {/snippet}
 
 {#snippet SearchGroups({ groups, listKey })}
-  {@const groupPage = collectionPage(groups, `search:${listKey}`, 20)}
+  {@const groupPage = collectionPage(groups, collectionLimits, `search:${listKey}`, 20)}
   {#each groupPage.items as group (group.sessionKey)}
-    {@const hitPage = collectionPage(group.hits, `search-hits:${group.sessionKey}`, 10)}
+    {@const hitPage = collectionPage(group.hits, collectionLimits, `search-hits:${group.sessionKey}`, 10)}
     <section class="session-sidebar-hit-group" title={group.sessionKey}>
       <div class="session-sidebar-hit-heading">
         <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>

@@ -39,7 +39,7 @@
     aria-selected={selected}
     use:scrollIntoViewWhen={active}
     onclick={() => onChoose(index)}
-    onmousemove={() => onActivate(index)}
+    onmouseenter={() => onActivate(index)}
   >
     <span class="model-provider">{provider.before}{#if provider.match}<mark>{provider.match}</mark>{/if}{provider.after}</span>
     <span class="model-name">{model.before}{#if model.match}<mark>{model.match}</mark>{/if}{model.after}</span>
@@ -55,6 +55,6 @@
     aria-selected={active}
     use:scrollIntoViewWhen={active}
     onclick={() => onChoose(index)}
-    onmousemove={() => onActivate(index)}
+    onmouseenter={() => onActivate(index)}
   >{text}</button>
 {/if}

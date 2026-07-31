@@ -15,7 +15,7 @@
     .filter(({ text }) => !query || String(text).toLowerCase().includes(query));
 
   function setActive(index) {
-    dialogs.setOptionActive(index);
+    if (index !== $optionPicker.active) dialogs.setOptionActive(index);
   }
 
   function move(dir) {

@@ -1,5 +1,6 @@
 <script>
   import { onDestroy, onMount } from "svelte";
+  import { createFrameScheduler } from "../lib/frameScheduler.js";
 
   let { toast, onDismiss = () => {} } = $props();
 
@@ -10,6 +11,7 @@
   let opacity = $state("");
   let dismissing = $state(false);
   const timers = new Set();
+  const swipeFrame = createFrameScheduler(updateSwipe);
 
   function schedule(callback, delay) {
     const timer = setTimeout(() => {
@@ -25,6 +27,7 @@
   });
 
   onDestroy(() => {
+    swipeFrame.cancel();
     for (const timer of timers) clearTimeout(timer);
     timers.clear();
   });
@@ -35,9 +38,9 @@
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function pointermove(event) {
+  function updateSwipe(clientX) {
     if (startX === null) return;
-    dx = event.clientX - startX;
+    dx = clientX - startX;
     if (Math.abs(dx) > 5) {
       swiping = true;
       transform = `translateX(${dx}px)`;
@@ -45,8 +48,13 @@
     }
   }
 
+  function pointermove(event) {
+    if (startX !== null) swipeFrame.schedule(event.clientX);
+  }
+
   function endSwipe() {
     if (startX === null) return;
+    swipeFrame.flush();
     if (Math.abs(dx) > 60) {
       dismissing = true;
       transform = `translateX(${dx > 0 ? 300 : -300}px)`;
@@ -56,6 +64,7 @@
       opacity = "";
     }
     startX = null;
+    swipeFrame.cancel();
   }
 
   function pointerup() {

@@ -27,7 +27,8 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.ok(grid.indexOf("{#each section.groups") < grid.indexOf("{#each section.movableWidgets"));
   assert.doesNotMatch(grid, /!children\.length[^\n]*<FolderIcon/);
   assert.match(grid, /onpointerdown=\{\(event\) => touchPointerDown\(event, widget\)\}/);
-  assert.match(grid, /ownerDocument\.elementFromPoint\(event\.clientX, event\.clientY\)/);
+  assert.match(grid, /touchMoveFrame\.schedule\(event\.pointerId, event\.currentTarget\.ownerDocument, event\.clientX, event\.clientY\)/);
+  assert.match(grid, /documentTarget\.elementFromPoint\(x, y\)/);
   assert.match(grid, /touchDestination/);
   assert.match(grid, /data-scope=\{section\.scope\}/);
   assert.match(grid, /PINNED_WIDGET_MOVE_ACTION, \{ id, scope, groupId, beforeId \}/);

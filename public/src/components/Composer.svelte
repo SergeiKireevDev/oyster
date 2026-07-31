@@ -1,9 +1,11 @@
 <script>
+  import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import { appHeader } from "../stores/appSession.js";
   import { composerText, composerUi, composerVoice } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
   import { composerHighlightSegments } from "../lib/composerHighlight.js";
+  import { createFrameScheduler } from "../lib/frameScheduler.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     COMPOSER_ABORT_ACTION,
@@ -15,20 +17,23 @@
 
   const uiActions = getUiActionRegistry();
   let highlight;
-  const syncHighlightScroll = (input) => {
+  const highlightScroll = createFrameScheduler((top, left) => {
     if (!highlight) return;
-    highlight.scrollTop = input.scrollTop;
-    highlight.scrollLeft = input.scrollLeft;
-  };
+    highlight.scrollTop = top;
+    highlight.scrollLeft = left;
+  });
+  const scheduleHighlightScroll = (input) => highlightScroll.schedule(input.scrollTop, input.scrollLeft);
   const handleInput = (event) => {
     uiActions.invoke(COMPOSER_INPUT_ACTION);
-    syncHighlightScroll(event.currentTarget);
+    scheduleHighlightScroll(event.currentTarget);
   };
-  const handleScroll = (event) => syncHighlightScroll(event.currentTarget);
+  const handleScroll = (event) => scheduleHighlightScroll(event.currentTarget);
   const handleKeydown = (event) => uiActions.invoke(COMPOSER_KEYDOWN_ACTION, event);
   const send = () => uiActions.invoke(COMPOSER_SEND_ACTION);
   const abort = () => uiActions.invoke(COMPOSER_ABORT_ACTION);
   const toggleVoice = () => uiActions.invoke(COMPOSER_VOICE_ACTION);
+
+  onDestroy(highlightScroll.cancel);
 
   $: highlightSegments = composerHighlightSegments($composerText);
   $: voiceButtonLabel = $composerVoice.transcribing
