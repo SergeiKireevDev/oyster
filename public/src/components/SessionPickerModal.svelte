@@ -30,26 +30,44 @@
   const loadPickedSessionFolder = (...args) => uiActions.invoke(SESSION_PICKER_LOAD_FOLDER_ACTION, ...args);
   const openPickedSearchHit = (...args) => uiActions.invoke(SESSION_PICKER_OPEN_SEARCH_HIT_ACTION, ...args);
   const runSessionPickerSearch = () => uiActions.invoke(SESSION_PICKER_SEARCH_ACTION);
-  const setSessionPickerExcludeTools = (...args) => uiActions.invoke(SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION, ...args);
-  const setSessionPickerFolder = (...args) => uiActions.invoke(SESSION_PICKER_SET_FOLDER_ACTION, ...args);
-  const setSessionPickerScope = (...args) => uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, ...args);
+  const setSessionPickerExcludeTools = (...args) => {
+    prepareSearchOptionChange();
+    return uiActions.invoke(SESSION_PICKER_SET_EXCLUDE_TOOLS_ACTION, ...args);
+  };
+  const setSessionPickerFolder = (...args) => {
+    prepareSearchOptionChange();
+    return uiActions.invoke(SESSION_PICKER_SET_FOLDER_ACTION, ...args);
+  };
+  const setSessionPickerScope = (...args) => {
+    prepareSearchOptionChange();
+    return uiActions.invoke(SESSION_PICKER_SET_SCOPE_ACTION, ...args);
+  };
   const stopPickedSession = (...args) => uiActions.invoke(SESSION_PICKER_STOP_ACTION, ...args);
   const cancelSessionPicker = () => uiActions.invoke(SESSION_PICKER_CANCEL_ACTION);
 
-  function fmtSessionDate(ts) {
-    return formatRelativeTime(ts);
-  }
+  const SEARCH_QUERY_MIN_LENGTH = 3;
+  const SEARCH_PAGE_SIZE = 20;
+  const SESSION_PAGE_SIZE = 40;
+  const LOOP_COMPLETION_STATUSES = new Set(["succeeded", "failed"]);
 
-  $: isSearching = $sessionPicker.query.trim().length >= 3;
-  $: runnerByIdentity = new Map($sessionPicker.runners.map((runner) => [runnerSessionIdentity(runner), runner]));
+  const isSearching = $derived($sessionPicker.query.trim().length >= SEARCH_QUERY_MIN_LENGTH);
+  const runnerByIdentity = $derived(new Map(
+    $sessionPicker.runners.map((runner) => [runnerSessionIdentity(runner), runner]),
+  ));
 
   function folderOf(path) {
-    return String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
+    const normalizedPath = String(path ?? "");
+    const separatorIndex = normalizedPath.lastIndexOf("/");
+    if (separatorIndex < 0) return "";
+    return separatorIndex === 0 ? "/" : normalizedPath.slice(0, separatorIndex);
   }
 
   function labelFor(dir) {
-    const label = $sessionPicker.folders.find((folder) => folder.dir === dir)?.label ?? (dir === $sessionPicker.currentFolder ? $sessionPicker.currentWorkdir : dir) ?? "?";
-    return abbreviateHomePath(label);
+    const folderLabel = $sessionPicker.folders.find((folder) => folder.dir === dir)?.label;
+    const currentFolderLabel = dir === $sessionPicker.currentFolder
+      ? $sessionPicker.currentWorkdir
+      : dir;
+    return abbreviateHomePath(folderLabel ?? currentFolderLabel ?? "?");
   }
 
   function runnerFor(session) {
@@ -85,18 +103,23 @@
   function loopSessionStatus(session) {
     const runner = runnerFor(session);
     if (runner?.alive) return "running";
-    if (["succeeded", "failed"].includes(runner?.subagentStatus)) return runner.subagentStatus;
+    if (LOOP_COMPLETION_STATUSES.has(runner?.subagentStatus)) return runner.subagentStatus;
     return "succeeded";
   }
 
   function loopFamilySummary(family) {
-    const statuses = family.forks.map(loopSessionStatus);
-    const running = statuses.filter((status) => status === "running").length;
-    const failed = statuses.filter((status) => status === "failed").length;
-    const complete = statuses.length - running;
-    if (running) return { status: "running", label: `${complete}/${statuses.length} complete · running` };
-    if (failed) return { status: "failed", label: `${failed} failed · ${complete}/${statuses.length} complete` };
-    return { status: "succeeded", label: `${complete}/${statuses.length} complete` };
+    let running = 0;
+    let failed = 0;
+    for (const fork of family.forks) {
+      const status = loopSessionStatus(fork);
+      if (status === "running") running += 1;
+      else if (status === "failed") failed += 1;
+    }
+    const total = family.forks.length;
+    const complete = total - running;
+    if (running) return { status: "running", label: `${complete}/${total} complete · running` };
+    if (failed) return { status: "failed", label: `${failed} failed · ${complete}/${total} complete` };
+    return { status: "succeeded", label: `${complete}/${total} complete` };
   }
 
   function searchGroupMeta(group) {
@@ -107,7 +130,7 @@
 
   const sessionDotClass = (alive, busy) => `s-dot${busy ? " busy" : alive ? " on" : ""}`;
   const sessionDotTitle = (alive, busy) => busy ? "agent working" : alive ? "process running (idle)" : "no running process";
-  const sessionDateMeta = (session) => `${hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}${fmtSessionDate(session.modifiedAt)} · ${session.messageCount} msgs`;
+  const sessionDateMeta = (session) => `${hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}${formatRelativeTime(session.modifiedAt)} · ${session.messageCount} msgs`;
   const plural = (count, singular, pluralForm = `${singular}s`) => count === 1 ? singular : pluralForm;
 
   function searchResultName(group) {
@@ -118,7 +141,6 @@
     return session.name || session.preview || fallback;
   }
 
-
   function sessionRowClass(current, timelineStatus) {
     const currentClass = current ? " current" : "";
     const timelineClass = timelineStatus ? ` s-loop-iteration status-${timelineStatus}` : "";
@@ -126,38 +148,47 @@
   }
 
   function openSearchResult(event, group) {
-    const snippet = event.target.closest?.(".s-snippet");
-    const index = Number(snippet?.dataset?.hitIndex ?? 0);
-    openPickedSearchHit(group.sessionKey, group.hits[index] ?? group.hits[0]);
+    const snippet = event.target instanceof Element
+      ? event.target.closest(".s-snippet[data-hit-index]")
+      : null;
+    const index = Number(snippet?.dataset.hitIndex ?? 0);
+    const hit = group.hits[index] ?? group.hits[0];
+    if (hit) openPickedSearchHit(group.sessionKey, hit);
   }
 
-  $: currentPartition = partitionSessionFamilies($sessionPicker.sessions, isAlive);
-  $: currentFamilies = {
+  const currentPartition = $derived(partitionSessionFamilies($sessionPicker.sessions, isAlive));
+  const currentFamilies = $derived({
     active: prepareSessionFamilies(currentPartition.active),
     inactive: prepareSessionFamilies(currentPartition.inactive),
-  };
-  $: otherFolders = $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder);
-  $: activeOtherFolders = (() => {
-    const map = new Map();
+  });
+  const otherFolders = $derived(
+    $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder),
+  );
+  const activeOtherFolders = $derived.by(() => {
+    const pathsByFolder = new Map();
     for (const runner of $sessionPicker.runners) {
       if (!runner.alive || !runner.sessionFile) continue;
       const dir = folderOf(runner.sessionFile);
-      if (dir === $sessionPicker.currentFolder) continue;
-      if (!map.has(dir)) map.set(dir, new Set());
-      map.get(dir).add(runner.sessionFile);
+      if (!dir || dir === $sessionPicker.currentFolder) continue;
+      if (!pathsByFolder.has(dir)) pathsByFolder.set(dir, new Set());
+      pathsByFolder.get(dir).add(runner.sessionFile);
     }
-    return [...map].map(([dir, paths]) => ({
+    return [...pathsByFolder].map(([dir, paths]) => ({
       dir,
-      families: prepareSessionFamilies(($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path))),
+      families: prepareSessionFamilies(
+        ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path)),
+      ),
     }));
-  })();
-  $: inactiveOtherFolderFamilies = new Map(otherFolders.map((folder) => [
+  });
+  const inactiveOtherFolderFamilies = $derived(new Map(otherFolders.map((folder) => [
     folder.dir,
-    prepareSessionFamilies(($sessionPicker.otherFolderSessions[folder.dir] ?? []).filter((session) => !isAlive(session))),
-  ]));
+    prepareSessionFamilies(
+      ($sessionPicker.otherFolderSessions[folder.dir] ?? []).filter((session) => !isAlive(session)),
+    ),
+  ])));
 
-  let collectionLimits = new Map();
-  function collectionPage(items, limits, key, pageSize = 40) {
+  let collectionLimits = $state(new Map());
+  function collectionPage(items, limits, key, pageSize = SESSION_PAGE_SIZE) {
     return incrementalCollectionPage(items, limits.get(key), pageSize);
   }
   function revealCollectionPage(key, page) {
@@ -167,31 +198,62 @@
   }
 
   let debounce = null;
+
   function focusOnMount(node) {
-    queueMicrotask(() => node.focus());
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled && node.isConnected) node.focus();
+    });
+    return { destroy: () => { cancelled = true; } };
   }
+
+  function clearSearchTimer() {
+    clearTimeout(debounce);
+    debounce = null;
+  }
+
+  function resetSearchPage() {
+    if (!collectionLimits.has("search")) return;
+    const next = new Map(collectionLimits);
+    next.delete("search");
+    collectionLimits = next;
+  }
+
+  function prepareSearchOptionChange() {
+    clearSearchTimer();
+    resetSearchPage();
+  }
+
   function queryInput(value) {
+    prepareSearchOptionChange();
+    const queryIsLongEnough = value.trim().length >= SEARCH_QUERY_MIN_LENGTH;
     updateSessionPicker({
       query: value,
-      ...(value.trim().length < 3 ? { searchStatus: "", searchResults: [], searching: false } : {}),
+      ...(!queryIsLongEnough ? { searchStatus: "", searchResults: [], searching: false } : {}),
     });
-    clearTimeout(debounce);
+    if (!queryIsLongEnough) return;
     debounce = setTimeout(() => runSessionPickerSearch(), 250);
+  }
+
+  function submitSearch(event) {
+    event.preventDefault();
+    clearSearchTimer();
+    runSessionPickerSearch();
   }
 
   onDestroy(() => clearTimeout(debounce));
 </script>
 
-<form class="search-row" role="search" onsubmit={(event) => { event.preventDefault(); clearTimeout(debounce); runSessionPickerSearch(); }}>
+<form class="search-row" role="search" onsubmit={submitSearch}>
   <input
     type="search"
     aria-label="Search sessions"
     placeholder="search sessions…"
-    bind:value={$sessionPicker.query}
+    value={$sessionPicker.query}
     oninput={(event) => queryInput(event.currentTarget.value)}
     use:focusOnMount
   />
-  <select aria-label="Search scope" bind:value={$sessionPicker.scope} onchange={(event) => setSessionPickerScope(event.currentTarget.value)}>
+  <select aria-label="Search scope" value={$sessionPicker.scope} onchange={(event) => setSessionPickerScope(event.currentTarget.value)}>
     <option value="session">This session</option>
     <option value="folder">Folder…</option>
     <option value="all">All sessions</option>
@@ -200,7 +262,7 @@
 
 {#if isSearching && $sessionPicker.scope === "folder"}
   <div class="search-row">
-    <select class="modal-flex-control" aria-label="Search folder" bind:value={$sessionPicker.folderPath} onchange={(event) => setSessionPickerFolder(event.currentTarget.value)}>
+    <select class="modal-flex-control" aria-label="Search folder" value={$sessionPicker.folderPath} onchange={(event) => setSessionPickerFolder(event.currentTarget.value)}>
       {#each $sessionPicker.folders as folder (folder.dir)}
         <option value={folder.dir}>{abbreviateHomePath(folder.label)} ({folder.count})</option>
       {/each}
@@ -210,18 +272,18 @@
 
 {#if isSearching}
   <label class="search-opts">
-    <input type="checkbox" bind:checked={$sessionPicker.excludeTools} onchange={(event) => setSessionPickerExcludeTools(event.currentTarget.checked)} />
+    <input type="checkbox" checked={$sessionPicker.excludeTools} onchange={(event) => setSessionPickerExcludeTools(event.currentTarget.checked)} />
     exclude tool output (search only user/ai text)
   </label>
-  <div class="m-path" role="status" aria-atomic="true">{$sessionPicker.searchStatus}</div>
-  {@const searchPage = collectionPage($sessionPicker.searchResults, collectionLimits, "search", 20)}
+  <div class="m-path" role="status" aria-atomic="true" aria-busy={$sessionPicker.searching}>{$sessionPicker.searchStatus}</div>
+  {@const searchPage = collectionPage($sessionPicker.searchResults, collectionLimits, "search", SEARCH_PAGE_SIZE)}
   {#each searchPage.items as group (group.sessionKey)}
-    <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
+    <button type="button" class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
       <div class="s-title">
         <span class="s-name">{searchResultName(group)}</span>
         <span class="s-date">{searchGroupMeta(group)}</span>
       </div>
-      {#each group.hits.slice(0, 3) as hit, index (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
+      {#each group.hits.slice(0, 3) as hit, index (hit.entryId ?? hit)}
         <div class="s-snippet" data-hit-index={index}>
           <SearchHitSnippet role={hit.role} kind={hit.kind} snippet={hit.snippet} query={$sessionPicker.query} />
         </div>
@@ -232,7 +294,7 @@
     </button>
   {/each}
   {#if searchPage.remainingCount}
-    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage("search", searchPage)}>Show {Math.min(20, searchPage.remainingCount)} more matching sessions</button>
+    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage("search", searchPage)}>Show {Math.min(SEARCH_PAGE_SIZE, searchPage.remainingCount)} more matching sessions</button>
   {/if}
 {:else}
   {#if currentFamilies.active.length || activeOtherFolders.length}
@@ -261,7 +323,7 @@
         <details class="s-folder" ontoggle={(event) => { if (event.currentTarget.open) loadPickedSessionFolder(folder); }}>
           <summary><FolderIcon size={13} /> {abbreviateHomePath(folder.label)} ({folder.count})</summary>
           {#if $sessionPicker.loadingFolders[folder.dir]}
-            <div class="m-path" role="status"><span class="spin" aria-hidden="true"></span> loading sessions…</div>
+            <div class="m-path" role="status" aria-atomic="true"><span class="spin" aria-hidden="true"></span> loading sessions…</div>
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
             {@const inactiveFamilies = inactiveOtherFolderFamilies.get(folder.dir) ?? []}
             {#if inactiveFamilies.length}
@@ -281,9 +343,9 @@
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
   <div class={sessionRowClass(current, timelineStatus)}>
-    <button class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
+    <button type="button" class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
       <div class="s-title">
-        {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
+        {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} role="img" aria-label={sessionDotTitle(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
         <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
         <span class="s-date">{sessionDateMeta(session)}</span>
       </div>
@@ -292,10 +354,10 @@
       {/if}
     </button>
     {#if alive}
-      <button class="s-del s-stop" title="Stop this session's process (keeps the session)" aria-label="Stop this session's process" onclick={() => stopPickedSession(session)}>■</button>
+      <button type="button" class="s-del s-stop" title="Stop this session's process (keeps the session)" aria-label="Stop this session's process" onclick={() => stopPickedSession(session)}>■</button>
     {/if}
     {#if !current}
-      <button class="s-del" title="Delete session" aria-label="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
+      <button type="button" class="s-del" title="Delete session" aria-label="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
     {/if}
   </div>
 {/snippet}
@@ -325,7 +387,7 @@
             {@render sessionRow(fork, loopSessionStatus(fork))}
           {/each}
           {#if forkPage.remainingCount}
-            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(40, forkPage.remainingCount)} more iterations</button>
+            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(SESSION_PAGE_SIZE, forkPage.remainingCount)} more iterations</button>
           {/if}
         </div>
       </details>
@@ -343,25 +405,25 @@
             {@render sessionRow(fork)}
           {/each}
           {#if forkPage.remainingCount}
-            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(40, forkPage.remainingCount)} more child sessions</button>
+            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(SESSION_PAGE_SIZE, forkPage.remainingCount)} more child sessions</button>
           {/if}
         </details>
       {/if}
     {/if}
   {/each}
   {#if familyPage.remainingCount}
-    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(40, familyPage.remainingCount)} more sessions</button>
+    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(SESSION_PAGE_SIZE, familyPage.remainingCount)} more sessions</button>
   {/if}
 {/snippet}
 
 {#snippet SessionSection({ title })}
-  <div class="s-section">{title}</div>
+  <div class="s-section" role="heading" aria-level="2">{title}</div>
 {/snippet}
 
 {#snippet FolderLabel({ label })}
-  <div class="s-wd"><FolderIcon size={13} /> {label}</div>
+  <div class="s-wd" role="heading" aria-level="3"><FolderIcon size={13} /> {label}</div>
 {/snippet}
 
 <div class="m-actions" id="mActions">
-  <button class="chip" data-modal-cancel onclick={cancelSessionPicker}>Cancel</button>
+  <button type="button" class="chip" data-modal-cancel onclick={cancelSessionPicker}>Cancel</button>
 </div>

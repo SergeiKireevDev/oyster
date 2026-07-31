@@ -101,8 +101,9 @@ test("file folder session and overlay controls use native semantics", () => {
   assert.equal((folderBrowser.match(/<button/g) ?? []).length, (folderBrowser.match(/<button[^>]*type="(?:button|submit)"/g) ?? []).length);
 
   const sessions = read("SessionPickerModal.svelte");
-  assert.match(sessions, /<button class="s-session-main" onclick=\{\(\) => choosePickedSession\(sessionIdentity\(session\)\)\}>/);
-  assert.match(sessions, /<button class="s-del s-stop"[^>]*title="Stop this session's process \(keeps the session\)"/);
-  assert.match(sessions, /<button class="s-del" title="Delete session"/);
-  assert.match(sessions, /<button class="chip" data-modal-cancel onclick=\{cancelSessionPicker\}>Cancel<\/button>/);
+  assert.match(sessions, /<button type="button" class="s-session-main" onclick=\{\(\) => choosePickedSession\(sessionIdentity\(session\)\)\}>/);
+  assert.match(sessions, /<button type="button" class="s-del s-stop"[^>]*title="Stop this session's process \(keeps the session\)"/);
+  assert.match(sessions, /<button type="button" class="s-del" title="Delete session"/);
+  assert.match(sessions, /<button type="button" class="chip" data-modal-cancel onclick=\{cancelSessionPicker\}>Cancel<\/button>/);
+  assert.equal((sessions.match(/<button\b/g) ?? []).length, (sessions.match(/<button\b[^>]*type="button"/g) ?? []).length);
 });
