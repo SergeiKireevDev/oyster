@@ -78,7 +78,6 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     const setProgress = () => update({ uploading: true, uploadText: `${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%` });
     setProgress();
     let done = 0;
-    const uploadErrors = [];
     for (const file of files) {
       try {
         let offset = 0;
@@ -123,18 +122,11 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
         done++;
       } catch (error) {
         const message = `${file.name}: ${error.message}`;
-        uploadErrors.push(message);
+        toast(message, "error");
         update({ uploadError: message });
       }
     }
-    if (uploadErrors.length) {
-      const summary = uploadErrors.length === 1
-        ? uploadErrors[0]
-        : `${uploadErrors.length} files failed to upload`;
-      toast(done ? `uploaded ${done} file${done > 1 ? "s" : ""}; ${summary}` : summary, "error");
-    } else if (done) {
-      toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
-    }
+    if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
     update({ uploading: false, uploadText: "⬆ Upload…" });
     await load(dir);
   }

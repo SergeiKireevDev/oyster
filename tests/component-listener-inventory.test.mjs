@@ -24,7 +24,7 @@ function locations(pattern) {
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
     "components/Menu.svelte:94:<svelte:document onclick={close} />",
-    "components/OptionPickerModal.svelte:48:<svelte:document onkeydowncapture={onKey} />",
+    "components/OptionPickerModal.svelte:86:<svelte:document onkeydowncapture={handleKeydown} />",
   ]);
 
   const transcript = source(new URL("components/Transcript.svelte", root));
@@ -46,7 +46,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/Menu.svelte:<button type=\"button\" role=\"menuitem\" tabindex=\"-1\" data-action=\"analytics\" use:focusWhenOpened={$menuOpen} onclick={openAnalytics}>",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
-    "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={onKey} />",
+    "components/OptionPickerModal.svelte:<svelte:document onkeydowncapture={handleKeydown} />",
     "components/Overlays.svelte:use:modalKeyboardNavigation={{ isOpen: () => $modalState.open, content: () => $modalState.content }}",
     "components/Overlays.svelte:use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}",
     "components/PinnedWidgetGrid.svelte:<span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden=\"true\" use:monitorPreview={widget}>",

@@ -28,7 +28,7 @@ export function createResponseEventController({ handleResponse, refreshRequired,
 export function createCodeReloadController({ isReplaying, toast, reloadPage }) {
   return (message) => {
     if (isReplaying()) return false;
-    if (message.type === "ui_reload") toast("UI updated — tap to refresh", "warning", { onClick: reloadPage, sticky: true });
+    if (message.type === "ui_reload") toast("UI updated — tap to refresh", "warning", { onClick: reloadPage, sticky: true, dedupeKey: "ui_reload" });
     else if (message.type === "code_reloaded") toast("server code hot-reloaded");
     else if (message.type === "code_reload_failed") toast(`server reload failed: ${message.error}`, "error");
     else return false;
