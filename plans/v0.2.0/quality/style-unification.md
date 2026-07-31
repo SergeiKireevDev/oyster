@@ -39,7 +39,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/CloudWorkspaceModal.svelte`
 - [x] `public/src/components/CommandPalette.svelte`
 - [x] `public/src/components/Composer.svelte`
-- [ ] `public/src/components/ConfirmPromptModal.svelte`
+- [x] `public/src/components/ConfirmPromptModal.svelte`
 - [ ] `public/src/components/CredentialsModal.svelte`
 - [ ] `public/src/components/EditorPromptModal.svelte`
 - [ ] `public/src/components/FileExplorerModal.svelte`
