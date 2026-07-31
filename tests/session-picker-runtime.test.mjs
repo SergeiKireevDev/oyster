@@ -236,7 +236,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /sessionEnvironments = hubMode \? groupSessionCwdsByHierarchy/);
   assert.match(source, /environmentOptions = !hubMode[\s\S]*? \? \[\]/);
   assert.match(source, /\{:else if !hubMode && sessionGroups\.length\}/);
-  assert.match(source, /\{@render SearchGroups\(\$sessionPicker\.searchResults\)\}/);
+  assert.match(source, /\{@render SearchGroups\(\{ groups: \$sessionPicker\.searchResults, listKey: "local" \}\)\}/);
   assert.match(source, /createSessionInFolder\(\{ id: workspace\.workspaceId, name: workspace\.workspaceName \}\)/);
   const compositionRoot = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   assert.match(compositionRoot, /async function showFolderBrowser\(requestedWorkspace = null\)/);

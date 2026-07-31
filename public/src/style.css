@@ -587,6 +587,17 @@
   .session-sidebar-child-sessions[open] > summary::before { content: "▾ "; }
   .session-sidebar-child-sessions > summary:hover { color: var(--text); }
   .session-sidebar-child-list { display: flex; flex-direction: column; gap: 4px; padding-left: 8px; }
+  .session-sidebar-load-more {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px dashed var(--border);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .session-sidebar-load-more:hover, .session-sidebar-load-more:focus-visible { border-color: var(--accent); color: var(--text); }
   .session-loop-card {
     position: relative;
     display: flex;
@@ -3578,6 +3589,8 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
 .model-selected-mark { color: var(--accent); font-weight: 800; text-align: center; }
 .model-enter-hint { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 .option-picker-empty { padding: 28px 14px; color: var(--muted); font-size: 12px; text-align: center; }
+.collection-load-more { width: 100%; margin: 5px 0; padding: 7px 10px; border: 1px dashed var(--border); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.collection-load-more:hover, .collection-load-more:focus-visible { border-color: var(--accent); color: var(--text); }
 .model-picker-help { margin-right: auto; color: var(--muted); font-size: 10px; }
 
 @media (max-width: 760px) {
