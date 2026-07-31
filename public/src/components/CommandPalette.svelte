@@ -7,6 +7,7 @@
   const uiActions = getUiActionRegistry();
 
   function setActive(index) {
+    if ($commandPalette.items[index]?.active) return;
     setCommandPaletteState({ items: $commandPalette.items.map((item, i) => ({ ...item, active: i === index })) });
   }
 
@@ -38,7 +39,7 @@
         class:active={cmd.active}
         tabindex="-1"
         onmousedown={(event) => event.preventDefault()}
-        onmousemove={() => setActive(i)}
+        onmouseenter={() => setActive(i)}
         onclick={(event) => choose(event, i)}
       >
         <span class="cmd-ico">{#if cmd.icon === "folder"}<FolderIcon size={15} />{:else}{cmd.icon}{/if}</span>

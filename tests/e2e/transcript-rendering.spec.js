@@ -32,6 +32,8 @@ test("session search opens the specific matching user message", async ({ page })
   await expect(resultGroup).toHaveCount(1);
   await expect(resultGroup.locator(":scope > .session-sidebar-folder")).toBeVisible();
   await expect(resultGroup.locator(":scope > .session-sidebar-folder")).toContainText("/workspace");
+  await expect(resultGroup.locator(".session-sidebar-hit")).toHaveCount(10);
+  await resultGroup.locator(".session-sidebar-load-more").click();
   await expect(resultGroup.locator(".session-sidebar-hit")).toHaveCount(14);
   const secondHit = resultGroup.locator(".session-sidebar-hit", { hasText: second });
   await expect(secondHit).toBeVisible();

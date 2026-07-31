@@ -36,8 +36,8 @@ test("session collection views render bounded pages with explicit recovery contr
     assert.match(source, /Show \{Math\.min\(/);
     assert.doesNotMatch(source, /\{#each families as family/);
   }
-  assert.match(sidebar, /collectionPage\(groups, `search:/);
-  assert.match(sidebar, /collectionPage\(group\.hits, `search-hits:/);
+  assert.match(sidebar, /collectionPage\(groups, collectionLimits, `search:/);
+  assert.match(sidebar, /collectionPage\(group\.hits, collectionLimits, `search-hits:/);
   assert.doesNotMatch(sidebar, /\{#each group\.hits as hit/);
   assert.doesNotMatch(picker, /\{#each \$sessionPicker\.searchResults as group/);
 });

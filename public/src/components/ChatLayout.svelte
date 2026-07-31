@@ -1,9 +1,11 @@
 <script>
+  import { onDestroy } from "svelte";
   import Composer from "./Composer.svelte";
   import SessionSidebar from "./SessionSidebar.svelte";
   import Sidebars from "./Sidebars.svelte";
   import Transcript from "./Transcript.svelte";
   import { clearTranscriptNotice, transcriptNotice } from "../stores/transcriptNotice.js";
+  import { createFrameScheduler } from "../lib/frameScheduler.js";
 
   let scroller;
 
@@ -12,9 +14,15 @@
     clearTranscriptNotice();
   }
 
-  function trackScroll() {
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120) clearTranscriptNotice();
+  const scrollTracking = createFrameScheduler((node) => {
+    if (node.scrollHeight - node.scrollTop - node.clientHeight < 120) clearTranscriptNotice();
+  });
+
+  function trackScroll(event) {
+    scrollTracking.schedule(event.currentTarget);
   }
+
+  onDestroy(scrollTracking.cancel);
 </script>
 
 <div id="main">
