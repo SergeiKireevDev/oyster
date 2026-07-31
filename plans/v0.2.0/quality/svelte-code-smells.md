@@ -107,7 +107,7 @@ and focused test.
 
 - [x] Render-time work is bounded; expensive parsing, sorting, filtering, and
   serialization are derived once or moved outside hot template paths.
-- [ ] Large collections use suitable pagination, virtualization, or incremental
+- [x] Large collections use suitable pagination, virtualization, or incremental
   rendering, and updates do not recreate every row unnecessarily.
 - [ ] High-frequency input, resize, scroll, and pointer handlers are bounded and
   do not trigger avoidable global state updates or network requests.
