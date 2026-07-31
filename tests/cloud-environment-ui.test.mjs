@@ -78,11 +78,24 @@ test("cloud workspace modal provisions source-installed reverse-connected Oyster
 
 test("llmbox workspace modal creates a box in the selected spoke environment", () => {
   const source = component("LlmboxWorkspaceModal.svelte");
-  assert.match(source, /export let spoke = ""/);
+  assert.match(source, /let \{ spoke = "", environmentName = "" \} = \$props\(\)/);
   assert.match(source, /workspaceService\.createLlmboxWorkspace\(payload\)/);
   assert.doesNotMatch(source, /\bfetch\s*\(|["'`]\/api\//);
-  assert.match(source, /id: workspaceId\.trim\(\)/);
+  assert.match(source, /const id = workspaceId\.trim\(\)/);
+  assert.match(source, /name: workspaceName\.trim\(\) \|\| id/);
   assert.match(source, /spoke,/);
-  assert.match(source, /payload\.diskBytes = size \* 1024 \* 1024 \* 1024/);
+  assert.match(source, /diskGiB \* BYTES_PER_GIB/);
   assert.match(source, /publishWorkspace\(workspace\)/);
+});
+
+test("llmbox workspace creation owns async and validation state safely", () => {
+  const source = component("LlmboxWorkspaceModal.svelte");
+  assert.match(source, /if \(loading\) return;/);
+  assert.match(source, /cause instanceof Error && cause\.message/);
+  assert.match(source, /onDestroy\(\(\) => createRequests\.invalidate\(\)\)/);
+  assert.match(source, /Math\.floor\(Number\.MAX_SAFE_INTEGER \/ BYTES_PER_GIB\)/);
+  assert.match(source, /aria-busy=\{loading\}/);
+  assert.match(source, /aria-describedby=\{error \? "llmboxWorkspaceError" : undefined\}/);
+  assert.match(source, /id="llmboxWorkspaceError"[^>]*role="alert"[^>]*aria-atomic="true"/);
+  assert.match(source, /oninput=\{clearError\}/);
 });
