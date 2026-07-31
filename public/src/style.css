@@ -3360,6 +3360,9 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .pinned-markdown-viewer .code-lang { padding: .45em 1em; border-bottom: 1px solid rgba(255,255,255,.08); color: #8993a5; font: .68em ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .pinned-markdown-viewer .math-block { max-width: 100%; padding: .75em 0; overflow-x: auto; }
 .pinned-widget-viewer-actions { padding-top: 12px; }
+.pinned-widget-viewer-navigation { display: flex; align-items: center; gap: 7px; margin-right: auto; color: var(--muted); font: 11px/1 var(--mono); }
+#modal .pinned-widget-viewer-navigation .pinned-widget-viewer-arrow { min-width: 34px; padding-inline: 9px; font-size: 16px; line-height: 1; }
+.pinned-widget-viewer-arrow:disabled { opacity: .35; cursor: default; }
 .pinned-widget-unavailable { color: var(--muted); }
 
 html[data-theme="light"] .pinned-widget-section { border-color: #e0e4ec; }

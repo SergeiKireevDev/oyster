@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createPinnedWidgetRuntime } from "../public/src/features/pinned-widgets/createPinnedWidgetRuntime.js";
+import { buildPinnedWidgetViewerNavigation } from "../public/src/features/pinned-widgets/pinnedWidgetViewModel.js";
 
 const component = (name) => readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
 
@@ -230,6 +231,37 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(video, /<video/);
   assert.match(video, /controls=\{!thumbnail\}/);
   for (const source of [viewer, markdown, image, svg, video]) assert.doesNotMatch(source, /<iframe/);
+});
+
+test("viewer arrows follow top-level order and stay within the current group", () => {
+  const widgets = [
+    { id: "session-top", label: "Session", kind: "image", scope: "session", groupId: null, position: 0 },
+    { id: "workspace-top", label: "Workspace", kind: "markdown", scope: "workspace", groupId: null, position: 0 },
+    { id: "plain-file", label: "Plain", kind: "file", scope: "workspace", groupId: null, position: 1 },
+    { id: "group-first", label: "First", kind: "video", scope: "session", groupId: "group-a", position: 0 },
+    { id: "group-link", label: "Link", kind: "link", scope: "session", groupId: "group-a", position: 1 },
+    { id: "group-last", label: "Last", kind: "file", mimeType: "text/html", scope: "session", groupId: "group-a", position: 2 },
+    { id: "other-group", label: "Other", kind: "image", scope: "session", groupId: "group-b", position: 0 },
+  ];
+
+  assert.deepEqual(buildPinnedWidgetViewerNavigation(widgets, "workspace-top"), {
+    previous: null,
+    next: widgets[0],
+    index: 0,
+    total: 2,
+  });
+  assert.deepEqual(buildPinnedWidgetViewerNavigation(widgets, "group-last"), {
+    previous: widgets[3],
+    next: null,
+    index: 1,
+    total: 2,
+  });
+
+  const viewer = component("PinnedWidgetViewerModal.svelte");
+  assert.match(viewer, /aria-label="Previous pinned widget"/);
+  assert.match(viewer, /aria-label="Next pinned widget"/);
+  assert.match(viewer, /PINNED_WIDGET_OPEN_ACTION, target/);
+  assert.match(viewer, /navigation\.index \+ 1.*navigation\.total/);
 });
 
 test("file explorer pins files and directories through scoped actions", () => {

@@ -13,7 +13,7 @@ const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", 
 const rootSource = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
 
 test("menu exposes a top-level Credentials action through the scoped registry", () => {
-  assert.match(menuSource, /data-action="credentials"[^>]*>[\s\S]*?<span>Credentials…<\/span><\/button>/);
+  assert.match(menuSource, /data-action="credentials"[^>]*>[\s\S]*?<span>Credentials…<\/span>\s*<\/button>/);
   assert.match(menuSource, /uiActions\.invoke\(CREDENTIALS_OPEN_ACTION\)/);
   assert.doesNotMatch(menuSource, /SettingsModal|localStorage|fetch\(/);
 });

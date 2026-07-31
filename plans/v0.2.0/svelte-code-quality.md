@@ -38,7 +38,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/ImageArtifact.svelte`
 - [x] `public/src/components/LlmboxWorkspaceModal.svelte`
 - [x] `public/src/components/MarkdownArtifact.svelte`
-- [ ] `public/src/components/Menu.svelte`
+- [x] `public/src/components/Menu.svelte`
 - [ ] `public/src/components/OptionPickerItem.svelte`
 - [ ] `public/src/components/OptionPickerModal.svelte`
 - [ ] `public/src/components/Overlays.svelte`
