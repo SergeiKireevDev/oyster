@@ -2783,7 +2783,16 @@ details.block.activity-step > .body {
   background: transparent;
   color: #838b9c;
 }
-.activity-stack { display: grid; gap: 2px; }
+.activity-stack {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  gap: 2px;
+}
+.activity-stack > details,
+.activity-history-body,
+details.block.activity-step { min-width: 0; max-width: 100%; }
 .activity-history { margin: 0; color: #687184; }
 .activity-history > summary {
   display: flex;
