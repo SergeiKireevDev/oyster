@@ -15,6 +15,7 @@ const iconNames = [
   "model",
   "thinking",
   "more",
+  "file",
 ];
 
 test("AppIcon keeps its public icon names in sync with its rendered branches", () => {

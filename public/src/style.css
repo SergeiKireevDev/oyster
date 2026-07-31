@@ -1521,9 +1521,6 @@
   }
   #input:focus { border-color: var(--accent-dim); }
 
-  #modal .m-option.file { padding: 6px 12px; margin-bottom: 4px; }
-  #modal .m-option.file::before { content: "📄 "; }
-  #modal .m-option.file .f-size { color: var(--muted); font-size: 11px; margin-left: 8px; }
   .btn {
     background: var(--accent);
     color: #10131a;

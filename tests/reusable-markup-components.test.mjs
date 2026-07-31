@@ -30,8 +30,10 @@ test("file workflows share the file entry concept without duplicating its markup
   assert.match(entry, /class:hidden-entry=\{file\.hidden\}/);
   assert.match(entry, /aria-label=\{file\.name\}/);
   assert.match(entry, /onclick=\{openFile\}/);
-  assert.match(entry, /\{file\.name\}\{#if formattedSize\}<span class="f-size">\{formattedSize\}<\/span>\{\/if\}/);
-  assert.match(entry, /\.file \{\s*overflow-wrap: anywhere;/);
+  assert.match(entry, /<AppIcon name="file" size=\{15\} \/>/);
+  assert.match(entry, /<span class="browser-file-name">\{file\.name\}<\/span>/);
+  assert.match(entry, /\{#if formattedSize\}<span class="f-size">\{formattedSize\}<\/span>\{\/if\}/);
+  assert.match(entry, /\.file \{[\s\S]*?min-width: 0;[\s\S]*?overflow: hidden;/);
   for (const name of ["FilePickerModal.svelte", "FileExplorerModal.svelte"]) {
     const source = component(name);
     assert.match(source, /import BrowserFileEntry from "\.\/BrowserFileEntry\.svelte"/);
