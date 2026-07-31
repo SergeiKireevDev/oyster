@@ -41,6 +41,23 @@ test("shared directory list owns typed reactive paging state", () => {
   assert.doesNotMatch(list, /export let|\$:/);
 });
 
+test("shared directory list follows the modal row visual contract", () => {
+  const list = readFileSync(new URL("../public/src/components/BrowserDirectoryList.svelte", import.meta.url), "utf8");
+  const style = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(list, /import FolderIcon from "\.\/FolderIcon\.svelte"/);
+  assert.match(list, /class="m-option dir browser-directory-button"/);
+  assert.match(list, /<FolderIcon size=\{15\} \/>/);
+  assert.match(list, /\.browser-directory-name\s*\{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
+  assert.match(list, /\.browser-directory-row > \.chip\s*\{[^}]*min-height: 32px;/s);
+  assert.match(list, /@media \(max-width: 760px\)/);
+  assert.match(list, /@media \(max-width: 520px\)/);
+  assert.match(style, /#modal \.browser-directory-button\s*\{[^}]*display: flex;[^}]*gap: 8px;/s);
+  assert.match(style, /@media \(max-width: 760px\)[\s\S]*#modal \.browser-directory-button \{ min-height: 40px; \}/);
+  assert.doesNotMatch(style, /\.m-option\.dir::before/, "directory icons come from the shared FolderIcon component");
+  assert.doesNotMatch(style, /\.browser-directory-row\s*\{/, "component-only layout remains scoped");
+});
+
 test("folder browser component routes browse, create, submit, and cancel through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/FolderBrowserModal.svelte", import.meta.url), "utf8");
   assert.match(source, /getUiActionRegistry\(\)/);
