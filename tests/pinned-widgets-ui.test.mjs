@@ -228,6 +228,10 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(viewer, /class:markdown-stage=\{widget\.kind === "markdown"\}/);
   assert.match(viewer, /copyTextToClipboard\(String\(widget\.content \?\? ""\)\)/);
   assert.match(viewer, /"Copy raw"/);
+  assert.match(viewer, /copyFeedback = \$state\(\{ widgetId: null, status: "idle" \}\)/);
+  assert.match(viewer, /copyFeedback\.widgetId === widget\.id \? copyFeedback\.status : "idle"/);
+  assert.match(viewer, /const copyRawDisabled = \$derived\(copyRawState === "copying"\)/);
+  assert.match(viewer, /disabled=\{copyRawDisabled\}/);
   assert.match(viewer, /pinned-markdown-toolbar/);
   const overlays = component("Overlays.svelte");
   const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
@@ -268,6 +272,7 @@ test("viewer arrows follow top-level order and stay within the current group", (
   });
 
   const viewer = component("PinnedWidgetViewerModal.svelte");
+  assert.match(viewer, /role="group" aria-label="Pinned widget navigation"/);
   assert.match(viewer, /aria-label="Previous pinned widget"/);
   assert.match(viewer, /aria-label="Next pinned widget"/);
   assert.match(viewer, /PINNED_WIDGET_OPEN_ACTION, target/);

@@ -42,7 +42,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/OptionPickerItem.svelte`
 - [x] `public/src/components/OptionPickerModal.svelte`
 - [x] `public/src/components/Overlays.svelte`
-- [ ] `public/src/components/PinnedWidgetGrid.svelte`
+- [x] `public/src/components/PinnedWidgetGrid.svelte`
 - [ ] `public/src/components/PinnedWidgetViewerModal.svelte`
 - [ ] `public/src/components/RoutineList.svelte`
 - [ ] `public/src/components/RoutineManagerModal.svelte`

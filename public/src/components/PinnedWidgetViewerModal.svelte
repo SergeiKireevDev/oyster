@@ -15,35 +15,57 @@
   import { pinnedWidgets } from "../stores/pinnedWidgets.js";
   import { buildPinnedWidgetViewerNavigation } from "../features/pinned-widgets/pinnedWidgetViewModel.js";
 
+  const COPY_FEEDBACK_DURATION_MS = 1_800;
+  const COPY_RAW_LABELS = {
+    idle: "Copy raw",
+    copying: "Copying…",
+    copied: "Copied",
+    failed: "Copy failed",
+  };
+  const EMPTY_WIDGET = Object.freeze({});
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
-  $: widget = $modalState.context?.widget ?? {};
-  $: source = widget.id ? browserActions.pinnedWidgetMediaSource(widget.id) : "";
-  $: htmlSource = widget.id ? browserActions.pinnedWidgetHtmlSource(widget.id) : "";
-  $: download = widget.path ? browserActions.fileDownload(widget.path) : null;
-  $: isHtml = String(widget.mimeType ?? "").startsWith("text/html");
-  $: navigation = buildPinnedWidgetViewerNavigation($pinnedWidgets, widget.id);
-  $: copyRawLabel = copyRawState === "copied" ? "Copied" : copyRawState === "failed" ? "Copy failed" : "Copy raw";
-  let copyRawState = "idle";
-  let copyRawTimer;
   const copyRequests = createAsyncRequestGuard();
 
+  let copyFeedback = $state({ widgetId: null, status: "idle" });
+  let copyRawTimer;
+  const widget = $derived($modalState.context?.widget ?? EMPTY_WIDGET);
+  const source = $derived(widget.id ? browserActions.pinnedWidgetMediaSource(widget.id) : "");
+  const htmlSource = $derived(widget.id ? browserActions.pinnedWidgetHtmlSource(widget.id) : "");
+  const download = $derived(widget.path ? browserActions.fileDownload(widget.path) : null);
+  const isHtml = $derived(String(widget.mimeType ?? "").startsWith("text/html"));
+  const navigation = $derived(buildPinnedWidgetViewerNavigation($pinnedWidgets, widget.id));
+  const copyRawState = $derived(copyFeedback.widgetId === widget.id ? copyFeedback.status : "idle");
+  const copyRawLabel = $derived(COPY_RAW_LABELS[copyRawState] ?? COPY_RAW_LABELS.idle);
+  const copyRawDisabled = $derived(copyRawState === "copying");
+
   function openAdjacentWidget(target) {
-    if (target) uiActions.invoke(PINNED_WIDGET_OPEN_ACTION, target);
+    if (!target) return;
+    uiActions.invoke(PINNED_WIDGET_OPEN_ACTION, target);
+  }
+
+  function revealWidget() {
+    uiActions.invoke(PINNED_WIDGET_REVEAL_ACTION, widget);
   }
 
   async function copyRawMarkdown() {
     const request = copyRequests.begin();
+    const widgetId = widget.id;
     clearTimeout(copyRawTimer);
+    copyFeedback = { widgetId, status: "copying" };
+
     try {
       const copied = await copyTextToClipboard(String(widget.content ?? ""));
       if (!request.isCurrent()) return;
-      copyRawState = copied ? "copied" : "failed";
+      copyFeedback = { widgetId, status: copied ? "copied" : "failed" };
     } catch {
       if (!request.isCurrent()) return;
-      copyRawState = "failed";
+      copyFeedback = { widgetId, status: "failed" };
     }
-    copyRawTimer = setTimeout(() => { copyRawState = "idle"; }, 1800);
+
+    copyRawTimer = setTimeout(() => {
+      if (request.isCurrent()) copyFeedback = { widgetId, status: "idle" };
+    }, COPY_FEEDBACK_DURATION_MS);
   }
 
   onDestroy(() => {
@@ -56,17 +78,30 @@
   {#if widget.kind === "markdown"}
     <div class="pinned-markdown-toolbar">
       <span>Markdown preview</span>
-      <button type="button" class="chip" onclick={copyRawMarkdown} aria-live="polite">
-        {copyRawLabel}
-      </button>
+      <button
+        type="button"
+        class="chip"
+        disabled={copyRawDisabled}
+        onclick={copyRawMarkdown}
+        aria-live="polite"
+        aria-atomic="true"
+      >{copyRawLabel}</button>
     </div>
   {:else if widget.kind === "monitoring"}
-    <div class="pinned-markdown-toolbar"><span>Live snapshot · {widget.format === "diff" ? "diff" : "text"}</span></div>
+    <div class="pinned-markdown-toolbar">
+      <span>Live snapshot · {widget.format === "diff" ? "diff" : "text"}</span>
+    </div>
   {/if}
+
   {#key widget.id}
-    <div class="pinned-widget-viewer-stage" class:markdown-stage={widget.kind === "markdown"} class:monitoring-stage={widget.kind === "monitoring"} class:html-stage={isHtml}>
+    <div
+      class="pinned-widget-viewer-stage"
+      class:markdown-stage={widget.kind === "markdown"}
+      class:monitoring-stage={widget.kind === "monitoring"}
+      class:html-stage={isHtml}
+    >
       {#if widget.availability !== "ready"}
-        <div class="pinned-widget-unavailable">This artifact is no longer available.</div>
+        <p class="pinned-widget-unavailable" role="status">This artifact is no longer available.</p>
       {:else if widget.kind === "image" && widget.mimeType === "image/svg+xml"}
         <SvgArtifact src={source} alt={widget.label} />
       {:else if widget.kind === "image"}
@@ -79,12 +114,15 @@
         <MonitoringArtifact content={widget.content ?? ""} format={widget.format ?? "text"} />
       {:else if isHtml}
         <HtmlArtifact src={htmlSource} label={widget.label} />
+      {:else}
+        <p class="pinned-widget-unavailable" role="status">A preview is not available for this artifact.</p>
       {/if}
     </div>
   {/key}
+
   <div class="m-actions pinned-widget-viewer-actions">
     {#if navigation.total > 1}
-      <div class="pinned-widget-viewer-navigation" aria-label="Pinned widget navigation">
+      <div class="pinned-widget-viewer-navigation" role="group" aria-label="Pinned widget navigation">
         <button
           type="button"
           class="chip pinned-widget-viewer-arrow"
@@ -93,7 +131,9 @@
           disabled={!navigation.previous}
           onclick={() => openAdjacentWidget(navigation.previous)}
         >←</button>
-        <span aria-live="polite">{navigation.index + 1} / {navigation.total}</span>
+        <span role="status" aria-live="polite" aria-atomic="true">
+          {navigation.index + 1} / {navigation.total}
+        </span>
         <button
           type="button"
           class="chip pinned-widget-viewer-arrow"
@@ -104,8 +144,12 @@
         >→</button>
       </div>
     {/if}
-    {#if download}<a class="chip" href={download.href} download={download.filename}>Download</a>{/if}
-    {#if widget.path}<button class="chip" onclick={() => uiActions.invoke(PINNED_WIDGET_REVEAL_ACTION, widget)}>Reveal in Files</button>{/if}
-    <button class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
+    {#if download}
+      <a class="chip" href={download.href} download={download.filename}>Download</a>
+    {/if}
+    {#if widget.path}
+      <button type="button" class="chip" onclick={revealWidget}>Reveal in Files</button>
+    {/if}
+    <button type="button" class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
   </div>
 </section>
