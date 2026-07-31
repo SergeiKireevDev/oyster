@@ -111,7 +111,7 @@ and focused test.
   rendering, and updates do not recreate every row unnecessarily.
 - [x] High-frequency input, resize, scroll, and pointer handlers are bounded and
   do not trigger avoidable global state updates or network requests.
-- [ ] Components do not create fresh heavyweight services, renderers, or data
+- [x] Components do not create fresh heavyweight services, renderers, or data
   structures on every reactive update.
 - [ ] Tests assert user-visible behavior, accessibility, lifecycle cleanup, and
   feature boundaries rather than only snapshots or implementation details.
