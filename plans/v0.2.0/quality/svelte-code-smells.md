@@ -113,7 +113,7 @@ and focused test.
   do not trigger avoidable global state updates or network requests.
 - [x] Components do not create fresh heavyweight services, renderers, or data
   structures on every reactive update.
-- [ ] Tests assert user-visible behavior, accessibility, lifecycle cleanup, and
+- [x] Tests assert user-visible behavior, accessibility, lifecycle cleanup, and
   feature boundaries rather than only snapshots or implementation details.
 - [ ] Every retained exception to this checklist has a focused regression test
   that demonstrates why the lower-level or imperative approach is necessary.

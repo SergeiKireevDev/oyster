@@ -80,6 +80,8 @@ test("loop first iteration context contains only instructions and plan", async (
   const prompt = buildIterationPrompt("- [ ] implement it");
   assert.match(prompt, /# Plan\n\n- \[ \] implement it/);
   assert.match(prompt, /state what you attempted, what succeeded, what failed/);
+  assert.match(prompt, /Do not create, amend, or otherwise modify Git commits/);
+  assert.match(prompt, /parent loop owns validation and commits only after validation passes/);
   assert.doesNotMatch(prompt, /Previous iteration output|Previous iteration failure log/);
 });
 
@@ -125,6 +127,10 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.match(source, /parentSessionId: ctx\.sessionManager\.getSessionId\(\)/);
   assert.match(source, /`Loop iteration \$\{iteration\}:/);
   assert.doesNotMatch(source, /getPiInvocation|--mode", "json"/);
+  assert.match(source, /const headBefore = await currentGitHead\(pi, ctx, signal\)/);
+  assert.match(source, /pi\.exec\("git", \["reset", "--soft", expectedHead\]/);
+  assert.match(source, /subagent-created commit history was reset/i);
+  assert.match(source, /if \(!restoredHead\.ok\) \{[\s\S]*subagent\.ok = false/);
   assert.match(source, /if \(subagent\.ok\) \{/);
   assert.match(source, /validation = await runValidation/);
   assert.match(source, /subagent failed; retrying/);
@@ -144,6 +150,14 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.match(source, /const commitArgs = \["commit", "--allow-empty", "--no-gpg-sign", "-m", title\]/);
   assert.match(source, /if \(body\) commitArgs\.push\("-m", body\)/);
   assert.match(source, /pi\.exec\("git", commitArgs/);
+  assert.ok(
+    source.indexOf("const headBefore = await currentGitHead") < source.indexOf("const subagent = await runSubagent"),
+    "the loop must capture Git HEAD before a subagent can modify it",
+  );
+  assert.ok(
+    source.indexOf("const restoredHead = await restoreLoopOwnedHead") < source.indexOf("validation = await runValidation"),
+    "subagent-created commits must be unwound before validation",
+  );
   assert.ok(
     source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
     "validation must pass before a loop step is committed",
