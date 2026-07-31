@@ -38,13 +38,18 @@ export default function pinnedWidgetExtension(pi: ExtensionAPI) {
     name: "pinned_widget",
     label: "Pinned Widget",
     description:
-      "Pin, list, organize, move, or unpin artifacts in Oyster's right sidebar. " +
-      "Pinned image, video, and Markdown files use Oyster's native viewers; pinning stays private " +
-      "and does not create a public tunnel. Use the hublot tool only when a public live interface is required.",
-    promptSnippet: "Pin private artifacts with pinned_widget. Use group_pinned_widgets to create one group and pin multiple related files in one call. Use hublot only for public interfaces. Unpinning never deletes the source.",
+      "Pin, monitor, list, organize, move, or unpin artifacts in Oyster's right sidebar. " +
+      "A monitor stores permanent preview and content scripts under ~/.oyster, polls its preview every 3 seconds " +
+      "only while visible, and runs its content script when opened. Pinned artifacts stay private. " +
+      "Use the hublot tool only when a public live interface is required.",
+    promptSnippet: "Pin private artifacts or create script-backed monitoring widgets with pinned_widget. Monitoring scripts must be complete executable scripts with shebangs; use format='diff' for code diffs. Use group_pinned_widgets for multiple related files. Unpinning never deletes source files or monitoring scripts.",
     parameters: Type.Object({
-      action: StringEnum(["pin", "list", "unpin", "group", "move"] as const),
+      action: StringEnum(["pin", "monitor", "list", "unpin", "group", "move"] as const),
       path: Type.Optional(Type.String({ description: "For pin: artifact path, absolute or relative to the session cwd" })),
+      preview_script: Type.Optional(Type.String({ description: "For monitor: complete shebang script whose stdout is the compact thumbnail preview" })),
+      content_script: Type.Optional(Type.String({ description: "For monitor: complete shebang script whose stdout is shown in the viewer" })),
+      cwd: Type.Optional(Type.String({ description: "For monitor: script working directory; defaults to the session cwd" })),
+      format: Type.Optional(StringEnum(["text", "diff"] as const, { description: "For monitor: viewer format; defaults to text" })),
       url: Type.Optional(Type.String({ description: "For pin: an explicit HTTPS link instead of a local path" })),
       label: Type.Optional(Type.String({ description: "Optional short widget label" })),
       id: Type.Optional(Type.String({ description: "Widget id for unpin or move" })),
@@ -56,6 +61,25 @@ export default function pinnedWidgetExtension(pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = ctx.sessionManager.getSessionId();
       const scope = params.scope ?? "session";
+      if (params.action === "monitor") {
+        if (!params.label?.trim()) throw new Error("'monitor' requires a label");
+        if (!params.preview_script || !params.content_script) throw new Error("'monitor' requires preview_script and content_script");
+        const data = await api("POST", "/pinned-widgets", {
+          label: params.label,
+          previewScript: params.preview_script,
+          contentScript: params.content_script,
+          cwd: resolve(ctx.cwd, params.cwd ?? "."),
+          format: params.format ?? "text",
+          groupId: params.group_id,
+          sessionId,
+          scope,
+        });
+        const widget = data.widget;
+        return {
+          content: [{ type: "text", text: `Created monitoring widget ${widget.label} (id=${widget.id}). Its permanent scripts are stored in ${widget.scriptDirectory}.` }],
+          details: widget,
+        };
+      }
       if (params.action === "pin") {
         if (!!params.path === !!params.url) throw new Error("'pin' requires exactly one of path or url");
         const data = await api("POST", "/pinned-widgets", {

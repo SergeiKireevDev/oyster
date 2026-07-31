@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -20,6 +20,8 @@ const execFileAsync = promisify(execFile);
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
 const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 const INLINE_KINDS = new Set(["image", "video"]);
+const MONITOR_PREVIEW_LIMIT = 64 * 1024;
+const MONITOR_CONTENT_LIMIT = 5 * 1024 * 1024;
 
 function id(prefix) {
   return `${prefix}-${randomBytes(9).toString("base64url")}`;
@@ -48,6 +50,25 @@ function rowVisible(row, sessionId, scope) {
   if (scope === "all") return true;
   if (scope === "workspace") return row.scope === "workspace";
   return row.scope === "workspace" || (!!sessionId && row.session_id === sessionId);
+}
+
+function monitoringState(row, resolveSafePath) {
+  const target = row.target ? resolveSafePath(resolve(row.target)) : null;
+  if (!target) return { availability: "missing" };
+  try {
+    const previewScriptPath = join(target, "preview.sh");
+    const contentScriptPath = join(target, "content.sh");
+    if (!statSync(target).isDirectory() || !statSync(previewScriptPath).isFile() || !statSync(contentScriptPath).isFile()) {
+      return { availability: "missing" };
+    }
+    return {
+      availability: "ready",
+      format: row.mime_type === "text/x-diff" ? "diff" : "text",
+      scriptDirectory: target,
+    };
+  } catch {
+    return { availability: "missing" };
+  }
 }
 
 function pathState(row, resolveSafePath) {
@@ -90,6 +111,7 @@ export function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = n
       error: hublot?.last_error ?? null,
     };
   }
+  if (row.kind === "monitoring") return { ...base, ...monitoringState(row, resolveSafePath) };
   if (["image", "video", "markdown", "file", "directory"].includes(row.kind)) {
     return { ...base, ...pathState(row, resolveSafePath) };
   }
@@ -257,6 +279,45 @@ function htmlTarget(state, widgetId, resolveSafePath) {
   return { target, stat, mimeType: classification.mimeType };
 }
 
+export function materializeMonitoringScripts({ id: widgetId, previewScript, contentScript, cwd, root = join(homedir(), ".oyster", "monitoring-widgets") }) {
+  for (const [name, script] of [["preview", previewScript], ["content", contentScript]]) {
+    if (typeof script !== "string" || !script.startsWith("#!")) throw Object.assign(new Error(`${name} script must start with a shebang`), { statusCode: 400 });
+    if (Buffer.byteLength(script) > 256 * 1024) throw Object.assign(new Error(`${name} script is too large`), { statusCode: 413 });
+  }
+  const target = join(root, widgetId);
+  mkdirSync(target, { recursive: true, mode: 0o700 });
+  for (const [name, script] of [["preview.sh", previewScript], ["content.sh", contentScript]]) {
+    const path = join(target, name);
+    writeFileSync(path, script.endsWith("\n") ? script : `${script}\n`, { mode: 0o700 });
+    chmodSync(path, 0o700);
+  }
+  writeFileSync(join(target, "cwd"), `${cwd}\n`, { mode: 0o600 });
+  return target;
+}
+
+export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
+  if (row?.kind !== "monitoring") throw Object.assign(new Error("widget is not a monitoring widget"), { statusCode: 415 });
+  const target = row.target ? resolveSafePath(resolve(row.target)) : null;
+  if (!target) throw Object.assign(new Error("monitoring scripts are unavailable"), { statusCode: 404 });
+  const script = join(target, mode === "content" ? "content.sh" : "preview.sh");
+  const cwdValue = readFileSync(join(target, "cwd"), "utf8").trim();
+  const cwd = resolveSafePath(resolve(cwdValue));
+  if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring working directory is unavailable"), { statusCode: 404 });
+  try {
+    const result = await execFileImpl(script, [], {
+      cwd,
+      timeout: mode === "content" ? 30_000 : 8_000,
+      maxBuffer: mode === "content" ? MONITOR_CONTENT_LIMIT : MONITOR_PREVIEW_LIMIT,
+      encoding: "utf8",
+      env: { ...process.env, NO_COLOR: "1", TERM: "dumb" },
+    });
+    return String(result?.stdout ?? "").replace(/\s+$/, "");
+  } catch (error) {
+    const detail = String(error?.stderr || error?.message || error).trim().slice(0, 1000);
+    throw Object.assign(new Error(`monitoring script failed${detail ? `: ${detail}` : ""}`), { statusCode: 422 });
+  }
+}
+
 /** Convert browser-incompatible video containers once, then serve the cached MP4 with range support. */
 export async function preparePinnedVideo(state, media, {
   ffmpegBin = process.env.FFMPEG_BIN || "ffmpeg",
@@ -309,6 +370,8 @@ export async function preparePinnedVideo(state, media, {
 
 export function createPinnedWidgetRoutes({
   state, requestContext, ensureSessionOwner, listTunnels = () => [], prepareVideo = preparePinnedVideo,
+  executeMonitor = runMonitoringScript,
+  monitorRoot = join(homedir(), ".oyster", "monitoring-widgets"),
 }) {
   const { json, readJsonBody, resolveSafePath } = requestContext;
   const repository = state.appStore.repositories.pinnedWidgets;
@@ -342,7 +405,21 @@ export function createPinnedWidgetRoutes({
         let mtimeMs = null;
         let hublotId = null;
         let fallbackLabel;
-        if (body.path) {
+        let widgetId = id("widget");
+        if (body.previewScript !== undefined || body.contentScript !== undefined) {
+          const cwd = resolveSafePath(resolve(String(body.cwd || state.config.PI_DIR)));
+          if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring cwd is outside the allowed roots or is not a directory"), { statusCode: 403 });
+          kind = "monitoring";
+          mimeType = body.format === "diff" ? "text/x-diff" : "text/plain; charset=utf-8";
+          target = materializeMonitoringScripts({
+            id: widgetId,
+            previewScript: body.previewScript,
+            contentScript: body.contentScript,
+            cwd,
+            root: monitorRoot,
+          });
+          fallbackLabel = "Monitor";
+        } else if (body.path) {
           target = resolveSafePath(resolve(String(body.path)));
           if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
           const stat = statSync(target);
@@ -363,7 +440,7 @@ export function createPinnedWidgetRoutes({
           target = url.href;
           fallbackLabel = url.hostname;
         } else {
-          throw Object.assign(new Error("path, hublotId, or https url is required"), { statusCode: 400 });
+          throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
         }
         const duplicate = repository.list().find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
         if (duplicate) {
@@ -374,7 +451,7 @@ export function createPinnedWidgetRoutes({
         assertGroup(repository, groupId, identity);
         const now = new Date().toISOString();
         const widget = repository.create({
-          id: id("widget"), ...identity, groupId, kind,
+          id: widgetId, ...identity, groupId, kind,
           label: normalizeLabel(body.label, fallbackLabel),
           position: repository.nextPosition({ ...identity, groupId }), target, mimeType,
           size, mtimeMs, createdAt: now,
@@ -495,6 +572,24 @@ export function createPinnedWidgetRoutes({
         });
         emit("pinned_widget_updated", { groupId, deleted: true, deletedWidgetIds: deleteWidgets ? children.map((item) => item.id) : [] });
         json(res, 200, { deleted: groupId, deletedWidgets: deleteWidgets ? children.map((item) => item.id) : [] });
+      } catch (error) { sendError(json, res, error); }
+    },
+
+    "GET /pinned-widget-monitor-preview": async (_req, res, url) => {
+      try {
+        const row = repository.find(String(url.searchParams.get("id") ?? ""));
+        if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
+        const preview = await executeMonitor(row, "preview", { resolveSafePath });
+        json(res, 200, { id: row.id, preview });
+      } catch (error) { sendError(json, res, error); }
+    },
+
+    "GET /pinned-widget-monitor-content": async (_req, res, url) => {
+      try {
+        const row = repository.find(String(url.searchParams.get("id") ?? ""));
+        if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
+        const content = await executeMonitor(row, "content", { resolveSafePath });
+        json(res, 200, { id: row.id, content, format: row.mime_type === "text/x-diff" ? "diff" : "text" });
       } catch (error) { sendError(json, res, error); }
     },
 

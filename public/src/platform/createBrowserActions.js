@@ -32,5 +32,11 @@ export function createBrowserActions({ windowTarget, storage }) {
     pinnedWidgetHtmlSource(id) {
       return `/pinned-widget-html?id=${encodeURIComponent(String(id ?? ""))}`;
     },
+    async readPinnedWidgetMonitorPreview(id) {
+      const response = await windowTarget.fetch(`/pinned-widget-monitor-preview?id=${encodeURIComponent(String(id ?? ""))}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `cannot refresh monitor (${response.status})`);
+      return data;
+    },
   });
 }

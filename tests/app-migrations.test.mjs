@@ -27,7 +27,7 @@ test("numbered migrations apply once and report stable status", (t) => {
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
-  assert.deepEqual(first, { currentVersion: 14, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] });
+  assert.deepEqual(first, { currentVersion: 15, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
   assert.deepEqual(second, first);
   assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
@@ -45,6 +45,7 @@ test("numbered migrations apply once and report stable status", (t) => {
     { version: 12, name: "pinned_widgets", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 13, name: "browser_video_containers", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 14, name: "svg_media", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 15, name: "monitoring_widgets", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 

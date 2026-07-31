@@ -342,6 +342,45 @@ export const APP_MIGRATIONS = Object.freeze([
       WHERE kind = 'file' AND lower(target) LIKE '%.svg';
     `,
   }),
+  Object.freeze({
+    version: 15,
+    name: "monitoring_widgets",
+    sql: `
+      CREATE TABLE pinned_widgets_next (
+        id TEXT PRIMARY KEY,
+        owner_id INTEGER REFERENCES app_sessions(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope IN ('session', 'workspace')),
+        group_id TEXT REFERENCES pinned_widget_groups(id) ON DELETE SET NULL,
+        kind TEXT NOT NULL CHECK (kind IN (
+          'live_interface', 'image', 'video', 'markdown', 'file', 'directory', 'builtin', 'link', 'monitoring'
+        )),
+        label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 200),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        target TEXT,
+        hublot_id TEXT REFERENCES hublots(id) ON DELETE SET NULL,
+        mime_type TEXT,
+        size INTEGER CHECK (size IS NULL OR size >= 0),
+        mtime_ms INTEGER CHECK (mtime_ms IS NULL OR mtime_ms >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((scope = 'workspace' AND owner_id IS NULL) OR (scope = 'session' AND owner_id IS NOT NULL)),
+        CHECK (kind = 'live_interface' OR hublot_id IS NULL),
+        CHECK ((kind IN ('image', 'video', 'markdown', 'file', 'directory', 'link', 'monitoring') AND target IS NOT NULL)
+          OR (kind IN ('live_interface', 'builtin')))
+      ) WITHOUT ROWID;
+
+      INSERT INTO pinned_widgets_next SELECT * FROM pinned_widgets;
+      DROP TABLE pinned_widgets;
+      ALTER TABLE pinned_widgets_next RENAME TO pinned_widgets;
+
+      CREATE INDEX pinned_widgets_scope_group_position_idx
+        ON pinned_widgets(scope, owner_id, group_id, position, id);
+      CREATE UNIQUE INDEX pinned_widgets_hublot_idx
+        ON pinned_widgets(hublot_id) WHERE hublot_id IS NOT NULL;
+      CREATE UNIQUE INDEX pinned_widgets_builtin_workspace_idx
+        ON pinned_widgets(target) WHERE kind = 'builtin' AND scope = 'workspace';
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {
