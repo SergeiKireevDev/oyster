@@ -3,15 +3,18 @@
   import { checkpointTree } from "../stores/checkpointTree.js";
 </script>
 
-<aside id="treebar">
-  <div class="side-head">Checkpoints &amp; forks</div>
-  <div id="treeView">
+<aside id="treebar" aria-labelledby="checkpoint-tree-heading">
+  <div id="checkpoint-tree-heading" class="side-head" role="heading" aria-level="2">Checkpoints &amp; forks</div>
+  <div id="treeView" aria-busy={$checkpointTree.loading}>
     {#if $checkpointTree.loading}
-      <div class="sidebar-loading" role="status"><span class="spin" aria-hidden="true"></span> loading tree…</div>
-    {:else if $checkpointTree.empty}
-      <div class="t-empty" role="status">{$checkpointTree.empty}</div>
+      <div class="sidebar-loading" role="status" aria-atomic="true">
+        <span class="spin" aria-hidden="true"></span>
+        <span>loading tree…</span>
+      </div>
     {:else if $checkpointTree.error}
-      <div class="t-empty" role="alert">{$checkpointTree.error}</div>
+      <div class="t-empty" role="alert" aria-atomic="true">{$checkpointTree.error}</div>
+    {:else if $checkpointTree.empty}
+      <div class="t-empty" role="status" aria-atomic="true">{$checkpointTree.empty}</div>
     {:else if $checkpointTree.root}
       <CheckpointTreeNode
         node={$checkpointTree.root}
