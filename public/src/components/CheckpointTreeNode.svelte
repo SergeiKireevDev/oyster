@@ -12,10 +12,8 @@
   export let runners = [];
   export let capabilities = { rollback: true, reason: null };
 
-  $: live = runners.find((runner) => runnerSessionIdentity(runner) === sessionIdentity(node) && runner.alive);
-
   function checkpointMessage(checkpoint) {
-    const text = (checkpoint.message ?? "").replace(/^checkpoint:?\s*/, "");
+    const text = (checkpoint.message ?? "").replace(/^checkpoint:?\s*/i, "").trim();
     return /^\d{4}-\d{2}-\d{2}T/.test(text) ? "" : text;
   }
 
@@ -26,8 +24,26 @@
       : date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
-  function forkChildren(hash) {
-    return (node.children ?? []).filter((child) => child.forkedAtHash === hash);
+  function childLayout(checkpoints, children) {
+    const rows = checkpoints.map((checkpoint, index) => ({
+      checkpoint,
+      forks: [],
+      key: `${checkpoint.hash}:${checkpoint.anchorId ?? checkpoint.timestamp ?? index}`,
+      message: checkpointMessage(checkpoint),
+      time: checkpointTime(checkpoint),
+    }));
+    const rowByHash = new Map();
+    for (const row of rows) {
+      if (!rowByHash.has(row.checkpoint.hash)) rowByHash.set(row.checkpoint.hash, row);
+    }
+
+    const unslotted = [];
+    for (const child of children) {
+      const row = rowByHash.get(child.forkedAtHash);
+      if (row) row.forks.push(child);
+      else unslotted.push(child);
+    }
+    return { rows, unslotted };
   }
 
   function checkpointTitle(checkpoint) {
@@ -36,51 +52,69 @@
       : `Rollback unavailable: ${capabilities.reason ?? "exact-entry fork is unsupported"}`;
   }
 
+  function checkpointLabel(row) {
+    if (!capabilities.rollback) return checkpointTitle(row.checkpoint);
+    const details = [row.message, row.time].filter(Boolean).join(", ");
+    return `Roll back to checkpoint ${row.checkpoint.hash}${details ? `, ${details}` : ""}`;
+  }
+
   function rollbackFrom(checkpoint) {
     if (capabilities.rollback) rollbackCheckpoint({ hash: checkpoint.hash, sessionId: node.id });
   }
 
-  $: hasChildren = Boolean(node.checkpoints?.length || unslottedChildren.length);
-
-  $: unslottedChildren = (node.children ?? []).filter((child) =>
-    !(node.checkpoints ?? []).some((checkpoint) => checkpoint.hash === child.forkedAtHash)
-  );
+  $: isCurrent = node.id === currentSessionId;
+  $: isFork = Boolean(node.parentId ?? node.parentSession);
+  $: live = runners.find((runner) => runner.alive && runnerSessionIdentity(runner) === sessionIdentity(node));
+  $: sessionName = node.name || node.id.slice(0, 8);
+  $: sessionLabel = [
+    sessionName,
+    isFork ? "forked session" : "root session",
+    isCurrent && "current session",
+    live && (live.busy ? "working" : "live"),
+  ].filter(Boolean).join(", ");
+  $: layout = childLayout(node.checkpoints ?? [], node.children ?? []);
+  $: hasChildren = layout.rows.length > 0 || layout.unslotted.length > 0;
 </script>
 
 <div>
   <button
     type="button"
     class="t-session"
-    class:current={node.id === currentSessionId}
+    class:current={isCurrent}
+    aria-current={isCurrent ? "true" : undefined}
+    aria-label={sessionLabel}
     title={node.sessionKey ?? node.path ?? node.id}
     onclick={() => openCheckpointTreeSession(node)}
   >
-    <span>{node.parentSession ? "🌿" : "🌱"}</span>
-    <span class="t-name">{node.name || node.id.slice(0, 8)}</span>
+    <span aria-hidden="true">{isFork ? "🌿" : "🌱"}</span>
+    <span class="t-name">{sessionName}</span>
     {#if live}
-      <span class="t-dot" class:busy={live.busy} title={live.busy ? "working" : "live"}></span>
+      <span class="t-dot" class:busy={live.busy} aria-hidden="true" title={live.busy ? "working" : "live"}></span>
     {/if}
   </button>
 
   {#if hasChildren}
     <div class="t-kids">
-      {#each node.checkpoints ?? [] as checkpoint (checkpoint.hash)}
+      {#each layout.rows as row (row.key)}
         <button
           type="button"
           class="t-ckpt"
-          title={checkpointTitle(checkpoint)}
+          aria-label={checkpointLabel(row)}
+          title={checkpointTitle(row.checkpoint)}
           disabled={!capabilities.rollback}
-          onclick={() => rollbackFrom(checkpoint)}
+          onclick={() => rollbackFrom(row.checkpoint)}
         >
-          🧊<span class="t-hash">{checkpoint.hash}</span><span class="t-msg">{checkpointMessage(checkpoint)}</span><span class="t-time">{checkpointTime(checkpoint)}</span>
+          <span aria-hidden="true">🧊</span><span class="t-hash">{row.checkpoint.hash}</span><span class="t-msg">{row.message}</span><span class="t-time">{row.time}</span>
         </button>
-        <div class="t-forks">
-          {#each forkChildren(checkpoint.hash) as child (child.id)}
-            <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
-          {/each}
-        </div>
+        {#if row.forks.length}
+          <div class="t-forks">
+            {#each row.forks as child (child.id)}
+              <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
+            {/each}
+          </div>
+        {/if}
       {/each}
-      {#each unslottedChildren as child (child.id)}
+      {#each layout.unslotted as child (child.id)}
         <svelte:self node={child} {currentSessionId} {runners} {capabilities} />
       {/each}
     </div>
