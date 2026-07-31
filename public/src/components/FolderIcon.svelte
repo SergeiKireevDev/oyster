@@ -24,3 +24,31 @@
     <path d="M3.75 10h16.5" />
   </svg>
 </span>
+
+<style>
+  .folder-icon {
+    --folder-neon: var(--accent);
+    display: inline-flex;
+    flex: none;
+    width: var(--folder-icon-size);
+    height: var(--folder-icon-size);
+    align-items: center;
+    justify-content: center;
+    color: var(--folder-neon);
+    filter: drop-shadow(0 0 4px rgba(157, 169, 255, 0.42));
+    vertical-align: -0.15em;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  path {
+    stroke: currentColor;
+    stroke-width: 1.65;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+</style>
