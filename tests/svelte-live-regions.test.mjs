@@ -6,11 +6,13 @@ const componentsRoot = new URL("../public/src/components/", import.meta.url);
 const component = (name) => readFileSync(new URL(name, componentsRoot), "utf8");
 
 test("transient notices and dynamic errors use appropriately prioritized live regions", () => {
+  const toasts = component("Toasts.svelte");
   const toast = component("ToastItem.svelte");
   const analytics = component("AnalyticsModal.svelte");
   const checkpointTree = component("CheckpointTreebar.svelte");
   const assistant = component("transcript/AssistantMessage.svelte");
 
+  assert.match(toasts, /<section id="toasts" aria-label="Notifications">/);
   assert.match(toast, /aria-live=\{toast\.kind === "error" \? "assertive" : "polite"\}/);
   assert.match(toast, /role=\{toast\.kind === "error" \? "alert" : "status"\}/);
   assert.match(toast, /aria-atomic="true"/);
