@@ -1451,49 +1451,6 @@
     cursor: default;
   }
   #modal .m-option.current .s-name { color: var(--accent); }
-  .api-keys-intro { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-  .api-keys-state { margin: 10px 0; color: var(--muted); font-size: 12px; }
-  .api-keys-state.error { color: var(--red); }
-  .api-key-list { display: grid; gap: 6px; }
-  .api-key-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
-  .api-key-provider, .api-key-status { min-width: 0; display: flex; align-items: center; gap: 8px; }
-  .api-key-provider { flex-direction: column; align-items: flex-start; gap: 1px; }
-  .api-key-provider span { max-width: 100%; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; }
-  .api-key-source, .api-key-readonly { padding: 2px 6px; border-radius: 999px; background: var(--code-bg); color: var(--muted); font-size: 10px; white-space: nowrap; }
-  .api-key-readonly { color: var(--accent); }
-  .api-key-oauth { padding: 4px 8px; border: 1px solid var(--accent-dim); border-radius: 6px; background: var(--user-bubble); color: var(--accent); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
-  .api-key-oauth:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); color: var(--text); }
-  .api-key-oauth:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .api-key-oauth:disabled { opacity: .45; cursor: default; }
-  .api-key-remove { padding: 4px 7px; border: 1px solid rgba(255,100,100,.25); border-radius: 6px; background: transparent; color: var(--red); font-size: 10px; }
-  .api-key-remove:hover:not(:disabled) { background: rgba(255,80,80,.08); }
-  .api-key-removal-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
-  .oauth-flow { display: grid; gap: 10px; margin: 12px 0; padding: 12px; border: 1px solid var(--accent-dim); border-radius: 8px; background: var(--panel); }
-  .oauth-flow h3, .oauth-flow p { margin: 0; }
-  .oauth-auth-link { width: fit-content; text-decoration: none; }
-  .oauth-device-code, .oauth-request { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
-  .oauth-device-code > p { flex: 1 0 100%; color: var(--muted); font-size: 11px; line-height: 1.4; }
-  .oauth-device-code-entry { display: flex; flex: 1 1 260px; align-items: end; gap: 6px; min-width: 0; }
-  .oauth-device-code label, .oauth-request label { display: grid; flex: 1 1 220px; gap: 5px; color: var(--muted); font-size: 11px; }
-  .oauth-device-code input, .oauth-request input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
-  .oauth-device-code input { font-family: var(--mono); font-weight: 700; letter-spacing: .08em; }
-  .oauth-device-code-copy { height: 34px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--accent); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
-  .oauth-device-code-copy:hover, .oauth-device-code-copy:focus-visible { border-color: var(--accent); background: var(--accent-dim); color: var(--text); }
-  .oauth-device-code .btn { min-height: 34px; text-decoration: none; }
-  .oauth-request { min-width: 0; margin: 0; padding: 0; border: 0; }
-  .oauth-request legend { width: 100%; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
-  .btn.oauth-cancel { width: fit-content; background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
-  .api-key-form { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1.3fr) auto; align-items: end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .api-key-form label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
-  .api-key-form select, .api-key-form input { min-width: 0; height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text); }
-  .api-key-form input:focus, .api-key-form select:focus { border-color: var(--accent-dim); outline: none; }
-  .api-key-oauth-choice { min-width: 0; display: grid; gap: 5px; }
-  .api-key-oauth-choice span { color: var(--muted); font-size: 11px; }
-  .api-key-oauth-choice strong { min-height: 34px; display: flex; align-items: center; font-size: 12px; }
-  .api-key-method-toggle { grid-column: 1 / -1; width: max-content; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
-  .api-key-method-toggle:hover, .api-key-method-toggle:focus-visible { text-decoration: underline; }
-  @media (max-width: 600px) { .api-key-form { grid-template-columns: 1fr; } .api-key-row, .api-key-status { align-items: flex-start; flex-direction: column; } }
-
 
   #modal .m-option.session-row { display: flex; align-items: center; }
   #modal .s-session-main {

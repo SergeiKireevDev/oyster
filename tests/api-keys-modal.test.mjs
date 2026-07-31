@@ -5,7 +5,6 @@ import { readFileSync } from "node:fs";
 const modal = readFileSync(new URL("../public/src/components/CredentialsModal.svelte", import.meta.url), "utf8");
 const modalRegistry = readFileSync(new URL("../public/src/runtime/modalContentRegistry.js", import.meta.url), "utf8");
 const store = readFileSync(new URL("../public/src/stores/credentials.js", import.meta.url), "utf8");
-const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("Credentials modal is owned by the overlay and covers safe provider states", () => {
   assert.match(modalRegistry, /import CredentialsModal from "\.\.\/components\/CredentialsModal\.svelte"/);
@@ -28,11 +27,13 @@ test("Credentials modal exposes API-key and OAuth actions with revocation and fa
   assert.match(modal, /pi may continue to authenticate after removal/);
 });
 
-test("OAuth credential actions use the application palette instead of browser-default controls", () => {
-  assert.match(styles, /\.api-key-oauth \{[^}]*border: 1px solid var\(--accent-dim\)[^}]*background: var\(--user-bubble\)[^}]*color: var\(--accent\)/);
-  assert.match(styles, /\.api-key-oauth:hover:not\(:disabled\) \{[^}]*border-color: var\(--accent\)[^}]*background: var\(--accent-dim\)[^}]*color: var\(--text\)/);
-  assert.match(styles, /\.api-key-oauth:focus-visible \{[^}]*outline: 2px solid var\(--accent\)/);
-  assert.match(styles, /\.btn\.oauth-cancel \{[^}]*background: rgba\(255,125,145,\.14\)[^}]*color: #ff9bac[^}]*box-shadow: none/);
+test("OAuth credential actions use shared controls and semantic palette tokens", () => {
+  assert.match(modal, /class="chip api-key-oauth"/);
+  assert.match(modal, /\.api-key-status \.api-key-oauth \{ color: var\(--accent\); \}/);
+  assert.match(modal, /class="chip api-key-remove"/);
+  assert.match(modal, /\.api-key-status \.api-key-remove \{[\s\S]*?var\(--red\)/);
+  assert.match(modal, /class="chip oauth-cancel"/);
+  assert.match(modal, /\.oauth-cancel \{[^}]*color: var\(--red\)/);
 });
 
 test("the status list shows only active providers while the selector includes inactive OAuth providers", () => {
