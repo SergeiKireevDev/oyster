@@ -3648,6 +3648,7 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
   .pinned-widget-viewer { min-height: calc(100dvh - 130px); }
   .pinned-widget-viewer-stage { border-radius: 8px; }
   .pinned-monitor-output { padding: 12px; }
+  .pinned-monitor-output:not(.diff-output) { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .pinned-monitor-output.diff-output { padding-inline: 0; }
   .pinned-image-frame { min-height: calc(100dvh - 190px); }
   .pinned-markdown-viewer { min-height: 100%; padding: 26px clamp(17px, 5vw, 28px) 42px; border-inline: 0; font-size: clamp(15px, 4vw, 17px); }

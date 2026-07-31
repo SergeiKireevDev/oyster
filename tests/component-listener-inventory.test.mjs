@@ -38,6 +38,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     .map((location) => location.replace(/:\d+:/, ":"));
 
   assert.deepEqual(integrations, [
+    "components/CommandPalette.svelte:use:keepActiveVisible={cmd.active}",
     "components/CredentialsModal.svelte:use:trackOAuthInput",
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
