@@ -36,6 +36,6 @@ test("the visual cost chart exposes its underlying bucket and model values", () 
   const analytics = component("AnalyticsModal.svelte");
 
   assert.match(analytics, /chartDescription = `Cost by \$\{\$analytics\.bucket\}\. \$\{chartData\.map/);
-  assert.match(analytics, /chartTitle\(item\)\.replaceAll\("\\n", ", "\)/);
+  assert.match(analytics, /chartTitle\(item, \$analytics\.bucket\)\.replaceAll\("\\n", ", "\)/);
   assert.match(analytics, /class="analytics-chart" role="img" aria-label=\{chartDescription\}/);
 });
