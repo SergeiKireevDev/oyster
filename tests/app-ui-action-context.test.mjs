@@ -14,8 +14,9 @@ const commandPaletteSource = readFileSync(new URL("../public/src/components/Comm
 
 test("App provides its scoped UI action registry and starts the application scope", () => {
   assert.match(appSource, /provideUiActionRegistry\(applicationScope\.services\.uiActions\)/);
-  assert.match(appSource, /applicationScope\.start\(\)/);
-  assert.match(appSource, /applicationScope\.teardown\(\)/);
+  assert.match(appSource, /applicationScope\.start\(\)\.catch\(\(error\) => \{/);
+  assert.match(appSource, /console\.error\("Application startup failed", error\)/);
+  assert.match(appSource, /return \(\) => applicationScope\.teardown\(\)/);
   assert.match(scopeSource, /startRuntime\(\{ uiActions, dialogs, browserActions, checkpointModelPicker \}\)/);
   assert.match(scopeSource, /uiActions\.teardown\(\)/);
 });

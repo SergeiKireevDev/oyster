@@ -24,7 +24,10 @@
   provideWorkspaceService(applicationScope.services.workspaceService);
 
   onMount(() => {
-    applicationScope.start();
+    applicationScope.start().catch((error) => {
+      console.error("Application startup failed", error);
+    });
+
     return () => applicationScope.teardown();
   });
 </script>
