@@ -14,7 +14,7 @@ test("Credentials modal is owned by the overlay and covers safe provider states"
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
-  assert.match(modal, /<button class="chip" data-modal-cancel onclick=\{close\}>Close<\/button>/);
+  assert.match(modal, /<button class="chip" type="button" data-modal-cancel onclick=\{close\}>Close<\/button>/);
 });
 
 test("Credentials modal exposes API-key and OAuth actions with revocation and fallback warnings", () => {
@@ -61,7 +61,7 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
   assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);
   assert.match(modal, /oninput=\{\(event\) => updateOAuthInput\(event, request\.requestId\)\}/);
-  assert.match(modal, /disabled=\{!oauthInputReady\[request\.requestId\]\}>Continue/);
+  assert.match(modal, /disabled=\{oauthOperationPending \|\| !oauthInputReady\[request\.requestId\]\}>Continue/);
   assert.match(modal, /unreachable loopback page[\s\S]*?redirect URL or authorization code/);
   assert.match(modal, /CREDENTIALS_CANCEL_OAUTH_ACTION/);
   for (const text of ["Sign-in completed", "Sign-in expired", "Sign-in cancelled", "Sign-in failed", "Pi restart:"]) {
@@ -82,6 +82,9 @@ test("OAuth callback inputs stay component-local and clear on every lifecycle tr
   assert.match(modal, /function cancelOAuth\(\) \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?CREDENTIALS_CANCEL_OAUTH_ACTION/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearOAuthInputs\(\)/);
   assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearOAuthInputs\(\)[\s\S]*?oauthInputs\.clear\(\)/);
+  assert.match(modal, /if \(oauthOperationPending\) return;[\s\S]*?oauthOperationPending = true;[\s\S]*?oauthOperationPending = false/);
+  assert.match(modal, /disabled=\{oauthOperationPending\} onclick=\{\(\) => chooseOAuth/);
+  assert.match(modal, /disabled=\{oauthOperationPending\} onclick=\{cancelOAuth\}/);
   assert.doesNotMatch(modal, /bind:value=\{[^}]*oauth|localStorage|sessionStorage/);
 });
 
@@ -96,7 +99,8 @@ test("API Keys modal form keeps submitted keys local and clears them on every ex
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_SAVE_API_KEY_ACTION, \{ provider: selectedProvider, key \}\)/);
   assert.match(modal, /finally \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearKey\(\)/);
-  assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearKey\(\)[\s\S]*?CREDENTIALS_CLOSE_ACTION/);
+  assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearKey\(\)[\s\S]*?keyInput = undefined[\s\S]*?deactivate\(\)/);
+  assert.match(modal, /function deactivate\(\) \{[\s\S]*?if \(deactivated\) return;[\s\S]*?CREDENTIALS_CLOSE_ACTION/);
   assert.doesNotMatch(modal, /bind:value=\{key/);
 });
 
