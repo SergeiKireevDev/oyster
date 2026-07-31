@@ -45,7 +45,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/FileExplorerModal.svelte`
 - [x] `public/src/components/FilePickerModal.svelte`
 - [x] `public/src/components/FolderBrowserModal.svelte`
-- [ ] `public/src/components/FolderIcon.svelte`
+- [x] `public/src/components/FolderIcon.svelte`
 - [ ] `public/src/components/Header.svelte`
 - [ ] `public/src/components/HtmlArtifact.svelte`
 - [ ] `public/src/components/HublotManagerModal.svelte`

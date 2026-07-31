@@ -4,6 +4,7 @@ import test from "node:test";
 import { compile } from "svelte/compiler";
 
 const source = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
+const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("Header exposes descriptive session-control names and button semantics", () => {
   assert.equal((source.match(/<button/g) ?? []).length, (source.match(/<button[^>]*type="button"/g) ?? []).length);
@@ -26,6 +27,24 @@ test("Header uses named handlers and does not forward unused DOM events", () => 
   }
   assert.doesNotMatch(source, /onclick=\{\([^)]*\) =>/);
   assert.doesNotMatch(source, /invoke\(HEADER_TOGGLE_TREE_ACTION,\s*event\)/);
+});
+
+test("Header uses semantic theme tokens and the shared chip contract", () => {
+  assert.match(source, /class="chip" id="menuBtn"/);
+  assert.match(source, /background: var\(--header-bg, color-mix\(in srgb, var\(--panel\)/);
+  assert.match(source, /color: var\(--header-status-color, var\(--muted\)\);/);
+  assert.match(source, /\.app-header \.chip[\s\S]*?color: var\(--muted\);/);
+  assert.match(source, /\.app-header \.chip:hover[\s\S]*?color: var\(--header-chip-hover-color, var\(--text\)\);/);
+  assert.match(source, /\.app-header \.chip:focus-visible\s*\{[\s\S]*?outline: 2px solid var\(--accent\);[\s\S]*?outline-offset: 2px;/);
+  assert.doesNotMatch(source, /#[0-9a-f]{3,8}|rgba?\(/i);
+  assert.match(globalStyles, /:root\[data-theme="light"\][\s\S]*?--header-bg:/);
+});
+
+test("Header gives open and mobile controls visible, reachable states", () => {
+  assert.match(source, /\.app-header \.chip\[aria-expanded="true"\][\s\S]*?border-color: var\(--accent\);[\s\S]*?box-shadow: inset 0 -2px 0 var\(--accent\);/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.app-header \.chip\s*\{\s*min-height: 40px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menuBtn\s*\{\s*width: 40px;/);
+  assert.match(source, /\.title\s*\{[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
 });
 
 test("Header compiles without Svelte warnings", () => {
