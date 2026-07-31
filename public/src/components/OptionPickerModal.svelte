@@ -1,12 +1,10 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { tick } from "svelte";
   import OptionPickerItem from "./OptionPickerItem.svelte";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
 
   const dialogs = getDialogService();
   const optionPicker = dialogs.optionPicker;
-
-  let searchEl;
 
   $: modelMode = $optionPicker.variant === "model";
   $: query = ($optionPicker.query || "").trim().toLowerCase();
@@ -45,13 +43,6 @@
     await tick();
     if (visible.length) setActive(visible[0].index);
   }
-
-  onMount(() => {
-    tick().then(() => {
-      searchEl?.focus();
-      if ($optionPicker.active >= 0) setActive($optionPicker.active);
-    });
-  });
 </script>
 
 <svelte:document onkeydowncapture={onKey} />
@@ -60,7 +51,6 @@
   <label class:model-autocomplete-search={modelMode} class="option-picker-search">
     {#if modelMode}<span aria-hidden="true">⌕</span>{/if}
     <input
-      bind:this={searchEl}
       type="search"
       placeholder={$optionPicker.placeholder}
       value={$optionPicker.query}

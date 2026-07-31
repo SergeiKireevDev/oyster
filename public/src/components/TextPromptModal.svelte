@@ -1,20 +1,12 @@
 <script>
-  import { onMount, tick } from "svelte";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
 
   const dialogs = getDialogService();
   const textPrompt = dialogs.textPrompt;
-
-  let inputEl;
-
-  onMount(() => {
-    tick().then(() => inputEl?.focus());
-  });
 </script>
 
 <form onsubmit={(event) => { event.preventDefault(); dialogs.submitText(); }}>
   <input
-    bind:this={inputEl}
     type="text"
     aria-label={$textPrompt.placeholder || "Response"}
     placeholder={$textPrompt.placeholder}
