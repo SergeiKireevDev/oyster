@@ -42,6 +42,24 @@ test("session collection views render bounded pages with explicit recovery contr
   assert.doesNotMatch(picker, /\{#each \$sessionPicker\.searchResults as group/);
 });
 
+test("file browsers incrementally reveal large keyed directory and file collections", () => {
+  const directoryList = component("BrowserDirectoryList.svelte");
+  assert.match(directoryList, /incrementalCollectionPage\(visibleDirs, requestedDirectories\)/);
+  assert.match(directoryList, /\{#each directoryPage\.items as dir \(dir\.name\)\}/);
+  assert.match(directoryList, /Show \{Math\.min\(directoryPage\.pageSize, directoryPage\.remainingCount\)\} more folders/);
+  assert.match(directoryList, /nextDirectoryPageIdentity = `\$\{path\}\\0\$\{showHidden\}`/);
+  assert.doesNotMatch(directoryList, /\{#each visibleDirs as dir/);
+
+  for (const name of ["FileExplorerModal.svelte", "FilePickerModal.svelte"]) {
+    const source = component(name);
+    assert.match(source, /incrementalCollectionPage\(files, requestedFiles\)/);
+    assert.match(source, /\{#each filePage\.items as file \(file\.name\)\}/);
+    assert.match(source, /Show \{Math\.min\(filePage\.pageSize, filePage\.remainingCount\)\} more files/);
+    assert.match(source, /nextFilePageIdentity = `/);
+    assert.doesNotMatch(source, /\{#each files as file/);
+  }
+});
+
 test("transcripts load the tail first and backfill in bounded chunks", () => {
   const runtime = readFileSync(new URL("../public/src/runtime/transcriptRuntime.js", import.meta.url), "utf8");
   assert.match(runtime, /tailMessages = 40, chunkMessages = 60/);

@@ -3,6 +3,7 @@
   import BrowserFileEntry from "./BrowserFileEntry.svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
+  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
@@ -20,10 +21,27 @@
 
   const toggleHiddenFiles = () => updateFilePicker({ showHidden: !$filePicker.showHidden });
 
+  let requestedFiles = 40;
+  let filePageIdentity = null;
+
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
   $: directories = visibleBrowserEntries($filePicker.dirs, $filePicker.showHidden);
+  $: nextFilePageIdentity = `${$filePicker.path}\0${$filePicker.showHidden}`;
+  $: if (nextFilePageIdentity !== filePageIdentity) {
+    filePageIdentity = nextFilePageIdentity;
+    requestedFiles = 40;
+  }
+  $: filePage = incrementalCollectionPage(files, requestedFiles);
   $: folderIsEmpty = !directories.length && !files.length;
   $: hiddenFilesLabel = $filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
+
+  function revealFiles() {
+    requestedFiles = nextCollectionPageCount(
+      filePage.visibleCount,
+      filePage.visibleCount + filePage.remainingCount,
+      filePage.pageSize,
+    );
+  }
 </script>
 
 {#if $filePicker.loading}
@@ -44,10 +62,13 @@
     showWorkdir={true}
     onBrowse={browseFilePicker}
   />
-  {#each files as file (file.name)}
+  {#each filePage.items as file (file.name)}
     {@const fullPath = browserPathFor($filePicker.path, file)}
     <BrowserFileEntry {file} path={fullPath} onOpen={pickFilePicker} />
   {/each}
+  {#if filePage.remainingCount}
+    <button type="button" class="collection-load-more" onclick={revealFiles}>Show {Math.min(filePage.pageSize, filePage.remainingCount)} more files</button>
+  {/if}
   {#if folderIsEmpty}
     <div class="m-path">(empty folder)</div>
   {/if}
