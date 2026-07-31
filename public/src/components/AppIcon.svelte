@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more";
+   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file";
    *   size?: number;
    *   class?: string;
    * }}
@@ -44,6 +44,8 @@
       <path d="m12 3 1.15 3.1L16 7.25l-2.85 1.15L12 11.5 10.85 8.4 8 7.25l2.85-1.15L12 3ZM18.5 13l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2ZM6 13l1.05 2.95L10 17l-2.95 1.05L6 21l-1.05-2.95L2 17l2.95-1.05L6 13Z" />
     {:else if name === "more"}
       <circle cx="5" cy="12" r="1.25" class="filled" /><circle cx="12" cy="12" r="1.25" class="filled" /><circle cx="19" cy="12" r="1.25" class="filled" />
+    {:else if name === "file"}
+      <path d="M6 3h8l4 4v14H6zM14 3v5h4" />
     {/if}
   </svg>
 </span>

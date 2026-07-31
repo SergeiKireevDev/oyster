@@ -58,6 +58,21 @@ test("shared directory list follows the modal row visual contract", () => {
   assert.doesNotMatch(style, /\.browser-directory-row\s*\{/, "component-only layout remains scoped");
 });
 
+test("shared file entries use the compact modal row visual contract", () => {
+  const entry = readFileSync(new URL("../public/src/components/BrowserFileEntry.svelte", import.meta.url), "utf8");
+  const style = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(entry, /import AppIcon from "\.\/AppIcon\.svelte"/);
+  assert.match(entry, /<span class="browser-file-content">/);
+  assert.match(entry, /<AppIcon name="file" size=\{15\} \/>/);
+  assert.match(entry, /\.browser-file-content\s*\{[^}]*display: flex;[^}]*gap: 8px;/s);
+  assert.match(entry, /\.browser-file-name\s*\{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
+  assert.match(entry, /\.f-size\s*\{[^}]*margin-left: auto;[^}]*font-variant-numeric: tabular-nums;/s);
+  assert.match(entry, /@media \(max-width: 760px\)[\s\S]*\.file \{ min-height: 40px; \}/);
+  assert.doesNotMatch(style, /\.m-option\.file::before/, "file icons come from the shared AppIcon component");
+  assert.doesNotMatch(style, /\.browser-file-(?:content|name|icon)/, "component-only layout remains scoped");
+});
+
 test("folder browser component routes browse, create, submit, and cancel through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/FolderBrowserModal.svelte", import.meta.url), "utf8");
   assert.match(source, /getUiActionRegistry\(\)/);
