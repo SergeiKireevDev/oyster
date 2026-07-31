@@ -77,6 +77,6 @@ test("touching a message selects it before its controls can be activated", () =>
     assert.match(source, /pointerType !== "touch"/);
     assert.match(source, /event\.preventDefault\(\)/);
     assert.match(source, /event\.currentTarget\.focus\(\{ preventScroll: true \}\)/);
-    assert.match(source, /tabindex="-1" onpointerdowncapture=\{selectOnFirstTouch\}/);
+    assert.match(source, /tabindex="-1"\s+onpointerdowncapture=\{selectOnFirstTouch\}/);
   }
 });
