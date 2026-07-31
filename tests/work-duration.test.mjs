@@ -41,9 +41,17 @@ test("work duration is rendered once after the transcript items for busy and idl
   assert.match(source, /{#if \$appSession\.busy && !\$appSession\.compacting}<span class="spin"/);
 });
 
-test("context compaction renders a dedicated live spinner", () => {
+test("work duration clock runs only while the session is busy and is cleaned up", () => {
+  const source = readFileSync(new URL("../public/src/components/Transcript.svelte", import.meta.url), "utf8");
+  assert.match(source, /appSession\.subscribe\(\(\{ busy \}\) =>/);
+  assert.match(source, /if \(!busy\) return;[\s\S]*?now = Date\.now\(\);[\s\S]*?workClock = setInterval/);
+  assert.match(source, /return \(\) => \{[\s\S]*?unsubscribe\(\);[\s\S]*?stopWorkClock\(\);/);
+  assert.doesNotMatch(source, /setInterval\(\(\) => \{ if \(\$appSession\.busy\)/);
+});
+
+test("context compaction renders a dedicated atomic live spinner", () => {
   const source = readFileSync(new URL("../public/src/components/Transcript.svelte", import.meta.url), "utf8");
   assert.match(source, /{#if \$appSession\.compacting}/);
-  assert.match(source, /class="compaction-status" role="status" aria-live="polite"/);
+  assert.match(source, /class="compaction-status" role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(source, /Compacting context…/);
 });

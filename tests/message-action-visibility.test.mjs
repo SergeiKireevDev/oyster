@@ -37,12 +37,14 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(transcript, /item\.kind === "user" \|\| item\.kind === "compaction"/);
   assert.match(transcript, /turnAnchorId \?\?= item\.id/);
   assert.match(transcript, /groups\.set\(turnAnchorId, turnActivities\)/);
-  assert.match(transcript, /items\.slice\(boundary \+ 1\)\.find\(\(item\) => groups\.has\(item\.id\)\)/);
+  assert.match(transcript, /for \(let index = boundary \+ 1; index < items\.length; index\+\+\)/);
+  assert.doesNotMatch(transcript, /items\.slice\(boundary \+ 1\)/);
   assert.match(transcript, /const isCurrentTurnActivity = \(item\) => \$appSession\.busy && item\.id === \$latestTurnActivityId/);
-  assert.match(transcript, /activityActive=\{isCurrentTurnActivity\(item\)\}/);
+  assert.match(transcript, /\{@const activityCurrent = isCurrentTurnActivity\(item\)\}/);
+  assert.match(transcript, /activityActive=\{activityCurrent\}/);
   assert.match(transcript, /activityBlocks=\{\$turnActivityGroups\.get\(item\.id\) \?\? \[\]\}/);
   assert.match(transcript, /activityKey=\{item\.id\}/);
-  assert.match(transcript, /activityUnsettled=\{isCurrentTurnActivity\(item\)\}/);
+  assert.match(transcript, /activityUnsettled=\{activityCurrent\}/);
   assert.match(assistant, /arrangeActivity\(data\.blocks, activityBlocks, activityKey\)/);
   assert.match(assistant, /visible\.unshift\(\{[\s\S]*?type: "activityStack"/);
   assert.match(assistant, /key: `activity:\$\{identity\}`/);
