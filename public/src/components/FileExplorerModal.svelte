@@ -5,6 +5,7 @@
   import { closeModalState } from "../stores/modal.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
   import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
+  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
@@ -30,11 +31,28 @@
 
   const toggleHiddenFiles = () => updateFileExplorer({ showHidden: !$fileExplorer.showHidden });
 
+  let requestedFiles = 40;
+  let filePageIdentity = null;
+
   $: files = visibleBrowserEntries($fileExplorer.files, $fileExplorer.showHidden);
   $: directories = visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden);
+  $: nextFilePageIdentity = `${$fileExplorer.path}\0${$fileExplorer.showHidden}`;
+  $: if (nextFilePageIdentity !== filePageIdentity) {
+    filePageIdentity = nextFilePageIdentity;
+    requestedFiles = 40;
+  }
+  $: filePage = incrementalCollectionPage(files, requestedFiles);
   $: folderIsEmpty = !directories.length && !files.length;
   $: hiddenFilesLabel = $fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
   $: editedFileDownload = browserActions.fileDownload($fileExplorer.editPath);
+
+  function revealFiles() {
+    requestedFiles = nextCollectionPageCount(
+      filePage.visibleCount,
+      filePage.visibleCount + filePage.remainingCount,
+      filePage.pageSize,
+    );
+  }
 </script>
 
 {#if $fileExplorer.loading}
@@ -74,7 +92,7 @@
     onBrowse={browseFileExplorer}
     onPin={pinExploredPath}
   />
-  {#each files as file (file.name)}
+  {#each filePage.items as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}
     {@const download = browserActions.fileDownload(fullPath)}
     <div class="file-explorer-row">
@@ -90,6 +108,9 @@
       <button class="chip" title={`edit ${file.name}`} aria-label={`Edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
     </div>
   {/each}
+  {#if filePage.remainingCount}
+    <button type="button" class="collection-load-more" onclick={revealFiles}>Show {Math.min(filePage.pageSize, filePage.remainingCount)} more files</button>
+  {/if}
   {#if folderIsEmpty}
     <div class="m-path" role="status">(empty folder)</div>
   {/if}

@@ -1,5 +1,6 @@
 <script>
   import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
+  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
 
   export let path = "";
   export let home = "";
@@ -12,8 +13,25 @@
   export let onBrowse = () => {};
   export let onPin = null;
 
+  let requestedDirectories = 40;
+  let directoryPageIdentity = null;
+
   $: visibleDirs = visibleBrowserEntries(dirs, showHidden);
+  $: nextDirectoryPageIdentity = `${path}\0${showHidden}`;
+  $: if (nextDirectoryPageIdentity !== directoryPageIdentity) {
+    directoryPageIdentity = nextDirectoryPageIdentity;
+    requestedDirectories = 40;
+  }
+  $: directoryPage = incrementalCollectionPage(visibleDirs, requestedDirectories);
   $: hasNavigation = path !== home || (showWorkdir && workdir && path !== workdir) || parent;
+
+  function revealDirectories() {
+    requestedDirectories = nextCollectionPageCount(
+      directoryPage.visibleCount,
+      directoryPage.visibleCount + directoryPage.remainingCount,
+      directoryPage.pageSize,
+    );
+  }
 </script>
 
 {#if showPath}
@@ -32,10 +50,13 @@
 {#if hasNavigation && visibleDirs.length}
   <div class="browser-directory-separator" role="separator" aria-label="Folders"></div>
 {/if}
-{#each visibleDirs as dir (dir.name)}
+{#each directoryPage.items as dir (dir.name)}
   {@const fullPath = browserPathFor(path, dir)}
   <div class="browser-directory-row">
     <button class={`m-option dir ${dir.hidden ? "hidden-entry" : ""}`} onclick={() => onBrowse(fullPath)}>{dir.name}</button>
     {#if onPin}<button type="button" class="chip" title={`pin ${dir.name}`} aria-label={`Pin ${dir.name}`} onclick={() => onPin(fullPath)}>⌖</button>{/if}
   </div>
 {/each}
+{#if directoryPage.remainingCount}
+  <button type="button" class="collection-load-more" onclick={revealDirectories}>Show {Math.min(directoryPage.pageSize, directoryPage.remainingCount)} more folders</button>
+{/if}
