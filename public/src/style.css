@@ -1066,7 +1066,6 @@
   .r-empty { color: var(--muted); font-size: 12px; flex-shrink: 0; }
   /* on small screens the sidebar becomes a slide-over drawer, toggled by a
      header chip that only appears there */
-  #carouselIndicator { display: none; }
   @media (max-width: 760px) {
     #sessions, #hublots { display: none; }
     #sessions.open {
@@ -1143,38 +1142,7 @@
       #sessions.open, #hublots.open,
       #sessions.open.closing, #hublots.open.closing { animation: none; }
     }
-    /* ---------- thin mobile carousel position indicator ---------- */
-    #carouselIndicator {
-      display: block;
-      position: fixed;
-      bottom: max(2px, env(safe-area-inset-bottom));
-      left: 50%;
-      width: 72px;
-      height: 2px;
-      transform: translateX(-50%);
-      z-index: 56;
-      pointer-events: none;
-      transition: opacity .2s;
-    }
-    #carouselIndicator .carousel-track {
-      position: relative;
-      display: block;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--muted) 28%, transparent);
-    }
-    #carouselIndicator .carousel-position {
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 25%;
-      border-radius: inherit;
-      background: var(--accent);
-      transform: translateX(calc(var(--carousel-index) * 100%));
-      transition: transform .25s ease;
-    }
-    /* hide when a modal/command palette is open */
+    /* Hide the component-owned carousel indicator below blocking overlays. */
     body:has(#overlay.open) #carouselIndicator,
     body:has(#cmdPalette.open) #carouselIndicator { opacity: 0; }
   }

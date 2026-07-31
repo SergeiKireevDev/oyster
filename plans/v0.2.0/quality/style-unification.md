@@ -30,7 +30,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/ArtifactLoadState.svelte`
 - [x] `public/src/components/AuthGate.svelte`
 - [x] `public/src/components/BrowserDirectoryList.svelte`
-- [ ] `public/src/components/BrowserFileEntry.svelte`
+- [x] `public/src/components/BrowserFileEntry.svelte`
 - [ ] `public/src/components/CarouselIndicator.svelte`
 - [ ] `public/src/components/ChatLayout.svelte`
 - [ ] `public/src/components/CheckpointModelPickerModal.svelte`
