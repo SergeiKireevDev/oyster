@@ -22,8 +22,13 @@ test("option picker delegates each option's conditional presentation to one reus
 test("file workflows share the file entry concept without duplicating its markup", () => {
   const entry = component("BrowserFileEntry.svelte");
 
+  assert.match(entry, /let \{[\s\S]*file,[\s\S]*path = "",[\s\S]*expanded = false,[\s\S]*onOpen = \(\) => \{\},[\s\S]*\} = \$props\(\)/);
+  assert.match(entry, /let formattedSize = \$derived\(fmtFileSize\(file\.size\)\)/);
+  assert.match(entry, /function openFile\(\) \{\s*onOpen\(path\);\s*\}/);
+  assert.match(entry, /type="button"/);
   assert.match(entry, /class:hidden-entry=\{file\.hidden\}/);
-  assert.match(entry, /\{file\.name\}<span class="f-size">\{fmtFileSize\(file\.size\)\}<\/span>/);
+  assert.match(entry, /onclick=\{openFile\}/);
+  assert.match(entry, /\{file\.name\}\{#if formattedSize\}<span class="f-size">\{formattedSize\}<\/span>\{\/if\}/);
   for (const name of ["FilePickerModal.svelte", "FileExplorerModal.svelte"]) {
     const source = component(name);
     assert.match(source, /import BrowserFileEntry from "\.\/BrowserFileEntry\.svelte"/);

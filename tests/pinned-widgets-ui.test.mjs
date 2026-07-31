@@ -223,7 +223,8 @@ test("file explorer pins files and directories through scoped actions", () => {
   assert.match(explorer, /FILE_EXPLORER_PIN_ACTION/);
   assert.match(explorer, /pinExploredPath\(fullPath\)/);
   assert.match(explorer, /Pin folder/);
-  assert.match(directories, /export let onPin = null/);
+  assert.match(directories, /onPin\?: \(\(path: string\) => void\) \| null/);
+  assert.match(directories, /onPin = null/);
   assert.match(directories, /onPin\(fullPath\)/);
 });
 

@@ -44,11 +44,13 @@ test("session collection views render bounded pages with explicit recovery contr
 
 test("file browsers incrementally reveal large keyed directory and file collections", () => {
   const directoryList = component("BrowserDirectoryList.svelte");
-  assert.match(directoryList, /incrementalCollectionPage\(visibleDirs, requestedDirectories\)/);
+  assert.match(directoryList, /incrementalCollectionPage\(visibleDirectories, requestedDirectories\)/);
   assert.match(directoryList, /\{#each directoryPage\.items as dir \(dir\.name\)\}/);
-  assert.match(directoryList, /Show \{Math\.min\(directoryPage\.pageSize, directoryPage\.remainingCount\)\} more folders/);
-  assert.match(directoryList, /nextDirectoryPageIdentity = `\$\{path\}\\0\$\{showHidden\}`/);
-  assert.doesNotMatch(directoryList, /\{#each visibleDirs as dir/);
+  assert.match(directoryList, /nextPageSize = \$derived\(Math\.min\(directoryPage\.pageSize, directoryPage\.remainingCount\)\)/);
+  assert.match(directoryList, /Show \{nextPageSize\} more folders/);
+  assert.match(directoryList, /nextDirectoryPageIdentity = \$derived\(`\$\{path\}\\0\$\{showHidden\}`\)/);
+  assert.match(directoryList, /requestedDirectories = DEFAULT_COLLECTION_PAGE_SIZE/);
+  assert.doesNotMatch(directoryList, /\{#each visibleDirectories as dir/);
 
   for (const name of ["FileExplorerModal.svelte", "FilePickerModal.svelte"]) {
     const source = component(name);
