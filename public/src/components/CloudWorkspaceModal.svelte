@@ -539,13 +539,13 @@
   });
 </script>
 
-<section class="cloud-workspace-modal" aria-label="Cloud workspace provisioning" aria-busy={loading}>
+<section class="cloud-workspace-modal" aria-label="Cloud workspace provisioning" aria-busy={loading} aria-describedby={error ? "cloudWorkspaceError" : undefined}>
   <nav class="cloud-steps" aria-label="Provisioning steps">
-    <span class:active={step === "providers"} class:complete={step !== "providers"}>1 <b>Provider</b></span>
+    <span class:active={step === "providers"} class:complete={step !== "providers"} aria-current={step === "providers" ? "step" : undefined}>1 <b>Provider</b></span>
     <i></i>
-    <span class:active={["credentials", "project"].includes(step)} class:complete={["instance", "done"].includes(step)}>2 <b>Connect</b></span>
+    <span class:active={["credentials", "project"].includes(step)} class:complete={["instance", "done"].includes(step)} aria-current={["credentials", "project"].includes(step) ? "step" : undefined}>2 <b>Connect</b></span>
     <i></i>
-    <span class:active={step === "instance"} class:complete={step === "done"}>3 <b>Instance</b></span>
+    <span class:active={step === "instance"} class:complete={step === "done"} aria-current={step === "instance" ? "step" : undefined}>3 <b>Instance</b></span>
   </nav>
 
   {#if step === "providers"}
@@ -568,7 +568,7 @@
     </div>
   {:else if step === "credentials"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
+      <button type="button" class="chip cloud-back" aria-label="Back to cloud providers" title="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Cloud provider</small><h3>{selectedProvider.name}</h3></div>
     </header>
     <div class="cloud-auth-note">
@@ -657,7 +657,7 @@
     {/if}
   {:else if step === "project"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
+      <button type="button" class="chip cloud-back" aria-label="Back to cloud providers" title="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Google Cloud</small><h3>Choose a project</h3></div>
     </header>
     {#if loading}
@@ -683,11 +683,11 @@
     {/if}
   {:else if step === "instance"}
     <header class="cloud-section-head">
-      <button type="button" class="cloud-back" aria-label="Back to cloud providers" onclick={returnToProviders}>←</button>
+      <button type="button" class="chip cloud-back" aria-label="Back to cloud providers" title="Back to cloud providers" onclick={returnToProviders}>←</button>
       <div><small>Provision with</small><h3>{selectedProvider.name}</h3></div>
       <div class="cloud-credential-actions">
-        <button class="cloud-manage-credentials" type="button" onclick={configureCredentials}>Replace connection</button>
-        <button class="cloud-manage-credentials danger" type="button" onclick={disconnectProvider}>Disconnect</button>
+        <button class="chip cloud-manage-credentials" type="button" onclick={configureCredentials}>Replace connection</button>
+        <button class="chip cloud-manage-credentials danger" type="button" onclick={disconnectProvider} disabled={loading}>Disconnect</button>
       </div>
     </header>
     {#if loading}
@@ -746,9 +746,327 @@
     </div>
   {/if}
 
-  {#if error}<p class="cloud-error" role="alert">{error}</p>{/if}
+  {#if error}<p id="cloudWorkspaceError" class="cloud-error" role="alert" aria-atomic="true">{error}</p>{/if}
 </section>
 
 <div class="m-actions" id="mActions">
   <button class="chip" data-modal-cancel onclick={closeModalState}>{step === "done" ? "Done" : "Cancel"}</button>
 </div>
+
+<style>
+  .cloud-workspace-modal {
+    min-height: 330px;
+    color: var(--text);
+  }
+
+  .cloud-steps {
+    display: flex;
+    align-items: center;
+    margin: 1px 0 18px;
+    color: var(--muted);
+  }
+
+  .cloud-steps span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .cloud-steps span b { font-weight: 600; }
+  .cloud-steps span.active { color: var(--accent); }
+  .cloud-steps span.complete { color: var(--green); }
+  .cloud-steps span.complete::after { content: "✓"; font-size: 9px; }
+
+  .cloud-steps i {
+    height: 1px;
+    flex: 1;
+    margin: 0 10px;
+    background: var(--border);
+  }
+
+  .cloud-intro,
+  .cloud-state {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .cloud-intro { max-width: 600px; margin: 0 0 14px; }
+  .cloud-state { margin: 12px 0; }
+
+  .cloud-provider-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .cloud-provider-card {
+    display: grid;
+    min-width: 0;
+    min-height: 180px;
+    grid-template-rows: auto 1fr auto;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 86%, transparent);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 140ms, background 140ms, transform 140ms;
+  }
+
+  .cloud-provider-card:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--accent-dim) 18%, var(--panel));
+    transform: translateY(-1px);
+  }
+
+  .cloud-provider-card:disabled { opacity: .45; cursor: not-allowed; }
+
+  .cloud-provider-icon {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 10px;
+    background: #1775e5;
+    color: white;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .cloud-provider-icon.aws { background: #202b3c; color: #ffb84d; font-size: 9px; }
+  .cloud-provider-icon.gcp { background: white; color: #4285f4; font-size: 20px; }
+  .cloud-provider-icon.hetzner { background: #d50c2d; color: white; font-size: 10px; }
+  .cloud-provider-copy { display: grid; min-width: 0; align-content: start; gap: 5px; }
+  .cloud-provider-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .cloud-provider-copy small { color: var(--muted); font-size: 10.5px; line-height: 1.4; overflow-wrap: anywhere; }
+
+  .cloud-provider-status {
+    width: fit-content;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 9px;
+  }
+
+  .cloud-provider-status.configured {
+    border-color: color-mix(in srgb, var(--green) 32%, var(--border));
+    background: color-mix(in srgb, var(--green) 12%, transparent);
+    color: var(--green);
+  }
+
+  .cloud-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .cloud-section-head > div { display: grid; min-width: 0; gap: 1px; }
+  .cloud-section-head small { color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+  .cloud-section-head h3 { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+
+  .chip.cloud-back {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 17px;
+  }
+
+  .cloud-credential-actions { display: flex; margin-left: auto; gap: 6px; }
+  .chip.cloud-manage-credentials { color: var(--accent); font-size: 10px; }
+  .chip.cloud-manage-credentials.danger { color: var(--red); }
+
+  .cloud-auth-note,
+  .cloud-connect-action {
+    display: grid;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+  }
+
+  .cloud-auth-note {
+    gap: 2px;
+    padding: 10px 12px;
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+    border-radius: 9px;
+  }
+
+  .cloud-auth-note strong { font-size: 11px; }
+  .cloud-auth-note span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+  .cloud-connect-action { justify-items: start; gap: 10px; padding: 16px; border-radius: 10px; }
+  .cloud-connect-action p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  .cloud-account-id,
+  .cloud-form label {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+
+  .cloud-account-id { width: min(100%, 280px); }
+  .cloud-account-id input,
+  .cloud-form input,
+  .cloud-form select,
+  .cloud-form textarea,
+  .cloud-handoff input {
+    min-width: 0;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+    outline: none;
+    transition: border-color 140ms, box-shadow 140ms;
+  }
+
+  .cloud-account-id input,
+  .cloud-form input,
+  .cloud-form select { height: 38px; padding: 8px 10px; }
+  .cloud-account-id input { font-family: var(--mono); }
+  .cloud-form textarea { padding: 8px 10px; resize: vertical; font: 10px var(--mono); }
+  .cloud-account-id input:focus,
+  .cloud-form :is(input, select, textarea):focus,
+  .cloud-handoff input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
+
+  .cloud-role-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cloud-token-steps { display: grid; gap: 6px; margin: 0 0 12px; padding-left: 22px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .cloud-console-link { text-decoration: none; }
+
+  .cloud-advanced-toggle,
+  .cloud-handoff > button,
+  .cloud-handoff-cancel {
+    min-height: 30px;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+
+  .cloud-advanced-toggle { margin-top: 12px; }
+  .cloud-advanced-toggle:hover,
+  .cloud-handoff > button:hover:not(:disabled),
+  .cloud-handoff-cancel:hover { text-decoration: underline; }
+  .cloud-handoff-cancel { margin-top: 4px; color: var(--red); font-size: 10px; }
+
+  .cloud-method-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+  .cloud-method-list button {
+    min-height: 30px;
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .cloud-method-list button:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
+  .cloud-method-list button.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+  .cloud-handoff { display: grid; justify-items: start; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cloud-handoff p,
+  .cloud-handoff small { margin: 0; color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+  .cloud-handoff > div { display: flex; width: 100%; min-width: 0; gap: 6px; }
+  .cloud-handoff input { flex: 1; padding: 7px 8px; font: 10px var(--mono); }
+  .cloud-handoff div button { min-height: 32px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); color: var(--text); cursor: pointer; }
+
+  .cloud-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+  .cloud-form label.wide,
+  .cloud-form .wide,
+  .cloud-secret-note { grid-column: 1 / -1; }
+  .cloud-file-paste summary { min-height: 30px; padding: 6px 0; color: var(--accent); cursor: pointer; }
+  .cloud-file-paste textarea { margin-top: 4px; }
+  .cloud-form label > small,
+  .cloud-secret-note,
+  .cloud-required-hint { color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+  .cloud-secret-note { margin: 0; }
+  .cloud-required-hint { margin: -2px 0 0; }
+  .cloud-primary { width: fit-content; justify-self: end; }
+  .cloud-form .cloud-primary.wide { width: 100%; margin-top: 2px; justify-self: stretch; }
+
+  .cloud-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+  }
+
+  .cloud-summary span { display: grid; min-width: 0; gap: 1px; }
+  .cloud-summary small,
+  .cloud-success dt { color: var(--muted); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+  .cloud-summary strong { overflow: hidden; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+
+  .cloud-loading { display: grid; justify-items: center; gap: 5px; padding: 55px 10px; text-align: center; }
+  .cloud-loading span { width: 25px; height: 25px; margin-bottom: 5px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: cloud-spin .7s linear infinite; }
+  .cloud-loading strong { font-size: 12px; }
+  .cloud-loading small { color: var(--muted); font-size: 10px; }
+
+  .cloud-error {
+    margin: 12px 0 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--red) 45%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--red) 8%, transparent);
+    color: var(--red);
+    font-size: 11px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .cloud-success { display: grid; max-width: 520px; justify-items: center; margin: 12px auto 0; text-align: center; }
+  .cloud-success-icon { display: grid; width: 45px; height: 45px; place-items: center; margin-bottom: 9px; border-radius: 50%; background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); font-size: 23px; }
+  .cloud-success > small { color: var(--green); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .cloud-success h3 { max-width: 100%; margin: 3px 0; overflow-wrap: anywhere; font-size: 19px; }
+  .cloud-success p { max-width: 460px; margin: 4px 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .cloud-success dl { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 13px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; text-align: left; }
+  .cloud-success dl div { min-width: 0; padding: 8px 10px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .cloud-success dl div:nth-child(2n) { border-right: 0; }
+  .cloud-success dl div:nth-last-child(-n+2) { border-bottom: 0; }
+  .cloud-success dd { margin: 1px 0 0; overflow: hidden; font: 10.5px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+
+  @keyframes cloud-spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    .cloud-provider-card,
+    .cloud-method-list button,
+    .cloud-advanced-toggle,
+    .cloud-handoff button { min-height: 40px; }
+  }
+
+  @media (max-width: 600px) {
+    .cloud-workspace-modal { min-height: min(70vh, 620px); }
+    .cloud-provider-grid,
+    .cloud-form { grid-template-columns: 1fr; }
+    .cloud-provider-card { min-height: 0; grid-template-rows: auto; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; padding: 11px; }
+    .cloud-form label.wide,
+    .cloud-form .wide,
+    .cloud-secret-note { grid-column: 1; }
+    .cloud-steps span b { display: none; }
+    .cloud-credential-actions { width: 100%; margin: 6px 0 0; }
+    .cloud-section-head { flex-wrap: wrap; }
+    .cloud-summary { grid-template-columns: 1fr; }
+    .cloud-success dl { grid-template-columns: 1fr; }
+    .cloud-success dl div { border-right: 0; }
+    .cloud-success dl div:nth-last-child(2) { border-bottom: 1px solid var(--border); }
+  }
+
+  @media (max-width: 520px) {
+    .cloud-provider-status { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cloud-role-actions { width: 100%; flex-direction: column; }
+    .cloud-role-actions .btn { width: 100%; }
+  }
+</style>

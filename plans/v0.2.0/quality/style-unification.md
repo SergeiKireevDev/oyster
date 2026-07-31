@@ -35,7 +35,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/ChatLayout.svelte`
 - [x] `public/src/components/CheckpointModelPickerModal.svelte`
 - [x] `public/src/components/CheckpointTreebar.svelte`
-- [ ] `public/src/components/CheckpointTreeNode.svelte`
+- [x] `public/src/components/CheckpointTreeNode.svelte`
 - [ ] `public/src/components/CloudWorkspaceModal.svelte`
 - [ ] `public/src/components/CommandPalette.svelte`
 - [ ] `public/src/components/Composer.svelte`
