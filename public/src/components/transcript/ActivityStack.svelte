@@ -11,6 +11,7 @@
   const toolBlocks = $derived(blocks.filter((block) => block.type === "toolCall"));
   const cardStores = $derived(toolBlocks.map((block) => block.cardStore));
   let cards = $state([]);
+  let historyOpen = $state(false);
 
   $effect(() => subscribeStoreGroup(cardStores, updateCards));
 
@@ -38,7 +39,7 @@
 
 <div class="activity-stack">
   {#if pastBlocks.length}
-    <details class="activity-history">
+    <details class="activity-history" bind:open={historyOpen}>
       <summary>
         <span class="activity-history-chevron" aria-hidden="true">›</span>
         <span>{pastStepLabel}</span>

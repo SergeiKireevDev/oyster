@@ -43,6 +43,6 @@ test("dynamic command rows and transcript blocks keep identity across selection 
   assert.match(commandPalette, /as cmd, i \(cmd\.key\)/);
   assert.match(commandController, /key: `command:\$\{name\}`/);
   assert.match(commandController, /key: `path:\$\{item\.path \?\? label\}`/);
-  assert.match(assistant, /as block, index \(block\)/);
+  assert.match(assistant, /as block, index \(blockIdentity\(block\)\)/);
   assert.match(activity, /as block \(block\)/);
 });

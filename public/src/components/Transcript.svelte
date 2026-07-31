@@ -97,6 +97,7 @@
         activityActive={isCurrentTurnActivity(item)}
         activityUnsettled={isCurrentTurnActivity(item)}
         activityBlocks={$turnActivityGroups.get(item.id) ?? []}
+        activityKey={item.id}
       />
     {/if}
   {/each}
