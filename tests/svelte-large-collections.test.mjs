@@ -66,7 +66,9 @@ test("file browsers incrementally reveal large keyed directory and file collecti
   assert.match(explorer, /requestedFiles = DEFAULT_COLLECTION_PAGE_SIZE/);
 
   const picker = component("FilePickerModal.svelte");
-  assert.match(picker, /Show \{Math\.min\(filePage\.pageSize, filePage\.remainingCount\)\} more files/);
+  assert.match(picker, /nextFilePageSize = Math\.min\(filePage\.pageSize, filePage\.remainingCount\)/);
+  assert.match(picker, /Show \{nextFilePageSize\} more files/);
+  assert.match(picker, /requestedFiles = DEFAULT_COLLECTION_PAGE_SIZE/);
 });
 
 test("transcripts load the tail first and backfill in bounded chunks", () => {
