@@ -8,12 +8,30 @@ const component = (name) => readFileSync(
 );
 
 const chatLayout = component("ChatLayout.svelte");
+const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("chat layout exposes semantic transcript structure and a native notice action", () => {
   assert.match(chatLayout, /<main id="chatcol">/);
   assert.match(chatLayout, /<section class="transcript-shell" aria-label="Conversation transcript">/);
   assert.match(chatLayout, /id="transcriptNotice"[\s\S]*type="button"[\s\S]*aria-label="Scroll to newest transcript event"/);
   assert.match(chatLayout, /<span aria-hidden="true">↓<\/span>/);
+});
+
+test("chat layout keeps its structural and transcript canvas styling scoped", () => {
+  assert.match(chatLayout, /#main\s*\{[\s\S]*?display:\s*flex;[\s\S]*?min-height:\s*0;[\s\S]*?flex:\s*1;/);
+  assert.match(chatLayout, /#chatcol\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg\) 48%, transparent\)/);
+  assert.match(chatLayout, /#scroller\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior-y:\s*contain;[\s\S]*?var\(--accent\)/);
+  assert.doesNotMatch(chatLayout, /scroll-behavior:\s*smooth/);
+  assert.doesNotMatch(globalStyles, /#(?:main|chatcol|scroller|transcriptNotice)\b|\.transcript-shell\b/);
+});
+
+test("new transcript notice follows shared interaction and responsive contracts", () => {
+  assert.match(chatLayout, /#transcriptNotice\s*\{[\s\S]*?border:\s*1px solid color-mix\([\s\S]*?background:\s*var\(--panel-2\);[\s\S]*?color:\s*var\(--accent\)/);
+  assert.match(chatLayout, /#transcriptNotice:hover\s*\{[\s\S]*?border-color:\s*var\(--accent\);[\s\S]*?background:\s*var\(--accent-dim\)/);
+  assert.match(chatLayout, /@media \(max-width: 760px\)[\s\S]*?#transcriptNotice\s*\{[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px;/);
+  assert.match(chatLayout, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition:\s*none/);
+  assert.match(chatLayout, /box-shadow:\s*0 10px 28px color-mix\(in srgb, var\(--muted\) 22%, transparent\)/);
+  assert.doesNotMatch(chatLayout, /:global\(/);
 });
 
 test("chat layout names its scroll threshold and safely releases scheduled work", () => {
