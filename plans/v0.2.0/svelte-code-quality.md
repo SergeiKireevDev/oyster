@@ -18,7 +18,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/BrowserFileEntry.svelte`
 - [x] `public/src/components/CarouselIndicator.svelte`
 - [x] `public/src/components/ChatLayout.svelte`
-- [ ] `public/src/components/CheckpointModelPickerModal.svelte`
+- [x] `public/src/components/CheckpointModelPickerModal.svelte`
 - [ ] `public/src/components/CheckpointTreebar.svelte`
 - [ ] `public/src/components/CheckpointTreeNode.svelte`
 - [ ] `public/src/components/CloudWorkspaceModal.svelte`

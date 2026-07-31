@@ -15,8 +15,20 @@ test("transient notices and dynamic errors use appropriately prioritized live re
   assert.match(toast, /role=\{toast\.kind === "error" \? "alert" : "status"\}/);
   assert.match(toast, /aria-atomic="true"/);
   assert.match(analytics, /analytics-error" role="alert"/);
-  assert.match(checkpointTree, /checkpointTree\.error[\s\S]*?class="t-empty" role="alert"/);
+  assert.match(checkpointTree, /checkpointTree\.error[\s\S]*?class="t-empty" role="alert" aria-atomic="true"/);
   assert.match(assistant, /data-assistant-part="error" role="alert"/);
+});
+
+test("checkpoint tree exposes a named, busy region and prioritizes errors over empty state", () => {
+  const checkpointTree = component("CheckpointTreebar.svelte");
+  const errorBranch = checkpointTree.indexOf("{:else if $checkpointTree.error}");
+  const emptyBranch = checkpointTree.indexOf("{:else if $checkpointTree.empty}");
+
+  assert.match(checkpointTree, /<aside id="treebar" aria-labelledby="checkpoint-tree-heading">/);
+  assert.match(checkpointTree, /id="checkpoint-tree-heading"[^>]*role="heading" aria-level="2"/);
+  assert.match(checkpointTree, /<div id="treeView" aria-busy=\{\$checkpointTree\.loading\}>/);
+  assert.ok(errorBranch >= 0 && errorBranch < emptyBranch, "errors should not be hidden by stale empty-state text");
+  assert.match(checkpointTree, /checkpointTree\.empty[\s\S]*?role="status" aria-atomic="true"/);
 });
 
 test("loading, connection, voice, and search updates expose polite status semantics", () => {
