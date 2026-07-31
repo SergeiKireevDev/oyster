@@ -13,12 +13,41 @@
 </script>
 
 <aside id="hublots" aria-label="Pinned widgets and routines">
-  <div class="side-head">Pinned Widgets</div>
-  <PinnedWidgetGrid />
-  <div class="pinned-widget-add-actions">
-    <button type="button" id="hublotAdd" title="Create a custom widget from a prompt" onclick={showWidgetManager}>Add custom from prompt</button>
-  </div>
-  <div class="side-head routines">Routines</div>
-  <RoutineList />
-  <button type="button" id="routineAdd" title="Build a new routine" aria-label="Build a new routine" onclick={showRoutineGenerator}>+</button>
+  <section class="sidebar-section" aria-labelledby="pinned-widgets-heading">
+    <h2 id="pinned-widgets-heading" class="side-head">Pinned Widgets</h2>
+    <PinnedWidgetGrid />
+    <div class="pinned-widget-add-actions">
+      <button
+        type="button"
+        id="hublotAdd"
+        title="Create a custom widget from a prompt"
+        onclick={showWidgetManager}
+      >Add custom from prompt</button>
+    </div>
+  </section>
+
+  <section class="sidebar-section" aria-labelledby="routines-heading">
+    <h2 id="routines-heading" class="side-head routines">Routines</h2>
+    <RoutineList />
+    <button
+      type="button"
+      id="routineAdd"
+      title="Build a new routine"
+      aria-label="Build a new routine"
+      onclick={showRoutineGenerator}
+    ><span aria-hidden="true">+</span></button>
+  </section>
 </aside>
+
+<style>
+  .sidebar-section {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .side-head {
+    margin: 0;
+  }
+</style>

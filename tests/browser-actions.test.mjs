@@ -43,7 +43,7 @@ test("pinned widget components use injected browser actions without direct windo
   assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
   assert.match(grid, /browserActions\.pinnedWidgetMediaSource\(widget\.id\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
-  assert.match(sidebar, /<button type="button" id="hublotAdd"[^>]*onclick=\{showWidgetManager\}>/);
+  assert.match(sidebar, /<button\s+[^>]*type="button"[^>]*id="hublotAdd"[^>]*onclick=\{showWidgetManager\}[^>]*>/);
   for (const source of [manager, viewer, grid, sidebar]) assert.doesNotMatch(source, /window\.open|role="button"/);
 
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
