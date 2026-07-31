@@ -29,7 +29,7 @@ test("component browser and imperative listener inventory is explicit", () => {
 
   const transcript = source(new URL("components/Transcript.svelte", root));
   assert.match(transcript, /onMount\(\(\) => \{/);
-  assert.match(transcript, /return \(\) => clearInterval\(timer\);/);
+  assert.match(transcript, /return \(\) => \{[\s\S]*?unsubscribe\(\);[\s\S]*?stopWorkClock\(\);/);
   assert.doesNotMatch(source(new URL("components/OptionPickerModal.svelte", root)), /document\.(?:add|remove)EventListener/);
 });
 
