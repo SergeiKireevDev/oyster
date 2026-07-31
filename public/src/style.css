@@ -882,7 +882,6 @@
     gap: 8px;
   }
   #treebar.open { display: flex; }
-  #treeView { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
   .t-session {
     display: flex; align-items: center; gap: 6px;
     width: 100%;
@@ -942,7 +941,6 @@
     min-width: 0;
   }
   .t-forks:empty { display: none; }
-  .t-empty { color: var(--muted); font-size: 12px; }
   @media (max-width: 760px) {
     #treebar.open {
       position: fixed;
