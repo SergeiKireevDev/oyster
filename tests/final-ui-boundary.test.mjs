@@ -54,5 +54,5 @@ test("components do not emulate buttons with spans", () => {
   }
 
   assert.match(readFileSync(join(componentRoot, "Header.svelte"), "utf8"), /<button class="chip" id="menuBtn"/);
-  assert.match(readFileSync(join(componentRoot, "PinnedWidgetGrid.svelte"), "utf8"), /<button type="button" class="pinned-widget-tile"/);
+  assert.match(readFileSync(join(componentRoot, "PinnedWidgetGrid.svelte"), "utf8"), /<button\s+[^>]*type="button"[^>]*class="pinned-widget-tile"/);
 });

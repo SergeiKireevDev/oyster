@@ -23,21 +23,29 @@
 
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
-  const refreshPinnedWidgets = () => uiActions.invoke(PINNED_WIDGET_REFRESH_ACTION);
-  const sectionDefinitions = [
+  const SECTION_DEFINITIONS = [
     { scope: "workspace", title: "Workspace visible", description: "All sessions in this workspace" },
     { scope: "session", title: "Session only", description: "Only this session · default" },
   ];
-  let touchDrag = null;
-  let touchDraggingId = null;
-  let touchDestination = null;
-  let touchPreview = null;
+  const TOUCH_DRAG_DELAY_MS = 300;
+  const TOUCH_DRAG_MOVE_TOLERANCE_PX = 8;
+  const CLICK_SUPPRESSION_MS = 500;
+  const MONITOR_REFRESH_INTERVAL_MS = 3_000;
+
+  let touchDrag = $state(null);
+  let touchDraggingId = $state(null);
+  let touchDestination = $state(null);
+  let touchPreview = $state(null);
   let suppressClickUntil = 0;
-  let monitorPreviews = {};
+  let monitorPreviews = $state({});
   const touchMoveFrame = createFrameScheduler(updateTouchPointer);
-  $: activeGroup = $pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null;
-  $: widgetView = buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, sectionDefinitions);
-  $: activeGroupWidgets = activeGroup ? widgetView.groupWidgets.get(activeGroup.id) ?? [] : [];
+  const activeGroup = $derived($pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null);
+  const widgetView = $derived(buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, SECTION_DEFINITIONS));
+  const activeGroupWidgets = $derived(activeGroup ? widgetView.groupWidgets.get(activeGroup.id) ?? [] : []);
+
+  function refreshPinnedWidgets() {
+    uiActions.invoke(PINNED_WIDGET_REFRESH_ACTION);
+  }
 
   function dragStart(event, widget) {
     event.dataTransfer.effectAllowed = "move";
@@ -62,8 +70,10 @@
   }
 
   function clearTouchDrag() {
+    const drag = touchDrag;
     touchMoveFrame.cancel();
-    if (touchDrag?.timer) clearTimeout(touchDrag.timer);
+    if (drag?.timer) clearTimeout(drag.timer);
+    if (drag?.cell.hasPointerCapture?.(drag.pointerId)) drag.cell.releasePointerCapture?.(drag.pointerId);
     touchDrag = null;
     touchDraggingId = null;
     touchDestination = null;
@@ -71,16 +81,28 @@
   }
 
   function touchPointerDown(event, item, type = "widget") {
-    if ((type === "widget" && item.kind === "builtin") || event.pointerType === "mouse" || !event.isPrimary || !event.target.closest(".pinned-widget-icon")) return;
+    const startsOnIcon = event.target?.closest?.(".pinned-widget-icon");
+    if ((type === "widget" && item.kind === "builtin") || event.pointerType === "mouse" || !event.isPrimary || !startsOnIcon) return;
+
     clearTouchDrag();
-    const drag = { pointerId: event.pointerId, item, type, cell: event.currentTarget, active: false, timer: null };
+    const drag = {
+      pointerId: event.pointerId,
+      item,
+      type,
+      cell: event.currentTarget,
+      active: false,
+      timer: null,
+      startX: event.clientX,
+      startY: event.clientY,
+      token: Symbol("touch-drag"),
+    };
+    drag.cell.setPointerCapture?.(drag.pointerId);
     drag.timer = setTimeout(() => {
-      if (touchDrag !== drag) return;
-      drag.active = true;
-      drag.cell.setPointerCapture?.(drag.pointerId);
+      if (touchDrag?.token !== drag.token) return;
+      touchDrag.active = true;
       touchDraggingId = item.id;
-      touchPreview = { x: event.clientX, y: event.clientY, label: item.label ?? item.name };
-    }, 300);
+      touchPreview = { x: drag.startX, y: drag.startY, label: item.label ?? item.name };
+    }, TOUCH_DRAG_DELAY_MS);
     touchDrag = drag;
   }
 
@@ -92,13 +114,19 @@
     touchDestination = groupCell
       ? { scope: groupCell.dataset.scope, groupId: groupCell.dataset.groupId }
       : section
-        ? { scope: section.dataset.scope, groupId: null }
+        ? { scope: section.dataset.scope, groupId: section.dataset.groupId || null }
         : null;
     touchPreview = { x, y, label: touchDrag.item.label ?? touchDrag.item.name };
   }
 
   function touchPointerMove(event) {
-    if (!touchDrag || touchDrag.pointerId !== event.pointerId || !touchDrag.active) return;
+    if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
+    if (!touchDrag.active) {
+      const movedX = Math.abs(event.clientX - touchDrag.startX);
+      const movedY = Math.abs(event.clientY - touchDrag.startY);
+      if (Math.max(movedX, movedY) > TOUCH_DRAG_MOVE_TOLERANCE_PX) clearTouchDrag();
+      return;
+    }
     event.preventDefault();
     touchMoveFrame.schedule(event.pointerId, event.currentTarget.ownerDocument, event.clientX, event.clientY);
   }
@@ -106,10 +134,13 @@
   function touchPointerUp(event) {
     if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
     const drag = touchDrag;
-    if (!drag.active) { clearTouchDrag(); return; }
+    if (!drag.active) {
+      clearTouchDrag();
+      return;
+    }
     event.preventDefault();
     touchMoveFrame.flush();
-    suppressClickUntil = Date.now() + 500;
+    suppressClickUntil = Date.now() + CLICK_SUPPRESSION_MS;
     const destination = touchDestination;
     clearTouchDrag();
     if (destination) {
@@ -122,31 +153,61 @@
     if (touchDrag?.pointerId === event.pointerId) clearTouchDrag();
   }
 
-  function monitorPreview(node, widget) {
-    if (widget.kind !== "monitoring") return {};
+  function monitorPreview(node, initialWidget) {
+    let widget = initialWidget;
     let fetching = false;
-    let disposed = false;
-    const visible = () => {
+    let generation = 0;
+    let timer = null;
+
+    function visible() {
       if (node.ownerDocument.visibilityState === "hidden" || !node.getClientRects().length) return false;
       const bounds = node.getBoundingClientRect();
       const viewport = node.ownerDocument.documentElement;
       return bounds.bottom > 0 && bounds.right > 0 && bounds.top < viewport.clientHeight && bounds.left < viewport.clientWidth;
-    };
-    const refresh = async () => {
-      if (fetching || disposed || !visible()) return;
+    }
+
+    async function refresh() {
+      if (fetching || widget.kind !== "monitoring" || !visible()) return;
       fetching = true;
+      const requestGeneration = generation;
+      const widgetId = widget.id;
       try {
-        const data = await browserActions.readPinnedWidgetMonitorPreview(widget.id);
-        if (!disposed) monitorPreviews = { ...monitorPreviews, [widget.id]: { value: data.preview || "—", error: false } };
+        const data = await browserActions.readPinnedWidgetMonitorPreview(widgetId);
+        if (requestGeneration === generation) {
+          monitorPreviews = { ...monitorPreviews, [widgetId]: { value: data.preview || "—", error: false } };
+        }
       } catch {
-        if (!disposed) monitorPreviews = { ...monitorPreviews, [widget.id]: { value: "unavailable", error: true } };
+        if (requestGeneration === generation) {
+          monitorPreviews = { ...monitorPreviews, [widgetId]: { value: "unavailable", error: true } };
+        }
       } finally {
         fetching = false;
       }
+    }
+
+    function stop() {
+      generation += 1;
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+    }
+
+    function start() {
+      if (widget.kind !== "monitoring" || timer !== null) return;
+      refresh();
+      timer = setInterval(refresh, MONITOR_REFRESH_INTERVAL_MS);
+    }
+
+    start();
+    return {
+      update(nextWidget) {
+        if (nextWidget.id !== widget.id || nextWidget.kind !== widget.kind) stop();
+        widget = nextWidget;
+        start();
+      },
+      destroy() {
+        stop();
+      },
     };
-    refresh();
-    const timer = setInterval(refresh, 3_000);
-    return { destroy() { disposed = true; clearInterval(timer); } };
   }
 
   function openWidget(event, widget) {
@@ -182,7 +243,17 @@
   }
 
   function scopeTitle(scope) {
-    return scope === "workspace" ? "Workspace visible" : "Session only";
+    return SECTION_DEFINITIONS.find((section) => section.scope === scope)?.title ?? scope;
+  }
+
+  function groupButtonLabel(group) {
+    const noun = group.children.length === 1 ? "widget" : "widgets";
+    return `Open ${group.name}, ${group.children.length} ${noun}`;
+  }
+
+  function showVideoThumbnail(event) {
+    const video = event.currentTarget;
+    if (video.duration > 0) video.currentTime = Math.min(0.1, video.duration / 2);
   }
 
   function glyph(widget) {
@@ -200,7 +271,7 @@
 {#snippet WidgetCell(widget, destinationScope)}
   <div
     role="listitem"
-    class:pinned-widget-cell={true}
+    class="pinned-widget-cell"
     class:unavailable={widget.availability !== "ready"}
     class:touch-dragging={touchDraggingId === widget.id}
     draggable={widget.kind !== "builtin"}
@@ -212,7 +283,13 @@
     onpointerup={touchPointerUp}
     onpointercancel={touchPointerCancel}
   >
-    <button type="button" class="pinned-widget-tile" onclick={(event) => openWidget(event, widget)} title={widgetTitle(widget)}>
+    <button
+      type="button"
+      class="pinned-widget-tile"
+      onclick={(event) => openWidget(event, widget)}
+      aria-label={widgetTitle(widget)}
+      title={widgetTitle(widget)}
+    >
       <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true" use:monitorPreview={widget}>
         {#if readyMedia(widget, "image")}
           <img src={browserActions.pinnedWidgetMediaSource(widget.id)} alt="" loading="lazy" />
@@ -222,7 +299,7 @@
             muted
             preload="metadata"
             playsinline
-            onloadedmetadata={(event) => { if (event.currentTarget.duration > 0) event.currentTarget.currentTime = Math.min(0.1, event.currentTarget.duration / 2); }}
+            onloadedmetadata={showVideoThumbnail}
           ></video><span class="pinned-widget-play">▶</span>
         {:else if isFolderWidget(widget)}
           <FolderIcon size={30} />
@@ -266,7 +343,7 @@
           class:touch-dragging={touchDraggingId === group.id}
           data-group-id={group.id}
           data-scope={group.scope}
-          draggable="true"
+          draggable={true}
           ondragstart={(event) => dragStartGroup(event, group)}
           ondragover={(event) => event.preventDefault()}
           ondrop={(event) => dropped(event, group.scope, group.id)}
@@ -275,8 +352,14 @@
           onpointerup={touchPointerUp}
           onpointercancel={touchPointerCancel}
         >
-          <button type="button" class="pinned-widget-tile" onclick={() => pinnedWidgetActiveGroup.set(group.id)} title={`Open ${group.name}`}>
-            <span class="pinned-widget-icon pinned-widget-group-icon">
+          <button
+            type="button"
+            class="pinned-widget-tile"
+            onclick={() => pinnedWidgetActiveGroup.set(group.id)}
+            aria-label={groupButtonLabel(group)}
+            title={`Open ${group.name}`}
+          >
+            <span class="pinned-widget-icon pinned-widget-group-icon" aria-hidden="true">
               {#each group.children.slice(0, 4) as child (child.id)}<span>{glyph(child)}</span>{/each}
             </span>
             <span class="pinned-widget-label">{group.name}</span>
@@ -304,7 +387,7 @@
     <button type="button" class="pinned-widget-back" onclick={() => pinnedWidgetActiveGroup.set(null)} aria-label="Back to pinned widgets">←</button>
     <button type="button" class="pinned-widget-folder-title" onclick={() => uiActions.invoke(PINNED_WIDGET_RENAME_GROUP_ACTION, activeGroup)} title="Rename group">{activeGroup.name}</button>
   </div>
-  <section class="pinned-widget-section" data-scope={activeGroup.scope}>
+  <section class="pinned-widget-section" data-scope={activeGroup.scope} data-group-id={activeGroup.id}>
     <div class="pinned-widget-section-head"><strong>{scopeTitle(activeGroup.scope)}</strong></div>
     <div
       class="pinned-widget-grid"
@@ -326,5 +409,10 @@
 {/if}
 
 {#if touchPreview}
-  <div class="pinned-widget-touch-preview" style={`left:${touchPreview.x}px;top:${touchPreview.y}px;`}>{touchPreview.label}</div>
+  <div
+    class="pinned-widget-touch-preview"
+    style:left={`${touchPreview.x}px`}
+    style:top={`${touchPreview.y}px`}
+    aria-hidden="true"
+  >{touchPreview.label}</div>
 {/if}

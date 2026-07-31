@@ -33,7 +33,8 @@ test("runtime-dependent geometry uses named style state rather than static decla
   const touchGrid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
 
   assert.match(routines, /style:width=\{progressWidth\(routine\)\}/);
-  assert.match(touchGrid, /style=\{`left:\$\{touchPreview\.x\}px;top:\$\{touchPreview\.y\}px;`\}/);
+  assert.match(touchGrid, /style:left=\{`\$\{touchPreview\.x\}px`\}/);
+  assert.match(touchGrid, /style:top=\{`\$\{touchPreview\.y\}px`\}/);
 });
 
 test("image artifact viewers share their common frame and media styles", () => {
