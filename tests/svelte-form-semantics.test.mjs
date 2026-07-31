@@ -90,7 +90,7 @@ test("file editing and checkpoint selection submit through forms while preservin
   assert.match(explorer, /saveError[\s\S]*?role="alert"/);
 
   const checkpoint = component("CheckpointModelPickerModal.svelte");
-  assert.match(checkpoint, /<form onsubmit=/);
+  assert.match(checkpoint, /<form[^>]*onsubmit=/);
   assert.match(checkpoint, /<label for="checkpointSummaryModel">Checkpoint summary model<\/label>/);
   assert.match(checkpoint, /id="checkpointSummaryModel"/);
   assert.match(checkpoint, /class="[^"]*\bbtn\b[^"]*" type="submit"/);

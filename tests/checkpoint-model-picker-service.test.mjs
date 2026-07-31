@@ -57,7 +57,23 @@ test("checkpoint picker modal consumes the scoped service and preserves controls
   assert.match(source, /aria-describedby=\{hasHelp \? "checkpointModelPickerHelp" : undefined\}/);
   assert.match(source, /aria-busy=\{\$checkpointModelPicker\.loading\}/);
   assert.match(source, /role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(source, /class="checkpoint-model-picker" aria-busy=\{\$checkpointModelPicker\.loading\}/);
+  assert.match(source, /class="m-actions" id="mActions"/);
   assert.doesNotMatch(source, /stores\/checkpointModelPicker\.js/);
+});
+
+test("checkpoint picker follows modal form, theme, and responsive style contracts", () => {
+  const source = readFileSync(new URL("../public/src/components/CheckpointModelPickerModal.svelte", import.meta.url), "utf8");
+
+  assert.match(source, /\.checkpoint-model-field\s*\{[\s\S]*?display:\s*grid;[\s\S]*?min-width:\s*0;/);
+  assert.match(source, /\.checkpoint-model-field select\s*\{[\s\S]*?min-height:\s*40px;[\s\S]*?border:\s*1px solid var\(--border\);[\s\S]*?background:\s*var\(--panel\);[\s\S]*?font:\s*12px\/1\.4 var\(--mono\);/);
+  assert.match(source, /\.checkpoint-model-field select:hover\s*\{[\s\S]*?color-mix\(in srgb, var\(--accent\)/);
+  assert.match(source, /\.checkpoint-model-field select:focus-visible\s*\{\s*border-color:\s*var\(--accent\);\s*\}/);
+  assert.match(source, /\.checkpoint-model-hint\s*\{[\s\S]*?overflow-wrap:\s*anywhere;/);
+  assert.match(source, /\.checkpoint-model-loading\s*\{[\s\S]*?color:\s*var\(--accent\);[\s\S]*?white-space:\s*nowrap;/);
+  assert.match(source, /@media \(max-width: 600px\)[\s\S]*?min-height:\s*42px;/);
+  assert.doesNotMatch(source, /#[0-9a-f]{3,8}\b|rgba?\(/i);
+  assert.doesNotMatch(source, /💨|class="search-row"|class="m-path"/);
 });
 
 test("checkpoint picker has no obsolete global store references", () => {
