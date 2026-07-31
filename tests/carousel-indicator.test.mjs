@@ -14,6 +14,13 @@ test("mobile carousel uses a thin bottom rail instead of dots", () => {
   assert.match(styles, /#carouselIndicator\s*\{[\s\S]*?bottom:\s*max\(2px, env\(safe-area-inset-bottom\)\);[\s\S]*?height:\s*2px;/);
 });
 
+test("carousel page is required and reactively mapped to its zero-based position", () => {
+  assert.match(component, /@typedef \{-1 \| 0 \| 1 \| 2\} CarouselPage/);
+  assert.match(component, /let \{ page \} = \$props\(\);/);
+  assert.match(component, /style:--carousel-index=\{page \+ 1\}/);
+  assert.doesNotMatch(component, /page\s*=/);
+});
+
 test("carousel indicator represents the sessions page to the left of chat", () => {
   let current;
   const unsubscribe = carouselPage.subscribe((value) => { current = value; });
