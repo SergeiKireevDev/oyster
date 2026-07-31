@@ -5,9 +5,13 @@
   import { closeModalState } from "../stores/modal.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
-    CREDENTIALS_CANCEL_OAUTH_ACTION, CREDENTIALS_CLOSE_ACTION, CREDENTIALS_LOGOUT_OAUTH_ACTION,
-    CREDENTIALS_REMOVE_API_KEY_ACTION, CREDENTIALS_RESPOND_OAUTH_ACTION,
-    CREDENTIALS_SAVE_API_KEY_ACTION, CREDENTIALS_START_OAUTH_ACTION,
+    CREDENTIALS_CANCEL_OAUTH_ACTION,
+    CREDENTIALS_CLOSE_ACTION,
+    CREDENTIALS_LOGOUT_OAUTH_ACTION,
+    CREDENTIALS_REMOVE_API_KEY_ACTION,
+    CREDENTIALS_RESPOND_OAUTH_ACTION,
+    CREDENTIALS_SAVE_API_KEY_ACTION,
+    CREDENTIALS_START_OAUTH_ACTION,
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
@@ -18,10 +22,12 @@
   let hasKey = false;
   let oauthInputs = new Set();
   let oauthInputReady = {};
+  let oauthOperationPending = false;
   let requestSignature = "";
   let deviceCodeInput;
   let deviceCodeCopied = false;
   let deviceCodeCopiedTimer;
+  let deactivated = false;
 
   const sourceLabels = {
     stored_api_key: "stored API key",
@@ -72,7 +78,12 @@
     authenticationMethod = selected?.oauthCapable ? "oauth" : "api_key";
     clearKey();
   }
-  $: nextRequestSignature = `${$credentialsState.flow?.flowId ?? ""}:${$credentialsState.flow?.status ?? ""}:${($credentialsState.flow?.requests ?? []).map((request) => request.requestId).join(",")}`;
+  $: nextRequestSignature = JSON.stringify({
+    flowId: $credentialsState.flow?.flowId ?? "",
+    status: $credentialsState.flow?.status ?? "",
+    deviceCode: $credentialsState.flow?.deviceCode?.userCode ?? "",
+    requests: ($credentialsState.flow?.requests ?? []).map(({ requestId, kind, message }) => ({ requestId, kind, message })),
+  });
   $: if (nextRequestSignature !== requestSignature) {
     requestSignature = nextRequestSignature;
     clearOAuthInputs();
@@ -101,7 +112,14 @@
     }
     deviceCodeCopied = true;
     clearTimeout(deviceCodeCopiedTimer);
-    deviceCodeCopiedTimer = setTimeout(() => { deviceCodeCopied = false; }, 2000);
+    deviceCodeCopiedTimer = setTimeout(() => {
+      deviceCodeCopied = false;
+      deviceCodeCopiedTimer = undefined;
+    }, 2000);
+  }
+
+  function updateKey(event) {
+    hasKey = Boolean(event.currentTarget.value.trim());
   }
 
   function updateOAuthInput(event, requestId) {
@@ -145,39 +163,70 @@
 
   async function respondOAuth(event, request) {
     event.preventDefault();
+    if (oauthOperationPending) return;
     const input = event.currentTarget.elements.namedItem("oauthResponse");
     const value = input?.value ?? "";
     if (!value.trim()) return;
+    oauthOperationPending = true;
     try {
       await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
     } finally {
       if (input) input.value = "";
       oauthInputReady = { ...oauthInputReady, [request.requestId]: false };
+      oauthOperationPending = false;
     }
   }
 
   async function chooseOAuth(request, value) {
-    await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
+    if (oauthOperationPending) return;
+    oauthOperationPending = true;
+    try {
+      await uiActions.invoke(CREDENTIALS_RESPOND_OAUTH_ACTION, { requestId: request.requestId, value });
+    } finally {
+      oauthOperationPending = false;
+    }
   }
 
   async function cancelOAuth() {
+    if (oauthOperationPending) return;
+    oauthOperationPending = true;
     clearOAuthInputs();
-    await uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
+    try {
+      await uiActions.invoke(CREDENTIALS_CANCEL_OAUTH_ACTION);
+    } finally {
+      oauthOperationPending = false;
+    }
+  }
+
+  function useApiKey() {
+    authenticationMethod = "api_key";
+  }
+
+  function useOAuth() {
+    clearKey();
+    authenticationMethod = "oauth";
+  }
+
+  function deactivate() {
+    if (deactivated) return;
+    deactivated = true;
+    void uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
   }
 
   function close() {
     clearKey();
     clearOAuthInputs();
-    uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
+    deactivate();
     closeModalState();
   }
 
   onDestroy(() => {
     clearKey();
     clearOAuthInputs();
+    keyInput = undefined;
     deviceCodeInput = undefined;
     oauthInputs.clear();
-    uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
+    deactivate();
   });
 </script>
 
@@ -217,7 +266,7 @@
             <fieldset class="oauth-request">
               <legend>{request.message}</legend>
               {#each request.options as option (option.id)}
-                <button type="button" class="btn" onclick={() => chooseOAuth(request, option.id)}>{option.label}</button>
+                <button type="button" class="btn" disabled={oauthOperationPending} onclick={() => chooseOAuth(request, option.id)}>{option.label}</button>
               {/each}
             </fieldset>
           {:else}
@@ -234,17 +283,18 @@
                   autocorrect="off"
                   spellcheck="false"
                   required
+                  disabled={oauthOperationPending}
                   oninput={(event) => updateOAuthInput(event, request.requestId)}
                 />
               </label>
               {#if request.kind === "manual_code"}
                 <p>If the provider redirects to an unreachable loopback page, paste the redirect URL or authorization code here.</p>
               {/if}
-              <button class="btn" type="submit" disabled={!oauthInputReady[request.requestId]}>Continue</button>
+              <button class="btn" type="submit" disabled={oauthOperationPending || !oauthInputReady[request.requestId]}>Continue</button>
             </form>
           {/if}
         {/each}
-        <button class="btn oauth-cancel" type="button" onclick={cancelOAuth}>Cancel sign-in</button>
+        <button class="btn oauth-cancel" type="button" disabled={oauthOperationPending} onclick={cancelOAuth}>Cancel sign-in</button>
       {:else if $credentialsState.flow.status === "succeeded"}
         <p role="status">Sign-in completed.</p>
       {:else if $credentialsState.flow.status === "cancelled"}
@@ -277,21 +327,21 @@
             <span class="api-key-source">{sourceLabel(provider.source)}</span>
             {#if provider.credentialType === "oauth"}
               {#if provider.oauthCapable}
-                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading}>
+                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                   Re-authenticate
                 </button>
               {/if}
-              <button class="api-key-remove" type="button" onclick={() => logoutOAuth(provider.provider)} disabled={$credentialsState.loading}>
+              <button class="api-key-remove" type="button" onclick={() => logoutOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                 Sign out from pi
               </button>
             {:else}
               {#if provider.credentialType === "api_key"}
-                <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$credentialsState.loading}>
+                <button class="api-key-remove" type="button" onclick={() => removeProvider(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                   Remove from pi and restart
                 </button>
               {/if}
               {#if provider.oauthCapable}
-                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading}>
+                <button class="api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                   {providerOAuthLabel(provider)}
                 </button>
               {/if}
@@ -320,7 +370,7 @@
   <form class="api-key-form" onsubmit={saveKey}>
     <label>
       <span>Provider</span>
-      <select bind:value={selectedProvider} disabled={$credentialsState.loading || !selectableProviders.length} required>
+      <select bind:value={selectedProvider} disabled={$credentialsState.loading || oauthOperationPending || !selectableProviders.length} required>
         {#each selectableProviders as provider (provider.provider)}
           <option value={provider.provider}>{provider.displayName}</option>
         {/each}
@@ -334,12 +384,12 @@
       <button
         class="btn"
         type="button"
-        disabled={$credentialsState.loading || !selectedProvider}
+        disabled={$credentialsState.loading || oauthOperationPending || !selectedProvider}
         onclick={() => startOAuth(selectedProvider)}
       >
         {oauthActionLabel(selected)}
       </button>
-      <button class="api-key-method-toggle" type="button" onclick={() => { authenticationMethod = "api_key"; }}>
+      <button class="api-key-method-toggle" type="button" disabled={oauthOperationPending} onclick={useApiKey}>
         Use an API key instead
       </button>
     {:else}
@@ -353,16 +403,16 @@
           autocorrect="off"
           spellcheck="false"
           placeholder="Enter a new API key"
-          disabled={$credentialsState.loading || !selectedProvider}
+          disabled={$credentialsState.loading || oauthOperationPending || !selectedProvider}
           required
-          oninput={(event) => { hasKey = Boolean(event.currentTarget.value.trim()); }}
+          oninput={updateKey}
         />
       </label>
-      <button class="btn" type="submit" disabled={$credentialsState.loading || !selectedProvider || !hasKey}>
+      <button class="btn" type="submit" disabled={$credentialsState.loading || oauthOperationPending || !selectedProvider || !hasKey}>
         {apiKeyActionLabel(selected)}
       </button>
       {#if selected?.oauthCapable}
-        <button class="api-key-method-toggle" type="button" onclick={() => { clearKey(); authenticationMethod = "oauth"; }}>
+        <button class="api-key-method-toggle" type="button" disabled={oauthOperationPending} onclick={useOAuth}>
           Use OAuth instead
         </button>
       {/if}
@@ -371,5 +421,5 @@
 </section>
 
 <div class="m-actions" id="mActions">
-  <button class="chip" data-modal-cancel onclick={close}>Close</button>
+  <button class="chip" type="button" data-modal-cancel onclick={close}>Close</button>
 </div>
