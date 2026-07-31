@@ -7,6 +7,7 @@
   import { runnerSessionIdentity, sameSession, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
+  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
   import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
   import { effectiveWorkspaceStatus, isHubRuntime, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { getWorkspaceService } from "../runtime/workspaceServiceContext.js";
@@ -392,6 +393,15 @@
     expandedCwds = next;
   }
   let expandedSessionFamilies = new Set();
+  let collectionLimits = new Map();
+  function collectionPage(items, key, pageSize = 40) {
+    return incrementalCollectionPage(items, collectionLimits.get(key), pageSize);
+  }
+  function revealCollectionPage(key, page) {
+    const next = new Map(collectionLimits);
+    next.set(key, nextCollectionPageCount(page.visibleCount, page.visibleCount + page.remainingCount, page.pageSize));
+    collectionLimits = next;
+  }
   function entryIdentity(entry) {
     return entry.session ? sessionIdentity(entry.session) : runnerSessionIdentity(entry.runner);
   }
@@ -548,9 +558,10 @@
   </div>
 {/snippet}
 
-{#snippet SessionRows({ families, archived = false, cwd = "" })}
+{#snippet SessionRows({ families, archived = false, cwd = "", listKey = cwd })}
+  {@const familyPage = collectionPage(families, `families:${listKey}`)}
   <div class="session-sidebar-workspace-sessions">
-    {#each families as family (entryIdentity(family.entry))}
+    {#each familyPage.items as family (entryIdentity(family.entry))}
       {@const familyKey = entryIdentity(family.entry)}
       {@const loopFamily = family.loop}
       {#if loopFamily}
@@ -558,23 +569,33 @@
       {:else}
         {@render SessionEntry({ entry: family.entry, archived, cwd })}
       {/if}
+      {@const childPage = collectionPage(family.children, `children:${familyKey}`)}
       {#if loopFamily && (expandedSessionFamilies.has(familyKey) || familyIsCurrent(family))}
         <div class="session-sidebar-loop-timeline" aria-label={`${family.children.length} loop iteration${family.children.length === 1 ? "" : "s"}`}>
-          {#each family.children as entry (entryIdentity(entry))}
+          {#each childPage.items as entry (entryIdentity(entry))}
             {@render SessionEntry({ entry, archived, cwd, timelineStatus: loopEntryStatus(entry) })}
           {/each}
+          {#if childPage.remainingCount}
+            <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(40, childPage.remainingCount)} more iterations</button>
+          {/if}
         </div>
       {:else if family.children.length && !loopFamily}
         <details class="session-sidebar-child-sessions" open={familyIsCurrent(family)}>
           <summary>{family.children.length} child session{family.children.length === 1 ? "" : "s"}</summary>
           <div class="session-sidebar-child-list">
-            {#each family.children as entry (entryIdentity(entry))}
+            {#each childPage.items as entry (entryIdentity(entry))}
               {@render SessionEntry({ entry, archived, cwd })}
             {/each}
+            {#if childPage.remainingCount}
+              <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`children:${familyKey}`, childPage)}>Show {Math.min(40, childPage.remainingCount)} more child sessions</button>
+            {/if}
           </div>
         </details>
       {/if}
     {/each}
+    {#if familyPage.remainingCount}
+      <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(40, familyPage.remainingCount)} more sessions</button>
+    {/if}
   </div>
 {/snippet}
 
@@ -590,12 +611,14 @@
       <span class="session-sidebar-cwd-label">{abbreviateHomePath(group.cwd)}</span>
       <span class="session-sidebar-count">{group.entries.length}</span>
     </summary>
-    {@render SessionRows({ families: group.families, archived, cwd: group.cwd })}
+    {@render SessionRows({ families: group.families, archived, cwd: group.cwd, listKey: cwdExpansionKey(group) })}
   </details>
 {/snippet}
 
-{#snippet SearchGroups(groups)}
-  {#each groups as group (group.sessionKey)}
+{#snippet SearchGroups({ groups, listKey })}
+  {@const groupPage = collectionPage(groups, `search:${listKey}`, 20)}
+  {#each groupPage.items as group (group.sessionKey)}
+    {@const hitPage = collectionPage(group.hits, `search-hits:${group.sessionKey}`, 10)}
     <section class="session-sidebar-hit-group" title={group.sessionKey}>
       <div class="session-sidebar-hit-heading">
         <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
@@ -606,7 +629,7 @@
         title={group.first.sessionCwd || group.first.folderLabel || ""}
       >{abbreviateHomePath(group.first.sessionCwd || group.first.folderLabel) || "Unknown working directory"}</span>
       <div class="session-sidebar-hit-list">
-        {#each group.hits as hit (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
+        {#each hitPage.items as hit (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
           <button
             type="button"
             class="session-sidebar-hit"
@@ -623,9 +646,15 @@
             </span>
           </button>
         {/each}
+        {#if hitPage.remainingCount}
+          <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search-hits:${group.sessionKey}`, hitPage)}>Show {Math.min(10, hitPage.remainingCount)} more matches</button>
+        {/if}
       </div>
     </section>
   {/each}
+  {#if groupPage.remainingCount}
+    <button type="button" class="session-sidebar-load-more" onclick={() => revealCollectionPage(`search:${listKey}`, groupPage)}>Show {Math.min(20, groupPage.remainingCount)} more matching sessions</button>
+  {/if}
 {/snippet}
 
 {#snippet WorkspaceHeading(workspace)}
@@ -803,13 +832,13 @@
                 class:current-workspace={isCurrentWorkspace(environment, workspace)}
               >
                 {@render WorkspaceHeading(workspace)}
-                {@render SearchGroups(workspace.groups)}
+                {@render SearchGroups({ groups: workspace.groups, listKey: `${environment.environmentId}:${workspace.workspaceId}` })}
               </section>
             {/each}
           </section>
         {/each}
       {:else}
-        {@render SearchGroups($sessionPicker.searchResults)}
+        {@render SearchGroups({ groups: $sessionPicker.searchResults, listKey: "local" })}
       {/if}
     {:else if hubMode && visibleSessionEnvironments.length}
       {#each visibleSessionEnvironments as environment (environment.environmentId)}

@@ -20,6 +20,7 @@
   import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
+  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
   import { isHubRuntime } from "../runtime/workspaceScope.js";
 
   const uiActions = getUiActionRegistry();
@@ -155,6 +156,16 @@
     prepareSessionFamilies(($sessionPicker.otherFolderSessions[folder.dir] ?? []).filter((session) => !isAlive(session))),
   ]));
 
+  let collectionLimits = new Map();
+  function collectionPage(items, key, pageSize = 40) {
+    return incrementalCollectionPage(items, collectionLimits.get(key), pageSize);
+  }
+  function revealCollectionPage(key, page) {
+    const next = new Map(collectionLimits);
+    next.set(key, nextCollectionPageCount(page.visibleCount, page.visibleCount + page.remainingCount, page.pageSize));
+    collectionLimits = next;
+  }
+
   let debounce = null;
   function focusOnMount(node) {
     queueMicrotask(() => node.focus());
@@ -203,7 +214,8 @@
     exclude tool output (search only user/ai text)
   </label>
   <div class="m-path" role="status" aria-atomic="true">{$sessionPicker.searchStatus}</div>
-  {#each $sessionPicker.searchResults as group (group.sessionKey)}
+  {@const searchPage = collectionPage($sessionPicker.searchResults, "search", 20)}
+  {#each searchPage.items as group (group.sessionKey)}
     <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
       <div class="s-title">
         <span class="s-name">{searchResultName(group)}</span>
@@ -219,16 +231,19 @@
       {/if}
     </button>
   {/each}
+  {#if searchPage.remainingCount}
+    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage("search", searchPage)}>Show {Math.min(20, searchPage.remainingCount)} more matching sessions</button>
+  {/if}
 {:else}
   {#if currentFamilies.active.length || activeOtherFolders.length}
     {@render SessionSection({ title: "Active sessions" })}
     {#if currentFamilies.active.length}
       {@render FolderLabel({ label: labelFor($sessionPicker.currentFolder) })}
-      {@render SessionRows({ families: currentFamilies.active })}
+      {@render SessionRows({ families: currentFamilies.active, listKey: "active:current" })}
     {/if}
     {#each activeOtherFolders as folder (folder.dir)}
       {@render FolderLabel({ label: labelFor(folder.dir) })}
-      {@render SessionRows({ families: folder.families })}
+      {@render SessionRows({ families: folder.families, listKey: `active:${folder.dir}` })}
     {/each}
   {/if}
 
@@ -237,7 +252,7 @@
   {/if}
   {#if currentFamilies.inactive.length}
     {@render FolderLabel({ label: labelFor($sessionPicker.currentFolder) })}
-    {@render SessionRows({ families: currentFamilies.inactive })}
+    {@render SessionRows({ families: currentFamilies.inactive, listKey: "inactive:current" })}
   {/if}
   {#if otherFolders.length}
     <details class="s-folders">
@@ -250,7 +265,7 @@
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
             {@const inactiveFamilies = inactiveOtherFolderFamilies.get(folder.dir) ?? []}
             {#if inactiveFamilies.length}
-              {@render SessionRows({ families: inactiveFamilies })}
+              {@render SessionRows({ families: inactiveFamilies, listKey: `inactive:${folder.dir}` })}
             {:else}
               <div class="m-path">(no inactive sessions)</div>
             {/if}
@@ -285,10 +300,12 @@
   </div>
 {/snippet}
 
-{#snippet SessionRows({ families })}
-  {#each families as family (sessionIdentity(family.session))}
+{#snippet SessionRows({ families, listKey })}
+  {@const familyPage = collectionPage(families, `families:${listKey}`)}
+  {#each familyPage.items as family (sessionIdentity(family.session))}
     {#if family.loop}
       {@const summary = loopFamilySummary(family)}
+      {@const forkPage = collectionPage(family.forks, `forks:${sessionIdentity(family.session)}`)}
       <details
         class={`s-loopgroup status-${summary.status}`}
         open={childSessionsOpen(family)}
@@ -304,27 +321,37 @@
           <span class="s-loop-chevron" aria-hidden="true"></span>
         </summary>
         <div class="s-loop-timeline">
-          {#each family.forks as fork (sessionIdentity(fork))}
+          {#each forkPage.items as fork (sessionIdentity(fork))}
             {@render sessionRow(fork, loopSessionStatus(fork))}
           {/each}
+          {#if forkPage.remainingCount}
+            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(40, forkPage.remainingCount)} more iterations</button>
+          {/if}
         </div>
       </details>
     {:else}
       {@render sessionRow(family.session)}
       {#if family.forks.length}
+        {@const forkPage = collectionPage(family.forks, `forks:${sessionIdentity(family.session)}`)}
         <details
           class="s-forkgroup"
           open={childSessionsOpen(family)}
           ontoggle={(event) => setChildSessionsOpen(family, event.currentTarget.open)}
         >
           <summary>{family.forks.length} child {plural(family.forks.length, "session")}</summary>
-          {#each family.forks as fork (sessionIdentity(fork))}
+          {#each forkPage.items as fork (sessionIdentity(fork))}
             {@render sessionRow(fork)}
           {/each}
+          {#if forkPage.remainingCount}
+            <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`forks:${sessionIdentity(family.session)}`, forkPage)}>Show {Math.min(40, forkPage.remainingCount)} more child sessions</button>
+          {/if}
         </details>
       {/if}
     {/if}
   {/each}
+  {#if familyPage.remainingCount}
+    <button type="button" class="collection-load-more" onclick={() => revealCollectionPage(`families:${listKey}`, familyPage)}>Show {Math.min(40, familyPage.remainingCount)} more sessions</button>
+  {/if}
 {/snippet}
 
 {#snippet SessionSection({ title })}
