@@ -63,23 +63,25 @@
   {:else if widget.kind === "monitoring"}
     <div class="pinned-markdown-toolbar"><span>Live snapshot · {widget.format === "diff" ? "diff" : "text"}</span></div>
   {/if}
-  <div class="pinned-widget-viewer-stage" class:markdown-stage={widget.kind === "markdown"} class:monitoring-stage={widget.kind === "monitoring"} class:html-stage={isHtml}>
-    {#if widget.availability !== "ready"}
-      <div class="pinned-widget-unavailable">This artifact is no longer available.</div>
-    {:else if widget.kind === "image" && widget.mimeType === "image/svg+xml"}
-      <SvgArtifact src={source} alt={widget.label} />
-    {:else if widget.kind === "image"}
-      <ImageArtifact src={source} alt={widget.label} />
-    {:else if widget.kind === "video"}
-      <VideoArtifact src={source} label={widget.label} autoplay={true} />
-    {:else if widget.kind === "markdown"}
-      <MarkdownArtifact source={widget.content ?? ""} label={widget.label} />
-    {:else if widget.kind === "monitoring"}
-      <MonitoringArtifact content={widget.content ?? ""} format={widget.format ?? "text"} />
-    {:else if isHtml}
-      <HtmlArtifact src={htmlSource} label={widget.label} />
-    {/if}
-  </div>
+  {#key widget.id}
+    <div class="pinned-widget-viewer-stage" class:markdown-stage={widget.kind === "markdown"} class:monitoring-stage={widget.kind === "monitoring"} class:html-stage={isHtml}>
+      {#if widget.availability !== "ready"}
+        <div class="pinned-widget-unavailable">This artifact is no longer available.</div>
+      {:else if widget.kind === "image" && widget.mimeType === "image/svg+xml"}
+        <SvgArtifact src={source} alt={widget.label} />
+      {:else if widget.kind === "image"}
+        <ImageArtifact src={source} alt={widget.label} />
+      {:else if widget.kind === "video"}
+        <VideoArtifact src={source} label={widget.label} autoplay={true} />
+      {:else if widget.kind === "markdown"}
+        <MarkdownArtifact source={widget.content ?? ""} label={widget.label} />
+      {:else if widget.kind === "monitoring"}
+        <MonitoringArtifact content={widget.content ?? ""} format={widget.format ?? "text"} />
+      {:else if isHtml}
+        <HtmlArtifact src={htmlSource} label={widget.label} />
+      {/if}
+    </div>
+  {/key}
   <div class="m-actions pinned-widget-viewer-actions">
     {#if navigation.total > 1}
       <div class="pinned-widget-viewer-navigation" aria-label="Pinned widget navigation">

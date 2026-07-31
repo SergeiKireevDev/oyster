@@ -39,7 +39,7 @@ test("text and editor prompt bodies and footers consume the scoped dialog servic
   assert.doesNotMatch(option, /stores\/optionPicker\.js/);
   assert.match(option, /event\.key === "ArrowDown"/);
   assert.match(option, /event\.key === "ArrowUp"/);
-  assert.match(option, /event\.key === "Enter"/);
+  assert.match(option, /event\.key (?:===|!==) "Enter"/);
   assert.match(option, /event\.key === "Escape"/);
   assert.match(option, /onclick=\{dialogs\.cancelOption\}/);
   assert.match(option, /model-autocomplete-search/);

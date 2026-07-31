@@ -262,6 +262,7 @@ test("viewer arrows follow top-level order and stay within the current group", (
   assert.match(viewer, /aria-label="Next pinned widget"/);
   assert.match(viewer, /PINNED_WIDGET_OPEN_ACTION, target/);
   assert.match(viewer, /navigation\.index \+ 1.*navigation\.total/);
+  assert.match(viewer, /\{#key widget\.id\}[\s\S]*pinned-widget-viewer-stage/, "switching widgets must recreate the scroll viewport at its left edge");
 });
 
 test("file explorer pins files and directories through scoped actions", () => {

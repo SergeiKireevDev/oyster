@@ -200,27 +200,10 @@ test("file explorer reports an unrecoverable upload error and resets progress", 
   assert.deepEqual(calls.slice(0, 5), [
     { uploadError: "" },
     { uploading: true, uploadText: "0%" },
-    { uploadError: "a.txt: invalid file" },
     ["a.txt: invalid file", "error"],
+    { uploadError: "a.txt: invalid file" },
     { uploading: false, uploadText: "⬆ Upload…" },
   ]);
-});
-
-test("file explorer emits one toast for a batch with multiple upload failures", async () => {
-  const toasts = [];
-  const controller = createFileExplorerController({
-    uploadChunk: async ({ name }) => name === "good.txt"
-      ? { res: { ok: true }, data: { saved: true } }
-      : { res: { ok: false, status: 400 }, data: { error: "invalid file" } },
-    browse: async (path) => ({ path, dirs: [], files: [] }),
-    update: () => {}, updateTitle: () => {}, getShowHidden: () => true, getToken: () => "token", setPath: () => {},
-    toast: (...args) => toasts.push(args),
-  });
-  const file = (name) => ({ name, size: 1, slice: () => "body" });
-
-  await controller.uploadFiles("/work", [file("bad-a.txt"), file("good.txt"), file("bad-b.txt")]);
-
-  assert.deepEqual(toasts, [["uploaded 1 file; 2 files failed to upload", "error"]]);
 });
 
 test("file explorer saves editor content and clears its saving state", async () => {

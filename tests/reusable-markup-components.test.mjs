@@ -9,7 +9,7 @@ test("option picker delegates each option's conditional presentation to one reus
   const picker = markup("OptionPickerModal.svelte");
   const item = component("OptionPickerItem.svelte");
 
-  assert.equal((picker.match(/\{#each visible as item/g) ?? []).length, 1);
+  assert.equal((picker.match(/\{#each visibleOptions as item/g) ?? []).length, 1);
   assert.match(picker, /<OptionPickerItem[\s\S]*\{modelMode\}[\s\S]*onChoose=\{dialogs\.chooseOption\}[\s\S]*onActivate=\{setActive\}/);
   assert.doesNotMatch(picker, /model-autocomplete-option|class="m-option"/);
   assert.match(item, /\{#if modelMode\}/);

@@ -1,45 +1,79 @@
 <script>
   import { scrollIntoViewWhen } from "../lib/modalDomAdapters.js";
 
-  export let text = "";
-  export let index = -1;
-  export let query = "";
-  export let modelMode = false;
-  export let active = false;
-  export let selected = false;
-  export let onChoose = () => {};
-  export let onActivate = () => {};
+  /** @typedef {{ before: string; match: string; after: string }} Highlight */
 
-  function highlight(value) {
-    const content = String(value);
-    const matchIndex = query ? content.toLowerCase().indexOf(query) : -1;
+  const noop = () => {};
+
+  /**
+   * @type {{
+   *   text?: unknown;
+   *   index?: number;
+   *   query?: string;
+   *   modelMode?: boolean;
+   *   active?: boolean;
+   *   selected?: boolean;
+   *   onChoose?: (index: number) => void;
+   *   onActivate?: (index: number) => void;
+   * }}
+   */
+  let {
+    text = "",
+    index = -1,
+    query = "",
+    modelMode = false,
+    active = false,
+    selected = false,
+    onChoose = noop,
+    onActivate = noop,
+  } = $props();
+
+  /**
+   * @param {string} value
+   * @param {string} searchQuery
+   * @returns {Highlight}
+   */
+  function highlight(value, searchQuery) {
+    const matchIndex = searchQuery ? value.toLowerCase().indexOf(searchQuery) : -1;
     return matchIndex < 0
-      ? { before: content, match: "", after: "" }
+      ? { before: value, match: "", after: "" }
       : {
-          before: content.slice(0, matchIndex),
-          match: content.slice(matchIndex, matchIndex + query.length),
-          after: content.slice(matchIndex + query.length),
+          before: value.slice(0, matchIndex),
+          match: value.slice(matchIndex, matchIndex + searchQuery.length),
+          after: value.slice(matchIndex + searchQuery.length),
         };
   }
 
-  $: separator = String(text).indexOf("/");
-  $: providerText = separator < 0 ? "custom" : String(text).slice(0, separator);
-  $: modelText = separator < 0 ? String(text) : String(text).slice(separator + 1);
-  $: provider = highlight(providerText);
-  $: model = highlight(modelText);
+  function choose() {
+    onChoose(index);
+  }
+
+  function activate() {
+    onActivate(index);
+  }
+
+  let optionText = $derived(String(text));
+  let normalizedQuery = $derived(String(query).trim().toLowerCase());
+  let separator = $derived(optionText.indexOf("/"));
+  let providerText = $derived(separator < 0 ? "custom" : optionText.slice(0, separator));
+  let modelText = $derived(separator < 0 ? optionText : optionText.slice(separator + 1));
+  let provider = $derived(highlight(providerText, normalizedQuery));
+  let model = $derived(highlight(modelText, normalizedQuery));
 </script>
 
 {#if modelMode}
   <button
+    type="button"
     class="model-autocomplete-option"
     class:active
     class:selected
     data-option-index={index}
     role="option"
     aria-selected={selected}
+    title={optionText}
     use:scrollIntoViewWhen={active}
-    onclick={() => onChoose(index)}
-    onmouseenter={() => onActivate(index)}
+    onclick={choose}
+    onmouseenter={activate}
   >
     <span class="model-provider">{provider.before}{#if provider.match}<mark>{provider.match}</mark>{/if}{provider.after}</span>
     <span class="model-name">{model.before}{#if model.match}<mark>{model.match}</mark>{/if}{model.after}</span>
@@ -48,13 +82,14 @@
   </button>
 {:else}
   <button
+    type="button"
     class="m-option"
     class:active
     data-option-index={index}
     role="option"
     aria-selected={active}
     use:scrollIntoViewWhen={active}
-    onclick={() => onChoose(index)}
-    onmouseenter={() => onActivate(index)}
-  >{text}</button>
+    onclick={choose}
+    onmouseenter={activate}
+  >{optionText}</button>
 {/if}
