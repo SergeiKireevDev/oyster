@@ -25,7 +25,10 @@ test("components use classes instead of static inline layout styles", () => {
   const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
   assert.match(styles, /\.modal-primary-action\s*\{/);
   assert.match(styles, /\.modal-code-editor\s*\{/);
-  assert.match(styles, /\.file-explorer-row\s*\{/);
+
+  const explorer = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
+  assert.match(explorer, /<style>[\s\S]*?\.file-explorer-row\s*\{/);
+  assert.doesNotMatch(styles, /#modal \.file-explorer-row\s*\{/);
 });
 
 test("runtime-dependent geometry uses named style state rather than static declarations", () => {

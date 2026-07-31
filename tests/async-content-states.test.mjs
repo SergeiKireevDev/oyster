@@ -10,7 +10,7 @@ test("asynchronous file browsers render loading, failure, retry, and empty state
     assert.match(source, /role="status"/);
     assert.match(source, /role="alert"/);
     assert.match(source, />Retry</);
-    assert.match(source, /\(empty folder\)|\(no subfolders\)/);
+    assert.match(source, /This folder is empty\.|\(empty folder\)|\(no subfolders\)/);
   }
 });
 

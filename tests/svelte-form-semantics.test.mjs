@@ -81,7 +81,7 @@ test("workspace forms pair native constraints with actionable validation guidanc
 
 test("file editing and checkpoint selection submit through forms while preserving shortcuts", () => {
   const explorer = component("FileExplorerModal.svelte");
-  assert.match(explorer, /<form id="fileEditorForm" aria-busy=\{\$fileExplorer\.saving\} onsubmit=\{submitFileEditor\}>/);
+  assert.match(explorer, /<form id="fileEditorForm" class="file-editor-form" aria-busy=\{\$fileExplorer\.saving\} onsubmit=\{submitFileEditor\}>/);
   assert.match(explorer, /event\.isComposing/);
   assert.match(explorer, /\|\| \$fileExplorer\.saving/);
   assert.match(explorer, /aria-keyshortcuts="Control\+S Meta\+S"/);
