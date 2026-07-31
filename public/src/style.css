@@ -79,29 +79,7 @@
      the whole transcript ("replay"), and backfill corrections sampled
      scrollTop mid-animation, accumulating drift. Deliberate smooth scrolling
      (permalink focus) requests it explicitly via scrollIntoView(). */
-  .transcript-shell { flex: 1; min-height: 0; position: relative; }
-  #scroller { height: 100%; overflow-y: auto; }
-  #transcriptNotice {
-    position: absolute;
-    left: 50%;
-    bottom: 12px;
-    translate: -50% 0;
-    width: 32px;
-    height: 32px;
-    border: 1px solid var(--accent-dim);
-    border-radius: 999px;
-    background: var(--panel-2);
-    color: var(--accent);
-    box-shadow: 0 5px 18px rgba(0,0,0,.45);
-    font: 700 18px/1 inherit;
-    cursor: pointer;
-    z-index: 12;
-  }
-  #transcriptNotice:hover { background: var(--accent-dim); color: var(--text); }
-
   /* ---------- main row: chat column + hublots sidebar ---------- */
-  #main { flex: 1; display: flex; min-height: 0; }
-  #chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #sessions {
     width: 240px;
     flex-shrink: 0;
@@ -2258,8 +2236,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 #menu .menu-logout .menu-option-icon { color: #b7a1aa; }
 
 /* Three-column workspace */
-#main { background: transparent; }
-#chatcol { position: relative; background: rgba(9, 11, 15, .38); }
 #sessions, #hublots, #treebar {
   border-color: rgba(255,255,255,.07);
   background: rgba(17, 20, 27, .76);
@@ -2418,11 +2394,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 }
 
 /* Transcript: spacious conversation canvas */
-#scroller {
-  background:
-    radial-gradient(ellipse at 50% -12%, rgba(132,145,255,.07), transparent 38%),
-    linear-gradient(180deg, rgba(255,255,255,.008), transparent 28%);
-}
 #messages { max-width: 960px; padding: 32px 40px 22px; gap: 4px; }
 .msg.user {
   max-width: min(74%, 660px);
@@ -2573,8 +2544,6 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
 }
 .activity-history-body details.block.activity-step > summary { min-height: 25px; opacity: .82; }
 .permalink, .message-copy, .checkpoint, .ckpt-restore { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
-#transcriptNotice { width: 36px; height: 36px; bottom: 20px; border-color: rgba(157,169,255,.35); background: #20263a; box-shadow: 0 10px 28px rgba(0,0,0,.38); }
-
 /* Floating composer */
 #composer {
   padding: 10px 20px calc(16px + env(safe-area-inset-bottom));
@@ -2804,7 +2773,6 @@ html[data-theme="light"] .menu-option-icon { border-color: rgba(82,99,216,.12); 
 html[data-theme="light"] #menu button:hover .menu-option-icon { border-color: rgba(82,99,216,.2); background: rgba(82,99,216,.12); color: #3949a4; }
 html[data-theme="light"] #menu .menu-logout { border-top-color: rgba(32,37,52,.09); }
 
-html[data-theme="light"] #chatcol { background: rgba(245,247,251,.48); }
 html[data-theme="light"] #sessions,
 html[data-theme="light"] #hublots,
 html[data-theme="light"] #treebar {
@@ -2837,7 +2805,6 @@ html[data-theme="light"] .session-sidebar-action:hover { border-color: var(--bor
 html[data-theme="light"] .session-sidebar-hit-group { border-color: var(--border); background: rgba(32,37,52,.025); }
 html[data-theme="light"] .session-archive-divider { color: #525d72; }
 
-html[data-theme="light"] #scroller { background: radial-gradient(circle at 50% 0, rgba(82,99,216,.045), transparent 34%); }
 html[data-theme="light"] .msg.user {
   border-color: rgba(82,99,216,.2);
   background: linear-gradient(145deg, #e4e8ff, #d8defa);
@@ -2867,7 +2834,6 @@ html[data-theme="light"] .permalink,
 html[data-theme="light"] .message-copy,
 html[data-theme="light"] .checkpoint,
 html[data-theme="light"] .ckpt-restore { background: #fff; box-shadow: 0 4px 12px rgba(35,43,65,.1); }
-html[data-theme="light"] #transcriptNotice { background: #fff; box-shadow: 0 10px 28px rgba(35,43,65,.18); }
 html[data-theme="light"] .tok-com { color: #68758a; }
 html[data-theme="light"] .tok-str { color: #167052; }
 html[data-theme="light"] .tok-num { color: #a54b12; }
