@@ -113,10 +113,23 @@ test("AuthGate retains failed authentication and exposes an inline error", () =>
   assert.match(source, /getAuthBrowser\(\)/);
   assert.match(source, /if \(!await authBrowser\.validateToken\(token\)\)/);
   assert.ok(source.indexOf("validateToken(token)") < source.indexOf("saveToken(token)"));
-  assert.match(source, /class="gate-error"[^>]*role="alert"/);
+  assert.match(source, /class="gate-error"[^>]*role="alert"[^>]*aria-atomic="true"/);
   assert.match(source, /Authentication failed/);
   assert.match(style, /#gate \.gate-error\s*\{[^}]*color: var\(--red\)/s);
   assert.match(source, /authBrowser\.saveToken\(token\)/);
-  assert.match(source, /authBrowser\.reload\(\)/);
+  assert.match(source, /tokenInput = "";\s*authBrowser\.reload\(\)/);
   assert.doesNotMatch(source, /localStorage|location\.reload/);
+});
+
+test("AuthGate exposes an accessible, password-manager-friendly authentication dialog", () => {
+  const source = readFileSync(new URL("../public/src/components/AuthGate.svelte", import.meta.url), "utf8");
+
+  assert.match(source, /role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="gateTitle"/);
+  assert.match(source, /<form class="card" onsubmit=\{submit\} aria-busy=\{connecting\}>/);
+  assert.match(source, /autocomplete="current-password"/);
+  assert.match(source, /autocapitalize="none"/);
+  assert.match(source, /spellcheck="false"/);
+  assert.match(source, /aria-describedby=\{inputDescription\}/);
+  assert.match(source, /readonly=\{connecting\}/);
+  assert.doesNotMatch(source, /disabled=\{connecting\}[\s\S]*required/);
 });
