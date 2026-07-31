@@ -10,7 +10,10 @@ export function createTranscriptRuntime(deps) {
     domAdapter: deps.domAdapter,
   });
 
-  const flash = flashTranscriptElement;
+  const flash = (element) => flashTranscriptElement(
+    element,
+    deps.scheduleDelayed ? { setTimeoutImpl: deps.scheduleDelayed } : undefined,
+  );
   const focusMessageBySnippet = (snippet) => focusTranscriptSnippet(deps.messageElements(), snippet, { flash });
   const permalink = createTranscriptPermalinkRuntime({
     fetchEntries: deps.fetchEntries,

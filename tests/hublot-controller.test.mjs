@@ -1,20 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHublotController, createHublotSidebarEventController } from "../public/src/lib/hublotController.js";
+import { createHublotController } from "../public/src/lib/hublotController.js";
 import { listHublots } from "../public/src/lib/hublotActions.js";
-test("hublot sidebar event controller invokes show and tears down", () => {
-  let listener;
-  let removed;
-  const windowTarget = { addEventListener(name, fn) { assert.equal(name, "pi-hublot-show"); listener = fn; }, removeEventListener(name, fn) { assert.equal(name, "pi-hublot-show"); removed = fn; } };
-  let shown = 0;
-  const controller = createHublotSidebarEventController({ windowTarget, show: () => shown++ });
-  controller.attach();
-  listener();
-  controller.detach();
-  assert.equal(shown, 1);
-  assert.equal(removed, listener);
-});
-
 test("hublot listing requests the Hub-wide collection before applying session visibility", async () => {
   let requested;
   const tunnels = await listHublots(async (url) => {
@@ -42,6 +29,23 @@ test("hublot controller refreshes the sidebar best-effort when authenticated", a
   });
   await controller.refreshSidebar();
   assert.deepEqual(calls, [["loading", true], ["tunnels", [{ id: 1 }]], ["loading", false]]);
+});
+
+test("hublot controller exposes pinned-widget load failures for retry", async () => {
+  const calls = [];
+  const controller = createHublotController({
+    isAuthenticated: () => true,
+    listSidebarHublots: async () => { throw new Error("offline"); },
+    setSidebarLoading: (value) => calls.push(["loading", value]),
+    setSidebarError: (value) => calls.push(["error", value]),
+    setSidebarTunnels: (value) => calls.push(["widgets", value]),
+  });
+
+  await controller.refreshSidebar();
+
+  assert.deepEqual(calls, [
+    ["loading", true], ["error", ""], ["widgets", []], ["error", "offline"], ["loading", false],
+  ]);
 });
 
 test("hublot controller ignores stale overlapping sidebar refreshes", async () => {

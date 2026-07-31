@@ -42,12 +42,13 @@
 </script>
 
 <div id="composer">
-  <div class="inner">
+  <form class="inner" onsubmit={(event) => { event.preventDefault(); send(); }}>
     <div class="composer-prompt" aria-hidden="true">›</div>
     <div class="composer-editor">
-      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
+      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment (segment)}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
       <textarea
         id="input"
+        aria-label="Message"
         rows="1"
         placeholder={$composerUi.placeholder}
         disabled={$composerUi.inputDisabled}
@@ -81,12 +82,12 @@
         {/if}
       </button>
     {/if}
-    <button class="btn" id="sendBtn" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled} onclick={send}>{$composerUi.sendText}</button>
-    <button class="btn stop" id="stopBtn" hidden={$composerUi.stopHidden} onclick={abort}>Stop</button>
-  </div>
+    <button class="btn" id="sendBtn" type="submit" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled}>{$composerUi.sendText}</button>
+    <button class="btn stop" id="stopBtn" type="button" hidden={$composerUi.stopHidden} onclick={abort}>Stop</button>
+  </form>
   <div id="statusbar">
     <span id="stateInfo">{$headerState.stateInfo}</span>
-    {#if $composerVoice.status}<span id="voiceStatus">{$composerVoice.status}</span>{/if}
+    {#if $composerVoice.status}<span id="voiceStatus" role="status" aria-atomic="true">{$composerVoice.status}</span>{/if}
     <span id="workdirInfo" title={$appHeader.workdirTitle}>{#if $appHeader.workdirText}<FolderIcon size={11} />{/if}{$appHeader.workdirText}</span>
   </div>
 </div>

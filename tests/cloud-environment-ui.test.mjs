@@ -6,7 +6,7 @@ const component = (name) => readFileSync(new URL(`../public/src/components/${nam
 
 test("Hub environment selector creates workspaces in the selected connection environment", () => {
   const sidebar = component("SessionSidebar.svelte");
-  const overlays = component("Overlays.svelte");
+  const registry = readFileSync(new URL("../public/src/runtime/modalContentRegistry.js", import.meta.url), "utf8");
   assert.match(sidebar, /class="session-sidebar-environment-create"/);
   assert.match(sidebar, /selectedEnvironment\?\.kind === "llmbox"/);
   assert.match(sidebar, /content: "llmboxWorkspace"/);
@@ -14,8 +14,10 @@ test("Hub environment selector creates workspaces in the selected connection env
   assert.match(sidebar, /content: "cloudWorkspace"/);
   assert.match(sidebar, /providerId: selectedEnvironment\?\.kind === "cloud"/);
   assert.match(sidebar, /Connect cloud provider/);
-  assert.match(overlays, /\$modalState\.content === "cloudWorkspace"[\s\S]*<CloudWorkspaceModal providerId=/);
-  assert.match(overlays, /\$modalState\.content === "llmboxWorkspace"[\s\S]*<LlmboxWorkspaceModal spoke=/);
+  assert.match(registry, /cloudWorkspace: CloudWorkspaceModal/);
+  assert.match(registry, /llmboxWorkspace: LlmboxWorkspaceModal/);
+  assert.match(registry, /content === "cloudWorkspace"[\s\S]*providerId: context\?\.providerId/);
+  assert.match(registry, /content === "llmboxWorkspace"[\s\S]*spoke: context\?\.spoke[\s\S]*environmentName: context\?\.environmentName/);
 });
 
 test("environment information describes connection boundaries rather than VM instances", () => {
@@ -38,12 +40,12 @@ test("cloud workspace modal provisions source-installed reverse-connected Oyster
   const source = component("CloudWorkspaceModal.svelte");
   assert.match(source, /export let providerId = ""/);
   assert.match(source, /providers\.find\(\(candidate\) => candidate\.id === providerId\)/);
-  assert.match(source, /\/api\/v1\/cloud\/providers/);
-  assert.match(source, /method: "PUT"/);
-  assert.match(source, /\/options\$\{query\}/);
-  assert.match(source, /method: "POST"/);
-  assert.match(source, /request\("\/api\/v1\/workspaces"/);
-  assert.match(source, /body: JSON\.stringify\(\{ provider: selectedProvider\.id, name: workspaceName, region, size, image \}\)/);
+  assert.match(source, /getWorkspaceService\(\)/);
+  assert.match(source, /workspaceService\.listCloudProviders\(\)/);
+  assert.match(source, /workspaceService\.saveCloudCredentials\(selectedProvider\.id/);
+  assert.match(source, /workspaceService\.getCloudOptions\(requestedProviderId, requestedRegion\)/);
+  assert.match(source, /workspaceService\.provisionCloudWorkspace\(\{/);
+  assert.doesNotMatch(source, /\bfetch\s*\(|["'`]\/api\//);
   assert.match(source, /createdWorkspace\.environmentName/);
   assert.match(source, /providerId === "digitalocean"/);
   assert.match(source, /providerId === "hetzner" \? "HZ"/);
@@ -77,9 +79,10 @@ test("cloud workspace modal provisions source-installed reverse-connected Oyster
 test("llmbox workspace modal creates a box in the selected spoke environment", () => {
   const source = component("LlmboxWorkspaceModal.svelte");
   assert.match(source, /export let spoke = ""/);
-  assert.match(source, /fetch\("\/api\/v1\/workspaces"/);
+  assert.match(source, /workspaceService\.createLlmboxWorkspace\(payload\)/);
+  assert.doesNotMatch(source, /\bfetch\s*\(|["'`]\/api\//);
   assert.match(source, /id: workspaceId\.trim\(\)/);
   assert.match(source, /spoke,/);
   assert.match(source, /payload\.diskBytes = size \* 1024 \* 1024 \* 1024/);
-  assert.match(source, /publishWorkspace\(data\.workspace\)/);
+  assert.match(source, /publishWorkspace\(workspace\)/);
 });

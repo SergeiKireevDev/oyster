@@ -29,17 +29,17 @@
   style:max-height={$commandPalette.maxHeight}
 >
   {#if $commandPalette.emptyText}
-    <div class="cmd-empty">{$commandPalette.emptyText}</div>
+    <div class="cmd-empty" role="status">{$commandPalette.emptyText}</div>
   {:else}
-    {#each $commandPalette.items as cmd, i}
-      <div
+    {#each $commandPalette.items as cmd, i (cmd.key)}
+      <button
+        type="button"
         class="cmd-row"
         class:active={cmd.active}
-        role="option"
         tabindex="-1"
-        aria-selected={cmd.active}
-        onmousedown={(event) => choose(event, i)}
+        onmousedown={(event) => event.preventDefault()}
         onmousemove={() => setActive(i)}
+        onclick={(event) => choose(event, i)}
       >
         <span class="cmd-ico">{#if cmd.icon === "folder"}<FolderIcon size={15} />{:else}{cmd.icon}{/if}</span>
         <div class="cmd-body">
@@ -47,7 +47,7 @@
           <div class="cmd-desc">{cmd.desc}</div>
         </div>
         <span class="cmd-hint">{cmd.active ? "enter ↵" : ""}</span>
-      </div>
+      </button>
     {/each}
   {/if}
 </div>

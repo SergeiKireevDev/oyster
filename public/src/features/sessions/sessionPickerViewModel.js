@@ -187,6 +187,31 @@ export function groupSessionEntriesByFamily(entries) {
   return [...families.values()];
 }
 
+/** Prepares sidebar entry families and loop ordering once before template rendering. */
+export function prepareSessionEntryFamilies(entries) {
+  const entryLabel = (entry) => entry.runner?.sessionName || entry.session?.name || entry.session?.preview || "";
+  return groupSessionEntriesByFamily(entries).map((family) => {
+    const loop = family.children.some((entry) => /^Loop iteration \d+:/i.test(entryLabel(entry)));
+    const children = loop ? [...family.children].sort((left, right) => {
+      const iteration = (entry) => Number(entryLabel(entry).match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
+      return iteration(left) - iteration(right);
+    }) : family.children;
+    return { ...family, children, loop };
+  });
+}
+
+/** Prepares picker family structure and loop ordering once before template rendering. */
+export function prepareSessionFamilies(sessions) {
+  return groupSessionFamilies(sessions).map((family) => {
+    const loop = family.forks.some((session) => /^Loop iteration \d+:/i.test(session.name || session.preview || ""));
+    const forks = loop ? [...family.forks].sort((left, right) => {
+      const iteration = (session) => Number((session.name || "").match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
+      return iteration(left) - iteration(right);
+    }) : family.forks;
+    return { ...family, forks, loop };
+  });
+}
+
 /** Keeps each session family together in the active or inactive partition. */
 export function partitionSessionFamilies(sessions, isAlive) {
   const active = [];

@@ -7,14 +7,17 @@ import { createDialogService } from "../public/src/runtime/dialogService.js";
 import { createCheckpointModelPickerService } from "../public/src/runtime/checkpointModelPickerService.js";
 
 const appSource = readFileSync(new URL("../public/src/App.svelte", import.meta.url), "utf8");
+const scopeSource = readFileSync(new URL("../public/src/runtime/createBrowserApplicationScope.js", import.meta.url), "utf8");
 const menuSource = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
 const headerSource = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
 const commandPaletteSource = readFileSync(new URL("../public/src/components/CommandPalette.svelte", import.meta.url), "utf8");
 
-test("App provides its UI action registry and passes it to the runtime", () => {
-  assert.match(appSource, /provideUiActionRegistry\(createUiActionRegistry\(\)\)/);
-  assert.match(appSource, /startAppRuntime\(\{ uiActions, dialogs, browserActions, checkpointModelPicker \}\)/);
-  assert.match(appSource, /uiActions\.teardown\(\)/);
+test("App provides its scoped UI action registry and starts the application scope", () => {
+  assert.match(appSource, /provideUiActionRegistry\(applicationScope\.services\.uiActions\)/);
+  assert.match(appSource, /applicationScope\.start\(\)/);
+  assert.match(appSource, /applicationScope\.teardown\(\)/);
+  assert.match(scopeSource, /startRuntime\(\{ uiActions, dialogs, browserActions, checkpointModelPicker \}\)/);
+  assert.match(scopeSource, /uiActions\.teardown\(\)/);
 });
 
 test("Menu routes every action through the scoped registry", () => {
@@ -39,21 +42,24 @@ test("Header presents session controls as a consistent icon action group", () =>
   assert.match(headerSource, /class="header-status"/);
 });
 
-test("CommandPalette routes mouse selection through the scoped registry", () => {
-  assert.match(commandPaletteSource, /onmousedown=\{\(event\) => choose\(event, i\)\}/);
+test("CommandPalette routes native activation through the scoped registry", () => {
+  assert.match(commandPaletteSource, /onclick=\{\(event\) => choose\(event, i\)\}/);
+  assert.match(commandPaletteSource, /onmousedown=\{\(event\) => event\.preventDefault\(\)\}/);
   assert.match(commandPaletteSource, /uiActions\.invoke\(COMMAND_PALETTE_RUN_ACTION, index\)/);
   assert.doesNotMatch(commandPaletteSource, /window\.dispatchEvent|CustomEvent/);
 });
 
-test("App provides scoped dialog and browser action services", () => {
-  assert.match(appSource, /provideDialogService\(createDialogService\(\)\)/);
-  assert.match(appSource, /provideBrowserActions\(createBrowserActions\(\{ windowTarget: window \}\)\)/);
-  assert.match(appSource, /provideSettingsPreferences\(createSettingsPreferenceService\(/);
-  assert.match(appSource, /onThinkingVisibilityChanged: \(\) => uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
-  assert.match(appSource, /provideCheckpointModelPicker\(createCheckpointModelPickerService\(/);
-  assert.match(appSource, /provideAuthBrowser\(createAuthBrowserService\(\{ storage: localStorage, reload: \(\) => location\.reload\(\) \}\)\)/);
-  assert.match(appSource, /checkpointModelPicker\.teardown\(\)/);
-  assert.match(appSource, /dialogs\.teardown\(\)/);
+test("App provides scoped services without constructing browser or persistence adapters", () => {
+  assert.match(appSource, /provideDialogService\(applicationScope\.services\.dialogs\)/);
+  assert.match(appSource, /provideBrowserActions\(applicationScope\.services\.browserActions\)/);
+  assert.match(appSource, /provideSettingsPreferences\(applicationScope\.services\.settingsPreferences\)/);
+  assert.match(appSource, /provideCheckpointModelPicker\(applicationScope\.services\.checkpointModelPicker\)/);
+  assert.match(appSource, /provideAuthBrowser\(applicationScope\.services\.authBrowser\)/);
+  assert.match(appSource, /provideWorkspaceService\(applicationScope\.services\.workspaceService\)/);
+  assert.doesNotMatch(appSource, /localStorage|\bwindow\b|\bdocument\b|createBrowserActions|createAuthBrowserService/);
+  assert.match(scopeSource, /onThinkingVisibilityChanged: \(\) => uiActions\.invoke\(SETTINGS_CHANGED_ACTION\)/);
+  assert.match(scopeSource, /checkpointModelPicker\.teardown\(\)/);
+  assert.match(scopeSource, /dialogs\.teardown\(\)/);
 });
 
 test("application mount teardown remount passes fresh scoped UI services", async () => {

@@ -80,7 +80,7 @@ async function body(page) {
   // ---- roll back to H1 via its ↩ arrow
   await page.locator(`.ckpt-restore[title*="${H1}"]`).first().click();
   await expect(page.locator("#overlay")).toHaveClass(/open/);
-  await page.getByRole("button", { name: /Roll back/ }).click();
+  await page.getByRole("button", { name: /^Roll back ⏪$/ }).click();
 
   // a forked session opens (new session id), titled with the rollback marker
   await expect.poll(() => currentSessionId(page), { timeout: 30000 }).not.toEqual(mainSession);

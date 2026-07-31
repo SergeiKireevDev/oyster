@@ -1,32 +1,30 @@
-export function createFolderBrowserEventController({ windowTarget, browse, create, cancel, submit }) {
-  const listeners = [["pi-folder-browser-browse", (event) => browse(event.detail)], ["pi-folder-browser-create", create], ["pi-folder-browser-cancel", cancel], ["pi-folder-browser-submit", submit]];
-  function attach() { for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener); return detach; }
-  function detach() { for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener); }
-  return { attach, detach };
-}
-
 export function createFolderBrowserController({ browse, mkdir, update, updateTitle, getShowHidden, setPath, openAndSwitchSession, setWorkdir, toast }) {
   async function load(path) {
-    update({ loading: true });
+    update({ loading: true, error: "" });
     try {
       const data = await browse(path);
       setPath(data.path);
       updateTitle("New session in folder");
       update({ path: data.path, home: data.home, parent: data.parent, dirs: data.dirs ?? [], showHidden: getShowHidden(), loading: false });
-    } catch (error) { update({ loading: false }); toast(error.message || "cannot open folder", "error"); }
+    } catch (error) {
+      const message = error.message || "Cannot open folder";
+      update({ loading: false, error: message });
+      toast(message, "error");
+    }
   }
   async function createFolder(path, name) {
     const folderName = name.trim();
     if (!folderName) return;
-    update({ creating: true });
+    update({ creating: true, createError: "" });
     try {
       const data = await mkdir(path, folderName);
       toast(`created ${data.path}`);
       update({ creating: false, createOpen: false, newName: "" });
       await load(data.path);
     } catch (error) {
-      toast(`mkdir failed: ${error.message}`, "error");
-      update({ creating: false });
+      const message = `mkdir failed: ${error.message}`;
+      toast(message, "error");
+      update({ creating: false, createError: message });
     }
   }
 

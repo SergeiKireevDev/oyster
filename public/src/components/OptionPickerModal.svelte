@@ -1,12 +1,12 @@
 <script>
   import { onMount, tick } from "svelte";
+  import OptionPickerItem from "./OptionPickerItem.svelte";
   import { getDialogService } from "../runtime/dialogServiceContext.js";
 
   const dialogs = getDialogService();
   const optionPicker = dialogs.optionPicker;
 
   let searchEl;
-  let listEl;
 
   $: modelMode = $optionPicker.variant === "model";
   $: query = ($optionPicker.query || "").trim().toLowerCase();
@@ -14,26 +14,8 @@
     .map((text, index) => ({ text, index }))
     .filter(({ text }) => !query || String(text).toLowerCase().includes(query));
 
-  function splitModel(value) {
-    const text = String(value);
-    const separator = text.indexOf("/");
-    return separator < 0
-      ? { provider: "custom", name: text }
-      : { provider: text.slice(0, separator), name: text.slice(separator + 1) };
-  }
-
-  function highlight(value) {
-    const text = String(value);
-    const index = query ? text.toLowerCase().indexOf(query) : -1;
-    return index < 0
-      ? { before: text, match: "", after: "" }
-      : { before: text.slice(0, index), match: text.slice(index, index + query.length), after: text.slice(index + query.length) };
-  }
-
-  async function setActive(index) {
+  function setActive(index) {
     dialogs.setOptionActive(index);
-    await tick();
-    listEl?.querySelector(`[data-option-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
   }
 
   function move(dir) {
@@ -94,7 +76,6 @@
 {/if}
 
 <div
-  bind:this={listEl}
   id="optionPickerResults"
   class:model-autocomplete-results={modelMode}
   class="option-picker-results"
@@ -102,39 +83,19 @@
   aria-label={$optionPicker.title}
 >
   {#if !visible.length}
-    <div class="option-picker-empty">No matching {modelMode ? "models" : "options"}</div>
-  {:else if modelMode}
-    {#each visible as item (item.index)}
-      {@const model = splitModel(item.text)}
-      {@const provider = highlight(model.provider)}
-      {@const name = highlight(model.name)}
-      <button
-        class="model-autocomplete-option"
-        class:active={item.index === $optionPicker.active}
-        class:selected={item.index === $optionPicker.selected}
-        data-option-index={item.index}
-        role="option"
-        aria-selected={item.index === $optionPicker.selected}
-        onclick={() => dialogs.chooseOption(item.index)}
-        onmousemove={() => setActive(item.index)}
-      >
-        <span class="model-provider">{provider.before}{#if provider.match}<mark>{provider.match}</mark>{/if}{provider.after}</span>
-        <span class="model-name">{name.before}{#if name.match}<mark>{name.match}</mark>{/if}{name.after}</span>
-        {#if item.index === $optionPicker.selected}<span class="model-selected-mark" aria-label="Current model">✓</span>{/if}
-        {#if item.index === $optionPicker.active}<span class="model-enter-hint" aria-hidden="true">↵</span>{/if}
-      </button>
-    {/each}
+    <div class="option-picker-empty" role="status">No matching {modelMode ? "models" : "options"}</div>
   {:else}
     {#each visible as item (item.index)}
-      <button
-        class="m-option"
-        class:active={item.index === $optionPicker.active}
-        data-option-index={item.index}
-        role="option"
-        aria-selected={item.index === $optionPicker.active}
-        onclick={() => dialogs.chooseOption(item.index)}
-        onmousemove={() => setActive(item.index)}
-      >{item.text}</button>
+      <OptionPickerItem
+        text={item.text}
+        index={item.index}
+        {query}
+        {modelMode}
+        active={item.index === $optionPicker.active}
+        selected={item.index === $optionPicker.selected}
+        onChoose={dialogs.chooseOption}
+        onActivate={setActive}
+      />
     {/each}
   {/if}
 </div>

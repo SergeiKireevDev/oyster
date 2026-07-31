@@ -18,4 +18,4 @@
   $: segments = highlightSearchSnippet(snippet, query);
 </script>
 
-<span class="s-role">{label}</span>{" "}<span class={copyClass}>{#each segments as segment}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}</span>
+<span class="s-role">{label}</span>{" "}<span class={copyClass}>{#each segments as segment (segment)}{#if segment.match}<mark>{segment.text}</mark>{:else}{segment.text}{/if}{/each}</span>

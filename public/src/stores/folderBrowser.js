@@ -10,6 +10,8 @@ export const folderBrowser = writable({
   creating: false,
   createOpen: false,
   newName: "",
+  error: "",
+  createError: "",
 });
 
 export function updateFolderBrowser(patch) {

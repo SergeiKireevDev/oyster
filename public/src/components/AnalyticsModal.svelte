@@ -33,13 +33,14 @@
   const chartLabelVisible = (index) => index % chartLabelEvery === 0 || index === chartData.length - 1;
   $: maxModelCost = Math.max(0, ...$analytics.models.map((model) => model.cost));
   $: chartData = makeChart($analytics.series);
+  $: chartDescription = `Cost by ${$analytics.bucket}. ${chartData.map((item) => chartTitle(item).replaceAll("\n", ", ")).join("; ")}`;
   $: maxChartCost = Math.max(0, ...chartData.map((item) => item.cost));
   $: chartLabelEvery = Math.max(1, Math.ceil(chartData.length / 6));
 </script>
 
 <div class="analytics-controls">
   <label>Range
-    <select value={$analytics.range} onchange={(event) => load(event.currentTarget.value, $analytics.bucket)}>
+    <select value={$analytics.range} disabled={$analytics.loading} onchange={(event) => load(event.currentTarget.value, $analytics.bucket)}>
       <option value="24h">Last 24 hours</option>
       <option value="7d">Last 7 days</option>
       <option value="30d">Last 30 days</option>
@@ -48,18 +49,18 @@
     </select>
   </label>
   <label>Group by
-    <select value={$analytics.bucket} onchange={(event) => load($analytics.range, event.currentTarget.value)}>
+    <select value={$analytics.bucket} disabled={$analytics.loading} onchange={(event) => load($analytics.range, event.currentTarget.value)}>
       <option value="hour">Hour</option>
       <option value="day">Day</option>
     </select>
   </label>
-  <button class="chip" onclick={() => load()}>Refresh</button>
+  <button class="chip" disabled={$analytics.loading} onclick={() => load()}>Refresh</button>
 </div>
 
 {#if $analytics.loading}
-  <div class="m-path"><span class="spin"></span> aggregating SQLite usage…</div>
+  <div class="m-path" role="status"><span class="spin" aria-hidden="true"></span> aggregating SQLite usage…</div>
 {:else if $analytics.error}
-  <div class="analytics-error">{$analytics.error}</div>
+  <div class="analytics-error" role="alert">{$analytics.error}</div>
 {:else}
   <div class="analytics-summary">
     <div><strong>{money($analytics.total.cost)}</strong><span>cost</span></div>
@@ -72,7 +73,7 @@
 
   <h3 class="analytics-heading">By model</h3>
   {#if !$analytics.models.length}
-    <div class="m-path">No usage in this range.</div>
+    <div class="m-path" role="status">No usage in this range.</div>
   {:else}
     <div class="analytics-models">
       {#each $analytics.models as model (model.model)}
@@ -87,7 +88,7 @@
 
   <h3 class="analytics-heading">Cost over time</h3>
   {#if chartData.length}
-    <div class="analytics-chart" role="img" aria-label={`Cost by ${$analytics.bucket}`}>
+    <div class="analytics-chart" role="img" aria-label={chartDescription}>
       <div class="analytics-chart-scale"><span>{money(maxChartCost)}</span><span>$0</span></div>
       <div class="analytics-chart-scroll">
         <div class="analytics-chart-bars">

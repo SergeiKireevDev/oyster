@@ -18,15 +18,17 @@ test("browser actions open external URLs in an isolated tab", () => {
 test("browser actions use cookie authentication for encoded file downloads", () => {
   const actions = createBrowserActions({ windowTarget: { open() {} } });
 
-  assert.deepEqual(actions.fileDownload("token +/?", "/workspace/a file #1.txt"), {
+  assert.deepEqual(actions.fileDownload("/workspace/a file #1.txt"), {
     href: "/file-download?path=%2Fworkspace%2Fa%20file%20%231.txt",
     filename: "a file #1.txt",
   });
-  assert.deepEqual(actions.fileDownload("token", "/"), {
+  assert.deepEqual(actions.fileDownload("/"), {
     href: "/file-download?path=%2F",
     filename: "download",
   });
-  assert.doesNotMatch(actions.fileDownload("token", "/file").href, /token=/);
+  assert.doesNotMatch(actions.fileDownload("/file").href, /token=/);
+  assert.equal(actions.pinnedWidgetMediaSource("image + 1"), "/pinned-widget-media?id=image%20%2B%201");
+  assert.equal(actions.pinnedWidgetHtmlSource("page/1"), "/pinned-widget-html?id=page%2F1");
 });
 
 test("pinned widget components use injected browser actions without direct window access", () => {
@@ -37,6 +39,9 @@ test("pinned widget components use injected browser actions without direct windo
   assert.doesNotMatch(manager, /getBrowserActions|openExternal|tunnel\.url/);
   assert.match(viewer, /getBrowserActions\(\)/);
   assert.match(viewer, /browserActions\.fileDownload\(/);
+  assert.match(viewer, /browserActions\.pinnedWidgetMediaSource\(widget\.id\)/);
+  assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
+  assert.match(grid, /browserActions\.pinnedWidgetMediaSource\(widget\.id\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
   assert.match(sidebar, /<button type="button" id="hublotAdd"[^>]*onclick=\{showWidgetManager\}>/);
   for (const source of [manager, viewer, grid, sidebar]) assert.doesNotMatch(source, /window\.open|role="button"/);

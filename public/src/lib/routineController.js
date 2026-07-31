@@ -10,21 +10,6 @@ export function createRoutineController({ runRoutine, getSessionId, refresh, toa
   return { run };
 }
 
-export function createRoutineEventController({ windowTarget, run }) {
-  const onAction = (event) => {
-    const { name, action } = event.detail ?? {};
-    run(name, action);
-  };
-  function attach() {
-    windowTarget.addEventListener("pi-routine-action", onAction);
-    return detach;
-  }
-  function detach() {
-    windowTarget.removeEventListener("pi-routine-action", onAction);
-  }
-  return { attach, detach };
-}
-
 export function createRoutineSidebarController({
   listRoutines,
   isVisible,
@@ -35,6 +20,7 @@ export function createRoutineSidebarController({
   setScopeAll,
   setCurrentSessionId,
   setLoading,
+  setError = () => {},
 }) {
   let items = [];
   let loadSequence = 0;
@@ -51,14 +37,19 @@ export function createRoutineSidebarController({
     const sequence = ++loadSequence;
     const sessionAtStart = getSessionId();
     setLoading(true);
+    setError("");
     setRoutines([]);
     setScopeAll(getScopeAll());
     setCurrentSessionId(sessionAtStart);
     let loadedItems;
+    let errorMessage = "";
     try {
       loadedItems = await listRoutines();
-    } catch { /* sidebar is best-effort */ }
+    } catch (error) {
+      errorMessage = error.message || "Unable to load routines";
+    }
     if (sequence !== loadSequence || sessionAtStart !== getSessionId()) return;
+    setError(errorMessage);
     if (loadedItems) items = loadedItems;
     sync({ loading: false });
   }

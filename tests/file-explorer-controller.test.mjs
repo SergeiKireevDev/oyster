@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createFileExplorerController, createOpenFileExplorerEventController } from "../public/src/lib/fileExplorerController.js";
+import { createFileExplorerController } from "../public/src/lib/fileExplorerController.js";
 
 const fileExplorerComponent = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
 
@@ -25,7 +25,7 @@ test("file explorer loads a directory into its list state", async () => {
   await controller.load("/work/src");
 
   assert.deepEqual(calls, [
-    ["update", { loading: true, mode: "list" }],
+    ["update", { loading: true, mode: "list", error: "" }],
     ["path", "/work/src"],
     ["title", "File explorer"],
     ["update", { mode: "list", path: "/work/src", home: "/home", workdir: "/work", parent: "/", dirs: [{ name: "src" }], files: [{ name: "a.txt" }], showHidden: false, loading: false, token: "token", uploadText: "⬆ Upload…", uploading: false }],
@@ -50,9 +50,9 @@ test("file explorer initializes its modal before loading the workdir", async () 
 
   assert.deepEqual(calls.slice(0, 4), [
     ["reset", "/work"],
-    ["update", { mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: "token", editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…" }],
+    ["update", { mode: "list", path: "", home: "", workdir: "", parent: null, dirs: [], files: [], showHidden: true, loading: true, token: "token", editPath: "", editContent: "", saving: false, uploading: false, uploadText: "⬆ Upload…", error: "", saveError: "", uploadError: "" }],
     ["modal", { title: "File explorer", content: "fileExplorer" }],
-    ["update", { loading: true, mode: "list" }],
+    ["update", { loading: true, mode: "list", error: "" }],
   ]);
   assert.equal(calls[4][1], "/work");
 });
@@ -122,14 +122,15 @@ test("file explorer uploads files, reports progress, and reloads the directory",
 
   await controller.uploadFiles("/work", [file]);
 
-  assert.deepEqual(calls.slice(0, 5), [
+  assert.deepEqual(calls.slice(0, 6), [
+    ["update", { uploadError: "" }],
     ["update", { uploading: true, uploadText: "0%" }],
     ["chunk", { dir: "/work", name: "a.txt", offset: 0, last: true, body: "0-3" }],
     ["update", { uploading: true, uploadText: "100%" }],
     ["toast", "uploaded 1 file to /work"],
     ["update", { uploading: false, uploadText: "⬆ Upload…" }],
   ]);
-  assert.equal(calls[6][1], "/work");
+  assert.equal(calls[7][1], "/work");
 });
 
 test("file explorer splits large uploads below common proxy body limits", async () => {
@@ -196,9 +197,11 @@ test("file explorer reports an unrecoverable upload error and resets progress", 
 
   await controller.uploadFiles("/work", [{ name: "a.txt", size: 1, slice: () => "body" }]);
 
-  assert.deepEqual(calls.slice(0, 3), [
+  assert.deepEqual(calls.slice(0, 5), [
+    { uploadError: "" },
     { uploading: true, uploadText: "0%" },
     ["a.txt: invalid file", "error"],
+    { uploadError: "a.txt: invalid file" },
     { uploading: false, uploadText: "⬆ Upload…" },
   ]);
 });
@@ -214,7 +217,7 @@ test("file explorer saves editor content and clears its saving state", async () 
   await controller.saveEditor("/work/a.txt", "hello");
 
   assert.deepEqual(calls, [
-    ["update", { saving: true }],
+    ["update", { saving: true, saveError: "" }],
     ["save", { path: "/work/a.txt", content: "hello" }],
     ["toast", "saved a.txt (5 bytes)"],
     ["update", { saving: false }],
@@ -231,7 +234,12 @@ test("file explorer clears saving state after a save error", async () => {
 
   await controller.saveEditor("/work/a.txt", "hello");
 
-  assert.deepEqual(calls, [{ saving: true }, ["save failed", "error"], { saving: false }]);
+  assert.deepEqual(calls, [
+    { saving: true, saveError: "" },
+    ["save failed", "error"],
+    { saveError: "save failed" },
+    { saving: false },
+  ]);
 });
 
 test("file explorer retries its workdir after another folder cannot load", async () => {
@@ -254,14 +262,10 @@ test("file explorer retries its workdir after another folder cannot load", async
   await controller.load("/gone");
 
   assert.deepEqual(calls.slice(0, 5), [
-    ["update", { loading: true, mode: "list" }],
+    ["update", { loading: true, mode: "list", error: "" }],
     ["browse", "/gone"],
-    ["update", { loading: false }],
     ["toast", "cannot open folder", "error"],
-    ["update", { loading: true, mode: "list" }],
+    ["update", { loading: true, mode: "list", error: "" }],
+    ["browse", "/work"],
   ]);
-  assert.equal(calls[5][1], "/work");
 });
-
-
-test("open file explorer event controller invokes callback", () => { let listener; const target = { addEventListener: (_, fn) => { listener = fn; }, removeEventListener() {} }; let opened = 0; createOpenFileExplorerEventController({ windowTarget: target, open: () => opened++ }).attach(); listener(); assert.equal(opened, 1); });

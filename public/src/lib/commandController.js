@@ -42,6 +42,7 @@ export function commandPaletteView(items, trigger, active) {
       const name = item.name ?? "";
       const highlighted = name.toLowerCase().startsWith(trigger.query.toLowerCase()) ? trigger.query.length : 0;
       return {
+        key: `command:${name}`,
         icon: item.icon ?? "›",
         desc: item.description ?? item.desc ?? "pi command",
         prefix: "/",
@@ -65,6 +66,7 @@ export function pathPaletteView(items, trigger, active) {
       const query = trigger.text.slice(trigger.text.lastIndexOf("/") + 1);
       const highlighted = label.toLowerCase().startsWith(query.toLowerCase()) ? query.length : 0;
       return {
+        key: `path:${item.path ?? label}`,
         icon: item.icon ?? (item.directory ? "folder" : "📄"),
         desc: item.desc ?? (item.directory ? "folder" : "file"),
         prefix: "",

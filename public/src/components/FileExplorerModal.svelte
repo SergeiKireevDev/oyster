@@ -1,9 +1,10 @@
 <script>
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
+  import BrowserFileEntry from "./BrowserFileEntry.svelte";
   import { updateFileExplorer } from "../stores/fileExplorer.js";
   import { closeModalState } from "../stores/modal.js";
   import { getBrowserActions } from "../runtime/browserActionsContext.js";
-  import { browserPathFor, fmtFileSize, visibleBrowserEntries } from "../lib/fileBrowser.js";
+  import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
   import { fileExplorer } from "../stores/fileExplorer.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
@@ -33,25 +34,34 @@
   $: directories = visibleBrowserEntries($fileExplorer.dirs, $fileExplorer.showHidden);
   $: folderIsEmpty = !directories.length && !files.length;
   $: hiddenFilesLabel = $fileExplorer.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
-  $: editedFileDownload = browserActions.fileDownload($fileExplorer.token, $fileExplorer.editPath);
+  $: editedFileDownload = browserActions.fileDownload($fileExplorer.editPath);
 </script>
 
 {#if $fileExplorer.loading}
-  <div class="m-path"><span class="spin"></span> loading files…</div>
+  <div class="m-path" role="status"><span class="spin"></span> loading files…</div>
+{:else if $fileExplorer.error}
+  <div class="m-path async-error" role="alert">
+    <span>Could not load files: {$fileExplorer.error}</span>
+    <button class="chip" type="button" onclick={() => browseFileExplorer($fileExplorer.path || undefined)}>Retry</button>
+  </div>
 {:else if $fileExplorer.mode === "edit"}
-  <div class="m-path">{$fileExplorer.editPath}</div>
-  <textarea
-    value={$fileExplorer.editContent}
-    spellcheck="false"
-    style="width:100%;height:50vh;resize:vertical;font:12.5px/1.5 ui-monospace,monospace;white-space:pre;tab-size:4;box-sizing:border-box;margin-top:6px;"
-    oninput={(event) => updateFileExplorer({ editContent: event.currentTarget.value })}
-    onkeydown={(event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
-        event.preventDefault();
-        saveExploredFile();
-      }
-    }}
-  ></textarea>
+  <form id="fileEditorForm" onsubmit={(event) => { event.preventDefault(); saveExploredFile(); }}>
+    <div class="m-path">{$fileExplorer.editPath}</div>
+    <textarea
+      aria-label={`Edit ${$fileExplorer.editPath}`}
+      value={$fileExplorer.editContent}
+      spellcheck="false"
+      class="modal-code-editor file-editor"
+      oninput={(event) => updateFileExplorer({ editContent: event.currentTarget.value })}
+      onkeydown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+          event.preventDefault();
+          event.currentTarget.form?.requestSubmit();
+        }
+      }}
+    ></textarea>
+    {#if $fileExplorer.saveError}<div class="m-path async-error" role="alert">{$fileExplorer.saveError} — correct the problem and retry Save.</div>{/if}
+  </form>
 {:else}
   <BrowserDirectoryList
     path={$fileExplorer.path}
@@ -66,34 +76,34 @@
   />
   {#each files as file (file.name)}
     {@const fullPath = browserPathFor($fileExplorer.path, file)}
-    {@const download = browserActions.fileDownload($fileExplorer.token, fullPath)}
-    <div style="display:flex;align-items:center;gap:6px;">
-      <button class={`m-option file ${file.hidden ? "hidden-entry" : ""}`.trim()} style="flex:1;min-width:0;" title={fullPath} onclick={() => editExploredFile(fullPath)}>
-        {file.name}<span class="f-size">{fmtFileSize(file.size)}</span>
-      </button>
+    {@const download = browserActions.fileDownload(fullPath)}
+    <div class="file-explorer-row">
+      <BrowserFileEntry {file} path={fullPath} expanded={true} onOpen={editExploredFile} />
       <a
-        class="chip"
+        class="chip chip-link"
         href={download.href}
         download={download.filename}
         title={`download ${file.name}`}
-        style="text-decoration:none"
+        aria-label={`Download ${file.name}`}
       >⬇</a>
-      <button class="chip" title={`pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}>⌖</button>
-      <button class="chip" title={`edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
+      <button class="chip" title={`pin ${file.name}`} aria-label={`Pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}>⌖</button>
+      <button class="chip" title={`edit ${file.name}`} aria-label={`Edit ${file.name}`} onclick={() => editExploredFile(fullPath)}>✎</button>
     </div>
   {/each}
   {#if folderIsEmpty}
-    <div class="m-path">(empty folder)</div>
+    <div class="m-path" role="status">(empty folder)</div>
   {/if}
 {/if}
 
+{#if $fileExplorer.uploadError}<div class="m-path async-error" role="alert">{$fileExplorer.uploadError} — choose the file again to retry.</div>{/if}
+
 <div class="m-actions" id="mActions">
   {#if $fileExplorer.mode === "edit"}
-    <button class="chip" onclick={saveFileExplorer}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
-    <a class="chip" href={editedFileDownload.href} download={editedFileDownload.filename} style="text-decoration:none">Download</a>
+    <button class="chip" type="submit" form="fileEditorForm" disabled={$fileExplorer.saving}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
+    <a class="chip chip-link" href={editedFileDownload.href} download={editedFileDownload.filename}>Download</a>
     <button class="chip" onclick={backFileExplorer}>← Back</button>
   {:else}
-    <button class="chip" title={`upload local files to ${$fileExplorer.path}`} onclick={uploadFileExplorer}>
+    <button class="chip" title={`upload local files to ${$fileExplorer.path}`} disabled={$fileExplorer.uploading} onclick={uploadFileExplorer}>
       {#if $fileExplorer.uploading}<span class="spin" aria-hidden="true">⟳</span>{/if}
       {$fileExplorer.uploadText}
     </button>

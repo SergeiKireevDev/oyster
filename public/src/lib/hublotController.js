@@ -1,33 +1,4 @@
-/** Route the Svelte-owned sidebar add action to the hublot workflow. */
-export function createHublotSidebarEventController({ windowTarget, show }) {
-  const onShow = () => show();
-  function attach() {
-    windowTarget.addEventListener("pi-hublot-show", onShow);
-    return detach;
-  }
-  function detach() {
-    windowTarget.removeEventListener("pi-hublot-show", onShow);
-  }
-  return { attach, detach };
-}
-
-export function createManagedHublotEventController({ windowTarget, create, openCommandPalette, toggleScope }) {
-  const listeners = [
-    ["pi-managed-hublot-create", (event) => create(event.detail)],
-    ["pi-managed-command-palette", (event) => openCommandPalette(event.detail)],
-    ["pi-managed-hublot-toggle-scope", () => toggleScope()],
-  ];
-  function attach() {
-    for (const [name, listener] of listeners) windowTarget.addEventListener(name, listener);
-    return detach;
-  }
-  function detach() {
-    for (const [name, listener] of listeners) windowTarget.removeEventListener(name, listener);
-  }
-  return { attach, detach };
-}
-
-export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, isVisible, updateManager, getScopeAll, getDescription }) {
+export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, setSidebarError = () => {}, isVisible, updateManager, getScopeAll, getDescription }) {
   let sidebarRefreshGeneration = 0;
 
   async function create(description) {
@@ -48,12 +19,16 @@ export function createHublotController({ createHublot, getSessionId, setDescript
     if (!isAuthenticated()) return;
     const generation = ++sidebarRefreshGeneration;
     setSidebarLoading(true);
+    setSidebarError("");
     let tunnels = [];
-    try { tunnels = await listSidebarHublots(); } catch { /* sidebar is best-effort */ }
+    let errorMessage = "";
+    try { tunnels = await listSidebarHublots(); }
+    catch (error) { errorMessage = error.message || "Unable to load pinned widgets"; }
     // Session switches can overlap requests. Never let a slower response for
     // the previous session replace the current session's pinned widgets.
     if (generation !== sidebarRefreshGeneration) return;
     setSidebarTunnels(tunnels);
+    setSidebarError(errorMessage);
     setSidebarLoading(false);
   }
   return { create, refresh, refreshSidebar };

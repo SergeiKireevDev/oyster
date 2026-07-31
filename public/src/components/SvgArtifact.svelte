@@ -1,7 +1,20 @@
 <script>
+  import ArtifactLoadState from "./ArtifactLoadState.svelte";
+
   export let src;
   export let alt = "Pinned SVG";
   let zoomed = false;
+  let status = "loading";
+  let attempt = 0;
+
+  $: resetResourceState(src);
+
+  function resetResourceState() {
+    status = "loading";
+    attempt = 0;
+  }
+
+  const retry = () => { status = "loading"; attempt += 1; };
 </script>
 
 <section class="pinned-svg-viewer" class:zoomed aria-label={`SVG viewer: ${alt}`}>
@@ -11,13 +24,18 @@
       {zoomed ? "Fit" : "Original size"}
     </button>
   </div>
-  <button
-    type="button"
-    class="pinned-svg-stage"
-    aria-label={`${zoomed ? "Fit" : "View original size"}: ${alt}`}
-    onclick={() => { zoomed = !zoomed; }}
-  >
-    <!-- SVG remains in the browser's inert image context; it is never injected as markup. -->
-    <img {src} {alt} loading="eager" draggable="false" />
-  </button>
+  <ArtifactLoadState kind="svg" available={!!src} {status} onRetry={retry} />
+  {#if src}
+    <button
+      type="button"
+      class="pinned-svg-stage"
+      aria-label={`${zoomed ? "Fit" : "View original size"}: ${alt}`}
+      onclick={() => { zoomed = !zoomed; }}
+    >
+      <!-- SVG remains in the browser's inert image context; it is never injected as markup. -->
+      {#key `${src}:${attempt}`}
+        <img {src} {alt} loading="eager" draggable="false" onload={() => { status = "ready"; }} onerror={() => { status = "error"; }} />
+      {/key}
+    </button>
+  {/if}
 </section>

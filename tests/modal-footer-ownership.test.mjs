@@ -10,7 +10,7 @@ test("checkpoint model picker owns its footer actions", () => {
 
   assert.match(component, /class="m-actions"/);
   assert.match(component, /onclick=\{cancelCheckpointModelPicker\}/);
-  assert.match(component, /onclick=\{submitCheckpointModelPicker\}/);
+  assert.match(component, /<form onsubmit=.*submitCheckpointModelPicker\(\)/);
   assert.doesNotMatch(overlays, /cancelCheckpointModelPicker|submitCheckpointModelPicker|\$checkpointModelPicker/);
 });
 

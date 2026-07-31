@@ -42,22 +42,29 @@ test("web app manifest is installable and references valid any and maskable icon
   assert.deepEqual(pngDimensions(join(root, "public", "pwa", "icons", "apple-touch-icon.png")), [180, 180]);
 });
 
-test("Vite copies root-scoped PWA assets and production entry registers the worker", () => {
+test("Vite copies root-scoped PWA assets and production entry gives worker registration to the app lifecycle", () => {
   assert.match(viteConfig, /publicDir: "pwa"/);
-  assert.match(main, /if \(import\.meta\.env\.PROD\) registerServiceWorker\(\);/);
+  assert.match(main, /attachPageIntegrations: import\.meta\.env\.PROD \? registerServiceWorker : undefined/);
 });
 
-test("service worker registration waits for load and uses root scope", async () => {
+test("service worker registration waits for load, uses root scope, and exposes deterministic cleanup", async () => {
   let loadHandler;
   const calls = [];
-  registerServiceWorker({
-    windowTarget: { addEventListener(type, handler, options) { calls.push([type, options]); loadHandler = handler; } },
-    navigatorTarget: { serviceWorker: { register(...args) { calls.push(args); return Promise.resolve(); } } },
+  const windowTarget = {
+    addEventListener(type, handler, options) { calls.push(["add", type, options]); loadHandler = handler; },
+    removeEventListener(type, handler, options) { calls.push(["remove", type, handler === loadHandler, options]); },
+  };
+  const detach = registerServiceWorker({
+    windowTarget,
+    navigatorTarget: { serviceWorker: { register(...args) { calls.push(["register", ...args]); return Promise.resolve(); } } },
   });
-  assert.deepEqual(calls, [["load", { once: true }]]);
+  assert.deepEqual(calls, [["add", "load", { once: true }]]);
   loadHandler();
   await Promise.resolve();
-  assert.deepEqual(calls[1], ["/service-worker.js", { scope: "/" }]);
+  assert.deepEqual(calls[1], ["register", "/service-worker.js", { scope: "/" }]);
+
+  detach();
+  assert.deepEqual(calls[2], ["remove", "load", true, { once: true }]);
 });
 
 test("service worker caches only the app shell and keeps token-bearing URLs out of cache keys", async () => {

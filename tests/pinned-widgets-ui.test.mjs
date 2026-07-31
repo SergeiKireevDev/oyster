@@ -23,8 +23,8 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(grid, /application\/x-oyster-widget-group/);
   assert.match(grid, /PINNED_WIDGET_MOVE_GROUP_ACTION/);
   assert.match(grid, /dragStartGroup\(event, group\)/);
-  assert.ok(grid.indexOf("{#each builtinWidgets") < grid.indexOf("{#each groups"));
-  assert.ok(grid.indexOf("{#each groups") < grid.indexOf("{#each movableWidgets"));
+  assert.ok(grid.indexOf("{#each section.builtinWidgets") < grid.indexOf("{#each section.groups"));
+  assert.ok(grid.indexOf("{#each section.groups") < grid.indexOf("{#each section.movableWidgets"));
   assert.doesNotMatch(grid, /!children\.length[^\n]*<FolderIcon/);
   assert.match(grid, /onpointerdown=\{\(event\) => touchPointerDown\(event, widget\)\}/);
   assert.match(grid, /ownerDocument\.elementFromPoint\(event\.clientX, event\.clientY\)/);
@@ -171,7 +171,7 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(html, /\{src\}/);
   assert.match(html, /sandbox=""/);
   assert.doesNotMatch(html, /srcdoc/);
-  assert.match(viewer, /pinnedWidgetHtmlUrl\(widget\.id\)/);
+  assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
   assert.match(markdown, /element="article" className="pinned-markdown-viewer"/);
   assert.match(viewer, /class:markdown-stage=\{widget\.kind === "markdown"\}/);
   assert.match(viewer, /copyTextToClipboard\(String\(widget\.content \?\? ""\)\)/);

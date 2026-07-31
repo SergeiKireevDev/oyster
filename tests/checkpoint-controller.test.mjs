@@ -24,9 +24,7 @@ function controller(overrides = {}) {
 
 test("checkpoint controller freezes once and refreshes checkpoint views", async () => {
   const { instance, calls } = controller();
-  let stopped = false;
-  await instance.freeze({ stopPropagation: () => { stopped = true; } });
-  assert.equal(stopped, true);
+  await instance.freeze();
   assert.deepEqual(calls.busy, [true, false]);
   assert.deepEqual(calls.toast, [["🧊 summarizing diff with model…"], ["checkpoint recorded"]]);
   assert.equal(calls.refresh, 1);
@@ -36,9 +34,9 @@ test("checkpoint controller freezes once and refreshes checkpoint views", async 
 test("checkpoint controller rolls back with the current session fallback", async () => {
   let request;
   const { instance, calls } = controller({ rollbackCheckpoint: async (options) => { request = options; return { rolledBack: "abc", runner: { id: "fork" } }; } });
-  const target = {};
-  await instance.rollback({ hash: "abc" }, target);
+  const checkpoint = { hash: "abc" };
+  await instance.rollback(checkpoint);
   assert.deepEqual(request, { sessionId: "session", hash: "abc", model: "model" });
-  assert.deepEqual(calls.restoreBusy, [[target, true], [target, false]]);
+  assert.deepEqual(calls.restoreBusy, [[checkpoint, true], [checkpoint, false]]);
   assert.deepEqual(calls.switched, ["fork"]);
 });

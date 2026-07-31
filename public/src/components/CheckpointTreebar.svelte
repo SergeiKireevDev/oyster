@@ -7,11 +7,11 @@
   <div class="side-head">Checkpoints &amp; forks</div>
   <div id="treeView">
     {#if $checkpointTree.loading}
-      <div class="sidebar-loading"><span class="spin"></span> loading tree…</div>
+      <div class="sidebar-loading" role="status"><span class="spin" aria-hidden="true"></span> loading tree…</div>
     {:else if $checkpointTree.empty}
-      <div class="t-empty">{$checkpointTree.empty}</div>
+      <div class="t-empty" role="status">{$checkpointTree.empty}</div>
     {:else if $checkpointTree.error}
-      <div class="t-empty">{$checkpointTree.error}</div>
+      <div class="t-empty" role="alert">{$checkpointTree.error}</div>
     {:else if $checkpointTree.root}
       <CheckpointTreeNode
         node={$checkpointTree.root}

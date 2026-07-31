@@ -90,6 +90,7 @@ export function createSessionAssembly(deps) {
     },
     teardown() {
       pickerRuntime?.detachActions?.();
+      refresher?.teardown?.();
       sessionFeature.teardown();
       refresher = null;
       pickerRuntime = null;

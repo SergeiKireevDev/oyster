@@ -9,6 +9,7 @@ export const filePicker = writable({
   files: [],
   showHidden: true,
   loading: false,
+  error: "",
 });
 
 export function updateFilePicker(patch) {

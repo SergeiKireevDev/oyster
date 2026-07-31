@@ -14,15 +14,24 @@ test("markdown renderer rejects active markup and non-HTTP link protocols", () =
   const html = renderSanitizedMarkdown([
     '<img src=x onerror="alert(1)">',
     "[unsafe](javascript:alert(1))",
+    "[encoded](https://example.test/&quot; onmouseover=&quot;alert(1))",
     '```"><svg onload="alert(1)">',
     "code",
     "```",
+    String.raw`$\href{javascript:alert(1)}{unsafe}$`,
   ].join("\n\n"));
 
   assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
   assert.match(html, /\[unsafe\]\(javascript:alert\(1\)\)/);
   assert.match(html, /class="code-lang">&quot;&gt;&lt;svg/);
-  assert.doesNotMatch(html, /<img|<svg|href="javascript:/);
+  assert.doesNotMatch(html, /<img|<svg|href="javascript:|<[^>]*\son(?:error|load|mouseover)=/i);
+});
+
+test("markdown renderer owns source normalization as well as sanitization", () => {
+  assert.equal(renderSanitizedMarkdown(null), "");
+  assert.equal(renderSanitizedMarkdown(undefined), "");
+  assert.equal(renderSanitizedMarkdown(42), "<p>42</p>");
+  assert.equal(renderSanitizedMarkdown({ toString: () => "<script>alert(1)</script>" }), "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>");
 });
 
 test("markdown renderer supports inline and display math without rendering math inside code", () => {

@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 
 export const routinesLoading = writable(false);
+export const routinesError = writable("");
 export const routines = writable([]);
 export const routinesTotal = writable(0);
 export const routineScopeAll = writable(false);

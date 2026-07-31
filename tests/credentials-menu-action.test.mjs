@@ -115,7 +115,7 @@ test("credentials assembly auto-opens setup only when no provider is configured"
 test("application composition mounts credentials with the runtime-scoped fetch and tears it down", () => {
   assert.match(rootSource, /const runtimeFetch = \(\.\.\.args\) => window\.fetch\(\.\.\.args\)/);
   assert.match(rootSource, /createCredentialsAssembly\(\{[\s\S]*?openModal: openModalState,[\s\S]*?fetchImpl: runtimeFetch,[\s\S]*?confirm: extensionUiAdapters\.confirm/);
-  assert.match(rootSource, /installAuthenticatedFetch: \(\) => installAuthenticatedFetch\(token, \{ windowTarget: window \}\)/);
+  assert.match(rootSource, /installAuthenticatedFetch: \(\) => installAuthenticatedFetch\(token, \{ windowTarget: window, storage \}\)/);
   assert.match(rootSource, /credentialsAssembly\.teardown\(\)/);
   assert.match(rootSource, /features: \{ credentials: credentialsAssembly\.operations \}/);
 });

@@ -1,118 +1,56 @@
 <script>
   import { onMount } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
-  import AnalyticsModal from "./AnalyticsModal.svelte";
-  import CredentialsModal from "./CredentialsModal.svelte";
   import CarouselIndicator from "./CarouselIndicator.svelte";
-  import CheckpointModelPickerModal from "./CheckpointModelPickerModal.svelte";
-  import CloudWorkspaceModal from "./CloudWorkspaceModal.svelte";
-  import LlmboxWorkspaceModal from "./LlmboxWorkspaceModal.svelte";
   import CommandPalette from "./CommandPalette.svelte";
-  import ConfirmPromptModal from "./ConfirmPromptModal.svelte";
-  import EditorPromptModal from "./EditorPromptModal.svelte";
-  import FileExplorerModal from "./FileExplorerModal.svelte";
-  import FilePickerModal from "./FilePickerModal.svelte";
-  import FolderBrowserModal from "./FolderBrowserModal.svelte";
-  import HublotManagerModal from "./HublotManagerModal.svelte";
-  import OptionPickerModal from "./OptionPickerModal.svelte";
-  import PinnedWidgetViewerModal from "./PinnedWidgetViewerModal.svelte";
-  import RoutineManagerModal from "./RoutineManagerModal.svelte";
-  import SettingsModal from "./SettingsModal.svelte";
-  import SessionPickerModal from "./SessionPickerModal.svelte";
-  import TextPromptModal from "./TextPromptModal.svelte";
   import Toasts from "./Toasts.svelte";
   import { createModalHistoryController } from "../lib/modalHistoryController.js";
+  import { modalFocusManagement, modalKeyboardNavigation, requestModalCancel } from "../lib/modalDomAdapters.js";
+  import { resolveModalContent } from "../runtime/modalContentRegistry.js";
+  import { carouselPage } from "../stores/carousel.js";
   import { modalState } from "../stores/modal.js";
 
-  const optionSelector = "button.m-option:not(:disabled), .session-row > button.s-session-main:not(:disabled), label.m-option";
   const folderModalContents = new Set(["fileExplorer", "filePicker", "folderBrowser"]);
-  let keyboardOption = null;
   let modalElement;
   let overlayElement;
 
+  $: modalContent = resolveModalContent($modalState.content, $modalState.context);
   $: hasFolderTitleIcon = folderModalContents.has($modalState.content);
   $: isMarkdownReaderModal = $modalState.content === "pinnedWidgetViewer" && (
     $modalState.context?.widget?.kind === "markdown"
     || String($modalState.context?.widget?.mimeType ?? "").startsWith("text/html")
   );
 
-  $: if ($modalState.open && modalElement) {
-    queueMicrotask(() => {
-      if ($modalState.open && !modalElement.contains(modalElement.ownerDocument.activeElement)) modalElement.focus();
-    });
-  }
-
-  function optionsIn(overlay) {
-    return [...overlay.querySelectorAll(optionSelector)].filter((option) => option.getClientRects().length > 0);
-  }
-
-  function activateOption(option) {
-    keyboardOption?.closest(".m-option")?.classList.remove("keyboard-active");
-    keyboardOption = option;
-    keyboardOption?.closest(".m-option")?.classList.add("keyboard-active");
-    keyboardOption?.scrollIntoView({ block: "nearest" });
-  }
-
-  function cancelModal(overlay) {
-    const explicit = overlay.querySelector("[data-modal-cancel]");
-    if (explicit) { explicit.click(); return; }
-    const fallback = [...overlay.querySelectorAll("button")].find((button) => /^(cancel|close|done|no)$/i.test(button.textContent.trim()));
-    fallback?.click();
-  }
-
-  function modalKeydown(event) {
-    if (!$modalState.open) return;
-    const overlay = event.currentTarget;
-    if ($modalState.content === "optionPicker") return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      cancelModal(overlay);
-      return;
-    }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
-    if (event.target.matches?.("textarea, select, [contenteditable=true]") || (event.key === "Enter" && event.target.matches?.("input, button"))) return;
-    const options = optionsIn(overlay);
-    if (!options.length) {
-      const primary = event.key === "Enter" ? overlay.querySelector(".m-actions button.btn:not(:disabled)") : null;
-      if (!primary) return;
-      event.preventDefault();
-      event.stopPropagation();
-      primary.click();
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      const selected = options.includes(keyboardOption) ? keyboardOption : event.target.closest?.(optionSelector) ?? options[0];
-      selected?.click();
-      return;
-    }
-    const current = options.indexOf(keyboardOption);
-    const direction = event.key === "ArrowDown" ? 1 : -1;
-    const next = current < 0 ? (direction > 0 ? 0 : options.length - 1) : (current + direction + options.length) % options.length;
-    activateOption(options[next]);
-  }
-
-  function modalMousemove(event) {
-    const option = event.target.closest?.(optionSelector);
-    if (option && event.currentTarget.contains(option)) activateOption(option);
-  }
-
   onMount(() => {
     const controller = createModalHistoryController({
       windowTarget: modalElement.ownerDocument.defaultView,
       subscribe: modalState.subscribe,
       isOpen: () => $modalState.open,
-      cancel: () => cancelModal(overlayElement),
+      cancel: () => requestModalCancel(overlayElement),
     });
     return controller.detach;
   });
 </script>
 
-<CarouselIndicator />
+<CarouselIndicator page={$carouselPage} />
 
-<div id="overlay" bind:this={overlayElement} class:open={$modalState.open} onkeydowncapture={modalKeydown} onmousemove={modalMousemove}><div id="modal" class:wide={$modalState.wide} class:markdown-reader-modal={isMarkdownReaderModal} role="dialog" aria-modal="true" tabindex="-1" bind:this={modalElement}>
+<div
+  id="overlay"
+  bind:this={overlayElement}
+  class:open={$modalState.open}
+  use:modalKeyboardNavigation={{ isOpen: () => $modalState.open, content: () => $modalState.content }}
+><div
+  id="modal"
+  class:wide={$modalState.wide}
+  class:markdown-reader-modal={isMarkdownReaderModal}
+  role="dialog"
+  aria-modal={$modalState.open ? "true" : undefined}
+  aria-hidden={$modalState.open ? undefined : "true"}
+  aria-labelledby="mTitle"
+  tabindex="-1"
+  bind:this={modalElement}
+  use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}
+>
   <div class="m-title" id="mTitle">
     {#if hasFolderTitleIcon}<FolderIcon size={17} />{/if}
     <span>{$modalState.title}</span>
@@ -123,40 +61,8 @@
     <div class="m-actions" id="mActions"></div>
   {:else}
     <div class="m-body" id="mBody">
-      {#if $modalState.content === "analytics"}
-        <AnalyticsModal />
-      {:else if $modalState.content === "credentials"}
-        <CredentialsModal />
-      {:else if $modalState.content === "settings"}
-        <SettingsModal />
-      {:else if $modalState.content === "optionPicker"}
-        <OptionPickerModal />
-      {:else if $modalState.content === "textPrompt"}
-        <TextPromptModal />
-      {:else if $modalState.content === "editorPrompt"}
-        <EditorPromptModal />
-      {:else if $modalState.content === "confirmPrompt"}
-        <ConfirmPromptModal />
-      {:else if $modalState.content === "checkpointModelPicker"}
-        <CheckpointModelPickerModal />
-      {:else if $modalState.content === "cloudWorkspace"}
-        <CloudWorkspaceModal providerId={$modalState.context?.providerId || ""} />
-      {:else if $modalState.content === "llmboxWorkspace"}
-        <LlmboxWorkspaceModal spoke={$modalState.context?.spoke || ""} environmentName={$modalState.context?.environmentName || ""} />
-      {:else if $modalState.content === "hublotManager"}
-        <HublotManagerModal />
-      {:else if $modalState.content === "pinnedWidgetViewer"}
-        <PinnedWidgetViewerModal />
-      {:else if $modalState.content === "routineManager"}
-        <RoutineManagerModal />
-      {:else if $modalState.content === "folderBrowser"}
-        <FolderBrowserModal />
-      {:else if $modalState.content === "filePicker"}
-        <FilePickerModal />
-      {:else if $modalState.content === "fileExplorer"}
-        <FileExplorerModal />
-      {:else if $modalState.content === "sessionPicker"}
-        <SessionPickerModal />
+      {#if modalContent}
+        <svelte:component this={modalContent.component} {...modalContent.props} />
       {/if}
     </div>
   {/if}

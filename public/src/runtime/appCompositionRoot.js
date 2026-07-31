@@ -31,9 +31,9 @@ import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
 import { setComposerTextValue, setComposerVoiceState } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
-import { pinnedWidgetGroups, pinnedWidgets, pinnedWidgetsLoading, setPinnedWidgetCollection } from "../stores/pinnedWidgets.js";
+import { pinnedWidgetGroups, pinnedWidgets, pinnedWidgetsError, pinnedWidgetsLoading, setPinnedWidgetCollection } from "../stores/pinnedWidgets.js";
 import { closeModalState, openModal as openModalState, updateModal as updateModalState } from "../stores/modal.js";
-import { routineCurrentSessionId, routineScopeAll, routines, routinesLoading, routinesTotal } from "../stores/routines.js";
+import { routineCurrentSessionId, routineScopeAll, routines, routinesError, routinesLoading, routinesTotal } from "../stores/routines.js";
 import { resetRoutineManager, updateRoutineManager } from "../stores/routineManager.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
@@ -56,11 +56,14 @@ import { chooseOnlineWorkspace, ensureActiveWorkspace, getActiveWorkspace, isHub
 /** Application assembly graph: browser adapters, feature interfaces, and lifecycle wiring. */
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
-  const { window, document, location, history, find } = browser;
+  const { window, document, location, history, storage, find } = browser;
   const { uiActions, dialogs: dialogService, browserActions, checkpointModelPicker } = stores;
   // Resolve at request time: authenticated fetch is installed when the runtime
   // starts, after this composition graph has already been constructed.
   const runtimeFetch = (...args) => window.fetch(...args);
+  // Browser capabilities are local aliases sourced from the injected mount
+  // boundary, never implicit globals captured while this module is imported.
+  const fetch = runtimeFetch;
 
 const lifecycleLog = createLifecycleLogger({
   snapshot: () => {
@@ -91,7 +94,7 @@ const $ = dom.findElement;
 const gate = dom.gate;
 const platformAssembly = createPlatformAssembly({
   transport: {
-    browser: { document, storage: localStorage },
+    browser: { document, storage, location, history, fetch: runtimeFetch },
     gate,
     getRunner: () => getCurrentRunner(),
     onInvalidToken: () => updateHeaderState({ stateInfo: "invalid token" }),
@@ -133,13 +136,13 @@ const rememberPrompt = composerOperations.rememberPrompt;
 
 const transcriptAssembly = createTranscriptAssembly({
   findElement: $,
-  storage: localStorage,
+  storage,
   tick,
   log: lifecycleLog,
   toast: addToast,
   copyPermalink: (element) => copyPermalink(element),
   handleCheckpoint: (event) => handleCheckpointClick(event),
-  rollbackCheckpoint: (checkpoint, target) => rollbackToCheckpoint(checkpoint, target),
+  rollbackCheckpoint: (checkpoint) => rollbackToCheckpoint(checkpoint),
   placeCheckpoint: () => placeCheckpointBtn(),
   rememberPrompt,
   clearComposerHistory: composerOperations.clearHistory,
@@ -206,12 +209,12 @@ const detachCheckpointTreeActions = () => checkpointAssembly.teardown();
 const sessionAssembly = createSessionAssembly({
   location,
   history,
-  storage: localStorage,
+  storage,
   updateAppSession,
   updateHeaderState,
   onRunnerChange: ({ currentRunner }) => {
     cancelPendingRpc("runner switched");
-    setActiveWorkspace(getRunners().find((runner) => runner.id === currentRunner)?.workspaceId);
+    setActiveWorkspace(getRunners().find((runner) => runner.id === currentRunner)?.workspaceId, storage);
   },
   stateApplier: {
     applySessionState,
@@ -240,7 +243,7 @@ const sessionAssembly = createSessionAssembly({
   },
   open: {
     open: (options) => openSession(fetch, options),
-    onOpened: (runner) => setActiveWorkspace(runner?.workspaceId, localStorage),
+    onOpened: (runner) => setActiveWorkspace(runner?.workspaceId, storage),
     getCurrentRunner: () => getCurrentRunner(),
     getRunners: () => getRunners(),
     preview: null,
@@ -507,12 +510,12 @@ const resourceAssembly = createResourceAssembly({
     getShowHidden: () => get(folderBrowser).showHidden,
     setPath: (path) => { state.folder.browsePath = path; },
     async openAndSwitchSession(...args) {
-      const previousWorkspace = getActiveWorkspace(localStorage);
-      if (state.folder.workspaceId) setActiveWorkspace(state.folder.workspaceId, localStorage);
+      const previousWorkspace = getActiveWorkspace(storage);
+      if (state.folder.workspaceId) setActiveWorkspace(state.folder.workspaceId, storage);
       try {
         return await getSessionRuntime().openAndSwitchSession(...args);
       } catch (error) {
-        if (previousWorkspace) setActiveWorkspace(previousWorkspace, localStorage);
+        if (previousWorkspace) setActiveWorkspace(previousWorkspace, storage);
         throw error;
       }
     },
@@ -555,6 +558,7 @@ const resourceAssembly = createResourceAssembly({
     },
     isAuthenticated: () => Boolean(token),
     setSidebarLoading: pinnedWidgetsLoading.set,
+    setSidebarError: pinnedWidgetsError.set,
     setSidebarTunnels: pinnedWidgets.set,
     deleteHublot: (id) => removeHublot(fetch, id),
     // Closing a live interface does not unpin its durable widget.
@@ -572,6 +576,7 @@ const resourceAssembly = createResourceAssembly({
     setScopeAll: routineScopeAll.set,
     setCurrentSessionId: routineCurrentSessionId.set,
     setLoading: routinesLoading.set,
+    setError: routinesError.set,
     runRoutine: (options) => runRoutine(fetch, options),
     toast: addToast,
   },
@@ -862,7 +867,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   open: () => openModal({ title: "Sessions", content: "sessionPicker" }),
   async openChosenSession(fullChoice) {
     try {
-      setActiveWorkspace(fullChoice.workspaceId);
+      setActiveWorkspace(fullChoice.workspaceId, storage);
       await getSessionRuntime().openAndSwitchSession({ ...sessionOpenSelection(fullChoice), dir: fullChoice.cwd || getWorkdir() });
       addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
     } catch (e) {
@@ -871,7 +876,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   },
   getSessionId: () => getSessionState()?.sessionId,
   openSearchSession: ({ sessionKey, sessionPath, dir, workspaceId }) => {
-    setActiveWorkspace(workspaceId);
+    setActiveWorkspace(workspaceId, storage);
     return getSessionRuntime().openSession({ sessionKey, sessionPath, dir: dir || getWorkdir() });
   },
   getCurrentRunner: () => getCurrentRunner(),
@@ -909,6 +914,7 @@ const transcriptRuntime = transcriptAssembly.configureFeature({
   copy: copyTextToClipboard,
   prompt: extensionUiAdapters.input,
   escape: CSS.escape,
+  scheduleDelayed: (...args) => delayedTasks.schedule(...args),
 });
 const transcriptFeature = transcriptRuntime.feature;
 const annotateTranscriptEntries = transcriptOperations.annotateTranscriptEntries;
@@ -938,7 +944,7 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   reloadTranscript,
   documentTarget: layoutDom.documentTarget,
   windowTarget: layoutDom.windowTarget,
-  storage: localStorage,
+  storage,
   setCarouselPage,
   loadScopedResources: () => { loadHublots(); loadRoutines(); },
   loadCheckpointTree,
@@ -979,7 +985,7 @@ const commandRuntime = composerAssembly.configureCommands({
   platform: {
     rpc,
     logout: () => {
-      clearAuthToken({ storage: localStorage, documentTarget: document });
+      clearAuthToken({ storage, documentTarget: document });
       location.reload();
     },
   },
@@ -1000,7 +1006,7 @@ const commandPaletteKeyboardController = commandRuntime.keyboardController;
 
 // Test/debug scripts use these hooks to seed and inspect session state.
 const runtimeAttachments = platformAssembly.configureAttachments({
-  installAuthenticatedFetch: () => installAuthenticatedFetch(token, { windowTarget: window }),
+  installAuthenticatedFetch: () => installAuthenticatedFetch(token, { windowTarget: window, storage }),
   installDebugHooks: () => installDebugHooks(window, {
     rpc,
     refreshState: () => getSessionRuntime().refreshState(),
@@ -1015,7 +1021,7 @@ const runtimeAttachments = platformAssembly.configureAttachments({
  *  the first SSE connect, so a reload (or a shared link) always lands on the
  *  same session; /m/<entryId> then focuses the linked message. */
 sessionAssembly.configureBoot({
-  prepare: () => ensureActiveWorkspace({ storage: localStorage, fetchImpl: fetch }),
+  prepare: () => ensureActiveWorkspace({ storage, fetchImpl: fetch }),
   lookupSession: async (sessionId) => {
     const res = await fetch(`/session-by-id?id=${encodeURIComponent(sessionId)}`);
     const data = await res.json().catch(() => ({}));

@@ -1,4 +1,5 @@
 <script>
+  import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import SearchHitSnippet from "./SearchHitSnippet.svelte";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -15,7 +16,7 @@
     SESSION_PICKER_STOP_ACTION,
   } from "../runtime/uiActionNames.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
-  import { groupSessionFamilies, partitionSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
+  import { partitionSessionFamilies, prepareSessionFamilies } from "../features/sessions/sessionPickerViewModel.js";
   import { runnerSessionIdentity, sessionIdentity } from "../lib/sessionIdentity.js";
   import { formatRelativeTime } from "../lib/relativeTime.js";
   import { abbreviateHomePath } from "../lib/pathDisplay.js";
@@ -39,6 +40,7 @@
   }
 
   $: isSearching = $sessionPicker.query.trim().length >= 3;
+  $: runnerByIdentity = new Map($sessionPicker.runners.map((runner) => [runnerSessionIdentity(runner), runner]));
 
   function folderOf(path) {
     return String(path ?? "").slice(0, String(path ?? "").lastIndexOf("/"));
@@ -50,7 +52,7 @@
   }
 
   function runnerFor(session) {
-    return $sessionPicker.runners.find((runner) => runnerSessionIdentity(runner) === sessionIdentity(session)) ?? { id: session.runnerId, alive: session.alive, busy: session.busy };
+    return runnerByIdentity.get(sessionIdentity(session)) ?? { id: session.runnerId, alive: session.alive, busy: session.busy };
   }
 
   function isAlive(session) {
@@ -69,24 +71,13 @@
     return Object.hasOwn(choices, key)
       ? choices[key]
       : family.forks.some((fork) => fork.id === $sessionPicker.currentId)
-        || (isLoopFamily(family) && family.forks.some(isAlive));
+        || (family.loop && family.forks.some(isAlive));
   }
 
   function setChildSessionsOpen(family, open) {
     const key = sessionIdentity(family.session);
     updateSessionPicker({
       expandedChildFamilies: { ...($sessionPicker.expandedChildFamilies ?? {}), [key]: open },
-    });
-  }
-
-  function isLoopFamily(family) {
-    return family.forks.some((session) => /^Loop iteration \d+:/i.test(session.name || session.preview || ""));
-  }
-
-  function loopSessions(family) {
-    return [...family.forks].sort((left, right) => {
-      const iteration = (session) => Number((session.name || "").match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
-      return iteration(left) - iteration(right);
     });
   }
 
@@ -113,19 +104,37 @@
     return `${workspace}${folder}${group.hits.length} hit${group.hits.length === 1 ? "" : "s"}`;
   }
 
-  function sessionsForPaths(dir, paths) {
-    return ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path));
-  }
-
-  function inactiveSessionsInFolder(dir) {
-    return ($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => !isAlive(session));
-  }
-
   const sessionDotClass = (alive, busy) => `s-dot${busy ? " busy" : alive ? " on" : ""}`;
   const sessionDotTitle = (alive, busy) => busy ? "agent working" : alive ? "process running (idle)" : "no running process";
   const sessionDateMeta = (session) => `${hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}${fmtSessionDate(session.modifiedAt)} · ${session.messageCount} msgs`;
+  const plural = (count, singular, pluralForm = `${singular}s`) => count === 1 ? singular : pluralForm;
+
+  function searchResultName(group) {
+    return group.first.sessionName || group.first.sessionPreview || "(unnamed session)";
+  }
+
+  function sessionName(session, fallback = "(empty session)") {
+    return session.name || session.preview || fallback;
+  }
+
+
+  function sessionRowClass(current, timelineStatus) {
+    const currentClass = current ? " current" : "";
+    const timelineClass = timelineStatus ? ` s-loop-iteration status-${timelineStatus}` : "";
+    return `m-option session-row${currentClass}${timelineClass}`;
+  }
+
+  function openSearchResult(event, group) {
+    const snippet = event.target.closest?.(".s-snippet");
+    const index = Number(snippet?.dataset?.hitIndex ?? 0);
+    openPickedSearchHit(group.sessionKey, group.hits[index] ?? group.hits[0]);
+  }
 
   $: currentPartition = partitionSessionFamilies($sessionPicker.sessions, isAlive);
+  $: currentFamilies = {
+    active: prepareSessionFamilies(currentPartition.active),
+    inactive: prepareSessionFamilies(currentPartition.inactive),
+  };
   $: otherFolders = $sessionPicker.folders.filter((folder) => folder.dir !== $sessionPicker.currentFolder);
   $: activeOtherFolders = (() => {
     const map = new Map();
@@ -136,8 +145,15 @@
       if (!map.has(dir)) map.set(dir, new Set());
       map.get(dir).add(runner.sessionFile);
     }
-    return map;
+    return [...map].map(([dir, paths]) => ({
+      dir,
+      families: prepareSessionFamilies(($sessionPicker.otherFolderSessions[dir] ?? []).filter((session) => paths.has(session.path))),
+    }));
   })();
+  $: inactiveOtherFolderFamilies = new Map(otherFolders.map((folder) => [
+    folder.dir,
+    prepareSessionFamilies(($sessionPicker.otherFolderSessions[folder.dir] ?? []).filter((session) => !isAlive(session))),
+  ]));
 
   let debounce = null;
   function focusOnMount(node) {
@@ -151,27 +167,29 @@
     clearTimeout(debounce);
     debounce = setTimeout(() => runSessionPickerSearch(), 250);
   }
+
+  onDestroy(() => clearTimeout(debounce));
 </script>
 
-<div class="search-row">
+<form class="search-row" role="search" onsubmit={(event) => { event.preventDefault(); clearTimeout(debounce); runSessionPickerSearch(); }}>
   <input
-    type="text"
+    type="search"
+    aria-label="Search sessions"
     placeholder="search sessions…"
     bind:value={$sessionPicker.query}
     oninput={(event) => queryInput(event.currentTarget.value)}
-    onkeydown={(event) => { if (event.key === "Enter") { clearTimeout(debounce); runSessionPickerSearch(); } }}
     use:focusOnMount
   />
-  <select bind:value={$sessionPicker.scope} onchange={(event) => setSessionPickerScope(event.currentTarget.value)}>
+  <select aria-label="Search scope" bind:value={$sessionPicker.scope} onchange={(event) => setSessionPickerScope(event.currentTarget.value)}>
     <option value="session">This session</option>
     <option value="folder">Folder…</option>
     <option value="all">All sessions</option>
   </select>
-</div>
+</form>
 
 {#if isSearching && $sessionPicker.scope === "folder"}
   <div class="search-row">
-    <select style="max-width:100%;flex:1;" bind:value={$sessionPicker.folderPath} onchange={(event) => setSessionPickerFolder(event.currentTarget.value)}>
+    <select class="modal-flex-control" aria-label="Search folder" bind:value={$sessionPicker.folderPath} onchange={(event) => setSessionPickerFolder(event.currentTarget.value)}>
       {#each $sessionPicker.folders as folder (folder.dir)}
         <option value={folder.dir}>{abbreviateHomePath(folder.label)} ({folder.count})</option>
       {/each}
@@ -184,18 +202,14 @@
     <input type="checkbox" bind:checked={$sessionPicker.excludeTools} onchange={(event) => setSessionPickerExcludeTools(event.currentTarget.checked)} />
     exclude tool output (search only user/ai text)
   </label>
-  <div class="m-path">{$sessionPicker.searchStatus}</div>
+  <div class="m-path" role="status" aria-atomic="true">{$sessionPicker.searchStatus}</div>
   {#each $sessionPicker.searchResults as group (group.sessionKey)}
-    <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => {
-      const snippet = event.target.closest?.(".s-snippet");
-      const idx = snippet?.dataset?.hitIndex;
-      openPickedSearchHit(group.sessionKey, group.hits[Number(idx ?? 0)] ?? group.hits[0]);
-    }}>
+    <button class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
       <div class="s-title">
-        <span class="s-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
+        <span class="s-name">{searchResultName(group)}</span>
         <span class="s-date">{searchGroupMeta(group)}</span>
       </div>
-      {#each group.hits.slice(0, 3) as hit, index}
+      {#each group.hits.slice(0, 3) as hit, index (hit.entryId ?? `${hit.role}:${hit.timestamp}:${hit.snippet.match}`)}
         <div class="s-snippet" data-hit-index={index}>
           <SearchHitSnippet role={hit.role} kind={hit.kind} snippet={hit.snippet} query={$sessionPicker.query} />
         </div>
@@ -206,24 +220,24 @@
     </button>
   {/each}
 {:else}
-  {#if currentPartition.active.length || activeOtherFolders.size}
+  {#if currentFamilies.active.length || activeOtherFolders.length}
     {@render SessionSection({ title: "Active sessions" })}
-    {#if currentPartition.active.length}
+    {#if currentFamilies.active.length}
       {@render FolderLabel({ label: labelFor($sessionPicker.currentFolder) })}
-      {@render SessionRows({ sessions: currentPartition.active })}
+      {@render SessionRows({ families: currentFamilies.active })}
     {/if}
-    {#each [...activeOtherFolders.entries()] as [dir, paths] (dir)}
-      {@render FolderLabel({ label: labelFor(dir) })}
-      {@render SessionRows({ sessions: sessionsForPaths(dir, paths) })}
+    {#each activeOtherFolders as folder (folder.dir)}
+      {@render FolderLabel({ label: labelFor(folder.dir) })}
+      {@render SessionRows({ families: folder.families })}
     {/each}
   {/if}
 
-  {#if currentPartition.inactive.length || otherFolders.length}
+  {#if currentFamilies.inactive.length || otherFolders.length}
     {@render SessionSection({ title: "Inactive sessions" })}
   {/if}
-  {#if currentPartition.inactive.length}
+  {#if currentFamilies.inactive.length}
     {@render FolderLabel({ label: labelFor($sessionPicker.currentFolder) })}
-    {@render SessionRows({ sessions: currentPartition.inactive })}
+    {@render SessionRows({ families: currentFamilies.inactive })}
   {/if}
   {#if otherFolders.length}
     <details class="s-folders">
@@ -232,11 +246,11 @@
         <details class="s-folder" ontoggle={(event) => { if (event.currentTarget.open) loadPickedSessionFolder(folder); }}>
           <summary><FolderIcon size={13} /> {abbreviateHomePath(folder.label)} ({folder.count})</summary>
           {#if $sessionPicker.loadingFolders[folder.dir]}
-            <div class="m-path"><span class="spin"></span> loading…</div>
+            <div class="m-path" role="status"><span class="spin" aria-hidden="true"></span> loading sessions…</div>
           {:else if $sessionPicker.otherFolderSessions[folder.dir]}
-            {@const inactive = inactiveSessionsInFolder(folder.dir)}
-            {#if inactive.length}
-              {@render SessionRows({ sessions: inactive })}
+            {@const inactiveFamilies = inactiveOtherFolderFamilies.get(folder.dir) ?? []}
+            {#if inactiveFamilies.length}
+              {@render SessionRows({ families: inactiveFamilies })}
             {:else}
               <div class="m-path">(no inactive sessions)</div>
             {/if}
@@ -251,27 +265,29 @@
   {@const current = session.id === $sessionPicker.currentId}
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
-  <div class={`m-option session-row${current ? " current" : ""}${timelineStatus ? ` s-loop-iteration status-${timelineStatus}` : ""}`}>
+  <div class={sessionRowClass(current, timelineStatus)}>
     <button class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
       <div class="s-title">
         {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
-        <span class="s-name">{session.name || session.preview || "(empty session)"}{current ? " · current" : ""}</span>
+        <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
         <span class="s-date">{sessionDateMeta(session)}</span>
       </div>
       {#if session.name && session.preview}
         <div class="s-preview">{session.preview}</div>
       {/if}
     </button>
-    <button class="s-del s-stop" style:display={alive ? "" : "none"} title="Stop this session's process (keeps the session)" onclick={() => stopPickedSession(session)}>■</button>
+    {#if alive}
+      <button class="s-del s-stop" title="Stop this session's process (keeps the session)" aria-label="Stop this session's process" onclick={() => stopPickedSession(session)}>■</button>
+    {/if}
     {#if !current}
-      <button class="s-del" title="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
+      <button class="s-del" title="Delete session" aria-label="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
     {/if}
   </div>
 {/snippet}
 
-{#snippet SessionRows({ sessions })}
-  {#each groupSessionFamilies(sessions) as family (sessionIdentity(family.session))}
-    {#if isLoopFamily(family)}
+{#snippet SessionRows({ families })}
+  {#each families as family (sessionIdentity(family.session))}
+    {#if family.loop}
       {@const summary = loopFamilySummary(family)}
       <details
         class={`s-loopgroup status-${summary.status}`}
@@ -281,14 +297,14 @@
         <summary>
           <span class="s-loop-icon" aria-hidden="true">↻</span>
           <span class="s-loop-copy">
-            <span class="s-loop-kicker">Sequential loop · {family.forks.length} iteration{family.forks.length === 1 ? "" : "s"}</span>
-            <strong>{family.session.name || family.session.preview || "Loop run"}</strong>
+            <span class="s-loop-kicker">Sequential loop · {family.forks.length} {plural(family.forks.length, "iteration")}</span>
+            <strong>{sessionName(family.session, "Loop run")}</strong>
           </span>
           <span class={`s-loop-status status-${summary.status}`}>{summary.label}</span>
           <span class="s-loop-chevron" aria-hidden="true"></span>
         </summary>
         <div class="s-loop-timeline">
-          {#each loopSessions(family) as fork (sessionIdentity(fork))}
+          {#each family.forks as fork (sessionIdentity(fork))}
             {@render sessionRow(fork, loopSessionStatus(fork))}
           {/each}
         </div>
@@ -301,7 +317,7 @@
           open={childSessionsOpen(family)}
           ontoggle={(event) => setChildSessionsOpen(family, event.currentTarget.open)}
         >
-          <summary>{family.forks.length} child session{family.forks.length === 1 ? "" : "s"}</summary>
+          <summary>{family.forks.length} child {plural(family.forks.length, "session")}</summary>
           {#each family.forks as fork (sessionIdentity(fork))}
             {@render sessionRow(fork)}
           {/each}

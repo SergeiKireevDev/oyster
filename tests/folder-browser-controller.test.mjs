@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFolderBrowserController, createFolderBrowserEventController } from "../public/src/lib/folderBrowserController.js";
+import { createFolderBrowserController } from "../public/src/lib/folderBrowserController.js";
 
 test("folder browser creates a folder and loads it", async () => {
   const calls = [];
@@ -17,11 +17,11 @@ test("folder browser creates a folder and loads it", async () => {
   await controller.createFolder("/workspace/project", " new ");
 
   assert.deepEqual(calls, [
-    ["update", { creating: true }],
+    ["update", { creating: true, createError: "" }],
     ["mkdir", "/workspace/project", "new"],
     ["toast", "created /workspace/project/new"],
     ["update", { creating: false, createOpen: false, newName: "" }],
-    ["update", { loading: true }],
+    ["update", { loading: true, error: "" }],
     ["browse", "/workspace/project/new"],
     ["path", "/workspace/project/new"],
     ["title", "New session in folder"],
@@ -39,7 +39,11 @@ test("folder browser keeps its creation form open when mkdir fails", async () =>
 
   await controller.createFolder("/workspace/project", "new");
 
-  assert.deepEqual(calls, [{ creating: true }, ["mkdir failed: permission denied", "error"], { creating: false }]);
+  assert.deepEqual(calls, [
+    { creating: true, createError: "" },
+    ["mkdir failed: permission denied", "error"],
+    { creating: false, createError: "mkdir failed: permission denied" },
+  ]);
 });
 
 test("folder browser creates and switches to a runner for the chosen folder", async () => {
@@ -77,6 +81,3 @@ test("folder browser reports a failed chosen-folder session without switching", 
 
   assert.deepEqual(calls, [["runner unavailable", "error"]]);
 });
-
-
-test("folder browser event controller routes events", () => { const ls=new Map(); const t={addEventListener:(n,f)=>ls.set(n,f),removeEventListener(){}}; const calls=[]; createFolderBrowserEventController({windowTarget:t,browse:(p)=>calls.push(p),create:()=>calls.push("create"),cancel:()=>calls.push("cancel"),submit:()=>calls.push("submit")}).attach(); ls.get("pi-folder-browser-browse")({detail:"/x"}); ls.get("pi-folder-browser-submit")(); assert.deepEqual(calls,["/x","submit"]); });

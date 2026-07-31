@@ -7,7 +7,7 @@ const credentialGuide = read("../docs/user-guide/credentials.md");
 const httpApi = read("../docs/reference/http-api.md");
 const app = read("../server/app.mjs");
 const menu = read("../public/src/components/Menu.svelte");
-const overlays = read("../public/src/components/Overlays.svelte");
+const modalRegistry = read("../public/src/runtime/modalContentRegistry.js");
 const root = read("../public/src/runtime/appCompositionRoot.js");
 const modalHistory = read("../public/src/lib/modalHistoryController.js");
 
@@ -29,7 +29,7 @@ test("credential route composition and UI ownership remain explicit", () => {
   assert.match(app, /credential: credentialRoutes/);
   assert.match(app, /oauth: oauthRoutes/);
   assert.match(menu, /data-action="credentials"/);
-  assert.match(overlays, /content === "credentials"[\s\S]*?<CredentialsModal/);
+  assert.match(modalRegistry, /credentials: CredentialsModal/);
   assert.match(root, /createCredentialsAssembly/);
   assert.match(root, /credentialsAssembly\.teardown/);
   assert.doesNotMatch(root, /showSettingsModal[^\n]*credentials|credentials[^\n]*showSettingsModal/);

@@ -12,19 +12,18 @@
   });
 </script>
 
-<input
-  bind:this={inputEl}
-  type="text"
-  placeholder={$textPrompt.placeholder}
-  value={$textPrompt.value}
-  oninput={(event) => dialogs.setTextValue(event.currentTarget.value)}
-  onkeydown={(event) => {
-    if (event.key === "Enter") dialogs.submitText();
-    else if (event.key === "Escape") dialogs.cancelText();
-  }}
-/>
+<form onsubmit={(event) => { event.preventDefault(); dialogs.submitText(); }}>
+  <input
+    bind:this={inputEl}
+    type="text"
+    aria-label={$textPrompt.placeholder || "Response"}
+    placeholder={$textPrompt.placeholder}
+    value={$textPrompt.value}
+    oninput={(event) => dialogs.setTextValue(event.currentTarget.value)}
+  />
 
-<div class="m-actions" id="mActions">
-  <button class="chip" data-modal-cancel onclick={dialogs.cancelText}>Cancel</button>
-  <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitText}>OK</button>
-</div>
+  <div class="m-actions" id="mActions">
+    <button class="chip" type="button" data-modal-cancel onclick={dialogs.cancelText}>Cancel</button>
+    <button class="btn modal-primary-action" type="submit">OK</button>
+  </div>
+</form>

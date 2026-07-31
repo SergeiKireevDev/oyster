@@ -16,7 +16,7 @@ async function loadHelpers() {
     interface ChecklistItem { line: number; checked: boolean; text: string; }
     interface PreviousIteration { output: string; validationLog?: string; succeeded: boolean; }
     ${helpers}
-    export { checklistItems, firstUncheckedItem, checkItem, buildIterationPrompt };
+    export { checklistItems, firstUncheckedItem, checkItem, commitMessage, buildIterationPrompt };
   `;
   const { code } = await transform(snippet, { loader: "ts", format: "esm", target: "es2022" });
   return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
@@ -60,6 +60,12 @@ test("loop parses Markdown checklists and checks exactly the selected item", asy
   const target = firstUncheckedItem(plan);
   assert.equal(target.text, "first");
   assert.equal(checkItem(plan, target), "# Plan\n\n- [x] done\n- [x] first\n1. [ ] second\n");
+});
+
+test("loop derives concise meaningful commit messages from checklist items", async () => {
+  const { commitMessage } = await loadHelpers();
+  assert.equal(commitMessage("  Add   retry handling\nfor failed jobs  "), "loop: Add retry handling for failed jobs");
+  assert.equal(commitMessage("x".repeat(100)), `loop: ${"x".repeat(66)}`);
 });
 
 test("loop first iteration context contains only instructions and plan", async () => {
@@ -117,4 +123,12 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.match(source, /pi\.exec\(validationPath, \[\]/);
   assert.match(source, /writeFileSync\(planPath, planBefore/);
   assert.match(source, /validation\?\.ok === true/);
+  assert.match(source, /writeFileSync\(planPath, checkItem\(planBefore, item\)/);
+  assert.match(source, /await commitSuccessfulStep\(pi, ctx, item\.text, signal\)/);
+  assert.match(source, /pi\.exec\("git", \["add", "-A"\]/);
+  assert.match(source, /pi\.exec\("git", \["commit", "--allow-empty", "--no-gpg-sign", "-m", commitMessage\(item\)\]/);
+  assert.ok(
+    source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
+    "validation must pass before a loop step is committed",
+  );
 });

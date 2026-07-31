@@ -5,6 +5,8 @@
   import CompactionMarker from "./transcript/CompactionMarker.svelte";
   import UserMessage from "./transcript/UserMessage.svelte";
   import { appSession } from "../stores/appSession.js";
+  import { checkpointMarker } from "../stores/checkpointMarker.js";
+  import { checkpointRestores } from "../stores/checkpointRestores.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
   import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
   import { subscribeStoreGroup } from "../lib/storeGroup.js";
@@ -76,6 +78,8 @@
         onCheckpoint={item.onCheckpoint}
         onRollback={item.onRollback}
         onRoot={item.setRoot}
+        checkpoint={$checkpointMarker}
+        restores={$checkpointRestores}
       />
     {:else if item.kind === "compaction"}
       <CompactionMarker tokensBefore={item.tokensBefore} />
@@ -88,6 +92,8 @@
         onCheckpoint={item.onCheckpoint}
         onRollback={item.onRollback}
         onRoot={item.setRoot}
+        checkpoint={$checkpointMarker}
+        restores={$checkpointRestores}
         activityActive={isCurrentTurnActivity(item)}
         activityUnsettled={isCurrentTurnActivity(item)}
         activityBlocks={$turnActivityGroups.get(item.id) ?? []}

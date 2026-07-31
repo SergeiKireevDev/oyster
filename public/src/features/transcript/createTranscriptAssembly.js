@@ -240,6 +240,7 @@ export function createTranscriptAssembly(deps) {
       getOrigin: featureDeps.getOrigin,
       copy: featureDeps.copy,
       prompt: featureDeps.prompt,
+      scheduleDelayed: featureDeps.scheduleDelayed,
     });
     permalinkOperations = runtime;
     return runtime;

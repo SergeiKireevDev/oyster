@@ -16,6 +16,9 @@ export const fileExplorer = writable({
   saving: false,
   uploading: false,
   uploadText: "⬆ Upload…",
+  error: "",
+  saveError: "",
+  uploadError: "",
 });
 
 export function updateFileExplorer(patch) {

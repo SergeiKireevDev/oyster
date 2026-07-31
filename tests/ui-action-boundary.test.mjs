@@ -18,12 +18,10 @@ const sources = sourceFiles(sourceRoot).map((path) => ({
   source: readFileSync(path, "utf8"),
 }));
 
-test("global menu and command-palette custom event paths are removed", () => {
-  const removedEvents = [["pi", "menu", "action"], ["pi", "command", "palette", "run"]]
-    .map((parts) => parts.join("-"));
+test("component intent actions do not use global custom-event buses", () => {
   for (const { path, source } of sources) {
-    assert.doesNotMatch(source, /window\.dispatchEvent/, path);
-    for (const eventName of removedEvents) assert.equal(source.includes(eventName), false, path);
+    assert.doesNotMatch(source, /\b(?:window|document)\.dispatchEvent\s*\(\s*new CustomEvent/, path);
+    assert.doesNotMatch(source, /addEventListener\s*\(\s*["']pi[-:](?:menu|command|hublot|routine|session-picker|file-picker|file-explorer|folder-browser|checkpoint-tree|composer|header|settings)/, path);
   }
 });
 
@@ -41,6 +39,15 @@ test("feature boundaries forbid global action bridges and component-owned platfo
     const source = sources.find(({ path }) => path === component)?.source ?? "";
     assert.doesNotMatch(source, /\blocalStorage\b|\blocation\.reload\s*\(/, component);
   }
+});
+
+test("checkpoint callbacks carry intent data instead of DOM targets", () => {
+  const treeNode = sources.find(({ path }) => path === "components/CheckpointTreeNode.svelte")?.source ?? "";
+  const restoreButton = sources.find(({ path }) => path === "components/transcript/CheckpointRestoreButton.svelte")?.source ?? "";
+  const controller = sources.find(({ path }) => path === "lib/checkpointController.js")?.source ?? "";
+  assert.doesNotMatch(treeNode, /rollbackCheckpoint\([^)]*(?:currentTarget|target)/);
+  assert.doesNotMatch(restoreButton, /onRollback\([^)]*restore\.target/);
+  assert.doesNotMatch(controller, /rollback\(checkpoint,\s*target|setRestoreBusy\(target/);
 });
 
 test("remaining dispatchEvent calls are native composer input synchronization", () => {

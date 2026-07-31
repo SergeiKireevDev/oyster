@@ -3,17 +3,24 @@
   import CopyMessageButton from "./CopyMessageButton.svelte";
   import CheckpointButton from "./CheckpointButton.svelte";
   import CheckpointRestoreButton from "./CheckpointRestoreButton.svelte";
-  import { checkpointMarker } from "../../stores/checkpointMarker.js";
-  import { checkpointRestores } from "../../stores/checkpointRestores.js";
+  import { reportNode } from "../../lib/nodeReporter.js";
 
-  let { text = "", onPermalink = () => {}, onCopy = () => {}, onCheckpoint = () => {}, onRollback = () => {}, onRoot = () => {} } = $props();
+  let {
+    text = "",
+    checkpoint = { target: null, busy: false },
+    restores = [],
+    onPermalink = () => {},
+    onCopy = () => {},
+    onCheckpoint = () => {},
+    onRollback = () => {},
+    onRoot = () => {},
+  } = $props();
 
   let root = $state();
   const iface = $derived(text.match(/^Opening interface: (.*)\n/));
   const interfaceTitle = $derived(iface ? iface[1] : "");
   const interfaceBody = $derived(iface ? text.slice(iface[0].length) : "");
-  const restore = $derived($checkpointRestores.find((item) => item.target === root));
-  $effect(() => { if (root) onRoot(root); });
+  const restore = $derived(restores.find((item) => item.target === root));
 
   function selectOnFirstTouch(event) {
     if (event.pointerType !== "touch" || event.currentTarget.matches(":focus-within")) return;
@@ -23,13 +30,13 @@
 </script>
 
 {#if iface}
-  <details class="block tool" class:ckpt-frozen={!!restore} data-role="user" bind:this={root}>
+  <details class="block tool" class:ckpt-frozen={!!restore} data-role="user" bind:this={root} use:reportNode={onRoot}>
     <summary><span class="tname">opening interface</span><span class="targ">{interfaceTitle}</span></summary>
     <div class="body"><pre>{interfaceBody}</pre></div>
     {@render CheckpointActions()}
   </details>
 {:else}
-  <div class="message-row user-message-row" data-role="user" bind:this={root}>
+  <div class="message-row user-message-row" data-role="user" bind:this={root} use:reportNode={onRoot}>
     <div class="msg user" class:ckpt-frozen={!!restore} tabindex="-1" onpointerdowncapture={selectOnFirstTouch}>
       {text}<PermalinkButton target={root} {onPermalink} />
       <CopyMessageButton {text} {onCopy} />
@@ -39,8 +46,8 @@
 {/if}
 
 {#snippet CheckpointActions()}
-  {#if $checkpointMarker.target === root}
-    <CheckpointButton {onCheckpoint} busy={$checkpointMarker.busy} />
+  {#if checkpoint.target === root}
+    <CheckpointButton {onCheckpoint} busy={checkpoint.busy} />
   {/if}
   {#if restore}
     <CheckpointRestoreButton {restore} {onRollback} />

@@ -20,12 +20,12 @@
   }
 </script>
 
-{#each settings as [key, label]}
-  <label class="m-option" style="cursor:pointer;display:flex;align-items:center;gap:10px;">
+{#each settings as [key, label] (key)}
+  <label class="m-option settings-option">
     <input
+      class="settings-checkbox"
       type="checkbox"
       checked={checked(key)}
-      style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;"
       onchange={(event) => changed(key, event)}
     />
     <span>{label}</span>

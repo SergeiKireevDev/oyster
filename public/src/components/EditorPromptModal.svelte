@@ -12,20 +12,25 @@
   });
 </script>
 
-<textarea
-  bind:this={inputEl}
-  placeholder={$editorPrompt.placeholder}
-  value={$editorPrompt.value}
-  spellcheck="false"
-  style="width:100%;height:42vh;resize:vertical;font:12.5px/1.5 ui-monospace,monospace;white-space:pre;tab-size:4;box-sizing:border-box;"
-  oninput={(event) => dialogs.setEditorValue(event.currentTarget.value)}
-  onkeydown={(event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") dialogs.submitEditor();
-    else if (event.key === "Escape") dialogs.cancelEditor();
-  }}
-></textarea>
+<form onsubmit={(event) => { event.preventDefault(); dialogs.submitEditor(); }}>
+  <textarea
+    bind:this={inputEl}
+    aria-label={$editorPrompt.placeholder || "Editor response"}
+    placeholder={$editorPrompt.placeholder}
+    value={$editorPrompt.value}
+    spellcheck="false"
+    class="modal-code-editor modal-code-editor-prompt"
+    oninput={(event) => dialogs.setEditorValue(event.currentTarget.value)}
+    onkeydown={(event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.currentTarget.form?.requestSubmit();
+      }
+    }}
+  ></textarea>
 
-<div class="m-actions" id="mActions">
-  <button class="chip" data-modal-cancel onclick={dialogs.cancelEditor}>Cancel</button>
-  <button class="btn" style="padding:6px 16px;" onclick={dialogs.submitEditor}>OK</button>
-</div>
+  <div class="m-actions" id="mActions">
+    <button class="chip" type="button" data-modal-cancel onclick={dialogs.cancelEditor}>Cancel</button>
+    <button class="btn modal-primary-action" type="submit">OK</button>
+  </div>
+</form>

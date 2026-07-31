@@ -10,7 +10,7 @@ test("command palette navigation wraps active command selection", () => {
 test("path palette view labels files without a command slash", () => {
   const view = pathPaletteView([{ path: "./src/app.js", name: "app.js", directory: false }], { text: "./src/a" }, 0);
   assert.equal(view.mode, "path");
-  assert.deepEqual(view.items[0], { icon: "📄", desc: "file", prefix: "", highlight: "a", rest: "pp.js", active: true });
+  assert.deepEqual(view.items[0], { key: "path:./src/app.js", icon: "📄", desc: "file", prefix: "", highlight: "a", rest: "pp.js", active: true });
 });
 
 test("command trigger recognizes only a leading slash command token", () => {
@@ -24,7 +24,7 @@ test("command trigger recognizes only a leading slash command token", () => {
 test("command palette presents supported pi commands with slash prefixes", () => {
   const view = commandPaletteView([{ name: "loop", description: "Run a plan" }], { text: "/lo", query: "lo" }, 0);
   assert.equal(view.mode, "command");
-  assert.deepEqual(view.items[0], { icon: "›", desc: "Run a plan", prefix: "/", highlight: "lo", rest: "op", active: true });
+  assert.deepEqual(view.items[0], { key: "command:loop", icon: "›", desc: "Run a plan", prefix: "/", highlight: "lo", rest: "op", active: true });
 });
 
 test("command palette position stays within the viewport", () => {

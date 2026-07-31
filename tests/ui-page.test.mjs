@@ -25,12 +25,15 @@ const svelteMarkup = svelteFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 test("Svelte entry module is wired from index.html", () => {
   assert.match(html, /<script\s+type="module"\s+src="\/src\/main\.js"><\/script>/);
   assert.match(entry, /import App from "\.\/App\.svelte";/);
-  assert.match(entry, /mount\(App, \{ target: document\.body \}\);/);
+  assert.match(entry, /const browser = resolveBrowserEnvironment\(\);/);
+  assert.match(entry, /if \(browser\) \{/);
+  assert.match(entry, /createBrowserApplicationScope\(\{/);
+  assert.match(entry, /mount\(App, \{ target: browser\.documentTarget\.body, props: \{ applicationScope \} \}\);/);
 });
 
 test("app runtime explicitly starts the application composition root", () => {
   assert.match(appRuntime, /import \{ createAppRuntime \} from "\.\/createAppRuntime\.js";/);
-  assert.match(appRuntime, /loadDependencies: \(\) => import\("\.\/appComposition\.js"\)/);
+  assert.match(appRuntime, /loadDependencies = \(\) => import\("\.\/appComposition\.js"\)/);
   assert.match(appRuntime, /runtime\.start\(\);/);
   assert.match(appRuntime, /runtime = null;/);
   assert.doesNotMatch(runtimeImplementation, /if \(!token\) requireToken\(\);\nelse boot\(\);/);

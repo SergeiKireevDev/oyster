@@ -128,7 +128,7 @@ async function body(page, { mobile }) {
   // click the t-ckpt row that contains H1's hash — opens the rollback modal
   await page.locator("#treeView .t-ckpt", { hasText: H1.slice(0, 7) }).click();
   await expect(page.locator("#overlay")).toHaveClass(/open/);
-  await page.getByRole("button", { name: /Roll back/ }).click();
+  await page.getByRole("button", { name: /^Roll back ⏪$/ }).click();
 
   // a forked session opens — its title carries the rollback hash
   await expect.poll(() => currentSessionId(page), { timeout: 30000 }).not.toEqual(mainSession);

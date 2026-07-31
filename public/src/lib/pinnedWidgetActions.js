@@ -64,11 +64,3 @@ export async function deletePinnedWidgetGroup(fetchImpl, id, { ungroup = false, 
 export async function readPinnedTextArtifact(fetchImpl, id) {
   return jsonResponse(await fetchImpl(`/pinned-widget-content?id=${encodeURIComponent(id)}`), "cannot display text artifact");
 }
-
-export function pinnedWidgetMediaUrl(id) {
-  return `/pinned-widget-media?id=${encodeURIComponent(id)}`;
-}
-
-export function pinnedWidgetHtmlUrl(id) {
-  return `/pinned-widget-html?id=${encodeURIComponent(id)}`;
-}
