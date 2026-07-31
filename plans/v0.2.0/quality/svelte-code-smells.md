@@ -115,7 +115,7 @@ and focused test.
   structures on every reactive update.
 - [x] Tests assert user-visible behavior, accessibility, lifecycle cleanup, and
   feature boundaries rather than only snapshots or implementation details.
-- [ ] Every retained exception to this checklist has a focused regression test
+- [x] Every retained exception to this checklist has a focused regression test
   that demonstrates why the lower-level or imperative approach is necessary.
 
 ## Suggested Audit Searches
