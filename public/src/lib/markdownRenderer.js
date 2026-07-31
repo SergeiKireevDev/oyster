@@ -24,13 +24,16 @@ for (const [alias, base] of Object.entries({
 })) KEYWORDS[alias] = KEYWORDS[base];
 
 const LITERALS = new Set("true false null undefined None True False nil NULL Some Ok Err self".split(" "));
+const KEYWORD_SETS = Object.fromEntries(Object.entries(KEYWORDS).map(([lang, words]) => [lang, new Set(words.split(" "))]));
+const HASH_COMMENT_LANGUAGES = new Set(["py", "python", "sh", "bash", "shell", "zsh", "console", "yaml", "yml", "toml", "rb", "ruby", "dockerfile", "makefile", ""]);
+const DASH_COMMENT_LANGUAGES = new Set(["sql", "lua", "hs", "haskell"]);
+const NO_SLASH_COMMENT_LANGUAGES = new Set(["py", "python", "yaml", "yml", "toml", "rb", "ruby"]);
+const HIGHLIGHT_PATTERNS = new Map();
 
-function highlightCode(src, lang) {
-  lang = (lang || "").toLowerCase();
-  const kwSet = new Set((KEYWORDS[lang] ?? KEYWORDS.js).split(" "));
-  const hashComments = ["py", "python", "sh", "bash", "shell", "zsh", "console", "yaml", "yml", "toml", "rb", "ruby", "dockerfile", "makefile", ""].includes(lang);
-  const dashComments = ["sql", "lua", "hs", "haskell"].includes(lang);
-  const slashComments = !["py", "python", "yaml", "yml", "toml", "rb", "ruby"].includes(lang);
+function highlightPattern({ hashComments, dashComments, slashComments }) {
+  const key = `${Number(hashComments)}${Number(dashComments)}${Number(slashComments)}`;
+  let pattern = HIGHLIGHT_PATTERNS.get(key);
+  if (pattern) return pattern;
   const parts = [
     slashComments ? String.raw`\/\*[\s\S]*?\*\/|\/\/[^\n]*` : null,
     hashComments ? String.raw`#[^\n]*` : null,
@@ -43,7 +46,20 @@ function highlightCode(src, lang) {
     String.raw`\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?\w*`,
     String.raw`[A-Za-z_$][A-Za-z0-9_$]*`,
   ].filter(Boolean);
-  const re = new RegExp(parts.join("|"), "g");
+  pattern = new RegExp(parts.join("|"), "g");
+  HIGHLIGHT_PATTERNS.set(key, pattern);
+  return pattern;
+}
+
+function highlightCode(src, lang) {
+  lang = (lang || "").toLowerCase();
+  const kwSet = KEYWORD_SETS[lang] ?? KEYWORD_SETS.js;
+  const re = highlightPattern({
+    hashComments: HASH_COMMENT_LANGUAGES.has(lang),
+    dashComments: DASH_COMMENT_LANGUAGES.has(lang),
+    slashComments: !NO_SLASH_COMMENT_LANGUAGES.has(lang),
+  });
+  re.lastIndex = 0;
   let out = "", pos = 0, m;
   while ((m = re.exec(src))) {
     out += escapeHtml(src.slice(pos, m.index));
