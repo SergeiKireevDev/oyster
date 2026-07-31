@@ -3,8 +3,8 @@
   import ToastItem from "./ToastItem.svelte";
 </script>
 
-<div id="toasts">
+<section id="toasts" aria-label="Notifications">
   {#each $toasts as toast (toast.id)}
     <ToastItem {toast} onDismiss={removeToast} />
   {/each}
-</div>
+</section>
