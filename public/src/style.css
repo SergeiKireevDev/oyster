@@ -1658,20 +1658,6 @@
     #modal .s-loop-status { order: 3; margin-left: 40px; }
     #modal .s-loop-chevron { margin: 11px 2px 0 auto; }
   }
-  #modal .browser-list-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  #modal .browser-list-actions .toggle-hidden.active {
-    color: var(--text);
-    border-color: var(--accent);
-    background: var(--accent-dim);
-  }
-  #modal .newdir-row { display: flex; gap: 6px; margin-bottom: 8px; }
-  #modal .newdir-row input { flex: 1; min-width: 0; }
-  #modal .newdir-row .btn { padding: 6px 12px; }
   /* hidden files/dirs (dotfiles) — dimmed unless hovered */
   #modal .m-option.hidden-entry { opacity: 0.45; }
   #modal .m-option.hidden-entry:hover { opacity: 1; }
