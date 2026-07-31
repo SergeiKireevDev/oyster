@@ -17,44 +17,89 @@
 
   const uiActions = getUiActionRegistry();
   let highlight;
+  let aborting = false;
   const highlightScroll = createFrameScheduler((top, left) => {
     if (!highlight) return;
     highlight.scrollTop = top;
     highlight.scrollLeft = left;
   });
-  const scheduleHighlightScroll = (input) => highlightScroll.schedule(input.scrollTop, input.scrollLeft);
-  const handleInput = (event) => {
+  function scheduleHighlightScroll(input) {
+    highlightScroll.schedule(input.scrollTop, input.scrollLeft);
+  }
+
+  function handleInput(event) {
     uiActions.invoke(COMPOSER_INPUT_ACTION);
     scheduleHighlightScroll(event.currentTarget);
-  };
-  const handleScroll = (event) => scheduleHighlightScroll(event.currentTarget);
-  const handleKeydown = (event) => uiActions.invoke(COMPOSER_KEYDOWN_ACTION, event);
-  const send = () => uiActions.invoke(COMPOSER_SEND_ACTION);
-  const abort = () => uiActions.invoke(COMPOSER_ABORT_ACTION);
-  const toggleVoice = () => uiActions.invoke(COMPOSER_VOICE_ACTION);
+  }
+
+  function handleScroll(event) {
+    scheduleHighlightScroll(event.currentTarget);
+  }
+
+  function handleKeydown(event) {
+    uiActions.invoke(COMPOSER_KEYDOWN_ACTION, event);
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    uiActions.invoke(COMPOSER_SEND_ACTION);
+  }
+
+  async function abort() {
+    if (aborting) return;
+    aborting = true;
+    try {
+      await uiActions.invoke(COMPOSER_ABORT_ACTION);
+    } finally {
+      aborting = false;
+    }
+  }
+
+  function toggleVoice() {
+    uiActions.invoke(COMPOSER_VOICE_ACTION);
+  }
+
+  function highlightSegmentKey(segment, index) {
+    // Highlight segments are ordered text ranges and never reorder. Combining
+    // their position and role preserves unaffected DOM nodes as the draft grows.
+    return `${index}:${segment.type}`;
+  }
+
+  function voiceIsStarting(voice) {
+    return !voice.listening && !voice.transcribing && Boolean(voice.status);
+  }
+
+  function voiceLabel(voice) {
+    if (voice.transcribing) return "Transcribing voice input";
+    if (voiceIsStarting(voice)) return voice.status;
+    return voice.listening ? "Stop voice input" : "Start voice input";
+  }
+
+  function voiceTitle(voice) {
+    if (voice.transcribing) return voice.status || "Transcribing voice input";
+    if (voiceIsStarting(voice)) return voice.status;
+    if (voice.listening) return "Stop listening";
+    return voice.local ? "Record with on-device Whisper" : "Dictate message";
+  }
 
   onDestroy(highlightScroll.cancel);
 
   $: highlightSegments = composerHighlightSegments($composerText);
-  $: voiceButtonLabel = $composerVoice.transcribing
-    ? "Transcribing voice input"
-    : $composerVoice.listening ? "Stop voice input" : "Start voice input";
-  $: voiceButtonTitle = $composerVoice.transcribing
-    ? $composerVoice.status
-    : $composerVoice.listening
-      ? "Stop listening"
-      : $composerVoice.local ? "Record with on-device Whisper" : "Dictate message";
+  $: voiceButtonLabel = voiceLabel($composerVoice);
+  $: voiceButtonTitle = voiceTitle($composerVoice);
+  $: voiceButtonDisabled = $composerVoice.transcribing || voiceIsStarting($composerVoice);
 </script>
 
 <div id="composer">
-  <form class="inner" onsubmit={(event) => { event.preventDefault(); send(); }}>
+  <form class="inner" onsubmit={handleSubmit} aria-label="Message composer">
     <div class="composer-prompt" aria-hidden="true">›</div>
     <div class="composer-editor">
-      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment (segment)}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
+      <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment, index (highlightSegmentKey(segment, index))}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
       <textarea
         id="input"
         aria-label="Message"
         rows="1"
+        enterkeyhint="send"
         placeholder={$composerUi.placeholder}
         disabled={$composerUi.inputDisabled}
         oninput={handleInput}
@@ -70,8 +115,9 @@
         class="voice-btn"
         id="voiceBtn"
         type="button"
-        disabled={$composerVoice.transcribing}
+        disabled={voiceButtonDisabled}
         aria-label={voiceButtonLabel}
+        aria-controls="input"
         aria-pressed={$composerVoice.listening}
         title={voiceButtonTitle}
         onclick={toggleVoice}
@@ -88,7 +134,7 @@
       </button>
     {/if}
     <button class="btn" id="sendBtn" type="submit" hidden={$composerUi.sendHidden} disabled={$composerUi.sendDisabled}>{$composerUi.sendText}</button>
-    <button class="btn stop" id="stopBtn" type="button" hidden={$composerUi.stopHidden} onclick={abort}>Stop</button>
+    <button class="btn stop" id="stopBtn" type="button" hidden={$composerUi.stopHidden} disabled={aborting} aria-label="Stop agent" onclick={abort}>Stop</button>
   </form>
   <div id="statusbar">
     <span id="stateInfo">{$headerState.stateInfo}</span>
