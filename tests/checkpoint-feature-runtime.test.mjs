@@ -27,7 +27,7 @@ test("checkpoint tree node exposes session, activity, and rollback context acces
   assert.match(source, /disabled=\{!capabilities\.rollback\}/);
   assert.match(source, /class="t-dot"[^>]*aria-hidden="true"/);
   assert.doesNotMatch(source, /class="t-dot"[^>]*title=/);
-  assert.match(source, /<span aria-hidden="true">🧊<\/span>/);
+  assert.match(source, /<span class="t-ckpt-icon" aria-hidden="true">🧊<\/span>/);
 });
 
 test("checkpoint tree node shares one live-runner index across recursive instances", () => {
