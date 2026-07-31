@@ -29,7 +29,7 @@ test("prompt picker checkpoint and hublot modal controls use native buttons", ()
   assert.match(read("CheckpointModelPickerModal.svelte"), /<button class="chip" type="button" data-modal-cancel onclick=\{cancelCheckpointModelPicker\}>Cancel<\/button>/);
 
   const hublot = read("HublotManagerModal.svelte");
-  assert.match(hublot, /<button class="chip" data-modal-cancel onclick=\{closeModalState\}>Close<\/button>/);
+  assert.match(hublot, /<button class="chip" type="button" data-modal-cancel disabled=\{\$hublotManager\.creating\} onclick=\{closeModalState\}>Close<\/button>/);
   assert.match(hublot, /Create live interface widget/);
   assert.doesNotMatch(hublot, /toggleManagedHublotScope|close this live interface/);
 });
