@@ -3302,12 +3302,14 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .pinned-widget-monitor-preview {
   display: -webkit-box;
   width: 100%;
+  max-width: 100%;
   max-height: 100%;
   padding: 5px;
   overflow: hidden;
   font: 700 9px/1.18 var(--mono);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  text-shadow: 0 0 6px rgba(126,240,208,.72);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }

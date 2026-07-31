@@ -10,6 +10,7 @@ import {
   classifyPinnedPath,
   createPinnedWidgetRoutes,
   ensurePinnedHublot,
+  formatMonitoringPreview,
   listPinnedWidgets,
 } from "../server/pinned-widgets.mjs";
 
@@ -202,13 +203,20 @@ test("deleting a group with its widgets preserves the source artifacts", async (
   assert.ok(paths.every(existsSync));
 });
 
+test("monitoring previews are capped at twenty visible characters without splitting emoji", () => {
+  assert.equal(formatMonitoringPreview("12345678901234567890"), "12345678901234567890");
+  assert.equal(formatMonitoringPreview("123456789012345678901"), "1234567890123456789…");
+  assert.equal([...formatMonitoringPreview("🟢".repeat(21))].length, 20);
+  assert.equal(formatMonitoringPreview("a\r\nb"), "a\nb");
+});
+
 test("monitoring widgets persist scripts and execute preview and viewer content on demand", async (t) => {
   const { root, routes } = fixture(t);
   writeFileSync(join(root, "tracked.txt"), "ready\n");
   const created = response();
   await routes["POST /pinned-widgets"](request({
     label: "Repository state",
-    previewScript: "#!/bin/sh\nprintf '3 staged · 2 unstaged'\n",
+    previewScript: "#!/bin/sh\nprintf '●3 ±2 ?1'\n",
     contentScript: "#!/bin/sh\nprintf 'status: '; cat tracked.txt\n",
     cwd: root,
     format: "text",
@@ -219,11 +227,11 @@ test("monitoring widgets persist scripts and execute preview and viewer content 
   assert.equal(created.body.widget.kind, "monitoring");
   assert.equal(created.body.widget.availability, "ready");
   assert.ok(created.body.widget.scriptDirectory.startsWith(join(root, ".oyster")));
-  assert.equal(readFileSync(join(created.body.widget.scriptDirectory, "preview.sh"), "utf8"), "#!/bin/sh\nprintf '3 staged · 2 unstaged'\n");
+  assert.equal(readFileSync(join(created.body.widget.scriptDirectory, "preview.sh"), "utf8"), "#!/bin/sh\nprintf '●3 ±2 ?1'\n");
 
   const preview = response();
   await routes["GET /pinned-widget-monitor-preview"]({}, preview, new URL(`http://localhost/pinned-widget-monitor-preview?id=${created.body.widget.id}`));
-  assert.equal(preview.body.preview, "3 staged · 2 unstaged");
+  assert.equal(preview.body.preview, "●3 ±2 ?1");
 
   const content = response();
   await routes["GET /pinned-widget-monitor-content"]({}, content, new URL(`http://localhost/pinned-widget-monitor-content?id=${created.body.widget.id}`));

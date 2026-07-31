@@ -27,9 +27,12 @@ test("symbol-only controls expose explicit accessible names", () => {
   assert.match(picker, /aria-label="Delete session"/);
 
   const explorer = component("FileExplorerModal.svelte");
+  assert.match(explorer, /<div role="list" aria-label="Files">/);
+  assert.match(explorer, /class="file-explorer-row" role="listitem"/);
   assert.match(explorer, /aria-label=\{`Download \$\{file\.name\}`\}/);
   assert.match(explorer, /aria-label=\{`Pin \$\{file\.name\}`\}/);
   assert.match(explorer, /aria-label=\{`Edit \$\{file\.name\}`\}/);
+  assert.equal((explorer.match(/<button/g) ?? []).length, (explorer.match(/<button[^>]*type="(?:button|submit)"/g) ?? []).length);
 });
 
 test("controls that start work use native disabled semantics while busy", () => {

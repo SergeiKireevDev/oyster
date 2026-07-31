@@ -27,7 +27,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/ConfirmPromptModal.svelte`
 - [x] `public/src/components/CredentialsModal.svelte`
 - [x] `public/src/components/EditorPromptModal.svelte`
-- [ ] `public/src/components/FileExplorerModal.svelte`
+- [x] `public/src/components/FileExplorerModal.svelte`
 - [ ] `public/src/components/FilePickerModal.svelte`
 - [ ] `public/src/components/FolderBrowserModal.svelte`
 - [ ] `public/src/components/FolderIcon.svelte`

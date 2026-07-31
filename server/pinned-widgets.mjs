@@ -22,6 +22,8 @@ const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 const INLINE_KINDS = new Set(["image", "video"]);
 const MONITOR_PREVIEW_LIMIT = 64 * 1024;
 const MONITOR_CONTENT_LIMIT = 5 * 1024 * 1024;
+const MONITOR_PREVIEW_CHARACTERS = 20;
+const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 function id(prefix) {
   return `${prefix}-${randomBytes(9).toString("base64url")}`;
@@ -293,6 +295,13 @@ export function materializeMonitoringScripts({ id: widgetId, previewScript, cont
   }
   writeFileSync(join(target, "cwd"), `${cwd}\n`, { mode: 0o600 });
   return target;
+}
+
+export function formatMonitoringPreview(value, limit = MONITOR_PREVIEW_CHARACTERS) {
+  if (!Number.isInteger(limit) || limit <= 0) return "";
+  const graphemes = [...GRAPHEME_SEGMENTER.segment(String(value ?? "").replace(/\r/g, ""))].map((part) => part.segment);
+  if (graphemes.length <= limit) return graphemes.join("");
+  return `${graphemes.slice(0, Math.max(0, limit - 1)).join("")}…`;
 }
 
 export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
@@ -579,7 +588,7 @@ export function createPinnedWidgetRoutes({
       try {
         const row = repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
-        const preview = await executeMonitor(row, "preview", { resolveSafePath });
+        const preview = formatMonitoringPreview(await executeMonitor(row, "preview", { resolveSafePath }));
         json(res, 200, { id: row.id, preview });
       } catch (error) { sendError(json, res, error); }
     },

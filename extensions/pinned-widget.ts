@@ -42,11 +42,11 @@ export default function pinnedWidgetExtension(pi: ExtensionAPI) {
       "A monitor stores permanent preview and content scripts under ~/.oyster, polls its preview every 3 seconds " +
       "only while visible, and runs its content script when opened. Pinned artifacts stay private. " +
       "Use the hublot tool only when a public live interface is required.",
-    promptSnippet: "Pin private artifacts or create script-backed monitoring widgets with pinned_widget. Monitoring scripts must be complete executable scripts with shebangs; use format='diff' for code diffs. Use group_pinned_widgets for multiple related files. Unpinning never deletes source files or monitoring scripts.",
+    promptSnippet: "Pin private artifacts or create script-backed monitoring widgets with pinned_widget. Monitoring scripts must be complete executable scripts with shebangs. Preview stdout is limited to 20 visible characters: design it for the thumbnail with compact symbols such as ●, ±, and ?. Use format='diff' for code diffs. Unpinning never deletes source files or monitoring scripts.",
     parameters: Type.Object({
       action: StringEnum(["pin", "monitor", "list", "unpin", "group", "move"] as const),
       path: Type.Optional(Type.String({ description: "For pin: artifact path, absolute or relative to the session cwd" })),
-      preview_script: Type.Optional(Type.String({ description: "For monitor: complete shebang script whose stdout is the compact thumbnail preview" })),
+      preview_script: Type.Optional(Type.String({ description: "For monitor: complete shebang script whose stdout is a thumbnail preview of at most 20 visible characters; compact neon-style symbols are encouraged" })),
       content_script: Type.Optional(Type.String({ description: "For monitor: complete shebang script whose stdout is shown in the viewer" })),
       cwd: Type.Optional(Type.String({ description: "For monitor: script working directory; defaults to the session cwd" })),
       format: Type.Optional(StringEnum(["text", "diff"] as const, { description: "For monitor: viewer format; defaults to text" })),

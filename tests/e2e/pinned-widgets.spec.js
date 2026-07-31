@@ -217,7 +217,7 @@ BEGIN { staged=0; unstaged=0; untracked=0 }
 substr($0,1,2) == "??" { untracked++; next }
 substr($0,1,1) != " " { staged++ }
 substr($0,2,1) != " " { unstaged++ }
-END { printf "%d staged\\n%d unstaged\\n%d untracked\\n", staged, unstaged, untracked }
+END { printf "●%d ±%d ?%d\\n", staged, unstaged, untracked }
 '
 `,
     contentScript: `#!/bin/sh
@@ -235,9 +235,8 @@ git --no-pager status --branch --untracked-files=all
   const widget = page.locator("#hublots .pinned-widget-cell", { hasText: "Git status" }).first();
   const preview = widget.locator(".pinned-widget-monitor-preview");
   await expect(widget).toBeVisible();
-  await expect(preview).toContainText("0 staged", { timeout: 10000 });
-  await expect(preview).toContainText("0 unstaged");
-  await expect(preview).toContainText("0 untracked");
+  await expect(preview).toHaveText("●0 ±0 ?0", { timeout: 10000 });
+  await expect(preview).toHaveText(/^.{1,20}$/u);
 
   await widget.locator(".pinned-widget-tile").click();
   await expect(page.locator("#mTitle")).toHaveText("Git status");
@@ -246,7 +245,7 @@ git --no-pager status --branch --untracked-files=all
 
   const localFile = "local-change-with-a-very-long-name-that-scrolls-inside-the-monitor-viewer.txt";
   dexec(`touch /workspace/${localFile}`);
-  await expect(preview).toContainText("1 untracked", { timeout: 10000 });
+  await expect(preview).toHaveText("●0 ±0 ?1", { timeout: 10000 });
 
   await widget.locator(".pinned-widget-tile").click();
   const output = page.locator(".pinned-monitor-output");
