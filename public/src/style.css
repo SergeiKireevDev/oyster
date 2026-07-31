@@ -1699,7 +1699,6 @@
     white-space: pre;
     tab-size: 4;
   }
-  #modal .modal-code-editor-prompt { height: 42vh; }
   #modal .file-editor { height: 50vh; margin-top: 6px; }
   #modal .settings-option { display: flex; align-items: center; gap: 10px; cursor: pointer; }
   #modal .settings-checkbox {
