@@ -86,8 +86,15 @@ test("file folder session and overlay controls use native semantics", () => {
   for (const action of ["uploadFileExplorer", "backFileExplorer", "backFileExplorerToHublots", "closeModalState"]) {
     assert.match(explorer, new RegExp(`<button[^>]*onclick=\\{${action}\\}`));
   }
-  assert.match(read("FilePickerModal.svelte"), /<button class="chip folder-action" title="Insert the current folder path" onclick=\{useFilePickerFolder\}>/);
-  assert.match(read("FolderBrowserModal.svelte"), /<button class="chip" data-modal-cancel onclick=\{cancelFolderBrowser\}>Cancel<\/button>/);
+  const filePicker = read("FilePickerModal.svelte");
+  assert.match(filePicker, /<button class="chip folder-action" type="button" title="Insert the current folder path" onclick=\{useFilePickerFolder\}>/);
+  assert.match(filePicker, /class:active=\{\$filePicker\.showHidden\}[\s\S]*aria-pressed=\{\$filePicker\.showHidden\}/);
+  assert.equal((filePicker.match(/<button/g) ?? []).length, (filePicker.match(/<button[^>]*type="button"/g) ?? []).length);
+  const folderBrowser = read("FolderBrowserModal.svelte");
+  assert.match(folderBrowser, /<button class="chip" type="button" data-modal-cancel onclick=\{cancelFolderBrowser\}>Cancel<\/button>/);
+  assert.match(folderBrowser, /aria-pressed=\{\$folderBrowser\.showHidden\}/);
+  assert.match(folderBrowser, /disabled=\{!canSubmitFolder\}/);
+  assert.equal((folderBrowser.match(/<button/g) ?? []).length, (folderBrowser.match(/<button[^>]*type="(?:button|submit)"/g) ?? []).length);
 
   const sessions = read("SessionPickerModal.svelte");
   assert.match(sessions, /<button class="s-session-main" onclick=\{\(\) => choosePickedSession\(sessionIdentity\(session\)\)\}>/);

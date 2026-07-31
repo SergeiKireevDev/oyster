@@ -48,6 +48,12 @@ test("folder browser component routes browse, create, submit, and cancel through
   assert.match(source, /uiActions\.invoke\(FOLDER_BROWSER_CREATE_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(FOLDER_BROWSER_SUBMIT_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(FOLDER_BROWSER_CANCEL_ACTION\)/);
+  assert.match(source, /function retryFolderBrowser\(\)/);
+  assert.match(source, /function toggleHiddenFolders\(\)/);
+  assert.match(source, /function submitCreateFolder\(event\)/);
+  assert.match(source, /if \(mounted && node\.isConnected\) node\.focus\(\)/);
+  assert.match(source, /destroy\(\) \{[\s\S]*mounted = false/);
+  assert.doesNotMatch(source, /onclick=\{\(\) =>|onsubmit=\{\(event\) =>|oninput=\{\(event\) =>/);
   assert.doesNotMatch(source, /features\/files\/folderBrowserActions\.js/);
 });
 

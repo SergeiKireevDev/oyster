@@ -3,7 +3,11 @@
   import BrowserFileEntry from "./BrowserFileEntry.svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import { browserPathFor, visibleBrowserEntries } from "../lib/fileBrowser.js";
-  import { incrementalCollectionPage, nextCollectionPageCount } from "../lib/incrementalCollection.js";
+  import {
+    DEFAULT_COLLECTION_PAGE_SIZE,
+    incrementalCollectionPage,
+    nextCollectionPageCount,
+  } from "../lib/incrementalCollection.js";
   import { filePicker, updateFilePicker } from "../stores/filePicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
@@ -19,9 +23,15 @@
   const useFilePickerFolder = () => uiActions.invoke(FILE_PICKER_USE_FOLDER_ACTION);
   const cancelFilePicker = () => uiActions.invoke(FILE_PICKER_CANCEL_ACTION);
 
-  const toggleHiddenFiles = () => updateFilePicker({ showHidden: !$filePicker.showHidden });
+  function toggleHiddenFiles() {
+    updateFilePicker({ showHidden: !$filePicker.showHidden });
+  }
 
-  let requestedFiles = 40;
+  function retryFilePicker() {
+    browseFilePicker($filePicker.path || undefined);
+  }
+
+  let requestedFiles = DEFAULT_COLLECTION_PAGE_SIZE;
   let filePageIdentity = null;
 
   $: files = visibleBrowserEntries($filePicker.files, $filePicker.showHidden);
@@ -29,9 +39,10 @@
   $: nextFilePageIdentity = `${$filePicker.path}\0${$filePicker.showHidden}`;
   $: if (nextFilePageIdentity !== filePageIdentity) {
     filePageIdentity = nextFilePageIdentity;
-    requestedFiles = 40;
+    requestedFiles = DEFAULT_COLLECTION_PAGE_SIZE;
   }
   $: filePage = incrementalCollectionPage(files, requestedFiles);
+  $: nextFilePageSize = Math.min(filePage.pageSize, filePage.remainingCount);
   $: folderIsEmpty = !directories.length && !files.length;
   $: hiddenFilesLabel = $filePicker.showHidden ? "👁️ Hide dotfiles" : "👁️ Show dotfiles";
 
@@ -45,11 +56,11 @@
 </script>
 
 {#if $filePicker.loading}
-  <div class="m-path" role="status"><span class="spin"></span> loading files…</div>
+  <div class="m-path" role="status"><span class="spin" aria-hidden="true"></span> loading files…</div>
 {:else if $filePicker.error}
   <div class="m-path async-error" role="alert">
     <span>Could not load files: {$filePicker.error}</span>
-    <button class="chip" type="button" onclick={() => browseFilePicker($filePicker.path || undefined)}>Retry</button>
+    <button class="chip" type="button" onclick={retryFilePicker}>Retry</button>
   </div>
 {:else}
   <BrowserDirectoryList
@@ -62,20 +73,32 @@
     showWorkdir={true}
     onBrowse={browseFilePicker}
   />
-  {#each filePage.items as file (file.name)}
-    {@const fullPath = browserPathFor($filePicker.path, file)}
-    <BrowserFileEntry {file} path={fullPath} onOpen={pickFilePicker} />
-  {/each}
+  {#if filePage.items.length}
+    <div role="list" aria-label="Files">
+      {#each filePage.items as file (file.name)}
+        {@const fullPath = browserPathFor($filePicker.path, file)}
+        <div role="listitem">
+          <BrowserFileEntry {file} path={fullPath} onOpen={pickFilePicker} />
+        </div>
+      {/each}
+    </div>
+  {/if}
   {#if filePage.remainingCount}
-    <button type="button" class="collection-load-more" onclick={revealFiles}>Show {Math.min(filePage.pageSize, filePage.remainingCount)} more files</button>
+    <button type="button" class="collection-load-more" onclick={revealFiles}>Show {nextFilePageSize} more files</button>
   {/if}
   {#if folderIsEmpty}
-    <div class="m-path">(empty folder)</div>
+    <div class="m-path" role="status">(empty folder)</div>
   {/if}
 {/if}
 
 <div class="m-actions" id="mActions">
-  <button class="chip folder-action" title="Insert the current folder path" onclick={useFilePickerFolder}><FolderIcon size={14} /> Use this folder</button>
-  <button class="chip toggle-hidden" onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
-  <button class="chip" data-modal-cancel onclick={cancelFilePicker}>Cancel</button>
+  <button class="chip folder-action" type="button" title="Insert the current folder path" onclick={useFilePickerFolder}><FolderIcon size={14} /> Use this folder</button>
+  <button
+    class="chip toggle-hidden"
+    class:active={$filePicker.showHidden}
+    type="button"
+    aria-pressed={$filePicker.showHidden}
+    onclick={toggleHiddenFiles}
+  >{hiddenFilesLabel}</button>
+  <button class="chip" type="button" data-modal-cancel onclick={cancelFilePicker}>Cancel</button>
 </div>

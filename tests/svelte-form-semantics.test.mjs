@@ -18,7 +18,7 @@ test("single-field workflows use native form submission instead of Enter key han
   assert.doesNotMatch(prompt, /event\.key === "Enter"/);
 
   const folder = component("FolderBrowserModal.svelte");
-  assert.match(folder, /<form class="newdir-row" onsubmit=/);
+  assert.match(folder, /<form class="newdir-row"[^>]*onsubmit=\{submitCreateFolder\}>/);
   assert.match(folder, /<label for="newFolderName">New folder name<\/label>/);
   assert.match(folder, /id="newFolderName"[\s\S]*required/);
 });
