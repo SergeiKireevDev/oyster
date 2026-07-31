@@ -51,7 +51,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/SessionPickerModal.svelte`
 - [x] `public/src/components/SessionSidebar.svelte`
 - [x] `public/src/components/SettingsModal.svelte`
-- [ ] `public/src/components/Sidebars.svelte`
+- [x] `public/src/components/Sidebars.svelte`
 - [ ] `public/src/components/SvgArtifact.svelte`
 - [ ] `public/src/components/TextPromptModal.svelte`
 - [ ] `public/src/components/ToastItem.svelte`

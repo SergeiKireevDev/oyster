@@ -27,14 +27,13 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
   assert.match(image, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
   assert.match(image, /<ArtifactLoadState kind="image" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
 
-  for (const [name, kind] of [
-    ["VideoArtifact.svelte", "video"],
-    ["SvgArtifact.svelte", "svg"],
-  ]) {
-    const source = component(name);
-    assert.match(source, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
-    assert.match(source, new RegExp(`<ArtifactLoadState kind="${kind}" available=\\{!!src\\} \\{status\\} onRetry=\\{retry\\}`));
-  }
+  const svg = component("SvgArtifact.svelte");
+  assert.match(svg, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
+  assert.match(svg, /<ArtifactLoadState kind="svg" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
+
+  const video = component("VideoArtifact.svelte");
+  assert.match(video, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
+  assert.match(video, /<ArtifactLoadState kind="video" available=\{!!src\} \{status\} onRetry=\{retry\}/);
 
   const html = component("HtmlArtifact.svelte");
   assert.match(html, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);

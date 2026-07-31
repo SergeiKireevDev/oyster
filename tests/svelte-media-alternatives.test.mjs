@@ -7,7 +7,7 @@ const component = (name) => readFileSync(new URL(name, componentsRoot), "utf8");
 
 test("content images and videos receive alternatives from their artifact labels", () => {
   assert.match(component("ImageArtifact.svelte"), /<img\s+[\s\S]*?\{src\}[\s\S]*?\{alt\}/);
-  assert.match(component("SvgArtifact.svelte"), /<img \{src\} \{alt\}/);
+  assert.match(component("SvgArtifact.svelte"), /<img\s+[\s\S]*?\{src\}[\s\S]*?alt=\{accessibleLabel\}/);
   assert.match(component("VideoArtifact.svelte"), /<video[\s\S]*?aria-label=\{label\}/);
 
   const viewer = component("PinnedWidgetViewerModal.svelte");
@@ -16,12 +16,20 @@ test("content images and videos receive alternatives from their artifact labels"
   assert.match(viewer, /<VideoArtifact src=\{source\} label=\{widget\.label\}/);
 });
 
-test("the image viewer exposes its zoom state and an accessible toggle name", () => {
+test("image and SVG viewers expose their zoom state and accessible toggle names", () => {
   const image = component("ImageArtifact.svelte");
 
   assert.match(image, /aria-label=\{`\$\{zoomed \? "Fit" : "View original size"\}: \$\{alt \|\| "Pinned image"\}`\}/);
   assert.match(image, /aria-pressed=\{zoomed\}/);
   assert.match(image, /onclick=\{toggleZoom\}/);
+
+  const svg = component("SvgArtifact.svelte");
+  assert.match(svg, /accessibleLabel = \$derived\(String\(alt \|\| ""\)\.trim\(\) \|\| "Pinned SVG"\)/);
+  assert.match(svg, /aria-label=\{`\$\{zoomed \? "Fit" : "View original size"\}: \$\{accessibleLabel\}`\}/);
+  assert.equal((svg.match(/aria-pressed=\{zoomed\}/g) ?? []).length, 2);
+  assert.equal((svg.match(/onclick=\{toggleZoom\}/g) ?? []).length, 2);
+  assert.match(svg, /disabled=\{!src\}/);
+  assert.match(svg, /aria-busy=\{loading\}/);
 });
 
 test("decorative branding, icons, and media thumbnails are hidden from assistive technology", () => {
