@@ -126,6 +126,7 @@ export function modalKeyboardNavigation(overlay, parameters) {
   }
 
   function activateOption(option) {
+    if (option === keyboardOption) return;
     keyboardOption?.closest(".m-option")?.classList.remove("keyboard-active");
     keyboardOption = option;
     keyboardOption?.closest(".m-option")?.classList.add("keyboard-active");
@@ -170,13 +171,15 @@ export function modalKeyboardNavigation(overlay, parameters) {
     activateOption(available[next]);
   }
 
-  function mousemove(event) {
+  function pointermove(event) {
     const option = event.target.closest?.(optionSelector);
     if (option && overlay.contains(option)) activateOption(option);
   }
 
   overlay.addEventListener("keydown", keydown, true);
-  overlay.addEventListener("mousemove", mousemove);
+  // Pointer movement may fire many times within one row. activateOption bounds
+  // reactive class and layout work to actual row changes.
+  overlay.addEventListener("pointermove", pointermove);
 
   return {
     update(next) {
@@ -184,7 +187,7 @@ export function modalKeyboardNavigation(overlay, parameters) {
     },
     destroy() {
       overlay.removeEventListener("keydown", keydown, true);
-      overlay.removeEventListener("mousemove", mousemove);
+      overlay.removeEventListener("pointermove", pointermove);
     },
   };
 }

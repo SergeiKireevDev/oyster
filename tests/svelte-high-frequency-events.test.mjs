@@ -5,6 +5,7 @@ import { createFrameScheduler } from "../public/src/lib/frameScheduler.js";
 import { createCarouselEventRegistration } from "../public/src/runtime/carouselController.js";
 
 const component = (name) => readFileSync(new URL(`../public/src/components/${name}`, import.meta.url), "utf8");
+const library = (name) => readFileSync(new URL(`../public/src/lib/${name}`, import.meta.url), "utf8");
 
 test("frame scheduler coalesces event bursts, flushes the latest value, and cancels stale work", () => {
   const frames = new Map();
@@ -77,6 +78,7 @@ test("high-frequency component events avoid per-event reactive and global update
   const option = component("OptionPickerItem.svelte");
   const picker = component("SessionPickerModal.svelte");
   const sidebar = component("SessionSidebar.svelte");
+  const modalDom = library("modalDomAdapters.js");
 
   for (const source of [composer, chat, widgets, toast]) {
     assert.match(source, /createFrameScheduler/);
@@ -84,6 +86,9 @@ test("high-frequency component events avoid per-event reactive and global update
   }
   assert.doesNotMatch(command, /onmousemove=/);
   assert.doesNotMatch(option, /onmousemove=/);
+  assert.doesNotMatch(modalDom, /addEventListener\("mousemove"/);
+  assert.match(modalDom, /option === keyboardOption/);
+  assert.match(modalDom, /addEventListener\("pointermove"/);
   assert.match(command, /items\[index\]\?\.active\) return/);
   assert.match(picker, /clearTimeout\(debounce\)[\s\S]*setTimeout\(\(\) => runSessionPickerSearch\(\), 250\)/);
   assert.match(sidebar, /clearTimeout\(searchTimer\)[\s\S]*searchTimer = setTimeout/);

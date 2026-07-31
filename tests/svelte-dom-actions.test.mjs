@@ -67,6 +67,10 @@ test("modal keyboard action navigates options and deterministically removes its 
   assert.equal(scrolled, 1);
   assert.equal(classes.has("keyboard-active"), true);
 
+  listeners.get("pointermove:false")({ target: { closest: () => option } });
+  listeners.get("pointermove:false")({ target: { closest: () => option } });
+  assert.equal(scrolled, 1, "pointer movement within the active option does not repeat layout work");
+
   listeners.get("keydown:true")({
     key: "Enter",
     target: { matches: (selector) => selector === "input, button" },
@@ -84,7 +88,7 @@ test("modal keyboard action navigates options and deterministically removes its 
   assert.equal(cancelled, 1, "Escape invokes the modal's explicit cancellation control");
 
   action.destroy();
-  assert.deepEqual(removed.map(([type, , capture]) => [type, capture]), [["keydown", true], ["mousemove", false]]);
+  assert.deepEqual(removed.map(([type, , capture]) => [type, capture]), [["keydown", true], ["pointermove", false]]);
 });
 
 test("modal focus action enters, traps, restores, and cleans up focus", async () => {
