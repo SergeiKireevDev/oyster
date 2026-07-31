@@ -48,10 +48,15 @@ test("checkpoint picker modal consumes the scoped service and preserves controls
   const source = readFileSync(new URL("../public/src/components/CheckpointModelPickerModal.svelte", import.meta.url), "utf8");
   assert.match(source, /getCheckpointModelPicker\(\)/);
   assert.match(source, /const checkpointModelPicker = picker\.state/);
-  assert.match(source, /picker\.setSelected\(value\)/);
+  assert.match(source, /picker\.setSelected\(event\.currentTarget\.value\)/);
   assert.match(source, /picker\.cancel\(\)/);
   assert.match(source, /picker\.submit\(\)/);
   assert.match(source, /No summary — timestamp message/);
+  assert.match(source, /new Set\(models\.filter/);
+  assert.match(source, /if \(selected && !uniqueModels\.includes\(selected\)\) uniqueModels\.unshift\(selected\)/);
+  assert.match(source, /aria-describedby=\{hasHelp \? "checkpointModelPickerHelp" : undefined\}/);
+  assert.match(source, /aria-busy=\{\$checkpointModelPicker\.loading\}/);
+  assert.match(source, /role="status" aria-live="polite" aria-atomic="true"/);
   assert.doesNotMatch(source, /stores\/checkpointModelPicker\.js/);
 });
 
