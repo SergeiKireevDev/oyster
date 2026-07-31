@@ -31,6 +31,17 @@ test("AppIcon sanitizes its CSS size and remains decorative", () => {
   assert.match(source, /style:--app-icon-size=\{`\$\{normalizedSize\}px`\}/);
   assert.match(source, /aria-hidden="true"/);
   assert.match(source, /<svg[^>]*focusable="false"/);
+  assert.match(source, /pointer-events: none/);
+});
+
+test("AppIcon follows the shared restrained, current-color icon treatment", () => {
+  assert.match(source, /display: inline-flex/);
+  assert.match(source, /vertical-align: -0\.125em/);
+  assert.match(source, /\.app-icon > svg \{[\s\S]*?display: block/);
+  assert.match(source, /\.app-icon :is\(path, circle, rect\) \{[\s\S]*?stroke: currentColor/);
+  assert.match(source, /stroke-width: 1\.65/);
+  assert.match(source, /\.app-icon \.filled \{[\s\S]*?fill: currentColor;[\s\S]*?stroke: none/);
+  assert.doesNotMatch(source, /filter:|text-shadow:|box-shadow:/);
 });
 
 test("AppIcon compiles without Svelte warnings", () => {

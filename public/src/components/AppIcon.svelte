@@ -50,29 +50,33 @@
 
 <style>
   .app-icon {
-    display: inline-grid;
-    flex: none;
+    display: inline-flex;
     width: var(--app-icon-size);
     height: var(--app-icon-size);
-    place-items: center;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    line-height: 0;
+    pointer-events: none;
+    vertical-align: -0.125em;
   }
 
-  svg {
+  .app-icon > svg {
+    display: block;
     width: 100%;
     height: 100%;
     overflow: visible;
   }
 
-  path,
-  circle,
-  rect {
+  .app-icon :is(path, circle, rect) {
     stroke: currentColor;
-    stroke-width: 1.8;
+    stroke-width: 1.65;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
 
-  .filled {
+  .app-icon .filled {
     fill: currentColor;
     stroke: none;
   }
