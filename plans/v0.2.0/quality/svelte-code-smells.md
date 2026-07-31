@@ -109,7 +109,7 @@ and focused test.
   serialization are derived once or moved outside hot template paths.
 - [x] Large collections use suitable pagination, virtualization, or incremental
   rendering, and updates do not recreate every row unnecessarily.
-- [ ] High-frequency input, resize, scroll, and pointer handlers are bounded and
+- [x] High-frequency input, resize, scroll, and pointer handlers are bounded and
   do not trigger avoidable global state updates or network requests.
 - [ ] Components do not create fresh heavyweight services, renderers, or data
   structures on every reactive update.
