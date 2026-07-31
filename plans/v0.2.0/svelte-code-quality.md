@@ -68,6 +68,6 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 - [x] `public/src/components/transcript/CheckpointRestoreButton.svelte`
 - [x] `public/src/components/transcript/CompactionMarker.svelte`
 - [x] `public/src/components/transcript/CopyMessageButton.svelte`
-- [ ] `public/src/components/transcript/PermalinkButton.svelte`
+- [x] `public/src/components/transcript/PermalinkButton.svelte`
 - [ ] `public/src/components/transcript/ToolCard.svelte`
 - [ ] `public/src/components/transcript/UserMessage.svelte`

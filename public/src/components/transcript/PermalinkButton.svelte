@@ -1,11 +1,26 @@
 <script>
+  /**
+   * @typedef {object} Props
+   * @property {HTMLElement | null} [target]
+   * @property {(target: HTMLElement | null) => void} [onPermalink]
+   */
+
+  /** @type {Props} */
   let { target = null, onPermalink = () => {} } = $props();
+
+  const label = "Copy a permalink to this message";
+
+  /** @param {MouseEvent} event */
+  function handleClick(event) {
+    event.stopPropagation();
+    onPermalink(target);
+  }
 </script>
 
 <button
   type="button"
   class="permalink"
-  title="copy a permalink to this message"
-  aria-label="Copy a permalink to this message"
-  onclick={(event) => { event.stopPropagation(); onPermalink(target); }}
->🔗</button>
+  title={label}
+  aria-label={label}
+  onclick={handleClick}
+><span aria-hidden="true">🔗</span></button>
