@@ -61,7 +61,11 @@ test("dialog shell has an accessible title and complete focus lifecycle", () => 
   assert.match(overlays, /aria-labelledby="mTitle"/);
   assert.match(overlays, /aria-modal=\{\$modalState\.open \? "true" : undefined\}/);
   assert.match(overlays, /aria-hidden=\{\$modalState\.open \? undefined : "true"\}/);
+  assert.match(overlays, /inert=\{!\$modalState\.open\}/);
   assert.match(overlays, /use:modalFocusManagement=\{\{ open: \$modalState\.open, identity: \$modalState\.content \}\}/);
+  assert.match(overlays, /let overlayElement = \$state\(\)/);
+  assert.match(overlays, /let modalContent = \$derived\(/);
+  assert.match(overlays, /if \(!overlay \|\| !windowTarget\) return;/);
   assert.match(adapters, /event\.key !== "Tab"/);
   assert.match(adapters, /dialog\.ownerDocument\.addEventListener\("focusin", focusin, true\)/);
   assert.match(adapters, /dialog\.ownerDocument\.removeEventListener\("focusin", focusin, true\)/);

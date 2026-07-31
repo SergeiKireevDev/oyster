@@ -30,7 +30,8 @@ test("the overlay delegates modal selection to the application composition regis
   const registry = readFileSync(join(sourceRoot, "runtime/modalContentRegistry.js"), "utf8");
 
   assert.match(overlay, /resolveModalContent\(\$modalState\.content, \$modalState\.context\)/);
-  assert.match(overlay, /<svelte:component this=\{modalContent\.component\} \{\.\.\.modalContent\.props\} \/>/);
+  assert.match(overlay, /\{@const ModalComponent = modalContent\.component\}[\s\S]*<ModalComponent \{\.\.\.modalContent\.props\} \/>/);
+  assert.doesNotMatch(overlay, /<svelte:component\b/, "use Svelte 5 dynamic component semantics");
   assert.doesNotMatch(overlay, /import \w+Modal from/);
   assert.doesNotMatch(overlay, /\{:else if \$modalState\.content/);
 
