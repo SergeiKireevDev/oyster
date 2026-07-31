@@ -12,7 +12,7 @@ Work on exactly one unchecked file from the checklist per iteration: the file na
 
 - [x] `public/src/components/AnalyticsModal.svelte`
 - [x] `public/src/components/AppIcon.svelte`
-- [ ] `public/src/components/ArtifactLoadState.svelte`
+- [x] `public/src/components/ArtifactLoadState.svelte`
 - [ ] `public/src/components/AuthGate.svelte`
 - [ ] `public/src/components/BrowserDirectoryList.svelte`
 - [ ] `public/src/components/BrowserFileEntry.svelte`
