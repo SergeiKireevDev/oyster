@@ -43,12 +43,13 @@ test("image artifact viewers share their common frame and media styles", () => {
   assert.match(styles, /\.pinned-image-frame img,\s*\.pinned-svg-stage img\s*\{[^}]*max-width: 100%;[^}]*object-fit: contain;/);
 });
 
-test("app-header styles use an explicit component class instead of styling every semantic header", () => {
+test("Header owns its layout and presentation styles", () => {
   const header = readFileSync(new URL("../public/src/components/Header.svelte", import.meta.url), "utf8");
   const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
   const selectors = styles.replace(/\/\*[\s\S]*?\*\//g, "");
 
   assert.match(header, /<header class="app-header">/);
-  assert.match(styles, /\.app-header\s*\{/);
+  assert.match(header, /<style>[\s\S]*?\.app-header\s*\{/);
+  assert.doesNotMatch(styles, /\.app-header|\.brand-mark|\.header-actions|\.header-status|\.header-action-divider/);
   assert.doesNotMatch(selectors, /^[\t ]*(?:html[^\n{]*[\t ]+)?header(?:[\t ]|\{|[.:#\[])/m);
 });

@@ -40,7 +40,9 @@ test("Header presents session controls as a consistent icon action group", () =>
   for (const icon of ["fork", "sliders", "model", "thinking", "more"]) {
     assert.match(headerSource, new RegExp(`<AppIcon name="${icon}"`));
   }
-  assert.match(headerSource, /class="header-status"/);
+  assert.match(headerSource, /<h1 class="title" id="sessionTitle"/);
+  assert.match(headerSource, /class="header-status" role="status" aria-atomic="true"/);
+  assert.match(headerSource, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("CommandPalette routes native activation through the scoped registry", () => {
