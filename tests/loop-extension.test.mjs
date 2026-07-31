@@ -62,11 +62,17 @@ test("loop parses Markdown checklists and checks exactly the selected item", asy
   assert.equal(checkItem(plan, target), "# Plan\n\n- [x] done\n- [x] first\n1. [ ] second\n");
 });
 
-test("loop normalizes generated commit subjects and falls back to the checklist item", async () => {
+test("loop normalizes generated commit titles and bullet-point bodies", async () => {
   const { commitMessage } = await loadHelpers();
-  assert.equal(commitMessage('Commit message: "Handle failed job retries"', "fallback"), "Handle failed job retries");
-  assert.equal(commitMessage("", "  Add   retry handling\nfor failed jobs  "), "Add retry handling for failed jobs");
-  assert.equal(commitMessage("x".repeat(100), "fallback"), "x".repeat(72));
+  assert.deepEqual(
+    commitMessage('Title: "Handle failed job retries"\n\nSummary:\n* Preserve retry state\n2. Cover failures', "fallback"),
+    { title: "Handle failed job retries", body: "- Preserve retry state\n- Cover failures" },
+  );
+  assert.deepEqual(commitMessage("", "  Add   retry handling\nfor failed jobs  "), {
+    title: "Add retry handling for failed jobs",
+    body: "",
+  });
+  assert.equal(commitMessage("x".repeat(100), "fallback").title, "x".repeat(72));
 });
 
 test("loop first iteration context contains only instructions and plan", async () => {
@@ -132,8 +138,12 @@ test("loop uses Oyster-managed persisted child runners and directly executes val
   assert.match(source, /ctx\.modelRegistry\.getApiKeyAndHeaders\(ctx\.model\)/);
   assert.match(source, /pi\.exec\("git", \["diff", "--cached"/);
   assert.match(source, /await complete\(/);
-  assert.match(source, /Describe the actual change, not the checklist, validation, or process/);
-  assert.match(source, /pi\.exec\("git", \["commit", "--allow-empty", "--no-gpg-sign", "-m", message\]/);
+  assert.match(source, /title followed by concise bullet points summarizing the changes/);
+  assert.match(source, /imperative title must be at most 72 characters/);
+  assert.match(source, /body must contain only `- ` bullet points/);
+  assert.match(source, /const commitArgs = \["commit", "--allow-empty", "--no-gpg-sign", "-m", title\]/);
+  assert.match(source, /if \(body\) commitArgs\.push\("-m", body\)/);
+  assert.match(source, /pi\.exec\("git", commitArgs/);
   assert.ok(
     source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
     "validation must pass before a loop step is committed",

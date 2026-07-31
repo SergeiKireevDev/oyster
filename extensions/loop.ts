@@ -54,15 +54,22 @@ function checkItem(markdown: string, target: ChecklistItem): string {
   return lines.join("\n");
 }
 
-function commitMessage(summary: string, fallback: string): string {
-  const firstLine = summary
-    .replace(/^\s*(?:commit (?:message|subject)\s*:\s*)/i, "")
-    .split(/\r?\n/, 1)[0]
-    .trim()
+function commitMessage(summary: string, fallback: string): { title: string; body: string } {
+  const lines = summary
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^```/.test(line));
+  const generatedTitle = (lines.shift() ?? "")
+    .replace(/^\s*(?:(?:commit )?(?:message|subject|title)\s*:\s*)/i, "")
     .replace(/^[`"']+|[`"']+$/g, "")
     .replace(/\s+/g, " ");
-  const normalized = firstLine || fallback.replace(/\s+/g, " ").trim();
-  return normalized.slice(0, 72).trimEnd();
+  const title = (generatedTitle || fallback.replace(/\s+/g, " ").trim()).slice(0, 72).trimEnd();
+  const body = lines
+    .filter((line) => !/^(?:body|summary)\s*:\s*$/i.test(line))
+    .map((line) => `- ${line.replace(/^(?:[-*•]|\d+[.)])\s*/, "").trim()}`)
+    .filter((line) => line !== "- ")
+    .join("\n");
+  return { title, body };
 }
 
 function clipTail(text: string, limit = CONTEXT_OUTPUT_LIMIT): string {
@@ -208,16 +215,17 @@ async function generateCommitMessage(
   subagentOutput: string,
   signal: AbortSignal | undefined,
 ): Promise<string> {
-  if (!ctx.model) return commitMessage("", item);
+  if (!ctx.model) return commitMessage("", item).title;
 
   try {
     const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-    if (!auth.ok || !auth.apiKey) return commitMessage("", item);
+    if (!auth.ok || !auth.apiKey) return commitMessage("", item).title;
     const diff = await pi.exec("git", ["diff", "--cached", "--no-ext-diff", "--unified=2"], { cwd: ctx.cwd, signal });
     const prompt = [
-      "Write a meaningful Git commit subject for this completed loop step.",
-      "Return only one imperative sentence of at most 72 characters: no quotes, prefix, bullet, or trailing period.",
-      "Describe the actual change, not the checklist, validation, or process.",
+      "Write a meaningful Git commit message for this completed loop step.",
+      "Return a title followed by concise bullet points summarizing the changes.",
+      "The imperative title must be at most 72 characters with no prefix, quotes, bullet, or trailing period.",
+      "The body must contain only `- ` bullet points. Describe the actual changes, not the checklist, validation, or process.",
       `Checklist item: ${item}`,
       `Implementation summary:\n${clipTail(subagentOutput)}`,
       `Staged diff:\n${clipTail(diff.stdout || "(no staged diff; this is an empty step commit)")}`,
@@ -231,9 +239,10 @@ async function generateCommitMessage(
       .filter((part): part is { type: "text"; text: string } => part.type === "text")
       .map((part) => part.text)
       .join("\n");
-    return commitMessage(summary, item);
+    const message = commitMessage(summary, item);
+    return message.body ? `${message.title}\n\n${message.body}` : message.title;
   } catch {
-    return commitMessage("", item);
+    return commitMessage("", item).title;
   }
 }
 
@@ -249,8 +258,11 @@ async function commitSuccessfulStep(
     return { ok: false, log: clipTail([staged.stdout, staged.stderr, "Unable to stage the validated loop changes."].filter(Boolean).join("\n")) };
   }
 
-  const message = await generateCommitMessage(pi, ctx, item, subagentOutput, signal);
-  const committed = await pi.exec("git", ["commit", "--allow-empty", "--no-gpg-sign", "-m", message], { cwd: ctx.cwd, signal });
+  const generated = await generateCommitMessage(pi, ctx, item, subagentOutput, signal);
+  const [title, body = ""] = generated.split("\n\n", 2);
+  const commitArgs = ["commit", "--allow-empty", "--no-gpg-sign", "-m", title];
+  if (body) commitArgs.push("-m", body);
+  const committed = await pi.exec("git", commitArgs, { cwd: ctx.cwd, signal });
   if (committed.code !== 0 || committed.killed) {
     return { ok: false, log: clipTail([committed.stdout, committed.stderr, "Unable to commit the validated loop changes."].filter(Boolean).join("\n")) };
   }
