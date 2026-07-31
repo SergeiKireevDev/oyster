@@ -7,6 +7,7 @@ const source = readFileSync(
   new URL("../public/src/components/ArtifactLoadState.svelte", import.meta.url),
   "utf8",
 );
+const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 const artifactKinds = ["image", "svg", "video", "html"];
 
@@ -27,7 +28,20 @@ test("ArtifactLoadState documents every supported artifact and resource status",
 test("ArtifactLoadState announces empty, loading, and error transitions atomically", () => {
   assert.equal((source.match(/role="status" aria-atomic="true"/g) ?? []).length, 2);
   assert.equal((source.match(/role="alert" aria-atomic="true"/g) ?? []).length, 1);
+  assert.match(source, /artifact-state-empty/);
+  assert.match(source, /artifact-state-loading[\s\S]*class="spin" aria-hidden="true"/);
+  assert.match(source, /artifact-state-error[\s\S]*artifact-state-error-mark" aria-hidden="true"/);
   assert.match(source, /onclick=\{onRetry\}>Retry<\/button>/);
+});
+
+test("ArtifactLoadState follows the shared responsive artifact-state visual contract", () => {
+  assert.match(styles, /\.artifact-state \{[\s\S]*position: absolute;[\s\S]*border: 1px solid var\(--border\);[\s\S]*background: color-mix\(in srgb, var\(--panel\)/);
+  assert.match(styles, /\.artifact-state-loading[\s\S]*var\(--accent\)/);
+  assert.match(styles, /\.artifact-state-error[\s\S]*var\(--red\)/);
+  assert.match(styles, /html\[data-theme="light"\] \.artifact-state/);
+  assert.match(styles, /@media \(max-width: 760px\) \{[\s\S]*\.artifact-state \.chip \{ min-height: 38px; \}/);
+  assert.match(styles, /\.pinned-widget-viewer-stage \{ position: relative;/);
+  assert.match(styles, /\.pinned-svg-viewer \{ position: relative;/);
 });
 
 test("ArtifactLoadState compiles without Svelte warnings", () => {
