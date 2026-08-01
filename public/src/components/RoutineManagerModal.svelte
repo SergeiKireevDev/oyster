@@ -52,7 +52,12 @@
       disabled={$routineManager.creating}
       onclick={closeModalState}
     >Cancel</button>
-    <button class="btn" type="submit" disabled={$routineManager.creating || !$routineManager.brief.trim()}>
+    <button
+      class="btn routine-submit"
+      class:building={$routineManager.creating}
+      type="submit"
+      disabled={$routineManager.creating || !$routineManager.brief.trim()}
+    >
       {#if $routineManager.creating}
         <span class="spin" aria-hidden="true"></span>
         <span role="status" aria-live="polite" aria-atomic="true">Building routine…</span>
@@ -145,6 +150,19 @@
     letter-spacing: .06em;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+
+  .routine-submit {
+    display: inline-flex;
+    min-width: 132px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .routine-submit.building:disabled {
+    opacity: .78;
+    cursor: wait;
   }
 
   @media (max-width: 760px) {

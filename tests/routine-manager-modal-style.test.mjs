@@ -20,7 +20,7 @@ test("routine manager presents a labelled and described job brief", () => {
 test("routine manager retains shared modal actions and explicit busy semantics", () => {
   assert.match(source, /class="m-actions" id="mActions"/);
   assert.match(source, /class="chip"[\s\S]*?data-modal-cancel[\s\S]*?disabled=\{\$routineManager\.creating\}/);
-  assert.match(source, /class="btn" type="submit"/);
+  assert.match(source, /class="btn routine-submit"[\s\S]*?class:building=\{\$routineManager\.creating\}[\s\S]*?type="submit"/);
   assert.match(source, /disabled=\{\$routineManager\.creating \|\| !\$routineManager\.brief\.trim\(\)\}/);
   assert.match(source, /<span class="spin" aria-hidden="true"><\/span>/);
   assert.match(source, /<span role="status" aria-live="polite" aria-atomic="true">Building routine…<\/span>/);
@@ -36,6 +36,8 @@ test("routine manager uses contained token-based responsive styling", () => {
   assert.match(style, /\.routine-brief:focus-visible/);
   assert.match(style, /\.routine-brief:disabled\s*\{[\s\S]*?cursor:\s*not-allowed;/);
   assert.match(style, /\.routine-contract\s*\{[\s\S]*?var\(--accent\)[\s\S]*?var\(--border\)[\s\S]*?var\(--panel\)/);
+  assert.match(style, /\.routine-submit\s*\{[\s\S]*?min-width:\s*132px;[\s\S]*?justify-content:\s*center;/);
+  assert.match(style, /\.routine-submit\.building:disabled\s*\{[\s\S]*?opacity:\s*\.78;[\s\S]*?cursor:\s*wait;/);
   assert.match(style, /@media \(max-width: 760px\)[\s\S]*?min-height:\s*40px;/);
   assert.match(style, /@media \(max-width: 520px\)[\s\S]*?flex:\s*1 1 132px;/);
   assert.doesNotMatch(style, /(?:color|background|border-color):\s*#[\da-f]{3,8}/i);

@@ -40,7 +40,7 @@ test("message, widget, and routine entry expose labels and native submit control
   const routine = component("RoutineManagerModal.svelte");
   assert.match(routine, /<label for="routineBrief"/);
   assert.match(routine, /id="routineBrief"[\s\S]*required/);
-  assert.match(routine, /<button class="btn" type="submit"/);
+  assert.match(routine, /<button[^>]*class="[^"]*\bbtn\b[^"]*"[^>]*type="submit"/);
 });
 
 test("search and constrained credential entry use semantic field types and native validation", () => {
