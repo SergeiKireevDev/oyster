@@ -80,14 +80,14 @@
   let modelMode = $derived($optionPicker.variant === "model");
   let query = $derived(String($optionPicker.query ?? "").trim().toLowerCase());
   let visibleOptions = $derived(filterOptions($optionPicker.options, query));
-  let searchLabel = $derived($optionPicker.placeholder || `Search ${$optionPicker.title || "options"}`);
+  let searchLabel = $derived(`Search ${$optionPicker.title || (modelMode ? "models" : "options")}`);
 </script>
 
 <svelte:document onkeydowncapture={handleKeydown} />
 
 {#if $optionPicker.searchable}
   <label class:model-autocomplete-search={modelMode} class="option-picker-search">
-    {#if modelMode}<span class="model-search-icon" aria-hidden="true">⌕</span>{/if}
+    {#if modelMode}<span class="model-search-icon" aria-hidden="true"></span>{/if}
     <input
       type="search"
       placeholder={$optionPicker.placeholder}
@@ -95,6 +95,7 @@
       role="combobox"
       aria-label={searchLabel}
       aria-controls="optionPickerResults"
+      aria-describedby={modelMode ? "modelPickerHelp" : undefined}
       aria-expanded="true"
       aria-autocomplete="list"
       autocomplete="off"
@@ -132,7 +133,7 @@
 </div>
 
 <div class="m-actions" id="mActions">
-  {#if modelMode}<span class="model-picker-help">↑↓ navigate · enter select</span>{/if}
+  {#if modelMode}<span class="model-picker-help" id="modelPickerHelp">↑/↓ Navigate · Enter Select</span>{/if}
   <button class="chip" type="button" data-modal-cancel onclick={dialogs.cancelOption}>Cancel</button>
 </div>
 
@@ -194,10 +195,24 @@
   }
 
   .model-search-icon {
+    position: relative;
+    width: 12px;
+    height: 12px;
     flex: none;
-    font-size: 18px;
-    line-height: 1;
-    transform: rotate(-15deg);
+    margin: 0 2px 2px 0;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+  }
+
+  .model-search-icon::after {
+    content: "";
+    position: absolute;
+    right: -4px;
+    bottom: -3px;
+    width: 5px;
+    border-top: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transform-origin: left center;
   }
 
   .model-autocomplete-search input {

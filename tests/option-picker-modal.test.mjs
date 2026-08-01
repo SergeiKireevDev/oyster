@@ -24,10 +24,13 @@ test("option picker keyboard handling preserves native buttons and composition",
 });
 
 test("option picker search and footer expose complete native control semantics", () => {
+  assert.match(source, /let searchLabel = \$derived\(`Search \$\{\$optionPicker\.title \|\| \(modelMode \? "models" : "options"\)\}`\)/);
   assert.match(source, /aria-label=\{searchLabel\}/);
+  assert.match(source, /aria-describedby=\{modelMode \? "modelPickerHelp" : undefined\}/);
   assert.match(source, /aria-autocomplete="list"/);
   assert.match(source, /class="model-result-count" aria-label=\{`\$\{visibleOptions\.length\} matching models`\}/);
   assert.match(source, /class="option-picker-empty" role="status" aria-atomic="true"/);
+  assert.match(source, /class="model-picker-help" id="modelPickerHelp">↑\/↓ Navigate · Enter Select<\/span>/);
   assert.match(source, /<button class="chip" type="button" data-modal-cancel/);
   assert.doesNotMatch(source, /<kbd>\{visibleOptions\.length\}<\/kbd>/);
 });
@@ -37,6 +40,8 @@ test("option picker owns its specialized styles and follows shared visual tokens
   assert.match(source, /background: var\(--panel\)/);
   assert.match(source, /color: var\(--text\)/);
   assert.match(source, /font: 10px\/1\.4 var\(--mono\)/);
+  assert.match(source, /\.model-search-icon::after \{[\s\S]*border-top: 1\.5px solid currentColor/);
+  assert.doesNotMatch(source, /⌕/);
   assert.match(source, /overscroll-behavior: contain/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*min-height: 44px/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
