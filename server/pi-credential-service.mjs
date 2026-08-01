@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, parse, resolve } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
@@ -14,9 +14,21 @@ function capabilityError(message, cause) {
   return credentialError(CAPABILITY_ERROR, message, cause);
 }
 
+function isWithin(root, candidate) {
+  const path = relative(root, candidate);
+  return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
+}
+
 function exportedEntryTarget(value) {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (typeof value === "string" && value.trim()) return value;
+  if (Array.isArray(value)) {
+    for (const candidate of value) {
+      const target = exportedEntryTarget(candidate);
+      if (target) return target;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
   for (const condition of ["import", "node", "default"]) {
     const target = exportedEntryTarget(value[condition]);
     if (target) return target;
@@ -24,20 +36,32 @@ function exportedEntryTarget(value) {
   return null;
 }
 
+function rootExport(exports) {
+  if (typeof exports === "string" || Array.isArray(exports)) return exports;
+  if (!exports || typeof exports !== "object") return null;
+  if (Object.hasOwn(exports, ".")) return exports["."];
+  // An exports object with no subpath keys is conditional sugar for ".".
+  return Object.keys(exports).some((key) => key.startsWith(".")) ? null : exports;
+}
+
 function packageEntry(packageRoot, manifest) {
-  const exported = exportedEntryTarget(manifest.exports?.["."] ?? (typeof manifest.exports === "string" ? manifest.exports : null));
+  const exported = exportedEntryTarget(rootExport(manifest.exports));
   const target = exported ?? manifest.main;
   if (typeof target !== "string" || !target.trim()) return null;
   const entry = resolve(packageRoot, target);
-  return entry === packageRoot || entry.startsWith(`${packageRoot}/`) ? entry : null;
+  return isWithin(packageRoot, entry) ? entry : null;
 }
 
 function declaredBins(packageRoot, manifest) {
-  if (typeof manifest.bin === "string") return [resolve(packageRoot, manifest.bin)];
-  if (!manifest.bin || typeof manifest.bin !== "object" || Array.isArray(manifest.bin)) return [];
-  return Object.values(manifest.bin)
-    .filter((value) => typeof value === "string")
-    .map((value) => resolve(packageRoot, value));
+  const values = typeof manifest.bin === "string"
+    ? [manifest.bin]
+    : manifest.bin && typeof manifest.bin === "object" && !Array.isArray(manifest.bin)
+      ? Object.values(manifest.bin)
+      : [];
+  return values
+    .filter((value) => typeof value === "string" && value.trim())
+    .map((value) => resolve(packageRoot, value))
+    .filter((value) => isWithin(packageRoot, value));
 }
 
 /** Resolve the SDK exported by the package that owns the configured pi executable. */
@@ -73,7 +97,11 @@ export function resolveConfiguredPiSdk(piBin) {
         if (!entry || !existsSync(entry)) {
           throw capabilityError(`configured pi package does not expose an importable SDK entry: ${manifestPath}`);
         }
-        return Object.freeze({ executable, packageRoot: directory, manifestPath, entry: realpathSync(entry) });
+        const realEntry = realpathSync(entry);
+        if (!isWithin(directory, realEntry)) {
+          throw capabilityError(`configured pi package SDK entry escapes its package root: ${manifestPath}`);
+        }
+        return Object.freeze({ executable, packageRoot: directory, manifestPath, entry: realEntry });
       }
     }
     if (directory === root) break;
@@ -106,7 +134,8 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     // reload fails. Validate the file first so Oyster still fails closed.
     if (modern && existsSync(authPath)) {
       try {
-        const value = JSON.parse(readFileSync(authPath, "utf8"));
+        const content = readFileSync(authPath, "utf8");
+        const value = content.trim() ? JSON.parse(content) : {};
         if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid credential root");
       } catch {
         throw capabilityError("configured pi auth storage could not be loaded");
@@ -118,15 +147,31 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     if (errors.length) throw capabilityError("configured pi auth storage could not be loaded");
   }
 
+  function safeProviderId(value, source) {
+    const provider = typeof value === "string" ? value.trim() : "";
+    if (!provider || provider !== value) {
+      throw capabilityError(`configured pi SDK returned invalid ${source} provider metadata`);
+    }
+    return provider;
+  }
+
   function safeCredential(provider, credential) {
-    if (credential?.type === "api_key") return Object.freeze({ provider, credentialType: "api_key" });
-    if (credential?.type === "oauth") return Object.freeze({ provider, credentialType: "oauth" });
+    const providerId = safeProviderId(provider, "credential");
+    if (credential?.type === "api_key") return Object.freeze({ provider: providerId, credentialType: "api_key" });
+    if (credential?.type === "oauth") return Object.freeze({ provider: providerId, credentialType: "oauth" });
     throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+  }
+
+  function safeRegisteredProviders(providers) {
+    if (!Array.isArray(providers)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
+    return new Set(providers.map((provider) => safeProviderId(provider?.id ?? provider, "model")));
   }
 
   function refreshRegistry(modelRegistry) {
     modelRegistry.refresh();
-    return new Set(modelRegistry.getAll().map((model) => model.provider).filter(Boolean));
+    const models = modelRegistry.getAll();
+    if (!Array.isArray(models)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
+    return new Set(models.map((model) => safeProviderId(model?.provider, "model")));
   }
 
   function safeOAuthProviders(authStorage) {
@@ -139,20 +184,24 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     }
     const providers = new Map();
     for (const item of discovered) {
-      const id = typeof item?.id === "string" ? item.id.trim() : "";
+      const id = safeProviderId(item?.id, "OAuth");
       const name = typeof item?.name === "string" ? item.name.trim() : "";
-      if (!id || !name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      if (!name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
       providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
   }
 
   function runtimeOAuthProviders(modelRuntime) {
+    const discovered = modelRuntime.getProviders();
+    if (!Array.isArray(discovered)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
     const providers = new Map();
-    for (const provider of modelRuntime.getProviders()) {
-      const id = typeof provider?.id === "string" ? provider.id.trim() : "";
-      const name = typeof provider?.auth?.oauth?.name === "string" ? provider.auth.oauth.name.trim() : "";
-      if (id && name) providers.set(id, Object.freeze({ id, name }));
+    for (const provider of discovered) {
+      const id = safeProviderId(provider?.id, "model");
+      if (provider?.auth?.oauth === undefined) continue;
+      const name = typeof provider.auth.oauth?.name === "string" ? provider.auth.oauth.name.trim() : "";
+      if (!name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
   }
@@ -192,6 +241,11 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       if (callbacks[name] !== undefined && typeof callbacks[name] !== "function") {
         throw credentialError("invalid_oauth_callbacks", `OAuth callback ${name} is invalid`);
       }
+    }
+    if (callbacks.signal !== undefined && callbacks.signal !== null
+      && (typeof callbacks.signal !== "object" || typeof callbacks.signal.aborted !== "boolean"
+        || typeof callbacks.signal.addEventListener !== "function")) {
+      throw credentialError("invalid_oauth_callbacks", "OAuth callback signal is invalid");
     }
     return Object.freeze({
       onAuth: callbacks.onAuth,
@@ -273,8 +327,19 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
   }
 
   async function credentialEntries(adapter) {
-    if (adapter.kind === "runtime") return adapter.authStorage.list();
-    return adapter.authStorage.list().map((providerId) => ({ providerId, type: adapter.authStorage.get(providerId)?.type }));
+    const listed = await adapter.authStorage.list();
+    if (!Array.isArray(listed)) throw capabilityError("configured pi auth storage returned invalid credential metadata");
+    const entries = adapter.kind === "runtime"
+      ? listed
+      : listed.map((providerId) => ({ providerId, type: adapter.authStorage.get(providerId)?.type }));
+    const seen = new Set();
+    return entries.map((entry) => {
+      const providerId = safeProviderId(entry?.providerId, "credential");
+      if (seen.has(providerId)) throw capabilityError("configured pi auth storage returned duplicate credential metadata");
+      seen.add(providerId);
+      const credential = safeCredential(providerId, { type: entry?.type });
+      return { providerId, type: credential.credentialType };
+    });
   }
 
   function storedCredential(adapter, provider) {
@@ -285,7 +350,7 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
 
   function registeredProviders(adapter) {
     return adapter.kind === "runtime"
-      ? new Set(adapter.modelRuntime.getProviders().map((provider) => provider.id))
+      ? safeRegisteredProviders(adapter.modelRuntime.getProviders())
       : refreshRegistry(adapter.modelRegistry);
   }
 
@@ -331,7 +396,10 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         const oauth = metadata.oauthProviders.get(provider);
         return Object.freeze({
           provider,
-          displayName: metadata.displayName(provider),
+          displayName: (() => {
+            const displayName = metadata.displayName(provider);
+            return typeof displayName === "string" && displayName.trim() ? displayName.trim() : provider;
+          })(),
           registered: metadata.registered.has(provider),
           oauthCapable: Boolean(oauth),
           oauthDisplayName: oauth?.name ?? null,
