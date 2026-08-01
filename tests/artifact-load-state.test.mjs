@@ -12,6 +12,10 @@ const viewer = readFileSync(
   new URL("../public/src/components/PinnedWidgetViewerModal.svelte", import.meta.url),
   "utf8",
 );
+const svgViewer = readFileSync(
+  new URL("../public/src/components/SvgArtifact.svelte", import.meta.url),
+  "utf8",
+);
 
 const artifactKinds = ["image", "svg", "video", "html"];
 
@@ -45,7 +49,7 @@ test("ArtifactLoadState follows the shared responsive artifact-state visual cont
   assert.match(styles, /html\[data-theme="light"\] \.artifact-state/);
   assert.match(styles, /@media \(max-width: 760px\) \{[\s\S]*\.artifact-state \.chip \{ min-height: 38px; \}/);
   assert.match(viewer, /\.pinned-widget-viewer-stage\s*\{[\s\S]*position: relative;/);
-  assert.match(styles, /\.pinned-svg-viewer \{ position: relative;/);
+  assert.match(svgViewer, /\.pinned-svg-viewer\s*\{[\s\S]*position: relative;/);
 });
 
 test("ArtifactLoadState compiles without Svelte warnings", () => {
