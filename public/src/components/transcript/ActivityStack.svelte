@@ -51,6 +51,7 @@
             {@const preview = thinkingPreview(block.text)}
             <details class="block thinking activity-step">
               <summary>
+                <span class="thinking-chevron" aria-hidden="true">›</span>
                 <span class="activity-indicator" aria-hidden="true"></span>
                 <span class="thinking-label">Thinking</span>
                 {#if preview}<span class="thinking-preview">{preview}</span>{/if}
@@ -68,6 +69,7 @@
   {#if latestThinking}
     <details class="block thinking activity-step current-thinking">
       <summary>
+        <span class="thinking-chevron" aria-hidden="true">›</span>
         <span class="activity-indicator" class:glowing={unsettled} aria-hidden="true"></span>
         <span class="thinking-label">Thinking</span>
         {#if latestThinkingPreview}
@@ -169,6 +171,19 @@
   }
 
   .activity-history-body details.thinking > summary { min-height: 26px; }
+
+  .thinking-chevron {
+    width: 10px;
+    flex: none;
+    color: color-mix(in srgb, var(--muted) 72%, transparent);
+    font-size: 15px;
+    line-height: 1;
+    text-align: center;
+    transition: color .15s ease, transform .15s ease;
+  }
+
+  details.thinking[open] .thinking-chevron { transform: rotate(90deg); }
+  details.thinking > summary:hover .thinking-chevron { color: var(--accent); }
 
   .thinking .activity-indicator {
     background: color-mix(in srgb, var(--accent) 58%, var(--muted));

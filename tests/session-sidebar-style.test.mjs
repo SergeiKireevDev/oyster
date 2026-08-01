@@ -10,7 +10,11 @@ const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta
 test("session sidebar owns its calm responsive presentation", () => {
   assert.match(source, /<style>[\s\S]*?#sessions \{[\s\S]*?var\(--sidebar-width\)/);
   assert.match(source, /\.session-sidebar-search:focus-visible \{[\s\S]*?var\(--accent\)/);
-  assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?var\(--selection-bg\)[\s\S]*?box-shadow: inset 2px 0 0 var\(--selection-marker\)/);
+  assert.match(source, /\.session-sidebar-workspace-container\.current-workspace \{ border-color: color-mix\(in srgb, var\(--accent\) 14%, var\(--border\)\); \}/);
+  assert.doesNotMatch(source, /\.current-workspace > \.session-sidebar-workspace-heading \{[^}]*background/);
+  assert.match(source, /\.session-sidebar-cwd\.current-cwd > summary \{ background: color-mix\(in srgb, var\(--accent\) 3%, transparent\)/);
+  assert.match(source, /\.session-sidebar-cwd\[open\] > \.session-sidebar-workspace-sessions \{ padding-top: 4px; \}/);
+  assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?var\(--accent\) 4%, var\(--panel-2\)[\s\S]*?box-shadow: inset 1px 0 0 var\(--selection-marker\)/);
   for (const token of ["selection-bg", "selection-border", "selection-marker", "selection-text"]) {
     assert.match(globalStyles, new RegExp(`--${token}:`));
   }
