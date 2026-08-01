@@ -7,6 +7,7 @@ const source = readFileSync(
   new URL("../public/src/components/OptionPickerItem.svelte", import.meta.url),
   "utf8",
 );
+const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("OptionPickerItem documents its inputs and derives display-only state", () => {
   assert.match(source, /let \{[\s\S]*text = "",[\s\S]*onActivate = noop,[\s\S]*\} = \$props\(\)/);
@@ -30,8 +31,19 @@ test("OptionPickerItem uses safe button behavior and stable event handlers", () 
 test("OptionPickerItem exposes complete model names when styled text is truncated", () => {
   assert.match(source, /class="model-autocomplete-option"[\s\S]*title=\{optionText\}/);
   assert.match(source, /aria-selected=\{selected\}/);
-  assert.match(source, /class="model-selected-mark" aria-label="Current model"/);
+  assert.match(source, /class="model-option-status">[\s\S]*class="model-selected-mark" aria-label="Current model"/);
   assert.match(source, /class="model-enter-hint" aria-hidden="true"/);
+});
+
+test("OptionPickerItem owns its model row styles and uses shared visual tokens", () => {
+  assert.match(source, /<style>[\s\S]*\.model-autocomplete-option\s*\{/);
+  assert.match(source, /grid-template-columns:\s*minmax\(72px, auto\) minmax\(0, 1fr\) minmax\(22px, auto\)/);
+  assert.match(source, /background:\s*var\(--accent-dim\)/);
+  assert.match(source, /font:\s*10px\/1\.3 var\(--mono\)/);
+  assert.match(source, /@media \(max-width:\s*760px\)[\s\S]*min-height:\s*44px/);
+  assert.match(source, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none/);
+  assert.doesNotMatch(globalStyles, /\.model-autocomplete-option\s*\{/);
+  assert.doesNotMatch(globalStyles, /\.model-(?:provider|name|selected-mark|enter-hint)\s*\{/);
 });
 
 test("OptionPickerItem compiles without Svelte warnings", () => {
