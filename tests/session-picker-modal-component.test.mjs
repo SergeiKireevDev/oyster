@@ -36,6 +36,8 @@ test("session picker owns its calm responsive modal presentation", () => {
   assert.match(source, /const searchFailed = \$derived\(\$sessionPicker\.searchStatus\.startsWith\("search failed"\)\)/);
   assert.match(source, /\.search-error \.m-path \{ color: var\(--red\); \}/);
   assert.match(source, /<style>[\s\S]*?\.search-row input\[type="search"\][\s\S]*?var\(--panel\)/);
+  assert.match(source, /<div class=\{sessionRowClass\(current, timelineStatus\)\}>\s*<div class="session-row-content">/);
+  assert.match(source, /\.session-row-content \{\s*display: flex;\s*min-width: 0;\s*align-items: center;/);
   assert.match(source, /\.session-row\.current \.s-name \{ color: var\(--selection-text\); \}/);
   assert.match(source, /\.s-del \{[\s\S]*?align-self: center;/);
   assert.match(source, /\.s-del::before,\s*\.s-del::after \{[\s\S]*?width: 11px;/);

@@ -347,22 +347,24 @@
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
   <div class={sessionRowClass(current, timelineStatus)}>
-    <button type="button" class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
-      <div class="s-title">
-        {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} role="img" aria-label={sessionDotTitle(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
-        <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
-        <span class="s-date">{sessionDateMeta(session)}</span>
-      </div>
-      {#if session.name && session.preview}
-        <div class="s-preview">{session.preview}</div>
+    <div class="session-row-content">
+      <button type="button" class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
+        <div class="s-title">
+          {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} role="img" aria-label={sessionDotTitle(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
+          <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
+          <span class="s-date">{sessionDateMeta(session)}</span>
+        </div>
+        {#if session.name && session.preview}
+          <div class="s-preview">{session.preview}</div>
+        {/if}
+      </button>
+      {#if alive}
+        <button type="button" class="s-del s-stop" title="Stop this session's process (keeps the session)" aria-label="Stop this session's process" onclick={() => stopPickedSession(session)}>■</button>
       {/if}
-    </button>
-    {#if alive}
-      <button type="button" class="s-del s-stop" title="Stop this session's process (keeps the session)" aria-label="Stop this session's process" onclick={() => stopPickedSession(session)}>■</button>
-    {/if}
-    {#if !current}
-      <button type="button" class="s-del" title="Delete session" aria-label="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
-    {/if}
+      {#if !current}
+        <button type="button" class="s-del" title="Delete session" aria-label="Delete session" onclick={() => deletePickedSession(session)}>✕</button>
+      {/if}
+    </div>
   </div>
 {/snippet}
 
@@ -520,7 +522,9 @@
     line-height: 1.42;
   }
 
-  .session-row {
+  .session-row { min-width: 0; }
+
+  .session-row-content {
     display: flex;
     min-width: 0;
     align-items: center;
