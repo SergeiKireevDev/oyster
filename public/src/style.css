@@ -265,54 +265,8 @@
     body:has(#overlay.open) #carouselIndicator,
     body:has(#cmdPalette.open) #carouselIndicator { opacity: 0; }
   }
-  #messages {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 16px 12px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
   .message-row { display: flex; width: 100%; min-width: 0; }
   .user-message-row { justify-content: flex-end; }
-  .work-duration {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 3px;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.4;
-  }
-  .work-duration .spin {
-    width: 10px;
-    height: 10px;
-    flex: none;
-    border: 1.5px solid var(--border);
-    border-top-color: var(--muted);
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
-  }
-  .compaction-status {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    width: fit-content;
-    margin-top: 5px;
-    padding: 5px 9px;
-    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1;
-  }
-  .compaction-status .spin {
-    width: 10px;
-    height: 10px;
-    border-width: 1.5px;
-    border-top-color: var(--accent);
-  }
   .msg { min-width: 0; position: relative; }
   .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .assistant-entry.empty { display: none; }
@@ -844,7 +798,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 .side-head::after { content: ""; height: 1px; flex: 1; margin-left: 10px; background: linear-gradient(90deg, var(--border), transparent); }
 
 /* Transcript: spacious conversation canvas */
-#messages { max-width: 960px; padding: 32px 40px 22px; gap: 4px; }
 .msg.user {
   max-width: min(74%, 660px);
   padding: 10px 15px;
@@ -1104,7 +1057,6 @@ button.toast.actionable:active { transform: translateY(0); }
 
 @media (max-width: 1080px) and (min-width: 761px) {
   :root { --sidebar-width: 238px; --rightbar-width: 280px; }
-  #messages { padding-inline: 24px; }
 }
 @media (max-width: 760px) {
   .chip { min-height: 30px; padding-inline: 9px; }
@@ -1127,7 +1079,6 @@ button.toast.actionable:active { transform: translateY(0); }
   #modal .browser-directory-shortcut,
   #modal .browser-directory-button { min-height: 40px; }
   #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
-  #messages { padding: 17px 16px 12px; gap: 4px; }
   .msg.user { max-width: 88%; padding: 8px 12px; }
   .msg.assistant { font-size: 13.75px; line-height: 1.52; }
   .btn { min-height: 38px; padding-inline: 14px; }

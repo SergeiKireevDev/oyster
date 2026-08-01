@@ -25,7 +25,7 @@ test("text assistant parts always own a clipboard control", () => {
 });
 
 test("transcript uses spacious turns and a single borderless activity signal", () => {
-  const transcriptGaps = [...css.matchAll(/#messages\s*\{[^}]*\bgap:\s*(\d+)px/g)].map((match) => Number(match[1]));
+  const transcriptGaps = [...transcript.matchAll(/\.transcript\s*\{[^}]*\bgap:\s*(\d+)px/g)].map((match) => Number(match[1]));
   assert.ok(transcriptGaps.length > 0);
   assert.deepEqual([...new Set(transcriptGaps)], [4]);
   assert.match(css, /\.assistant-entry \{[^}]*gap: 4px;/);

@@ -71,7 +71,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/TextPromptModal.svelte`
 - [x] `public/src/components/ToastItem.svelte`
 - [x] `public/src/components/Toasts.svelte`
-- [ ] `public/src/components/Transcript.svelte`
+- [x] `public/src/components/Transcript.svelte`
 - [ ] `public/src/components/VideoArtifact.svelte`
 
 ## Transcript components
