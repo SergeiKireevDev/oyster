@@ -62,10 +62,24 @@ test("the Markdown boundary limits its root markup and omits empty attributes", 
   assert.match(boundary, /element === "article" \? "article" : "div"/);
   assert.match(boundary, /typeof value !== "string"/);
   assert.match(boundary, /value\.trim\(\) \|\| undefined/);
-  assert.match(boundary, /rootClass = \$derived\(optionalTrimmedString\(className\)\)/);
+  assert.match(boundary, /callerClass = \$derived\(optionalTrimmedString\(className\)\)/);
+  assert.match(boundary, /callerClass \? `sanitized-markdown \$\{callerClass\}` : "sanitized-markdown"/);
   assert.match(boundary, /accessibleLabel = \$derived\(optionalTrimmedString\(label\)\)/);
   assert.match(boundary, /class=\{rootClass\} aria-label=\{accessibleLabel\}/);
   assert.doesNotMatch(boundary, /this=\{element\}|class=\{className\}|aria-label=\{label\}/);
+});
+
+test("the Markdown boundary owns a shared, tokenized content contract", () => {
+  const boundary = source("public/src/components/SanitizedMarkdown.svelte");
+  const styles = source("public/src/style.css");
+
+  assert.match(boundary, /sanitized-markdown/);
+  assert.match(styles, /\.sanitized-markdown\s*\{[^}]*min-width: 0;[^}]*max-width: 100%;[^}]*color: var\(--text\);[^}]*overflow-wrap: anywhere;/);
+  assert.match(styles, /\.sanitized-markdown > :first-child \{ margin-top: 0; \}/);
+  assert.match(styles, /\.sanitized-markdown > :last-child \{ margin-bottom: 0; \}/);
+  assert.match(styles, /\.sanitized-markdown a:hover \{ color: color-mix\(in srgb, var\(--accent\)/);
+  assert.match(styles, /\.sanitized-markdown a:focus-visible \{ outline: 2px solid var\(--accent\); outline-offset: 2px; \}/);
+  assert.match(styles, /\.sanitized-markdown pre,[\s\S]*?overflow-x: auto;[\s\S]*?overscroll-behavior-inline: contain;/);
 });
 
 test("the Markdown boundary compiles without Svelte or accessibility warnings", () => {

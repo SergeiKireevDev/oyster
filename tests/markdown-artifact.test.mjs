@@ -34,7 +34,7 @@ test("MarkdownArtifact uses the tokenized responsive reader contract", () => {
   assert.match(styles, /background: color-mix\(in srgb, var\(--panel\)/);
   assert.match(styles, /color: var\(--text\)/);
   assert.match(styles, /font: [^;]*var\(--mono\)/);
-  assert.match(styles, /\.pinned-markdown-viewer a:focus-visible/);
+  assert.match(styles, /\.sanitized-markdown a:focus-visible/);
   assert.match(styles, /@media \(max-width: 1080px\)[\s\S]*\.pinned-markdown-viewer/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.pinned-markdown-viewer/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*\.pinned-markdown-viewer/);
