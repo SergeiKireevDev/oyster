@@ -326,26 +326,7 @@
     .msg:focus-within > .permalink, .msg:focus-within > .message-copy { opacity: .85; pointer-events: auto; }
     .msg:focus-within { outline: 1px solid var(--accent-dim); outline-offset: 3px; }
   }
-  /* return arrow — shown on checkpointed messages; rolls the workdir back
-     to that checkpoint and opens a forked session there */
-  .ckpt-restore {
-    position: absolute;
-    top: 2px;
-    font-size: 12px;
-    line-height: 1.4;
-    color: var(--muted);
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1px 5px;
-    cursor: pointer;
-    user-select: none;
-    opacity: .6;
-    transition: opacity .15s;
-    z-index: 2;
-  }
-  .ckpt-restore:hover { color: var(--accent); border-color: var(--accent-dim); opacity: 1; }
-  .ckpt-restore.busy { opacity: .3; cursor: wait; }
+  /* Return controls on checkpointed user messages sit beside their other actions. */
   .msg.user > .ckpt-restore { left: -118px; }
   /* checkpointed (rollbackable) messages carry an icy accent */
   .msg.user.ckpt-frozen {
@@ -863,7 +844,7 @@ details.block.activity-step > .body {
   color: #838b9c;
 }
 details.block.activity-step { min-width: 0; max-width: 100%; }
-.permalink, .message-copy, .ckpt-restore { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.permalink, .message-copy { border-radius: 7px; background: #1b202a; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
 .assistant-part-actions > button { position: static; flex: none; }
 .msg.user > .checkpoint { left: -94px; }
 @media (hover: hover) {
@@ -1078,8 +1059,7 @@ html[data-theme="light"] details.block.activity-step > .body {
 html[data-theme="light"] details.block > summary::before { color: #788398; }
 html[data-theme="light"] .tool summary .tname { color: #4656c4; }
 html[data-theme="light"] .permalink,
-html[data-theme="light"] .message-copy,
-html[data-theme="light"] .ckpt-restore { background: #fff; box-shadow: 0 4px 12px rgba(35,43,65,.1); }
+html[data-theme="light"] .message-copy { background: #fff; box-shadow: 0 4px 12px rgba(35,43,65,.1); }
 html[data-theme="light"] .tok-com { color: #68758a; }
 html[data-theme="light"] .tok-str { color: #167052; }
 html[data-theme="light"] .tok-num { color: #a54b12; }
