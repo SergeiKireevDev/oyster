@@ -7,6 +7,7 @@ const source = readFileSync(
   new URL("../public/src/components/transcript/CopyMessageButton.svelte", import.meta.url),
   "utf8",
 );
+const globalCss = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("CopyMessageButton compiles without Svelte or accessibility warnings", () => {
   const { warnings } = compile(source, {
@@ -28,10 +29,27 @@ test("CopyMessageButton is safe inside forms and has a consistent accessible nam
   assert.match(source, /const label = "Copy this message";/);
   assert.match(source, /title=\{label\}/);
   assert.match(source, /aria-label=\{label\}/);
-  assert.match(source, /<span aria-hidden="true">⧉<\/span>/);
+  assert.match(source, /import AppIcon from "\.\.\/AppIcon\.svelte";/);
+  assert.match(source, /<AppIcon name="copy" size=\{15\} \/>/);
 });
 
 test("CopyMessageButton isolates clicks and sends the current text", () => {
   assert.match(source, /event\.stopPropagation\(\);[\s\S]*?onCopy\(text\);/);
   assert.match(source, /onclick=\{handleClick\}/);
+});
+
+test("CopyMessageButton follows the transcript action control visual contract", () => {
+  assert.match(source, /\.message-copy \{[\s\S]*?width: 28px;[\s\S]*?border: 1px solid var\(--border\);[\s\S]*?border-radius: 7px;[\s\S]*?var\(--panel-2\)[\s\S]*?color: var\(--muted\);/);
+  assert.match(source, /\.message-copy:hover \{[\s\S]*?var\(--accent\)[\s\S]*?var\(--surface-hover\)[\s\S]*?translateY\(-1px\)/);
+  assert.match(source, /\.message-copy:active \{ transform: none; \}/);
+  assert.doesNotMatch(globalCss, /(?:^|\n)\s*\.permalink, \.message-copy \{/);
+  assert.match(globalCss, /\.msg\.user > \.message-copy \{ left: -62px; \}/);
+});
+
+test("CopyMessageButton retains contextual reveal and mobile touch behavior", () => {
+  assert.match(source, /opacity: 0;[\s\S]*?pointer-events: none;/);
+  assert.match(globalCss, /\.msg:focus-within > \.permalink, \.msg:focus-within > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
+  assert.match(globalCss, /\.assistant-part:focus-within > \.assistant-part-actions > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: 38px;[\s\S]*?min-height: 38px;/);
+  assert.match(globalCss, /@media \(max-width: 760px\)[\s\S]*?\.msg\.user > \.message-copy \{ left: -72px; \}/);
 });
