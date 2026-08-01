@@ -10,7 +10,7 @@ const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta
 const scopedStyles = component.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
 
 test("hublot sidebar uses shared compact actions and semantic sections", () => {
-  assert.match(component, /<aside id="hublots" aria-label="Pinned widgets and routines">/);
+  assert.match(component, /<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines">/);
   assert.match(component, /<section class="sidebar-section" aria-labelledby="pinned-widgets-heading">/);
   assert.match(component, /<section class="sidebar-section" aria-labelledby="routines-heading">/);
   assert.match(component, /id="hublotAdd"[\s\S]*?class="chip sidebar-create-action"/);

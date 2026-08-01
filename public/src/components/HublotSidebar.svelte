@@ -12,7 +12,7 @@
   const showRoutineGenerator = () => uiActions.invoke(ROUTINE_SHOW_GENERATOR_ACTION);
 </script>
 
-<aside id="hublots" aria-label="Pinned widgets and routines">
+<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines">
   <section class="sidebar-section" aria-labelledby="pinned-widgets-heading">
     <h2 id="pinned-widgets-heading" class="side-head">Pinned Widgets</h2>
     <PinnedWidgetGrid />
@@ -48,11 +48,6 @@
 </aside>
 
 <style>
-  aside {
-    min-width: 0;
-    scrollbar-gutter: stable;
-  }
-
   .sidebar-section {
     display: flex;
     min-width: 0;
@@ -97,7 +92,7 @@
   }
 
   @media (max-width: 760px) {
-    aside {
+    #hublots {
       padding-bottom: calc(14px + env(safe-area-inset-bottom));
     }
 

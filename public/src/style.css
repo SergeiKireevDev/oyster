@@ -59,15 +59,19 @@
   /* ---------- main row: chat column + hublots sidebar ---------- */
   /* SessionSidebar's externally toggled drawer state remains a global layout contract. */
   #sessions { display: flex; }
-  #hublots {
-    width: 230px;
+  .workspace-aux-sidebar {
+    display: flex;
+    min-width: 0;
     flex-shrink: 0;
+    flex-direction: column;
+    overflow-y: auto;
     border-left: 1px solid var(--border);
     background: var(--panel);
-    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  #hublots {
+    width: 230px;
     padding: 10px;
-    display: flex;
-    flex-direction: column;
     gap: 10px;
   }
   .hublot-block {
@@ -145,14 +149,9 @@
   }
   /* ---------- checkpoint / fork tree (right sidebar, toggled by ⎇) ---------- */
   #treebar {
-    width: 270px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--border);
-    background: var(--panel);
-    overflow-y: auto;
-    padding: 10px;
     display: none;
-    flex-direction: column;
+    width: 270px;
+    padding: 10px;
     gap: 8px;
   }
   #treebar.open { display: flex; }
@@ -834,7 +833,7 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 }
 .chip:hover { color: var(--text); border-color: #424a61; background: rgba(255,255,255,.065); transform: translateY(-1px); }
 /* Three-column workspace */
-#sessions, #hublots, #treebar {
+#sessions, .workspace-aux-sidebar {
   border-color: rgba(255,255,255,.07);
   background: rgba(17, 20, 27, .76);
   backdrop-filter: blur(12px);
@@ -1150,8 +1149,7 @@ html[data-theme="light"] .chip {
 }
 html[data-theme="light"] .chip:hover { border-color: #aeb8cc; background: rgba(82,99,216,.08); }
 html[data-theme="light"] #sessions,
-html[data-theme="light"] #hublots,
-html[data-theme="light"] #treebar {
+html[data-theme="light"] .workspace-aux-sidebar {
   border-color: rgba(32,37,52,.1);
   background: rgba(255,255,255,.78);
 }
