@@ -53,7 +53,7 @@
   aria-label={`SVG viewer: ${accessibleLabel}`}
   aria-busy={loading}
 >
-  <div class="pinned-svg-toolbar">
+  <div class="pinned-media-toolbar">
     <span>SVG · vector</span>
     <button
       type="button"

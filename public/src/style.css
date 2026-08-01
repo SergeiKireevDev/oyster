@@ -2607,7 +2607,9 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .pinned-image-frame.zoomed { place-items: start; cursor: zoom-out; }
 .pinned-image-frame.zoomed img { max-width: none; max-height: none; }
 .pinned-svg-viewer { position: relative; display: flex; width: 100%; min-height: 55vh; flex-direction: column; }
-.pinned-svg-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; color: var(--muted); font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.pinned-media-toolbar { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 4px 8px; color: var(--muted); font: 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.pinned-media-toolbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinned-media-toolbar .chip { min-height: 30px; flex: none; padding: 5px 11px; font: inherit; letter-spacing: .04em; }
 .pinned-svg-stage {
   min-height: 50vh;
   flex: 1;
@@ -2829,7 +2831,9 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
   #modal.markdown-reader-modal .m-title { padding: 12px 12px 6px; }
   #modal.markdown-reader-modal .m-body { padding: 4px 6px 8px; }
   #modal.markdown-reader-modal .pinned-widget-viewer-actions { gap: 5px; padding-top: 8px; }
-  .pinned-markdown-toolbar { min-height: 34px; padding: 0 2px 6px; }
+  .pinned-markdown-toolbar,
+  .pinned-media-toolbar { min-height: 40px; padding: 0 2px 6px; }
+  .pinned-media-toolbar .chip { min-height: 38px; }
   .model-autocomplete-option { grid-template-columns: minmax(62px, 28%) minmax(0, 1fr) 18px; padding-inline: 8px; }
   .model-provider { max-width: none; }
   .model-picker-help { display: none; }
@@ -2841,6 +2845,5 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
   .pinned-monitor-output { padding: 12px; }
   .pinned-monitor-output:not(.diff-output) { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .pinned-monitor-output.diff-output { padding-inline: 0; }
-  .pinned-image-frame { min-height: calc(100dvh - 190px); }
   .pinned-markdown-viewer { min-height: 100%; padding: 26px clamp(17px, 5vw, 28px) 42px; border-inline: 0; font-size: clamp(15px, 4vw, 17px); }
 }
