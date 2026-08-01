@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "copy";
+   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "copy" | "link";
    *   size?: number;
    *   class?: string;
    * }}
@@ -49,6 +49,8 @@
     {:else if name === "copy"}
       <rect x="8" y="8" width="11" height="11" rx="2" />
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    {:else if name === "link"}
+      <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" />
     {/if}
   </svg>
 </span>
