@@ -200,6 +200,7 @@
   }
 
   .file-explorer-row > .chip {
+    display: inline-flex;
     width: 32px;
     min-width: 32px;
     min-height: 32px;
