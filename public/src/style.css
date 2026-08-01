@@ -265,8 +265,6 @@
     body:has(#overlay.open) #carouselIndicator,
     body:has(#cmdPalette.open) #carouselIndicator { opacity: 0; }
   }
-  .message-row { display: flex; width: 100%; min-width: 0; }
-  .user-message-row { justify-content: flex-end; }
   .msg { min-width: 0; position: relative; }
   /* Turn spacing crosses the UserMessage and AssistantMessage component boundaries. */
   #messages > [data-role="user"] + .assistant-entry,
@@ -279,8 +277,6 @@
   }
   .msg.user > .permalink { left: -34px; }
   .msg.user > .message-copy { left: -62px; }
-  .msg[tabindex]:focus { outline: none; }
-  .msg[tabindex]:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
   @media (hover: none) {
     .msg:hover > .permalink, .msg:hover > .message-copy { opacity: 0; pointer-events: none; }
     .msg:focus-within > .permalink, .msg:focus-within > .message-copy { opacity: .85; pointer-events: auto; }
@@ -288,20 +284,6 @@
   }
   /* Return controls on checkpointed user messages sit beside their other actions. */
   .msg.user > .ckpt-restore { left: -118px; }
-  /* checkpointed (rollbackable) messages carry an icy accent */
-  .msg.user.ckpt-frozen {
-    border: 1px solid rgba(127, 212, 255, .45);
-    box-shadow: 0 0 10px rgba(127, 212, 255, .13);
-  }
-  .msg.user {
-    align-self: flex-end;
-    max-width: 85%;
-    background: var(--user-bubble);
-    border-radius: 14px 14px 4px 14px;
-    padding: 8px 13px;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
   .msg .meta {
     font-size: 11px;
     color: var(--muted);
@@ -670,15 +652,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 .side-head::after { content: ""; height: 1px; flex: 1; margin-left: 10px; background: linear-gradient(90deg, var(--border), transparent); }
 
 /* Transcript: spacious conversation canvas */
-.msg.user {
-  max-width: min(74%, 660px);
-  padding: 10px 15px;
-  border: 1px solid rgba(172,181,255,.2);
-  border-radius: 18px 18px 5px 18px;
-  background: linear-gradient(145deg, rgba(53,63,108,.96), rgba(38,46,80,.96));
-  box-shadow: 0 10px 30px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.055);
-  line-height: 1.5;
-}
 .msg .meta { margin-top: 3px; font-size: 10px; }
 
 /* Shared Markdown rendering boundary. Context classes set reading density. */
@@ -874,7 +847,6 @@ button.toast.actionable:active { transform: translateY(0); }
   #modal .browser-directory-shortcut,
   #modal .browser-directory-button { min-height: 40px; }
   #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
-  .msg.user { max-width: 88%; padding: 8px 12px; }
   .assistant-part-actions > button {
     display: grid;
     min-width: 38px;
@@ -958,11 +930,6 @@ html[data-theme="light"] .workspace-aux-sidebar {
 }
 html[data-theme="light"] .side-head { color: var(--muted); }
 
-html[data-theme="light"] .msg.user {
-  border-color: rgba(82,99,216,.2);
-  background: linear-gradient(145deg, #e4e8ff, #d8defa);
-  box-shadow: 0 8px 26px rgba(35,43,65,.08), inset 0 1px 0 rgba(255,255,255,.75);
-}
 html[data-theme="light"] .md h1,
 html[data-theme="light"] .md h2,
 html[data-theme="light"] .md h3,
