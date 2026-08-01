@@ -171,9 +171,10 @@ test("session sidebar expands loop children as a status timeline", () => {
   assert.match(sidebar, /status-running/);
   assert.match(sidebar, /status-succeeded/);
   assert.match(sidebar, /status-failed/);
-  assert.match(styles, /@keyframes session-timeline-glow/);
-  assert.match(styles, /\.session-timeline-entry\.status-succeeded/);
-  assert.match(styles, /\.session-timeline-entry\.status-failed/);
+  assert.match(sidebar, /@keyframes session-timeline-glow/);
+  assert.match(sidebar, /\.session-timeline-entry\.status-succeeded/);
+  assert.match(sidebar, /\.session-timeline-entry\.status-failed/);
+  assert.doesNotMatch(styles, /\.session-(?:sidebar|timeline|loop)/);
 });
 
 test("session navigation omits the redundant full-picker buttons", () => {
