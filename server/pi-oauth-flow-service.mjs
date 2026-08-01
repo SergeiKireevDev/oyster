@@ -6,6 +6,13 @@ const MAX_URL_LENGTH = 16 * 1024;
 const MAX_TEXT_LENGTH = 4 * 1024;
 const MAX_RESPONSE_LENGTH = 32 * 1024;
 const MAX_OPTIONS = 32;
+const SAFE_FAILURE_CODES = new Set([
+  "credential_busy",
+  "credential_replace_required",
+  "credential_type_conflict",
+  "oauth_provider_not_found",
+  "credential_service_unavailable",
+]);
 
 function flowError(code, message) {
   const error = new Error(message);
@@ -21,12 +28,7 @@ function providerId(value) {
 }
 
 function safeFailureCode(error) {
-  return new Set([
-    "credential_busy",
-    "credential_type_conflict",
-    "oauth_provider_not_found",
-    "credential_service_unavailable",
-  ]).has(error?.code) ? error.code : "oauth_failed";
+  return SAFE_FAILURE_CODES.has(error?.code) ? error.code : "oauth_failed";
 }
 
 /**
@@ -102,7 +104,9 @@ export function createPiOAuthFlowService({
       kind: request.kind,
       message: request.message,
       ...(request.placeholder !== undefined ? { placeholder: request.placeholder } : {}),
-      ...(request.options ? { options: request.options.map((option) => Object.freeze({ ...option })) } : {}),
+      ...(request.options
+        ? { options: Object.freeze(request.options.map((option) => Object.freeze({ ...option }))) }
+        : {}),
     });
   }
 
@@ -118,7 +122,9 @@ export function createPiOAuthFlowService({
       ...(flow.authorization ? { authorization: Object.freeze({ ...flow.authorization }) } : {}),
       ...(flow.deviceCode ? { deviceCode: Object.freeze({ ...flow.deviceCode }) } : {}),
       ...(flow.progress ? { progress: flow.progress } : {}),
-      ...(flow.requests?.size ? { requests: [...flow.requests.values()].map(requestSnapshot) } : {}),
+      ...(flow.requests?.size
+        ? { requests: Object.freeze([...flow.requests.values()].map(requestSnapshot)) }
+        : {}),
       ...(flow.restart ? { restart: flow.restart } : {}),
       ...(flow.failureCode ? { failureCode: flow.failureCode } : {}),
     });
@@ -148,7 +154,17 @@ export function createPiOAuthFlowService({
 
   function scheduleInactivity(flow) {
     if (flow.activeTimer) clearTimer(flow.activeTimer);
-    flow.activeTimer = schedule(flow, () => finish(flow, "cancelled", "oauth_flow_expired", { abort: true }), inactivityMs);
+    const generation = (flow.activeTimerGeneration ?? 0) + 1;
+    flow.activeTimerGeneration = generation;
+    flow.activeTimer = schedule(flow, () => {
+      if (flow.activeTimerGeneration !== generation || flow.status !== ACTIVE_STATUS) return;
+      if (flow.credentialPersisted) {
+        flow.restart = Object.freeze({ status: "failed", runnerIds: Object.freeze([]) });
+        finish(flow, "succeeded");
+      } else {
+        finish(flow, "cancelled", "oauth_flow_expired", { abort: true });
+      }
+    }, inactivityMs);
   }
 
   function update(flow, phase) {
@@ -187,11 +203,13 @@ export function createPiOAuthFlowService({
       },
       onDeviceCode(info) {
         update(flow, "device_code");
+        const intervalSeconds = info?.intervalSeconds;
+        const expiresInSeconds = info?.expiresInSeconds;
         flow.deviceCode = {
           userCode: boundedText(info?.userCode, "device code", 1024),
           verificationUri: safeUrl(info?.verificationUri, "device verification URL"),
-          ...(Number.isFinite(info?.intervalSeconds) ? { intervalSeconds: info.intervalSeconds } : {}),
-          ...(Number.isFinite(info?.expiresInSeconds) ? { expiresInSeconds: info.expiresInSeconds } : {}),
+          ...(Number.isSafeInteger(intervalSeconds) && intervalSeconds >= 0 ? { intervalSeconds } : {}),
+          ...(Number.isSafeInteger(expiresInSeconds) && expiresInSeconds >= 0 ? { expiresInSeconds } : {}),
         };
       },
       onPrompt(prompt) {
@@ -239,8 +257,10 @@ export function createPiOAuthFlowService({
 
   function finish(flow, status, failureCode, { abort = false } = {}) {
     if (flow.status !== ACTIVE_STATUS) return false;
+    flow.activeTimerGeneration = (flow.activeTimerGeneration ?? 0) + 1;
     if (flow.activeTimer) clearTimer(flow.activeTimer);
     delete flow.activeTimer;
+    delete flow.promise;
     if (abort) flow.controller.abort();
     rejectPending(flow);
     flow.status = status;
@@ -280,10 +300,7 @@ export function createPiOAuthFlowService({
       .then(async () => {
         if (flow.status !== ACTIVE_STATUS) return;
         flow.credentialPersisted = true;
-        if (flow.activeTimer) clearTimer(flow.activeTimer);
-        delete flow.activeTimer;
-        flow.phase = "restarting";
-        flow.updatedAt = now();
+        update(flow, "restarting");
         try {
           const restart = await restartActiveRunners();
           if (flow.status !== ACTIVE_STATUS) return;
