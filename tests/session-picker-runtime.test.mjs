@@ -153,9 +153,10 @@ test("session picker presents loops as non-navigable run cards with iteration ti
   assert.match(source, /Sequential loop · \{family\.forks\.length\} \{plural\(family\.forks\.length, "iteration"\)\}/);
   assert.match(source, /loopFamilySummary\(family\)/);
   assert.match(source, /sessionRow\(fork, loopSessionStatus\(fork\)\)/);
-  assert.match(styles, /#modal \.s-loopgroup/);
-  assert.match(styles, /#modal \.s-loop-timeline::before/);
-  assert.match(styles, /#modal \.m-option\.s-loop-iteration\.status-running::before/);
+  assert.match(source, /\.s-loopgroup \{/);
+  assert.match(source, /\.s-loop-timeline::before/);
+  assert.match(source, /\.s-loop-iteration\.status-running::before/);
+  assert.doesNotMatch(styles, /#modal \.s-loopgroup/);
 });
 
 test("session sidebar expands loop children as a status timeline", () => {
