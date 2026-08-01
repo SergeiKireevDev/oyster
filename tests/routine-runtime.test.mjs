@@ -27,7 +27,9 @@ test("routine list prevents duplicate actions and exposes accessible state", () 
   }
   assert.match(source, /if \(pendingActions\[name\]\) return/);
   assert.match(source, /aria-busy=\{routinePending\(routine\)\}/);
-  assert.match(source, /role="img"\s+aria-label=\{`Status: \$\{routine\.status\}`\}/);
+  assert.match(source, /class=\{`r-status \$\{dotClass\(routine\.status\)\}`\}>\{routine\.status\}<\/span>/);
+  assert.match(source, /class=\{`r-dot \$\{dotClass\(routine\.status\)\}`} title=\{routine\.status\} aria-hidden="true"/);
+  assert.match(source, /class="r-pending" role="status" aria-atomic="true"/);
   assert.match(source, /routine\.progress === null \? " indet"/);
 });
 
@@ -37,9 +39,9 @@ test("routine manager normalizes submissions and exposes its busy state", () => 
   assert.match(source, /const brief = \$routineManager\.brief\.trim\(\)/);
   assert.match(source, /if \(\$routineManager\.creating \|\| !brief\) return/);
   assert.match(source, /uiActions\.invoke\(ROUTINE_GENERATE_ACTION, brief\)/);
-  assert.match(source, /<form aria-busy=\{\$routineManager\.creating\} onsubmit=\{submitRoutine\}>/);
+  assert.match(source, /<form class="routine-manager-form" aria-busy=\{\$routineManager\.creating\} onsubmit=\{submitRoutine\}>/);
   assert.match(source, /<textarea[\s\S]*?disabled=\{\$routineManager\.creating\}[\s\S]*?oninput=\{updateBrief\}/);
-  assert.match(source, /<span role="status" aria-atomic="true">Building routine…<\/span>/);
+  assert.match(source, /<span role="status" aria-live="polite" aria-atomic="true">Building routine…<\/span>/);
   assert.doesNotMatch(source, /onsubmit=\{\(event\) =>/);
   assert.doesNotMatch(source, /oninput=\{\(event\) =>/);
 });
