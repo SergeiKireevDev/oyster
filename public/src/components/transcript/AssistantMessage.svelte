@@ -114,3 +114,80 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .assistant-entry {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .assistant-entry.empty { display: none; }
+
+  .assistant-part {
+    align-self: stretch;
+    width: 100%;
+    max-width: 840px;
+    min-width: 0;
+    padding: 0 4px;
+    color: var(--text);
+    font-size: 14.5px;
+    line-height: 1.62;
+    overflow-wrap: anywhere;
+  }
+
+  .assistant-part:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .assistant-part.ckpt-frozen {
+    padding-inline-start: 12px;
+    border-inline-start: 3px solid color-mix(in srgb, var(--accent) 52%, transparent);
+    border-radius: 3px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      transparent 45%
+    );
+  }
+
+  .error-msg {
+    display: flex;
+    gap: 8px;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--red) 58%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--red) 7%, transparent);
+    color: var(--red);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .error-msg::before {
+    content: "!";
+    display: grid;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    place-items: center;
+    margin-top: 1px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  @media (max-width: 760px) {
+    .assistant-part {
+      font-size: 13.75px;
+      line-height: 1.52;
+    }
+  }
+</style>
