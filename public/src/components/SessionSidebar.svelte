@@ -1134,9 +1134,8 @@
   .session-sidebar-search-environment-heading { display: flex; min-width: 0; align-items: baseline; gap: 7px; padding: 3px 5px 0; }
   .session-sidebar-search-environment-heading strong { overflow: hidden; color: var(--text); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-workspace-container { display: flex; min-width: 0; flex: none; flex-direction: column; gap: 4px; padding: 5px; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-radius: 10px; }
-  .session-sidebar-workspace-container.current-workspace { border-color: var(--selection-border); box-shadow: inset 1px 0 0 var(--selection-marker); }
+  .session-sidebar-workspace-container.current-workspace { border-color: color-mix(in srgb, var(--accent) 14%, var(--border)); }
   .session-sidebar-workspace-heading { display: flex; min-width: 0; align-items: center; gap: 7px; padding: 4px 5px; border-radius: 7px; color: var(--text); }
-  .current-workspace > .session-sidebar-workspace-heading { background: var(--selection-bg); }
   .workspace-unavailable { opacity: .76; }
   .session-sidebar-hierarchy-copy { display: grid; min-width: 0; flex: 1; gap: 1px; }
   .session-sidebar-workspace-kicker { display: flex; min-width: 0; align-items: center; gap: 5px; }
@@ -1166,7 +1165,7 @@
   .session-sidebar-child-sessions > summary::-webkit-details-marker,
   .session-archive-divider::-webkit-details-marker { display: none; }
   .session-sidebar-cwd > summary:hover { background: color-mix(in srgb, var(--text) 3%, transparent); color: var(--text); }
-  .session-sidebar-cwd.current-cwd > summary { background: var(--selection-bg); color: var(--selection-text); }
+  .session-sidebar-cwd.current-cwd > summary { background: color-mix(in srgb, var(--accent) 3%, transparent); color: color-mix(in srgb, var(--accent) 18%, var(--text)); }
   .session-sidebar-cwd > summary::before { content: "›"; flex: none; font-size: 15px; line-height: .8; transition: transform .15s; }
   .session-sidebar-cwd[open] > summary::before { transform: rotate(90deg); }
   .session-sidebar-cwd-icon { width: 12px; height: 9px; flex: none; border: 1px solid currentColor; border-radius: 2px; opacity: .72; }
@@ -1177,6 +1176,7 @@
 
   .session-sidebar-workspace-sessions,
   .session-sidebar-child-list { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+  .session-sidebar-cwd[open] > .session-sidebar-workspace-sessions { padding-top: 4px; }
   .session-sidebar-child-sessions { min-width: 0; margin-left: 17px; }
   .session-sidebar-child-sessions > summary { min-height: 30px; padding: 6px 5px; color: var(--muted); font-size: 10px; cursor: pointer; list-style: none; }
   .session-sidebar-child-sessions > summary::before { content: "▸ "; }
@@ -1186,7 +1186,7 @@
 
   .session-sidebar-entry { position: relative; display: flex; min-height: 54px; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: 9px; transition: background-color .14s, border-color .14s, transform .14s; }
   .session-sidebar-entry:hover { background: color-mix(in srgb, var(--text) 4.5%, transparent); transform: translateX(2px); }
-  .session-sidebar-entry.current { border-color: var(--selection-border); background: var(--selection-bg); box-shadow: inset 2px 0 0 var(--selection-marker); }
+  .session-sidebar-entry.current { border-color: color-mix(in srgb, var(--accent) 14%, var(--border)); background: color-mix(in srgb, var(--accent) 4%, var(--panel-2)); box-shadow: inset 1px 0 0 var(--selection-marker); }
   .session-sidebar-row { display: flex; min-width: 0; min-height: 54px; flex: 1; align-items: center; gap: 8px; padding: 7px 7px 7px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .session-sidebar-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
   .session-sidebar-name,

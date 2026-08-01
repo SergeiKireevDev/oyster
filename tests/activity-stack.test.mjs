@@ -34,6 +34,8 @@ test("ActivityStack exposes current and expandable states without relying on col
   assert.match(source, /role="group" aria-label="Assistant activity"/);
   assert.match(source, /const historyToggleLabel = \$derived/);
   assert.match(source, /<summary title=\{historyToggleLabel\}>/);
+  assert.equal(source.match(/class="thinking-chevron" aria-hidden="true">›<\/span>/g)?.length, 2);
+  assert.match(source, /details\.thinking\[open\] \.thinking-chevron \{ transform: rotate\(90deg\); \}/);
   assert.match(source, /\{#if unsettled\}<span class="activity-current-status">Active<\/span>\{\/if\}/);
   assert.match(source, /\.activity-history-failed,[\s\S]*?border: 1px solid currentColor;/);
 });
