@@ -29,8 +29,11 @@ function exportedEntryTarget(value) {
     return null;
   }
   if (!value || typeof value !== "object") return null;
-  for (const condition of ["import", "node", "default"]) {
-    const target = exportedEntryTarget(value[condition]);
+  // Node resolves conditional exports in declaration order. `node`,
+  // `node-addons`, and `import` are active; `default` is the fallback.
+  for (const [condition, candidate] of Object.entries(value)) {
+    if (condition !== "import" && condition !== "node" && condition !== "node-addons" && condition !== "default") continue;
+    const target = exportedEntryTarget(candidate);
     if (target) return target;
   }
   return null;
@@ -141,10 +144,17 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         throw capabilityError("configured pi auth storage could not be loaded");
       }
     }
-    authStorage.drainErrors?.();
-    authStorage.reload();
-    const errors = authStorage.drainErrors?.() ?? [];
-    if (errors.length) throw capabilityError("configured pi auth storage could not be loaded");
+    try {
+      authStorage.drainErrors?.();
+      authStorage.reload();
+      const errors = authStorage.drainErrors?.() ?? [];
+      if (!Array.isArray(errors) || errors.length) {
+        throw capabilityError("configured pi auth storage could not be loaded");
+      }
+    } catch (cause) {
+      if (cause?.code === CAPABILITY_ERROR) throw cause;
+      throw capabilityError("configured pi auth storage could not be loaded", cause);
+    }
   }
 
   function safeProviderId(value, source) {
@@ -186,7 +196,7 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     for (const item of discovered) {
       const id = safeProviderId(item?.id, "OAuth");
       const name = typeof item?.name === "string" ? item.name.trim() : "";
-      if (!name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      if (!name || providers.has(id)) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
       providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
@@ -200,7 +210,7 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       const id = safeProviderId(provider?.id, "model");
       if (provider?.auth?.oauth === undefined) continue;
       const name = typeof provider.auth.oauth?.name === "string" ? provider.auth.oauth.name.trim() : "";
-      if (!name) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      if (!name || providers.has(id)) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
       providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
@@ -300,9 +310,15 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
             return Object.freeze({ kind: "legacy", authStorage, modelRegistry, authPath, modelsPath, sdkEntry: location.entry });
           }
           if (typeof sdk?.ModelRuntime?.create === "function" && typeof sdk?.readStoredCredential === "function") {
-            const authEntry = resolve(dirname(location.entry), "core", "auth-storage.js");
-            if (!authEntry.startsWith(`${location.packageRoot}/`) || !existsSync(authEntry)) {
-              throw capabilityError(`configured pi SDK does not expose its credential store: ${location.entry}`);
+            const unresolvedAuthEntry = resolve(dirname(location.entry), "core", "auth-storage.js");
+            let authEntry;
+            try {
+              authEntry = realpathSync(unresolvedAuthEntry);
+            } catch (cause) {
+              throw capabilityError(`configured pi SDK does not expose its credential store: ${location.entry}`, cause);
+            }
+            if (!isWithin(location.packageRoot, authEntry)) {
+              throw capabilityError(`configured pi SDK credential store escapes its package root: ${unresolvedAuthEntry}`);
             }
             const authSdk = await importSdk(pathToFileURL(authEntry).href);
             if (typeof authSdk?.AuthStorage?.create !== "function") {
@@ -319,7 +335,16 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         }
       })();
     }
-    return adapterPromise;
+    const pending = adapterPromise;
+    try {
+      return await pending;
+    } catch (error) {
+      // Import and initialization failures can be transient (for example,
+      // during an atomic package replacement). Keep concurrent callers on the
+      // same attempt, but allow a later request to retry.
+      if (adapterPromise === pending) adapterPromise = undefined;
+      throw error;
+    }
   }
 
   async function prepare(adapter) {

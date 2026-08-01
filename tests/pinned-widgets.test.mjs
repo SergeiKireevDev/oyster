@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -12,6 +12,8 @@ import {
   ensurePinnedHublot,
   formatMonitoringPreview,
   listPinnedWidgets,
+  materializeMonitoringScripts,
+  runMonitoringScript,
 } from "../server/pinned-widgets.mjs";
 
 function fixture(t, routeOptions = {}) {
@@ -88,6 +90,15 @@ test("live interfaces receive one durable widget and preserve closed state", (t)
   appStore.repositories.hublots.update(hublot.id, { status: "closed", desired_state: "closed", public_url: null });
   const listed = listPinnedWidgets(state, { resolveSafePath: (path) => path, listTunnels: () => [] });
   assert.equal(listed.widgets.find((widget) => widget.id === first.id).availability, "closed");
+
+  const owner = appStore.repositories.sessions.upsert({
+    backend: "sqlite", sessionId: "session-a", storagePath: "/tmp/agent.sqlite", createdAt: "created",
+  });
+  appStore.repositories.hublots.update(hublot.id, { owner_id: owner.id });
+  const moved = ensurePinnedHublot(state, appStore.repositories.hublots.find(hublot.id));
+  assert.equal(moved.scope, "session");
+  assert.equal(moved.owner_id, owner.id);
+  assert.equal(moved.position, 0);
 });
 
 test("widget routes classify files, render Markdown natively, group, move, and unpin", async (t) => {
@@ -210,6 +221,38 @@ test("monitoring previews are capped at twenty visible characters without splitt
   assert.equal(formatMonitoringPreview("a\r\nb"), "a\nb");
 });
 
+test("monitoring script materialization confines widget ids and rejects unknown execution modes", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-monitor-materialization-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.throws(() => materializeMonitoringScripts({
+    id: "../escape",
+    previewScript: "#!/bin/sh\ntrue",
+    contentScript: "#!/bin/sh\ntrue",
+    cwd: root,
+    root,
+  }), /invalid monitoring widget id/);
+  assert.equal(readdirSync(root).length, 0);
+  await assert.rejects(
+    runMonitoringScript({ kind: "monitoring" }, "invalid", { resolveSafePath: (path) => path }),
+    /monitoring mode must be preview or content/,
+  );
+});
+
+test("failed monitoring widget creation removes newly materialized scripts", async (t) => {
+  const { root, routes } = fixture(t);
+  const monitorRoot = join(root, ".oyster", "monitoring-widgets");
+  const created = response();
+  await routes["POST /pinned-widgets"](request({
+    label: "   ",
+    previewScript: "#!/bin/sh\ntrue",
+    contentScript: "#!/bin/sh\ntrue",
+    cwd: root,
+    sessionId: "session-a",
+  }), created);
+  assert.equal(created.status, 400);
+  assert.deepEqual(readdirSync(monitorRoot), []);
+});
+
 test("monitoring widgets persist scripts and execute preview and viewer content on demand", async (t) => {
   const { root, routes } = fixture(t);
   writeFileSync(join(root, "tracked.txt"), "ready\n");
@@ -237,6 +280,26 @@ test("monitoring widgets persist scripts and execute preview and viewer content 
   await routes["GET /pinned-widget-monitor-content"]({}, content, new URL(`http://localhost/pinned-widget-monitor-content?id=${created.body.widget.id}`));
   assert.equal(content.body.content, "status: ready");
   assert.equal(content.body.format, "text");
+});
+
+test("widget creation rejects malformed scopes and credential-bearing links", async (t) => {
+  const { root, routes } = fixture(t);
+  const path = join(root, "notes.md");
+  writeFileSync(path, "# Notes");
+
+  const missingSession = response();
+  await routes["POST /pinned-widgets"](request({ path, scope: "session" }), missingSession);
+  assert.equal(missingSession.status, 400);
+  assert.match(missingSession.body.error, /sessionId is required/);
+
+  const invalidScope = response();
+  await routes["POST /pinned-widgets"](request({ path, scope: "global" }), invalidScope);
+  assert.equal(invalidScope.status, 400);
+
+  const credentialLink = response();
+  await routes["POST /pinned-widgets"](request({ url: "https://user:secret@example.com/report" }), credentialLink);
+  assert.equal(credentialLink.status, 400);
+  assert.match(credentialLink.body.error, /cannot contain credentials/);
 });
 
 test("standalone HTML of any size is streamed as a sandboxed pinned preview artifact", async (t) => {

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
-import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -40,9 +40,22 @@ export function classifyPinnedPath(path, stat = statSync(path)) {
 }
 
 function scopeIdentity(body, ensureSessionOwner) {
-  const requestedScope = body?.scope === "workspace" ? "workspace" : "session";
-  const sessionId = body?.sessionId ? String(body.sessionId).slice(0, 100) : null;
-  if (requestedScope === "workspace" || !sessionId) return { scope: "workspace", ownerId: null, sessionId: null };
+  const rawScope = body?.scope;
+  if (rawScope !== undefined && rawScope !== "session" && rawScope !== "workspace") {
+    throw Object.assign(new Error("pinned widget scope must be session or workspace"), { statusCode: 400 });
+  }
+  const requestedScope = rawScope ?? "session";
+  if (requestedScope === "workspace") return { scope: "workspace", ownerId: null, sessionId: null };
+
+  const sessionId = body?.sessionId == null ? "" : String(body.sessionId).trim();
+  if (!sessionId) {
+    if (rawScope === "session") {
+      throw Object.assign(new Error("sessionId is required for session-scoped pinned widgets"), { statusCode: 400 });
+    }
+    // Preserve the legacy default for callers that omit both scope and sessionId.
+    return { scope: "workspace", ownerId: null, sessionId: null };
+  }
+  if (sessionId.length > 100) throw Object.assign(new Error("sessionId is too long"), { statusCode: 400 });
   const owner = ensureSessionOwner(sessionId);
   if (!owner) throw Object.assign(new Error("unknown session for pinned widget"), { statusCode: 404 });
   return { scope: "session", ownerId: owner.id, sessionId };
@@ -145,11 +158,17 @@ export function ensurePinnedHublot(state, hublot) {
   const now = new Date().toISOString();
   if (existing) {
     if (existing.owner_id !== (hublot.owner_id ?? null) || existing.scope !== scope) {
-      repository.update(existing.id, {
-        owner_id: hublot.owner_id ?? null,
-        scope,
-        group_id: null,
-        updated_at: now,
+      const oldIdentity = { ownerId: existing.owner_id, scope: existing.scope };
+      const nextIdentity = { ownerId: hublot.owner_id ?? null, scope };
+      state.appStore.transaction(() => {
+        repository.update(existing.id, {
+          owner_id: nextIdentity.ownerId,
+          scope: nextIdentity.scope,
+          group_id: null,
+          position: repository.nextPosition({ ...nextIdentity, groupId: null }),
+          updated_at: now,
+        });
+        normalizeContainer(repository, oldIdentity, existing.group_id ?? null);
       });
     }
     return repository.find(existing.id);
@@ -228,7 +247,12 @@ function reorderWidget(state, row, { groupId, beforeId, identity = null }, now) 
 }
 
 function sendError(json, res, error) {
-  json(res, Number(error.statusCode) || (/constraint/i.test(error.message) ? 409 : 400), { error: error.message });
+  const explicitStatus = Number(error?.statusCode);
+  const constraintViolation = /constraint/i.test(String(error?.message ?? ""));
+  const status = Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus <= 599
+    ? explicitStatus
+    : constraintViolation ? 409 : 500;
+  json(res, status, { error: status === 500 ? "internal server error" : String(error?.message || "request failed") });
 }
 
 function parseRange(header, size) {
@@ -252,13 +276,24 @@ function parseRange(header, size) {
   return { start, end: Math.min(end, size - 1) };
 }
 
+function statArtifact(target, unavailableMessage) {
+  try {
+    const stat = statSync(target);
+    if (!stat.isFile()) throw Object.assign(new Error(unavailableMessage), { statusCode: 404 });
+    return stat;
+  } catch (error) {
+    if (error?.statusCode) throw error;
+    throw Object.assign(new Error(unavailableMessage), { statusCode: 404, cause: error });
+  }
+}
+
 function mediaTarget(state, widgetId, resolveSafePath) {
   const row = state.appStore.repositories.pinnedWidgets.find(widgetId);
   if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
   if (!INLINE_KINDS.has(row.kind)) throw Object.assign(new Error("widget is not safe inline media"), { statusCode: 415 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!target) throw Object.assign(new Error("pinned media is unavailable"), { statusCode: 404 });
-  const stat = statSync(target);
+  const stat = statArtifact(target, "pinned media is unavailable");
   const classification = classifyPinnedPath(target, stat);
   if (classification.kind !== row.kind || classification.mimeType !== row.mime_type) {
     throw Object.assign(new Error("pinned media type changed; re-pin it before display"), { statusCode: 415 });
@@ -273,7 +308,7 @@ function htmlTarget(state, widgetId, resolveSafePath) {
   if (!isHtml) throw Object.assign(new Error("widget is not an HTML artifact"), { statusCode: 415 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!target) throw Object.assign(new Error("pinned HTML artifact is unavailable"), { statusCode: 404 });
-  const stat = statSync(target);
+  const stat = statArtifact(target, "pinned HTML artifact is unavailable");
   const classification = classifyPinnedPath(target, stat);
   if (classification.kind !== "file" || !String(classification.mimeType ?? "").startsWith("text/html")) {
     throw Object.assign(new Error("pinned HTML type changed; re-pin it before display"), { statusCode: 415 });
@@ -282,19 +317,28 @@ function htmlTarget(state, widgetId, resolveSafePath) {
 }
 
 export function materializeMonitoringScripts({ id: widgetId, previewScript, contentScript, cwd, root = join(homedir(), ".oyster", "monitoring-widgets") }) {
+  if (!/^[A-Za-z0-9_-]+$/.test(String(widgetId ?? ""))) {
+    throw Object.assign(new Error("invalid monitoring widget id"), { statusCode: 400 });
+  }
   for (const [name, script] of [["preview", previewScript], ["content", contentScript]]) {
     if (typeof script !== "string" || !script.startsWith("#!")) throw Object.assign(new Error(`${name} script must start with a shebang`), { statusCode: 400 });
     if (Buffer.byteLength(script) > 256 * 1024) throw Object.assign(new Error(`${name} script is too large`), { statusCode: 413 });
   }
   const target = join(root, widgetId);
-  mkdirSync(target, { recursive: true, mode: 0o700 });
-  for (const [name, script] of [["preview.sh", previewScript], ["content.sh", contentScript]]) {
-    const path = join(target, name);
-    writeFileSync(path, script.endsWith("\n") ? script : `${script}\n`, { mode: 0o700 });
-    chmodSync(path, 0o700);
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  mkdirSync(target, { mode: 0o700 });
+  try {
+    for (const [name, script] of [["preview.sh", previewScript], ["content.sh", contentScript]]) {
+      const path = join(target, name);
+      writeFileSync(path, script.endsWith("\n") ? script : `${script}\n`, { mode: 0o700, flag: "wx" });
+      chmodSync(path, 0o700);
+    }
+    writeFileSync(join(target, "cwd"), `${cwd}\n`, { mode: 0o600, flag: "wx" });
+    return target;
+  } catch (error) {
+    rmSync(target, { recursive: true, force: true });
+    throw error;
   }
-  writeFileSync(join(target, "cwd"), `${cwd}\n`, { mode: 0o600 });
-  return target;
 }
 
 export function formatMonitoringPreview(value, limit = MONITOR_PREVIEW_CHARACTERS) {
@@ -306,6 +350,7 @@ export function formatMonitoringPreview(value, limit = MONITOR_PREVIEW_CHARACTER
 
 export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
   if (row?.kind !== "monitoring") throw Object.assign(new Error("widget is not a monitoring widget"), { statusCode: 415 });
+  if (mode !== "preview" && mode !== "content") throw Object.assign(new Error("monitoring mode must be preview or content"), { statusCode: 400 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!target) throw Object.assign(new Error("monitoring scripts are unavailable"), { statusCode: 404 });
   const script = join(target, mode === "content" ? "content.sh" : "preview.sh");
@@ -337,9 +382,16 @@ export async function preparePinnedVideo(state, media, {
   const fingerprint = createHash("sha256")
     .update(`${media.target}\0${media.stat.size}\0${Math.trunc(media.stat.mtimeMs)}`)
     .digest("hex");
-  mkdirSync(cacheRoot, { recursive: true });
+  mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   const target = join(cacheRoot, `${fingerprint}.mp4`);
-  const cached = () => existsSync(target) && statSync(target).size > 0;
+  const cached = () => {
+    try {
+      const stat = lstatSync(target);
+      return stat.isFile() && stat.size > 0;
+    } catch {
+      return false;
+    }
+  };
   if (!cached()) {
     const pending = state.pinnedWidgetTranscodes?.get(fingerprint);
     if (pending) await pending;
@@ -405,6 +457,8 @@ export function createPinnedWidgetRoutes({
     "POST /pinned-widgets": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
+      let materializedTarget = null;
+      let widgetCreated = false;
       try {
         const identity = scopeIdentity(body, ensureSessionOwner);
         let kind;
@@ -427,11 +481,19 @@ export function createPinnedWidgetRoutes({
             cwd,
             root: monitorRoot,
           });
+          materializedTarget = target;
           fallbackLabel = "Monitor";
         } else if (body.path) {
           target = resolveSafePath(resolve(String(body.path)));
           if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
-          const stat = statSync(target);
+          let stat;
+          try { stat = statSync(target); }
+          catch (error) {
+            throw Object.assign(new Error("pinned path is unavailable"), { statusCode: 404, cause: error });
+          }
+          if (!stat.isDirectory() && !stat.isFile()) {
+            throw Object.assign(new Error("pinned path must be a regular file or directory"), { statusCode: 415 });
+          }
           ({ kind, mimeType } = classifyPinnedPath(target, stat));
           size = stat.size;
           mtimeMs = Math.trunc(stat.mtimeMs);
@@ -443,8 +505,12 @@ export function createPinnedWidgetRoutes({
           json(res, 200, { widget: pinnedWidgetDto(state, pinned, { resolveSafePath, activeTunnels: listTunnels(state) }), ...currentCollection(body) });
           return;
         } else if (body.url) {
-          const url = new URL(String(body.url));
+          let url;
+          try { url = new URL(String(body.url)); }
+          catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
           if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
+          if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
+          if (url.href.length > 8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
           kind = "link";
           target = url.href;
           fallbackLabel = url.hostname;
@@ -465,10 +531,14 @@ export function createPinnedWidgetRoutes({
           position: repository.nextPosition({ ...identity, groupId }), target, mimeType,
           size, mtimeMs, createdAt: now,
         });
+        widgetCreated = true;
         const dto = pinnedWidgetDto(state, widget, { resolveSafePath, activeTunnels: listTunnels(state) });
         emit("pinned_widget_created", { widget: dto });
         json(res, 201, { widget: dto, ...currentCollection(body) });
-      } catch (error) { sendError(json, res, error); }
+      } catch (error) {
+        if (materializedTarget && !widgetCreated) rmSync(materializedTarget, { recursive: true, force: true });
+        sendError(json, res, error);
+      }
     },
 
     "PATCH /pinned-widgets": async (req, res) => {
@@ -609,7 +679,11 @@ export function createPinnedWidgetRoutes({
         if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a readable text artifact"), { statusCode: 415 });
         const target = row.target ? resolveSafePath(resolve(row.target)) : null;
         if (!target) throw Object.assign(new Error("pinned text artifact is unavailable"), { statusCode: 404 });
-        const stat = statSync(target);
+        const stat = statArtifact(target, "pinned text artifact is unavailable");
+        const classification = classifyPinnedPath(target, stat);
+        if (classification.kind !== "markdown" || classification.mimeType !== row.mime_type) {
+          throw Object.assign(new Error("pinned text type changed; re-pin it before display"), { statusCode: 415 });
+        }
         if (stat.size > 5 * 1024 * 1024) throw Object.assign(new Error("text artifact is too large to display"), { statusCode: 413 });
         json(res, 200, { id: row.id, path: target, content: readFileSync(target, "utf8") });
       } catch (error) { sendError(json, res, error); }
@@ -644,7 +718,11 @@ export function createPinnedWidgetRoutes({
           "cache-control": "private, no-cache", "x-content-type-options": "nosniff",
         });
         res.end();
-      } catch (error) { res.writeHead(Number(error.statusCode) || 404); res.end(); }
+      } catch (error) {
+        const status = Number(error?.statusCode);
+        res.writeHead(Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500);
+        res.end();
+      }
     },
 
     "GET /pinned-widget-media": async (req, res, url) => {
