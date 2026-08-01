@@ -854,21 +854,6 @@
     gap: 10px;
     margin-bottom: 4px;
   }
-  #hublotAdd, #routineAdd {
-    border: 2px dashed var(--border);
-    border-radius: 10px;
-    height: 90px;
-    flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 38px;
-    color: var(--muted);
-    background: transparent;
-    font-family: inherit;
-    cursor: pointer;
-    user-select: none;
-  }
-  #hublotAdd:hover, #routineAdd:hover { color: var(--accent); border-color: var(--accent-dim); }
-
   /* ---------- checkpoint / fork tree (right sidebar, toggled by ⎇) ---------- */
   #treebar {
     width: 270px;
@@ -902,8 +887,6 @@
     flex-shrink: 0;
     user-select: none;
   }
-  .side-head + .side-head, #routineList + .side-head { margin-top: 4px; }
-  .side-head.routines { border-top: 1px solid var(--border); padding-top: 10px; }
   .sidebar-loading {
     display: flex; align-items: center; gap: 7px;
     padding: 8px 2px;
@@ -1884,7 +1867,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
   letter-spacing: .16em;
 }
 .side-head::after { content: ""; height: 1px; flex: 1; margin-left: 10px; background: linear-gradient(90deg, var(--border), transparent); }
-.side-head.routines { padding-top: 14px; border-top: 0; }
 .session-sidebar-search {
   height: 36px;
   padding: 8px 11px 8px 33px;
@@ -2183,8 +2165,6 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
 .hublot-block .preview { height: 122px; }
 .hublot-block .preview.builtin { background: linear-gradient(145deg, #1b202a, #131720); font-size: 36px; }
 .hublot-block .cap { min-height: 34px; padding: 7px 9px; border-top-color: rgba(255,255,255,.06); font-size: 11px; }
-#hublotAdd, #routineAdd { height: 74px; border-width: 1px; border-color: #343b4b; border-radius: 12px; background: rgba(255,255,255,.018); font-size: 28px; transition: background .15s, border-color .15s; }
-#hublotAdd:hover, #routineAdd:hover { background: rgba(157,169,255,.06); border-color: rgba(157,169,255,.5); }
 .routine-block { padding: 10px; border-color: rgba(255,255,255,.075); border-radius: 11px; background: rgba(255,255,255,.03); }
 .r-btn { border-color: rgba(255,255,255,.09); background: rgba(255,255,255,.035); }
 
@@ -2366,8 +2346,6 @@ html[data-theme="light"] .hublot-block,
 html[data-theme="light"] .routine-block { border-color: var(--border); background: rgba(255,255,255,.68); box-shadow: 0 8px 24px rgba(35,43,65,.08); }
 html[data-theme="light"] .hublot-block .preview.builtin { background: linear-gradient(145deg, #eef1f7, #e3e8f0); }
 html[data-theme="light"] .hublot-block .cap { border-top-color: var(--border); }
-html[data-theme="light"] #hublotAdd,
-html[data-theme="light"] #routineAdd { border-color: #c5ccda; background: rgba(255,255,255,.45); }
 html[data-theme="light"] .r-btn { border-color: var(--border); background: rgba(255,255,255,.65); }
 
 html[data-theme="light"] #overlay { background: rgba(35,43,65,.4); }
@@ -2567,24 +2545,6 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
 .pinned-widget-back:hover,
 .pinned-widget-folder-title:hover { background: rgba(157,169,255,.08); }
 .pinned-widget-empty { padding: 12px 5px; color: var(--muted); font-size: 10px; line-height: 1.4; text-align: center; }
-.pinned-widget-add-actions { display: grid; grid-template-columns: 1fr; gap: 5px; }
-.pinned-widget-add-actions #hublotAdd,
-.pinned-widget-add-actions > button {
-  width: auto;
-  height: 34px;
-  min-height: 34px;
-  padding: 0 9px;
-  border: 1px dashed #343b4b;
-  border-radius: 9px;
-  background: rgba(255,255,255,.018);
-  color: var(--muted);
-  font: inherit;
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-}
-.pinned-widget-add-actions #hublotAdd { font-size: 10px; font-weight: 600; }
-.pinned-widget-add-actions > button:hover { border-color: var(--accent-dim); color: var(--accent); }
 .live-interface-preview { width: 100%; border: 0; flex-direction: column; gap: 4px; color: var(--text); cursor: pointer; }
 .live-interface-preview > span:first-child { color: var(--green); font-size: 28px; }
 .live-interface-preview > span:last-child { color: var(--muted); font-size: 10px; }

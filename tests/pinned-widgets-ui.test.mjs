@@ -53,15 +53,15 @@ test("right rail groups its controls under semantic section headings", () => {
   assert.match(sidebar, /<section class="sidebar-section" aria-labelledby="pinned-widgets-heading">/);
   assert.match(sidebar, /<h2 id="pinned-widgets-heading" class="side-head">Pinned Widgets<\/h2>/);
   assert.match(sidebar, /<section class="sidebar-section" aria-labelledby="routines-heading">/);
-  assert.match(sidebar, /<h2 id="routines-heading" class="side-head routines">Routines<\/h2>/);
-  assert.match(sidebar, /id="routineAdd"[\s\S]*?aria-label="Build a new routine"[\s\S]*?<span aria-hidden="true">\+<\/span>/);
+  assert.match(sidebar, /<h2 id="routines-heading" class="side-head">Routines<\/h2>/);
+  assert.match(sidebar, /id="routineAdd"[\s\S]*?aria-label="Build a new routine"[\s\S]*?<span class="sidebar-create-icon" aria-hidden="true">\+<\/span>/);
   assert.match(sidebar, /<style>[\s\S]*?\.sidebar-section\s*\{[\s\S]*?flex-direction: column;/);
 });
 
 test("pinned widget rail keeps creation compact and nests group destinations under Move to", async () => {
   const sidebar = component("HublotSidebar.svelte");
   assert.doesNotMatch(sidebar, />Group<|>Link</);
-  assert.match(sidebar, /id="hublotAdd"[^>]*>[\s\S]*?Add custom from prompt<\/button>/);
+  assert.match(sidebar, /id="hublotAdd"[^>]*class="chip sidebar-create-action"[^>]*>[\s\S]*?Add custom from prompt[\s\S]*?<\/button>/);
 
   const prompts = [];
   const requests = [];
