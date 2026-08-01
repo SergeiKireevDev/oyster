@@ -56,7 +56,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/Menu.svelte`
 - [x] `public/src/components/OptionPickerItem.svelte`
 - [x] `public/src/components/OptionPickerModal.svelte`
-- [ ] `public/src/components/Overlays.svelte`
+- [x] `public/src/components/Overlays.svelte`
 - [ ] `public/src/components/PinnedWidgetGrid.svelte`
 - [ ] `public/src/components/PinnedWidgetViewerModal.svelte`
 - [ ] `public/src/components/RoutineList.svelte`
