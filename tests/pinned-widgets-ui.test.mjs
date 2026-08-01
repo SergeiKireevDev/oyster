@@ -9,7 +9,7 @@ const component = (name) => readFileSync(new URL(`../public/src/components/${nam
 test("right rail is a compact grouped Pinned Widgets launcher", () => {
   const sidebar = component("HublotSidebar.svelte");
   const grid = component("PinnedWidgetGrid.svelte");
-  const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+  const styles = grid;
   assert.match(sidebar, />Pinned Widgets</);
   assert.match(sidebar, /<PinnedWidgetGrid/);
   assert.match(grid, /pinnedWidgetActiveGroup/);
