@@ -41,9 +41,10 @@ test("file picker owns its footer actions", () => {
 test("file explorer owns browse and edit footer actions", () => {
   const component = read("FileExplorerModal.svelte");
   const overlays = read("Overlays.svelte");
-  for (const action of ["saveFileExplorer", "browserActions.fileDownload", "uploadFileExplorer", "backFileExplorer", "backFileExplorerToHublots", "closeModalState"]) {
+  for (const action of ["saveFileExplorer", "browserActions.fileDownload", "uploadFileExplorer", "backFileExplorer", "closeModalState"]) {
     assert.match(component, new RegExp(action));
   }
+  assert.doesNotMatch(component, /Pin folder|← Widgets|backFileExplorerToHublots/);
   assert.doesNotMatch(overlays, /saveFileExplorer|uploadFileExplorer|backFileExplorer|\$fileExplorer/);
 });
 

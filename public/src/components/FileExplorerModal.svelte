@@ -1,4 +1,5 @@
 <script>
+  import AppIcon from "./AppIcon.svelte";
   import BrowserDirectoryList from "./BrowserDirectoryList.svelte";
   import BrowserFileEntry from "./BrowserFileEntry.svelte";
   import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
@@ -16,7 +17,6 @@
     FILE_EXPLORER_BROWSE_ACTION,
     FILE_EXPLORER_EDIT_ACTION,
     FILE_EXPLORER_PIN_ACTION,
-    FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
     FILE_EXPLORER_SAVE_ACTION,
     FILE_EXPLORER_UPLOAD_ACTION,
   } from "../runtime/uiActionNames.js";
@@ -29,7 +29,6 @@
   const uploadFileExplorer = () => uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
   const pinExploredPath = (path) => uiActions.invoke(FILE_EXPLORER_PIN_ACTION, path);
   const backFileExplorer = () => uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
-  const backFileExplorerToHublots = () => uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
 
   function toggleHiddenFiles() {
     updateFileExplorer({ showHidden: !$fileExplorer.showHidden });
@@ -140,7 +139,7 @@
             download={download.filename}
             title={`download ${file.name}`}
             aria-label={`Download ${file.name}`}
-          ><span aria-hidden="true">↓</span></a>
+          ><AppIcon name="download" size={15} /></a>
           <button type="button" class="chip" title={`pin ${file.name}`} aria-label={`Pin ${file.name}`} onclick={() => pinExploredPath(fullPath)}><span aria-hidden="true">⌖</span></button>
           <button type="button" class="chip" title={`edit ${file.name}`} aria-label={`Edit ${file.name}`} onclick={() => editExploredFile(fullPath)}><span aria-hidden="true">✎</span></button>
         </div>
@@ -170,9 +169,7 @@
       {#if $fileExplorer.uploading}<span class="spin" aria-hidden="true">⟳</span>{/if}
       {$fileExplorer.uploadText}
     </button>
-    <button class="chip" type="button" title={`pin ${$fileExplorer.path}`} onclick={() => pinExploredPath($fileExplorer.path)}>⌖ Pin folder</button>
     <button class="chip toggle-hidden" class:active={$fileExplorer.showHidden} type="button" aria-pressed={$fileExplorer.showHidden} onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
-    <button class="chip" type="button" onclick={backFileExplorerToHublots}>← Widgets</button>
   {/if}
   <button class="chip" type="button" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>
@@ -206,6 +203,8 @@
     width: 32px;
     min-width: 32px;
     min-height: 32px;
+    align-items: center;
+    justify-content: center;
     padding: 0;
   }
 

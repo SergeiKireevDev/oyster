@@ -18,7 +18,6 @@ const resourceActionNames = [
   "fileExplorer.upload",
   "fileExplorer.pin",
   "fileExplorer.back",
-  "fileExplorer.returnToHublots",
   "fileExplorer.open",
   "hublot.show",
   "hublot.create",

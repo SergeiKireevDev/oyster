@@ -26,7 +26,6 @@ export const FILE_EXPLORER_SAVE_ACTION = "fileExplorer.save";
 export const FILE_EXPLORER_UPLOAD_ACTION = "fileExplorer.upload";
 export const FILE_EXPLORER_PIN_ACTION = "fileExplorer.pin";
 export const FILE_EXPLORER_BACK_ACTION = "fileExplorer.back";
-export const FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION = "fileExplorer.returnToHublots";
 export const FILE_EXPLORER_OPEN_ACTION = "fileExplorer.open";
 
 export const HUBLOT_SHOW_ACTION = "hublot.show";
