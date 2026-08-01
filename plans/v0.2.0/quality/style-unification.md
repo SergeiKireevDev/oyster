@@ -54,7 +54,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/LlmboxWorkspaceModal.svelte`
 - [x] `public/src/components/MarkdownArtifact.svelte`
 - [x] `public/src/components/Menu.svelte`
-- [ ] `public/src/components/OptionPickerItem.svelte`
+- [x] `public/src/components/OptionPickerItem.svelte`
 - [ ] `public/src/components/OptionPickerModal.svelte`
 - [ ] `public/src/components/Overlays.svelte`
 - [ ] `public/src/components/PinnedWidgetGrid.svelte`
