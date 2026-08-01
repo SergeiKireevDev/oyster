@@ -29,3 +29,18 @@ test("ActivityStack computes each visible thinking preview once", () => {
   assert.equal(source.match(/thinkingPreview\(latestThinking\.text\)/g)?.length, 1);
   assert.doesNotMatch(source, /\{#if thinkingPreview\(/);
 });
+
+test("ActivityStack exposes current and expandable states without relying on color", () => {
+  assert.match(source, /role="group" aria-label="Assistant activity"/);
+  assert.match(source, /const historyToggleLabel = \$derived/);
+  assert.match(source, /<summary title=\{historyToggleLabel\}>/);
+  assert.match(source, /\{#if unsettled\}<span class="activity-current-status">Active<\/span>\{\/if\}/);
+  assert.match(source, /\.activity-history-failed,[\s\S]*?border: 1px solid currentColor;/);
+});
+
+test("ActivityStack uses semantic theme tokens and mobile touch targets", () => {
+  assert.doesNotMatch(source, /#[\da-fA-F]{3,8}\b/);
+  assert.match(source, /color-mix\(in srgb, var\(--accent\)/);
+  assert.match(source, /color: var\(--red\)/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-height: 40px;/);
+});

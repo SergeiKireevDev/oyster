@@ -76,7 +76,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 
 ## Transcript components
 
-- [ ] `public/src/components/transcript/ActivityStack.svelte`
+- [x] `public/src/components/transcript/ActivityStack.svelte`
 - [ ] `public/src/components/transcript/AssistantMessage.svelte`
 - [ ] `public/src/components/transcript/AssistantPartActions.svelte`
 - [ ] `public/src/components/transcript/CheckpointButton.svelte`
