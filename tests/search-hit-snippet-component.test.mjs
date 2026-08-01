@@ -33,7 +33,8 @@ test("session search result markup is shared by the picker and sidebar", () => {
   assert.match(snippet, /mark \{[\s\S]*?color-mix\(in srgb, var\(--yellow\)/);
 
   const styles = source("public/src/style.css");
-  assert.match(styles, /\.session-sidebar-snippet \{[\s\S]*?--search-hit-lines: 3;/);
+  assert.match(sidebar, /\.session-sidebar-snippet \{[\s\S]*?--search-hit-lines: 3;/);
+  assert.doesNotMatch(styles, /\.session-sidebar-snippet/);
   assert.doesNotMatch(styles, /\.search-hit \.s-snippet mark|\.session-sidebar-snippet mark/);
 
   const { warnings } = compile(snippet, {

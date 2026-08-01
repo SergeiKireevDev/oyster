@@ -557,7 +557,7 @@
       onclick={() => selectSessionEntry(session, runner, familyKey)}
     >
       {#if timelineStatus}
-        <span class="session-timeline-marker" aria-label={loopStatusLabel(timelineStatus)}></span>
+        <span class="session-timeline-marker" role="img" aria-label={loopStatusLabel(timelineStatus)}></span>
       {:else}
         <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy} aria-hidden="true"></span>
       {/if}
@@ -950,3 +950,344 @@
     {/if}
   </div>
 </aside>
+
+<style>
+  #sessions {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 12px 14px;
+    overflow-y: auto;
+  }
+
+  form { flex: none; }
+
+  .session-sidebar-search {
+    width: 100%;
+    height: 36px;
+    padding: 8px 11px 8px 33px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    outline: 0;
+    background-color: color-mix(in srgb, var(--text) 4.5%, transparent);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%237d8599' stroke-width='1.6'%3E%3Ccircle cx='6' cy='6' r='4.2'/%3E%3Cpath d='m9.2 9.2 3.2 3.2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 11px center;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    transition: border-color .15s, background-color .15s, box-shadow .15s;
+  }
+
+  .session-sidebar-search:hover { background-color: color-mix(in srgb, var(--text) 6%, transparent); }
+  .session-sidebar-search:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+    background-color: color-mix(in srgb, var(--text) 6.5%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .session-sidebar-search[aria-busy="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+  .session-sidebar-new { display: flex; width: 100%; filter: drop-shadow(0 7px 18px color-mix(in srgb, var(--bg) 35%, transparent)); }
+  .session-sidebar-create,
+  .session-sidebar-create-folder {
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    background: color-mix(in srgb, var(--accent) 9%, var(--panel-2));
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: border-color .15s, background-color .15s, color .15s;
+  }
+  .session-sidebar-create {
+    display: flex;
+    min-width: 0;
+    min-height: 42px;
+    flex: 1;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
+    text-align: left;
+  }
+  .session-sidebar-create-folder {
+    display: grid;
+    width: 36px;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    border-radius: 0 10px 10px 0;
+    color: var(--muted);
+  }
+  .session-sidebar-create:hover:not(:disabled),
+  .session-sidebar-create-folder:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+  .session-sidebar-create:disabled { cursor: not-allowed; opacity: .45; }
+  .session-sidebar-create-icon { flex: none; color: var(--accent); font-size: 18px; line-height: 1; }
+  .session-sidebar-create-copy { display: grid; min-width: 0; line-height: 1.2; }
+  .session-sidebar-create-copy strong { color: color-mix(in srgb, var(--accent) 38%, var(--text)); font-size: 12px; font-weight: 650; }
+  .session-sidebar-create-copy small { overflow: hidden; color: var(--muted); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-create-chevron { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+
+  .session-sidebar-list { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; }
+
+  .session-sidebar-environment-picker { position: relative; width: 100%; min-width: 0; flex: none; }
+  .session-sidebar-environment-selector {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--panel-2));
+    color: var(--muted);
+  }
+  .session-sidebar-environment-control { display: flex; min-width: 0; min-height: 38px; flex: 1; align-items: center; gap: 7px; padding: 6px 8px; }
+  .session-sidebar-environment-label,
+  .session-sidebar-hierarchy-copy small,
+  .session-sidebar-search-environment-heading small { flex: none; color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .session-sidebar-environment-selector select { min-width: 0; flex: 1; padding: 0 2px; border: 0; outline: 0; background: transparent; color: color-mix(in srgb, var(--accent) 35%, var(--text)); font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+  .session-sidebar-environment-selector select option { background: var(--panel-2); color: var(--text); }
+  .session-sidebar-environment-tab-icon { width: 9px; height: 7px; flex: none; border: 1px solid currentColor; border-radius: 2px; }
+  .session-sidebar-environment-info,
+  .session-sidebar-environment-create {
+    width: 34px;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background-color .14s, color .14s;
+  }
+  .session-sidebar-environment-info { width: 30px; font: 700 10px/1 var(--mono); }
+  .session-sidebar-environment-create { font: 17px/1 inherit; }
+  .session-sidebar-environment-info:hover,
+  .session-sidebar-environment-info.active,
+  .session-sidebar-environment-create:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+
+  .session-sidebar-instance-tooltip-dismiss { position: fixed; inset: 0; z-index: 19; padding: 0; border: 0; background: transparent; cursor: default; }
+  .session-sidebar-instance-tooltip {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 8px);
+    left: 0;
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(480px, calc(100vh - 150px));
+    padding: 11px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-radius: 12px;
+    background: var(--panel-2);
+    color: var(--text);
+    box-shadow: var(--shadow-lg);
+  }
+  .session-sidebar-instance-tooltip header { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .session-sidebar-instance-tooltip header > span:first-child { display: grid; min-width: 0; gap: 2px; }
+  .session-sidebar-instance-tooltip header small { color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .session-sidebar-instance-tooltip header strong { overflow-wrap: anywhere; font-size: 12px; }
+  .session-sidebar-environment-tooltip-actions { display: flex; flex: none; align-items: center; gap: 7px; }
+  .session-sidebar-environment-tooltip-close { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); font: 16px/1 inherit; cursor: pointer; }
+  .session-sidebar-environment-tooltip-close:hover { border-color: var(--border); background: var(--surface-hover); color: var(--text); }
+  .session-sidebar-instance-status { flex: none; font-size: 8px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .session-sidebar-instance-tooltip dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; }
+  .session-sidebar-instance-tooltip dl div { min-width: 0; padding: 6px 7px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .session-sidebar-instance-tooltip dl div:nth-child(-n+2) { border-top: 0; }
+  .session-sidebar-instance-tooltip dl div:nth-child(2n) { border-right: 0; }
+  .session-sidebar-instance-tooltip dt { color: var(--muted); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+  .session-sidebar-instance-tooltip dd { margin: 2px 0 0; overflow-wrap: anywhere; font: 9px/1.35 var(--mono); }
+
+  .session-sidebar-instance-status.status-online,
+  .session-sidebar-workspace-icon.status-online,
+  .session-sidebar-workspace-status.status-online { color: var(--green); }
+  .session-sidebar-instance-status:is(.status-provisioning, .status-provisioned, .status-awaiting_agent, .status-initializing, .status-resuming, .status-pausing),
+  .session-sidebar-workspace-icon:is(.status-provisioning, .status-provisioned, .status-awaiting_agent, .status-initializing, .status-resuming, .status-pausing),
+  .session-sidebar-workspace-status:is(.status-provisioning, .status-provisioned, .status-awaiting_agent, .status-initializing, .status-resuming, .status-pausing) { color: var(--yellow); }
+  .session-sidebar-instance-status:is(.status-failed, .status-destroying),
+  .session-sidebar-workspace-icon:is(.status-failed, .status-destroying),
+  .session-sidebar-workspace-status:is(.status-failed, .status-destroying) { color: var(--red); }
+  .session-sidebar-instance-status.status-paused,
+  .session-sidebar-workspace-icon.status-paused,
+  .session-sidebar-workspace-status.status-paused { color: var(--accent); }
+  .session-sidebar-instance-status:is(.status-offline, .status-unknown),
+  .session-sidebar-workspace-icon:is(.status-offline, .status-unknown),
+  .session-sidebar-workspace-status:is(.status-offline, .status-unknown) { color: var(--muted); }
+  .session-sidebar-workspace-icon:is(.status-provisioning, .status-awaiting_agent, .status-initializing, .status-resuming, .status-pausing) { animation: workspace-pulse 1.5s ease-in-out infinite; }
+
+  .session-sidebar-environment-empty-create,
+  .session-sidebar-load-more {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 9px;
+    border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    color: var(--muted);
+    font: 10.5px inherit;
+    cursor: pointer;
+  }
+  .session-sidebar-environment-empty-create:hover,
+  .session-sidebar-load-more:hover { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text); }
+
+  .session-sidebar-environment-view { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
+  .session-sidebar-search-environment-heading { display: flex; min-width: 0; align-items: baseline; gap: 7px; padding: 3px 5px 0; }
+  .session-sidebar-search-environment-heading strong { overflow: hidden; color: var(--text); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-workspace-container { display: flex; min-width: 0; flex: none; flex-direction: column; gap: 4px; padding: 5px; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-radius: 10px; }
+  .session-sidebar-workspace-container.current-workspace { border-color: color-mix(in srgb, var(--accent) 26%, var(--border)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
+  .session-sidebar-workspace-heading { display: flex; min-width: 0; align-items: center; gap: 7px; padding: 4px 5px; border-radius: 7px; color: var(--text); }
+  .current-workspace > .session-sidebar-workspace-heading { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .workspace-unavailable { opacity: .76; }
+  .session-sidebar-hierarchy-copy { display: grid; min-width: 0; flex: 1; gap: 1px; }
+  .session-sidebar-workspace-kicker { display: flex; min-width: 0; align-items: center; gap: 5px; }
+  .session-sidebar-hierarchy-copy strong { overflow: hidden; color: color-mix(in srgb, var(--accent) 30%, var(--text)); font-size: 11.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-workspace-status { overflow: hidden; font-size: 8px; font-weight: 700; letter-spacing: .04em; line-height: 1; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+  .session-sidebar-workspace-heading code { max-width: 58px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-workspace-empty { padding: 8px 7px; color: var(--muted); font-size: 10px; text-align: center; }
+  .session-sidebar-workspace-icon { width: 13px; height: 13px; flex: none; border: 1.5px solid currentColor; border-radius: 3px; background: color-mix(in srgb, currentColor 14%, transparent); color: var(--muted); transform: rotate(45deg) scale(.78); }
+  .session-sidebar-workspace-cloud-actions { display: flex; flex: none; gap: 3px; }
+  .session-sidebar-workspace-power,
+  .session-sidebar-workspace-destroy,
+  .session-sidebar-workspace-create { display: grid; flex: none; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--muted); font: 10px/1 inherit; cursor: pointer; }
+  .session-sidebar-workspace-power,
+  .session-sidebar-workspace-destroy { width: 24px; height: 24px; }
+  .session-sidebar-workspace-create { width: 28px; height: 28px; border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: 16px; }
+  .session-sidebar-workspace-power:hover:not(:disabled) { border-color: var(--yellow); color: var(--yellow); }
+  .session-sidebar-workspace-power.resume:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+  .session-sidebar-workspace-destroy:hover:not(:disabled) { border-color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
+  .session-sidebar-workspace-create:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+  .session-sidebar-workspace-power:disabled,
+  .session-sidebar-workspace-destroy:disabled,
+  .session-sidebar-workspace-create:disabled { cursor: not-allowed; opacity: .4; }
+
+  .session-sidebar-cwd { min-width: 0; }
+  .session-sidebar-cwd > summary { display: flex; min-width: 0; min-height: 32px; align-items: center; gap: 6px; padding: 5px; border-radius: 7px; color: var(--muted); font-size: 9.5px; font-weight: 560; cursor: pointer; list-style: none; user-select: none; }
+  .session-sidebar-cwd > summary::-webkit-details-marker,
+  .session-sidebar-child-sessions > summary::-webkit-details-marker,
+  .session-archive-divider::-webkit-details-marker { display: none; }
+  .session-sidebar-cwd > summary:hover { background: color-mix(in srgb, var(--text) 3%, transparent); color: var(--text); }
+  .session-sidebar-cwd.current-cwd > summary { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); }
+  .session-sidebar-cwd > summary::before { content: "›"; flex: none; font-size: 15px; line-height: .8; transition: transform .15s; }
+  .session-sidebar-cwd[open] > summary::before { transform: rotate(90deg); }
+  .session-sidebar-cwd-icon { width: 12px; height: 9px; flex: none; border: 1px solid currentColor; border-radius: 2px; opacity: .72; }
+  .session-sidebar-cwd-icon::before { display: block; width: 5px; height: 2px; margin: -3px 0 0 1px; border: 1px solid currentColor; border-bottom: 0; border-radius: 2px 2px 0 0; background: var(--panel-2); content: ""; }
+  .session-sidebar-cwd-label { min-width: 0; overflow: hidden; font-family: var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-count,
+  .session-sidebar-hit-count { min-width: 21px; margin-left: auto; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--muted); font-size: 9px; text-align: center; }
+
+  .session-sidebar-workspace-sessions,
+  .session-sidebar-child-list { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+  .session-sidebar-child-sessions { min-width: 0; margin-left: 17px; }
+  .session-sidebar-child-sessions > summary { min-height: 30px; padding: 6px 5px; color: var(--muted); font-size: 10px; cursor: pointer; list-style: none; }
+  .session-sidebar-child-sessions > summary::before { content: "▸ "; }
+  .session-sidebar-child-sessions[open] > summary::before { content: "▾ "; }
+  .session-sidebar-child-sessions > summary:hover { color: var(--text); }
+  .session-sidebar-child-list { padding-left: 8px; }
+
+  .session-sidebar-entry { position: relative; display: flex; min-height: 54px; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: 9px; transition: background-color .14s, border-color .14s, transform .14s; }
+  .session-sidebar-entry:hover { background: color-mix(in srgb, var(--text) 4.5%, transparent); transform: translateX(2px); }
+  .session-sidebar-entry.current { border-color: color-mix(in srgb, var(--accent) 20%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+  .session-sidebar-row { display: flex; min-width: 0; min-height: 54px; flex: 1; align-items: center; gap: 8px; padding: 7px 7px 7px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .session-sidebar-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+  .session-sidebar-name,
+  .session-sidebar-folder,
+  .session-sidebar-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-name { font-size: 12.5px; font-weight: 580; }
+  .session-sidebar-entry.current .session-sidebar-name { color: var(--accent); }
+  .session-sidebar-folder { color: var(--muted); font: 10.5px var(--mono); }
+  .session-sidebar-meta { color: var(--muted); font-size: 9.5px; font-weight: 450; }
+  .s-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 3%, transparent); }
+
+  .session-sidebar-action,
+  .session-sidebar-lifecycle { display: grid; width: 30px; height: 30px; flex: none; align-self: center; place-items: center; margin-right: 3px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); line-height: 1; opacity: .72; cursor: pointer; transition: color .12s, background-color .12s, border-color .12s, opacity .12s; }
+  .session-sidebar-action { font-size: 0; }
+  .session-sidebar-action.stop::before { width: 11px; height: 11px; border-radius: 2px; background: currentColor; content: ""; }
+  .session-sidebar-action.delete::before { width: 14px; height: 14px; background: currentColor; content: ""; clip-path: polygon(8% 0, 50% 42%, 92% 0, 100% 8%, 58% 50%, 100% 92%, 92% 100%, 50% 58%, 8% 100%, 0 92%, 42% 50%, 0 8%); }
+  .session-sidebar-lifecycle.archive::before { width: 14px; height: 12px; border: 1.5px solid currentColor; border-top-width: 4px; border-radius: 2px; content: ""; }
+  .session-sidebar-entry:hover :is(.session-sidebar-action, .session-sidebar-lifecycle),
+  .session-sidebar-entry.current :is(.session-sidebar-action, .session-sidebar-lifecycle) { opacity: 1; }
+  .session-sidebar-action:hover { border-color: color-mix(in srgb, var(--red) 28%, var(--border)); background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
+  .session-sidebar-lifecycle:hover { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent); opacity: 1; }
+
+  .session-loop-card { position: relative; display: flex; min-width: 0; min-height: 60px; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 6%, var(--panel-2)); }
+  .session-loop-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  .session-loop-header { display: flex; min-width: 0; min-height: 60px; flex: 1; align-items: center; gap: 8px; padding: 8px 7px 8px 9px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .session-loop-icon { display: grid; width: 27px; height: 27px; flex: none; place-items: center; border-radius: 8px; background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); font-size: 17px; }
+  .session-loop-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
+  .session-loop-kicker { color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .session-loop-progress { flex: none; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--green) 24%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--green) 10%, transparent); color: var(--green); font-size: 8.5px; font-weight: 700; }
+  .session-loop-progress.status-running { border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
+  .session-loop-progress.status-failed { border-color: color-mix(in srgb, var(--red) 28%, transparent); background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+  .session-loop-chevron { width: 6px; height: 6px; flex: none; margin-right: 2px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
+  .session-loop-header[aria-expanded="true"] .session-loop-chevron { transform: rotate(45deg); }
+  .session-sidebar-loop-timeline { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 3px; margin: 1px 0 7px 23px; padding-left: 13px; }
+  .session-sidebar-loop-timeline::before { position: absolute; top: 17px; bottom: 17px; left: 3px; width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 24%, transparent); content: ""; }
+  .session-timeline-entry { min-height: 48px; }
+  .session-timeline-entry .session-sidebar-row { min-height: 48px; padding-left: 4px; }
+  .session-timeline-marker { position: relative; z-index: 1; width: 10px; height: 10px; flex: none; margin-right: 7px; margin-left: -19px; border: 2px solid var(--panel); border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 2px color-mix(in srgb, var(--muted) 35%, transparent); }
+  .session-timeline-entry.status-succeeded .session-timeline-marker { background: var(--green); box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 34%, transparent); }
+  .session-timeline-entry.status-failed .session-timeline-marker { background: var(--red); box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 36%, transparent); }
+  .session-timeline-entry.status-running .session-timeline-marker { background: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); animation: session-timeline-glow 1.45s ease-in-out infinite; }
+
+  .session-sidebar-status { padding: 6px 3px; color: var(--muted); font-size: 11px; }
+  .session-sidebar-hit-group { display: flex; min-width: 0; flex: none; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--text) 3%, var(--panel)); }
+  .session-sidebar-hit-heading { display: flex; align-items: center; gap: 8px; padding: 8px 8px 0; }
+  .session-sidebar-hit-heading .session-sidebar-name { min-width: 0; flex: 1; }
+  .session-sidebar-hit-group > .session-sidebar-folder { padding: 2px 8px 8px; overflow: visible; overflow-wrap: anywhere; line-height: 1.3; text-overflow: clip; white-space: normal; }
+  .session-sidebar-hit-list { display: grid; border-top: 1px solid var(--border); }
+  .session-sidebar-hit { width: 100%; height: 72px; min-width: 0; padding: 7px 8px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color .14s; }
+  .session-sidebar-hit:last-child { border-bottom: 0; }
+  .session-sidebar-hit:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .session-sidebar-snippet { width: 100%; min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.4; --search-hit-lines: 3; }
+
+  .session-sidebar-archive { min-width: 0; }
+  .session-archive-divider { display: flex; min-height: 34px; align-items: center; gap: 7px; margin: 8px 4px 2px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; list-style: none; user-select: none; }
+  .session-archive-divider::before { color: var(--muted); font-size: 15px; line-height: .8; content: "›"; transition: transform .15s; }
+  .session-sidebar-archive[open] > .session-archive-divider::before { transform: rotate(90deg); }
+  .session-archive-divider small { margin-left: auto; color: var(--muted); font-size: 8px; font-weight: 550; letter-spacing: .04em; text-transform: none; }
+  .session-sidebar-archive-groups { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+
+  :is(.r-empty, .session-sidebar-workspace-empty) { overflow-wrap: anywhere; }
+  .r-empty { padding: 16px 8px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: 11px; text-align: center; }
+
+  @keyframes workspace-pulse { 50% { opacity: .45; } }
+  @keyframes session-timeline-glow { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 12px 3px color-mix(in srgb, var(--accent) 30%, transparent); } }
+
+  @media (max-width: 760px) {
+    #sessions { padding: max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+    .session-sidebar-search { height: 42px; }
+    .session-sidebar-create,
+    .session-sidebar-environment-control { min-height: 44px; }
+    .session-sidebar-create-folder,
+    .session-sidebar-environment-info,
+    .session-sidebar-environment-create { width: 44px; }
+    .session-sidebar-entry,
+    .session-sidebar-row { min-height: 58px; }
+    .session-sidebar-action,
+    .session-sidebar-lifecycle { width: 40px; height: 40px; }
+    .session-sidebar-workspace-power,
+    .session-sidebar-workspace-destroy,
+    .session-sidebar-workspace-create { width: 40px; height: 40px; }
+    .session-sidebar-cwd > summary,
+    .session-sidebar-child-sessions > summary,
+    .session-archive-divider,
+    .session-sidebar-load-more,
+    .session-sidebar-environment-empty-create { min-height: 40px; }
+  }
+
+  @media (max-width: 520px) {
+    .session-sidebar-instance-tooltip { right: 0; left: auto; width: min(320px, calc(100vw - 28px)); }
+    .session-sidebar-instance-tooltip dl { grid-template-columns: minmax(0, 1fr); }
+    .session-sidebar-instance-tooltip dl div { border-right: 0; }
+    .session-sidebar-instance-tooltip dl div:nth-child(2) { border-top: 1px solid var(--border); }
+    .session-sidebar-workspace-heading { flex-wrap: wrap; }
+    .session-sidebar-hierarchy-copy { flex-basis: calc(100% - 28px); }
+    .session-sidebar-workspace-cloud-actions { margin-left: 20px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .session-sidebar-workspace-icon,
+    .session-timeline-entry.status-running .session-timeline-marker { animation: none; }
+    .session-sidebar-entry:hover { transform: none; }
+  }
+</style>
