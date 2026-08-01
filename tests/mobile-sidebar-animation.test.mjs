@@ -20,7 +20,7 @@ test("mobile session and hublot drawers animate in and reverse when closing", ()
 });
 
 test("mobile header uses compact grouped controls", () => {
-  assert.match(header, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?gap: 1px;[\s\S]*?padding: 2px;/);
+  assert.match(header, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?gap: 2px;[\s\S]*?margin: 3px 0;[\s\S]*?padding: 1px;/);
   assert.match(header, /@media \(max-width: 760px\)[\s\S]*?#cfgChip \{[\s\S]*?display: inline-flex;[\s\S]*?max-width: 42vw;/);
   assert.match(header, /#modelChip,[\s\S]*?#thinkChip,[\s\S]*?#treeChip \{[\s\S]*?display: none;/);
 });
