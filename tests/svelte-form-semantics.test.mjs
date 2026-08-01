@@ -66,10 +66,10 @@ test("search and constrained credential entry use semantic field types and nativ
 
 test("workspace forms pair native constraints with actionable validation guidance", () => {
   const llmbox = component("LlmboxWorkspaceModal.svelte");
-  assert.match(llmbox, /<form class="cloud-form"[^>]*onsubmit=\{createWorkspace\}>/);
+  assert.match(llmbox, /<form id="llmboxWorkspaceForm" class="llmbox-form"[^>]*onsubmit=\{createWorkspace\}>/);
   assert.match(llmbox, /required pattern="\[a-z0-9\].*?"[^>]*title="Use 1–63 lowercase letters, numbers, or hyphens"/);
   assert.match(llmbox, /type="number" min="1" max=\{MAX_DISK_GIB\} step="1"/);
-  assert.match(llmbox, /class="cloud-error wide" role="alert" aria-atomic="true"/);
+  assert.match(llmbox, /class="llmbox-error" role="alert" aria-atomic="true"/);
 
   const cloud = component("CloudWorkspaceModal.svelte");
   assert.match(cloud, /class="cloud-required-hint wide">All fields are required\. If anything is missing, selecting Provision will highlight it\./);
