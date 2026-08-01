@@ -118,8 +118,8 @@
 
   @media (max-width: 760px) {
     #transcriptNotice {
-      width: 40px;
-      height: 40px;
+      width: var(--icon-control-standard);
+      height: var(--icon-control-standard);
       bottom: 12px;
     }
   }

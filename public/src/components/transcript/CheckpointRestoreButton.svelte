@@ -88,8 +88,8 @@
 
   @media (max-width: 760px) {
     .ckpt-restore {
-      min-width: 38px;
-      min-height: 38px;
+      min-width: var(--icon-control-dense);
+      min-height: var(--icon-control-dense);
     }
   }
 

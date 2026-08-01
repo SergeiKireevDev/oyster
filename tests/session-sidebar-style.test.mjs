@@ -23,7 +23,8 @@ test("session sidebar owns its calm responsive presentation", () => {
   assert.match(source, /\.session-sidebar-workspace-power:disabled,[\s\S]*?cursor: not-allowed/);
   assert.match(source, /\.session-sidebar-instance-status\.status-online,[\s\S]*?var\(--green\)/);
   assert.match(source, /\.session-sidebar-instance-status:is\(\.status-failed, \.status-destroying\)[\s\S]*?var\(--red\)/);
-  assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?env\(safe-area-inset-bottom\)[\s\S]*?width: 40px; height: 40px;/);
+  assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?\.session-sidebar-action \{ width: var\(--icon-control-important\); height: var\(--icon-control-important\); \}/);
+  assert.match(source, /\.session-sidebar-lifecycle \{ width: var\(--icon-control-standard\); height: var\(--icon-control-standard\); \}/);
   assert.match(source, /@media \(max-width: 520px\) \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
 

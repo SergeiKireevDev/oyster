@@ -131,6 +131,17 @@ Every interactive control should account for:
 
 Use semantic elements (`button`, `a`, `input`, `summary`) and preserve keyboard behavior. Icon-only buttons require an accessible label and should generally provide a tooltip through `title` when useful.
 
+### Icon-control sizing
+
+Use the shared size tokens rather than independently enlarging icon buttons at mobile breakpoints:
+
+- `--icon-control-dense` (`30px`): header actions and inline transcript utilities.
+- `--icon-control-standard` (`34px`): ordinary icon-only navigation, download, pin, overflow, and reveal actions.
+- `--icon-control-important` (`40px`): primary, destructive, session-lifecycle, and workspace power actions.
+- `--icon-control-gap` (`4px`): minimum separation inside dense groups.
+
+Keep glyphs at `14–16px` in most controls. Do not add margins to every child in a grouped control; use the parent gap so the group does not become visually oversized.
+
 ## Forms
 
 - Inputs, textareas, and selects use panel/input surfaces, `1px` borders, `7–12px` radii, inherited typography, and primary text color.
@@ -164,7 +175,7 @@ Use semantic elements (`button`, `a`, `input`, `summary`) and preserve keyboard 
 
 - Prefer the shared `AppIcon` component for application actions and `FolderIcon` for folders instead of adding emoji or mismatched icon sets.
 - Icons generally inherit `currentColor`, allowing hover, disabled, status, and theme states to work automatically.
-- Typical action icons are `14–17px`; icon containers are commonly `28–32px`.
+- Typical action icons are `14–16px`; use the shared dense, standard, and important icon-control tokens for their containers.
 - Status dots are small (`6–8px`) and map to semantic tokens.
 - Glow is reserved for live/busy/current signals and the brand. Static decorative glow should be avoided.
 - Accompany unfamiliar status color with text, shape, or accessible status copy.
@@ -185,7 +196,7 @@ The principal breakpoints currently in use are:
 - `760px`: mobile layout; sidebars become slide-over/carousel panels, messages and composer tighten, and some controls increase their touch area.
 - `600px` and `520px`: complex forms, analytics, and grouped modal content collapse or wrap.
 
-Style mobile deliberately rather than depending on accidental wrapping. Preserve readable content, reachable actions, and scrolling within the viewport. Interactive controls should approach a `40px` touch target on mobile even when their visible icon is smaller.
+Style mobile deliberately rather than depending on accidental wrapping. Preserve readable content, reachable actions, and scrolling within the viewport. Text actions and important or destructive icon actions should approach a `40px` touch target; dense and ordinary icon-only controls use the shared `30px` and `34px` sizes with at least `4px` separation.
 
 ## Accessibility and content guidance
 

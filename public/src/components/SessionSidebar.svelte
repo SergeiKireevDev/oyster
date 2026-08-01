@@ -1259,15 +1259,15 @@
     .session-sidebar-create,
     .session-sidebar-environment-control { min-height: 44px; }
     .session-sidebar-create-folder,
-    .session-sidebar-environment-info,
-    .session-sidebar-environment-create { width: 44px; }
+    .session-sidebar-environment-create { width: var(--icon-control-important); }
+    .session-sidebar-environment-info { width: var(--icon-control-standard); }
     .session-sidebar-entry,
     .session-sidebar-row { min-height: 58px; }
-    .session-sidebar-action,
-    .session-sidebar-lifecycle { width: 40px; height: 40px; }
+    .session-sidebar-action { width: var(--icon-control-important); height: var(--icon-control-important); }
+    .session-sidebar-lifecycle { width: var(--icon-control-standard); height: var(--icon-control-standard); }
     .session-sidebar-workspace-power,
     .session-sidebar-workspace-destroy,
-    .session-sidebar-workspace-create { width: 40px; height: 40px; }
+    .session-sidebar-workspace-create { width: var(--icon-control-important); height: var(--icon-control-important); }
     .session-sidebar-cwd > summary,
     .session-sidebar-child-sessions > summary,
     .session-archive-divider,

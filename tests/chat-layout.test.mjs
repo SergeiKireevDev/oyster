@@ -28,7 +28,7 @@ test("chat layout keeps its structural and transcript canvas styling scoped", ()
 test("new transcript notice follows shared interaction and responsive contracts", () => {
   assert.match(chatLayout, /#transcriptNotice\s*\{[\s\S]*?border:\s*1px solid color-mix\([\s\S]*?background:\s*var\(--panel-2\);[\s\S]*?color:\s*var\(--accent\)/);
   assert.match(chatLayout, /#transcriptNotice:hover\s*\{[\s\S]*?border-color:\s*var\(--accent\);[\s\S]*?background:\s*var\(--accent-dim\)/);
-  assert.match(chatLayout, /@media \(max-width: 760px\)[\s\S]*?#transcriptNotice\s*\{[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px;/);
+  assert.match(chatLayout, /@media \(max-width: 760px\)[\s\S]*?#transcriptNotice\s*\{[\s\S]*?width:\s*var\(--icon-control-standard\);[\s\S]*?height:\s*var\(--icon-control-standard\);/);
   assert.match(chatLayout, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition:\s*none/);
   assert.match(chatLayout, /box-shadow:\s*0 10px 28px color-mix\(in srgb, var\(--muted\) 22%, transparent\)/);
   assert.doesNotMatch(chatLayout, /:global\(/);

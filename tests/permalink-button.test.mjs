@@ -50,5 +50,5 @@ test("PermalinkButton retains contextual reveal and mobile touch behavior", () =
   assert.match(source, /opacity: 0;[\s\S]*?pointer-events: none;/);
   assert.match(globalCss, /\.msg:focus-within > \.permalink, \.msg:focus-within > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
   assert.match(globalCss, /\.assistant-part:focus-within > \.assistant-part-actions > \.permalink,/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: 38px;[\s\S]*?min-height: 38px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: var\(--icon-control-dense\);[\s\S]*?min-height: var\(--icon-control-dense\);/);
 });

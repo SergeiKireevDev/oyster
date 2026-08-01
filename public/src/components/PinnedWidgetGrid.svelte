@@ -749,8 +749,8 @@
     .pinned-widget-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px 8px; }
     .pinned-widget-icon { width: 52px; height: 52px; }
     .pinned-widget-label { font-size: 10px; }
-    .pinned-widget-menu { width: 40px; height: 40px; top: -8px; right: -7px; }
-    .pinned-widget-back { width: 40px; min-height: 40px; }
+    .pinned-widget-menu { width: var(--icon-control-standard); height: var(--icon-control-standard); top: -5px; right: -4px; }
+    .pinned-widget-back { width: var(--icon-control-standard); min-height: var(--icon-control-standard); }
     .pinned-widget-folder-title { min-height: 40px; }
     .pinned-widget-empty .chip { min-height: 40px; }
   }

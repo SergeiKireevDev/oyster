@@ -165,9 +165,9 @@
     .browser-directory-navigation { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
 
     .browser-directory-row > .chip {
-      width: 40px;
-      min-width: 40px;
-      min-height: 40px;
+      width: var(--icon-control-standard);
+      min-width: var(--icon-control-standard);
+      min-height: var(--icon-control-standard);
     }
   }
 
