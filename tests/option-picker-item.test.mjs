@@ -15,6 +15,7 @@ test("OptionPickerItem documents its inputs and derives display-only state", () 
   assert.match(source, /let normalizedQuery = \$derived\(String\(query\)\.trim\(\)\.toLowerCase\(\)\)/);
   assert.match(source, /let provider = \$derived\(highlight\(providerText, normalizedQuery\)\)/);
   assert.match(source, /let model = \$derived\(highlight\(modelText, normalizedQuery\)\)/);
+  assert.match(source, /let modelOptionLabel = \$derived\(selected \? `\$\{optionText\}, current model` : optionText\)/);
   assert.doesNotMatch(source, /\$:|export let/);
 });
 
@@ -28,11 +29,12 @@ test("OptionPickerItem uses safe button behavior and stable event handlers", () 
   assert.doesNotMatch(source, /onclick=\{\(\) =>|onmouseenter=\{\(\) =>/);
 });
 
-test("OptionPickerItem exposes complete model names when styled text is truncated", () => {
-  assert.match(source, /class="model-autocomplete-option"[\s\S]*title=\{optionText\}/);
-  assert.match(source, /aria-selected=\{selected\}/);
-  assert.match(source, /class="model-option-status">[\s\S]*class="model-selected-mark" aria-label="Current model"/);
+test("OptionPickerItem exposes complete names and selection state when styled text is truncated", () => {
+  assert.equal((source.match(/title=\{optionText\}/g) ?? []).length, 2);
+  assert.match(source, /class="model-autocomplete-option"[\s\S]*aria-selected=\{selected\}[\s\S]*aria-label=\{modelOptionLabel\}/);
+  assert.match(source, /class="model-option-status">[\s\S]*class="model-selected-mark" aria-hidden="true"/);
   assert.match(source, /class="model-enter-hint" aria-hidden="true"/);
+  assert.doesNotMatch(source, /class="model-selected-mark" aria-label=/);
 });
 
 test("OptionPickerItem owns its model row styles and uses shared visual tokens", () => {

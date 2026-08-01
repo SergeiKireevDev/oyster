@@ -59,6 +59,7 @@
   let modelText = $derived(separator < 0 ? optionText : optionText.slice(separator + 1));
   let provider = $derived(highlight(providerText, normalizedQuery));
   let model = $derived(highlight(modelText, normalizedQuery));
+  let modelOptionLabel = $derived(selected ? `${optionText}, current model` : optionText);
 </script>
 
 {#if modelMode}
@@ -70,6 +71,7 @@
     data-option-index={index}
     role="option"
     aria-selected={selected}
+    aria-label={modelOptionLabel}
     title={optionText}
     use:scrollIntoViewWhen={active}
     onclick={choose}
@@ -78,7 +80,7 @@
     <span class="model-provider">{provider.before}{#if provider.match}<mark>{provider.match}</mark>{/if}{provider.after}</span>
     <span class="model-name">{model.before}{#if model.match}<mark>{model.match}</mark>{/if}{model.after}</span>
     <span class="model-option-status">
-      {#if selected}<span class="model-selected-mark" aria-label="Current model">✓</span>{/if}
+      {#if selected}<span class="model-selected-mark" aria-hidden="true">✓</span>{/if}
       {#if active}<span class="model-enter-hint" aria-hidden="true">↵</span>{/if}
     </span>
   </button>
@@ -90,6 +92,7 @@
     data-option-index={index}
     role="option"
     aria-selected={active}
+    title={optionText}
     use:scrollIntoViewWhen={active}
     onclick={choose}
     onmouseenter={activate}
