@@ -8,12 +8,55 @@
  * edits to runners, tunnels, routines, checkpoints, sessions, and persistence
  * adapters all schedule a candidate build.
  */
-export const RELOADABLE_MODULE_GRAPH = Object.freeze({
-  composition: Object.freeze([
+function createReloadManifest(groups) {
+  const seen = new Map();
+  const modules = [];
+  const graph = {};
+
+  for (const [group, entries] of Object.entries(groups)) {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new TypeError(`reloadable module group "${group}" must be a non-empty array`);
+    }
+
+    const frozenEntries = entries.map((module) => {
+      if (
+        typeof module !== "string"
+        || !module.endsWith(".mjs")
+        || module.startsWith("/")
+        || module.includes("\\")
+        || module.includes("?")
+        || module.includes("#")
+        || module.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+      ) {
+        throw new TypeError(`invalid reloadable server module in "${group}": ${String(module)}`);
+      }
+
+      const previousGroup = seen.get(module);
+      if (seen.has(module)) {
+        throw new Error(
+          `duplicate reloadable server module "${module}" in "${previousGroup}" and "${group}"`,
+        );
+      }
+      seen.set(module, group);
+      modules.push(module);
+      return module;
+    });
+
+    graph[group] = Object.freeze(frozenEntries);
+  }
+
+  return Object.freeze({
+    graph: Object.freeze(graph),
+    modules: Object.freeze(modules),
+  });
+}
+
+const manifest = createReloadManifest({
+  composition: [
     "app.mjs",
     "application-candidate.mjs",
-  ]),
-  domain: Object.freeze([
+  ],
+  domain: [
     "checkpoints.mjs",
     "pi-credential-service.mjs",
     "pi-oauth-flow-service.mjs",
@@ -27,8 +70,8 @@ export const RELOADABLE_MODULE_GRAPH = Object.freeze({
     "sessions.mjs",
     "session-titles.mjs",
     "tunnels.mjs",
-  ]),
-  http: Object.freeze([
+  ],
+  http: [
     "http/createRequestContext.mjs",
     "http/createRouteTable.mjs",
     "http/routes/checkpointRoutes.mjs",
@@ -42,8 +85,8 @@ export const RELOADABLE_MODULE_GRAPH = Object.freeze({
     "http/routes/staticRoutes.mjs",
     "http/routes/tunnelRoutes.mjs",
     "http/routes/workdirRoutes.mjs",
-  ]),
-  persistence: Object.freeze([
+  ],
+  persistence: [
     "persistence/checkpointRollbackJournal.mjs",
     "persistence/hublotScriptMaterializer.mjs",
     "persistence/hublotSupervisor.mjs",
@@ -52,21 +95,15 @@ export const RELOADABLE_MODULE_GRAPH = Object.freeze({
     "persistence/sessionDeletion.mjs",
     "persistence/sessionDeletionReconciler.mjs",
     "persistence/sessionOwners.mjs",
-  ]),
-  sessionPersistence: Object.freeze([
+  ],
+  sessionPersistence: [
     "sessions/jsonlCatalog.mjs",
     "sessions/searchQuery.mjs",
     "sessions/searchRescore.mjs",
     "sessions/sqliteCatalog.mjs",
     "sessions/usageAnalytics.mjs",
-  ]),
+  ],
 });
 
-export const RELOADABLE_SERVER_MODULES = Object.freeze(
-  Object.values(RELOADABLE_MODULE_GRAPH).flat(),
-);
-
-const duplicates = RELOADABLE_SERVER_MODULES.filter(
-  (module, index, modules) => modules.indexOf(module) !== index,
-);
-if (duplicates.length) throw new Error(`duplicate reloadable server module: ${duplicates.join(", ")}`);
+export const RELOADABLE_MODULE_GRAPH = manifest.graph;
+export const RELOADABLE_SERVER_MODULES = manifest.modules;

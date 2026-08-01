@@ -9,9 +9,19 @@ test("reload manifest names existing, unique server modules by dependency domain
   assert.deepEqual(Object.keys(RELOADABLE_MODULE_GRAPH), [
     "composition", "domain", "http", "persistence", "sessionPersistence",
   ]);
+  assert.equal(Object.isFrozen(RELOADABLE_MODULE_GRAPH), true);
+  assert.equal(Object.isFrozen(RELOADABLE_SERVER_MODULES), true);
+  assert.ok(Object.values(RELOADABLE_MODULE_GRAPH).every(Object.isFrozen));
+  assert.deepEqual(RELOADABLE_SERVER_MODULES, Object.values(RELOADABLE_MODULE_GRAPH).flat());
   assert.equal(new Set(RELOADABLE_SERVER_MODULES).size, RELOADABLE_SERVER_MODULES.length);
   for (const module of RELOADABLE_SERVER_MODULES) {
-    assert.equal(module.startsWith("/") || module.includes(".."), false, module);
+    assert.match(module, /\.mjs$/);
+    assert.equal(
+      module.startsWith("/") || module.includes("\\") || module.includes("..")
+        || module.includes("?") || module.includes("#"),
+      false,
+      module,
+    );
     assert.equal(existsSync(new URL(module, serverUrl)), true, module);
   }
 });
