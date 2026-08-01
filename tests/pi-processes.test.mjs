@@ -29,6 +29,50 @@ test("pi process launcher pins executable, store, and Oyster authentication envi
   assert.equal(calls[0][2].env.CUSTOM, "yes");
 });
 
+test("launcher snapshots process policy and does not leak an unconfigured token", () => {
+  const calls = [];
+  const config = {
+    PI_BIN: "/local/pi",
+    PERSISTENT_STORE: "sqlite",
+    TOKEN: "original-token",
+    OYSTER_URL: " http://127.0.0.1:8083 ",
+  };
+  const launcher = createPiProcessLauncher({
+    config,
+    spawnImpl: (...args) => { calls.push(args); return {}; },
+  });
+  config.PI_BIN = "/replaced/pi";
+  config.PERSISTENT_STORE = "jsonl";
+  config.TOKEN = "replaced-token";
+  config.OYSTER_URL = "http://elsewhere.invalid";
+
+  launcher.launch([]);
+  assert.equal(launcher.bin, "/local/pi");
+  assert.equal(calls[0][0], "/local/pi");
+  assert.equal(calls[0][2].env.PERSISTENT_STORE, "sqlite");
+  assert.equal(calls[0][2].env.OYSTER_TOKEN, "original-token");
+  assert.equal(calls[0][2].env.OYSTER_URL, "http://127.0.0.1:8083");
+
+  const withoutToken = createPiProcessLauncher({
+    config: { PI_BIN: "/local/pi" },
+    spawnImpl: (...args) => { calls.push(args); return {}; },
+  });
+  withoutToken.launch([], { env: { OYSTER_TOKEN: "stale-token" } });
+  assert.equal("OYSTER_TOKEN" in calls[1][2].env, false);
+});
+
+test("pi process launcher rejects malformed process inputs", () => {
+  assert.throws(() => createPiProcessLauncher(), /PI_BIN must be a non-empty string/);
+  assert.throws(() => createPiProcessLauncher({ config: { PI_BIN: "  " } }), /PI_BIN must be a non-empty string/);
+  assert.throws(() => createPiProcessLauncher({ config: { PI_BIN: "/pi" }, spawnImpl: null }), /spawnImpl must be a function/);
+
+  const launcher = createPiProcessLauncher({ config: { PI_BIN: "/pi" }, spawnImpl() {} });
+  assert.throws(() => launcher.launch("--mode rpc"), /arguments must be an array of strings/);
+  assert.throws(() => launcher.launch(["--mode", 1]), /arguments must be an array of strings/);
+  assert.throws(() => launcher.launch([], null), /options must be an object/);
+  assert.throws(() => launcher.launch([], { env: null }), /environment must be an object/);
+});
+
 test("ephemeral pi processes always receive --no-session exactly once", () => {
   const calls = [];
   const launcher = createPiProcessLauncher({
