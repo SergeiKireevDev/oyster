@@ -68,6 +68,14 @@ test("credential service resolves conditional root exports and rejects SDK entri
     conditional.cleanup();
   }
 
+  const ordered = fixture({ manifest: { exports: { node: "./dist/node.js", import: "./dist/index.js" } } });
+  try {
+    writeFileSync(join(ordered.packageRoot, "dist", "node.js"), "export const selected = 'node';\n");
+    assert.equal(resolveConfiguredPiSdk(ordered.cli).entry, join(ordered.packageRoot, "dist", "node.js"));
+  } finally {
+    ordered.cleanup();
+  }
+
   const escaped = fixture();
   try {
     const outsideEntry = join(escaped.root, "outside-sdk.js");
@@ -81,6 +89,47 @@ test("credential service resolves conditional root exports and rejects SDK entri
     );
   } finally {
     escaped.cleanup();
+  }
+});
+
+test("credential service retries a transient SDK import failure", async () => {
+  const item = fixture();
+  try {
+    let attempts = 0;
+    const service = createPiCredentialService({
+      config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir },
+      importSdk: async (url) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("temporary import failure");
+        return import(url);
+      },
+    });
+    await assert.rejects(service.load(), { code: "credential_service_unavailable" });
+    assert.equal((await service.load()).kind, "legacy");
+    assert.equal(attempts, 2);
+  } finally {
+    item.cleanup();
+  }
+});
+
+test("credential service confines the runtime credential-store module to the pi package", async () => {
+  const item = fixture({ sdkSource: `
+    export const readStoredCredential = () => undefined;
+    export class ModelRuntime { static async create() { throw new Error("must not initialize"); } }
+  ` });
+  try {
+    const core = join(item.packageRoot, "dist", "core");
+    const outside = join(item.root, "outside-auth-storage.js");
+    mkdirSync(core);
+    writeFileSync(outside, "export class AuthStorage { static create() { return {}; } }\n");
+    symlinkSync(outside, join(core, "auth-storage.js"));
+    await assert.rejects(
+      createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } }).load(),
+      (error) => error.code === "credential_service_unavailable"
+        && error.message.includes("credential store escapes its package root"),
+    );
+  } finally {
+    item.cleanup();
   }
 });
 
@@ -349,6 +398,29 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
     assert.equal(readFileSync(authPath, "utf8"), '{"openai":');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("credential service sanitizes auth-storage reload failures", async () => {
+  const item = fixture({ sdkSource: `
+    export class AuthStorage {
+      static create() { return new AuthStorage(); }
+      reload() { throw new Error("secret storage detail"); }
+      drainErrors() { return []; }
+      list() { return []; }
+    }
+    export class ModelRegistry { static create() { return {}; } }
+  ` });
+  try {
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } });
+    await assert.rejects(
+      service.listStoredCredentials(),
+      (error) => error.code === "credential_service_unavailable"
+        && error.message === "configured pi auth storage could not be loaded"
+        && !error.message.includes("secret storage detail"),
+    );
+  } finally {
+    item.cleanup();
   }
 });
 
