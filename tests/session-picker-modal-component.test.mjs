@@ -29,6 +29,23 @@ test("session picker bounds and cleans up deferred search work", () => {
   assert.match(source, /onDestroy\(\(\) => clearTimeout\(debounce\)\)/);
 });
 
+test("session picker owns its calm responsive modal presentation", () => {
+  const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+
+  assert.match(source, /<div class="session-picker" class:search-error=\{searchFailed\} aria-busy=\{\$sessionPicker\.searching\}>/);
+  assert.match(source, /const searchFailed = \$derived\(\$sessionPicker\.searchStatus\.startsWith\("search failed"\)\)/);
+  assert.match(source, /\.search-error \.m-path \{ color: var\(--red\); \}/);
+  assert.match(source, /<style>[\s\S]*?\.search-row input\[type="search"\][\s\S]*?var\(--panel\)/);
+  assert.match(source, /\.session-row\.current \.s-name \{ color: var\(--accent\); \}/);
+  assert.match(source, /\.s-del:hover \{[\s\S]*?var\(--red\)/);
+  assert.match(source, /\.s-stop:hover \{[\s\S]*?var\(--yellow\)/);
+  assert.match(source, /\.session-picker-empty \{[\s\S]*?var\(--muted\)/);
+  assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?\.s-del \{ width: 40px; height: 40px; \}/);
+  assert.match(source, /@media \(max-width: 520px\) \{[\s\S]*?\.search-row \{ flex-wrap: wrap; \}/);
+  assert.doesNotMatch(globalStyles, /#modal \.s-(?:session-main|loopgroup|forkgroup|folders|del)/);
+  assert.doesNotMatch(globalStyles, /\.search-row \{/);
+});
+
 test("session picker controls and status indicators expose explicit semantics", () => {
   assert.equal(
     source.match(/<button\b/g)?.length,
