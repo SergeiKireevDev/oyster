@@ -20,3 +20,14 @@ test("image artifact owns its responsive, theme-tokenized stage presentation", (
   assert.match(image, /class:ready=\{status === "ready"\}/);
   assert.match(image, /@media \(max-width: 760px\)[\s\S]*min-height: calc\(100dvh - 230px\)/);
 });
+
+test("SVG artifact owns its responsive, low-glare vector canvas", () => {
+  assert.match(svg, /<style>[\s\S]*\.pinned-svg-viewer\s*\{[^}]*min-width: 0;[^}]*min-height: 55vh;/);
+  assert.match(svg, /\.pinned-svg-stage\s*\{[^}]*padding: clamp\([^;]+;[^}]*border-radius: 10px;[^}]*var\(--panel\)[^}]*var\(--bg\)/);
+  assert.match(svg, /background-image:[\s\S]*var\(--border\)[\s\S]*background-size: 16px 16px/);
+  assert.match(svg, /class:ready=\{status === "ready"\}/);
+  assert.match(svg, /\.pinned-svg-viewer\.zoomed \.pinned-svg-stage[\s\S]*cursor: zoom-out/);
+  assert.match(svg, /@media \(max-width: 760px\)[\s\S]*min-height: calc\(100dvh - 230px\)/);
+  assert.doesNotMatch(styles, /\.pinned-svg-viewer\s*\{/);
+  assert.doesNotMatch(styles, /background-color: #f8f9fb/);
+});

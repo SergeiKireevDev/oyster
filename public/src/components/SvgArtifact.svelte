@@ -80,6 +80,7 @@
         <img
           {src}
           alt={accessibleLabel}
+          class:ready={status === "ready"}
           loading="eager"
           draggable="false"
           onload={handleLoad}
@@ -89,3 +90,63 @@
     </button>
   {/if}
 </section>
+
+<style>
+  .pinned-svg-viewer {
+    position: relative;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 55vh;
+    flex-direction: column;
+  }
+
+  .pinned-svg-stage {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 50vh;
+    flex: 1;
+    padding: clamp(16px, 4vw, 42px);
+    border-radius: 10px;
+    background-color: color-mix(in srgb, var(--panel) 72%, var(--bg));
+    background-image:
+      linear-gradient(45deg, color-mix(in srgb, var(--border) 42%, transparent) 25%, transparent 25%),
+      linear-gradient(-45deg, color-mix(in srgb, var(--border) 42%, transparent) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 42%, transparent) 75%),
+      linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 42%, transparent) 75%);
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-size: 16px 16px;
+  }
+
+  .pinned-svg-stage img {
+    max-height: 62vh;
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+
+  .pinned-svg-stage img.ready {
+    opacity: 1;
+  }
+
+  .pinned-svg-viewer.zoomed .pinned-svg-stage {
+    place-items: start;
+    padding: 12px;
+    cursor: zoom-out;
+  }
+
+  .pinned-svg-viewer.zoomed .pinned-svg-stage img {
+    max-width: none;
+    max-height: none;
+  }
+
+  @media (max-width: 760px) {
+    .pinned-svg-viewer {
+      min-height: calc(100dvh - 190px);
+    }
+
+    .pinned-svg-stage {
+      min-height: calc(100dvh - 230px);
+      padding: 10px;
+    }
+  }
+</style>
