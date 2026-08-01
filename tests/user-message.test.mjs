@@ -31,12 +31,13 @@ test("interface notifications split the title from a verbatim body", () => {
   assert.match(source, /\{interfaceMessage\.body\}/);
 });
 
-test("user actions stay inert until the message root exists", () => {
+test("user actions include copy and permalink without the checkpoint control", () => {
   assert.match(source, /root === null \? null : \(restores\.find/);
   assert.equal(source.match(/<AssistantPartActions\b/g)?.length, 2);
   assert.equal(source.match(/label="User message actions"/g)?.length, 2);
-  assert.equal(source.match(/checkpoint=\{root !== null && checkpoint\.target === root\}/g)?.length, 2);
+  assert.equal(source.match(/copyText=\{text\}[\s\S]*?\n\s*copy/g)?.length, 2);
   assert.equal(source.match(/\{restore\}/g)?.length, 2);
+  assert.doesNotMatch(source, /CheckpointButton|onCheckpoint/);
 });
 
 test("user messages own a semantic, responsive bubble presentation", () => {

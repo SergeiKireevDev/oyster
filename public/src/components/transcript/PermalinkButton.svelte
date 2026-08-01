@@ -31,9 +31,8 @@
 
 <style>
   .permalink {
-    position: absolute;
+    position: static;
     z-index: 2;
-    top: 2px;
     display: inline-grid;
     width: 28px;
     height: 28px;

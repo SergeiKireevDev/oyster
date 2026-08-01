@@ -151,25 +151,6 @@
     gap: 10px;
     margin-bottom: 4px;
   }
-  /* ---------- checkpoint / fork tree (right sidebar, toggled by ⎇) ---------- */
-  #treebar {
-    display: none;
-    width: 270px;
-    padding: 10px;
-    gap: 8px;
-  }
-  #treebar.open { display: flex; }
-  @media (max-width: 760px) {
-    #treebar.open {
-      position: fixed;
-      top: 0; right: 0; bottom: 0;
-      width: 100vw;
-      z-index: 55;
-      box-shadow: -8px 0 30px rgba(0,0,0,.5);
-      touch-action: pan-x pan-y;
-    }
-  }
-
   /* ---------- routines (same sidebar, second section) ---------- */
   .side-head {
     font-size: 11px;
@@ -650,7 +631,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 }
 #sessions { width: var(--sidebar-width); padding: 18px 12px 14px; gap: 12px; }
 #hublots { width: var(--rightbar-width); padding: 18px 14px; gap: 12px; }
-#treebar { width: 300px; padding: 18px 14px; }
 .side-head {
   display: flex;
   align-items: center;
@@ -851,7 +831,7 @@ button.toast.actionable:active { transform: translateY(0); }
   #modal .m-option { min-height: 40px; }
   #modal .browser-directory-shortcut,
   #modal .browser-directory-button { min-height: 40px; }
-  #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
+  #sessions.open, #hublots.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
   .message-actions > button {
     display: grid;
     min-width: var(--icon-control-dense);
@@ -979,8 +959,7 @@ html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in s
 
 @media (max-width: 760px) {
   html[data-theme="light"] #sessions.open,
-  html[data-theme="light"] #hublots.open,
-  html[data-theme="light"] #treebar.open { background: rgba(255,255,255,.98); }
+  html[data-theme="light"] #hublots.open { background: rgba(255,255,255,.98); }
 }
 
 /* Pinned Widgets: compact phone-style launcher and native artifact viewers. */

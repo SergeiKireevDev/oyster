@@ -199,7 +199,6 @@ const checkpointOperations = checkpointAssembly.operations;
 const placeCheckpointBtn = checkpointOperations.placeMarker;
 const refreshCheckpointMarkers = checkpointOperations.refreshMarkers;
 const refreshTreeIfOpen = checkpointOperations.refreshTreeIfOpen;
-const loadCheckpointTree = checkpointOperations.loadTree;
 const handleCheckpointClick = checkpointOperations.freeze;
 const rollbackToCheckpoint = checkpointOperations.rollback;
 const detachCheckpointTreeActions = () => checkpointAssembly.teardown();
@@ -946,14 +945,12 @@ const settingsLayoutRuntime = createSettingsLayoutRuntime({
   storage,
   setCarouselPage,
   loadScopedResources: () => { loadHublots(); loadRoutines(); },
-  loadCheckpointTree,
   getRunners: () => getRunners(),
   getCurrentRunner: () => getCurrentRunner(),
   getWorkdir: () => getWorkdir(),
   switchRunner: (id) => getSessionRuntime().switchRunner(id),
   sessionsEl: layoutDom.sessions,
   hublotsEl: layoutDom.hublots,
-  treebarEl: layoutDom.treebar,
   isDrawerToggleTarget: layoutDom.isDrawerToggleTarget,
   isOverlayOpen: dialogAdapters.modal.isOverlayOpen,
 });

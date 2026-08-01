@@ -5,17 +5,14 @@
   const INTERFACE_PREFIX = "Opening interface: ";
 
   /** @typedef {Record<string, unknown> & { hash: string }} Checkpoint */
-  /** @typedef {{ target: HTMLElement | null, busy: boolean }} CheckpointMarker */
   /** @typedef {{ target: HTMLElement, checkpoint: Checkpoint, busy?: boolean }} RestoreState */
   /** @typedef {{ title: string, body: string }} InterfaceMessage */
   /**
    * @typedef {object} Props
    * @property {string} [text]
-   * @property {CheckpointMarker} [checkpoint]
    * @property {RestoreState[]} [restores]
    * @property {(target: HTMLElement | null) => void} [onPermalink]
    * @property {(text: string) => void} [onCopy]
-   * @property {() => void} [onCheckpoint]
    * @property {(checkpoint: Checkpoint) => void} [onRollback]
    * @property {(root: HTMLElement) => void} [onRoot]
    */
@@ -23,11 +20,9 @@
   /** @type {Props} */
   let {
     text = "",
-    checkpoint = { target: null, busy: false },
     restores = [],
     onPermalink = () => {},
     onCopy = () => {},
-    onCheckpoint = () => {},
     onRollback = () => {},
     onRoot = () => {},
   } = $props();
@@ -90,10 +85,7 @@
       copy
       {onPermalink}
       {onCopy}
-      {onCheckpoint}
       {onRollback}
-      checkpoint={root !== null && checkpoint.target === root}
-      checkpointBusy={checkpoint.busy}
       {restore}
     />
   </details>
@@ -113,10 +105,7 @@
         copy
         {onPermalink}
         {onCopy}
-        {onCheckpoint}
         {onRollback}
-        checkpoint={root !== null && checkpoint.target === root}
-        checkpointBusy={checkpoint.busy}
         {restore}
       />
     </div>

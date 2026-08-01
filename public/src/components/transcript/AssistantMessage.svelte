@@ -11,11 +11,9 @@
     role = "assistant",
     activityActive = false,
     activityUnsettled = false,
-    checkpoint = { target: null, busy: false },
     restores = [],
     onPermalink = () => {},
     onCopy = () => {},
-    onCheckpoint = () => {},
     onRollback = () => {},
     onRoot = () => {},
   } = $props();
@@ -43,7 +41,6 @@
     return {
       copyText: isText ? block.text : "",
       copy: isText,
-      checkpoint: isLast && checkpoint.target === root,
       restore: isLast ? restore : null,
     };
   }
@@ -89,10 +86,7 @@
         copy={actions.copy}
         {onPermalink}
         {onCopy}
-        {onCheckpoint}
         {onRollback}
-        checkpoint={actions.checkpoint}
-        checkpointBusy={checkpoint.busy}
         restore={actions.restore}
       />
     </div>
@@ -104,10 +98,7 @@
         <AssistantPartActions
           target={root}
           {onPermalink}
-          {onCheckpoint}
           {onRollback}
-          checkpoint={checkpoint.target === root}
-          checkpointBusy={checkpoint.busy}
           {restore}
         />
       {/if}

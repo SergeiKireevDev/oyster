@@ -16,7 +16,6 @@ export function createCarouselController({
   windowTarget,
   storage,
   setPage,
-  loadCheckpointTree,
   setTimeoutImpl = setTimeout,
   clearTimeoutImpl = clearTimeout,
   drawerAnimationMs = 500,
@@ -24,14 +23,12 @@ export function createCarouselController({
   // Scoped hublots and routines are prefetched when the active session is
   // applied. Revealing that cached sidebar must not refresh it: the loading
   // state would otherwise unmount embedded previews on every swipe.
-  const pages = new Map([[2, loadCheckpointTree]]);
   const closingTimers = new Map();
   let current = Number.parseInt(storage.getItem("pi_carousel") || "0", 10);
   if (!Number.isFinite(current)) current = 0;
 
-  // -1 is the sessions drawer to the left of chat; 1 and 2 are the existing
-  // hublot and checkpoint drawers to its right.
-  const clamp = (page) => Math.max(-1, Math.min(2, Number(page) || 0));
+  // -1 is the sessions drawer to the left of chat; 1 is the hublot drawer to its right.
+  const clamp = (page) => Math.max(-1, Math.min(1, Number(page) || 0));
   const isMobile = () => windowTarget.matchMedia("(max-width: 760px)").matches;
   const prefersReducedMotion = () => windowTarget.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sync = () => setPage(current);
@@ -74,20 +71,16 @@ export function createCarouselController({
   function apply() {
     const sessions = documentTarget.getElementById("sessions");
     const hublots = documentTarget.getElementById("hublots");
-    const treebar = documentTarget.getElementById("treebar");
     if (!isMobile()) {
       hideImmediately(sessions);
       hideImmediately(hublots);
-      treebar.classList.remove("open");
       current = 0;
       sync();
       return;
     }
     current = clamp(current);
     setDrawerOpen(sessions, current === -1);
-    setDrawerOpen(hublots, current >= 1);
-    treebar.classList.toggle("open", current >= 2);
-    pages.get(current)?.();
+    setDrawerOpen(hublots, current === 1);
     sync();
   }
 
@@ -106,7 +99,6 @@ export function createCarouselController({
   function reset() {
     hideImmediately(documentTarget.getElementById("sessions"));
     hideImmediately(documentTarget.getElementById("hublots"));
-    documentTarget.getElementById("treebar").classList.remove("open");
     set(0, { apply: false });
   }
 
@@ -129,16 +121,15 @@ export function createCarouselController({
  * The DOM targets remain injected so this can be installed and torn down by
  * the composition root without coupling the carousel to Svelte components.
  */
-export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, treebar, getCarousel, isToggleTarget, isOverlayOpen = () => false }) {
+export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, getCarousel, isToggleTarget, isOverlayOpen = () => false }) {
   const onClick = (event) => {
     if (!windowTarget.matchMedia("(max-width: 760px)").matches
       || isOverlayOpen()
       || event.target.closest?.("#modal, #cmdPalette, #menu")
       || sessions.contains(event.target)
       || hublots.contains(event.target)
-      || treebar.contains(event.target)
       || isToggleTarget(event.target)) return;
-    if (sessions.classList.contains("open") || hublots.classList.contains("open") || treebar.classList.contains("open")) getCarousel().reset();
+    if (sessions.classList.contains("open") || hublots.classList.contains("open")) getCarousel().reset();
   };
 
   function attach() {
@@ -191,7 +182,7 @@ export function createCarouselEventRegistration({
   return { attach, detach };
 }
 
-export function createCarouselHeaderController({ isDesktop, hublots, treebar, loadHublots, loadCheckpointTree, carousel }) {
+export function createCarouselHeaderController({ isDesktop, hublots, loadHublots, carousel }) {
   function toggleHublots() {
     if (isDesktop()) {
       hublots.classList.toggle("open");
@@ -201,16 +192,7 @@ export function createCarouselHeaderController({ isDesktop, hublots, treebar, lo
     carousel.set(hublots.classList.contains("open") ? 0 : 1);
   }
 
-  function toggleTree() {
-    if (isDesktop()) {
-      treebar.classList.toggle("open");
-      if (treebar.classList.contains("open")) loadCheckpointTree();
-      return;
-    }
-    carousel.set(treebar.classList.contains("open") ? 0 : 2);
-  }
-
-  return { toggleHublots, toggleTree };
+  return { toggleHublots };
 }
 
 export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {

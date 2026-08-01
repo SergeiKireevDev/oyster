@@ -22,11 +22,11 @@ test("Header menu trigger communicates popup state", () => {
 });
 
 test("Header uses named handlers and does not forward unused DOM events", () => {
-  for (const handler of ["toggleTree", "openConfig", "chooseModel", "cycleThinking", "toggleMenu"]) {
+  for (const handler of ["openConfig", "chooseModel", "cycleThinking", "toggleMenu"]) {
     assert.match(source, new RegExp(`onclick=\\{${handler}\\}`));
   }
   assert.doesNotMatch(source, /onclick=\{\([^)]*\) =>/);
-  assert.doesNotMatch(source, /invoke\(HEADER_TOGGLE_TREE_ACTION,\s*event\)/);
+  assert.doesNotMatch(source, /HEADER_TOGGLE_TREE_ACTION|treeChip|toggleTree/);
 });
 
 test("Header uses semantic theme tokens and the shared chip contract", () => {
