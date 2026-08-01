@@ -38,6 +38,9 @@
   const copyRawState = $derived(copyFeedback.widgetId === widget.id ? copyFeedback.status : "idle");
   const copyRawLabel = $derived(COPY_RAW_LABELS[copyRawState] ?? COPY_RAW_LABELS.idle);
   const copyRawDisabled = $derived(copyRawState === "copying");
+  const copyRawSucceeded = $derived(copyRawState === "copied");
+  const copyRawFailed = $derived(copyRawState === "failed");
+  const previewLabel = $derived(`${widget.label || "Pinned widget"} preview`);
 
   function openAdjacentWidget(target) {
     if (!target) return;
@@ -80,7 +83,9 @@
       <span>Markdown preview</span>
       <button
         type="button"
-        class="chip"
+        class="chip copy-raw-action"
+        class:copy-success={copyRawSucceeded}
+        class:copy-error={copyRawFailed}
         disabled={copyRawDisabled}
         onclick={copyRawMarkdown}
         aria-live="polite"
@@ -99,6 +104,8 @@
       class:markdown-stage={widget.kind === "markdown"}
       class:monitoring-stage={widget.kind === "monitoring"}
       class:html-stage={isHtml}
+      role="region"
+      aria-label={previewLabel}
     >
       {#if widget.availability !== "ready"}
         <p class="pinned-widget-unavailable" role="status">This artifact is no longer available.</p>
@@ -130,7 +137,7 @@
           title={navigation.previous ? `Previous: ${navigation.previous.label}` : "No previous pinned widget"}
           disabled={!navigation.previous}
           onclick={() => openAdjacentWidget(navigation.previous)}
-        >←</button>
+        ><span aria-hidden="true">←</span></button>
         <span role="status" aria-live="polite" aria-atomic="true">
           {navigation.index + 1} / {navigation.total}
         </span>
@@ -141,7 +148,7 @@
           title={navigation.next ? `Next: ${navigation.next.label}` : "No next pinned widget"}
           disabled={!navigation.next}
           onclick={() => openAdjacentWidget(navigation.next)}
-        >→</button>
+        ><span aria-hidden="true">→</span></button>
       </div>
     {/if}
     {#if download}
@@ -153,3 +160,148 @@
     <button type="button" class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
   </div>
 </section>
+
+<style>
+  .pinned-widget-viewer {
+    display: flex;
+    min-width: 0;
+    min-height: min(70vh, 680px);
+    flex-direction: column;
+  }
+
+  .pinned-markdown-toolbar {
+    display: flex;
+    min-width: 0;
+    min-height: 38px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 4px 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .pinned-markdown-toolbar > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pinned-markdown-toolbar .chip {
+    min-height: 30px;
+    flex: none;
+    padding: 5px 11px;
+    font-size: 11px;
+  }
+
+  .copy-raw-action.copy-success {
+    border-color: color-mix(in srgb, var(--green) 44%, var(--border));
+    color: var(--green);
+  }
+
+  .copy-raw-action.copy-error {
+    border-color: color-mix(in srgb, var(--red) 48%, var(--border));
+    color: var(--red);
+  }
+
+  .pinned-widget-viewer-stage {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    place-items: center;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg) 92%, var(--panel));
+  }
+
+  .pinned-widget-viewer-stage.markdown-stage,
+  .pinned-widget-viewer-stage.monitoring-stage {
+    display: block;
+    overscroll-behavior: contain;
+    background: var(--bg);
+  }
+
+  .pinned-widget-viewer-stage.markdown-stage {
+    scrollbar-gutter: stable;
+  }
+
+  .pinned-widget-viewer-stage.monitoring-stage {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .pinned-widget-viewer-stage.html-stage {
+    display: block;
+    background: #fff;
+  }
+
+  .pinned-widget-unavailable {
+    max-width: min(34ch, calc(100% - 32px));
+    margin: 16px;
+    padding: 12px 14px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    color: var(--muted);
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  .pinned-widget-viewer-actions {
+    padding-top: 12px;
+  }
+
+  .pinned-widget-viewer-navigation {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    margin-right: auto;
+    color: var(--muted);
+    font: 11px/1 var(--mono);
+  }
+
+  .pinned-widget-viewer-navigation > span {
+    min-width: 4.5ch;
+    text-align: center;
+  }
+
+  @media (max-width: 760px) {
+    .pinned-markdown-toolbar {
+      min-height: 40px;
+      padding: 0 2px 6px;
+    }
+
+    .pinned-markdown-toolbar .chip,
+    .pinned-widget-viewer-actions > .chip {
+      min-height: 40px;
+    }
+
+    .pinned-widget-viewer {
+      min-height: calc(100dvh - 130px);
+    }
+
+    .pinned-widget-viewer-stage {
+      border-radius: 8px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .pinned-widget-viewer-navigation {
+      width: 100%;
+      justify-content: center;
+      margin-right: 0;
+    }
+
+    .pinned-widget-viewer-actions > .chip {
+      flex: 1 1 calc(50% - 3px);
+      justify-content: center;
+      text-align: center;
+    }
+  }
+</style>
