@@ -65,10 +65,10 @@
     tabindex="-1"
     use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}
   >
-    <div class="m-title" id="mTitle">
+    <h2 class="m-title" id="mTitle">
       {#if hasFolderTitleIcon}<FolderIcon size={17} />{/if}
-      <span>{$modalState.title}</span>
-    </div>
+      <span title={$modalState.title}>{$modalState.title}</span>
+    </h2>
 
     {#if $modalState.content === null}
       <div class="m-body" id="mBody"></div>
