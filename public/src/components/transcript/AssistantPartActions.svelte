@@ -35,13 +35,35 @@
   } = $props();
 </script>
 
-<PermalinkButton {target} {onPermalink} />
-{#if showCopy}
-  <CopyMessageButton text={copyText} {onCopy} />
-{/if}
-{#if showCheckpoint}
-  <CheckpointButton {onCheckpoint} busy={checkpointBusy} />
-{/if}
-{#if restoreState}
-  <CheckpointRestoreButton restore={restoreState} {onRollback} />
-{/if}
+<div class="assistant-part-actions" role="group" aria-label="Assistant message actions">
+  <PermalinkButton {target} {onPermalink} />
+  {#if showCopy}
+    <CopyMessageButton text={copyText} {onCopy} />
+  {/if}
+  {#if showCheckpoint}
+    <CheckpointButton {onCheckpoint} busy={checkpointBusy} />
+  {/if}
+  {#if restoreState}
+    <CheckpointRestoreButton restore={restoreState} {onRollback} />
+  {/if}
+</div>
+
+<style>
+  .assistant-part-actions {
+    position: absolute;
+    z-index: 2;
+    inset-block-start: -8px;
+    inset-inline-end: 4px;
+    display: flex;
+    max-width: calc(100% - 8px);
+    flex-direction: row-reverse;
+    gap: 4px;
+  }
+
+  @media (max-width: 760px) {
+    .assistant-part-actions {
+      inset-block-start: -14px;
+      gap: 2px;
+    }
+  }
+</style>
