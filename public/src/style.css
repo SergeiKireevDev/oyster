@@ -749,29 +749,17 @@
   /* toast */
   #toasts {
     position: fixed;
-    bottom: 90px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; gap: 6px;
+    bottom: 90px;
+    left: 50%;
     z-index: 60;
+    display: flex;
+    width: min(calc(100% - 24px), 560px);
+    flex-direction: column;
     align-items: center;
+    gap: 7px;
+    transform: translateX(-50%);
     pointer-events: none;
   }
-  .toast {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    color: inherit;
-    font: inherit;
-    font-size: 13px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.4);
-    animation: fadein .2s;
-    pointer-events: auto;
-    touch-action: pan-y;
-  }
-  .toast.dismissing { transition: transform .15s ease-out, opacity .15s ease-out; opacity: 0; }
-  .toast.warning { border-color: var(--yellow); }
-  .toast.error { border-color: var(--red); }
-  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
   .chip .spin { display: inline-block; animation: chipspin 1s linear infinite; }
   @keyframes chipspin { to { transform: rotate(360deg); } }
 
@@ -1058,7 +1046,59 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
 }
 #modal .browser-directory-shortcut { color: var(--muted); font-size: 11.5px; font-weight: 620; text-align: center; }
 #modal .browser-directory-button { display: flex; flex: 1; align-items: center; gap: 8px; }
-.toast { border-color: rgba(255,255,255,.1); border-radius: 10px; background: rgba(28,33,43,.96); box-shadow: 0 12px 32px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
+.toast {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, var(--text));
+  border-radius: 10px;
+  appearance: none;
+  background: color-mix(in srgb, var(--panel-2) 96%, transparent);
+  box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  color: var(--text);
+  font: 560 12.5px/1.4 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: left;
+  overflow-wrap: anywhere;
+  animation: toast-in .16s ease-out;
+  pointer-events: auto;
+  touch-action: pan-y;
+  backdrop-filter: blur(12px);
+}
+.toast.warning {
+  border-color: color-mix(in srgb, var(--yellow) 58%, var(--border));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--yellow) 72%, transparent), 0 12px 32px rgba(0,0,0,.35);
+}
+.toast.error {
+  border-color: color-mix(in srgb, var(--red) 58%, var(--border));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--red) 72%, transparent), 0 12px 32px rgba(0,0,0,.35);
+}
+.toast-kind {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1;
+}
+.toast.warning .toast-kind { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 11%, transparent); }
+.toast.error .toast-kind { color: var(--red); background: color-mix(in srgb, var(--red) 11%, transparent); }
+.toast-text { min-width: 0; }
+.toast-action { flex: none; color: var(--muted); font-size: 18px; font-weight: 500; line-height: 1; }
+button.toast.actionable { cursor: pointer; transition: transform .15s, border-color .15s, background .15s, opacity .15s; }
+button.toast.actionable:hover { border-color: var(--accent-dim); background: color-mix(in srgb, var(--panel-2) 88%, var(--accent)); transform: translateY(-1px); }
+button.toast.actionable:hover .toast-action { color: var(--accent); }
+button.toast.actionable:active { transform: translateY(0); }
+.toast.dismissing { opacity: 0; transition: transform .15s ease-out, opacity .15s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 
 @media (max-width: 1080px) and (min-width: 761px) {
   :root { --sidebar-width: 238px; --rightbar-width: 280px; }
@@ -1089,6 +1129,11 @@ details.block.activity-step { min-width: 0; max-width: 100%; }
   .msg.user { max-width: 88%; padding: 8px 12px; }
   .msg.assistant { font-size: 13.75px; line-height: 1.52; }
   .btn { min-height: 38px; padding-inline: 14px; }
+  #toasts {
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    width: calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+  .toast { min-height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1208,7 +1253,9 @@ html[data-theme="light"] .analytics-modal {
   --analytics-series-7: #5e7d28;
   --analytics-series-8: #ae563d;
 }
-html[data-theme="light"] .toast { border-color: var(--border); background: rgba(255,255,255,.97); box-shadow: 0 12px 32px rgba(35,43,65,.16); }
+html[data-theme="light"] .toast { background: rgba(255,255,255,.97); box-shadow: 0 12px 32px rgba(35,43,65,.16); }
+html[data-theme="light"] .toast.warning { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--yellow) 72%, transparent), 0 12px 32px rgba(35,43,65,.16); }
+html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--red) 72%, transparent), 0 12px 32px rgba(35,43,65,.16); }
 
 @media (max-width: 760px) {
   html[data-theme="light"] #sessions.open,

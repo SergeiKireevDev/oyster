@@ -121,10 +121,22 @@
 
 </script>
 
+{#snippet toastContent()}
+  {#if toast.kind === "warning"}
+    <span class="toast-kind" aria-hidden="true">!</span>
+  {:else if toast.kind === "error"}
+    <span class="toast-kind" aria-hidden="true">×</span>
+  {/if}
+  <span class="toast-text">{toast.text}</span>
+  {#if toast.onClick}
+    <span class="toast-action" aria-hidden="true">›</span>
+  {/if}
+{/snippet}
+
 {#if toast.onClick}
   <button
     type="button"
-    class={`toast${toast.kind ? ` ${toast.kind}` : ""}${dismissing ? " dismissing" : ""}`}
+    class={`toast actionable${toast.kind ? ` ${toast.kind}` : ""}${dismissing ? " dismissing" : ""}`}
     aria-live={toast.kind === "error" ? "assertive" : "polite"}
     aria-atomic="true"
     style:transform={transform || undefined}
@@ -136,7 +148,7 @@
     onpointercancel={handlePointerCancel}
     onlostpointercapture={handleLostPointerCapture}
   >
-    {toast.text}
+    {@render toastContent()}
   </button>
 {:else}
   <div
@@ -151,6 +163,6 @@
     onpointercancel={handlePointerCancel}
     onlostpointercapture={handleLostPointerCapture}
   >
-    {toast.text}
+    {@render toastContent()}
   </div>
 {/if}
