@@ -26,7 +26,7 @@ test("ToolCard prepares safe, bounded tool output outside its markup", () => {
 
   const markup = source.slice(source.indexOf("</script>") + "</script>".length);
   assert.doesNotMatch(markup, /JSON\.stringify|\.slice\(/);
-  assert.match(markup, /\{#if isEdit\}[\s\S]*?aria-label="Tool edits"[\s\S]*?\{:else if argsText\}/);
+  assert.match(markup, /\{#if isEdit && renderedDiffLines\.length\}[\s\S]*?aria-label="Tool edits"[\s\S]*?\{:else if !isEdit && argsText\}/);
   assert.match(markup, /\{#if resultText\}[\s\S]*?aria-label="Tool result"/);
 });
 
@@ -36,4 +36,21 @@ test("ToolCard documents its store contract and labels expanded content", () => 
   assert.match(source, /aria-label="Tool arguments"/);
   assert.match(source, /aria-label="Tool edits"/);
   assert.match(source, /aria-label="Tool result"/);
+  assert.match(source, /class="tool-chevron" aria-hidden="true"/);
+  assert.match(source, /\{#if !hasDetails\}[\s\S]*?No details returned\./);
+});
+
+test("ToolCard owns a semantic, responsive activity presentation", () => {
+  const styles = source.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
+
+  assert.match(source, /class="block tool tool-card activity-step"/);
+  assert.match(styles, /\.tool-card > summary \{[\s\S]*?min-width: 0;[\s\S]*?border-radius: 7px;/);
+  assert.match(styles, /\.activity-indicator\.running \{[\s\S]*?var\(--yellow\)[\s\S]*?animation: activity-glow/);
+  assert.match(styles, /\.activity-indicator\.ok \{[\s\S]*?var\(--green\)/);
+  assert.match(styles, /\.activity-indicator\.err \{[\s\S]*?var\(--red\)/);
+  assert.match(styles, /border-left: 1px solid color-mix\(in srgb, var\(--accent\)/);
+  assert.match(styles, /\.diff-del \{[\s\S]*?var\(--red\)/);
+  assert.match(styles, /\.diff-add \{[\s\S]*?var\(--green\)/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?min-height: 40px;[\s\S]*?max-height: 55vh;/);
+  assert.doesNotMatch(styles, /html\[data-theme="light"\]/);
 });

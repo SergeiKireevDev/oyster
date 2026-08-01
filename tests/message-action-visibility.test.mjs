@@ -61,7 +61,7 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   assert.match(activityStack, /class="activity-history"/);
   assert.ok(activityStack.indexOf('{#if pastBlocks.length}') < activityStack.indexOf('{#if latestThinking}'));
   assert.ok(activityStack.indexOf('{#if pastBlocks.length}') < activityStack.indexOf('{#if headTool}'));
-  assert.match(toolCard, /class="block tool activity-step"/);
+  assert.match(toolCard, /class="block tool tool-card activity-step"/);
   assert.match(css, /details\.block\.activity-step \{[\s\S]*?border: 0;[\s\S]*?background: transparent;/);
   assert.match(css, /html\[data-theme="light"\] details\.block\.activity-step,[\s\S]*?background: transparent;/);
   assert.match(activityStack, /class:glowing=\{unsettled\}/);

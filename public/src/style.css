@@ -404,32 +404,6 @@
   details.thinking > summary { color: var(--yellow); font-style: italic; }
   details.thinking > .body { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
 
-  .tool summary .tname { color: var(--accent); font-family: var(--mono); font-size: 12.5px; }
-  .tool summary .targ {
-    color: var(--muted); font-family: var(--mono); font-size: 12px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    min-width: 0; flex: 1;
-  }
-  .tool summary .status { margin-left: auto; flex-shrink: 0; font-size: 12px; }
-  .tool .status.running { color: var(--yellow); }
-  .tool .status.ok { color: var(--green); }
-  .tool .status.err { color: var(--red); }
-  .tool .body pre {
-    margin: 0;
-    font-family: var(--mono);
-    font-size: 12.5px;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 350px;
-    overflow-y: auto;
-  }
-  .tool .args-pre { color: var(--muted); margin-bottom: 8px !important; }
-  .tool .diff { font-family: var(--mono); font-size: 12.5px; margin-bottom: 8px; max-height: 350px; overflow-y: auto; }
-  .tool .diff .diff-line { white-space: pre-wrap; word-break: break-word; padding: 0 4px; }
-  .tool .diff .diff-del { color: var(--red); background: rgba(255, 80, 80, 0.08); }
-  .tool .diff .diff-add { color: var(--green); background: rgba(80, 255, 120, 0.08); }
-  .tool .diff .diff-hdr { color: var(--muted); margin-top: 6px; }
-
   /* ---------- shared primary actions ---------- */
   .btn {
     background: var(--accent);
@@ -749,10 +723,6 @@ details.block { margin: 0; border-color: rgba(255,255,255,.075); border-radius: 
 details.block > summary { min-height: 32px; padding: 5px 11px; font-size: 11.5px; }
 details.block > .body { padding: 7px 11px 8px; }
 details.block > summary::before { content: "›"; color: #656e82; font-size: 16px; }
-.tool summary .tname { color: #abb5ff; font-size: 11.5px; font-weight: 650; }
-.tool summary .status.ok { font-size: 0; }
-.tool summary .status.ok::after { content: "✓"; font-size: 12px; }
-
 /* Thinking and tool activity: one current, borderless signal. */
 details.block.activity-step {
   margin: 1px 0;
@@ -788,13 +758,6 @@ details.block.activity-step > summary::before { display: none; }
   0%, 100% { opacity: .58; transform: scale(.85); }
   50% { opacity: 1; transform: scale(1.12); }
 }
-.activity-step.tool summary .tname { color: #aeb7ff; font-size: 11.5px; font-weight: 650; }
-.activity-step.tool summary .targ { color: #747c8f; font-size: 10.5px; }
-.activity-step.tool summary .status { color: #697284; font-size: 9.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
-.activity-step.tool summary .status.running { color: #c7a96c; }
-.activity-step.tool summary .status.err { color: #ff8b9d; }
-.activity-step.tool summary .status.ok { font-size: 9.5px; }
-.activity-step.tool summary .status.ok::after { content: none; }
 details.block.activity-step > .body {
   margin: 5px 0 7px 3px;
   padding: 7px 0 7px 15px;
@@ -1017,7 +980,6 @@ html[data-theme="light"] details.block.activity-step > .body {
   background: transparent;
 }
 html[data-theme="light"] details.block > summary::before { color: #788398; }
-html[data-theme="light"] .tool summary .tname { color: #4656c4; }
 html[data-theme="light"] .tok-com { color: #68758a; }
 html[data-theme="light"] .tok-str { color: #167052; }
 html[data-theme="light"] .tok-num { color: #a54b12; }
