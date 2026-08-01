@@ -3,7 +3,7 @@
   import { checkpointTree } from "../stores/checkpointTree.js";
 </script>
 
-<aside id="treebar" aria-labelledby="checkpoint-tree-heading">
+<aside id="treebar" class="workspace-aux-sidebar" aria-labelledby="checkpoint-tree-heading">
   <h2 id="checkpoint-tree-heading" class="side-head">Checkpoints &amp; forks</h2>
   <div id="treeView" aria-busy={$checkpointTree.loading}>
     {#if $checkpointTree.loading}

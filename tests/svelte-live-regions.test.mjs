@@ -26,7 +26,7 @@ test("checkpoint tree exposes a named, busy region and prioritizes errors over e
   const errorBranch = checkpointTree.indexOf("{:else if $checkpointTree.error}");
   const emptyBranch = checkpointTree.indexOf("{:else if $checkpointTree.empty}");
 
-  assert.match(checkpointTree, /<aside id="treebar" aria-labelledby="checkpoint-tree-heading">/);
+  assert.match(checkpointTree, /<aside id="treebar" class="workspace-aux-sidebar" aria-labelledby="checkpoint-tree-heading">/);
   assert.match(checkpointTree, /<h2 id="checkpoint-tree-heading" class="side-head">/);
   assert.match(checkpointTree, /<div id="treeView" aria-busy=\{\$checkpointTree\.loading\}>/);
   assert.ok(errorBranch >= 0 && errorBranch < emptyBranch, "errors should not be hidden by stale empty-state text");
