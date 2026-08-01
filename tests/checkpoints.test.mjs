@@ -117,6 +117,28 @@ test("checkpointTree: forks nest under the root, inherited checkpoints shown onc
   rmSync(FORK);
 });
 
+test("checkpointTree: malformed cyclic lineage terminates without duplicating nodes", () => {
+  const references = {
+    a: { backend: "sqlite", id: "a", storagePath: "/sessions.sqlite" },
+    b: { backend: "sqlite", id: "b", storagePath: "/sessions.sqlite" },
+  };
+  const catalog = {
+    backend: "sqlite",
+    storagePath: "/sessions.sqlite",
+    readHeader: (id) => ({ id, cwd: "/work" }),
+    list: () => [
+      { id: "a", cwd: "/work", parentSessionId: "b", createdAt: "2026-01-01" },
+      { id: "b", cwd: "/work", parentSessionId: "a", createdAt: "2026-01-02" },
+    ],
+  };
+  const emptyRepository = { listForSession: () => [] };
+
+  const { root } = checkpointTreeCore(references.a, { catalog, repository: emptyRepository });
+  assert.equal(root.id, "a");
+  assert.deepEqual(root.children.map(({ id }) => id), ["b"]);
+  assert.deepEqual(root.children[0].children, []);
+});
+
 test("checkpointTree: legacy forks infer forkedAtHash from newest inherited record", () => {
   clearCheckpoints();
   const LEGACY = writeSession("2026-01-04T00-00-00-000Z_legacy.jsonl",
@@ -176,6 +198,42 @@ test("checkpointWorkdir: clean tree marks HEAD, dirty tree commits", async () =>
   assert.equal(g("status", "--porcelain").trim(), "", "workdir is clean after checkpoint");
   assert.match(g("log", "-1", "--format=%s"), /checkpoint: my label/);
 
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test("checkpointWorkdir falls back to its label when summary launching fails", async () => {
+  const { repo, g } = initRepo();
+  writeFileSync(join(repo, "a.txt"), "changed\n");
+  const launcher = { ephemeral() { throw new Error("launcher unavailable"); } };
+
+  const result = await checkpointWorkdir(launcher, repo, "fallback", "provider/model");
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.message, "checkpoint: fallback");
+  assert.equal(result.body.summarized, false);
+  assert.match(g("log", "-1", "--format=%s"), /checkpoint: fallback/);
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test("checkpointWorkdir counts paths containing newlines as one file", async () => {
+  const { repo } = initRepo();
+  writeFileSync(join(repo, "line\nbreak.txt"), "content\n");
+
+  const result = await checkpointWorkdir(null, repo, "newline path");
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.files, 1);
+  rmSync(repo, { recursive: true, force: true });
+});
+
+test("checkpointWorkdir rejects a clean repository without a HEAD commit", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "oyster-test-empty-repo-"));
+  execFileSync("git", ["init", "-q"], { cwd: repo });
+
+  const result = await checkpointWorkdir(null, repo, null);
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.error, /no commits/);
   rmSync(repo, { recursive: true, force: true });
 });
 
