@@ -2648,49 +2648,209 @@ html[data-theme="light"] .toast { border-color: var(--border); background: rgba(
   width: min(100%, 78ch);
   min-height: 100%;
   margin: 0 auto;
-  padding: clamp(28px, 5vw, 68px) clamp(20px, 6vw, 76px);
-  border-inline: 1px solid rgba(255,255,255,.055);
-  background: #151a23;
-  color: #e2e7f0;
-  box-shadow: 0 0 38px rgba(0,0,0,.18);
-  font: clamp(15px, 1.15vw, 17px)/1.72 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  overflow-wrap: break-word;
+  padding: clamp(26px, 4vw, 52px) clamp(20px, 5vw, 58px);
+  border-inline: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 94%, var(--panel-2));
+  box-shadow: 0 0 30px color-mix(in srgb, var(--bg) 72%, transparent);
+  color: var(--text);
+  font: clamp(14.5px, 1.1vw, 16.5px)/1.68 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
 }
-.pinned-markdown-viewer > :first-child { margin-top: 0; }
-.pinned-markdown-viewer > :last-child { margin-bottom: 0; }
+
+.pinned-markdown-viewer > :first-child {
+  margin-top: 0;
+}
+
+.pinned-markdown-viewer > :last-child {
+  margin-bottom: 0;
+}
+
 .pinned-markdown-viewer h1,
 .pinned-markdown-viewer h2,
 .pinned-markdown-viewer h3,
-.pinned-markdown-viewer h4 { margin: 1.75em 0 .65em; color: #f4f6fb; font-weight: 720; line-height: 1.22; letter-spacing: -.025em; text-wrap: balance; }
-.pinned-markdown-viewer h1 { padding-bottom: .35em; border-bottom: 1px solid rgba(255,255,255,.1); font-size: clamp(1.8rem, 4vw, 2.55rem); }
-.pinned-markdown-viewer h2 { padding-bottom: .28em; border-bottom: 1px solid rgba(255,255,255,.08); font-size: clamp(1.45rem, 3vw, 1.9rem); }
-.pinned-markdown-viewer h3 { font-size: clamp(1.18rem, 2vw, 1.4rem); }
-.pinned-markdown-viewer h4 { font-size: 1.05rem; }
+.pinned-markdown-viewer h4 {
+  margin: 1.65em 0 0.62em;
+  color: var(--text);
+  font-weight: 680;
+  line-height: 1.24;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+
+.pinned-markdown-viewer h1 {
+  padding-bottom: 0.32em;
+  border-bottom: 1px solid var(--border);
+  font-size: clamp(1.65rem, 3vw, 2.1rem);
+}
+
+.pinned-markdown-viewer h2 {
+  padding-bottom: 0.26em;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  font-size: clamp(1.35rem, 2.3vw, 1.7rem);
+}
+
+.pinned-markdown-viewer h3 {
+  font-size: clamp(1.12rem, 1.8vw, 1.3rem);
+}
+
+.pinned-markdown-viewer h4 {
+  font-size: 1rem;
+}
+
 .pinned-markdown-viewer p,
 .pinned-markdown-viewer ul,
 .pinned-markdown-viewer ol,
 .pinned-markdown-viewer blockquote,
 .pinned-markdown-viewer table,
 .pinned-markdown-viewer .codeblock,
-.pinned-markdown-viewer .math-block { margin: 0 0 1.25em; }
+.pinned-markdown-viewer .math-block {
+  margin: 0 0 1.15em;
+}
+
 .pinned-markdown-viewer ul,
-.pinned-markdown-viewer ol { padding-left: 1.6em; }
-.pinned-markdown-viewer li { margin: .35em 0; padding-left: .2em; }
-.pinned-markdown-viewer a { color: #aeb9ff; text-decoration-thickness: .08em; text-underline-offset: .18em; }
-.pinned-markdown-viewer a:hover { color: #cad1ff; }
-.pinned-markdown-viewer strong { color: #f4f6fb; }
-.pinned-markdown-viewer blockquote { padding: .7em 1em; border-left: 4px solid var(--accent-dim); border-radius: 0 8px 8px 0; background: rgba(157,169,255,.07); color: #bdc5d4; }
-.pinned-markdown-viewer hr { margin: 2.25em 0; border: 0; border-top: 1px solid rgba(255,255,255,.12); }
-.pinned-markdown-viewer img { display: block; max-width: 100%; height: auto; margin: 1.5em auto; border-radius: 8px; }
-.pinned-markdown-viewer table { display: block; width: 100%; max-width: 100%; overflow: auto; border-spacing: 0; border-collapse: collapse; font-size: .9em; }
+.pinned-markdown-viewer ol {
+  padding-left: 1.55em;
+}
+
+.pinned-markdown-viewer li {
+  margin: 0.3em 0;
+  padding-left: 0.16em;
+}
+
+.pinned-markdown-viewer a {
+  border-radius: 3px;
+  color: var(--accent);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.pinned-markdown-viewer a:hover {
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+
+.pinned-markdown-viewer a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pinned-markdown-viewer strong {
+  color: var(--text);
+  font-weight: 680;
+}
+
+.pinned-markdown-viewer blockquote {
+  padding: 0.68em 0.9em;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--accent-dim) 35%, transparent);
+  color: var(--muted);
+}
+
+.pinned-markdown-viewer hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.pinned-markdown-viewer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.4em auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.pinned-markdown-viewer table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  overscroll-behavior-inline: contain;
+}
+
 .pinned-markdown-viewer th,
-.pinned-markdown-viewer td { min-width: 8em; padding: .65em .8em; border: 1px solid rgba(255,255,255,.11); text-align: left; vertical-align: top; }
-.pinned-markdown-viewer th { background: rgba(255,255,255,.055); color: #f4f6fb; }
-.pinned-markdown-viewer :not(pre) > code { padding: .15em .38em; border: 1px solid rgba(255,255,255,.08); border-radius: 5px; background: #0d1118; color: #f0c98b; font: .88em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.pinned-markdown-viewer .codeblock { max-width: 100%; overflow: hidden; border: 1px solid rgba(255,255,255,.09); border-radius: 10px; background: #0b0f15; }
-.pinned-markdown-viewer .codeblock pre { margin: 0; padding: 1em 1.15em; overflow: auto; font-size: .84em; line-height: 1.58; tab-size: 2; }
-.pinned-markdown-viewer .code-lang { padding: .45em 1em; border-bottom: 1px solid rgba(255,255,255,.08); color: #8993a5; font: .68em ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
-.pinned-markdown-viewer .math-block { max-width: 100%; padding: .75em 0; overflow-x: auto; }
+.pinned-markdown-viewer td {
+  min-width: 8em;
+  padding: 0.6em 0.72em;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pinned-markdown-viewer th {
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 650;
+}
+
+.pinned-markdown-viewer :not(pre) > code {
+  padding: 0.14em 0.36em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-2) 82%, var(--bg));
+  color: color-mix(in srgb, var(--yellow) 82%, var(--text));
+  font: 0.88em/1.5 var(--mono);
+}
+
+.pinned-markdown-viewer .codeblock {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel));
+}
+
+.pinned-markdown-viewer .codeblock pre {
+  margin: 0;
+  padding: 0.9em 1em;
+  overflow: auto;
+  font: 0.84em/1.58 var(--mono);
+  tab-size: 2;
+}
+
+.pinned-markdown-viewer .code-lang {
+  padding: 0.45em 1em;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font: 0.68em var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pinned-markdown-viewer .math-block {
+  max-width: 100%;
+  padding: 0.7em 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 1080px) {
+  .pinned-markdown-viewer {
+    padding-inline: clamp(20px, 4vw, 42px);
+  }
+}
+
+@media (max-width: 760px) {
+  .pinned-markdown-viewer {
+    min-height: 100%;
+    padding: 24px clamp(16px, 5vw, 26px) 38px;
+    border-inline: 0;
+    font-size: clamp(14.5px, 4vw, 16px);
+    line-height: 1.62;
+  }
+}
+
+@media (max-width: 520px) {
+  .pinned-markdown-viewer th,
+  .pinned-markdown-viewer td {
+    min-width: 7em;
+    padding: 0.52em 0.62em;
+  }
+}
 .pinned-widget-viewer-actions { padding-top: 12px; }
 .pinned-widget-viewer-navigation { display: flex; align-items: center; gap: 7px; margin-right: auto; color: var(--muted); font: 11px/1 var(--mono); }
 #modal .pinned-widget-viewer-navigation .pinned-widget-viewer-arrow { min-width: 34px; padding-inline: 9px; font-size: 16px; line-height: 1; }
@@ -2713,21 +2873,6 @@ html[data-theme="light"] .diff-line.diff-removed { background: #fff0f1; color: #
 html[data-theme="light"] .diff-line.diff-hunk { background: #eef2ff; color: #3447a5; }
 html[data-theme="light"] .diff-line.diff-meta { color: #4b5563; }
 html[data-theme="light"] .pinned-widget-viewer-stage.html-stage { background: #fff; }
-html[data-theme="light"] .pinned-markdown-viewer { border-color: #dce1e9; background: #fff; color: #293142; box-shadow: 0 0 34px rgba(41,49,66,.08); }
-html[data-theme="light"] .pinned-markdown-viewer h1,
-html[data-theme="light"] .pinned-markdown-viewer h2,
-html[data-theme="light"] .pinned-markdown-viewer h3,
-html[data-theme="light"] .pinned-markdown-viewer h4,
-html[data-theme="light"] .pinned-markdown-viewer strong { color: #151b27; }
-html[data-theme="light"] .pinned-markdown-viewer h1,
-html[data-theme="light"] .pinned-markdown-viewer h2,
-html[data-theme="light"] .pinned-markdown-viewer hr { border-color: #dfe3ea; }
-html[data-theme="light"] .pinned-markdown-viewer a { color: #4358ca; }
-html[data-theme="light"] .pinned-markdown-viewer blockquote { background: #f1f3ff; color: #515b70; }
-html[data-theme="light"] .pinned-markdown-viewer th,
-html[data-theme="light"] .pinned-markdown-viewer td { border-color: #d9dee7; }
-html[data-theme="light"] .pinned-markdown-viewer th { background: #f3f5f8; color: #151b27; }
-html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color: #dce1e9; background: #f3f5f8; color: #8b4513; }
 
 @media (hover: none) {
   .pinned-widget-menu { opacity: .72; }
@@ -2845,5 +2990,4 @@ html[data-theme="light"] .pinned-markdown-viewer :not(pre) > code { border-color
   .pinned-monitor-output { padding: 12px; }
   .pinned-monitor-output:not(.diff-output) { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .pinned-monitor-output.diff-output { padding-inline: 0; }
-  .pinned-markdown-viewer { min-height: 100%; padding: 26px clamp(17px, 5vw, 28px) 42px; border-inline: 0; font-size: clamp(15px, 4vw, 17px); }
 }

@@ -7,21 +7,21 @@
   const hasRenderableContent = $derived(source.trim().length > 0);
 </script>
 
-{#if hasRenderableContent}
-  <SanitizedMarkdown element="article" className="pinned-markdown-viewer" {source} {label} />
-{:else}
-  <p class="empty-state" role="status" aria-atomic="true">This Markdown artifact is empty.</p>
-{/if}
+<section class="markdown-artifact">
+  {#if hasRenderableContent}
+    <SanitizedMarkdown element="article" className="pinned-markdown-viewer" {source} {label} />
+  {:else}
+    <p class="artifact-state artifact-state-empty" role="status" aria-atomic="true">
+      <span>This Markdown artifact is empty.</span>
+    </p>
+  {/if}
+</section>
 
 <style>
-  .empty-state {
-    box-sizing: border-box;
+  .markdown-artifact {
     display: grid;
+    width: 100%;
+    min-width: 0;
     min-height: 100%;
-    margin: 0;
-    padding: 2rem;
-    place-items: center;
-    color: var(--muted);
-    text-align: center;
   }
 </style>
