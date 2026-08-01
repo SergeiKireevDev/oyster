@@ -52,7 +52,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/HublotSidebar.svelte`
 - [x] `public/src/components/ImageArtifact.svelte`
 - [x] `public/src/components/LlmboxWorkspaceModal.svelte`
-- [ ] `public/src/components/MarkdownArtifact.svelte`
+- [x] `public/src/components/MarkdownArtifact.svelte`
 - [ ] `public/src/components/Menu.svelte`
 - [ ] `public/src/components/OptionPickerItem.svelte`
 - [ ] `public/src/components/OptionPickerModal.svelte`
