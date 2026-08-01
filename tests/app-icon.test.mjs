@@ -16,6 +16,7 @@ const iconNames = [
   "thinking",
   "more",
   "file",
+  "download",
   "copy",
   "link",
 ];

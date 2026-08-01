@@ -695,7 +695,6 @@ const fileExplorerActions = {
   upload: uploadExplorerFiles,
   pin: (path) => pinArtifactPath(path),
   back: () => loadFileExplorer(fileExplorerState.curPath),
-  backToHublots: () => showHublots().catch((e) => addToast(e.message, "error")),
 };
 
 

@@ -89,7 +89,7 @@ test("folder browser component routes browse, create, submit, and cancel through
   assert.doesNotMatch(source, /features\/files\/folderBrowserActions\.js/);
 });
 
-test("file explorer component routes browse, edit, save, upload, back, and return through scoped actions", () => {
+test("file explorer component routes browse, edit, save, upload, and back through scoped actions", () => {
   const source = readFileSync(new URL("../public/src/components/FileExplorerModal.svelte", import.meta.url), "utf8");
   assert.match(source, /getUiActionRegistry\(\)/);
   assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_BROWSE_ACTION, path\)/);
@@ -97,8 +97,7 @@ test("file explorer component routes browse, edit, save, upload, back, and retur
   assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_SAVE_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_UPLOAD_ACTION\)/);
   assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_BACK_ACTION\)/);
-  assert.match(source, /uiActions\.invoke\(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION\)/);
-  assert.doesNotMatch(source, /features\/files\/fileExplorerActions\.js/);
+  assert.doesNotMatch(source, /FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION|features\/files\/fileExplorerActions\.js/);
 });
 
 test("the Files widget routes file workflows while the custom prompt stays focused on live interfaces", () => {

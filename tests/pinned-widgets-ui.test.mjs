@@ -280,12 +280,14 @@ test("viewer arrows follow top-level order and stay within the current group", (
   assert.match(viewer, /\{#key widget\.id\}[\s\S]*pinned-widget-viewer-stage/, "switching widgets must recreate the scroll viewport at its left edge");
 });
 
-test("file explorer pins files and directories through scoped actions", () => {
+test("file explorer pins entries without current-folder or widgets footer actions", () => {
   const explorer = component("FileExplorerModal.svelte");
   const directories = component("BrowserDirectoryList.svelte");
   assert.match(explorer, /FILE_EXPLORER_PIN_ACTION/);
   assert.match(explorer, /pinExploredPath\(fullPath\)/);
-  assert.match(explorer, /Pin folder/);
+  assert.match(explorer, /<AppIcon name="download" size=\{15\} \/>/);
+  assert.match(explorer, /\.file-explorer-row > \.chip \{[\s\S]*align-items: center;[\s\S]*justify-content: center;/);
+  assert.doesNotMatch(explorer, /Pin folder|← Widgets|FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION/);
   assert.match(directories, /onPin\?: \(\(path: string\) => void\) \| null/);
   assert.match(directories, /onPin = null/);
   assert.match(directories, /onPin\(fullPath\)/);

@@ -15,7 +15,6 @@ import {
   FILE_EXPLORER_BROWSE_ACTION,
   FILE_EXPLORER_EDIT_ACTION,
   FILE_EXPLORER_OPEN_ACTION,
-  FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION,
   FILE_EXPLORER_SAVE_ACTION,
   FILE_EXPLORER_UPLOAD_ACTION,
   HUBLOT_CREATE_ACTION,
@@ -113,7 +112,6 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
       save: () => calls.push(["explorer-save"]),
       upload: () => calls.push(["explorer-upload"]),
       back: () => calls.push(["explorer-back"]),
-      backToHublots: () => calls.push(["explorer-return"]),
     },
     files: { openExplorer: () => calls.push(["explorer-open"]) },
     hublots: {
@@ -143,7 +141,6 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   uiActions.invoke(FILE_EXPLORER_SAVE_ACTION);
   uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
   uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
-  uiActions.invoke(FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION);
   uiActions.invoke(FILE_EXPLORER_OPEN_ACTION);
   uiActions.invoke(HUBLOT_SHOW_ACTION);
   uiActions.invoke(HUBLOT_CREATE_ACTION, "demo");
@@ -167,7 +164,6 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
     ["explorer-save"],
     ["explorer-upload"],
     ["explorer-back"],
-    ["explorer-return"],
     ["explorer-open"],
     ["hublot-show"],
     ["hublot-create", "demo"],
@@ -188,5 +184,5 @@ test("resource assembly registers file-picker, folder-browser, and file-explorer
   assert.equal(uiActions.invoke(ROUTINE_RUN_ACTION, "stale", "start"), undefined);
   assert.equal(uiActions.invoke(ROUTINE_SHOW_GENERATOR_ACTION), undefined);
   assert.equal(uiActions.invoke(ROUTINE_GENERATE_ACTION, "stale"), undefined);
-  assert.equal(calls.length, 23);
+  assert.equal(calls.length, 22);
 });

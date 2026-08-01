@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "copy" | "link";
+   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "download" | "copy" | "link";
    *   size?: number;
    *   class?: string;
    * }}
@@ -46,6 +46,8 @@
       <circle cx="5" cy="12" r="1.25" class="filled" /><circle cx="12" cy="12" r="1.25" class="filled" /><circle cx="19" cy="12" r="1.25" class="filled" />
     {:else if name === "file"}
       <path d="M6 3h8l4 4v14H6zM14 3v5h4" />
+    {:else if name === "download"}
+      <path d="M12 3v12M8 11l4 4 4-4M5 20h14" />
     {:else if name === "copy"}
       <rect x="8" y="8" width="11" height="11" rx="2" />
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
