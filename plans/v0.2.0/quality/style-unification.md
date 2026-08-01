@@ -68,7 +68,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/SettingsModal.svelte`
 - [x] `public/src/components/Sidebars.svelte`
 - [x] `public/src/components/SvgArtifact.svelte`
-- [ ] `public/src/components/TextPromptModal.svelte`
+- [x] `public/src/components/TextPromptModal.svelte`
 - [ ] `public/src/components/ToastItem.svelte`
 - [ ] `public/src/components/Toasts.svelte`
 - [ ] `public/src/components/Transcript.svelte`

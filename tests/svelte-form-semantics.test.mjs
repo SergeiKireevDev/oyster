@@ -12,10 +12,11 @@ test("single-field workflows use native form submission instead of Enter key han
   assert.doesNotMatch(auth, /onkeydown=\{onKeydown\}/);
 
   const prompt = component("TextPromptModal.svelte");
-  assert.match(prompt, /<form onsubmit=\{submitTextPrompt\}>/);
+  assert.match(prompt, /<form class="text-prompt" onsubmit=\{submitTextPrompt\}>/);
   assert.match(prompt, /placeholder = \$derived\(String\(\$textPrompt\.placeholder \?\? ""\)\.trim\(\)\)/);
   assert.match(prompt, /inputLabel = \$derived\(placeholder \|\| String\(\$textPrompt\.title \?\? ""\)\.trim\(\) \|\| "Response"\)/);
-  assert.match(prompt, /aria-label=\{inputLabel\}/);
+  assert.match(prompt, /<label class="text-prompt-field" for="textPromptInput">[\s\S]*?<span>Response<\/span>/);
+  assert.match(prompt, /id="textPromptInput"[\s\S]*?aria-label=\{inputLabel\}/);
   assert.match(prompt, /placeholder=\{placeholder\}/);
   assert.match(prompt, /<button class="[^"]*\bbtn\b[^"]*" type="submit"/);
   assert.doesNotMatch(prompt, /event\.key === "Enter"/);
