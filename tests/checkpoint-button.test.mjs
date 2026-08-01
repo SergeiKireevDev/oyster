@@ -42,7 +42,7 @@ test("CheckpointButton follows the transcript action control visual contract", (
 test("CheckpointButton provides explicit loading, mobile, and reduced-motion states", () => {
   assert.match(source, /\.checkpoint-spinner \{[\s\S]*?border-right-color: transparent;[\s\S]*?animation: checkpoint-spin/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: 38px;[\s\S]*?min-height: 38px;/);
-  assert.match(globalCss, /@media \(max-width: 760px\)[\s\S]*?\.msg\.user:has\(> \.ckpt-restore\) > \.checkpoint \{ left: -160px; \}/);
+  assert.match(globalCss, /@media \(max-width: 760px\)[\s\S]*?\.msg\.user > \.checkpoint \{ left: -114px; \}[\s\S]*?\.msg\.user:has\(> \.ckpt-restore\) > \.checkpoint \{ left: -160px; \}/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/);
 });
 

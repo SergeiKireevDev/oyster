@@ -82,7 +82,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/transcript/CheckpointButton.svelte`
 - [x] `public/src/components/transcript/CheckpointRestoreButton.svelte`
 - [x] `public/src/components/transcript/CompactionMarker.svelte`
-- [ ] `public/src/components/transcript/CopyMessageButton.svelte`
+- [x] `public/src/components/transcript/CopyMessageButton.svelte`
 - [ ] `public/src/components/transcript/PermalinkButton.svelte`
 - [ ] `public/src/components/transcript/ToolCard.svelte`
 - [ ] `public/src/components/transcript/UserMessage.svelte`
