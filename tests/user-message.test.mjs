@@ -31,10 +31,12 @@ test("interface notifications split the title from a verbatim body", () => {
   assert.match(source, /\{interfaceMessage\.body\}/);
 });
 
-test("checkpoint controls are not rendered before the message root exists", () => {
+test("user actions stay inert until the message root exists", () => {
   assert.match(source, /root === null \? null : \(restores\.find/);
-  assert.match(source, /\{#if root !== null && checkpoint\.target === root\}/);
-  assert.match(source, /\{#if restore !== null\}/);
+  assert.equal(source.match(/<AssistantPartActions\b/g)?.length, 2);
+  assert.equal(source.match(/label="User message actions"/g)?.length, 2);
+  assert.equal(source.match(/checkpoint=\{root !== null && checkpoint\.target === root\}/g)?.length, 2);
+  assert.equal(source.match(/\{restore\}/g)?.length, 2);
 });
 
 test("user messages own a semantic, responsive bubble presentation", () => {

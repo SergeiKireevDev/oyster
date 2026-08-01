@@ -43,12 +43,11 @@ test("PermalinkButton follows the transcript action control visual contract", ()
   assert.match(source, /\.permalink:hover \{[\s\S]*?var\(--accent\)[\s\S]*?var\(--surface-hover\)[\s\S]*?translateY\(-1px\)/);
   assert.match(source, /\.permalink:active \{ transform: none; \}/);
   assert.doesNotMatch(globalCss, /(?:^|\n)\s*\.permalink \{[\s\S]*?background:/);
-  assert.match(globalCss, /\.msg\.user > \.permalink \{ left: -34px; \}/);
+  assert.doesNotMatch(globalCss, /\.msg\.user > \.permalink \{[^}]*left:/);
 });
 
 test("PermalinkButton retains contextual reveal and mobile touch behavior", () => {
   assert.match(source, /opacity: 0;[\s\S]*?pointer-events: none;/);
-  assert.match(globalCss, /\.msg:focus-within > \.permalink, \.msg:focus-within > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
-  assert.match(globalCss, /\.assistant-part:focus-within > \.assistant-part-actions > \.permalink,/);
+  assert.match(globalCss, /:is\(\.assistant-part, \.msg\.user, \.interface-message\):focus-within > \.message-actions > :is\(\.permalink, \.message-copy\)[\s\S]*?pointer-events: auto;/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: var\(--icon-control-dense\);[\s\S]*?min-height: var\(--icon-control-dense\);/);
 });

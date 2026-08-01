@@ -274,20 +274,19 @@
   #messages > [data-role="user"] + .assistant-entry,
   #messages > .assistant-entry + [data-role="user"] { margin-top: 12px; }
   /* Message actions reveal on hover or focus; their visuals are component-owned. */
-  .msg:hover > .permalink, .msg:hover > .message-copy { opacity: .85; pointer-events: auto; }
   @media (hover: hover) {
-    .user-message-row:hover .msg.user > .permalink,
-    .user-message-row:hover .msg.user > .message-copy { opacity: .85; pointer-events: auto; }
+    :is(.assistant-part, .msg.user, .interface-message):hover > .message-actions > :is(.permalink, .message-copy) {
+      opacity: .85;
+      pointer-events: auto;
+    }
   }
-  .msg.user > .permalink { left: -34px; }
-  .msg.user > .message-copy { left: -62px; }
+  :is(.assistant-part, .msg.user, .interface-message):focus-within > .message-actions > :is(.permalink, .message-copy) {
+    opacity: .85;
+    pointer-events: auto;
+  }
   @media (hover: none) {
-    .msg:hover > .permalink, .msg:hover > .message-copy { opacity: 0; pointer-events: none; }
-    .msg:focus-within > .permalink, .msg:focus-within > .message-copy { opacity: .85; pointer-events: auto; }
     .msg:focus-within { outline: 1px solid var(--accent-dim); outline-offset: 3px; }
   }
-  /* Return controls on checkpointed user messages sit beside their other actions. */
-  .msg.user > .ckpt-restore { left: -118px; }
   .msg .meta {
     font-size: 11px;
     color: var(--muted);
@@ -753,14 +752,7 @@ details.block.activity-step > .body {
   color: #838b9c;
 }
 details.block.activity-step { min-width: 0; max-width: 100%; }
-.assistant-part-actions > button { position: static; flex: none; }
-.msg.user > .checkpoint { left: -94px; }
-@media (hover: hover) {
-  .assistant-part:hover > .assistant-part-actions > .permalink,
-  .assistant-part:hover > .assistant-part-actions > .message-copy { opacity: .85; pointer-events: auto; }
-}
-.assistant-part:focus-within > .assistant-part-actions > .permalink,
-.assistant-part:focus-within > .assistant-part-actions > .message-copy { opacity: .85; pointer-events: auto; }
+.message-actions > button { position: static; flex: none; }
 .btn { min-height: 40px; padding: 8px 17px; border-radius: 11px; background: linear-gradient(145deg, #b0b9ff, #8f9cf3); box-shadow: 0 5px 16px rgba(106,120,225,.2); color: #10131e; font-size: 13px; transition: transform .15s, filter .15s; }
 .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .btn.stop { background: rgba(255,125,145,.14); color: #ff9bac; box-shadow: none; }
@@ -860,16 +852,13 @@ button.toast.actionable:active { transform: translateY(0); }
   #modal .browser-directory-shortcut,
   #modal .browser-directory-button { min-height: 40px; }
   #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
-  .assistant-part-actions > button {
+  .message-actions > button {
     display: grid;
-    min-width: 38px;
-    min-height: 38px;
+    min-width: var(--icon-control-dense);
+    min-height: var(--icon-control-dense);
     padding: 0;
     place-items: center;
   }
-  .msg.user > .message-copy { left: -72px; }
-  .msg.user > .checkpoint { left: -114px; }
-  .msg.user:has(> .ckpt-restore) > .checkpoint { left: -160px; }
   .btn { min-height: 38px; padding-inline: 14px; }
   .toast-stack {
     right: max(8px, env(safe-area-inset-right));

@@ -44,11 +44,11 @@ test("session search result markup is shared by the picker and sidebar", () => {
   assert.deepEqual(warnings, []);
 });
 
-test("user message branches share checkpoint action markup", () => {
+test("user message branches share the top-right message action group", () => {
   const message = source("public/src/components/transcript/UserMessage.svelte");
 
-  assert.equal(message.match(/\{@render checkpointActions\(\)\}/g)?.length, 2);
-  assert.equal(message.match(/<CheckpointButton\b/g)?.length, 1);
-  assert.equal(message.match(/<CheckpointRestoreButton\b/g)?.length, 1);
-  assert.match(message, /\{#snippet checkpointActions\(\)\}/);
+  assert.equal(message.match(/<AssistantPartActions\b/g)?.length, 2);
+  assert.equal(message.match(/label="User message actions"/g)?.length, 2);
+  assert.doesNotMatch(message, /<Checkpoint(?:Button|RestoreButton)\b/);
+  assert.doesNotMatch(message, /checkpointActions/);
 });

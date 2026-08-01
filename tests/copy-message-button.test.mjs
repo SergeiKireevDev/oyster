@@ -43,13 +43,12 @@ test("CopyMessageButton follows the transcript action control visual contract", 
   assert.match(source, /\.message-copy:hover \{[\s\S]*?var\(--accent\)[\s\S]*?var\(--surface-hover\)[\s\S]*?translateY\(-1px\)/);
   assert.match(source, /\.message-copy:active \{ transform: none; \}/);
   assert.doesNotMatch(globalCss, /(?:^|\n)\s*\.permalink, \.message-copy \{/);
-  assert.match(globalCss, /\.msg\.user > \.message-copy \{ left: -62px; \}/);
+  assert.doesNotMatch(globalCss, /\.msg\.user > \.message-copy \{[^}]*left:/);
 });
 
 test("CopyMessageButton retains contextual reveal and mobile touch behavior", () => {
   assert.match(source, /opacity: 0;[\s\S]*?pointer-events: none;/);
-  assert.match(globalCss, /\.msg:focus-within > \.permalink, \.msg:focus-within > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
-  assert.match(globalCss, /\.assistant-part:focus-within > \.assistant-part-actions > \.message-copy \{ opacity: \.85; pointer-events: auto; \}/);
+  assert.match(globalCss, /:is\(\.assistant-part, \.msg\.user, \.interface-message\):focus-within > \.message-actions > :is\(\.permalink, \.message-copy\)[\s\S]*?pointer-events: auto;/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: var\(--icon-control-dense\);[\s\S]*?min-height: var\(--icon-control-dense\);/);
-  assert.match(globalCss, /@media \(max-width: 760px\)[\s\S]*?\.msg\.user > \.message-copy \{ left: -72px; \}/);
+  assert.doesNotMatch(globalCss, /@media \(max-width: 760px\)[\s\S]*?\.msg\.user > \.message-copy \{[^}]*left:/);
 });
