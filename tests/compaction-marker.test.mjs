@@ -7,6 +7,10 @@ const source = readFileSync(
   new URL("../public/src/components/transcript/CompactionMarker.svelte", import.meta.url),
   "utf8",
 );
+const globalStyles = readFileSync(
+  new URL("../public/src/style.css", import.meta.url),
+  "utf8",
+);
 
 test("CompactionMarker compiles without Svelte or accessibility warnings", () => {
   const { warnings } = compile(source, {
@@ -33,4 +37,22 @@ test("CompactionMarker describes valid token counts with correct plurality", () 
   assert.match(source, /!Number\.isFinite\(tokensBefore\) \|\| tokensBefore <= 0/);
   assert.match(source, /tokensBefore === 1 \? "token" : "tokens"/);
   assert.match(source, /tokensBefore\.toLocaleString\(\)/);
+  assert.match(source, /\{#if tokenSummary\}[\s\S]*?class="compaction-count">\{tokenSummary\}/);
+});
+
+test("CompactionMarker keeps its decorative contents out of the separator name", () => {
+  assert.match(source, /class="compaction-label" aria-hidden="true"/);
+  assert.match(source, /class="compaction-indicator"/);
+  assert.match(source, /class="compaction-title">Context compacted/);
+});
+
+test("CompactionMarker owns a restrained token-based transcript divider", () => {
+  assert.match(source, /<style>[\s\S]*?\.compaction-marker\s*\{/);
+  assert.match(source, /grid-template-columns:\s*minmax\(12px, 1fr\) minmax\(0, auto\) minmax\(12px, 1fr\)/);
+  assert.match(source, /background:\s*color-mix\(in srgb, var\(--panel-2\) 72%, transparent\)/);
+  assert.match(source, /var\(--accent\)/);
+  assert.match(source, /font:\s*9px\/1 var\(--mono\)/);
+  assert.match(source, /text-overflow:\s*ellipsis/);
+  assert.match(source, /@media \(max-width: 520px\)/);
+  assert.doesNotMatch(globalStyles, /\.compaction-marker/);
 });
