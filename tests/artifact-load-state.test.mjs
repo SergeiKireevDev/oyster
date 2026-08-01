@@ -8,6 +8,10 @@ const source = readFileSync(
   "utf8",
 );
 const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+const viewer = readFileSync(
+  new URL("../public/src/components/PinnedWidgetViewerModal.svelte", import.meta.url),
+  "utf8",
+);
 
 const artifactKinds = ["image", "svg", "video", "html"];
 
@@ -40,7 +44,7 @@ test("ArtifactLoadState follows the shared responsive artifact-state visual cont
   assert.match(styles, /\.artifact-state-error[\s\S]*var\(--red\)/);
   assert.match(styles, /html\[data-theme="light"\] \.artifact-state/);
   assert.match(styles, /@media \(max-width: 760px\) \{[\s\S]*\.artifact-state \.chip \{ min-height: 38px; \}/);
-  assert.match(styles, /\.pinned-widget-viewer-stage \{ position: relative;/);
+  assert.match(viewer, /\.pinned-widget-viewer-stage\s*\{[\s\S]*position: relative;/);
   assert.match(styles, /\.pinned-svg-viewer \{ position: relative;/);
 });
 
