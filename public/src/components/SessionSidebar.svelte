@@ -1265,9 +1265,6 @@
     .session-sidebar-row { min-height: 58px; }
     .session-sidebar-action { width: var(--icon-control-important); height: var(--icon-control-important); }
     .session-sidebar-lifecycle { width: var(--icon-control-standard); height: var(--icon-control-standard); }
-    .session-sidebar-workspace-power,
-    .session-sidebar-workspace-destroy,
-    .session-sidebar-workspace-create { width: var(--icon-control-important); height: var(--icon-control-important); }
     .session-sidebar-cwd > summary,
     .session-sidebar-child-sessions > summary,
     .session-archive-divider,
@@ -1280,9 +1277,16 @@
     .session-sidebar-instance-tooltip dl { grid-template-columns: minmax(0, 1fr); }
     .session-sidebar-instance-tooltip dl div { border-right: 0; }
     .session-sidebar-instance-tooltip dl div:nth-child(2) { border-top: 1px solid var(--border); }
-    .session-sidebar-workspace-heading { flex-wrap: wrap; }
-    .session-sidebar-hierarchy-copy { flex-basis: calc(100% - 28px); }
-    .session-sidebar-workspace-cloud-actions { margin-left: 20px; }
+  }
+
+  @media (pointer: coarse) {
+    .session-sidebar-workspace-cloud-actions { gap: 12px; margin-right: 5px; }
+    .session-sidebar-workspace-power,
+    .session-sidebar-workspace-destroy,
+    .session-sidebar-workspace-create { position: relative; }
+    .session-sidebar-workspace-power::after,
+    .session-sidebar-workspace-destroy::after { position: absolute; inset: -8px -6px; content: ""; }
+    .session-sidebar-workspace-create::after { position: absolute; inset: -6px; content: ""; }
   }
 
   @media (prefers-reduced-motion: reduce) {
