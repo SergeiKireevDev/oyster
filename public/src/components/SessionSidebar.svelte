@@ -1202,8 +1202,8 @@
   .session-sidebar-lifecycle { display: grid; width: 30px; height: 30px; flex: none; align-self: center; place-items: center; margin-right: 3px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); line-height: 1; opacity: .72; cursor: pointer; transition: color .12s, background-color .12s, border-color .12s, opacity .12s; }
   .session-sidebar-action { font-size: 0; }
   .session-sidebar-action.stop::before { width: 11px; height: 11px; border-radius: 2px; background: currentColor; content: ""; }
-  .session-sidebar-action.delete::before { width: 14px; height: 14px; background: currentColor; content: ""; clip-path: polygon(8% 0, 50% 42%, 92% 0, 100% 8%, 58% 50%, 100% 92%, 92% 100%, 50% 58%, 8% 100%, 0 92%, 42% 50%, 0 8%); }
-  .session-sidebar-lifecycle.archive::before { width: 14px; height: 12px; border: 1.5px solid currentColor; border-top-width: 4px; border-radius: 2px; content: ""; }
+  .session-sidebar-action.delete::before { width: 11px; height: 11px; background: currentColor; content: ""; clip-path: polygon(8% 0, 50% 42%, 92% 0, 100% 8%, 58% 50%, 100% 92%, 92% 100%, 50% 58%, 8% 100%, 0 92%, 42% 50%, 0 8%); }
+  .session-sidebar-lifecycle.archive::before { width: 11px; height: 11px; border: 1.5px solid currentColor; border-top-width: 4px; border-radius: 2px; content: ""; }
   .session-sidebar-entry:hover :is(.session-sidebar-action, .session-sidebar-lifecycle),
   .session-sidebar-entry.current :is(.session-sidebar-action, .session-sidebar-lifecycle) { opacity: 1; }
   .session-sidebar-action:hover { border-color: color-mix(in srgb, var(--red) 28%, var(--border)); background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
@@ -1263,7 +1263,7 @@
     .session-sidebar-environment-info { width: var(--icon-control-standard); }
     .session-sidebar-entry,
     .session-sidebar-row { min-height: 58px; }
-    .session-sidebar-action { width: var(--icon-control-important); height: var(--icon-control-important); }
+    .session-sidebar-action,
     .session-sidebar-lifecycle { width: var(--icon-control-standard); height: var(--icon-control-standard); }
     .session-sidebar-cwd > summary,
     .session-sidebar-child-sessions > summary,
