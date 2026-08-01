@@ -9,7 +9,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 ## Server root
 
 - [x] `server/application-candidate.mjs`
-- [ ] `server/app.mjs`
+- [x] `server/app.mjs`
 - [ ] `server/checkpoints.mjs`
 - [ ] `server/pi-credential-service.mjs`
 - [ ] `server/pinned-widgets.mjs`

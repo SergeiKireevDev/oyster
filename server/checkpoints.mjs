@@ -25,8 +25,18 @@ function checkpointContext(input, options = {}) {
     const header = readSessionHeaderInfo(input);
     return { catalog, reference: { backend: "jsonl", id: header.id, storagePath: input }, identity: input };
   }
-  const reference = input;
-  return { catalog, reference, identity: reference.backend === "sqlite" ? reference.id : reference.storagePath };
+  if (!input || typeof input !== "object" || !["jsonl", "sqlite"].includes(input.backend) || !input.id) {
+    throw new TypeError("a valid session path or reference is required");
+  }
+  if (input.backend === "jsonl" && !input.storagePath) {
+    throw new TypeError("a JSONL session reference requires a storage path");
+  }
+  return { catalog, reference: input, identity: input.backend === "sqlite" ? input.id : input.storagePath };
+}
+
+function requireRepository(repository) {
+  if (!repository) throw new Error("SQLite checkpoint repository is required");
+  return repository;
 }
 
 /** Anchor a commit to the current backend-neutral session tip. */
@@ -35,6 +45,7 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
   const { sessionId, leafId, entries } = catalog.entries(identity);
   const anchorId = entries[entries.length - 1]?.id ?? null;
   if (!sessionId || !anchorId || !hash) return null;
+  const repository = requireRepository(options.repository);
   const checkpoint = {
     hash, anchorId, leafId, dir,
     sessionRef: reference,
@@ -42,8 +53,7 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
     message: message ?? null,
     timestamp: new Date().toISOString(),
   };
-  if (!options.repository) throw new Error("SQLite checkpoint repository is required");
-  return options.repository.record(reference, checkpoint);
+  return repository.record(reference, checkpoint);
 }
 
 /** Build a checkpoint family from catalog lineage rather than directory scans. */
@@ -81,32 +91,41 @@ export function checkpointTree(session, options = {}) {
     seen.add(root.id);
     root = byId.get(root.parentId);
   }
-  if (!options.repository) throw new Error("SQLite checkpoint repository is required");
-  const db = Object.fromEntries(infos.map((info) => [info.id, options.repository.listForSession(info.sessionRef)]));
-  // forks inherit their ancestors' checkpoint records (so ↩ works inside
-  // them), but the tree must not display those twice: each node only shows
-  // checkpoints an ancestor hasn't already shown
-  const build = (info, depth, shownAbove = new Set()) => {
-    const all = db[info.id] ?? [];
-    const key = (c) => `${c.hash}@${c.anchorId}`;
+  const repository = requireRepository(options.repository);
+  const checkpointsById = new Map(infos.map((info) => [info.id, repository.listForSession(info.sessionRef)]));
+  const childrenByParentId = new Map();
+  for (const info of infos) {
+    if (!info.parentId) continue;
+    const children = childrenByParentId.get(info.parentId) ?? [];
+    children.push(info);
+    childrenByParentId.set(info.parentId, children);
+  }
+  for (const children of childrenByParentId.values()) {
+    children.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id));
+  }
+  // Forks inherit their ancestors' checkpoint records (so ↩ works inside
+  // them), but the tree must not display those twice. A lineage set also
+  // prevents malformed cyclic catalog data from recursively duplicating nodes.
+  const build = (info, depth, shownAbove = new Set(), lineage = new Set()) => {
+    const all = checkpointsById.get(info.id) ?? [];
+    const key = (checkpoint) => `${checkpoint.hash}@${checkpoint.anchorId}`;
     const shown = new Set([...shownAbove, ...all.map(key)]);
-    // legacy forks (pre-forkedAtHash headers): the newest record inherited
-    // from an ancestor IS the checkpoint the fork was created from
-    const inherited = all.filter((c) => shownAbove.has(key(c)));
+    const inherited = all.filter((checkpoint) => shownAbove.has(key(checkpoint)));
     const forkedAtHash = info.forkedAtHash
       ?? (inherited.length
         ? inherited.reduce((a, b) => ((a.timestamp ?? "") > (b.timestamp ?? "") ? a : b)).hash
         : null);
+    const descendants = depth > 25
+      ? []
+      : (childrenByParentId.get(info.id) ?? []).filter((child) => !lineage.has(child.id));
+    const childLineage = new Set(lineage).add(info.id);
     return {
       ...info,
       forkedAtHash,
       checkpoints: all
-        .filter((c) => !shownAbove.has(key(c)))
+        .filter((checkpoint) => !shownAbove.has(key(checkpoint)))
         .map(({ hash, anchorId, message, timestamp }) => ({ hash, anchorId, message, timestamp })),
-      children: depth > 25 ? [] : infos
-        .filter((candidate) => candidate.parentId === info.id)
-        .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? -1 : 1))
-        .map((i) => build(i, depth + 1, shown)),
+      children: descendants.map((child) => build(child, depth + 1, shown, childLineage)),
     };
   };
   return { root: build(root, 0) };
@@ -115,8 +134,9 @@ export function checkpointTree(session, options = {}) {
 /** run git in a workdir; resolves with { code, stdout, stderr } (never rejects) */
 export function git(dir, args) {
   return new Promise((resolvePromise) => {
-    execFile("git", args, { cwd: dir, timeout: 30_000 }, (err, stdout, stderr) => {
-      resolvePromise({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
+    execFile("git", args, { cwd: dir, timeout: 30_000 }, (error, stdout, stderr) => {
+      const code = !error ? 0 : (Number.isInteger(error.code) ? error.code : 1);
+      resolvePromise({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
 }
@@ -133,24 +153,47 @@ function summarizeDiff(piProcesses, dir, model, diff) {
       `<diff>\n${diff}\n</diff>`;
     const args = ["--no-session", "--no-tools", "--thinking", "off", "--model", model, "-p", prompt];
     console.log(`[oyster] checkpoint summary sub-agent (${model}) for ${dir}`);
-    const proc = piProcesses.ephemeral(args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "", err = "";
-    proc.stdout.on("data", (c) => { out += c; });
-    proc.stderr.on("data", (c) => { err += c; });
-    const timer = setTimeout(() => { try { proc.kill("SIGKILL"); } catch {} }, 60_000);
-    timer.unref?.();
-    proc.on("error", () => { clearTimeout(timer); resolvePromise(null); });
-    proc.on("exit", (code) => {
+    if (!piProcesses?.ephemeral) {
+      resolvePromise(null);
+      return;
+    }
+    let proc;
+    try {
+      proc = piProcesses.ephemeral(args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      resolvePromise(null);
+      return;
+    }
+    if (!proc?.stdout || !proc.stderr || typeof proc.on !== "function") {
+      resolvePromise(null);
+      return;
+    }
+    let out = "", err = "", settled = false;
+    const appendBounded = (current, chunk) => (current + chunk).slice(-16_384);
+    proc.stdout.on("data", (chunk) => { out = appendBounded(out, chunk); });
+    proc.stderr.on("data", (chunk) => { err = appendBounded(err, chunk); });
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      resolvePromise(value);
+    };
+    const timer = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch {}
+      finish(null);
+    }, 60_000);
+    timer.unref?.();
+    proc.once("error", () => finish(null));
+    proc.once("exit", (code) => {
       if (code !== 0) {
         console.error(`[oyster] summary sub-agent failed (code=${code}): ${err.trim().split("\n").pop() ?? ""}`);
-        resolvePromise(null);
+        finish(null);
         return;
       }
-      // first meaningful line, stripped of quotes/fences, length-capped
-      const line = out.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("```"))[0] ?? "";
-      const clean = line.replace(/^["'`]+|["'`]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
-      resolvePromise(clean || null);
+      const line = out.split("\n").map((value) => value.trim()).find((value) => value && !value.startsWith("```")) ?? "";
+      const clean = line.replace(/^["'`]+|["'`]+$/g, "").replace(/[\u0000-\u001f\u007f]+/g, " ")
+        .replace(/\s+/g, " ").trim().slice(0, 72);
+      finish(clean || null);
     });
   });
 }
@@ -164,21 +207,30 @@ export async function checkpointWorkdir(piProcesses, dir, label, model = null) {
   if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
   const st = await git(dir, ["status", "--porcelain"]);
   if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
-  const files = st.stdout.split("\n").filter(Boolean).length;
-  if (!files) {
-    // clean tree: nothing to commit, but HEAD still marks this exact state;
-    // carry its subject so the tree can label the checkpoint
-    const head = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
-    const subject = (await git(dir, ["log", "-1", "--format=%s"])).stdout.trim();
-    return { status: 200, body: { committed: false, reason: "workdir is clean", hash: head || undefined, message: subject || undefined } };
+  if (!st.stdout) {
+    // A clean tree can only be checkpointed when HEAD identifies its state.
+    const headResult = await git(dir, ["rev-parse", "--short", "HEAD"]);
+    if (headResult.code !== 0 || !headResult.stdout.trim()) {
+      return { status: 400, body: { error: "repository has no commits to checkpoint" } };
+    }
+    const subjectResult = await git(dir, ["log", "-1", "--format=%s"]);
+    return { status: 200, body: {
+      committed: false,
+      reason: "workdir is clean",
+      hash: headResult.stdout.trim(),
+      message: subjectResult.code === 0 ? (subjectResult.stdout.trim() || undefined) : undefined,
+    } };
   }
   const add = await git(dir, ["add", "-A"]);
   if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
+  const changedFiles = await git(dir, ["diff", "--cached", "--name-only", "-z"]);
+  if (changedFiles.code !== 0) return { status: 500, body: { error: `git diff failed: ${changedFiles.stderr.trim()}` } };
+  const files = changedFiles.stdout.split("\0").filter(Boolean).length;
   let message = null;
   let summarized = false;
   if (model) {
-    const diff = (await git(dir, ["diff", "--cached"])).stdout.slice(0, 40_000);
-    if (!piProcesses?.ephemeral) throw new Error("pi process launcher is required for checkpoint summaries");
+    const diffResult = await git(dir, ["diff", "--cached"]);
+    const diff = diffResult.code === 0 ? diffResult.stdout.slice(0, 40_000) : "";
     const summary = diff.trim() ? await summarizeDiff(piProcesses, dir, model, diff) : null;
     if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
   }
@@ -188,7 +240,11 @@ export async function checkpointWorkdir(piProcesses, dir, label, model = null) {
   if (ci.code !== 0) {
     return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };
   }
-  const hash = (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
+  const head = await git(dir, ["rev-parse", "--short", "HEAD"]);
+  if (head.code !== 0 || !head.stdout.trim()) {
+    return { status: 500, body: { error: `checkpoint committed but HEAD could not be resolved: ${head.stderr.trim()}` } };
+  }
+  const hash = head.stdout.trim();
   console.log(`[oyster] checkpoint ${hash} in ${dir} (${files} files): ${message}`);
   return { status: 200, body: { committed: true, hash, message, files, dir, summarized } };
 }
