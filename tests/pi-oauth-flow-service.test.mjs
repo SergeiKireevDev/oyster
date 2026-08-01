@@ -89,10 +89,23 @@ test("OAuth flow coordinator adapts interactive callbacks with one-time bounded 
   let status = service.getStatus(started.flowId);
   assert.equal(status.authorization.url, "https://auth.invalid/start?state=transient");
   assert.equal(status.deviceCode.userCode, "USER-1234");
+  assert.equal(status.deviceCode.intervalSeconds, 5);
+  assert.equal(status.deviceCode.expiresInSeconds, 900);
   assert.equal(status.progress, "Waiting for input");
   assert.equal(status.requests.length, 3);
   assert.equal(new Set(status.requests.map((request) => request.requestId)).size, 3);
   assert.ok(status.requests.every((request) => /^[0-9a-f]{64}$/.test(request.requestId)));
+  assert.equal(Object.isFrozen(status.requests), true);
+  assert.equal(Object.isFrozen(status.requests.find((request) => request.kind === "select").options), true);
+  assert.throws(() => status.requests.push({}), TypeError);
+
+  callbacks.onDeviceCode({
+    userCode: "USER-1234", verificationUri: "https://auth.invalid/device",
+    intervalSeconds: -1, expiresInSeconds: 1.5,
+  });
+  const boundedDeviceCode = service.getStatus(started.flowId).deviceCode;
+  assert.equal(boundedDeviceCode.intervalSeconds, undefined);
+  assert.equal(boundedDeviceCode.expiresInSeconds, undefined);
 
   const prompt = status.requests.find((request) => request.kind === "prompt");
   const manual = status.requests.find((request) => request.kind === "manual_code");
@@ -186,6 +199,44 @@ test("OAuth flow coordinator restarts runners after durable login and reports re
   assert.equal(restarts, 0);
 });
 
+test("OAuth flow coordinator bounds a hung runner restart after credentials are saved", async () => {
+  const timers = [];
+  const setTimer = (callback, delay) => {
+    const timer = { callback, delay, cleared: false, unref() {} };
+    timers.push(timer);
+    return timer;
+  };
+  const clearTimer = (timer) => { timer.cleared = true; };
+  const restart = deferred();
+  const registry = new Map();
+  const service = createPiOAuthFlowService({
+    registry,
+    credentialService: { async loginOAuth() { return { credentialType: "oauth" }; } },
+    restartActiveRunners: () => restart.promise,
+    randomBytes: deterministicBytes(),
+    inactivityMs: 1000,
+    terminalRetentionMs: 2000,
+    setTimer,
+    clearTimer,
+  });
+
+  const started = service.start("hung-restart");
+  await settle();
+  assert.equal(service.getStatus(started.flowId).phase, "restarting");
+  const restartTimer = timers.findLast((timer) => timer.delay === 1000 && !timer.cleared);
+  restartTimer.callback();
+  const completed = service.getStatus(started.flowId);
+  assert.equal(completed.status, "succeeded");
+  assert.equal(completed.phase, "complete");
+  assert.deepEqual(completed.restart, { status: "failed", runnerIds: [] });
+  assert.equal(service.start("another-provider").status, "pending");
+
+  restart.resolve({ status: "restarted", runnerIds: ["late-runner"] });
+  await settle();
+  assert.deepEqual(service.getStatus(started.flowId).restart, { status: "failed", runnerIds: [] });
+  service.shutdown();
+});
+
 test("OAuth flow coordinator cancels, expires, and shuts down flows with cleanup", async () => {
   const registry = new Map();
   const timers = new Map();
@@ -270,6 +321,23 @@ test("replacement coordinator can poll and answer a hot-reloaded active flow", a
   await settle();
   assert.equal(replacement.getStatus(started.flowId).status, "succeeded");
   assert.doesNotMatch(JSON.stringify(replacement.getStatus(started.flowId)), /hot-answer-canary/);
+});
+
+test("OAuth flow coordinator preserves safe actionable provider failure codes", async () => {
+  const service = createPiOAuthFlowService({
+    registry: new Map(),
+    credentialService: {
+      async loginOAuth() {
+        throw Object.assign(new Error("credential details canary"), { code: "credential_replace_required" });
+      },
+    },
+    restartActiveRunners: restartNoRunners,
+    randomBytes: deterministicBytes(),
+  });
+  const started = service.start("already-configured");
+  await settle();
+  assert.equal(service.getStatus(started.flowId).failureCode, "credential_replace_required");
+  assert.doesNotMatch(JSON.stringify(service.getStatus(started.flowId)), /details|canary/);
 });
 
 test("OAuth flow coordinator redacts provider failures and reuses supplied state", async () => {
