@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
+const grid = readFileSync(new URL("../public/src/components/PinnedWidgetGrid.svelte", import.meta.url), "utf8");
 
-test("monitoring thumbnails contain compact neon text without spilling", () => {
-  assert.match(styles, /\.pinned-widget-monitor-preview \{[^}]*max-width: 100%;[^}]*overflow: hidden;[^}]*overflow-wrap: anywhere;/);
-  assert.match(styles, /\.pinned-widget-monitor-preview \{[^}]*text-shadow: 0 0 6px rgba\(126,240,208,\.72\);/);
+test("monitoring thumbnails contain compact semantic text without spilling", () => {
+  assert.match(grid, /\.pinned-widget-monitor-preview \{[^}]*max-width: 100%;[^}]*overflow: hidden;[^}]*overflow-wrap: anywhere;/);
+  assert.match(grid, /\.pinned-widget-icon\.kind-monitoring \{[^}]*color: var\(--green\);/);
+  assert.doesNotMatch(grid, /\.pinned-widget-monitor-preview \{[^}]*text-shadow:/);
 });
 
 test("monitoring output is constrained to the mobile viewer instead of being cropped by its intrinsic width", () => {
