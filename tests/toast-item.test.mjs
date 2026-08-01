@@ -20,7 +20,7 @@ test("shared toast styling covers interaction, semantic states, long content, an
   assert.match(styles, /\.toast\.error \{[\s\S]*?var\(--red\)/);
   assert.match(styles, /button\.toast\.actionable:hover/);
   assert.match(styles, /\.toast\.dismissing \{[\s\S]*?transition:/);
-  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?#toasts \{[\s\S]*?env\(safe-area-inset-bottom\)/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.toast-stack \{[\s\S]*?env\(safe-area-inset-bottom\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
 });
 

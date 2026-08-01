@@ -12,7 +12,7 @@ test("transient notices and dynamic errors use appropriately prioritized live re
   const checkpointTree = component("CheckpointTreebar.svelte");
   const assistant = component("transcript/AssistantMessage.svelte");
 
-  assert.match(toasts, /<section id="toasts" aria-label="Notifications">/);
+  assert.match(toasts, /<section id="toasts" class="toast-stack" aria-label="Notifications">/);
   assert.match(toast, /aria-live=\{toast\.kind === "error" \? "assertive" : "polite"\}/);
   assert.match(toast, /role=\{toast\.kind === "error" \? "alert" : "status"\}/);
   assert.match(toast, /aria-atomic="true"/);

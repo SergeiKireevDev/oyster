@@ -3,7 +3,7 @@
   import ToastItem from "./ToastItem.svelte";
 </script>
 
-<section id="toasts" aria-label="Notifications">
+<section id="toasts" class="toast-stack" aria-label="Notifications">
   {#each $toasts as toast (toast.id)}
     <ToastItem {toast} onDismiss={removeToast} />
   {/each}
