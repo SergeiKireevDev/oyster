@@ -12,7 +12,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/app.mjs`
 - [x] `server/checkpoints.mjs`
 - [x] `server/pi-credential-service.mjs`
-- [ ] `server/pinned-widgets.mjs`
+- [x] `server/pinned-widgets.mjs`
 - [ ] `server/pi-oauth-flow-service.mjs`
 - [ ] `server/pi-processes.mjs`
 - [ ] `server/reload-manifest.mjs`

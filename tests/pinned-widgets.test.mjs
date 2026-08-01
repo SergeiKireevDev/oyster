@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -13,6 +13,7 @@ import {
   formatMonitoringPreview,
   listPinnedWidgets,
   materializeMonitoringScripts,
+  preparePinnedVideo,
   runMonitoringScript,
 } from "../server/pinned-widgets.mjs";
 
@@ -130,6 +131,23 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   assert.equal(removed.status, 200);
 });
 
+test("an invalid widget label does not partially apply a requested move", async (t) => {
+  const { root, routes, appStore } = fixture(t);
+  const path = join(root, "atomic.md");
+  writeFileSync(path, "# Atomic");
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path, scope: "workspace" }), created);
+  const grouped = response();
+  await routes["POST /pinned-widget-groups"](request({ name: "Destination", scope: "workspace" }), grouped);
+
+  const patched = response();
+  await routes["PATCH /pinned-widgets"](request({
+    id: created.body.widget.id, groupId: grouped.body.group.id, label: "   ",
+  }), patched);
+  assert.equal(patched.status, 400);
+  assert.equal(appStore.repositories.pinnedWidgets.find(created.body.widget.id).group_id, null);
+});
+
 test("widgets move between session-only and workspace-visible sections", async (t) => {
   const { root, routes } = fixture(t);
   writeFileSync(join(root, "shared.md"), "# Shared");
@@ -241,16 +259,18 @@ test("monitoring script materialization confines widget ids and rejects unknown 
 test("failed monitoring widget creation removes newly materialized scripts", async (t) => {
   const { root, routes } = fixture(t);
   const monitorRoot = join(root, ".oyster", "monitoring-widgets");
-  const created = response();
-  await routes["POST /pinned-widgets"](request({
-    label: "   ",
+  const base = {
     previewScript: "#!/bin/sh\ntrue",
     contentScript: "#!/bin/sh\ntrue",
     cwd: root,
     sessionId: "session-a",
-  }), created);
-  assert.equal(created.status, 400);
-  assert.deepEqual(readdirSync(monitorRoot), []);
+  };
+  for (const body of [{ ...base, label: "   " }, { ...base, format: "html" }]) {
+    const created = response();
+    await routes["POST /pinned-widgets"](request(body), created);
+    assert.equal(created.status, 400);
+    assert.deepEqual(readdirSync(monitorRoot), []);
+  }
 });
 
 test("monitoring widgets persist scripts and execute preview and viewer content on demand", async (t) => {
@@ -280,6 +300,43 @@ test("monitoring widgets persist scripts and execute preview and viewer content 
   await routes["GET /pinned-widget-monitor-content"]({}, content, new URL(`http://localhost/pinned-widget-monitor-content?id=${created.body.widget.id}`));
   assert.equal(content.body.content, "status: ready");
   assert.equal(content.body.format, "text");
+});
+
+test("mutation routes reject JSON values that are not objects", async (t) => {
+  const { routes } = fixture(t);
+  for (const route of ["POST /pinned-widgets", "PATCH /pinned-widgets", "POST /pinned-widget-groups", "PATCH /pinned-widget-groups"]) {
+    const res = response();
+    await routes[route](request(null), res);
+    assert.equal(res.status, 400, route);
+    assert.match(res.body.error, /JSON object/, route);
+  }
+});
+
+test("built-in widgets cannot be moved into session ownership or indirectly deleted with a group", async (t) => {
+  const { routes, appStore } = fixture(t);
+
+  const moved = response();
+  await routes["PATCH /pinned-widgets"](request({
+    id: "builtin:file-explorer", scope: "session", sessionId: "session-a",
+  }), moved);
+  assert.equal(moved.status, 409);
+  assert.equal(appStore.repositories.pinnedWidgets.find("builtin:file-explorer").scope, "workspace");
+
+  const grouped = response();
+  await routes["POST /pinned-widget-groups"](request({ name: "Tools", scope: "workspace" }), grouped);
+  const placed = response();
+  await routes["PATCH /pinned-widgets"](request({
+    id: "builtin:file-explorer", groupId: grouped.body.group.id,
+  }), placed);
+  assert.equal(placed.status, 200);
+
+  const removed = response();
+  routes["DELETE /pinned-widget-groups"]({}, removed, new URL(
+    `http://localhost/pinned-widget-groups?id=${grouped.body.group.id}&deleteWidgets=1`,
+  ));
+  assert.equal(removed.status, 409);
+  assert.ok(appStore.repositories.pinnedWidgets.find("builtin:file-explorer"));
+  assert.ok(appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id));
 });
 
 test("widget creation rejects malformed scopes and credential-bearing links", async (t) => {
@@ -378,6 +435,39 @@ test("SVG artifacts stream only through the sandboxed native image viewer", asyn
   assert.match(res.headers["content-security-policy"], /default-src 'none'; sandbox/);
   assert.match(res.headers["content-security-policy"], /style-src 'unsafe-inline'/);
   assert.deepEqual(res.body(), svg);
+});
+
+test("concurrent video preparation initializes and shares the transcode registry", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-video-transcode-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const source = join(root, "legacy.avi");
+  const cacheRoot = join(root, "cache");
+  writeFileSync(source, "legacy video");
+  const stat = statSync(source);
+  const media = {
+    row: { kind: "video" }, source, target: source, stat,
+    mimeType: "video/x-msvideo", displayName: "legacy.avi",
+  };
+  const state = {};
+  let conversions = 0;
+  let release;
+  const blocked = new Promise((resolvePromise) => { release = resolvePromise; });
+  const execFileImpl = async (_bin, args) => {
+    conversions++;
+    await blocked;
+    writeFileSync(args.at(-1), "converted video");
+    return { stdout: "", stderr: "" };
+  };
+
+  const first = preparePinnedVideo(state, media, { cacheRoot, execFileImpl });
+  const second = preparePinnedVideo(state, media, { cacheRoot, execFileImpl });
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(conversions, 1);
+  release();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.target, secondResult.target);
+  assert.equal(firstResult.mimeType, "video/mp4");
+  assert.equal(state.pinnedWidgetTranscodes.size, 0);
 });
 
 test("AVI artifacts open in the native player through a browser-compatible MP4 conversion", async (t) => {
