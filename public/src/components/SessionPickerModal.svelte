@@ -526,7 +526,7 @@
     align-items: center;
   }
 
-  .session-row.current .s-name { color: var(--accent); }
+  .session-row.current .s-name { color: var(--selection-text); }
 
   .s-session-main {
     min-width: 0;

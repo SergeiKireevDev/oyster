@@ -40,7 +40,7 @@ test("OptionPickerItem exposes complete names and selection state when styled te
 test("OptionPickerItem owns its model row styles and uses shared visual tokens", () => {
   assert.match(source, /<style>[\s\S]*\.model-autocomplete-option\s*\{/);
   assert.match(source, /grid-template-columns:\s*minmax\(72px, auto\) minmax\(0, 1fr\) minmax\(22px, auto\)/);
-  assert.match(source, /background:\s*var\(--accent-dim\)/);
+  assert.match(source, /\.model-autocomplete-option\.active\s*\{[\s\S]*background:\s*var\(--selection-bg\)[\s\S]*var\(--selection-marker\)/);
   assert.match(source, /font:\s*10px\/1\.3 var\(--mono\)/);
   assert.match(source, /@media \(max-width:\s*760px\)[\s\S]*min-height:\s*44px/);
   assert.match(source, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none/);

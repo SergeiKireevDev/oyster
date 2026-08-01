@@ -26,7 +26,7 @@ test("settings modal owns token-based selected, focus, disabled, and responsive 
   const style = source.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
 
   assert.match(style, /grid-template-columns:\s*18px minmax\(0, 1fr\)/);
-  assert.match(style, /\.settings-option\.active\s*\{[\s\S]*?inset 2px 0 0 var\(--accent\)/);
+  assert.match(style, /\.settings-option\.active\s*\{[\s\S]*?inset 2px 0 0 var\(--selection-marker\)/);
   assert.match(style, /:has\(\.settings-checkbox:focus-visible\)[\s\S]*?border-color:\s*var\(--accent\)/);
   assert.match(style, /:has\(\.settings-checkbox:disabled\)[\s\S]*?opacity:\s*\.45;[\s\S]*?cursor:\s*not-allowed/);
   assert.match(style, /accent-color:\s*var\(--accent\)/);

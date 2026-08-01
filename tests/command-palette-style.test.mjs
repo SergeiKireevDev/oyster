@@ -11,7 +11,7 @@ const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta
 test("command palette owns a restrained token-based floating surface", () => {
   assert.match(component, /<style>[\s\S]*?#cmdPalette\s*\{[\s\S]*?var\(--panel-2\)[\s\S]*?var\(--shadow-lg\)/);
   assert.match(component, /\.cmd-row:hover\s*\{[\s\S]*?var\(--surface-hover\)/);
-  assert.match(component, /\.cmd-row\.active\s*\{[\s\S]*?var\(--accent-dim\)[\s\S]*?inset 2px 0 0 var\(--accent\)/);
+  assert.match(component, /\.cmd-row\.active\s*\{[\s\S]*?var\(--selection-bg\)[\s\S]*?inset 2px 0 0 var\(--selection-marker\)/);
   assert.match(component, /\.cmd-row:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--accent\)/);
   assert.doesNotMatch(component, /#[0-9a-f]{3,8}\b|rgba?\(/i);
 });

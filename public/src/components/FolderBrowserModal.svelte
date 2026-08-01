@@ -168,10 +168,10 @@
   }
 
   .toggle-hidden.active {
-    border-color: var(--accent);
-    background: var(--accent-dim);
-    color: var(--text);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
+    color: var(--selection-text);
+    box-shadow: inset 0 -1px 0 var(--selection-marker);
   }
 
   .newdir-row {

@@ -12,7 +12,7 @@ test("cloud workspace provisioning owns a token-based responsive visual contract
   assert.match(component, /<style>[\s\S]*?\.cloud-workspace-modal\s*\{/);
   assert.match(component, /\.cloud-provider-card:hover:not\(:disabled\)/);
   assert.match(component, /\.cloud-provider-card:disabled\s*\{[\s\S]*?opacity:\s*\.45;[\s\S]*?cursor:\s*not-allowed;/);
-  assert.match(component, /\.cloud-method-list button\.active\s*\{[\s\S]*?var\(--accent-dim\)/);
+  assert.match(component, /\.cloud-method-list button\.active\s*\{[\s\S]*?var\(--selection-bg\)[\s\S]*?var\(--selection-text\)/);
   assert.match(component, /\.cloud-error\s*\{[\s\S]*?var\(--red\)/);
   assert.match(component, /\.cloud-success-icon\s*\{[\s\S]*?var\(--green\)/);
   assert.match(component, /@media \(max-width: 760px\)[\s\S]*?min-height:\s*40px;/);

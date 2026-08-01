@@ -18,7 +18,7 @@ test("file explorer exposes clear loading, error, empty, and hidden-file states"
   assert.match(component, /class="file-explorer-empty" role="status">This folder is empty\./);
   assert.match(component, /class:active=\{\$fileExplorer\.showHidden\}/);
   assert.match(component, /aria-pressed=\{\$fileExplorer\.showHidden\}/);
-  assert.match(styles, /\.toggle-hidden\.active\s*\{[\s\S]*?box-shadow:\s*inset 0 -2px 0 var\(--accent\);/);
+  assert.match(styles, /\.toggle-hidden\.active\s*\{[\s\S]*?var\(--selection-bg\)[\s\S]*?box-shadow:\s*inset 0 -1px 0 var\(--selection-marker\);/);
 });
 
 test("file explorer editor is labelled, responsive, and uses the shared primary action", () => {
@@ -39,7 +39,9 @@ test("file explorer owns compact file action layout and uses semantic theme toke
   assert.match(styles, /var\(--red\)/);
   assert.match(styles, /var\(--border\)/);
   assert.match(styles, /var\(--panel-2\)/);
-  assert.match(styles, /var\(--accent\)/);
+  for (const token of ["selection-bg", "selection-border", "selection-marker", "selection-text"]) {
+    assert.match(styles, new RegExp(`var\\(--${token}\\)`));
+  }
   assert.doesNotMatch(styles, /(?:color|background|border-color):\s*#[\da-f]{3,8}/i);
   assert.doesNotMatch(styles, /rgba?\(/i);
 });

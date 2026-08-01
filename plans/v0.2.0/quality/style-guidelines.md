@@ -44,7 +44,11 @@ Use CSS custom properties instead of hard-coded colors whenever a semantic token
 | `--red` | `#ff7d91` | `#c43f58` | Error, destructive, stopped unexpectedly |
 | `--yellow` | `#f5c66f` | `#956317` | Warning, pending, pausing |
 | `--stopped` | `#343943` | `#aeb7c6` | Inactive/stopped status |
-| `--user-bubble` | `#29315a` | `#e1e6ff` | Selected options and user-message family |
+| `--user-bubble` | `#29315a` | `#e1e6ff` | User-message surfaces |
+| `--selection-bg` | subtle 6% accent tint | theme-derived | Quiet selected/current background |
+| `--selection-border` | 22% accent blended with border | theme-derived | Selected/current border |
+| `--selection-marker` | translucent 48% accent | theme-derived | Thin non-color selection marker |
+| `--selection-text` | 24% accent blended with text | theme-derived | Restrained selected/current text |
 | `--surface-hover` | `#1d222d` | `#e9edf4` | Generic hover surface |
 | `--shadow-lg` | `0 24px 64px rgba(0,0,0,.42)` | light equivalent | Menus, modals, major overlays |
 | `--mono` | SFMono/Cascadia/Roboto Mono/Consolas | same | Code, paths, hashes, technical values |
@@ -120,7 +124,7 @@ Every interactive control should account for:
 - **Default:** clear affordance without excessive accent color.
 - **Hover:** subtle fill/border/color change; desktop controls may move by only `1–2px`.
 - **Focus-visible:** the global convention is a `2px solid var(--accent)` outline with `2px` offset. Never remove it without an equally visible replacement.
-- **Active/selected/current:** use accent tint and/or inset marker; do not communicate selection by color alone when another cue is practical.
+- **Active/selected/current:** use the shared `--selection-*` tokens: a near-neutral low-opacity tint, a softly blended border, restrained text, and—where useful—a thin inset marker. Avoid saturated accent fills, glow, or fully accent-colored labels; do not communicate selection by color alone.
 - **Disabled:** reduced opacity (currently about `.45`), default/not-allowed cursor, and no hover lift.
 - **Loading:** spinner, pulsing status dot, progress bar, or explicit copy while retaining stable layout.
 - **Error/destructive:** `--red`; **warning/pending:** `--yellow`; **success/online:** `--green`.

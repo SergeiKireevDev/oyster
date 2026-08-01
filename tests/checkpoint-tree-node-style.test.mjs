@@ -12,7 +12,7 @@ test("checkpoint tree nodes use shared iconography and restrained semantic surfa
   assert.match(component, /import AppIcon from "\.\/AppIcon\.svelte"/);
   assert.match(component, /<AppIcon name="fork" size=\{14\} \/>/);
   assert.doesNotMatch(component, /🌿|🌱/);
-  assert.match(component, /\.t-session\.current\s*\{[\s\S]*?var\(--accent-dim\)[\s\S]*?inset 2px 0 0 var\(--accent\)/);
+  assert.match(component, /\.t-session\.current\s*\{[\s\S]*?var\(--selection-bg\)[\s\S]*?inset 2px 0 0 var\(--selection-marker\)[\s\S]*?var\(--selection-text\)/);
   assert.match(component, /\.t-ckpt:hover:not\(:disabled\)/);
   assert.match(component, /\.t-ckpt:disabled\s*\{[\s\S]*?opacity:\s*\.45;[\s\S]*?cursor:\s*not-allowed;/);
   assert.doesNotMatch(component, /#[0-9a-f]{3,8}\b|rgba?\(/i);

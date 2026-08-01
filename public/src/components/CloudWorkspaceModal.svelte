@@ -972,7 +972,7 @@
   }
 
   .cloud-method-list button:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
-  .cloud-method-list button.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+  .cloud-method-list button.active { border-color: var(--selection-border); background: var(--selection-bg); color: var(--selection-text); font-weight: 600; box-shadow: inset 0 -1px 0 var(--selection-marker); }
 
   .cloud-handoff { display: grid; justify-items: start; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .cloud-handoff p,

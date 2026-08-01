@@ -118,8 +118,8 @@
   }
 
   .cmd-row.active {
-    background: color-mix(in srgb, var(--accent-dim) 72%, var(--panel-2));
-    box-shadow: inset 2px 0 0 var(--accent);
+    background: var(--selection-bg);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
   }
 
   .cmd-row:focus-visible {
@@ -229,8 +229,8 @@
   }
 
   #cmdPalette.path .cmd-row.active {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent-dim) 72%, var(--panel-2));
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
   }
 
   #cmdPalette.path .cmd-ico {

@@ -176,11 +176,11 @@
   }
 
   .t-session.current {
-    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-    background: color-mix(in srgb, var(--accent-dim) 48%, transparent);
-    box-shadow: inset 2px 0 0 var(--accent);
-    color: var(--accent);
-    font-weight: 650;
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
+    color: var(--selection-text);
+    font-weight: 620;
   }
 
   .t-session-icon,
