@@ -33,9 +33,9 @@ test("latest work period freezes completed turns at the last rendered timestamp"
 test("work duration is rendered once after the transcript items for busy and idle sessions", () => {
   const source = readFileSync(new URL("../public/src/components/Transcript.svelte", import.meta.url), "utf8");
   const loopEnd = source.indexOf("{/each}");
-  const label = source.indexOf('class="work-duration"');
+  const label = source.indexOf('class="transcript-status work-duration"');
   assert.ok(loopEnd >= 0 && label > loopEnd);
-  assert.equal(source.match(/class="work-duration"/g)?.length, 1);
+  assert.equal(source.match(/class="transcript-status work-duration"/g)?.length, 1);
   assert.match(source, /latestTranscriptWorkPeriod\(\$transcriptItems, \$appSession\.workTimerResetAt\)/);
   assert.match(source, /\$appSession\.busy \? now : workPeriod\.endedAt/);
   assert.match(source, /{#if \$appSession\.busy && !\$appSession\.compacting}<span class="spin"/);
@@ -52,6 +52,6 @@ test("work duration clock runs only while the session is busy and is cleaned up"
 test("context compaction renders a dedicated atomic live spinner", () => {
   const source = readFileSync(new URL("../public/src/components/Transcript.svelte", import.meta.url), "utf8");
   assert.match(source, /{#if \$appSession\.compacting}/);
-  assert.match(source, /class="compaction-status" role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(source, /class="transcript-status compaction-status" role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(source, /Compacting context…/);
 });

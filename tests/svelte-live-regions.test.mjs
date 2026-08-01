@@ -69,6 +69,6 @@ test("routine progress is queryable without announcing every incremental log upd
   assert.match(routine, /aria-valuemax="100"/);
   assert.match(routine, /aria-valuenow=\{progressValue\(routine\)\}/);
   assert.match(routine, /class="r-msg"[^>]*aria-live="off"/);
-  assert.match(transcript, /class="work-duration" aria-live="off"/);
+  assert.match(transcript, /class="transcript-status work-duration"[^>]*aria-live="off"/);
   assert.match(component("transcript/ToolCard.svelte"), /class=\{`status \$\{statusClass\}`\} aria-live="off"/);
 });
