@@ -26,7 +26,7 @@ test("folder browser uses shared controls and clear form states", () => {
   assert.match(component, /<label for="newFolderName">New folder name<\/label>/);
   assert.match(component, /class:active=\{\$folderBrowser\.showHidden\}[\s\S]*?aria-pressed=\{\$folderBrowser\.showHidden\}/);
   assert.match(component, /class="btn modal-primary-action start-session-action"[^>]*disabled=\{!canSubmitFolder\}/);
-  assert.match(styles, /\.toggle-hidden\.active\s*\{[\s\S]*?box-shadow:\s*inset 0 -2px 0 var\(--accent\);/);
+  assert.match(styles, /\.toggle-hidden\.active\s*\{[\s\S]*?var\(--selection-bg\)[\s\S]*?box-shadow:\s*inset 0 -1px 0 var\(--selection-marker\);/);
   assert.doesNotMatch(component, /👁️|dotfiles/);
 });
 
@@ -35,7 +35,7 @@ test("folder browser owns responsive layout with semantic theme tokens", () => {
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?min-height:\s*40px;/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?grid-template-columns:\s*1fr;/);
   assert.match(styles, /\.m-actions > \.start-session-action\s*\{[^}]*flex-basis:\s*100%;/);
-  for (const token of ["muted", "red", "border", "panel-2", "accent", "accent-dim", "text", "mono"]) {
+  for (const token of ["muted", "red", "border", "panel-2", "selection-bg", "selection-border", "selection-marker", "selection-text", "mono"]) {
     assert.match(styles, new RegExp(`var\\(--${token}\\)`));
   }
   assert.doesNotMatch(styles, /(?:color|background|border-color):\s*#[\da-f]{3,8}/i);

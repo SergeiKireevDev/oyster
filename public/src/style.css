@@ -487,11 +487,16 @@
     background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
   #modal .m-option.active,
-  #modal .m-option.keyboard-active { border-color: var(--accent); background: var(--user-bubble); }
+  #modal .m-option.keyboard-active {
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
+  }
   #modal .m-option.current {
-    border-color: var(--accent);
-    background: var(--user-bubble);
-    box-shadow: 3px 0 0 var(--accent) inset, 0 0 12px rgba(122,162,247,.18);
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
+    color: var(--selection-text);
     cursor: default;
   }
   #modal .m-path {
@@ -593,6 +598,10 @@
   --red: #ff7d91;
   --yellow: #f5c66f;
   --user-bubble: #29315a;
+  --selection-bg: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+  --selection-border: color-mix(in srgb, var(--accent) 22%, var(--border));
+  --selection-marker: color-mix(in srgb, var(--accent) 48%, transparent);
+  --selection-text: color-mix(in srgb, var(--accent) 24%, var(--text));
   --surface-hover: #1d222d;
   --sidebar-width: 272px;
   --rightbar-width: 320px;

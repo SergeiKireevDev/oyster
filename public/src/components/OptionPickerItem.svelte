@@ -117,14 +117,17 @@
     transition: border-color .15s, background-color .15s;
   }
 
-  .model-autocomplete-option:hover,
+  .model-autocomplete-option:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: var(--surface-hover); }
+
   .model-autocomplete-option.active {
-    border-color: var(--accent);
-    background: var(--accent-dim);
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
   }
 
   .model-autocomplete-option.selected:not(.active) {
-    background: color-mix(in srgb, var(--accent-dim) 48%, transparent);
+    border-color: var(--selection-border);
+    background: var(--selection-bg);
   }
 
   .model-provider {

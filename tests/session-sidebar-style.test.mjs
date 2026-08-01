@@ -10,7 +10,12 @@ const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta
 test("session sidebar owns its calm responsive presentation", () => {
   assert.match(source, /<style>[\s\S]*?#sessions \{[\s\S]*?var\(--sidebar-width\)/);
   assert.match(source, /\.session-sidebar-search:focus-visible \{[\s\S]*?var\(--accent\)/);
-  assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?box-shadow: inset 2px 0 0 var\(--accent\)/);
+  assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?var\(--selection-bg\)[\s\S]*?box-shadow: inset 2px 0 0 var\(--selection-marker\)/);
+  for (const token of ["selection-bg", "selection-border", "selection-marker", "selection-text"]) {
+    assert.match(globalStyles, new RegExp(`--${token}:`));
+  }
+  assert.match(globalStyles, /#modal \.m-option\.active,[\s\S]*?var\(--selection-bg\)[\s\S]*?var\(--selection-marker\)/);
+  assert.doesNotMatch(globalStyles, /#modal \.m-option\.current \{[^}]*(?:var\(--user-bubble\)|0 0 12px)/);
   assert.match(source, /\.session-sidebar-workspace-power:disabled,[\s\S]*?cursor: not-allowed/);
   assert.match(source, /\.session-sidebar-instance-status\.status-online,[\s\S]*?var\(--green\)/);
   assert.match(source, /\.session-sidebar-instance-status:is\(\.status-failed, \.status-destroying\)[\s\S]*?var\(--red\)/);

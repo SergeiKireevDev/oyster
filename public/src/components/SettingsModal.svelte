@@ -69,7 +69,7 @@
   .settings-option:last-of-type { margin-bottom: 0; }
 
   .settings-option.active {
-    box-shadow: inset 2px 0 0 var(--accent);
+    box-shadow: inset 2px 0 0 var(--selection-marker);
   }
 
   .settings-option:has(.settings-checkbox:focus-visible) {
