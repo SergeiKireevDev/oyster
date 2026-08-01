@@ -60,6 +60,30 @@ test("credential service imports the SDK owned by the real configured PI_BIN", a
   }
 });
 
+test("credential service resolves conditional root exports and rejects SDK entries escaping the package", () => {
+  const conditional = fixture({ manifest: { exports: { import: "./dist/index.js", default: "./dist/missing.js" } } });
+  try {
+    assert.equal(resolveConfiguredPiSdk(conditional.cli).entry, join(conditional.packageRoot, "dist", "index.js"));
+  } finally {
+    conditional.cleanup();
+  }
+
+  const escaped = fixture();
+  try {
+    const outsideEntry = join(escaped.root, "outside-sdk.js");
+    writeFileSync(outsideEntry, "export const outside = true;\n");
+    rmSync(join(escaped.packageRoot, "dist", "index.js"));
+    symlinkSync(outsideEntry, join(escaped.packageRoot, "dist", "index.js"));
+    assert.throws(
+      () => resolveConfiguredPiSdk(escaped.cli),
+      (error) => error.code === "credential_service_unavailable"
+        && error.message.includes("SDK entry escapes its package root"),
+    );
+  } finally {
+    escaped.cleanup();
+  }
+});
+
 test("credential service rejects an SDK without pi credential exports", async () => {
   const item = fixture({ sdkSource: "export const unrelated = true;\n" });
   try {
@@ -311,6 +335,9 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
     await service.setApiKey("openai", "create-canary");
     const authPath = join(agentDir, "auth.json");
     assert.equal(statSync(authPath).mode & 0o777, 0o600);
+    writeFileSync(authPath, "");
+    assert.deepEqual(await service.listStoredCredentials(), []);
+    await service.setApiKey("openai", "create-canary");
     writeFileSync(authPath, '{"openai":');
     await assert.rejects(
       service.listStoredCredentials(),
@@ -322,6 +349,36 @@ test("credential operations create auth.json as 0600 and fail closed on malforme
     assert.equal(readFileSync(authPath, "utf8"), '{"openai":');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("credential service fails closed on malformed SDK metadata and invalid abort signals", async () => {
+  const item = fixture({ sdkSource: `
+    export class AuthStorage {
+      static create() { return new AuthStorage(); }
+      reload() {}
+      drainErrors() { return []; }
+      list() { return ["", "valid"]; }
+      get() { return { type: "api_key" }; }
+      getOAuthProviders() { return []; }
+    }
+    export class ModelRegistry {
+      static create() { return new ModelRegistry(); }
+      refresh() {}
+      getAll() { return []; }
+    }
+  ` });
+  try {
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } });
+    await assert.rejects(service.listStoredCredentials(), {
+      code: "credential_service_unavailable",
+      message: "configured pi SDK returned invalid credential provider metadata",
+    });
+    await assert.rejects(service.loginOAuth("provider", {
+      onAuth() {}, onDeviceCode() {}, async onPrompt() {}, async onSelect() {}, signal: {},
+    }), { code: "invalid_oauth_callbacks", message: "OAuth callback signal is invalid" });
+  } finally {
+    item.cleanup();
   }
 });
 
