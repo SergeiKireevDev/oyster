@@ -41,7 +41,7 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
   const markdown = component("MarkdownArtifact.svelte");
   assert.match(markdown, /let \{ source = "", label = "Markdown artifact" \} = \$props\(\)/);
   assert.match(markdown, /\$derived\(source\.trim\(\)\.length > 0\)/);
-  assert.match(markdown, /role="status" aria-atomic="true">This Markdown artifact is empty/);
+  assert.match(markdown, /role="status" aria-atomic="true">[\s\S]*This Markdown artifact is empty/);
 });
 
 test("asynchronous sidebar collections render loading, failure, retry, and empty states", () => {
