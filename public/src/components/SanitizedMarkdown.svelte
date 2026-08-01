@@ -16,7 +16,8 @@
   // Keep the generated tag constrained even when untyped callers provide an
   // unsupported value at runtime. Empty optional attributes are omitted.
   const rootElement = $derived(element === "article" ? "article" : "div");
-  const rootClass = $derived(optionalTrimmedString(className));
+  const callerClass = $derived(optionalTrimmedString(className));
+  const rootClass = $derived(callerClass ? `sanitized-markdown ${callerClass}` : "sanitized-markdown");
   const accessibleLabel = $derived(optionalTrimmedString(label));
   const renderedHtml = $derived(renderSanitizedMarkdown(source));
 </script>
