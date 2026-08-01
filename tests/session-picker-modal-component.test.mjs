@@ -37,6 +37,7 @@ test("session picker owns its calm responsive modal presentation", () => {
   assert.match(source, /\.search-error \.m-path \{ color: var\(--red\); \}/);
   assert.match(source, /<style>[\s\S]*?\.search-row input\[type="search"\][\s\S]*?var\(--panel\)/);
   assert.match(source, /\.session-row\.current \.s-name \{ color: var\(--selection-text\); \}/);
+  assert.match(source, /\.s-del \{[\s\S]*?align-self: center;/);
   assert.match(source, /\.s-del::before,\s*\.s-del::after \{[\s\S]*?width: 11px;/);
   assert.match(source, /\.s-stop::before \{\s*width: 11px;\s*height: 11px;/);
   assert.match(source, /\.s-del:hover \{[\s\S]*?var\(--red\)/);
