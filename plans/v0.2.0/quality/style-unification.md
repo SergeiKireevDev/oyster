@@ -60,7 +60,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/PinnedWidgetGrid.svelte`
 - [x] `public/src/components/PinnedWidgetViewerModal.svelte`
 - [x] `public/src/components/RoutineList.svelte`
-- [ ] `public/src/components/RoutineManagerModal.svelte`
+- [x] `public/src/components/RoutineManagerModal.svelte`
 - [ ] `public/src/components/SanitizedMarkdown.svelte`
 - [ ] `public/src/components/SearchHitSnippet.svelte`
 - [ ] `public/src/components/SessionPickerModal.svelte`
