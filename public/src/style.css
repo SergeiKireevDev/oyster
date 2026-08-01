@@ -2859,41 +2859,6 @@ html[data-theme="light"] .pinned-widget-viewer-stage.html-stage { background: #f
   padding: 2px;
   scrollbar-width: thin;
 }
-.model-autocomplete-option {
-  display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) 22px;
-  align-items: center;
-  gap: 10px;
-  min-height: 43px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.model-autocomplete-option:hover,
-.model-autocomplete-option.active {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-}
-.model-autocomplete-option.selected:not(.active) { background: color-mix(in srgb, var(--accent-dim) 48%, transparent); }
-.model-provider {
-  max-width: 130px;
-  overflow: hidden;
-  color: var(--muted);
-  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .055em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.model-name { overflow: hidden; font-size: 13px; font-weight: 590; text-overflow: ellipsis; white-space: nowrap; }
-.model-autocomplete-option mark { padding: 0; border-radius: 2px; background: transparent; color: var(--accent); font-weight: 750; }
-.model-selected-mark { color: var(--accent); font-weight: 800; text-align: center; }
-.model-enter-hint { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 .option-picker-empty { padding: 28px 14px; color: var(--muted); font-size: 12px; text-align: center; }
 .collection-load-more { width: 100%; margin: 5px 0; padding: 7px 10px; border: 1px dashed var(--border); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
 .collection-load-more:hover, .collection-load-more:focus-visible { border-color: var(--accent); color: var(--text); }
@@ -2909,8 +2874,6 @@ html[data-theme="light"] .pinned-widget-viewer-stage.html-stage { background: #f
   .pinned-markdown-toolbar,
   .pinned-media-toolbar { min-height: 40px; padding: 0 2px 6px; }
   .pinned-media-toolbar .chip { min-height: 38px; }
-  .model-autocomplete-option { grid-template-columns: minmax(62px, 28%) minmax(0, 1fr) 18px; padding-inline: 8px; }
-  .model-provider { max-width: none; }
   .model-picker-help { display: none; }
   .pinned-widget-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px 8px; }
   .pinned-widget-icon { width: 52px; height: 52px; }

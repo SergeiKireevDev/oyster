@@ -77,8 +77,10 @@
   >
     <span class="model-provider">{provider.before}{#if provider.match}<mark>{provider.match}</mark>{/if}{provider.after}</span>
     <span class="model-name">{model.before}{#if model.match}<mark>{model.match}</mark>{/if}{model.after}</span>
-    {#if selected}<span class="model-selected-mark" aria-label="Current model">✓</span>{/if}
-    {#if active}<span class="model-enter-hint" aria-hidden="true">↵</span>{/if}
+    <span class="model-option-status">
+      {#if selected}<span class="model-selected-mark" aria-label="Current model">✓</span>{/if}
+      {#if active}<span class="model-enter-hint" aria-hidden="true">↵</span>{/if}
+    </span>
   </button>
 {:else}
   <button
@@ -93,3 +95,94 @@
     onmouseenter={activate}
   >{optionText}</button>
 {/if}
+
+<style>
+  .model-autocomplete-option {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(22px, auto);
+    align-items: center;
+    gap: 10px;
+    min-height: 43px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, background-color .15s;
+  }
+
+  .model-autocomplete-option:hover,
+  .model-autocomplete-option.active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .model-autocomplete-option.selected:not(.active) {
+    background: color-mix(in srgb, var(--accent-dim) 48%, transparent);
+  }
+
+  .model-provider {
+    max-width: 130px;
+    overflow: hidden;
+    color: var(--muted);
+    font: 10px/1.3 var(--mono);
+    letter-spacing: .055em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .model-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 590;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .model-autocomplete-option mark {
+    padding: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--accent);
+    font-weight: 750;
+  }
+
+  .model-option-status {
+    display: flex;
+    min-width: 22px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .model-selected-mark {
+    color: var(--accent);
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .model-enter-hint {
+    color: var(--muted);
+    font: 11px var(--mono);
+    text-align: center;
+  }
+
+  @media (max-width: 760px) {
+    .model-autocomplete-option {
+      grid-template-columns: minmax(62px, 28%) minmax(0, 1fr) minmax(18px, auto);
+      min-height: 44px;
+      padding-inline: 8px;
+    }
+
+    .model-provider { max-width: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .model-autocomplete-option { transition: none; }
+  }
+</style>
