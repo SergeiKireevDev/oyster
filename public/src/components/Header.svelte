@@ -327,12 +327,16 @@
     }
 
     .header-actions {
-      gap: 1px;
-      padding: 2px;
+      gap: 2px;
+      margin: 3px 0;
+      padding: 1px;
     }
 
     .app-header .chip {
-      min-height: 40px;
+      min-height: 34px;
+      margin: 1px;
+      gap: 5px;
+      padding: 0 7px;
     }
 
     #modelChip,
@@ -347,7 +351,7 @@
     }
 
     #menuBtn {
-      width: 40px;
+      width: 34px;
     }
 
     #cfgChip span {

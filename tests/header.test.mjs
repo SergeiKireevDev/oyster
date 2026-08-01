@@ -40,10 +40,11 @@ test("Header uses semantic theme tokens and the shared chip contract", () => {
   assert.match(globalStyles, /:root\[data-theme="light"\][\s\S]*?--header-bg:/);
 });
 
-test("Header gives open and mobile controls visible, reachable states", () => {
+test("Header gives open controls visible states and mobile controls compact spacing", () => {
   assert.match(source, /\.app-header \.chip\[aria-expanded="true"\][\s\S]*?border-color: var\(--accent\);[\s\S]*?box-shadow: inset 0 -2px 0 var\(--accent\);/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.app-header \.chip\s*\{\s*min-height: 40px;/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menuBtn\s*\{\s*width: 40px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?margin: 3px 0;[\s\S]*?padding: 1px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.app-header \.chip\s*\{\s*min-height: 34px;[\s\S]*?margin: 1px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menuBtn\s*\{\s*width: 34px;/);
   assert.match(source, /\.title\s*\{[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
 });
 
