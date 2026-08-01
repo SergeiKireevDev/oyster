@@ -98,4 +98,6 @@ test("llmbox workspace creation owns async and validation state safely", () => {
   assert.match(source, /aria-describedby=\{error \? "llmboxWorkspaceError" : undefined\}/);
   assert.match(source, /id="llmboxWorkspaceError"[^>]*role="alert"[^>]*aria-atomic="true"/);
   assert.match(source, /oninput=\{clearError\}/);
+  assert.match(source, /disabled=\{loading\}/);
+  assert.match(source, /<span role="status">Creating workspace…<\/span>/);
 });
