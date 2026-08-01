@@ -28,8 +28,8 @@ test("transcript uses spacious turns and a single borderless activity signal", (
   const transcriptGaps = [...transcript.matchAll(/\.transcript\s*\{[^}]*\bgap:\s*(\d+)px/g)].map((match) => Number(match[1]));
   assert.ok(transcriptGaps.length > 0);
   assert.deepEqual([...new Set(transcriptGaps)], [4]);
-  assert.match(css, /\.assistant-entry \{[^}]*gap: 4px;/);
-  assert.match(css, /\.assistant-entry\.empty \{ display: none; \}/);
+  assert.match(assistant, /\.assistant-entry \{[\s\S]*?gap: 4px;/);
+  assert.match(assistant, /\.assistant-entry\.empty \{ display: none; \}/);
   assert.match(assistant, /const empty = \$derived\(displayBlocks\.length === 0 && !data\.errorMessage\)/);
   assert.match(assistant, /class:empty=\{empty\}/);
   assert.match(css, /#messages > \[data-role="user"\] \+ \.assistant-entry,[\s\S]*?margin-top: 12px;/);

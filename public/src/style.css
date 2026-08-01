@@ -268,8 +268,7 @@
   .message-row { display: flex; width: 100%; min-width: 0; }
   .user-message-row { justify-content: flex-end; }
   .msg { min-width: 0; position: relative; }
-  .assistant-entry { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  .assistant-entry.empty { display: none; }
+  /* Turn spacing crosses the UserMessage and AssistantMessage component boundaries. */
   #messages > [data-role="user"] + .assistant-entry,
   #messages > .assistant-entry + [data-role="user"] { margin-top: 12px; }
   .compaction-marker {
@@ -376,12 +375,6 @@
     border: 1px solid rgba(127, 212, 255, .45);
     box-shadow: 0 0 10px rgba(127, 212, 255, .13);
   }
-  .msg.assistant.ckpt-frozen {
-    border-left: 3px solid rgba(127, 212, 255, .5);
-    border-radius: 3px;
-    padding-left: 12px;
-    background: linear-gradient(90deg, rgba(127, 212, 255, .06), transparent 45%);
-  }
   .msg.user {
     align-self: flex-end;
     max-width: 85%;
@@ -391,24 +384,11 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .msg.assistant { align-self: stretch; }
-  .msg.assistant .md { word-break: break-word; }
   .msg .meta {
     font-size: 11px;
     color: var(--muted);
     margin-top: 4px;
   }
-  .msg.error-msg {
-    align-self: stretch;
-    border: 1px solid var(--red);
-    border-radius: 8px;
-    padding: 8px 12px;
-    color: var(--red);
-    font-size: 13px;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
   /* markdown */
   .md p { margin: 0 0 .7em; }
   .md p:last-child { margin-bottom: 0; }
@@ -807,13 +787,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
   box-shadow: 0 10px 30px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.055);
   line-height: 1.5;
 }
-.msg.assistant {
-  max-width: 840px;
-  padding: 0 4px;
-  color: #e3e5ec;
-  font-size: 14.5px;
-  line-height: 1.62;
-}
 .msg .meta { margin-top: 3px; font-size: 10px; }
 
 /* Shared Markdown rendering boundary. Context classes set reading density. */
@@ -1014,7 +987,6 @@ button.toast.actionable:active { transform: translateY(0); }
   #modal .browser-directory-button { min-height: 40px; }
   #sessions.open, #hublots.open, #treebar.open { top: 0; padding: 18px 14px; background: rgba(14,17,23,.98); backdrop-filter: blur(20px); }
   .msg.user { max-width: 88%; padding: 8px 12px; }
-  .msg.assistant { font-size: 13.75px; line-height: 1.52; }
   .btn { min-height: 38px; padding-inline: 14px; }
   .toast-stack {
     right: max(8px, env(safe-area-inset-right));
@@ -1093,7 +1065,6 @@ html[data-theme="light"] .msg.user {
   background: linear-gradient(145deg, #e4e8ff, #d8defa);
   box-shadow: 0 8px 26px rgba(35,43,65,.08), inset 0 1px 0 rgba(255,255,255,.75);
 }
-html[data-theme="light"] .msg.assistant { color: var(--text); }
 html[data-theme="light"] .md h1,
 html[data-theme="light"] .md h2,
 html[data-theme="light"] .md h3,
