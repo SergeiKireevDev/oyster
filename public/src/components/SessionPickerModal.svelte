@@ -579,6 +579,7 @@
     width: 30px;
     height: 30px;
     flex: none;
+    align-self: center;
     place-items: center;
     margin-left: 4px;
     padding: 0;
