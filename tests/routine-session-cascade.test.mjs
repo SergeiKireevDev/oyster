@@ -9,6 +9,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createRoutine, deleteSessionRoutines, startRoutine, stopRoutine, stopSessionRoutines } from "../server/routines.mjs";
 
 const SCRIPT = "#!/bin/sh\necho live-output\nsleep 30\n";
+const TERM_RESISTANT_SCRIPT = "#!/bin/sh\ntrap '' TERM\necho live-output\nwhile :; do sleep 1; done\n";
 
 function owner(store, sessionId) {
   return store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent.sqlite", createdAt: "created" });
@@ -39,7 +40,7 @@ test("session deletion removes owned routine definitions, runs, logs, and live h
   const { root, store, state, waitForEvent } = fixture(t);
   const ownerA = owner(store, "session-a");
   const ownerB = owner(store, "session-b");
-  createRoutine(state, { name: "owned.sh", script: SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
+  createRoutine(state, { name: "owned.sh", script: TERM_RESISTANT_SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
   createRoutine(state, { name: "other.sh", script: SCRIPT, sessionId: "session-b", ownerId: ownerB.id, cwd: root });
   createRoutine(state, { name: "global.sh", script: SCRIPT });
 
@@ -65,8 +66,8 @@ test("session deletion removes owned routine definitions, runs, logs, and live h
   assert.equal(store.repositories.routines.findRun(ownedRun.id), null);
   assert.deepEqual(store.repositories.routines.listLogs(ownedRun.id), []);
   assert.equal(state.routineRuntime.has(ownedDefinition.id), false);
-  for (let attempt = 0; attempt < 20 && ownedProcess.exitCode === null && ownedProcess.signalCode === null; attempt++) await delay(10);
-  assert.equal(ownedProcess.signalCode, "SIGTERM");
+  for (let attempt = 0; attempt < 50 && ownedProcess.exitCode === null && ownedProcess.signalCode === null; attempt++) await delay(10);
+  assert.equal(ownedProcess.signalCode, "SIGKILL", "session deletion must force-kill routines that ignore SIGTERM");
 
   assert.equal(store.repositories.routines.findByName("other.sh").id, otherDefinition.id);
   assert.equal(store.repositories.routines.findRun(otherRun.id).status, "running");
@@ -74,7 +75,7 @@ test("session deletion removes owned routine definitions, runs, logs, and live h
   assert.equal(state.routineRuntime.get(otherDefinition.id), otherRuntime);
   assert.ok(store.repositories.routines.findByName("global.sh"));
 
-  const otherExit = once(otherRuntime.proc, "exit");
+  const otherClose = once(otherRuntime.proc, "close");
   stopRoutine(state, "other.sh");
-  await otherExit;
+  await otherClose;
 });
