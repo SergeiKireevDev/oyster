@@ -15,6 +15,8 @@ test("app cache-busts every extracted route-factory import", () => {
   }
   assert.match(source, /\.map\(\(name\) => `http\/routes\/\$\{name\}\.mjs`\)/);
   assert.match(source, /\.map\(\(name\) => import\(bust\(name\)\)\)/);
+  assert.match(source, /statSync\([^;]+\{ bigint: true \}\)/);
+  assert.match(source, /`\$\{info\.mtimeNs\}-\$\{info\.size\}`/);
 });
 
 test("mtime query observes a changed route module across application-style reloads", async (t) => {

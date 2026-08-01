@@ -2,14 +2,13 @@
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createCandidateState, createDisposableScope, createRequestLifecycle, validateCatalogAccess,
-  validateDependencyConstruction, validateRepositoryAvailability,
+import { createCandidateState, createDisposableScope, createRequestLifecycle,
+  validateCatalogAccess, validateDependencyConstruction, validateRepositoryAvailability,
 } from "./application-candidate.mjs?reload=1";
-// sibling modules are imported with a cache-busting query so hot reloads of
-// app.mjs pick up their current versions instead of stale cached modules
+// Include nanosecond mtime and size so rapid same-tick saves cannot reuse a stale ESM entry.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const bust = (name) => `./${name}?v=${statSync(join(__dirname, name)).mtimeMs}`;
+const moduleVersion = (name) => { const info = statSync(join(__dirname, name), { bigint: true }); return `${info.mtimeNs}-${info.size}`; };
+const bust = (name) => `./${name}?v=${moduleVersion(name)}`;
 export async function buildCandidate(stableState, { generation = Symbol("application-candidate") } = {}) {
   const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnMarkdownService, spawnGitServerService, ensureHublotTunnelPool, acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry, stopHublotTunnelPool } =
     await import(bust("tunnels.mjs"));
@@ -72,7 +71,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
   }
 
-  const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${statSync(join(__dirname, catalogModule)).mtimeMs}`;
+  const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${moduleVersion(catalogModule)}`;
   state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
     ? (await import(bust(catalogModule))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
     : jsonlSessionCatalog;
@@ -153,7 +152,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const credentialService = createPiCredentialService({ config });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners });
-  state.oauthFlows ??= new Map(); const oauthFlowService = createPiOAuthFlowService({ registry: state.oauthFlows, credentialService, restartActiveRunners, setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); scope.defer(() => oauthFlowService.shutdown()); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });
+  state.oauthFlows ??= new Map(); const oauthRegistry = new Map(); state.oauthFlows.set(generation, oauthRegistry); scope.defer(() => state.oauthFlows.delete(generation));
+  const oauthFlowService = createPiOAuthFlowService({ registry: oauthRegistry, credentialService, restartActiveRunners, setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); scope.defer(() => oauthFlowService.shutdown()); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });
   const checkpointRoutes = createCheckpointRoutes({
     state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
     recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
@@ -184,12 +184,12 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
 
   const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes });
-  const openRouteKeys = new Set(Object.keys(openRoutes));
+  const openRouteKeys = new Set(Object.keys(openRoutes)); const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
 
   // ---------------------------------------------------------------- dispatch
-
   async function handleRequest(req, res) {
-    const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+    let url; try { url = new URL(req.url ?? "/", "http://localhost"); }
+    catch { json(res, 400, { error: "invalid request URL" }); return; }
     const key = `${req.method} ${url.pathname}`;
 
     const staticFallback = routeTable.get(`${req.method} /*`);
@@ -212,15 +212,15 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     if (route) return route(req, res, url);
 
     // same path exists under another method -> 405, otherwise 404
-    const pathKnown = [...routeTable.keys()].some((k) => k.endsWith(` ${url.pathname}`));
+    const pathKnown = knownPaths.has(url.pathname);
     json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 
   const hublotReconciliation = scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
   if (config.HUBLOT_TUNNEL_POOL_SIZE > 0 && !state.hublotTunnelPoolStopping) {
     void Promise.resolve(hublotReconciliation)
-      .then(() => ensureHublotTunnelPool(state))
-      .catch((error) => console.error(`[oyster] initial tunnel pool failed: ${error.message}`));
+      .then(scope.guard(() => ensureHublotTunnelPool(state)))
+      .catch((error) => console.error(`[oyster] initial tunnel pool failed: ${error instanceof Error ? error.message : String(error)}`));
   }
   application = {
     handleRequest, startPi, stopPi,

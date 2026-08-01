@@ -29,22 +29,53 @@ const CANDIDATE_STATE_FIELDS = new Set([
  * stable object; candidate-owned writes can never replace the active values.
  */
 export function createCandidateState(stableState) {
+  if ((typeof stableState !== "object" && typeof stableState !== "function") || stableState === null) {
+    throw new TypeError("stable application state must be an object");
+  }
+
+  // The proxy cannot use stableState as its target: a non-configurable stable
+  // property would make returning a staged value violate Proxy invariants.
+  // A separate extensible target also ensures defineProperty() cannot bypass
+  // the candidate-field isolation provided by ordinary assignment.
   const candidateFields = Object.fromEntries([...CANDIDATE_STATE_FIELDS].map((field) => [field, undefined]));
-  return new Proxy(stableState, {
-    get(target, property, receiver) {
-      if (CANDIDATE_STATE_FIELDS.has(property)) return candidateFields[property];
-      return Reflect.get(target, property, receiver);
+  Object.setPrototypeOf(candidateFields, Object.getPrototypeOf(stableState));
+
+  return new Proxy(candidateFields, {
+    get(target, property) {
+      if (CANDIDATE_STATE_FIELDS.has(property)) return Reflect.get(target, property, target);
+      return Reflect.get(stableState, property, stableState);
     },
-    set(target, property, value, receiver) {
-      if (CANDIDATE_STATE_FIELDS.has(property)) {
-        candidateFields[property] = value;
-        return true;
-      }
-      return Reflect.set(target, property, value, target);
+    set(target, property, value) {
+      if (CANDIDATE_STATE_FIELDS.has(property)) return Reflect.set(target, property, value, target);
+      return Reflect.set(stableState, property, value, stableState);
+    },
+    defineProperty(target, property, descriptor) {
+      if (CANDIDATE_STATE_FIELDS.has(property)) return Reflect.defineProperty(target, property, descriptor);
+      return Reflect.defineProperty(stableState, property, descriptor);
     },
     deleteProperty(target, property) {
-      if (CANDIDATE_STATE_FIELDS.has(property)) return delete candidateFields[property];
-      return Reflect.deleteProperty(target, property);
+      if (CANDIDATE_STATE_FIELDS.has(property)) return Reflect.deleteProperty(target, property);
+      return Reflect.deleteProperty(stableState, property);
+    },
+    has(target, property) {
+      return CANDIDATE_STATE_FIELDS.has(property)
+        ? Reflect.has(target, property)
+        : Reflect.has(stableState, property);
+    },
+    ownKeys(target) {
+      return [...new Set([...Reflect.ownKeys(stableState), ...Reflect.ownKeys(target)])];
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (CANDIDATE_STATE_FIELDS.has(property)) return Reflect.getOwnPropertyDescriptor(target, property);
+      const descriptor = Reflect.getOwnPropertyDescriptor(stableState, property);
+      // The proxy target is extensible, so a configurable view faithfully
+      // exposes stable fields without claiming they belong to this target.
+      return descriptor ? { ...descriptor, configurable: true } : undefined;
+    },
+    preventExtensions() {
+      // Keeping the private target extensible is required to expose stable
+      // own keys without violating Proxy invariants.
+      return false;
     },
   });
 }
@@ -61,7 +92,11 @@ export function validateRepositoryAvailability(appStore) {
     }
   }
   try {
-    return appStore.hydrate();
+    const hydration = appStore.hydrate();
+    if (!hydration || typeof hydration !== "object" || !Array.isArray(hydration.incompleteOperations)) {
+      throw new TypeError("application store hydrate() returned an invalid snapshot");
+    }
+    return hydration;
   } catch (cause) {
     throw new Error("application repository access failed", { cause });
   }
@@ -87,9 +122,17 @@ export function validateCatalogAccess(catalog, { backend, cwd } = {}) {
 
 /** Assert that factories produced the callable boundaries composition needs. */
 export function validateDependencyConstruction(dependencies) {
+  if (!dependencies || typeof dependencies !== "object") {
+    throw new TypeError("constructed dependencies must be an object");
+  }
   for (const [name, dependency] of Object.entries(dependencies)) {
-    if (!dependency?.value) throw new Error(`dependency "${name}" was not constructed`);
-    for (const method of dependency.methods ?? []) {
+    if (dependency?.value == null) throw new Error(`dependency "${name}" was not constructed`);
+    const methods = dependency.methods ?? [];
+    if (!Array.isArray(methods)) throw new TypeError(`dependency "${name}" methods must be an array`);
+    for (const method of methods) {
+      if (typeof method !== "string" || !method) {
+        throw new TypeError(`dependency "${name}" has an invalid method name`);
+      }
       if (typeof dependency.value[method] !== "function") {
         throw new Error(`dependency "${name}" is missing ${method}()`);
       }
@@ -140,6 +183,7 @@ export function createDisposableScope({ generation = Symbol("application-candida
     get active() { return !started; },
     defer(cleanup) {
       if (started) throw new Error("cannot acquire a resource after candidate disposal started");
+      if (typeof cleanup !== "function") throw new TypeError("deferred cleanup must be a function");
       cleanups.push(cleanup);
     },
     dispose() {
@@ -187,7 +231,7 @@ export function createRequestLifecycle() {
   };
 
   return {
-    handle(handler, args) {
+    handle(handler, args = []) {
       if (!accepting) throw new Error("candidate application is retired");
       entered++;
       return Promise.resolve()

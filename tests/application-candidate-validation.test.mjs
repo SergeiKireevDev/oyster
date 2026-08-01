@@ -49,6 +49,12 @@ test("repository preflight requires every application boundary and probes the st
     /repository "pinnedWidgets" is unavailable \(missing list\(\)\)/,
   );
   assert.equal(hydrated, 1, "an incomplete registry must fail before database access");
+
+  assert.throws(
+    () => validateRepositoryAvailability(appStore({ hydrate: () => ({}) })),
+    (error) => error.message === "application repository access failed"
+      && error.cause?.message.includes("invalid snapshot"),
+  );
 });
 
 test("repository and catalog access failures retain their original causes", () => {
@@ -85,6 +91,11 @@ test("catalog and constructed-dependency contracts fail before a candidate is us
   assert.throws(
     () => validateDependencyConstruction({ codec: { value: {}, methods: ["validate"] } }),
     /dependency "codec" is missing validate\(\)/,
+  );
+  assert.throws(() => validateDependencyConstruction(null), /dependencies must be an object/);
+  assert.throws(
+    () => validateDependencyConstruction({ codec: { value: {}, methods: "validate" } }),
+    /methods must be an array/,
   );
 });
 

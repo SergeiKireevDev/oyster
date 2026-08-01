@@ -26,6 +26,30 @@ test("candidate-owned state is staged without replacing or reading active genera
   assert.equal(stable.currentDir, "/after", "stable fields continue to use stable-core ownership");
 });
 
+test("candidate state isolates reflective writes and supports non-configurable stable fields", () => {
+  const stableCatalog = { generation: "active" };
+  const stable = { get activeCatalog() { return this.sessionCatalog; } };
+  Object.defineProperty(stable, "sessionCatalog", {
+    configurable: false,
+    enumerable: true,
+    writable: true,
+    value: stableCatalog,
+  });
+  const candidate = createCandidateState(stable);
+
+  assert.equal(candidate.sessionCatalog, undefined, "non-configurable active values remain private");
+  Object.defineProperty(candidate, "sessionCatalog", { configurable: true, value: { generation: "candidate" } });
+  assert.equal(candidate.sessionCatalog.generation, "candidate");
+  assert.equal(stable.sessionCatalog, stableCatalog);
+  assert.equal(candidate.activeCatalog, stableCatalog, "stable accessors retain their stable receiver");
+  assert.doesNotThrow(() => Reflect.ownKeys(candidate));
+});
+
+test("candidate state rejects invalid stable state", () => {
+  assert.throws(() => createCandidateState(null), /must be an object/);
+  assert.throws(() => createCandidateState("state"), /must be an object/);
+});
+
 test("candidate disposable scope cleans staged resources once in reverse acquisition order", async () => {
   const calls = [];
   const scope = createDisposableScope();
@@ -40,6 +64,11 @@ test("candidate disposable scope cleans staged resources once in reverse acquisi
   assert.deepEqual(calls, ["oauth", "timers", "catalog"]);
   await scope.dispose();
   assert.deepEqual(calls, ["oauth", "timers", "catalog"]);
+});
+
+test("candidate disposable scope rejects invalid cleanup registrations", () => {
+  const scope = createDisposableScope();
+  assert.throws(() => scope.defer(undefined), /cleanup must be a function/);
 });
 
 test("candidate generation guards suppress queued timers and listeners after disposal", async () => {
@@ -88,7 +117,7 @@ test("candidate disposable scope retries only cleanups that previously failed", 
 test("candidate retirement drains admitted requests before resource cleanup", async () => {
   const lifecycle = createRequestLifecycle();
   let release;
-  const request = lifecycle.handle(() => new Promise((resolve) => { release = resolve; }), []);
+  const request = lifecycle.handle(() => new Promise((resolve) => { release = resolve; }));
 
   let retired = false;
   const retirement = lifecycle.retire().then(() => { retired = true; });
@@ -118,4 +147,7 @@ test("application construction defers candidate resource acquisition until activ
   assert.match(appSource, /scope\.defer\(\(\) => \{ clearInterval\(reaperTimer\); clearInterval\(watchdogTimer\); \}\)/);
   assert.match(appSource, /createRunnerManager\(state, \{ appStore, ensureSessionOwner, unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*guardCallback: scope\.guard \}\)/);
   assert.match(appSource, /setTimer: \(callback, delay\) => setTimeout\(scope\.guard\(callback\), delay\)/);
+  assert.match(appSource, /state\.oauthFlows\.set\(generation, oauthRegistry\)/);
+  assert.match(appSource, /scope\.defer\(\(\) => state\.oauthFlows\.delete\(generation\)\)/);
+  assert.match(appSource, /\.then\(scope\.guard\(\(\) => ensureHublotTunnelPool\(state\)\)\)/);
 });

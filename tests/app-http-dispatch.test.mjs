@@ -132,3 +132,21 @@ test("composed dispatch bypasses token checks only when the Oyster instance is e
   await application.handleRequest(request("/api-keys"), credentials);
   assert.notEqual(credentials.status, 401);
 });
+
+test("dispatch rejects malformed request targets and does not parse the untrusted Host header", async () => {
+  const application = await init(stableState());
+
+  const malformed = response();
+  await application.handleRequest(request("http://["), malformed);
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(JSON.parse(malformed.body), { error: "invalid request URL" });
+
+  const invalidHost = response();
+  await application.handleRequest(request("/health", { host: "[" }), invalidHost);
+  assert.equal(invalidHost.status, 200);
+
+  const wrongMethod = response();
+  await application.handleRequest(request("/health", { authorization: "Bearer dispatch-token" }, { method: "POST" }), wrongMethod);
+  assert.equal(wrongMethod.status, 405);
+  assert.deepEqual(JSON.parse(wrongMethod.body), { error: "method not allowed" });
+});
