@@ -23,8 +23,10 @@ test("session sidebar owns its calm responsive presentation", () => {
   assert.match(source, /\.session-sidebar-workspace-power:disabled,[\s\S]*?cursor: not-allowed/);
   assert.match(source, /\.session-sidebar-instance-status\.status-online,[\s\S]*?var\(--green\)/);
   assert.match(source, /\.session-sidebar-instance-status:is\(\.status-failed, \.status-destroying\)[\s\S]*?var\(--red\)/);
-  assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?\.session-sidebar-action \{ width: var\(--icon-control-important\); height: var\(--icon-control-important\); \}/);
-  assert.match(source, /\.session-sidebar-lifecycle \{ width: var\(--icon-control-standard\); height: var\(--icon-control-standard\); \}/);
+  assert.match(source, /\.session-sidebar-action\.stop::before \{ width: 11px; height: 11px;/);
+  assert.match(source, /\.session-sidebar-action\.delete::before \{ width: 11px; height: 11px;/);
+  assert.match(source, /\.session-sidebar-lifecycle\.archive::before \{ width: 11px; height: 11px;/);
+  assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?\.session-sidebar-action,\s*\.session-sidebar-lifecycle \{ width: var\(--icon-control-standard\); height: var\(--icon-control-standard\); \}/);
   assert.doesNotMatch(source, /@media \(max-width: 760px\) \{[\s\S]*?\.session-sidebar-workspace-(?:power|destroy|create)[^}]*icon-control-important/);
   assert.doesNotMatch(source, /\.session-sidebar-workspace-heading \{ flex-wrap: wrap; \}/);
   assert.match(source, /@media \(max-width: 520px\) \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/);

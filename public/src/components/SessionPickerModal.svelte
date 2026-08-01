@@ -595,7 +595,7 @@
   .s-del::after {
     content: "";
     position: absolute;
-    width: 13px;
+    width: 11px;
     border-top: 1.5px solid currentColor;
     transform: rotate(45deg);
   }
@@ -609,8 +609,8 @@
   }
 
   .s-stop::before {
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
     border: 0;
     border-radius: 2px;
     background: currentColor;
