@@ -1,8 +1,5 @@
 <script>
-  import PermalinkButton from "./PermalinkButton.svelte";
-  import CopyMessageButton from "./CopyMessageButton.svelte";
-  import CheckpointButton from "./CheckpointButton.svelte";
-  import CheckpointRestoreButton from "./CheckpointRestoreButton.svelte";
+  import AssistantPartActions from "./AssistantPartActions.svelte";
   import { reportNode } from "../../lib/nodeReporter.js";
 
   const INTERFACE_PREFIX = "Opening interface: ";
@@ -86,7 +83,19 @@
         <p class="empty-interface">No interface details provided.</p>
       {/if}
     </div>
-    {@render checkpointActions()}
+    <AssistantPartActions
+      label="User message actions"
+      target={root}
+      copyText={text}
+      copy
+      {onPermalink}
+      {onCopy}
+      {onCheckpoint}
+      {onRollback}
+      checkpoint={root !== null && checkpoint.target === root}
+      checkpointBusy={checkpoint.busy}
+      {restore}
+    />
   </details>
 {:else}
   <div class="message-row user-message-row" data-role="user" bind:this={root} use:reportNode={onRoot}>
@@ -96,21 +105,24 @@
       tabindex="-1"
       onpointerdowncapture={selectOnFirstTouch}
     >
-      {text}<PermalinkButton target={root} {onPermalink} />
-      <CopyMessageButton {text} {onCopy} />
-      {@render checkpointActions()}
+      {text}
+      <AssistantPartActions
+        label="User message actions"
+        target={root}
+        copyText={text}
+        copy
+        {onPermalink}
+        {onCopy}
+        {onCheckpoint}
+        {onRollback}
+        checkpoint={root !== null && checkpoint.target === root}
+        checkpointBusy={checkpoint.busy}
+        {restore}
+      />
     </div>
   </div>
 {/if}
 
-{#snippet checkpointActions()}
-  {#if root !== null && checkpoint.target === root}
-    <CheckpointButton {onCheckpoint} busy={checkpoint.busy} />
-  {/if}
-  {#if restore !== null}
-    <CheckpointRestoreButton {restore} {onRollback} />
-  {/if}
-{/snippet}
 
 <style>
   .message-row {

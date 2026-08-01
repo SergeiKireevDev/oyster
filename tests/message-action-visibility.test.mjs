@@ -7,17 +7,18 @@ const transcript = readFileSync(new URL("../public/src/components/Transcript.sve
 const user = readFileSync(new URL("../public/src/components/transcript/UserMessage.svelte", import.meta.url), "utf8");
 const assistant = readFileSync(new URL("../public/src/components/transcript/AssistantMessage.svelte", import.meta.url), "utf8");
 const assistantActions = readFileSync(new URL("../public/src/components/transcript/AssistantPartActions.svelte", import.meta.url), "utf8");
+const permalinkButton = readFileSync(new URL("../public/src/components/transcript/PermalinkButton.svelte", import.meta.url), "utf8");
 const copyButton = readFileSync(new URL("../public/src/components/transcript/CopyMessageButton.svelte", import.meta.url), "utf8");
 const activityStack = readFileSync(new URL("../public/src/components/transcript/ActivityStack.svelte", import.meta.url), "utf8");
 const toolCard = readFileSync(new URL("../public/src/components/transcript/ToolCard.svelte", import.meta.url), "utf8");
 
 test("message actions stay hidden until hover or focus selection", () => {
-  assert.match(css, /\.permalink \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/);
+  assert.match(permalinkButton, /\.permalink \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/);
   assert.match(copyButton, /\.message-copy \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/);
-  assert.match(css, /\.msg:hover > \.permalink[\s\S]*?opacity: \.85; pointer-events: auto;/);
-  assert.match(css, /@media \(hover: hover\)[\s\S]*?\.user-message-row:hover \.msg\.user > \.permalink,[\s\S]*?\.user-message-row:hover \.msg\.user > \.message-copy[\s\S]*?pointer-events: auto;/);
+  assert.match(css, /@media \(hover: hover\)[\s\S]*?:is\(\.assistant-part, \.msg\.user, \.interface-message\):hover > \.message-actions > :is\(\.permalink, \.message-copy\)[\s\S]*?opacity: \.85;[\s\S]*?pointer-events: auto;/);
+  assert.match(css, /:is\(\.assistant-part, \.msg\.user, \.interface-message\):focus-within > \.message-actions > :is\(\.permalink, \.message-copy\)[\s\S]*?pointer-events: auto;/);
   assert.match(user, /class="message-row user-message-row" data-role="user"/);
-  assert.match(css, /@media \(hover: none\)[\s\S]*?\.msg:hover > \.permalink[\s\S]*?opacity: 0; pointer-events: none;[\s\S]*?\.msg:focus-within > \.permalink[\s\S]*?opacity: \.85; pointer-events: auto;/);
+  assert.equal(user.match(/label="User message actions"/g)?.length, 2);
 });
 
 test("text assistant parts always own a clipboard control", () => {

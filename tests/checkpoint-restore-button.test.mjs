@@ -36,7 +36,7 @@ test("CheckpointRestoreButton follows the transcript action control visual contr
   assert.match(source, /\.ckpt-restore:hover:not\(:disabled\) \{[\s\S]*?var\(--accent\)[\s\S]*?var\(--surface-hover\)[\s\S]*?translateY\(-1px\)/);
   assert.match(source, /\.ckpt-restore:disabled \{[\s\S]*?cursor: wait;[\s\S]*?opacity: \.45;/);
   assert.doesNotMatch(globalCss, /(?:^|\n)\s*\.ckpt-restore\s*\{/);
-  assert.match(globalCss, /\.msg\.user > \.ckpt-restore \{ left: -118px; \}/);
+  assert.doesNotMatch(globalCss, /\.msg\.user > \.ckpt-restore \{[^}]*left:/);
 });
 
 test("CheckpointRestoreButton provides explicit loading, mobile, and reduced-motion states", () => {

@@ -18,6 +18,7 @@
    * @property {boolean} [checkpoint]
    * @property {boolean} [checkpointBusy]
    * @property {RestoreState | null} [restore]
+   * @property {string} [label]
    */
 
   /** @type {Props} */
@@ -32,10 +33,11 @@
     checkpoint: showCheckpoint = false,
     checkpointBusy = false,
     restore: restoreState = null,
+    label = "Assistant message actions",
   } = $props();
 </script>
 
-<div class="assistant-part-actions" role="group" aria-label="Assistant message actions">
+<div class="message-actions" role="group" aria-label={label}>
   <PermalinkButton {target} {onPermalink} />
   {#if showCopy}
     <CopyMessageButton text={copyText} {onCopy} />
@@ -49,7 +51,7 @@
 </div>
 
 <style>
-  .assistant-part-actions {
+  .message-actions {
     position: absolute;
     z-index: 2;
     inset-block-start: -8px;
@@ -57,13 +59,10 @@
     display: flex;
     max-width: calc(100% - 8px);
     flex-direction: row-reverse;
-    gap: 4px;
+    gap: var(--icon-control-gap);
   }
 
   @media (max-width: 760px) {
-    .assistant-part-actions {
-      inset-block-start: -14px;
-      gap: 2px;
-    }
+    .message-actions { inset-block-start: -10px; }
   }
 </style>
