@@ -286,7 +286,7 @@ test("file explorer pins entries without current-folder or widgets footer action
   assert.match(explorer, /FILE_EXPLORER_PIN_ACTION/);
   assert.match(explorer, /pinExploredPath\(fullPath\)/);
   assert.match(explorer, /<AppIcon name="download" size=\{15\} \/>/);
-  assert.match(explorer, /\.file-explorer-row > \.chip \{[\s\S]*align-items: center;[\s\S]*justify-content: center;/);
+  assert.match(explorer, /\.file-explorer-row > \.chip \{[\s\S]*display: inline-flex;[\s\S]*align-items: center;[\s\S]*justify-content: center;/);
   assert.doesNotMatch(explorer, /Pin folder|← Widgets|FILE_EXPLORER_RETURN_TO_HUBLOTS_ACTION/);
   assert.match(directories, /onPin\?: \(\(path: string\) => void\) \| null/);
   assert.match(directories, /onPin = null/);
