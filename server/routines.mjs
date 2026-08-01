@@ -20,8 +20,8 @@
  * script's whole process group (SIGTERM, then SIGKILL).
  *
  * Definitions, bindings, status, progress, results, and logs live only in
- * SQLite. `state.routineRuntime` contains only live ChildProcess handles and
- * their readline stream readers, keyed by persistent routine id.
+ * SQLite. `state.routineRuntime` contains only live ChildProcess handles,
+ * stream readers, and forced-stop timers, keyed by persistent routine id.
  */
 
 import { spawn } from "node:child_process";
@@ -34,8 +34,8 @@ import { materializeRoutineScript } from "./persistence/routineMaterializer.mjs"
 
 const ROUTINES_DIR = join(homedir(), ".pi", "routines");
 const LOG_MAX = 80;
+const STOP_GRACE_MS = 4000;
 const PROGRESS_RE = /^::progress\s+(?:(\d{1,3})%?(?:\s+|$))?(.*)$/;
-
 
 export function routinesDir() {
   return ROUTINES_DIR;
@@ -97,6 +97,27 @@ function activeRuntime(state, definition) {
   return routineRuntime(state).get(definition.id) ?? null;
 }
 
+function signalProcessGroup(proc, signal) {
+  const pid = proc?.pid;
+  if (Number.isInteger(pid) && pid > 0) {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {}
+  }
+  try { proc?.kill(signal); } catch {}
+}
+
+function terminateRuntime(runtime) {
+  signalProcessGroup(runtime.proc, "SIGTERM");
+  if (runtime.stopTimer) return;
+  runtime.stopTimer = setTimeout(() => {
+    runtime.stopTimer = null;
+    signalProcessGroup(runtime.proc, "SIGKILL");
+  }, STOP_GRACE_MS);
+  runtime.stopTimer.unref();
+}
+
 function runScript(state, definition, mode) {
   const repository = routineRepository(state);
   const cwd = definition.cwd && existsSync(definition.cwd) ? definition.cwd : state.currentDir;
@@ -110,7 +131,7 @@ function runScript(state, definition, mode) {
     detached: true,
   });
   const readers = new Set();
-  const runtime = { proc, readers };
+  const runtime = { proc, readers, stopTimer: null };
   routineRuntime(state).set(definition.id, runtime);
   const run = repository.createRun({
     id: randomUUID(), routineId: definition.id, mode,
@@ -145,38 +166,45 @@ function runScript(state, definition, mode) {
   readers.add(stderrReader);
 
   const clearRuntime = () => {
-    if (routineRuntime(state).get(definition.id) !== runtime) return false;
     for (const reader of readers) reader.close();
+    if (runtime.stopTimer) clearTimeout(runtime.stopTimer);
+    runtime.stopTimer = null;
+    if (routineRuntime(state).get(definition.id) !== runtime) return false;
     routineRuntime(state).delete(definition.id);
     return true;
   };
 
-  proc.on("error", (error) => {
-    if (!clearRuntime()) return;
-    repository.finishRun(run.id, { status: "failed", error: error.message, finishedAt: new Date().toISOString() });
-    emit(state, definition, "error");
-  });
+  let spawnError = null;
+  proc.once("error", (error) => { spawnError = error; });
 
-  proc.on("exit", (code, signal) => {
+  // `close`, unlike `exit`, waits for stdio to drain. Finalizing on `exit`
+  // could otherwise discard the script's last log or progress line.
+  proc.once("close", (code, signal) => {
     if (!clearRuntime()) return;
+    if (spawnError) {
+      repository.finishRun(run.id, { status: "failed", error: spawnError.message, finishedAt: new Date().toISOString() });
+      emit(state, definition, "error");
+      return;
+    }
     const current = repository.findRun(run.id);
     console.log(`[oyster] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
-    if (mode === "teardown") {
+    const exitReason = signal ? `signal ${signal}` : `exit ${code}`;
+    if (current?.status === "stopping") {
+      repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
+      emit(state, definition, "stopped");
+    } else if (mode === "teardown") {
       repository.finishRun(run.id, {
         status: code === 0 ? "idle" : "failed",
         result: code === 0 ? "byproducts removed" : null,
-        error: code === 0 ? null : (current?.message ?? `teardown failed (exit ${code})`),
+        error: code === 0 ? null : (current?.message ?? `teardown failed (${exitReason})`),
         finishedAt: new Date().toISOString(), exitCode: code,
       });
       emit(state, definition, "teardown_finished");
-    } else if (current?.status === "stopping") {
-      repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
-      emit(state, definition, "stopped");
     } else {
       if (code === 0 && current?.progress !== null) repository.updateProgress(run.id, 100, current?.message ?? null);
       repository.finishRun(run.id, {
         status: code === 0 ? "done" : "failed",
-        error: code === 0 ? null : (current?.message ?? `run failed (exit ${code})`),
+        error: code === 0 ? null : (current?.message ?? `run failed (${exitReason})`),
         finishedAt: new Date().toISOString(), exitCode: code,
       });
       emit(state, definition, "finished");
@@ -185,7 +213,9 @@ function runScript(state, definition, mode) {
 }
 
 export function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
-  if (!/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
+  if (typeof name !== "string" || !/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
+  if (typeof script !== "string") throw new Error("routine script must be a string");
+  if (cwd !== null && typeof cwd !== "string") throw new Error("routine cwd must be a string or null");
   if (sessionId && !ownerId) throw new Error("session owner is required to bind a routine");
   const existing = findRoutine(state, name);
   if (existing && activeRuntime(state, existing)?.proc) throw new Error(`routine "${name}" is currently running — stop it before overwriting`);
@@ -236,9 +266,7 @@ export function stopRoutine(state, name) {
   const run = routineRepository(state).findLatestRun(definition.id);
   if (run) routineRepository(state).updateRunStatus(run.id, "stopping");
   emit(state, definition, "stopping");
-  const pid = runtime.proc.pid;
-  try { process.kill(-pid, "SIGTERM"); } catch { try { runtime.proc.kill("SIGTERM"); } catch {} }
-  setTimeout(() => { try { process.kill(-pid, "SIGKILL"); } catch {} }, 4000).unref();
+  terminateRuntime(runtime);
   return routineView(state, definition);
 }
 
@@ -276,9 +304,12 @@ export function deleteSessionRoutines(state, sessionId) {
   for (const definition of routineRepository(state).list().filter((row) => row.session_id === sessionId)) {
     const runtime = activeRuntime(state, definition);
     if (runtime?.proc) {
-      runtime.proc.removeAllListeners?.("exit");
+      // Session deletion is irreversible, so do not leave a resistant
+      // routine alive after detaching its durable definition.
+      if (runtime.stopTimer) clearTimeout(runtime.stopTimer);
+      runtime.stopTimer = null;
+      signalProcessGroup(runtime.proc, "SIGKILL");
       for (const reader of runtime.readers) reader.close();
-      try { process.kill(-runtime.proc.pid, "SIGTERM"); } catch { try { runtime.proc.kill("SIGTERM"); } catch {} }
       routineRuntime(state).delete(definition.id);
     }
     const view = routineView(state, definition);
@@ -336,16 +367,23 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
     const capture = (chunk) => { tail = (tail + String(chunk)).slice(-3000); };
     proc.stdout.on("data", capture);
     proc.stderr.on("data", capture);
+    let forceTimer = null;
     const timeout = setTimeout(() => {
-      try { process.kill(-proc.pid, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch {} }
+      signalProcessGroup(proc, "SIGTERM");
+      forceTimer = setTimeout(() => signalProcessGroup(proc, "SIGKILL"), STOP_GRACE_MS);
+      forceTimer.unref();
       reject(new Error("timed out while the routine agent was working"));
     }, 5 * 60 * 1000);
-    proc.once("error", (error) => {
+    const clearTimers = () => {
       clearTimeout(timeout);
+      if (forceTimer) clearTimeout(forceTimer);
+    };
+    proc.once("error", (error) => {
+      clearTimers();
       reject(new Error(`failed to spawn routine agent: ${error.message}`));
     });
     proc.once("exit", (code, signal) => {
-      clearTimeout(timeout);
+      clearTimers();
       if (code === 0) resolvePromise({ output: tail.trim() });
       else reject(new Error(`routine agent exited (${signal ?? code}): ${tail.trim().split("\n").at(-1) ?? "unknown error"}`));
     });
@@ -354,7 +392,15 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
 }
 
 export function stopAllRoutines(state) {
-  for (const runtime of state.routineRuntime?.values() ?? []) {
-    try { process.kill(-runtime.proc.pid, "SIGKILL"); } catch { try { runtime.proc.kill("SIGKILL"); } catch {} }
+  const runtimes = state.routineRuntime;
+  if (!runtimes) return;
+  // Detach before signaling so late child events cannot write to a store that
+  // the server is in the process of closing.
+  state.routineRuntime = new Map();
+  for (const runtime of runtimes.values()) {
+    if (runtime.stopTimer) clearTimeout(runtime.stopTimer);
+    runtime.stopTimer = null;
+    for (const reader of runtime.readers) reader.close();
+    signalProcessGroup(runtime.proc, "SIGKILL");
   }
 }

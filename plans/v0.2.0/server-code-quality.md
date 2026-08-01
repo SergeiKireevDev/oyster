@@ -16,7 +16,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/pi-oauth-flow-service.mjs`
 - [x] `server/pi-processes.mjs`
 - [x] `server/reload-manifest.mjs`
-- [ ] `server/routines.mjs`
+- [x] `server/routines.mjs`
 - [ ] `server/runner-restart-service.mjs`
 - [ ] `server/runners.mjs`
 - [ ] `server/server.mjs`
