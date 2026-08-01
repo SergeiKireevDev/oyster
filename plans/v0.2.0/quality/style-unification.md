@@ -49,7 +49,7 @@ For each checklist item, review the referenced Svelte component and consolidate 
 - [x] `public/src/components/Header.svelte`
 - [x] `public/src/components/HtmlArtifact.svelte`
 - [x] `public/src/components/HublotManagerModal.svelte`
-- [ ] `public/src/components/HublotSidebar.svelte`
+- [x] `public/src/components/HublotSidebar.svelte`
 - [ ] `public/src/components/ImageArtifact.svelte`
 - [ ] `public/src/components/LlmboxWorkspaceModal.svelte`
 - [ ] `public/src/components/MarkdownArtifact.svelte`
