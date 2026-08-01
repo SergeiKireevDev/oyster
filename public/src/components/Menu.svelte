@@ -119,3 +119,126 @@
     <span>Log out</span>
   </button>
 </div>
+
+<style>
+  #menu {
+    position: absolute;
+    top: 48px;
+    right: max(14px, env(safe-area-inset-right));
+    z-index: 30;
+    display: none;
+    width: max-content;
+    min-width: 232px;
+    max-width: calc(100vw - 28px);
+    padding: 6px;
+    overflow: hidden;
+    flex-direction: column;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--panel-2) 97%, transparent);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(18px);
+  }
+
+  #menu.open {
+    display: flex;
+  }
+
+  #menu button {
+    display: flex;
+    min-width: 0;
+    min-height: 42px;
+    align-items: center;
+    gap: 11px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: color-mix(in srgb, var(--text) 82%, var(--muted));
+    font: inherit;
+    font-size: 13px;
+    font-weight: 560;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  #menu button:hover,
+  #menu button:focus-visible {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text);
+  }
+
+  #menu button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  #menu button > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .menu-option-icon {
+    display: grid;
+    width: 29px;
+    height: 29px;
+    flex: none;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--accent) 11%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: color-mix(in srgb, var(--accent) 76%, var(--muted));
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  #menu button:hover .menu-option-icon,
+  #menu button:focus-visible .menu-option-icon {
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  }
+
+  #menu .menu-logout {
+    margin-top: 5px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 0 0 9px 9px;
+  }
+
+  #menu .menu-logout .menu-option-icon {
+    color: color-mix(in srgb, var(--red) 55%, var(--muted));
+  }
+
+  #menu .menu-logout:hover,
+  #menu .menu-logout:focus-visible {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+  }
+
+  #menu .menu-logout:hover .menu-option-icon,
+  #menu .menu-logout:focus-visible .menu-option-icon {
+    border-color: color-mix(in srgb, var(--red) 24%, var(--border));
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+  }
+
+  @media (max-width: 760px) {
+    #menu {
+      right: max(9px, env(safe-area-inset-right));
+      max-width: calc(100vw - 18px - env(safe-area-inset-right));
+    }
+
+    #menu button {
+      min-height: 44px;
+    }
+  }
+
+  @media (max-width: 520px) {
+    #menu {
+      width: min(232px, calc(100vw - 18px - env(safe-area-inset-right)));
+      min-width: 0;
+    }
+  }
+</style>

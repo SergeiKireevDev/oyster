@@ -50,29 +50,6 @@
   }
   .chip:hover { color: var(--text); border-color: var(--accent-dim); }
 
-  /* ---------- menu ---------- */
-  #menu {
-    position: absolute;
-    top: 44px; right: 10px;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 8px 30px rgba(0,0,0,.5);
-    display: none;
-    flex-direction: column;
-    min-width: 200px;
-    z-index: 30;
-    overflow: hidden;
-  }
-  #menu.open { display: flex; }
-  #menu button {
-    all: unset;
-    padding: 10px 14px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-  #menu button:hover { background: var(--accent-dim); }
-
   /* ---------- messages ---------- */
   /* NO scroll-behavior:smooth here: it would ANIMATE every programmatic
      scrollTop write — the initial bottom-pin became a visible glide through
@@ -1810,43 +1787,6 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
   transition: color .16s, border-color .16s, background .16s, transform .16s;
 }
 .chip:hover { color: var(--text); border-color: #424a61; background: rgba(255,255,255,.065); transform: translateY(-1px); }
-#menu {
-  top: 48px;
-  right: 14px;
-  min-width: 232px;
-  padding: 6px;
-  border-radius: 13px;
-  background: rgba(24,28,37,.97);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(18px);
-}
-#menu button {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-height: 42px;
-  padding: 6px 9px;
-  border-radius: 9px;
-  color: #cbd0dc;
-  font-size: 13px;
-  font-weight: 560;
-}
-#menu button:hover { background: rgba(157,169,255,.12); color: white; }
-.menu-option-icon {
-  width: 29px;
-  height: 29px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  border: 1px solid rgba(157,169,255,.11);
-  border-radius: 8px;
-  background: rgba(157,169,255,.07);
-  color: #aab2f4;
-}
-#menu button:hover .menu-option-icon { border-color: rgba(157,169,255,.22); background: rgba(157,169,255,.13); color: #d9ddff; }
-#menu .menu-logout { margin-top: 5px; border-top: 1px solid rgba(255,255,255,.07); border-radius: 0 0 9px 9px; }
-#menu .menu-logout .menu-option-icon { color: #b7a1aa; }
-
 /* Three-column workspace */
 #sessions, #hublots, #treebar {
   border-color: rgba(255,255,255,.07);
@@ -2263,16 +2203,6 @@ html[data-theme="light"] .chip {
   color: #5c667a;
 }
 html[data-theme="light"] .chip:hover { border-color: #aeb8cc; background: rgba(82,99,216,.08); }
-html[data-theme="light"] #menu {
-  border-color: var(--border);
-  background: rgba(255,255,255,.97);
-}
-html[data-theme="light"] #menu button { color: var(--text); }
-html[data-theme="light"] #menu button:hover { background: var(--accent-dim); color: #29378f; }
-html[data-theme="light"] .menu-option-icon { border-color: rgba(82,99,216,.12); background: rgba(82,99,216,.07); color: #5866c7; }
-html[data-theme="light"] #menu button:hover .menu-option-icon { border-color: rgba(82,99,216,.2); background: rgba(82,99,216,.12); color: #3949a4; }
-html[data-theme="light"] #menu .menu-logout { border-top-color: rgba(32,37,52,.09); }
-
 html[data-theme="light"] #sessions,
 html[data-theme="light"] #hublots,
 html[data-theme="light"] #treebar {

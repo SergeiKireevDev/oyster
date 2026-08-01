@@ -4,6 +4,7 @@ import test from "node:test";
 import { compile } from "svelte/compiler";
 
 const source = readFileSync(new URL("../public/src/components/Menu.svelte", import.meta.url), "utf8");
+const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
 test("Menu exposes an accessible, stateful application menu", () => {
   assert.match(source, /role="menu"/);
@@ -31,6 +32,16 @@ test("Menu actions use named handlers and explicit button behavior", () => {
     assert.match(source, new RegExp(`onclick=\\{${handler}\\}`));
   }
   assert.doesNotMatch(source, /onclick=\{\(\) =>/);
+});
+
+test("Menu owns a responsive, theme-aware floating-menu style", () => {
+  assert.match(source, /<style>[\s\S]*?#menu\s*\{[\s\S]*?var\(--panel-2\)[\s\S]*?var\(--shadow-lg\)/);
+  assert.match(source, /#menu button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/s);
+  assert.match(source, /#menu \.menu-logout:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--red\) 10%, transparent\)/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menu button\s*\{\s*min-height:\s*44px;/);
+  assert.match(source, /@media \(max-width: 520px\)[\s\S]*?width:\s*min\(232px,/);
+  assert.doesNotMatch(source, /html\[data-theme="light"\]/, "semantic menu colors should not need a component theme fork");
+  assert.doesNotMatch(globalStyles, /#menu|\.menu-option-icon|\.menu-logout/, "obsolete global menu overrides should be removed");
 });
 
 test("Menu compiles without Svelte warnings", () => {
