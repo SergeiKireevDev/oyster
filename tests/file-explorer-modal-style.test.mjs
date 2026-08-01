@@ -27,7 +27,8 @@ test("file explorer editor is labelled, responsive, and uses the shared primary 
   assert.match(component, /<kbd>Ctrl<\/kbd>\/<kbd>⌘<\/kbd> \+ <kbd>S<\/kbd> to save/);
   assert.match(component, /class="btn modal-primary-action" type="submit" form="fileEditorForm"/);
   assert.match(styles, /height:\s*clamp\(260px, 50vh, 560px\);/);
-  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?min-height:\s*40px;/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.file-explorer-row > \.chip \{[\s\S]*?min-height: var\(--icon-control-standard\);/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.m-actions > :is\(button, a\) \{ min-height: 40px; \}/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?flex:\s*1 1 118px;/);
   assert.doesNotMatch(globalStyles, /#modal \.file-editor\s*\{/);
 });

@@ -327,14 +327,14 @@
     }
 
     .header-actions {
-      gap: 2px;
+      gap: var(--icon-control-gap);
       margin: 3px 0;
       padding: 1px;
     }
 
     .app-header .chip {
-      min-height: 34px;
-      margin: 1px;
+      min-height: var(--icon-control-dense);
+      margin: 0;
       gap: 5px;
       padding: 0 7px;
     }
@@ -351,7 +351,7 @@
     }
 
     #menuBtn {
-      width: 34px;
+      width: var(--icon-control-dense);
     }
 
     #cfgChip span {

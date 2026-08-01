@@ -289,9 +289,9 @@
 
   @media (max-width: 760px) {
     .file-explorer-row > .chip {
-      width: 40px;
-      min-width: 40px;
-      min-height: 40px;
+      width: var(--icon-control-standard);
+      min-width: var(--icon-control-standard);
+      min-height: var(--icon-control-standard);
     }
 
     .file-editor-form .file-editor { height: clamp(220px, 44vh, 420px); }
@@ -300,7 +300,7 @@
 
   @media (max-width: 520px) {
     .file-explorer-row { gap: 5px; }
-    .file-explorer-row > .chip { width: 38px; min-width: 38px; }
+    .file-explorer-row > .chip { width: var(--icon-control-standard); min-width: var(--icon-control-standard); }
     .file-editor-hint { text-align: left; }
     .m-actions > :is(button, a) { flex: 1 1 118px; }
   }

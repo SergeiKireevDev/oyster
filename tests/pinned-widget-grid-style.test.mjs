@@ -27,6 +27,6 @@ test("pinned widget grid exposes accessible asynchronous and management states",
 test("pinned widget launcher remains usable across pointer and narrow touch layouts", () => {
   assert.match(component, /\.pinned-widget-cell\[draggable="true"\] \.pinned-widget-icon\s*\{[^}]*touch-action: none;/s);
   assert.match(component, /@media \(hover: none\)\s*\{[\s\S]*\.pinned-widget-menu \{ opacity: \.72; \}/);
-  assert.match(component, /@media \(max-width: 760px\)[\s\S]*\.pinned-widget-menu \{ width: 40px; height: 40px;[\s\S]*\.pinned-widget-back \{ width: 40px; min-height: 40px;/);
+  assert.match(component, /@media \(max-width: 760px\)[\s\S]*\.pinned-widget-menu \{ width: var\(--icon-control-standard\); height: var\(--icon-control-standard\);[\s\S]*\.pinned-widget-back \{ width: var\(--icon-control-standard\); min-height: var\(--icon-control-standard\);/);
   assert.match(component, /@media \(max-width: 520px\)[\s\S]*grid-template-columns: repeat\(3/);
 });

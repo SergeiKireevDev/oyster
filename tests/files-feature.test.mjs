@@ -50,7 +50,7 @@ test("shared directory list follows the modal row visual contract", () => {
   assert.match(list, /<FolderIcon size=\{15\} \/>/);
   assert.match(list, /\.browser-directory-name\s*\{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
   assert.match(list, /\.browser-directory-row > \.chip\s*\{[^}]*min-height: 32px;/s);
-  assert.match(list, /@media \(max-width: 760px\)/);
+  assert.match(list, /@media \(max-width: 760px\)[\s\S]*?\.browser-directory-row > \.chip \{[\s\S]*?min-height: var\(--icon-control-standard\);/);
   assert.match(list, /@media \(max-width: 520px\)/);
   assert.match(style, /#modal \.browser-directory-button\s*\{[^}]*display: flex;[^}]*gap: 8px;/s);
   assert.match(style, /@media \(max-width: 760px\)[\s\S]*#modal \.browser-directory-button \{ min-height: 40px; \}/);

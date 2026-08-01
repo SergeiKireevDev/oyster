@@ -37,14 +37,15 @@ test("Header uses semantic theme tokens and the shared chip contract", () => {
   assert.match(source, /\.app-header \.chip:hover[\s\S]*?color: var\(--header-chip-hover-color, var\(--text\)\);/);
   assert.match(source, /\.app-header \.chip:focus-visible\s*\{[\s\S]*?outline: 2px solid var\(--accent\);[\s\S]*?outline-offset: 2px;/);
   assert.doesNotMatch(source, /#[0-9a-f]{3,8}|rgba?\(/i);
+  assert.match(globalStyles, /:root\s*\{[\s\S]*?--icon-control-dense: 30px;[\s\S]*?--icon-control-standard: 34px;[\s\S]*?--icon-control-important: 40px;[\s\S]*?--icon-control-gap: 4px;/);
   assert.match(globalStyles, /:root\[data-theme="light"\][\s\S]*?--header-bg:/);
 });
 
 test("Header gives open controls visible states and mobile controls compact spacing", () => {
   assert.match(source, /\.app-header \.chip\[aria-expanded="true"\][\s\S]*?border-color: var\(--accent\);[\s\S]*?box-shadow: inset 0 -2px 0 var\(--accent\);/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?margin: 3px 0;[\s\S]*?padding: 1px;/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.app-header \.chip\s*\{\s*min-height: 34px;[\s\S]*?margin: 1px;/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menuBtn\s*\{\s*width: 34px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.header-actions \{[\s\S]*?gap: var\(--icon-control-gap\);[\s\S]*?margin: 3px 0;[\s\S]*?padding: 1px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.app-header \.chip\s*\{\s*min-height: var\(--icon-control-dense\);[\s\S]*?margin: 0;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?#menuBtn\s*\{\s*width: var\(--icon-control-dense\);/);
   assert.match(source, /\.title\s*\{[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
 });
 

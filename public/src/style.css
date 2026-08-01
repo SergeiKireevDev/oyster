@@ -13,6 +13,10 @@
     --yellow: #e0af68;
     --user-bubble: #26436e;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --icon-control-dense: 30px;
+    --icon-control-standard: 34px;
+    --icon-control-important: 40px;
+    --icon-control-gap: 4px;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }

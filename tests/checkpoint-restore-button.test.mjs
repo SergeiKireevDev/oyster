@@ -41,7 +41,7 @@ test("CheckpointRestoreButton follows the transcript action control visual contr
 
 test("CheckpointRestoreButton provides explicit loading, mobile, and reduced-motion states", () => {
   assert.match(source, /\.restore-spinner \{[\s\S]*?border-right-color: transparent;[\s\S]*?animation: restore-spin/);
-  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: 38px;[\s\S]*?min-height: 38px;/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?min-width: var\(--icon-control-dense\);[\s\S]*?min-height: var\(--icon-control-dense\);/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/);
 });
 
