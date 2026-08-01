@@ -15,7 +15,6 @@ test("keyboard-focusable controls have a shared visible focus treatment", () => 
 
 test("symbol-only controls expose explicit accessible names", () => {
   assert.match(component("transcript/PermalinkButton.svelte"), /aria-label=\{label\}/);
-  assert.match(component("transcript/CheckpointButton.svelte"), /aria-label="Checkpoint all workdir changes"/);
   assert.match(component("transcript/CheckpointRestoreButton.svelte"), /aria-label=\{`Roll back to checkpoint/);
   assert.match(component("HublotSidebar.svelte"), /id="routineAdd"[^>]*aria-label="Build a new routine"/);
   assert.match(component("BrowserDirectoryList.svelte"), /aria-label=\{`Pin \$\{dir\.name\}`\}/);
@@ -36,7 +35,6 @@ test("symbol-only controls expose explicit accessible names", () => {
 });
 
 test("controls that start work use native disabled semantics while busy", () => {
-  assert.match(component("transcript/CheckpointButton.svelte"), /disabled=\{busy\}/);
   assert.match(component("transcript/CheckpointRestoreButton.svelte"), /disabled=\{restore\.busy\}/);
 
   const explorer = component("FileExplorerModal.svelte");

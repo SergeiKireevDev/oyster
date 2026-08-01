@@ -34,12 +34,11 @@ test("render-time collection and formatting work uses named reactive values", ()
   assert.match(cloudWorkspaceMarkup, /aria-expanded=\{advancedMethodsOpen\}/);
 });
 
-test("chart, modal, routine, and checkpoint markup delegates business rules to helpers", () => {
+test("chart, modal, and routine markup delegates business rules to helpers", () => {
   const analyticsMarkup = markup("public/src/components/AnalyticsModal.svelte");
   const viewerMarkup = markup("public/src/components/PinnedWidgetViewerModal.svelte");
   const overlaysMarkup = markup("public/src/components/Overlays.svelte");
   const routinesMarkup = markup("public/src/components/RoutineList.svelte");
-  const checkpointMarkup = markup("public/src/components/CheckpointTreeNode.svelte");
 
   assert.doesNotMatch(analyticsMarkup, /Math\.(?:max|ceil)|\/(?:\s*maxModelCost|\s*maxChartCost|\s*item\.cost)/);
   assert.match(analyticsMarkup, /style:width=\{modelBarWidth\(model\)\}/);
@@ -49,6 +48,4 @@ test("chart, modal, routine, and checkpoint markup delegates business rules to h
   assert.match(overlaysMarkup, /class:markdown-reader-modal=\{isMarkdownReaderModal\}/);
   assert.doesNotMatch(routinesMarkup, /\["running", "stopping", "teardown"\]|routine\.log \?\?|routine\.progress \?\?/);
   assert.match(routinesMarkup, /class=\{progressClass\(routine\)\}/);
-  assert.doesNotMatch(checkpointMarkup, /capabilities\.rollback\s*\?|capabilities\.rollback\s*&&/);
-  assert.match(checkpointMarkup, /title=\{checkpointTitle\(row\)\}/);
 });

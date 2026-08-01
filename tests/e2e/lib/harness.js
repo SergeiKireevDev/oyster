@@ -227,7 +227,6 @@ export async function forceNewSession(page) {
   await page.evaluate(() => {
     document.getElementById("sessions")?.classList.remove("open");
     document.getElementById("hublots")?.classList.remove("open");
-    document.getElementById("treebar")?.classList.remove("open");
   });
 }
 

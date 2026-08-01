@@ -20,11 +20,11 @@ test("AssistantPartActions compiles without Svelte or accessibility warnings", (
 
 test("AssistantPartActions keeps visibility flags distinct from action data", () => {
   assert.match(source, /copy: showCopy = false/);
-  assert.match(source, /checkpoint: showCheckpoint = false/);
   assert.match(source, /restore: restoreState = null/);
+  assert.match(source, /<PermalinkButton \{target\} \{onPermalink\} \/>/);
   assert.match(source, /\{#if showCopy\}[\s\S]*?<CopyMessageButton text=\{copyText\}/);
-  assert.match(source, /\{#if showCheckpoint\}[\s\S]*?<CheckpointButton/);
   assert.match(source, /\{#if restoreState\}[\s\S]*?<CheckpointRestoreButton restore=\{restoreState\}/);
+  assert.doesNotMatch(source, /CheckpointButton|showCheckpoint|checkpointBusy/);
 });
 
 test("AssistantPartActions documents the callback and restore contracts", () => {

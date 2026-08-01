@@ -9,7 +9,6 @@ import {
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
-  HEADER_TOGGLE_TREE_ACTION,
   SETTINGS_CHANGED_ACTION,
 } from "../../runtime/uiActionNames.js";
 
@@ -40,7 +39,6 @@ export function createSettingsLayoutRuntime(deps) {
       windowTarget: deps.windowTarget,
       storage: deps.storage,
       setPage: deps.setCarouselPage,
-      loadCheckpointTree: deps.loadCheckpointTree,
     },
   });
 
@@ -69,9 +67,7 @@ export function createSettingsLayoutRuntime(deps) {
   const header = createCarouselHeaderController({
     isDesktop: () => deps.windowTarget.matchMedia("(min-width: 761px)").matches,
     hublots: deps.hublotsEl,
-    treebar: deps.treebarEl,
     loadHublots: deps.loadScopedResources,
-    loadCheckpointTree: deps.loadCheckpointTree,
     carousel,
   });
 
@@ -80,7 +76,6 @@ export function createSettingsLayoutRuntime(deps) {
     windowTarget: deps.windowTarget,
     sessions: deps.sessionsEl,
     hublots: deps.hublotsEl,
-    treebar: deps.treebarEl,
     getCarousel: () => carousel,
     isToggleTarget: deps.isDrawerToggleTarget,
     isOverlayOpen: deps.isOverlayOpen,
@@ -90,13 +85,11 @@ export function createSettingsLayoutRuntime(deps) {
     chooseModel: settings.chooseModel,
     cycleThinking: settings.cycleThinking,
     openConfig: settings.openConfig,
-    toggleTree: header.toggleTree,
   };
   const detachUiActions = [
     deps.uiActions.register(HEADER_CHOOSE_MODEL_ACTION, headerActions.chooseModel),
     deps.uiActions.register(HEADER_CYCLE_THINKING_ACTION, headerActions.cycleThinking),
     deps.uiActions.register(HEADER_OPEN_CONFIG_ACTION, headerActions.openConfig),
-    deps.uiActions.register(HEADER_TOGGLE_TREE_ACTION, headerActions.toggleTree),
     deps.uiActions.register(SETTINGS_CHANGED_ACTION, settingsChanged),
   ];
 

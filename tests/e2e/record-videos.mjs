@@ -1,4 +1,4 @@
-// Records videos of the mobile swipe-carousel and treebar interactions.
+// Records videos of the mobile swipe-carousel interactions.
 // Uses the Playwright API directly (not the test runner) because the runner
 // config approach doesn't produce videos with headless chromium on this host.
 //
@@ -80,41 +80,15 @@ async function main() {
   console.log("Recording: swipe to open hublots...");
   await page.evaluate(() => {
     document.getElementById("hublots")?.classList.remove("open");
-    document.getElementById("treebar")?.classList.remove("open");
   });
   await page.waitForTimeout(500);
-  await swipe("left");
-  await page.waitForTimeout(1500);
-  // swipe again to go to checkpoints
   await swipe("left");
   await page.waitForTimeout(1500);
   // swipe right to go back
   await swipe("right");
   await page.waitForTimeout(1000);
-  await swipe("right");
-  await page.waitForTimeout(1000);
 
-  // ---- Scenario 2: open treebar via chip, see checkpoints ----
-  console.log("Recording: chip opens treebar, see checkpoints...");
-  // send a prompt first so there's a session file
-  await page.fill("#input", "Do not use any tools. Reply with exactly the word ALPHA.");
-  await page.click("#sendBtn");
-  await page.waitForSelector(".msg.assistant", { timeout: 60000 });
-  await page.waitForTimeout(500);
-  // freeze
-  await page.locator(".checkpoint").click();
-  await page.waitForSelector("#overlay.open");
-  await page.getByRole("button", { name: /Freeze/ }).click();
-  await page.waitForTimeout(500);
-  // open treebar via chip
-  await page.click("#treeChip");
-  await page.waitForTimeout(2000);
-  // close via swipe
-  await swipe("right");
-  await swipe("right");
-  await page.waitForTimeout(1000);
-
-  // ---- Scenario 3: two-finger swipe switches sessions ----
+  // ---- Scenario 2: two-finger swipe switches sessions ----
   console.log("Recording: two-finger swipe...");
   // open the mobile sessions sidebar directly; colon commands are intentionally unsupported
   await swipe("right");

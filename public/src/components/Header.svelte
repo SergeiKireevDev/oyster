@@ -9,15 +9,10 @@
     HEADER_CHOOSE_MODEL_ACTION,
     HEADER_CYCLE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
-    HEADER_TOGGLE_TREE_ACTION,
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   const hubMode = isHubRuntime();
-
-  function toggleTree() {
-    uiActions.invoke(HEADER_TOGGLE_TREE_ACTION);
-  }
 
   function openConfig() {
     uiActions.invoke(HEADER_OPEN_CONFIG_ACTION);
@@ -54,16 +49,6 @@
   </div>
   <span class="spacer" aria-hidden="true"></span>
   <nav class="header-actions" aria-label="Session controls">
-    <button
-      class="chip"
-      id="treeChip"
-      type="button"
-      aria-label="Checkpoints and forks"
-      title="Checkpoints & forks tree"
-      onclick={toggleTree}
-    >
-      <AppIcon name="fork" size={16} />
-    </button>
     <button
       class="chip"
       id="cfgChip"
@@ -255,7 +240,6 @@
     color: var(--text);
   }
 
-  #treeChip,
   #menuBtn {
     width: 30px;
     padding: 0;
@@ -340,8 +324,7 @@
     }
 
     #modelChip,
-    #thinkChip,
-    #treeChip {
+    #thinkChip {
       display: none;
     }
 

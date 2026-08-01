@@ -7,7 +7,6 @@ import {
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
-  HEADER_TOGGLE_TREE_ACTION,
   SETTINGS_CHANGED_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
@@ -21,11 +20,10 @@ function mount(listeners, uiActions = createUiActionRegistry()) {
     documentTarget: { addEventListener: (...args) => listeners.push(["add", ...args]), removeEventListener: (...args) => listeners.push(["remove", ...args]) },
     windowTarget: { matchMedia: () => ({ matches: true }), addEventListener: (...args) => listeners.push(["add", ...args]), removeEventListener: (...args) => listeners.push(["remove", ...args]) },
     storage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
-    setCarouselPage() {}, loadScopedResources() {}, loadCheckpointTree() {}, getRunners: () => [],
+    setCarouselPage() {}, loadScopedResources() {}, getRunners: () => [],
     getCurrentRunner: () => null, getWorkdir: () => "/tmp", switchRunner() {},
     sessionsEl: { contains: () => false, classList: { contains: () => false, toggle() {} } },
-    hublotsEl: { classList: { contains: () => false, toggle() {} } },
-    treebarEl: { classList: { contains: () => false, toggle() {} } },
+    hublotsEl: { contains: () => false, classList: { contains: () => false, toggle() {} } },
     isDrawerToggleTarget: () => false,
   });
 }
@@ -53,7 +51,6 @@ test("settings/layout runtime registers header and settings-change actions until
     HEADER_CHOOSE_MODEL_ACTION,
     HEADER_CYCLE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
-    HEADER_TOGGLE_TREE_ACTION,
     SETTINGS_CHANGED_ACTION,
   ].sort());
 
@@ -68,7 +65,6 @@ test("header routes scoped actions and settings delegates persistence to its pre
     "HEADER_CHOOSE_MODEL_ACTION",
     "HEADER_CYCLE_THINKING_ACTION",
     "HEADER_OPEN_CONFIG_ACTION",
-    "HEADER_TOGGLE_TREE_ACTION",
   ]) {
     assert.match(header, new RegExp(`uiActions\\.invoke\\(${name}`));
   }

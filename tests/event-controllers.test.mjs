@@ -85,23 +85,18 @@ test("carousel header controller toggles desktop drawers and mobile pages", () =
     return { classList: { toggle: (name) => values.has(name) ? values.delete(name) : values.add(name), contains: (name) => values.has(name) } };
   };
   const hublots = drawer();
-  const treebar = drawer();
   const calls = [];
   let desktop = true;
   const controller = createCarouselHeaderController({
     isDesktop: () => desktop,
     hublots,
-    treebar,
     loadHublots: () => calls.push("hublots"),
-    loadCheckpointTree: () => calls.push("tree"),
     carousel: { set: (page) => calls.push(page) },
   });
   controller.toggleHublots();
-  controller.toggleTree();
   desktop = false;
   controller.toggleHublots();
-  controller.toggleTree();
-  assert.deepEqual(calls, ["hublots", "tree", 0, 0]);
+  assert.deepEqual(calls, ["hublots", 0]);
 });
 
 test("carousel swipe controller routes horizontal single and multi-touch gestures", () => {
@@ -146,27 +141,22 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   };
   const sessions = { classList: classes() };
   const hublots = { classList: classes() };
-  const treebar = { classList: classes() };
   const writes = [];
   const pages = [];
   const controller = createCarouselController({
-    documentTarget: { getElementById: (id) => ({ sessions, hublots, treebar })[id] },
+    documentTarget: { getElementById: (id) => ({ sessions, hublots })[id] },
     windowTarget: { matchMedia: () => ({ matches: true }) },
     storage: { getItem: () => "0", setItem: (...args) => writes.push(args) },
     setPage: (page) => pages.push(page),
-    loadCheckpointTree: () => pages.push("tree"),
   });
   controller.set(1);
   assert.equal(controller.get(), 1);
   assert.deepEqual([...hublots.classList.values], ["open"]);
-  assert.deepEqual([...treebar.classList.values], []);
   assert.deepEqual(pages, [1], "revealing prefetched hublots does not reload them");
   controller.step(1);
-  assert.equal(controller.get(), 2);
-  assert.deepEqual([...hublots.classList.values], ["open"]);
-  assert.deepEqual([...treebar.classList.values], ["open"]);
-  assert.deepEqual(writes, [["pi_carousel", "1"], ["pi_carousel", "2"]]);
-  assert.deepEqual(pages, [1, "tree", 2]);
+  assert.equal(controller.get(), 1);
+  assert.deepEqual(writes, [["pi_carousel", "1"]]);
+  assert.deepEqual(pages, [1]);
   controller.reset();
   controller.step(-1);
   assert.equal(controller.get(), -1);
@@ -175,7 +165,6 @@ test("carousel controller persists and applies mobile drawer pages", () => {
   assert.equal(controller.get(), 0);
   assert.deepEqual([...sessions.classList.values], []);
   assert.deepEqual([...hublots.classList.values], []);
-  assert.deepEqual([...treebar.classList.values], []);
 });
 
 test("carousel controller keeps drawers mounted until reverse swipe animations finish", () => {
@@ -191,15 +180,13 @@ test("carousel controller keeps drawers mounted until reverse swipe animations f
   };
   const sessions = { classList: classes() };
   const hublots = { classList: classes() };
-  const treebar = { classList: classes() };
   const timers = new Map();
   let nextTimer = 0;
   const controller = createCarouselController({
-    documentTarget: { getElementById: (id) => ({ sessions, hublots, treebar })[id] },
+    documentTarget: { getElementById: (id) => ({ sessions, hublots })[id] },
     windowTarget: { matchMedia: (query) => ({ matches: query === "(max-width: 760px)" }) },
     storage: { getItem: () => "0", setItem() {} },
     setPage() {},
-    loadCheckpointTree() {},
     setTimeoutImpl: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; },
     clearTimeoutImpl: (id) => timers.delete(id),
   });
@@ -227,7 +214,6 @@ test("mobile drawer controller preserves an open drawer during modal operations 
   };
   const sessions = { contains: () => false, classList: { contains: () => false } };
   const hublots = { contains: () => false, classList: { contains: (name) => name === "open" } };
-  const treebar = { contains: () => false, classList: { contains: () => false } };
   let resets = 0;
   let overlayOpen = true;
   const controller = createMobileDrawerDismissController({
@@ -235,7 +221,6 @@ test("mobile drawer controller preserves an open drawer during modal operations 
     windowTarget: { matchMedia: () => ({ matches: true }) },
     sessions,
     hublots,
-    treebar,
     getCarousel: () => ({ reset: () => { resets++; } }),
     isToggleTarget: () => false,
     isOverlayOpen: () => overlayOpen,

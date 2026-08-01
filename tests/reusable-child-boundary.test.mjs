@@ -30,12 +30,12 @@ test("feature owners adapt global state into focused child props", () => {
   assert.match(component("ToastItem.svelte"), /let \{ toast, onDismiss = \(\) => \{\} \} = \$props\(\)/);
 
   const transcript = component("Transcript.svelte");
-  assert.equal((transcript.match(/checkpoint=\{\$checkpointMarker\}/g) ?? []).length, 2);
+  assert.doesNotMatch(transcript, /checkpointMarker|onCheckpoint/);
   assert.equal((transcript.match(/restores=\{\$checkpointRestores\}/g) ?? []).length, 2);
 
   for (const path of ["transcript/UserMessage.svelte", "transcript/AssistantMessage.svelte"]) {
     const source = component(path);
-    assert.match(source, /checkpoint = \{ target: null, busy: false \}/, path);
+    assert.doesNotMatch(source, /onCheckpoint|CheckpointButton/, path);
     assert.match(source, /restores = \[\]/, path);
   }
 });

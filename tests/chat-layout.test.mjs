@@ -47,6 +47,7 @@ test("auxiliary sidebars stay unwrapped as direct chat layout flex children", ()
   const markup = source.replace(/<script>[\s\S]*?<\/script>/, "");
 
   assert.match(chatLayout, /<Sidebars \/>/);
-  assert.match(markup, /<HublotSidebar \/>\s*<CheckpointTreebar \/>/);
+  assert.match(markup, /<HublotSidebar \/>/);
+  assert.doesNotMatch(markup, /CheckpointTreebar/);
   assert.doesNotMatch(markup, /<(?:aside|div|section)\b/);
 });

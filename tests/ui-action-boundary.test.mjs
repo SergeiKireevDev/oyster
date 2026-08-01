@@ -42,10 +42,8 @@ test("feature boundaries forbid global action bridges and component-owned platfo
 });
 
 test("checkpoint callbacks carry intent data instead of DOM targets", () => {
-  const treeNode = sources.find(({ path }) => path === "components/CheckpointTreeNode.svelte")?.source ?? "";
   const restoreButton = sources.find(({ path }) => path === "components/transcript/CheckpointRestoreButton.svelte")?.source ?? "";
   const controller = sources.find(({ path }) => path === "lib/checkpointController.js")?.source ?? "";
-  assert.doesNotMatch(treeNode, /rollbackCheckpoint\([^)]*(?:currentTarget|target)/);
   assert.doesNotMatch(restoreButton, /onRollback\([^)]*restore\.target/);
   assert.doesNotMatch(controller, /rollback\(checkpoint,\s*target|setRestoreBusy\(target/);
 });

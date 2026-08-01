@@ -37,7 +37,7 @@ test("Menu routes every action through the scoped registry", () => {
 
 test("Header presents session controls as a consistent icon action group", () => {
   assert.match(headerSource, /<nav class="header-actions" aria-label="Session controls">/);
-  for (const icon of ["fork", "sliders", "model", "thinking", "more"]) {
+  for (const icon of ["sliders", "model", "thinking", "more"]) {
     assert.match(headerSource, new RegExp(`<AppIcon name="${icon}"`));
   }
   assert.match(headerSource, /<h1 class="title" id="sessionTitle"/);

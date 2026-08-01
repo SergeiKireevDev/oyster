@@ -9,7 +9,6 @@ test("transient notices and dynamic errors use appropriately prioritized live re
   const toasts = component("Toasts.svelte");
   const toast = component("ToastItem.svelte");
   const analytics = component("AnalyticsModal.svelte");
-  const checkpointTree = component("CheckpointTreebar.svelte");
   const assistant = component("transcript/AssistantMessage.svelte");
 
   assert.match(toasts, /<section id="toasts" class="toast-stack" aria-label="Notifications">/);
@@ -17,26 +16,12 @@ test("transient notices and dynamic errors use appropriately prioritized live re
   assert.match(toast, /role=\{toast\.kind === "error" \? "alert" : "status"\}/);
   assert.match(toast, /aria-atomic="true"/);
   assert.match(analytics, /analytics-error" role="alert"/);
-  assert.match(checkpointTree, /checkpointTree\.error[\s\S]*?class="checkpoint-tree-state checkpoint-tree-error" role="alert" aria-atomic="true"/);
   assert.match(assistant, /data-assistant-part="error" role="alert"/);
-});
-
-test("checkpoint tree exposes a named, busy region and prioritizes errors over empty state", () => {
-  const checkpointTree = component("CheckpointTreebar.svelte");
-  const errorBranch = checkpointTree.indexOf("{:else if $checkpointTree.error}");
-  const emptyBranch = checkpointTree.indexOf("{:else if $checkpointTree.empty}");
-
-  assert.match(checkpointTree, /<aside id="treebar" class="workspace-aux-sidebar" aria-labelledby="checkpoint-tree-heading">/);
-  assert.match(checkpointTree, /<h2 id="checkpoint-tree-heading" class="side-head">/);
-  assert.match(checkpointTree, /<div id="treeView" aria-busy=\{\$checkpointTree\.loading\}>/);
-  assert.ok(errorBranch >= 0 && errorBranch < emptyBranch, "errors should not be hidden by stale empty-state text");
-  assert.match(checkpointTree, /checkpointTree\.empty[\s\S]*?role="status" aria-atomic="true"/);
 });
 
 test("loading, connection, voice, and search updates expose polite status semantics", () => {
   const expectedStatuses = [
     ["AnalyticsModal.svelte", /aggregating SQLite usage/],
-    ["CheckpointTreebar.svelte", /Loading tree/],
     ["CheckpointModelPickerModal.svelte", /Loading models/],
     ["SessionPickerModal.svelte", /loading sessions/],
   ];
