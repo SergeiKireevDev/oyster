@@ -47,7 +47,7 @@ test("session title summarizer uses the configured model and returns a clean tit
     onSpawn: (value) => { spawned = value; },
   });
   process.stdout.write('Title: "Fix OAuth Redirect Handling"\n');
-  process.emit("exit", 0);
+  process.emit("close", 0);
 
   assert.equal(await result, "Fix OAuth Redirect Handling");
   assert.equal(spawned, process);
@@ -59,8 +59,61 @@ test("session title summarizer uses the configured model and returns a clean tit
   assert.match(calls[0].args.at(-1), /Fix OAuth redirects/);
 });
 
-test("session title cleanup strips formatting and bounds output", () => {
+test("session title cleanup strips formatting, controls, and bounds output", () => {
   assert.equal(cleanSessionTitle("```\n## ignored\n```"), "ignored");
+  assert.equal(cleanSessionTitle('Title: "Fix\u0000 OAuth\u001b"'), "Fix OAuth");
   assert.equal(cleanSessionTitle(`Title: ${"x".repeat(100)}`).length, 72);
   assert.equal(cleanSessionTitle("\n\n"), null);
+});
+
+test("session title context tolerates malformed structured values", () => {
+  const circular = {};
+  circular.self = circular;
+  const transcript = firstSessionMessages([{ role: "assistant", content: [
+    { type: "text", text: { nested: true } },
+    { type: "text", text: Symbol("description") },
+    { type: "toolCall", name: "", arguments: circular },
+  ] }]);
+
+  assert.match(transcript, /\{"nested":true\}/);
+  assert.match(transcript, /Symbol\(description\)/);
+  assert.match(transcript, /tool call: unknown \[object Object\]/);
+});
+
+test("session title summarizer returns null and kills the child when spawn registration fails", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const process = fakeProcess();
+  const result = summarizeSessionTitle({ ephemeral: () => process }, {
+    cwd: "/workspace",
+    messages: [{ role: "user", content: "Review the server" }],
+    onSpawn: () => { throw new Error("registration failed"); },
+  });
+
+  assert.equal(await result, null);
+  assert.equal(process.signal, "SIGKILL");
+});
+
+test("session title summarizer converts synchronous spawn failures to null", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const result = summarizeSessionTitle({ ephemeral: () => { throw new Error("spawn failed"); } }, {
+    cwd: "/workspace",
+    messages: [{ role: "user", content: "Review the server" }],
+  });
+
+  assert.equal(await result, null);
+});
+
+test("session title summarizer kills a child that exceeds its timeout", async () => {
+  const process = fakeProcess();
+  const result = summarizeSessionTitle({ ephemeral: () => process }, {
+    cwd: "/workspace",
+    messages: [{ role: "user", content: "Review the server" }],
+    timeoutMs: 0,
+  });
+
+  // A real child keeps the event loop alive; this fake needs an equivalent handle.
+  const keepAlive = setTimeout(() => {}, 100);
+  assert.equal(await result, null);
+  clearTimeout(keepAlive);
+  assert.equal(process.signal, "SIGKILL");
 });
