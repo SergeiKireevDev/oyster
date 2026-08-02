@@ -1,11 +1,18 @@
-const ROUTE_KEY = /^[A-Z]+ \/\S*$/;
+// Request dispatch looks routes up with `${req.method} ${url.pathname}`. Query,
+// fragment, control, and backslash characters therefore cannot form a stable
+// pathname key (the WHATWG URL parser splits or normalizes them).
+const ROUTE_KEY = /^[A-Z]+ \/[^\s\x00-\x1f\x7f?#\\]*$/u;
+
+function isRecord(value) {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
 
 function routeEntries(name, routes) {
   if (routes instanceof Map) return routes.entries();
-  if (routes && typeof routes === "object" && !Array.isArray(routes)) {
-    return Object.entries(routes);
-  }
-  throw new TypeError(`route group "${name}" must be an object or Map`);
+  if (isRecord(routes)) return Object.entries(routes);
+  throw new TypeError(`route group "${name}" must be a plain object or Map`);
 }
 
 /**
@@ -18,16 +25,19 @@ function routeEntries(name, routes) {
  * @returns {Map<string, Function>}
  */
 export function createRouteTable(groups) {
-  if (!groups || typeof groups !== "object" || Array.isArray(groups)) {
-    throw new TypeError("route groups must be a named object");
+  if (!isRecord(groups)) {
+    throw new TypeError("route groups must be a named plain object");
   }
 
   const table = new Map();
   const owners = new Map();
   for (const [name, routes] of Object.entries(groups)) {
     for (const [key, handler] of routeEntries(name, routes)) {
+      if (typeof key !== "string") {
+        throw new TypeError(`route key in group "${name}" must be a string`);
+      }
       if (!ROUTE_KEY.test(key)) {
-        throw new TypeError(`invalid route key "${key}" in group "${name}"`);
+        throw new TypeError(`invalid route key ${JSON.stringify(key)} in group "${name}"`);
       }
       if (typeof handler !== "function") {
         throw new TypeError(`handler for "${key}" in group "${name}" must be a function`);

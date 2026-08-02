@@ -29,7 +29,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 ## HTTP infrastructure
 
 - [x] `server/http/createRequestContext.mjs`
-- [ ] `server/http/createRouteTable.mjs`
+- [x] `server/http/createRouteTable.mjs`
 
 ## HTTP routes
 
