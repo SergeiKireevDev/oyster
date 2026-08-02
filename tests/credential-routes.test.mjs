@@ -46,6 +46,24 @@ test("credential GET returns only the service safe provider read model", async (
   assert.deepEqual(res.body, { providers });
 });
 
+test("credential GET treats every invalid service result as an unavailable dependency", async () => {
+  for (const listProviders of [
+    async () => null,
+    async () => { throw Object.assign(new Error("private failure"), { code: "invalid_provider" }); },
+  ]) {
+    const routes = createCredentialRoutes({
+      requestContext: context(),
+      credentialService: { listProviders },
+    });
+    const res = response();
+    await routes["GET /api-keys"]({}, res);
+    assert.deepEqual(res, {
+      status: 503,
+      body: { error: "credential service unavailable", code: "credential_service_unavailable" },
+    });
+  }
+});
+
 test("credential mutations require bounded input and explicit restart confirmation", async () => {
   let writes = 0;
   const routes = createCredentialRoutes({
@@ -60,6 +78,8 @@ test("credential mutations require bounded input and explicit restart confirmati
     null,
     {},
     { provider: "openai", key: "key", restart: false },
+    { provider: "bad\nprovider", key: "key", restart: true },
+    { provider: "x".repeat(257), key: "key", restart: true },
     { provider: "openai", key: "", restart: true },
     { provider: "openai", key: "x".repeat(CREDENTIAL_KEY_LIMIT + 1), restart: true },
   ]) {
@@ -123,6 +143,7 @@ test("credential routes return stable safe statuses for malformed bodies and ser
     ["invalid_provider", 400],
     ["unknown_provider", 404],
     ["credential_not_found", 404],
+    ["credential_busy", 409],
     ["oauth_conflict", 409],
     ["credential_service_unavailable", 503],
   ]) {
@@ -139,6 +160,38 @@ test("credential routes return stable safe statuses for malformed bodies and ser
     assert.equal(res.body.code, code);
     assert.doesNotMatch(JSON.stringify(res.body), /submitted-canary/);
   }
+
+  const unknownRoutes = createCredentialRoutes({
+    requestContext: context(),
+    credentialService: {
+      async setApiKey() {
+        throw Object.assign(new Error("private implementation failure"), { code: "private-code-canary" });
+      },
+    },
+    restartActiveRunners: async () => ({ status: "restarted", runnerIds: [] }),
+  });
+  const unknown = response();
+  await unknownRoutes["POST /api-keys"](
+    { body: { provider: "provider", key: "submitted-canary", restart: true } },
+    unknown,
+  );
+  assert.equal(unknown.status, 503);
+  assert.equal(unknown.body.code, "credential_service_unavailable");
+  assert.doesNotMatch(JSON.stringify(unknown.body), /private-code-canary|submitted-canary/);
+});
+
+test("credential body parsing does not misclassify response writer failures as read failures", async () => {
+  let writes = 0;
+  const failure = new Error("response unavailable");
+  const requestContext = context();
+  requestContext.json = () => { writes += 1; throw failure; };
+  const routes = createCredentialRoutes({ requestContext, credentialService: {} });
+
+  await assert.rejects(
+    routes["POST /api-keys"]({ raw: "{" }, response()),
+    (error) => error === failure,
+  );
+  assert.equal(writes, 1);
 });
 
 test("credential mutations return safe results and restart after the durable write", async () => {
@@ -148,17 +201,18 @@ test("credential mutations return safe results and restart after the durable wri
     credentialService: {
       async setApiKey(provider, key) {
         calls.push(["set", provider, key]);
-        return { provider, credentialType: "api_key" };
+        return { provider, credentialType: "api_key", key };
       },
       async removeApiKey(provider) {
         calls.push(["remove", provider]);
-        return { provider, removed: true };
+        return { provider, removed: true, leaked: "remove-result-canary" };
       },
     },
     async restartActiveRunners() {
       calls.push(["restart"]);
       return { runnerIds: ["runner-1"], status: "restarted" };
     },
+    logger: { info() { throw new Error("logger unavailable"); } },
   });
 
   const added = response();
@@ -171,6 +225,27 @@ test("credential mutations return safe results and restart after the durable wri
   await routes["DELETE /api-keys"]({ body: { provider: "openai", restart: true } }, removed);
   assert.equal(removed.status, 200);
   assert.deepEqual(calls.slice(2), [["remove", "openai"], ["restart"]]);
+  assert.doesNotMatch(JSON.stringify(removed.body), /remove-result-canary/);
+});
+
+test("credential routes report malformed restart results without exposing service output", async () => {
+  const routes = createCredentialRoutes({
+    requestContext: context(),
+    credentialService: {
+      async setApiKey(provider, key) { return { provider, key, internal: "result-canary" }; },
+    },
+    restartActiveRunners: async () => ({ status: "unexpected", private: "restart-canary" }),
+    logger: { error() { throw new Error("logger unavailable"); } },
+  });
+  const res = response();
+  await routes["POST /api-keys"](
+    { body: { provider: "openai", key: "submitted-canary", restart: true } },
+    res,
+  );
+  assert.equal(res.status, 503);
+  assert.equal(res.body.code, "runner_restart_failed");
+  assert.deepEqual(res.body.credential, { provider: "openai", credentialType: "api_key" });
+  assert.doesNotMatch(JSON.stringify(res.body), /result-canary|restart-canary|submitted-canary/);
 });
 
 test("credential routes report durable writes followed by partial restart failures", async () => {
