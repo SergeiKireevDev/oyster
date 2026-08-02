@@ -22,11 +22,16 @@ const tableNames = (database) => database.prepare(
 
 test("numbered migrations apply once and report stable status", (t) => {
   const database = databaseFixture(t);
-  const now = () => "2026-07-16T00:00:00.000Z";
+  let clockCalls = 0;
+  const now = () => {
+    clockCalls += 1;
+    return "2026-07-16T00:00:00.000Z";
+  };
 
   const first = applyMigrations(database, { now });
   const second = applyMigrations(database, { now });
 
+  assert.equal(clockCalls, APP_MIGRATIONS.length);
   assert.deepEqual(first, { currentVersion: 15, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
   assert.deepEqual(second, first);
   assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations"]);
@@ -92,10 +97,60 @@ test("a failed migration rolls back its schema and ledger row", (t) => {
   assert.deepEqual(database.prepare("SELECT * FROM schema_migrations").all(), []);
 });
 
-test("migration numbering must be unique and ascending", (t) => {
+test("migration definitions are validated before changing the database", (t) => {
   const database = databaseFixture(t);
-  assert.throws(() => applyMigrations(database, { migrations: [
-    { version: 2, name: "later", sql: "SELECT 1;" },
-    { version: 1, name: "earlier", sql: "SELECT 1;" },
-  ] }), /unique ascending integer versions/);
+  const invalidLists = [
+    null,
+    [{ version: 2, name: "later", sql: "SELECT 1;" }, { version: 1, name: "earlier", sql: "SELECT 1;" }],
+    [{ version: 0, name: "zero", sql: "SELECT 1;" }],
+    [{ version: 1, name: "", sql: "SELECT 1;" }],
+    [{ version: 1, name: "valid", sql: "  " }],
+  ];
+
+  for (const migrations of invalidLists) {
+    assert.throws(() => applyMigrations(database, { migrations }), /migrations must be an array|unique ascending integer versions|invalid application database migration/);
+  }
+  assert.deepEqual(tableNames(database), []);
+});
+
+test("migration history must be a matching contiguous prefix", (t) => {
+  const database = databaseFixture(t);
+  database.exec(`
+    CREATE TABLE schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    )
+  `);
+  const insert = database.prepare("INSERT INTO schema_migrations VALUES (?, ?, 'now')");
+  insert.run(2, "second");
+  const migrations = [
+    { version: 1, name: "first", sql: "SELECT 1;" },
+    { version: 2, name: "second", sql: "SELECT 1;" },
+  ];
+
+  assert.throws(() => applyMigrations(database, { migrations }), /history has a gap/);
+  database.exec("DELETE FROM schema_migrations");
+  insert.run(1, "renamed");
+  assert.throws(() => applyMigrations(database, { migrations }), /migration 1 name mismatch/);
+  database.exec("DELETE FROM schema_migrations");
+  insert.run(3, "future");
+  assert.throws(() => applyMigrations(database, { migrations }), /migration 3 is not supported/);
+});
+
+test("migration dependencies and clock are validated", (t) => {
+  const database = databaseFixture(t);
+  assert.throws(() => applyMigrations(null), /database connection is required/);
+  assert.throws(() => applyMigrations(database, { now: "soon" }), /clock must be a function/);
+
+  database.exec("BEGIN");
+  assert.throws(() => applyMigrations(database), /inside a transaction/);
+  database.exec("ROLLBACK");
+
+  assert.throws(() => applyMigrations(database, {
+    migrations: [{ version: 1, name: "clock", sql: "CREATE TABLE clock_test(id INTEGER)" }],
+    now: () => null,
+  }), /clock must return a timestamp string/);
+  assert.deepEqual(tableNames(database), ["schema_migrations"]);
+  assert.equal(database.isTransaction, false);
 });

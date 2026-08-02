@@ -384,19 +384,63 @@ export const APP_MIGRATIONS = Object.freeze([
 ]);
 
 function validateMigrations(migrations) {
+  if (!Array.isArray(migrations)) throw new TypeError("application database migrations must be an array");
+
   let previous = 0;
   for (const migration of migrations) {
-    if (!Number.isInteger(migration.version) || migration.version <= previous) {
-      throw new Error("application database migrations must have unique ascending integer versions");
+    if (!migration || !Number.isSafeInteger(migration.version) || migration.version <= previous) {
+      throw new Error("application database migrations must have unique ascending integer versions greater than zero");
     }
-    if (!migration.name || !migration.sql) throw new Error(`invalid application database migration ${migration.version}`);
+    if (typeof migration.name !== "string" || !migration.name.trim()
+      || typeof migration.sql !== "string" || !migration.sql.trim()) {
+      throw new Error(`invalid application database migration ${migration.version}`);
+    }
     previous = migration.version;
   }
 }
 
+function readAppliedMigrations(database, migrations) {
+  const configured = new Map(migrations.map((migration) => [migration.version, migration.name]));
+  const applied = new Map();
+  for (const row of database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all()) {
+    const version = Number(row.version);
+    if (!Number.isSafeInteger(version) || version < 1 || typeof row.name !== "string") {
+      throw new Error("application database migration history is invalid");
+    }
+    if (!configured.has(version)) {
+      throw new Error(`application database migration ${version} is not supported by this server`);
+    }
+    if (configured.get(version) !== row.name) {
+      throw new Error(`application database migration ${version} name mismatch`);
+    }
+    applied.set(version, row.name);
+  }
+
+  let foundPending = false;
+  for (const migration of migrations) {
+    if (!applied.has(migration.version)) foundPending = true;
+    else if (foundPending) throw new Error("application database migration history has a gap");
+  }
+  return applied;
+}
+
+function migrationError(migration, error, rollbackError) {
+  const detail = error instanceof Error ? error.message : String(error);
+  const message = `application database migration ${migration.version} (${migration.name}) failed: ${detail}`;
+  return rollbackError
+    ? new AggregateError([error, rollbackError], `${message}; rollback failed`, { cause: error })
+    : new Error(message, { cause: error });
+}
+
 /** Apply each pending migration atomically and return the resulting status. */
 export function applyMigrations(database, { migrations = APP_MIGRATIONS, now = () => new Date().toISOString() } = {}) {
+  if (!database || typeof database.exec !== "function" || typeof database.prepare !== "function") {
+    throw new TypeError("application database connection is required");
+  }
+  if (database.isTransaction) throw new Error("cannot apply application database migrations inside a transaction");
+  if (typeof now !== "function") throw new TypeError("application database migration clock must be a function");
   validateMigrations(migrations);
+
   database.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -405,31 +449,42 @@ export function applyMigrations(database, { migrations = APP_MIGRATIONS, now = (
     );
   `);
 
-  const appliedRows = database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all();
-  const applied = new Map(appliedRows.map((row) => [Number(row.version), row.name]));
-  for (const migration of migrations) {
-    if (applied.has(migration.version)) {
-      if (applied.get(migration.version) !== migration.name) {
-        throw new Error(`application database migration ${migration.version} name mismatch`);
-      }
-      continue;
-    }
+  const initiallyApplied = readAppliedMigrations(database, migrations);
+  const findApplied = database.prepare("SELECT name FROM schema_migrations WHERE version = ?");
+  const recordApplied = database.prepare(
+    "INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)",
+  );
 
+  for (const migration of migrations) {
+    if (initiallyApplied.has(migration.version)) continue;
     database.exec("BEGIN IMMEDIATE");
     try {
-      database.exec(migration.sql);
-      database.prepare("INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)")
-        .run(migration.version, migration.name, now());
+      // Recheck while holding the write lock: another server may have applied
+      // this migration after the initial history read.
+      const existing = findApplied.get(migration.version);
+      if (existing) {
+        if (existing.name !== migration.name) {
+          throw new Error(`application database migration ${migration.version} name mismatch`);
+        }
+      } else {
+        const appliedAt = now();
+        if (typeof appliedAt !== "string" || !appliedAt.trim()) {
+          throw new TypeError("application database migration clock must return a timestamp string");
+        }
+        database.exec(migration.sql);
+        recordApplied.run(migration.version, migration.name, appliedAt);
+      }
       database.exec("COMMIT");
-      applied.set(migration.version, migration.name);
     } catch (error) {
-      try { database.exec("ROLLBACK"); } catch {}
-      throw new Error(`application database migration ${migration.version} (${migration.name}) failed: ${error.message}`, { cause: error });
+      let rollbackError;
+      try { database.exec("ROLLBACK"); } catch (caught) { rollbackError = caught; }
+      throw migrationError(migration, error, rollbackError);
     }
   }
 
+  const applied = readAppliedMigrations(database, migrations);
   return Object.freeze({
     currentVersion: migrations.at(-1)?.version ?? 0,
-    appliedVersions: Object.freeze([...applied.keys()].sort((a, b) => a - b)),
+    appliedVersions: Object.freeze([...applied.keys()]),
   });
 }
