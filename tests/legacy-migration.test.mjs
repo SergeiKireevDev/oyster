@@ -50,6 +50,64 @@ test("dry-run and apply report source/destination counts and durable conflicts",
   assert.deepEqual(JSON.parse(dryLedger.conflicts), [{ domain: "routines", key: "existing", reason: "different content" }]);
 });
 
+test("reports safely snapshot domain counts and conflicts", async (t) => {
+  const { store } = fixture(t);
+  const conflict = { domain: "spoofed", key: "legacy", detail: { state: "original" } };
+  const tasks = Object.fromEntries([
+    ["__proto__", async () => ({
+      sourceCount: 1,
+      destinationCount: 0,
+      conflicts: [conflict],
+    })],
+  ]);
+
+  const report = await runLegacyMigration({
+    appStore: store,
+    id: "safe-report",
+    now: () => "time",
+    tasks,
+  });
+
+  assert.equal(Object.getPrototypeOf(report.sourceCounts), Object.prototype);
+  assert.equal(Object.hasOwn(report.sourceCounts, "__proto__"), true);
+  assert.equal(report.sourceCounts.__proto__, 1);
+  conflict.detail.state = "mutated";
+  assert.deepEqual(report.conflicts, [{ domain: "__proto__", key: "legacy", detail: { state: "original" } }]);
+  assert.equal(Object.isFrozen(report.conflicts[0]), true);
+  assert.equal(Object.isFrozen(report.conflicts[0].detail), true);
+  assert.deepEqual(
+    JSON.parse(store.repositories.migrationLedger.find("safe-report").source_counts),
+    Object.fromEntries([["__proto__", 1]]),
+  );
+});
+
+test("invalid task reports fail with an auditable validation error", async (t) => {
+  const { store } = fixture(t);
+  await assert.rejects(() => runLegacyMigration({
+    appStore: store,
+    id: "invalid-report",
+    now: () => "time",
+    tasks: {
+      routines: async () => ({
+        sourceCount: Number.MAX_SAFE_INTEGER + 1,
+        destinationCount: 0,
+        conflicts: [],
+      }),
+    },
+  }), /sourceCount must be a non-negative safe integer/);
+  assert.match(store.repositories.migrationLedger.find("invalid-report").error, /sourceCount/);
+
+  await assert.rejects(() => runLegacyMigration({
+    appStore: store,
+    id: "invalid-conflict",
+    now: () => "time",
+    tasks: {
+      routines: async () => ({ sourceCount: 0, destinationCount: 0, conflicts: [null] }),
+    },
+  }), /conflicts must contain objects/);
+  assert.equal(store.repositories.migrationLedger.find("invalid-conflict").status, "failed");
+});
+
 test("failed migration attempts remain diagnosable in the ledger", async (t) => {
   const { store } = fixture(t);
   await assert.rejects(() => runLegacyMigration({
@@ -64,4 +122,24 @@ test("failed migration attempts remain diagnosable in the ledger", async (t) => 
   assert.equal(row.error, "malformed source");
   assert.equal(row.finished_at, "time");
   await assert.rejects(() => runLegacyMigration({ appStore: store, mode: "write", tasks: { x() {} } }), /invalid migration mode/);
+});
+
+test("non-Error task failures and ledger recording failures preserve diagnostics", async () => {
+  const finishError = new Error("ledger unavailable");
+  const ledger = {
+    start() {},
+    finish() { throw finishError; },
+  };
+
+  await assert.rejects(() => runLegacyMigration({
+    appStore: { repositories: { migrationLedger: ledger } },
+    id: "recording-failed",
+    now: () => "time",
+    tasks: { routines: async () => { throw "malformed source"; } },
+  }), (error) => {
+    assert.equal(error.message, "legacy migration failed: malformed source");
+    assert.equal(error.migrationId, "recording-failed");
+    assert.deepEqual(error.recordingErrors, [finishError]);
+    return true;
+  });
 });
