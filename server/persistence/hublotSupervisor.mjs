@@ -112,10 +112,13 @@ export function createHublotSupervisor({
     let crashLooped = 0;
     let interrupted = 0;
     const isEligible = (row) => row?.desired_state === "open" && !["closing", "closed"].includes(row.status);
+    const isRecovering = (row) => isEligible(row) && ["recovering", "failed"].includes(row.status);
     const resetRestartState = (id) => repository.update(id, { restart_count: 0, next_restart_at: null });
     const recordRestartFailure = (id, error) => {
       let current = repository.find(id);
-      if (!isEligible(current)) return false;
+      // Recovery callbacks yield to operator actions and may also complete before
+      // throwing during cleanup. Only mutate a hublot that is still recovering.
+      if (!isRecovering(current)) return false;
       const failure = errorMessage(error);
       const count = current.restart_count + 1;
       if (current.status !== "failed") {
@@ -160,9 +163,26 @@ export function createHublotSupervisor({
         const selfServiceMissing = hublot.service_kind === "self_served" && checkService
           ? !(await checkService(hublot))
           : false;
-        // Async health checks and recovery hooks yield to operator requests. Never
-        // overwrite a close/delete that won the race while reconciliation waited.
-        if (!isEligible(repository.find(hublot.id))) continue;
+        // Async health checks yield to operator actions and other recovery paths.
+        // Do not act on a stale row or stale process inventory after they finish.
+        if (hublot.service_kind === "self_served" && checkService) {
+          const current = repository.find(hublot.id);
+          const rowChanged = !isEligible(current)
+            || ["status", "desired_state", "public_url", "last_error", "restart_count", "next_restart_at"]
+              .some((key) => current[key] !== hublot[key]);
+          const expectedActiveIds = observations
+            .filter(({ matches }) => matches)
+            .map(({ process }) => process.id)
+            .sort();
+          const currentActiveIds = repository.listProcesses(hublot.id)
+            .filter((process) => !process.ended_at && ["running", "starting"].includes(process.status))
+            .map((process) => process.id)
+            .sort();
+          if (rowChanged || expectedActiveIds.length !== currentActiveIds.length
+            || expectedActiveIds.some((id, index) => id !== currentActiveIds[index])) continue;
+        } else if (!isEligible(repository.find(hublot.id))) {
+          continue;
+        }
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
         const needsSelfRecovery = hublot.service_kind === "self_served" && hublot.status === "interrupted" && !selfServiceMissing;
@@ -220,7 +240,7 @@ export function createHublotSupervisor({
               continue;
             }
           }
-          if (serviceDead && restartService) {
+          if (serviceDead && restartService && isRecovering(repository.find(hublot.id))) {
             try {
               await restartService(hublot);
               if (isEligible(repository.find(hublot.id))) { resetRestartState(hublot.id); restarted++; }

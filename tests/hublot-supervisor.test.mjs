@@ -186,6 +186,36 @@ test("supervisor does not overwrite a manual close during an asynchronous health
   assert.equal(store.repositories.hublots.find(hublot.id).desired_state, "closed");
 });
 
+test("supervisor ignores stale health results after concurrent process recovery", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4205, serviceKind: "self_served" });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://live.test" });
+  let checkStarted;
+  const started = new Promise((resolve) => { checkStarted = resolve; });
+  let finishCheck;
+  const result = new Promise((resolve) => { finishCheck = resolve; });
+  let recoveryAttempts = 0;
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    checkService: async () => { checkStarted(); return result; },
+    recoverTunnel: async () => { recoveryAttempts++; },
+    verifyIdentity: (process) => process.id === "replacement-tunnel",
+  });
+
+  const reconciliation = supervisor.reconcile();
+  await started;
+  processRow(store, hublot.id, "replacement-tunnel", "tunnel");
+  finishCheck(false);
+  const report = await reconciliation;
+
+  assert.equal(report.checked, 1);
+  assert.equal(report.recovering, 0);
+  assert.equal(recoveryAttempts, 0);
+  assert.equal(store.repositories.hublots.find(hublot.id).status, "open");
+  assert.equal(store.repositories.hublots.find(hublot.id).public_url, "https://live.test");
+});
+
 test("supervisor does not turn a concurrently closed hublot into a restart failure", async (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4204, brief: "managed service" });
@@ -216,6 +246,36 @@ test("supervisor does not turn a concurrently closed hublot into a restart failu
   assert.equal(closed.desired_state, "closed");
   assert.equal(closed.restart_count, 0);
   assert.match(messages[0], /spawn failed/);
+});
+
+test("failed tunnel recovery does not overwrite a concurrent successful open", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4206, serviceKind: "self_served" });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://old.test" });
+  let recoveryStarted;
+  const started = new Promise((resolve) => { recoveryStarted = resolve; });
+  let rejectRecovery;
+  const recovery = new Promise((resolve, reject) => { rejectRecovery = reject; });
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    recoverTunnel: async () => { recoveryStarted(); return recovery; },
+    verifyIdentity: () => false,
+    logger: { error() {} },
+  });
+
+  const reconciliation = supervisor.reconcile();
+  await started;
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://replacement.test" });
+  rejectRecovery(new Error("stale recovery failed"));
+  const report = await reconciliation;
+  const reopened = store.repositories.hublots.find(hublot.id);
+
+  assert.equal(report.crashLooped, 0);
+  assert.equal(reopened.status, "open");
+  assert.equal(reopened.public_url, "https://replacement.test");
+  assert.equal(reopened.restart_count, 0);
+  assert.equal(reopened.next_restart_at, null);
 });
 
 test("supervisor validates callbacks and timing configuration", (t) => {
