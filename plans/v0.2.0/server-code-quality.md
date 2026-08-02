@@ -71,4 +71,4 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/sessions/searchQuery.mjs`
 - [x] `server/sessions/searchRescore.mjs`
 - [x] `server/sessions/sqliteCatalog.mjs`
-- [ ] `server/sessions/usageAnalytics.mjs`
+- [x] `server/sessions/usageAnalytics.mjs`
