@@ -66,3 +66,81 @@ test("runner removal during restart is reported and not resurrected", async () =
     runnerIds: ["gone"], status: "partial", failedRunnerIds: ["gone"],
   });
 });
+
+test("restart awaits asynchronous lifecycle operations and retains work queued while stopping", async () => {
+  const beforeStop = { id: "before" };
+  const duringStop = { id: "during" };
+  const runner = { id: "async", proc: {}, resumeQueue: [beforeStop] };
+  const events = [];
+  const restart = createRestartActiveRunners({
+    runners: () => new Set([runner]),
+    async stopRunner(item) {
+      events.push("stopping");
+      item.proc = null;
+      item.resumeQueue = [];
+      await Promise.resolve();
+      item.resumeQueue.push(duringStop);
+      events.push("stopped");
+    },
+    async startRunner(item) {
+      events.push(["starting", [...item.resumeQueue]]);
+      await Promise.resolve();
+      item.proc = {};
+      events.push("started");
+    },
+    async delay() { events.push("delay"); },
+  });
+
+  assert.deepEqual(await restart(), { runnerIds: ["async"], status: "restarted" });
+  assert.deepEqual(events, [
+    "stopping", "stopped", "delay", ["starting", [beforeStop, duringStop]], "started",
+  ]);
+  assert.deepEqual(runner.resumeQueue, [beforeStop, duringStop]);
+});
+
+test("stop failures preserve queued resume work and do not produce duplicate failure IDs", async () => {
+  const queued = { id: "queued" };
+  const runner = { id: "failed-stop", proc: {}, resumeQueue: [queued] };
+  const restart = createRestartActiveRunners({
+    runners: () => [runner],
+    stopRunner(item) {
+      item.resumeQueue = [];
+      throw new Error("stop failed after clearing queue");
+    },
+    startRunner() { throw new Error("must not start after a stop failure"); },
+    delay: async () => {},
+  });
+
+  assert.deepEqual(await restart(), {
+    runnerIds: ["failed-stop"], status: "partial", failedRunnerIds: ["failed-stop"],
+  });
+  assert.deepEqual(runner.resumeQueue, [queued]);
+});
+
+test("a rejected asynchronous start is reported as a partial restart", async () => {
+  const runner = { id: "rejected-start", proc: {}, resumeQueue: [] };
+  const restart = createRestartActiveRunners({
+    runners: () => [runner],
+    stopRunner(item) { item.proc = null; },
+    async startRunner() { throw new Error("rejected start"); },
+    delay: async () => {},
+  });
+
+  assert.deepEqual(await restart(), {
+    runnerIds: ["rejected-start"], status: "partial", failedRunnerIds: ["rejected-start"],
+  });
+});
+
+test("invalid restart dependencies and collections fail with clear errors", async () => {
+  const lifecycle = { runners: () => [], stopRunner() {}, startRunner() {} };
+  assert.throws(() => createRestartActiveRunners({ ...lifecycle, delay: null }), /delay must be a function/);
+  assert.throws(() => createRestartActiveRunners({ ...lifecycle, restartDelayMs: -1 }), /non-negative finite number/);
+  assert.throws(() => createRestartActiveRunners({ ...lifecycle, restartDelayMs: Number.NaN }), /non-negative finite number/);
+
+  const restart = createRestartActiveRunners({
+    ...lifecycle,
+    runners: () => null,
+    delay: async () => {},
+  });
+  await assert.rejects(restart(), /runners\(\) must return a Map or iterable/);
+});
