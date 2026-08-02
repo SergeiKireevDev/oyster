@@ -31,3 +31,76 @@ test("usage analytics deduplicates response IDs copied into forks", () => {
   assert.equal(result.total.requests, 1);
   assert.equal(result.total.cost, 0.1);
 });
+
+test("usage analytics deduplicates copied entry IDs when response metadata differs", () => {
+  const usage = { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } };
+  const result = aggregateUsageRecords([
+    record("same-entry", "2026-01-01T10:00:00Z", "one", usage, "response-id"),
+    { ...record("same-entry", "2026-01-01T10:00:00Z", "one", usage, ""), sessionId: "fork" },
+  ]);
+  assert.equal(result.total.requests, 1);
+});
+
+test("usage analytics only marks valid records as seen", () => {
+  const usage = { input: 10, output: 2, totalTokens: 12, cost: { total: 0.1 } };
+  const result = aggregateUsageRecords([
+    record("invalid-copy", "not-a-date", "one", usage, "same-response"),
+    record("valid-copy", "2026-01-01T10:00:00Z", "one", usage, "same-response"),
+  ]);
+  assert.equal(result.total.requests, 1);
+  assert.equal(result.series[0].bucket, "2026-01-01T00:00:00.000Z");
+});
+
+test("usage analytics keeps response and entry ID namespaces distinct", () => {
+  const usage = { input: 1, totalTokens: 1, cost: { total: 0.01 } };
+  const result = aggregateUsageRecords([
+    record("first-entry", "2026-01-01T10:00:00Z", "one", usage, "shared-id"),
+    record("shared-id", "2026-01-01T11:00:00Z", "one", usage, ""),
+  ]);
+  assert.equal(result.total.requests, 2);
+});
+
+test("usage analytics does not guess identities for records without stable IDs", () => {
+  const usage = { input: 1, totalTokens: 1, cost: { total: 0.01 } };
+  const withoutIds = {
+    sessionId: "session",
+    timestamp: "2026-01-01T10:00:00Z",
+    message: { role: "assistant", provider: "provider", model: "one", usage },
+  };
+  const result = aggregateUsageRecords([withoutIds, { ...withoutIds }]);
+  assert.equal(result.total.requests, 2);
+});
+
+test("usage analytics ignores malformed records and unsafe numeric fields", () => {
+  const result = aggregateUsageRecords([
+    null,
+    { message: null },
+    { timestamp: null, message: { model: "epoch", usage: {} } },
+    { timestamp: Symbol("invalid"), message: { model: "symbol", usage: {} } },
+    { timestamp: "2026-01-01T10:00:00Z", message: { model: 42, usage: {} } },
+    { timestamp: "2026-01-01T10:00:00Z", message: { model: "bad-provider", provider: 42, usage: {} } },
+    record("valid", "2026-01-01T10:00:00Z", "one", {
+      input: 3,
+      output: -2,
+      cacheRead: Infinity,
+      cacheWrite: "4",
+      reasoning: true,
+      totalTokens: 3,
+      cost: { total: Number.NaN },
+    }),
+  ]);
+  assert.deepEqual(result.total, {
+    requests: 1,
+    input: 3,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    reasoning: 0,
+    totalTokens: 3,
+    cost: 0,
+  });
+});
+
+test("usage analytics rejects unsupported buckets", () => {
+  assert.throws(() => aggregateUsageRecords([], { bucket: "week" }), /unsupported analytics bucket: week/);
+});
