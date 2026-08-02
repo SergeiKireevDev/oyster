@@ -56,10 +56,10 @@ export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
 // life — long enough to never kill an active-but-silent runner, short
 // enough to fade abandoned ones out.
 const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
-const ORAPHA_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+const ORPHAN_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
-  "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer",
+  "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
   "titleProcess", "titleSessionId", "initialArgs", "eventListeners", "subagentStatus",
 ]);
@@ -74,6 +74,7 @@ function initializeRunnerRuntime(descriptor) {
     resumeId: null,
     resumeQueue: [],
     resumeTimer: null,
+    startTimer: null,
     lastSpawnAt: 0,
     lastLineAt: 0,
     probeSentAt: null,
@@ -99,13 +100,21 @@ function ensureRunnerRuntimeFields(runner) {
 
 export function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
-  appStore = state.appStore, now = () => new Date().toISOString(),
+  appStore = undefined, now = () => new Date().toISOString(),
   summarizeTitle = summarizeSessionTitle,
   unarchiveSession = null,
   guardCallback = (callback) => callback,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
 } = {}) {
+  if (!state || typeof state !== "object") throw new TypeError("runner state is required");
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
+  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("runner timer functions are required");
+  if (appStore === undefined) appStore = state.appStore;
   const { config, serverEvent, sessionReferences } = state;
+  if (!config || typeof config !== "object") throw new TypeError("runner config is required");
+  if (typeof serverEvent !== "function") throw new TypeError("serverEvent is required");
+  if (!(state.sseClients instanceof Set)) throw new TypeError("sseClients must be a Set");
   const runnerRepository = appStore?.repositories?.runners ?? null;
   const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
   const piProcesses = spawnImpl
@@ -237,13 +246,18 @@ export function createRunnerManager(state, {
       event = JSON.parse(eventLine);
       sseId = event._sseId ?? null;
     } catch {}
-    runnerEventRepository?.append({
-      runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
-    });
+    try {
+      runnerEventRepository?.append({
+        runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
+      });
+    } catch (error) {
+      console.error(`[oyster] cannot persist event for runner ${runner.id}: ${error?.message ?? error}`);
+    }
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
-      res.write(`data: ${eventLine}\n\n`);
+      try { res.write(`data: ${eventLine}\n\n`); }
+      catch (error) { console.error(`[oyster] cannot write runner ${runner.id} event: ${error?.message ?? error}`); }
     }
     if (event) {
       for (const listener of runner.eventListeners ?? []) {
@@ -420,7 +434,15 @@ export function createRunnerManager(state, {
     const nowMs = Date.now();
     // crash-loop guard: if this runner died within 2s of spawning, wait
     if (nowMs - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
-      setTimeout(() => { if (!runner.proc && state.runners.has(runner.id)) startRunner(runner); }, 2000);
+      if (!runner.startTimer) {
+        const timer = setTimer(guardCallback(() => {
+          if (runner.startTimer !== timer) return;
+          runner.startTimer = null;
+          if (!runner.proc && state.runners.has(runner.id)) startRunner(runner);
+        }), 2000);
+        runner.startTimer = timer;
+        timer.unref?.();
+      }
       return;
     }
     runner.lastSpawnAt = nowMs;
@@ -440,10 +462,18 @@ export function createRunnerManager(state, {
       "--append-system-prompt", PINNED_ARTIFACT_SYSTEM_PROMPT,
     ];
     console.log(`[oyster] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
-    const proc = piProcesses.launch(args, {
-      cwd: runner.dir,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let proc;
+    try {
+      proc = piProcesses.launch(args, {
+        cwd: runner.dir,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
+      runnerEvent(runner, { type: "pi_error", error: error?.message ?? String(error) });
+      runnersChanged(runner);
+      return;
+    }
     runner.proc = proc;
     runnerRepository?.update(runner.id, { last_status: "running" });
 
@@ -457,10 +487,12 @@ export function createRunnerManager(state, {
     const rl = createInterface({ input: proc.stdout });
     runner.stdoutReader = rl;
     rl.on("line", (line) => {
+      if (runner.proc !== proc) return;
       line = line.trim();
       if (!line) return;
       runner.lastLineAt = Date.now();
-      trackRunner(runner, line);
+      try { trackRunner(runner, line); }
+      catch (error) { console.error(`[oyster] cannot track runner ${runner.id} output: ${error?.message ?? error}`); }
       runnerWrite(runner, line);
     });
 
@@ -473,7 +505,10 @@ export function createRunnerManager(state, {
       console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
       if (runner.proc === proc) runner.proc = null;
-      if (runner.stdoutReader === rl) runner.stdoutReader = null;
+      if (runner.stdoutReader === rl) {
+        rl.close();
+        runner.stdoutReader = null;
+      }
       runnerRepository?.update(runner.id, { last_status: "dead" });
       runnersChanged(runner);
     });
@@ -482,7 +517,10 @@ export function createRunnerManager(state, {
       console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
       if (runner.proc === proc) {
         runner.proc = null;
-        if (runner.stdoutReader === rl) runner.stdoutReader = null;
+        if (runner.stdoutReader === rl) {
+          rl.close();
+          runner.stdoutReader = null;
+        }
         runner.busy = false;
         runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
         runnerEvent(runner, { type: "pi_exit", code, signal });
@@ -515,6 +553,8 @@ export function createRunnerManager(state, {
     runnerRepository?.update(runner.id, { desired_state: "stopped", last_status: "stopped", last_stopped_at: now() });
     try { runner.titleProcess?.kill("SIGTERM"); } catch {}
     runner.titleProcess = null;
+    clearTimer(runner.startTimer);
+    runner.startTimer = null;
     if (!proc) return;
     runner.proc = null;
     runner.busy = false;
@@ -522,15 +562,28 @@ export function createRunnerManager(state, {
     runner.resumeTimer = null;
     runner.resumeId = null;
     runner.resumeQueue = [];
+    const stdoutReader = runner.stdoutReader;
     proc.removeAllListeners("exit");
     proc.on("exit", () => {
-      runner.stdoutReader = null;
-      runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" });
+      if (runner.stdoutReader === stdoutReader) {
+        stdoutReader?.close();
+        runner.stdoutReader = null;
+      }
+      // A replacement may already be running when the old process reports
+      // its exit. Do not clobber its reader or publish a stale death event.
+      if (!runner.proc) runnerEvent(runner, { type: "pi_exit", code: null, signal: "SIGTERM" });
     });
-    proc.kill("SIGTERM");
-    setTimeout(() => {
-      if (proc.exitCode === null && !proc.killed) proc.kill("SIGKILL");
-    }, 3000).unref();
+    try { proc.kill("SIGTERM"); }
+    catch (error) { console.error(`[oyster] cannot stop runner ${runner.id}: ${error?.message ?? error}`); }
+    const killTimer = setTimer(guardCallback(() => {
+      // ChildProcess.killed only means that kill() was called; it does not
+      // mean the child exited. Escalate every process still lacking an exit.
+      if (proc.exitCode === null) {
+        try { proc.kill("SIGKILL"); }
+        catch (error) { console.error(`[oyster] cannot kill runner ${runner.id}: ${error?.message ?? error}`); }
+      }
+    }), 3000);
+    killTimer.unref?.();
     runnersChanged(runner);
   }
 
@@ -659,18 +712,19 @@ export function createRunnerManager(state, {
     for (const runner of state.runners.values()) {
       if (!runner.proc) continue; // already stopped
       if (runner.sessionName) continue; // user actually talked to it
-      // lastLineAt is set at spawn and bumped on every stdout line — use
-      // it as "when this runner became alive"
-      if (now - runner.lastLineAt <= MAX_ORPHAN_AGE_MS) continue;
+      if (runner.busy) continue; // never interrupt active work
+      // lastLineAt measures recent output, not process age. A noisy nameless
+      // worker is still an orphan, so age it from the actual spawn time.
+      if (now - runner.lastSpawnAt <= MAX_ORPHAN_AGE_MS) continue;
       console.log(
-        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastLineAt) / 60000)}min, no session name) in ${runner.dir}`
+        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastSpawnAt) / 60000)}min, no session name) in ${runner.dir}`
       );
       stopRunner(runner);
     }
   }
 
   clearInterval(state.runnerReaperTimer);
-  state.runnerReaperTimer = setInterval(guardCallback(reaperTick), ORAPHA_REAP_INTERVAL_MS);
+  state.runnerReaperTimer = setInterval(guardCallback(reaperTick), ORPHAN_REAP_INTERVAL_MS);
   state.runnerReaperTimer.unref?.();
 
   // Startup and read-only session selection only restore descriptors. An RPC
