@@ -26,7 +26,7 @@ function stableState() {
       path: "/tmp/oyster.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
         sessions: { find: () => null, upsert: (owner) => owner },
-        operations: { listIncomplete: () => [] },
+        operations: { listIncomplete: () => [], create() {}, updateWithPayload: () => 1 },
         checkpoints: { listForSession: () => [], load: () => ({}), save() {} },
         routines: { list: () => [] },
         hublots: { list: () => [], listProcesses: () => [] },
