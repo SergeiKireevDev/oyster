@@ -37,6 +37,14 @@ function dependencies(overrides = {}) {
   };
 }
 
+test("OAuth routes validate required service boundaries", () => {
+  assert.throws(() => createOAuthRoutes(), /requestContext/);
+  assert.throws(() => createOAuthRoutes({ requestContext: {} }), /requestContext/);
+  const base = dependencies();
+  assert.throws(() => createOAuthRoutes({ ...base, credentialService: {} }), /listProviders/);
+  assert.throws(() => createOAuthRoutes({ ...base, flowService: { ...base.flowService, cancel: null } }), /flowService/);
+});
+
 test("OAuth routes expose only exact bounded-JSON endpoints", async () => {
   const routes = createOAuthRoutes(dependencies());
   assert.deepEqual(Object.keys(routes), [
@@ -68,6 +76,7 @@ test("OAuth start validates provider capability and explicit replacement", async
   }));
   for (const [body, status] of [
     [{ provider: "stored" }, 400],
+    [{ provider: "stored\u0000", replace: true }, 400],
     [{ provider: "stored", replace: false }, 409],
     [{ provider: "api-only", replace: true }, 404],
   ]) {
@@ -110,6 +119,24 @@ test("OAuth routes map failures to stable safe statuses without echoing inputs",
     assert.doesNotMatch(JSON.stringify(res.body), /provider-error|body-canary|secret-code/);
     if (code === "secret-code-canary") assert.equal(res.body.code, "credential_service_unavailable");
   }
+
+  const invalidProviderList = createOAuthRoutes(dependencies({
+    credentialService: { async listProviders() { return { provider: "mock" }; } },
+  }));
+  const invalidProviders = response();
+  await invalidProviderList["POST /oauth/start"]({ body: { provider: "mock", replace: false } }, invalidProviders);
+  assert.equal(invalidProviders.status, 503);
+
+  const statusFailure = createOAuthRoutes(dependencies({
+    flowService: {
+      start() {}, respond() {}, cancel() {},
+      async getStatus() { throw Object.assign(new Error("status-canary"), { code: "credential_busy" }); },
+    },
+  }));
+  const failedStatus = response();
+  await statusFailure["POST /oauth/status"]({ body: { flowId: FLOW_ID } }, failedStatus);
+  assert.equal(failedStatus.status, 409);
+  assert.doesNotMatch(JSON.stringify(failedStatus.body), /status-canary/);
 
   const malformedRoutes = createOAuthRoutes(dependencies());
   const malformed = response();
@@ -154,6 +181,38 @@ test("OAuth logout reports fallback and durable success when runner restart is i
     assert.match(res.body.error, /credential removed/);
     assert.doesNotMatch(JSON.stringify(res.body), /restart-secret-canary/);
   }
+
+  const unsafeResults = createOAuthRoutes(dependencies({
+    credentialService: {
+      async listProviders() { return [{ provider: "mock", source: "secret-source-canary" }]; },
+      async logoutOAuth() {
+        return { provider: "mock", removed: true, accessToken: "access-token-canary" };
+      },
+    },
+    restartActiveRunners: async () => ({
+      status: "restarted",
+      runnerIds: [],
+      internalSecret: "restart-secret-canary",
+    }),
+  }));
+  const safe = response();
+  await unsafeResults["DELETE /oauth"]({ body: { provider: "mock", restart: true } }, safe);
+  assert.equal(safe.status, 200);
+  assert.equal(safe.body.source, "not_configured");
+  assert.deepEqual(safe.body.credential, { provider: "mock", removed: true });
+  assert.doesNotMatch(JSON.stringify(safe.body), /access-token|restart-secret|secret-source/);
+
+  const malformedRestart = createOAuthRoutes(dependencies({
+    restartActiveRunners: async () => ({ status: "restarted", runnerIds: "runner-secret-canary" }),
+  }));
+  const malformedRestartResponse = response();
+  await malformedRestart["DELETE /oauth"](
+    { body: { provider: "mock", restart: true } },
+    malformedRestartResponse,
+  );
+  assert.equal(malformedRestartResponse.status, 503);
+  assert.equal(malformedRestartResponse.body.code, "runner_restart_failed");
+  assert.doesNotMatch(JSON.stringify(malformedRestartResponse.body), /runner-secret-canary/);
 
   let restarts = 0;
   const busy = createOAuthRoutes(dependencies({
