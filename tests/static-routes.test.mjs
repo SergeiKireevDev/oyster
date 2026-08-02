@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -45,6 +45,8 @@ test("static document routes serve the Vite build for root and permalinks", asyn
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "text/html; charset=utf-8");
     assert.equal(res.headers["cache-control"], "no-cache");
+    assert.equal(res.headers["content-length"], 8);
+    assert.equal(res.headers["x-content-type-options"], "nosniff");
     assert.equal(res.body, "built UI");
   }
 });
@@ -56,6 +58,8 @@ test("public assets preserve MIME and no-cache headers", async (t) => {
   assert.equal(res.status, 200);
   assert.equal(res.headers["content-type"], "text/javascript; charset=utf-8");
   assert.equal(res.headers["cache-control"], "no-cache");
+  assert.equal(res.headers["content-length"], 26);
+  assert.equal(res.headers["x-content-type-options"], "nosniff");
   assert.equal(res.body, "export const built = true;");
 
   const manifest = await invoke(handler, "/manifest.webmanifest");
@@ -71,6 +75,53 @@ test("static fallback rejects traversal, malformed encoding, directories, and mi
   const { handler } = await setup(t);
   assert.equal((await invoke(handler, "/%2e%2e/secret")).handled, false);
   assert.equal((await invoke(handler, "/%E0%A4%A")).handled, false);
+  assert.equal((await invoke(handler, "/bad%00name")).handled, false);
   assert.equal((await invoke(handler, "/assets")).handled, false);
   assert.equal((await invoke(handler, "/missing.js")).handled, false);
+});
+
+test("static fallback does not follow assets outside its selected root", async (t) => {
+  const { root, handler } = await setup(t);
+  await writeFile(join(root, "private.txt"), "private");
+  await symlink(join(root, "private.txt"), join(root, "dist", "leak.txt"));
+
+  assert.equal((await invoke(handler, "/leak.txt")).handled, false);
+});
+
+test("an escaped dist index is ignored in favor of the public UI", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "static-routes-index-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "public"));
+  await mkdir(join(root, "dist"));
+  await writeFile(join(root, "public", "index.html"), "development UI");
+  await writeFile(join(root, "outside.html"), "not the UI");
+  await symlink(join(root, "outside.html"), join(root, "dist", "index.html"));
+  const state = { config: { TOKEN: "token", PI_DIR: root, DIRNAME: root } };
+  const routes = createStaticRoutes({ config: state.config, requestContext: createRequestContext(state) });
+
+  const { handled, res } = await invoke(routes["GET /*"], "/");
+  assert.equal(handled, true);
+  assert.equal(res.status, 200);
+  assert.equal(res.body, "development UI");
+});
+
+test("missing selected index returns a bounded non-cacheable error", async (t) => {
+  const { root, handler } = await setup(t);
+  await unlink(join(root, "dist", "index.html"));
+
+  const { handled, res } = await invoke(handler, "/");
+  assert.equal(handled, true);
+  assert.equal(res.status, 500);
+  assert.equal(res.headers["content-type"], "text/plain; charset=utf-8");
+  assert.equal(res.headers["cache-control"], "no-store");
+  assert.equal(res.headers["content-length"], Buffer.byteLength(res.body));
+  assert.equal(res.body, "public/index.html missing");
+});
+
+test("static route construction validates required dependencies", () => {
+  assert.throws(() => createStaticRoutes(), /config\.DIRNAME is required/);
+  assert.throws(
+    () => createStaticRoutes({ config: { DIRNAME: "/tmp" }, requestContext: {} }),
+    /requestContext\.mimeType is required/,
+  );
 });
