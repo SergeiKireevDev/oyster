@@ -7,34 +7,91 @@ function stringValue(value) {
   try { return String(value ?? ""); } catch { return ""; }
 }
 
-function json(value) {
-  try {
-    const serialized = JSON.stringify(value);
-    return serialized === undefined ? stringValue(value) : serialized;
-  } catch {
-    return stringValue(value);
-  }
+function property(value, key) {
+  try { return value?.[key]; } catch { return undefined; }
 }
 
-function contentText(content) {
-  if (typeof content === "string") return content;
+/** Serialize untrusted structured content without traversing an unbounded object graph. */
+function json(value, limit = MESSAGE_TEXT_LIMIT) {
+  const chunks = [];
+  let remaining = limit;
+  let entries = 0;
+  const ancestors = new WeakSet();
+  const append = (text) => {
+    if (remaining <= 0) return;
+    const chunk = stringValue(text).slice(0, remaining);
+    chunks.push(chunk);
+    remaining -= chunk.length;
+  };
+  const render = (item, depth) => {
+    if (remaining <= 0) return;
+    if (item === null) { append("null"); return; }
+    if (typeof item === "string") { append(JSON.stringify(item.slice(0, limit))); return; }
+    if (typeof item === "number" || typeof item === "boolean") { append(stringValue(item)); return; }
+    if (typeof item !== "object") { append(stringValue(item)); return; }
+    if (ancestors.has(item)) { append('"[circular]"'); return; }
+    if (depth >= 8 || entries >= 100) { append('"[truncated]"'); return; }
+
+    ancestors.add(item);
+    let keys;
+    try { keys = Object.keys(item).slice(0, 50); } catch { keys = []; }
+    const array = Array.isArray(item);
+    append(array ? "[" : "{");
+    for (const [keyIndex, key] of keys.entries()) {
+      if (remaining <= 1 || entries >= 100) break;
+      if (keyIndex > 0) append(",");
+      if (!array) { append(JSON.stringify(key)); append(":"); }
+      entries += 1;
+      render(property(item, key), depth + 1);
+    }
+    append(array ? "]" : "}");
+    ancestors.delete(item);
+  };
+  render(value, 0);
+  return chunks.join("");
+}
+
+function contentText(content, ancestors = new WeakSet()) {
+  if (typeof content === "string") return content.slice(0, MESSAGE_TEXT_LIMIT);
   if (!Array.isArray(content)) return content == null ? "" : json(content);
-  return content.map((block) => {
-    if (!block || typeof block !== "object") return stringValue(block);
-    if (block.type === "text") return typeof block.text === "string" ? block.text : json(block.text);
-    if (block.type === "image") return "[image]";
-    if (block.type === "thinking") return "[thinking omitted]";
-    if (block.type === "toolCall") return `[tool call: ${stringValue(block.name) || "unknown"} ${json(block.arguments ?? {})}]`;
-    if (block.type === "toolResult") return `[tool result: ${contentText(block.content)}]`;
-    return json(block);
-  }).filter(Boolean).join("\n");
+  if (ancestors.has(content)) return "[circular content]";
+
+  ancestors.add(content);
+  const rendered = [];
+  let length = 0;
+  const blockCount = Math.min(Number(property(content, "length")) || 0, 100);
+  for (let index = 0; index < blockCount && length < MESSAGE_TEXT_LIMIT; index += 1) {
+    const block = property(content, index);
+    const type = property(block, "type");
+    let text;
+    if (!block || typeof block !== "object") text = stringValue(block);
+    else if (type === "text") {
+      const value = property(block, "text");
+      text = typeof value === "string" ? value : json(value);
+    } else if (type === "image") text = "[image]";
+    else if (type === "thinking") text = "[thinking omitted]";
+    else if (type === "toolCall") {
+      const name = stringValue(property(block, "name")) || "unknown";
+      text = `[tool call: ${name} ${json(property(block, "arguments") ?? {})}]`;
+    } else if (type === "toolResult") {
+      text = `[tool result: ${contentText(property(block, "content"), ancestors)}]`;
+    } else text = json(block);
+    if (!text) continue;
+    const separator = rendered.length ? "\n" : "";
+    const available = MESSAGE_TEXT_LIMIT - length;
+    const chunk = `${separator}${text}`.slice(0, available);
+    rendered.push(chunk);
+    length += chunk.length;
+  }
+  ancestors.delete(content);
+  return rendered.join("");
 }
 
 /** Render only the first ten session messages into bounded, role-labelled text. */
 export function firstSessionMessages(messages) {
   return (Array.isArray(messages) ? messages : []).slice(0, SESSION_TITLE_MESSAGE_LIMIT).map((message, index) => {
-    const role = stringValue(message?.role) || "unknown";
-    const text = contentText(message?.content).replace(/\s+/g, " ").trim().slice(0, MESSAGE_TEXT_LIMIT);
+    const role = stringValue(property(message, "role")) || "unknown";
+    const text = contentText(property(message, "content")).replace(/\s+/g, " ").trim().slice(0, MESSAGE_TEXT_LIMIT);
     return `${index + 1}. ${role}: ${text || "[no text]"}`;
   }).join("\n");
 }
@@ -52,7 +109,7 @@ export function sessionTitlePrompt(messages) {
 }
 
 export function cleanSessionTitle(output) {
-  const line = String(output ?? "").split("\n")
+  const line = stringValue(output).split("\n")
     .map((value) => value.trim())
     .find((value) => value && !value.startsWith("```")) ?? "";
   return line
@@ -67,19 +124,25 @@ export function cleanSessionTitle(output) {
 
 function configuredModel(model) {
   if (typeof model === "string") return model.trim() || null;
-  const provider = typeof model?.provider === "string" ? model.provider.trim() : "";
-  const id = typeof model?.id === "string" ? model.id.trim() : "";
+  const providerValue = property(model, "provider");
+  const idValue = property(model, "id");
+  const provider = typeof providerValue === "string" ? providerValue.trim() : "";
+  const id = typeof idValue === "string" ? idValue.trim() : "";
   return provider && id ? `${provider}/${id}` : null;
 }
 
 /** Ask the session's configured model for a one-shot title without saving a session. */
-export function summarizeSessionTitle(piProcesses, { cwd, messages, model = null, timeoutMs = 60_000, onSpawn = () => {} }) {
-  if (!piProcesses?.ephemeral) return Promise.resolve(null);
-  const transcript = firstSessionMessages(messages);
+export function summarizeSessionTitle(piProcesses, options = {}) {
+  const ephemeral = property(piProcesses, "ephemeral");
+  if (typeof ephemeral !== "function") return Promise.resolve(null);
+  const cwd = property(options, "cwd");
+  const transcript = firstSessionMessages(property(options, "messages"));
   if (!transcript) return Promise.resolve(null);
+  const selectedModel = configuredModel(property(options, "model"));
+  const configuredTimeout = property(options, "timeoutMs");
+  const onSpawn = property(options, "onSpawn");
 
   return new Promise((resolvePromise) => {
-    const selectedModel = configuredModel(model);
     const args = [
       "--no-tools", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files",
       "--thinking", "off",
@@ -103,7 +166,7 @@ export function summarizeSessionTitle(piProcesses, { cwd, messages, model = null
       : current + stringValue(chunk).slice(0, OUTPUT_LIMIT - current.length);
 
     try {
-      proc = piProcesses.ephemeral(args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+      proc = ephemeral.call(piProcesses, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
       if (!proc?.stdout?.on || !proc?.stderr?.on || !proc?.once || !proc?.kill) {
         throw new TypeError("ephemeral process has an invalid child-process interface");
       }
@@ -129,13 +192,13 @@ export function summarizeSessionTitle(piProcesses, { cwd, messages, model = null
         }
         settle(cleanSessionTitle(stdout));
       });
-      const delay = Number.isFinite(timeoutMs) && timeoutMs >= 0 ? timeoutMs : 60_000;
+      const delay = Number.isFinite(configuredTimeout) && configuredTimeout >= 0 ? configuredTimeout : 60_000;
       timer = setTimeout(() => {
         settle(null);
         try { proc.kill("SIGKILL"); } catch {}
       }, delay);
       timer.unref?.();
-      onSpawn(proc);
+      if (typeof onSpawn === "function") onSpawn(proc);
     } catch (error) {
       console.error(`[oyster] cannot start session title sub-agent: ${stringValue(error?.message) || "unknown error"}`);
       settle(null);

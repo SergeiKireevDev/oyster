@@ -77,7 +77,29 @@ test("session title context tolerates malformed structured values", () => {
 
   assert.match(transcript, /\{"nested":true\}/);
   assert.match(transcript, /Symbol\(description\)/);
-  assert.match(transcript, /tool call: unknown \[object Object\]/);
+  assert.match(transcript, /tool call: unknown \{"self":"\[circular\]"\}/);
+});
+
+test("session title context bounds sparse and recursively nested content", () => {
+  const blocks = [];
+  blocks.length = 1_000_000_000;
+  blocks[0] = { type: "toolResult" };
+  blocks[0].content = blocks;
+
+  const transcript = firstSessionMessages([{ role: "assistant", content: blocks }]);
+
+  assert.match(transcript, /tool result: \[circular content\]/);
+  assert.ok(transcript.length <= 3_050);
+});
+
+test("session title context tolerates throwing message accessors", () => {
+  const message = {};
+  Object.defineProperties(message, {
+    role: { get() { throw new Error("unreadable role"); } },
+    content: { get() { throw new Error("unreadable content"); } },
+  });
+
+  assert.equal(firstSessionMessages([message]), "1. unknown: [no text]");
 });
 
 test("session title summarizer returns null and kills the child when spawn registration fails", async (t) => {
@@ -91,6 +113,22 @@ test("session title summarizer returns null and kills the child when spawn regis
 
   assert.equal(await result, null);
   assert.equal(process.signal, "SIGKILL");
+});
+
+test("session title summarizer ignores malformed model and callback configuration", async () => {
+  const process = fakeProcess();
+  const model = {};
+  Object.defineProperty(model, "provider", { get() { throw new Error("unreadable provider"); } });
+  const result = summarizeSessionTitle({ ephemeral: () => process }, {
+    cwd: "/workspace",
+    messages: [{ role: "user", content: "Review the server" }],
+    model,
+    onSpawn: "not a function",
+  });
+  process.stdout.end("Review Server Code");
+  process.emit("close", 0);
+
+  assert.equal(await result, "Review Server Code");
 });
 
 test("session title summarizer converts synchronous spawn failures to null", async (t) => {
