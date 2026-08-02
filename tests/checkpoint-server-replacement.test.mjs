@@ -27,6 +27,7 @@ test("checkpoint trees and in-progress rollback records survive stable server re
     operationId: () => "rollback-across-replacement",
     now: () => "2026-07-16T03:00:00.000Z",
   }).start({ reference: rootRef, hash: rootCheckpoint.hash, dir: "/work" });
+  rollback.advance("safety_checkpointed", { safetyHash: null });
   rollback.advance("session_forked", { forkReference: forkRef });
 
   const headers = new Map([
