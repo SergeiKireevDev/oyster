@@ -1,14 +1,36 @@
 import { unlinkSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isWithin(path, root) {
+  const relationship = relative(root, path);
+  return relationship === ""
+    || (!isAbsolute(relationship) && relationship !== ".." && !relationship.startsWith(`..${sep}`));
+}
 
 /** Resolve a root session and every transitive child across catalog folders. */
 export function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
   const sqlite = catalog.backend === "sqlite";
-  const referenceFor = (session) => !sqlite && typeof sessionReferences.validate !== "function"
-    ? sessionReferenceFor(session)
-    : sessionReferences.validate(sqlite
-      ? { backend: "sqlite", id: session.id, storagePath: catalog.storagePath }
-      : { backend: "jsonl", id: session.id, storagePath: session.path });
+  const validateReference = sessionReferences?.validate;
+  if (typeof validateReference !== "function" && (sqlite || typeof sessionReferenceFor !== "function")) {
+    throw new TypeError("a session reference validator is required");
+  }
+  const referenceFor = (session) => {
+    const reference = !sqlite && typeof validateReference !== "function"
+      ? sessionReferenceFor(session)
+      : sessionReferences.validate(sqlite
+        ? { backend: "sqlite", id: session.id, storagePath: catalog.storagePath }
+        : { backend: "jsonl", id: session.id, storagePath: session.path });
+    if (!reference || typeof reference !== "object") throw new TypeError("session reference resolver returned an invalid reference");
+    return reference;
+  };
   let summaries;
   if (sqlite) {
     summaries = catalog.list({});
@@ -108,6 +130,27 @@ export function createSessionRoutes({
   now = () => Date.now(),
   logger = console,
 }) {
+  if (!state || typeof state !== "object" || !(state.runners instanceof Map)
+    || !state.sessionReferences || typeof state.sessionReferences.serialize !== "function"
+    || typeof state.sessionReferences.equals !== "function") {
+    throw new TypeError("state with runners and session reference operations is required");
+  }
+  if (!requestContext || typeof requestContext.json !== "function") throw new TypeError("requestContext.json must be a function");
+  if (!sessions?.catalog || !["jsonl", "sqlite"].includes(sessions.catalog.backend)) {
+    throw new TypeError("a JSONL or SQLite session catalog is required");
+  }
+  const requiredFunctions = {
+    stopRunner: runners?.stopRunner,
+    runnersChanged: runners?.runnersChanged,
+    resolvePath,
+    now,
+  };
+  const missingFunction = Object.entries(requiredFunctions).find(([, value]) => typeof value !== "function");
+  if (missingFunction) throw new TypeError(`${missingFunction[0]} must be a function`);
+  if (typeof resources?.closeSessionHublots !== "function" && typeof resources?.closeTunnel !== "function") {
+    throw new TypeError("closeTunnel must be a function when closeSessionHublots is unavailable");
+  }
+
   const { json, readJsonBody } = requestContext;
   const { catalog, sessionReferenceFor, sessionTargetFromSearch, readSessionHeaderInfo } = sessions;
   const { stopRunner, runnersChanged } = runners;
@@ -175,11 +218,12 @@ export function createSessionRoutes({
         json(res, 400, { error: "invalid analytics range or bucket" });
         return;
       }
-      const since = durations[range] == null ? null : new Date(now() - durations[range]).toISOString();
+      const generatedAtMs = now();
+      const since = durations[range] == null ? null : new Date(generatedAtMs - durations[range]).toISOString();
       try {
-        json(res, 200, { range, since, generatedAt: new Date(now()).toISOString(), ...catalog.usageAnalytics({ bucket, since }) });
+        json(res, 200, { range, since, generatedAt: new Date(generatedAtMs).toISOString(), ...catalog.usageAnalytics({ bucket, since }) });
       } catch (error) {
-        json(res, 500, { error: `cannot aggregate usage: ${error.message}` });
+        json(res, 500, { error: `cannot aggregate usage: ${errorMessage(error)}` });
       }
     },
 
@@ -194,7 +238,7 @@ export function createSessionRoutes({
         if (sqlite) cwd = requested;
         else {
           location = requested;
-          if (location !== catalog.root && !location.startsWith(`${catalog.root}/`)) {
+          if (!isWithin(location, catalog.root)) {
             json(res, 400, { error: "folder must be under the sessions root" });
             return;
           }
@@ -202,17 +246,22 @@ export function createSessionRoutes({
       } else if (url.searchParams.get("dir")) cwd = resolvePath(String(url.searchParams.get("dir")));
       else cwd = state.currentDir;
 
-      const summaries = catalog.list({ cwd, location });
-      const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
-      const live = [...state.runners.values()];
-      const result = summaries.map((summary) => {
-        const session = decorate(summary, byLegacyPath);
-        const runner = live.find((candidate) => candidate.sessionRef
-          ? state.sessionReferences.equals(candidate.sessionRef, session.sessionRef)
-          : candidate.sessionFile === session.path);
-        return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
-      });
-      json(res, 200, { sessions: result });
+      try {
+        const summaries = catalog.list({ cwd, location });
+        if (!Array.isArray(summaries)) throw new TypeError("session catalog returned an invalid list");
+        const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
+        const live = [...state.runners.values()];
+        const result = summaries.map((summary) => {
+          const session = decorate(summary, byLegacyPath);
+          const runner = live.find((candidate) => candidate.sessionRef
+            ? state.sessionReferences.equals(candidate.sessionRef, session.sessionRef)
+            : candidate.sessionFile === session.path);
+          return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
+        });
+        json(res, 200, { sessions: result });
+      } catch (error) {
+        json(res, 500, { error: `failed to list sessions: ${errorMessage(error)}` });
+      }
     },
 
     "POST /session/archive": async (req, res) => {
@@ -221,7 +270,11 @@ export function createSessionRoutes({
         return;
       }
       const body = await readJsonBody(req, res);
-      if (!body) return;
+      if (body === undefined) return;
+      if (!isRecord(body)) {
+        json(res, 400, { error: "request body must be a JSON object" });
+        return;
+      }
       let reference;
       try { reference = state.sessionReferences.parse(String(body.sessionKey ?? "")); }
       catch {
@@ -243,16 +296,20 @@ export function createSessionRoutes({
         return;
       }
       const archived = body.archived !== false;
-      const references = setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
-      if (archived) {
-        for (const runner of state.runners.values()) {
-          const belongsToFamily = runner.sessionRef
-            ? references.some((familyReference) => state.sessionReferences.equals(runner.sessionRef, familyReference))
-            : references.some((familyReference) => familyReference.backend === "jsonl" && runner.sessionFile === familyReference.storagePath);
-          if (belongsToFamily && runner.proc) stopRunner(runner);
+      try {
+        const references = setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
+        if (archived) {
+          for (const runner of state.runners.values()) {
+            const belongsToFamily = runner.sessionRef
+              ? references.some((familyReference) => state.sessionReferences.equals(runner.sessionRef, familyReference))
+              : references.some((familyReference) => familyReference.backend === "jsonl" && runner.sessionFile === familyReference.storagePath);
+            if (belongsToFamily && runner.proc) stopRunner(runner);
+          }
         }
+        json(res, 200, { sessionKey: body.sessionKey, archived });
+      } catch (error) {
+        json(res, 500, { error: `failed to update session archive state: ${errorMessage(error)}` });
       }
-      json(res, 200, { sessionKey: body.sessionKey, archived });
     },
 
     "DELETE /session": async (_req, res, url) => {
@@ -283,7 +340,7 @@ export function createSessionRoutes({
           return { deleted: sessionRef.storagePath };
         },
       };
-      if (!operations.capabilities.delete[reference.backend]) {
+      if (!operations?.capabilities?.delete?.[reference.backend]) {
         json(res, 409, { error: `${reference.backend} session deletion is not supported by the configured pi` });
         return;
       }
@@ -292,12 +349,13 @@ export function createSessionRoutes({
         : reference.backend === "jsonl" && runner.sessionFile === reference.storagePath);
       const workflow = deleteOwnedSession ?? (async (steps) => {
         const stoppedRunners = await steps.stopRunners();
+        const stoppedRoutines = await steps.stopRoutines();
         const agentResult = await steps.deleteAgentSession();
         await steps.removeRuntime(stoppedRunners);
         await steps.broadcast();
         const closedHublots = await steps.closeHublots();
         const deletedRoutines = await steps.deleteRoutines();
-        return { agentResult, closedHublots, stoppedRoutines: deletedRoutines, deletedRoutines };
+        return { agentResult, closedHublots, stoppedRoutines, deletedRoutines };
       });
       try {
         const outcome = await workflow({
@@ -308,7 +366,7 @@ export function createSessionRoutes({
             const closed = [];
             for (const tunnel of listTunnels(state)) {
               if (tunnel.sessionId !== reference.id) continue;
-              closeTunnel(state, tunnel.id);
+              await closeTunnel(state, tunnel.id);
               closed.push(tunnel.port);
               logger.log(`[oyster] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
             }
@@ -334,8 +392,8 @@ export function createSessionRoutes({
           releasedRoutines: outcome.deletedRoutines,
         });
       } catch (error) {
-        const status = error.code === "capability_unavailable" ? 409 : 500;
-        json(res, status, { error: `failed to delete session: ${error.message}` });
+        const status = error?.code === "capability_unavailable" ? 409 : 500;
+        json(res, status, { error: `failed to delete session: ${errorMessage(error)}` });
       }
     },
 
@@ -347,7 +405,7 @@ export function createSessionRoutes({
         if (!session) { json(res, 404, { error: `no session with id ${id}` }); return; }
         json(res, 200, { session: decorate(session) });
       } catch (error) {
-        json(res, 500, { error: `failed to read session: ${error.message}` });
+        json(res, 500, { error: `failed to read session: ${errorMessage(error)}` });
       }
     },
 
@@ -355,19 +413,23 @@ export function createSessionRoutes({
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
       try { json(res, 200, catalog.entries(identity)); }
-      catch (error) { json(res, 500, { error: `failed to parse session: ${error.message}` }); }
+      catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
     "GET /session-messages": (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
       try { json(res, 200, catalog.messages(identity)); }
-      catch (error) { json(res, 500, { error: `failed to parse session: ${error.message}` }); }
+      catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
     "GET /session-folders": (_req, res, url) => {
       const forDir = url.searchParams.get("dir") ? resolvePath(String(url.searchParams.get("dir"))) : state.currentDir;
-      json(res, 200, { folders: catalog.folders(), current: catalog.locationForCwd(forDir) });
+      try {
+        json(res, 200, { folders: catalog.folders(), current: catalog.locationForCwd(forDir) });
+      } catch (error) {
+        json(res, 500, { error: `failed to list session folders: ${errorMessage(error)}` });
+      }
     },
 
     "GET /search": (_req, res, url) => {
@@ -388,11 +450,11 @@ export function createSessionRoutes({
       if (scope === "session") {
         if (sqlite && !sessionIdentity) { json(res, 400, { error: "scope=session requires a session key" }); return; }
         if (!sqlite && sessionIdentity) path = sessionIdentity;
-        if (!sqlite && (!path || !path.startsWith(`${catalog.root}/`) || !path.endsWith(".jsonl"))) {
+        if (!sqlite && (!path || !isWithin(path, catalog.root) || path === catalog.root || !path.endsWith(".jsonl"))) {
           json(res, 400, { error: "scope=session requires a session file path" }); return;
         }
       }
-      if (scope === "folder" && !sqlite && path && path !== catalog.root && !path.startsWith(`${catalog.root}/`)) {
+      if (scope === "folder" && !sqlite && path && !isWithin(path, catalog.root)) {
         json(res, 400, { error: "folder must be under the sessions root" }); return;
       }
       try {
@@ -416,7 +478,7 @@ export function createSessionRoutes({
         });
         json(res, 200, { q: query, scope, ...result });
       } catch (error) {
-        json(res, 500, { error: `search failed: ${error.message}` });
+        json(res, 500, { error: `search failed: ${errorMessage(error)}` });
       }
     },
   };
