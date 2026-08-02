@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { labelOf, textOf, transcriptMessage } from "./jsonlCatalog.mjs";
+import { labelOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 import { rescoreSearchResults } from "./searchRescore.mjs";
 const searchQueryUrl = new URL("./searchQuery.mjs", import.meta.url);
@@ -11,12 +11,21 @@ function decodeEntry(row) {
   let payload;
   try { payload = JSON.parse(row.payload); } catch { return null; }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-  return { id: row.id, parentId: row.parent_id, type: row.type, timestamp: row.timestamp, ...payload };
+  if (typeof row.id !== "string" || !row.id || typeof row.type !== "string" || !row.type) return null;
+  // Structural fields are stored separately and must not be overridable by a
+  // malformed or hand-edited payload.
+  return {
+    ...payload,
+    id: row.id,
+    parentId: typeof row.parent_id === "string" && row.parent_id ? row.parent_id : null,
+    type: row.type,
+    timestamp: row.timestamp,
+  };
 }
 
 function identityId(value) {
   const id = typeof value === "string" ? value : value?.id;
-  if (!id) throw new Error("SQLite session ID is required");
+  if (typeof id !== "string" || !id) throw new Error("SQLite session ID is required");
   return id;
 }
 
@@ -31,16 +40,24 @@ function snippet(text, index, length, context = 70) {
 }
 
 function searchableParts(entry) {
-  if (entry.type === "session_info" && entry.name) return [{ role: "meta", kind: "name", text: entry.name }];
-  if (entry.type !== "message") return [];
-  const message = entry.message ?? {};
+  if (entry.type === "session_info" && typeof entry.name === "string" && entry.name) {
+    return [{ role: "meta", kind: "name", text: entry.name }];
+  }
+  if (entry.type !== "message" || !entry.message || typeof entry.message !== "object") return [];
+  const message = entry.message;
   if (typeof message.content === "string") return [{ role: message.role, kind: "text", text: message.content }];
   if (!Array.isArray(message.content)) return [];
   const parts = [];
   for (const block of message.content) {
-    if (block.type === "text" && block.text) parts.push({ role: message.role, kind: "text", text: block.text });
-    else if (block.type === "thinking" && block.thinking) parts.push({ role: message.role, kind: "thinking", text: block.thinking });
-    else if (block.type === "toolCall") parts.push({ role: message.role, kind: "toolCall", text: `${block.name} ${JSON.stringify(block.arguments ?? {})}` });
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "text" && typeof block.text === "string" && block.text) {
+      parts.push({ role: message.role, kind: "text", text: block.text });
+    } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
+      parts.push({ role: message.role, kind: "thinking", text: block.thinking });
+    } else if (block.type === "toolCall") {
+      const name = typeof block.name === "string" && block.name ? block.name : "?";
+      parts.push({ role: message.role, kind: "toolCall", text: `${name} ${JSON.stringify(block.arguments ?? {})}` });
+    }
   }
   return parts;
 }
@@ -53,7 +70,21 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
   function withDatabase(operation, missingValue) {
     if (!existsSync(storagePath)) return missingValue;
     const database = databaseFactory(storagePath);
-    try { return operation(database); } finally { database.close(); }
+    let operationFailed = false;
+    try {
+      return operation(database);
+    } catch (error) {
+      operationFailed = true;
+      throw error;
+    } finally {
+      try {
+        database.close();
+      } catch (closeError) {
+        // A cleanup failure must not hide the query failure that explains why
+        // the operation itself did not complete.
+        if (!operationFailed) throw closeError;
+      }
+    }
   }
 
   const summarySelect = `SELECT s.id, s.created_at, s.cwd, s.parent_session_id, s.active_leaf_id,
@@ -63,15 +94,16 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     FROM sessions s LEFT JOIN session_materialized sm ON sm.session_id = s.id`;
 
   function rowSummary(row) {
+    const name = typeof row.session_name === "string" ? row.session_name.trim() : "";
     return {
       id: row.id,
       createdAt: row.created_at,
       modifiedAt: row.modified_at,
-      name: row.session_name?.trim() || null,
-      cwd: row.cwd,
-      parentSessionId: row.parent_session_id ?? null,
-      preview: row.first_message?.slice(0, 120) ?? null,
-      messageCount: row.message_count ?? 0,
+      name: name || null,
+      cwd: typeof row.cwd === "string" ? row.cwd : null,
+      parentSessionId: typeof row.parent_session_id === "string" ? row.parent_session_id : null,
+      preview: typeof row.first_message === "string" ? row.first_message.slice(0, 120) : null,
+      messageCount: Number.isSafeInteger(row.message_count) && row.message_count >= 0 ? row.message_count : 0,
       storagePath,
     };
   }
@@ -112,22 +144,22 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     } : null;
   }
 
-  function readSession(value) {
-    const id = identityId(value);
-    return withDatabase((database) => {
-      const session = database.prepare("SELECT id, cwd, created_at, parent_session_id, active_leaf_id FROM sessions WHERE id = ?").get(id);
-      if (!session) throw new Error(`SQLite session not found: ${id}`);
-      const rows = database.prepare(
-        "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq",
-      ).all(id);
-      const allEntries = rows.map(decodeEntry).filter(Boolean);
-      return { session, allEntries, byId: new Map(allEntries.map((entry) => [entry.id, entry])) };
-    }, null);
+  function readSessionFromDatabase(database, id) {
+    const session = database.prepare("SELECT id, cwd, created_at, parent_session_id, active_leaf_id FROM sessions WHERE id = ?").get(id);
+    if (!session) throw new Error(`SQLite session not found: ${id}`);
+    const rows = database.prepare(
+      "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq",
+    ).all(id);
+    const allEntries = rows.map(decodeEntry).filter(Boolean);
+    return { session, allEntries, byId: new Map(allEntries.map((entry) => [entry.id, entry])) };
   }
 
-  function activeBranch(value) {
-    const loaded = readSession(value);
-    if (!loaded) return { session: null, allEntries: [], branch: [] };
+  function readSession(value) {
+    const id = identityId(value);
+    return withDatabase((database) => readSessionFromDatabase(database, id), null);
+  }
+
+  function activeBranchFromLoaded(loaded) {
     const branch = [];
     const seen = new Set();
     let entry = loaded.session.active_leaf_id ? loaded.byId.get(loaded.session.active_leaf_id) : null;
@@ -138,6 +170,11 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     }
     branch.reverse();
     return { ...loaded, branch };
+  }
+
+  function activeBranch(value) {
+    const loaded = readSession(value);
+    return loaded ? activeBranchFromLoaded(loaded) : { session: null, allEntries: [], branch: [] };
   }
 
   function entries(value) {
@@ -184,77 +221,88 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
 
   function folders() {
     const counts = new Map();
-    for (const session of list()) counts.set(session.cwd, (counts.get(session.cwd) ?? 0) + 1);
+    for (const session of list()) {
+      if (session.cwd !== null) counts.set(session.cwd, (counts.get(session.cwd) ?? 0) + 1);
+    }
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([cwd, count]) => ({
       dir: cwd, name: cwd, label: cwd, count,
     }));
   }
 
-  function search({ q, scope = "folder", path, cwd = path, includeTools = false }, maxResults = 200) {
+  function search({ q, scope = "folder", path, cwd = path, includeTools = false } = {}, maxResults = 200) {
     const { terms, operator } = parseSearchQuery(q);
-    let selected = scope === "session" ? [findById(identityId(path))].filter(Boolean)
-      : scope === "all" ? list() : list({ cwd });
     if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
-    const indexedEntries = withDatabase((database) => {
-      const hasSearchIndex = database.prepare(
+    const selected = scope === "session" ? [findById(identityId(path))].filter(Boolean)
+      : scope === "all" ? list() : list({ cwd });
+    const filesSearched = selected.length;
+    const resultLimit = Number.isSafeInteger(maxResults) && maxResults >= 0 ? maxResults : 0;
+    const searched = withDatabase((database) => {
+      let candidates = selected;
+      let indexedEntries = null;
+      // Pi's FTS index uses the trigram tokenizer. Terms shorter than three
+      // characters cannot be represented by MATCH, so scan in that case to
+      // preserve the catalog's quoted-short-term search behavior.
+      const canUseSearchIndex = terms.every((term) => [...term].length >= 3);
+      const hasSearchIndex = canUseSearchIndex && database.prepare(
         "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'",
       ).get();
-      if (!hasSearchIndex) return null;
-      const searchableFilter = includeTools
-        ? ""
-        : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
-      const rows = database.prepare(`
-        SELECT DISTINCT f.session_id, f.entry_id
-        FROM session_search_fts f
-        WHERE session_search_fts MATCH ? ${searchableFilter}
-      `).all(ftsSearchExpression(terms, operator));
-      const matches = new Map();
-      for (const row of rows) {
-        if (!matches.has(row.session_id)) matches.set(row.session_id, new Set());
-        matches.get(row.session_id).add(row.entry_id);
+      if (hasSearchIndex) {
+        const searchableFilter = includeTools
+          ? ""
+          : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
+        const rows = database.prepare(`
+          SELECT DISTINCT f.session_id, f.entry_id
+          FROM session_search_fts f
+          WHERE session_search_fts MATCH ? ${searchableFilter}
+        `).all(ftsSearchExpression(terms, operator));
+        indexedEntries = new Map();
+        for (const row of rows) {
+          if (!indexedEntries.has(row.session_id)) indexedEntries.set(row.session_id, new Set());
+          indexedEntries.get(row.session_id).add(row.entry_id);
+        }
+        candidates = selected.filter((session) => indexedEntries.has(session.id));
       }
-      return matches;
-    }, null);
-    if (indexedEntries) selected = selected.filter((session) => indexedEntries.has(session.id));
-    const filesSearched = selected.length;
-    const results = [];
-    let truncated = false;
-    for (const session of selected) {
-      const loaded = activeBranch(session.id);
-      const hits = [];
-      for (const entry of loaded.branch) {
-        if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
-        for (const part of searchableParts(entry)) {
-          const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
-          if (!includeTools && !isText) continue;
-          const match = matchSearchText(part.text, terms, operator);
-          if (!match) continue;
-          hits.push({
-            entryId: entry.id ?? null,
-            role: part.role ?? null,
-            kind: part.kind,
-            timestamp: entry.timestamp ?? null,
-            snippet: snippet(part.text, match.index, match.length),
-          });
+
+      const results = [];
+      let truncated = false;
+      for (const session of candidates) {
+        const loaded = activeBranchFromLoaded(readSessionFromDatabase(database, session.id));
+        const hits = [];
+        for (const entry of loaded.branch) {
+          if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
+          for (const part of searchableParts(entry)) {
+            const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
+            if (!includeTools && !isText) continue;
+            const match = matchSearchText(part.text, terms, operator);
+            if (!match) continue;
+            hits.push({
+              entryId: entry.id ?? null,
+              role: part.role ?? null,
+              kind: part.kind,
+              timestamp: entry.timestamp ?? null,
+              snippet: snippet(part.text, match.index, match.length),
+            });
+            if (hits.length >= 25) break;
+          }
           if (hits.length >= 25) break;
         }
-        if (hits.length >= 25) break;
+        for (const hit of hits) {
+          if (results.length >= resultLimit) { truncated = true; break; }
+          results.push({
+            ...hit,
+            sessionId: session.id,
+            sessionName: session.name,
+            sessionPreview: session.preview,
+            sessionCwd: session.cwd,
+            folder: session.cwd,
+            folderLabel: session.cwd,
+          });
+        }
+        if (truncated) break;
       }
-      for (const hit of hits) {
-        if (results.length >= maxResults) { truncated = true; break; }
-        results.push({
-          ...hit,
-          sessionId: session.id,
-          sessionName: session.name,
-          sessionPreview: session.preview,
-          sessionCwd: session.cwd,
-          folder: session.cwd,
-          folderLabel: session.cwd,
-        });
-      }
-      if (truncated) break;
-    }
-    return { results: rescoreSearchResults(results, q), truncated, filesSearched };
+      return { results, truncated };
+    }, { results: [], truncated: false });
+    return { results: rescoreSearchResults(searched.results, q), truncated: searched.truncated, filesSearched };
   }
 
   function usageAnalytics({ bucket = "day", since = null } = {}) {
