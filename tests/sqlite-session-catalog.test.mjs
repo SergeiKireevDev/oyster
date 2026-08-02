@@ -134,6 +134,32 @@ test("SQLite catalog keeps the full transcript and marks compaction in place", (
   assert.equal(messages[2].tokensBefore, 1234);
 });
 
+test("SQLite catalog preserves query failures when closing the read handle also fails", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-close-error-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  writeFileSync(path, "");
+  const queryError = new Error("query failed");
+  const closeError = new Error("close failed");
+  const failingCatalog = createSqliteSessionCatalog({
+    databasePath: path,
+    databaseFactory: () => ({
+      prepare() { throw queryError; },
+      close() { throw closeError; },
+    }),
+  });
+  assert.throws(() => failingCatalog.list(), (error) => error === queryError);
+
+  const closeOnlyCatalog = createSqliteSessionCatalog({
+    databasePath: path,
+    databaseFactory: () => ({
+      prepare() { return { all: () => [] }; },
+      close() { throw closeError; },
+    }),
+  });
+  assert.throws(() => closeOnlyCatalog.list(), (error) => error === closeError);
+});
+
 test("SQLite catalog skips malformed entry payloads and closes every read handle", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-malformed-"));
   roots.push(root);
@@ -162,6 +188,83 @@ test("SQLite catalog skips malformed entry payloads and closes every read handle
   assert.deepEqual(catalog.tree("broken").nodes.map((node) => node.id), ["good"]);
   assert.deepEqual(catalog.messages("broken").messages.map((message) => message.content), ["durable phrase"]);
   assert.equal(closes, 3);
+});
+
+test("SQLite catalog treats database columns as authoritative and tolerates malformed payload fields", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-defensive-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  const writer = new DatabaseSync(path);
+  schema(writer);
+  writer.prepare(`INSERT INTO sessions
+    (id, created_at, cwd, active_leaf_id, updated_at, first_message, all_messages_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("defensive", "2026-01-01", "/work", "real-id", "2026-01-01", Buffer.from("not text"), "durable");
+  writer.prepare("INSERT INTO session_materialized VALUES (?, ?)")
+    .run("defensive", JSON.stringify({ name: 123, messageCount: -4 }));
+  writer.prepare(`INSERT INTO session_entries
+    (session_id, id, entry_seq, parent_id, type, timestamp, payload) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("defensive", "real-id", 1, null, "message", "database-time", JSON.stringify({
+      id: "payload-id",
+      parentId: "payload-parent",
+      type: "session_info",
+      timestamp: "payload-time",
+      message: { role: "assistant", content: [{ type: "text", text: "durable text" }, null, 1, { type: "text", text: 42 }] },
+    }));
+  writer.close();
+
+  const catalog = createSqliteSessionCatalog({ databasePath: path });
+  assert.deepEqual(catalog.list()[0], {
+    id: "defensive",
+    createdAt: "2026-01-01",
+    modifiedAt: "2026-01-01",
+    name: null,
+    cwd: "/work",
+    parentSessionId: null,
+    preview: null,
+    messageCount: 0,
+    storagePath: path,
+  });
+  assert.deepEqual(catalog.tree("defensive").nodes[0], {
+    id: "real-id",
+    parentId: null,
+    type: "message",
+    timestamp: "database-time",
+    role: "assistant",
+    label: "durable text",
+  });
+  assert.equal(catalog.search({ q: "durable", scope: "session", path: "defensive" }).results[0].entryId, "real-id");
+  assert.throws(() => catalog.summarize({ id: 123 }), /SQLite session ID is required/);
+});
+
+test("SQLite trigram search scans for quoted terms shorter than three characters", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-short-search-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  const writer = new DatabaseSync(path);
+  schema(writer);
+  writer.exec(`CREATE VIRTUAL TABLE session_search_fts USING fts5(
+    session_id UNINDEXED, entry_id UNINDEXED, role UNINDEXED, kind UNINDEXED,
+    timestamp UNINDEXED, text, tokenize = 'trigram'
+  )`);
+  writer.prepare(`INSERT INTO sessions
+    (id, created_at, cwd, active_leaf_id, updated_at, first_message, all_messages_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("short", "2026-01-01", "/work", "a1", "2026-01-01", "prompt", "a durable answer");
+  writer.prepare(`INSERT INTO session_entries
+    (session_id, id, entry_seq, parent_id, type, timestamp, payload) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("short", "a1", 1, null, "message", "2026-01-01", JSON.stringify({ message: { role: "assistant", content: "a durable answer" } }));
+  writer.prepare("INSERT INTO session_search_fts VALUES (?, ?, ?, ?, ?, ?)")
+    .run("short", "a1", "assistant", "text", "2026-01-01", "a durable answer");
+  writer.close();
+
+  const catalog = createSqliteSessionCatalog({ databasePath: path });
+  const short = catalog.search({ q: '"a"', scope: "all" });
+  assert.equal(short.results.length, 1);
+  assert.equal(short.results[0].snippet.match, "a");
+  const missing = catalog.search({ q: "missing", scope: "all" });
+  assert.equal(missing.results.length, 0);
+  assert.equal(missing.filesSearched, 1);
 });
 
 test("SQLite catalog reads committed WAL updates while another handle remains open", () => {
