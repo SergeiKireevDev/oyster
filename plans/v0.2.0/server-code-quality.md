@@ -55,7 +55,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/persistence/hublotSupervisor.mjs`
 - [x] `server/persistence/legacyBackup.mjs`
 - [x] `server/persistence/legacyDataImport.mjs`
-- [ ] `server/persistence/legacyMigration.mjs`
+- [x] `server/persistence/legacyMigration.mjs`
 - [ ] `server/persistence/migrations.mjs`
 - [ ] `server/persistence/processIdentity.mjs`
 - [ ] `server/persistence/routineImporter.mjs`
