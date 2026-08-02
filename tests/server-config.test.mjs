@@ -102,6 +102,20 @@ test("configuration rejects invalid stores and missing executables", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /OYSTER_HUBLOT_TUNNEL_POOL_SIZE must be an integer/);
 
+  for (const port of ["-1", "1.5", "65536", "not-a-port"]) {
+    result = checkConfig({ args: ["--pi", process.execPath, "--port", port] });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /PORT\/--port must be an integer from 0 to 65535/);
+  }
+
+  result = checkConfig({ args: ["--pi", process.execPath, "--token", ""] });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /OYSTER_TOKEN\/--token must be a non-empty string/);
+
+  result = checkConfig({ args: ["--pi", process.execPath, "--pi-args", "--session-dir"] });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--session-dir.*requires a directory/);
+
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /pi executable is missing or not executable/);

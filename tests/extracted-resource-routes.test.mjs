@@ -16,5 +16,5 @@ test("composed lifecycle API retains stable-core resource shutdown hooks", () =>
   assert.match(source, /stopTunnels: \(\) => \{ stopHublotTunnelPool\(state\); state\.hublotSupervisor\?\.stop\(\); return shutdownHublots\(state\); \}/);
   assert.match(source, /stopRoutines: \(\) => stopAllRoutines\(state\)/);
   assert.match(source, /stopOAuth: \(\) => oauthFlowService\.shutdown\(\)/);
-  assert.match(serverSource, /Promise\.resolve\(\)\.then\(\(\) => app\.stopOAuth\?\.\(\)\)/);
+  assert.match(serverSource, /Promise\.resolve\(\)\.then\(\(\) => shutdownApplication\.stopOAuth\?\.\(\)\)/);
 });

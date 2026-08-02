@@ -52,31 +52,45 @@ function envFlag(name) {
 function defaultToken() {
   const tokenFile = join(PROJECT_ROOT, ".ui-token");
   const readStoredToken = () => {
-    if (!existsSync(tokenFile)) return null;
-    const token = readFileSync(tokenFile, "utf8").trim();
-    if (!token) throw new Error(`Oyster token file is empty: ${tokenFile}`);
-    return token;
+    try {
+      const token = readFileSync(tokenFile, "utf8").trim();
+      if (!token) throw new Error(`Oyster token file is empty: ${tokenFile}`);
+      return token;
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    }
   };
-  const stored = readStoredToken();
-  if (stored) return stored;
 
-  const generated = randomBytes(16).toString("hex");
-  let descriptor = null;
-  let created = false;
-  try {
-    descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
-    created = true;
-    writeFileSync(descriptor, `${generated}\n`, "utf8");
-    fsyncSync(descriptor);
-    closeSync(descriptor);
-    descriptor = null;
-    return generated;
-  } catch (error) {
-    if (descriptor !== null) try { closeSync(descriptor); } catch {}
-    if (error.code === "EEXIST") return readStoredToken();
-    if (created) try { unlinkSync(tokenFile); } catch {}
-    throw new Error(`cannot persist generated Oyster token at ${tokenFile}: ${error.message}`, { cause: error });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const stored = readStoredToken();
+    if (stored) return stored;
+
+    const generated = randomBytes(16).toString("hex");
+    let descriptor = null;
+    let created = false;
+    try {
+      descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+      created = true;
+      writeFileSync(descriptor, `${generated}\n`, "utf8");
+      fsyncSync(descriptor);
+      closeSync(descriptor);
+      descriptor = null;
+      return generated;
+    } catch (error) {
+      if (descriptor !== null) try { closeSync(descriptor); } catch {}
+      if (created) try { unlinkSync(tokenFile); } catch {}
+      // Another server may have created and then removed the file. Retry the
+      // complete atomic read/create sequence rather than returning null.
+      if (error.code === "EEXIST") {
+        const racedToken = readStoredToken();
+        if (racedToken) return racedToken;
+        if (attempt < 3) continue;
+      }
+      throw new Error(`cannot persist generated Oyster token at ${tokenFile}: ${error.message}`, { cause: error });
+    }
   }
+  throw new Error(`cannot persist generated Oyster token at ${tokenFile}`);
 }
 
 function defaultTunnelBin() {
@@ -118,6 +132,19 @@ function validateConfig(config) {
   if (!supportedNode) {
     throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
+  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) {
+    throw new Error("PORT/--port must be an integer from 0 to 65535");
+  }
+  if (typeof config.HOST !== "string" || config.HOST.trim() === "") {
+    throw new Error("HOST/--host must not be empty");
+  }
+  if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
+    throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
+  }
+  const configuredSessionDir = config.PI_EXTRA_ARGS.indexOf("--session-dir");
+  if (configuredSessionDir >= 0 && !config.PI_EXTRA_ARGS[configuredSessionDir + 1]) {
+    throw new Error("--session-dir in PI_ARGS/--pi-args requires a directory");
+  }
   if (!config.OYSTER_DB_PATH.endsWith(".sqlite")) {
     throw new Error(`OYSTER_DB_PATH must name a .sqlite file: ${config.OYSTER_DB_PATH}`);
   }
@@ -148,12 +175,12 @@ const piExtraArgs = (argValue("--pi-args") ?? process.env.PI_ARGS ?? "").split("
 const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
 const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
 const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
-const config = {
+const config = Object.freeze({
   PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
   HOST: argValue("--host") ?? process.env.HOST ?? "0.0.0.0",
   PI_BIN: resolveExecutable(argValue("--pi") ?? process.env.PI_BIN ?? DEFAULT_LOCAL_PI),
   PI_DIR: resolve(argValue("--dir") ?? process.env.PI_DIR ?? process.cwd()),
-  PI_EXTRA_ARGS: piExtraArgs,
+  PI_EXTRA_ARGS: Object.freeze(piExtraArgs),
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -166,7 +193,7 @@ const config = {
   HUBLOT_TUNNEL_POOL_SIZE: Number(process.env.OYSTER_HUBLOT_TUNNEL_POOL_SIZE ?? 2),
   SKIP_PUBLIC_HUBLOT_READINESS: envFlag("OYSTER_SKIP_PUBLIC_HUBLOT_READINESS"),
   DIRNAME: PROJECT_ROOT,
-};
+});
 validateConfig(config);
 // Child processes inherit the single validated selection, including when the
 // server supplied the SQLite default rather than receiving it from its parent.
@@ -218,7 +245,17 @@ const state = {
    *  replay lives in the runner_events repository. */
   broadcast(line) {
     for (const res of state.sseClients) {
-      if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
+      if (res.writableEnded || res.destroyed) {
+        state.sseClients.delete(res);
+        continue;
+      }
+      try {
+        res.write(`data: ${line}\n\n`);
+      } catch (error) {
+        state.sseClients.delete(res);
+        console.error(`[oyster] SSE broadcast failed: ${error.message ?? error}`);
+        res.destroy();
+      }
     }
   },
   serverEvent(obj) {
@@ -271,27 +308,42 @@ let nextApplicationGeneration = 0;
 async function loadApp() {
   // Allocate before import so failed attempts cannot reuse a generation token.
   const generation = ++nextApplicationGeneration;
-  const url = `${pathToFileURL(APP_PATH)}?v=${statSync(APP_PATH).mtimeMs}`;
+  const url = `${pathToFileURL(APP_PATH)}?generation=${generation}&mtime=${statSync(APP_PATH).mtimeMs}`;
   const mod = await import(url);
+  const transactional = typeof mod.buildCandidate === "function";
+  if (!transactional && typeof mod.init !== "function") {
+    throw new Error("application module must export buildCandidate() or init()");
+  }
   let candidate = null;
   try {
     // init() remains supported for small embedders and older application
     // modules. Transactional applications expose buildCandidate().
-    candidate = typeof mod.buildCandidate === "function"
+    candidate = transactional
       ? await mod.buildCandidate(state, { generation })
       : await mod.init(state);
     if (!candidate || typeof candidate.handleRequest !== "function") {
       throw new Error("candidate application is missing handleRequest()");
     }
-    if (typeof candidate.activate === "function") await candidate.activate();
-    if (typeof candidate.dispose !== "function" && typeof mod.buildCandidate === "function") {
+    if (transactional && typeof candidate.dispose !== "function") {
       throw new Error("candidate application is missing dispose()");
+    }
+    if (shuttingDown) throw new Error("application load cancelled during shutdown");
+    if (typeof candidate.activate === "function") await candidate.activate();
+    if (shuttingDown) throw new Error("application load cancelled during shutdown");
+    // Transactional candidates may expose lifecycle methods through getters
+    // that become available only after activation has assembled the app.
+    if (typeof candidate.startPi !== "function" || typeof candidate.stopPi !== "function") {
+      throw new Error("candidate application is missing startPi() or stopPi()");
     }
   } catch (error) {
     // Nothing active is touched before the single assignment below. A failed
     // activated candidate owns and cleans only its staged resources.
-    if (candidate?.dispose) {
-      try { await candidate.dispose(); } catch (cleanupError) { error.cleanupError = cleanupError; }
+    if (typeof candidate?.dispose === "function") {
+      try {
+        await candidate.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], "candidate activation and cleanup failed");
+      }
     }
     throw error;
   }
@@ -310,21 +362,75 @@ async function loadApp() {
 }
 
 let reloadTimer = null;
+let reloadInProgress = false;
+let activeReload = null;
+let pendingReload = null;
+let shuttingDown = false;
+const fileWatchers = new Set();
+
+function closeFileWatchers() {
+  clearTimeout(reloadTimer);
+  reloadTimer = null;
+  pendingReload = null;
+  for (const watcher of fileWatchers) {
+    try { watcher.close(); } catch {}
+  }
+  fileWatchers.clear();
+}
+
+function watchDirectory(directory, listener) {
+  const watcher = watch(directory, listener);
+  watcher.on("error", (error) => {
+    fileWatchers.delete(watcher);
+    console.error(`[oyster] file watcher failed for ${directory}: ${error.message}`);
+    state.serverEvent({ type: "code_reload_watch_failed", directory, error: error.message });
+  });
+  fileWatchers.add(watcher);
+}
+
+function drainReloads() {
+  if (reloadInProgress || shuttingDown || !pendingReload) return activeReload;
+  reloadInProgress = true;
+  const changed = pendingReload;
+  pendingReload = null;
+  activeReload = (async () => {
+    try {
+      await loadApp();
+      console.log(`[oyster] hot-reloaded app.mjs after ${changed} (clients stay connected: ${state.sseClients.size})`);
+    } catch (error) {
+      // Keep serving with the previous version on syntax/runtime errors.
+      if (!shuttingDown) {
+        console.error(`[oyster] reload FAILED, keeping old code: ${error.message}`);
+        state.serverEvent({ type: "code_reload_failed", error: error.message });
+      }
+    } finally {
+      reloadInProgress = false;
+      activeReload = null;
+      // A watcher timer may have fired while this reload was still active.
+      // Re-arm it so that the newer change is neither lost nor loaded before
+      // its debounce window has elapsed.
+      if (pendingReload && !reloadTimer && !shuttingDown) {
+        reloadTimer = setTimeout(() => {
+          reloadTimer = null;
+          void drainReloads();
+        }, 150);
+      }
+    }
+  })();
+  return activeReload;
+}
+
 function watchApp() {
   // Watch DIRECTORIES, not files: editors and tools often save via
   // write-to-temp + rename, which replaces the inode and permanently
   // detaches a file-based fs.watch. Directory watchers survive renames.
   const scheduleReload = (changed) => {
+    if (shuttingDown) return;
+    pendingReload = changed;
     clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(async () => {
-      try {
-        await loadApp();
-        console.log(`[oyster] hot-reloaded app.mjs after ${changed} (clients stay connected: ${state.sseClients.size})`);
-      } catch (e) {
-        // keep serving with the previous version on syntax/runtime errors
-        console.error(`[oyster] reload FAILED, keeping old code: ${e.message}`);
-        state.serverEvent({ type: "code_reload_failed", error: e.message });
-      }
+    reloadTimer = setTimeout(() => {
+      reloadTimer = null;
+      void drainReloads();
     }, 150);
   };
 
@@ -336,7 +442,7 @@ function watchApp() {
   for (const relativeDirectory of reloadDirectories) {
     const directory = relativeDirectory === "." ? SERVER_DIR : join(SERVER_DIR, relativeDirectory);
     if (!existsSync(directory)) continue;
-    watch(directory, (_event, filename) => {
+    watchDirectory(directory, (_event, filename) => {
       if (!filename) return;
       const relativeModule = relativeDirectory === "." ? String(filename) : join(relativeDirectory, String(filename));
       if (reloadable.has(relativeModule)) scheduleReload(relativeModule);
@@ -351,15 +457,17 @@ function watchApp() {
   if (existsSync(distDir)) {
     let uiTimer = null;
     const notifyUiChanged = (label) => {
+      if (shuttingDown) return;
       clearTimeout(uiTimer);
       uiTimer = setTimeout(() => {
+        if (shuttingDown) return;
         console.log(`[oyster] ${label} changed, notifying browsers`);
         state.serverEvent({ type: "ui_reload" });
       }, 150);
     };
     for (const directory of [distDir, assetsDir]) {
       if (!existsSync(directory)) continue;
-      watch(directory, (_event, filename) => {
+      watchDirectory(directory, (_event, filename) => {
         if (filename) notifyUiChanged(`dist/${directory === assetsDir ? "assets/" : ""}${filename}`);
       });
     }
@@ -368,17 +476,30 @@ function watchApp() {
 
 // ---------------------------------------------------------------- server
 
+function handleRequestFailure(error, res) {
+  console.error(`[oyster] handler error: ${error?.stack ?? error}`);
+  if (res.destroyed || res.writableEnded) return;
+  if (!res.headersSent) {
+    res.writeHead(500, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "internal error" }));
+    return;
+  }
+  // Once a streaming or partial response has started, appending JSON would
+  // corrupt its protocol. Terminate the connection instead.
+  res.destroy();
+}
+
 const server = http.createServer((req, res) => {
   // Read once: this request belongs entirely to the selected generation even
   // when a reload commits before its handler settles.
   const selectedApplication = app;
-  selectedApplication.handleRequest(req, res).catch((e) => {
-    console.error(`[oyster] handler error: ${e.stack ?? e}`);
-    if (!res.headersSent) {
-      res.writeHead(500, { "content-type": "application/json" });
-    }
-    if (!res.writableEnded) res.end(JSON.stringify({ error: "internal error" }));
-  });
+  try {
+    Promise.resolve(selectedApplication.handleRequest(req, res)).catch((error) => {
+      handleRequestFailure(error, res);
+    });
+  } catch (error) {
+    handleRequestFailure(error, res);
+  }
 });
 
 await loadApp();
@@ -406,23 +527,48 @@ server.listen(config.PORT, config.HOST, () => {
 let shutdownPromise = null;
 function shutdown() {
   if (shutdownPromise) return shutdownPromise;
+  shuttingDown = true;
+  closeFileWatchers();
   shutdownPromise = (async () => {
     server.close();
+    if (activeReload) await activeReload;
+    const shutdownApplication = app;
+    for (const res of state.sseClients) res.end();
+    state.sseClients.clear();
+
     // Hublot cleanup is internally bounded and must finish before the store closes;
     // its exit callbacks persist final process metadata needed for restart recovery.
-    await Promise.resolve().then(() => app.stopTunnels?.());
+    try {
+      await Promise.resolve().then(() => shutdownApplication.stopTunnels?.());
+    } catch (error) {
+      console.error(`[oyster] tunnel shutdown failed: ${error.stack ?? error}`);
+    }
+
     const cleanup = Promise.allSettled([
-      Promise.resolve().then(() => app.stopRoutines?.()),
-      Promise.resolve().then(() => app.stopOAuth?.()),
-      Promise.resolve().then(() => app.stopPi()),
+      Promise.resolve().then(() => shutdownApplication.stopRoutines?.()),
+      Promise.resolve().then(() => shutdownApplication.stopOAuth?.()),
+      Promise.resolve().then(() => shutdownApplication.stopPi()),
     ]);
-    const timeout = new Promise((resolveTimeout) => setTimeout(resolveTimeout, 5000));
-    await Promise.race([cleanup, timeout]);
+    let timeoutHandle;
+    const timeout = new Promise((resolveTimeout) => {
+      timeoutHandle = setTimeout(() => resolveTimeout("timeout"), 5000);
+    });
+    const cleanupResult = await Promise.race([cleanup, timeout]);
+    clearTimeout(timeoutHandle);
+    if (cleanupResult === "timeout") {
+      console.error("[oyster] application shutdown timed out after 5000ms");
+    } else {
+      for (const result of cleanupResult) {
+        if (result.status === "rejected") console.error(`[oyster] application shutdown hook failed: ${result.reason?.stack ?? result.reason}`);
+      }
+    }
+    server.closeAllConnections();
     state.appStore.flush();
     state.appStore.close();
     process.exit(0);
   })().catch((error) => {
     console.error(`[oyster] shutdown failed: ${error.stack ?? error}`);
+    try { server.closeAllConnections(); } catch {}
     try { state.appStore.close(); } catch {}
     process.exit(1);
   });

@@ -7,7 +7,8 @@ test("stable core watches the reload manifest with one debounced scheduler", () 
   assert.match(source, /import \{ RELOADABLE_SERVER_MODULES \} from "\.\/reload-manifest\.mjs"/);
   assert.match(source, /const scheduleReload = \(changed\) => \{/);
   assert.match(source, /clearTimeout\(reloadTimer\)/);
-  assert.match(source, /setTimeout\(async \(\) => \{[\s\S]*?await loadApp\(\)/);
+  assert.match(source, /reloadTimer = setTimeout\(\(\) => \{[\s\S]*?void drainReloads\(\)/);
+  assert.match(source, /if \(reloadInProgress \|\| shuttingDown \|\| !pendingReload\) return activeReload;[\s\S]*?activeReload = \(async \(\) => \{[\s\S]*?await loadApp\(\)/);
   assert.match(source, /const reloadable = new Set\(RELOADABLE_SERVER_MODULES\)/);
   assert.match(source, /RELOADABLE_SERVER_MODULES\.map\(\(module\) => dirname\(module\)\)/);
   assert.match(source, /for \(const relativeDirectory of reloadDirectories\)/);
