@@ -48,7 +48,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 ## Persistence
 
 - [x] `server/persistence/appSettings.mjs`
-- [ ] `server/persistence/appStore.mjs`
+- [x] `server/persistence/appStore.mjs`
 - [ ] `server/persistence/checkpointImporter.mjs`
 - [ ] `server/persistence/checkpointRollbackJournal.mjs`
 - [ ] `server/persistence/hublotScriptMaterializer.mjs`

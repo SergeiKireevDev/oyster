@@ -31,6 +31,7 @@ test("app store configures durability, integrity, and contention pragmas", () =>
   const statements = [];
   class FakeDatabase {
     exec(sql) { statements.push(sql); }
+    prepare() {}
     close() {}
   }
 
@@ -48,6 +49,7 @@ test("app store exposes synchronous commit and rollback without exposing its dat
   const statements = [];
   class FakeDatabase {
     exec(sql) { statements.push(sql.trim()); }
+    prepare() {}
     close() {}
   }
   const store = openAppStore({
@@ -71,6 +73,7 @@ test("app store checkpoints WAL writes before close", () => {
   const statements = [];
   class FakeDatabase {
     exec(sql) { statements.push(sql.trim()); }
+    prepare() {}
     close() { statements.push("CLOSE"); }
   }
   const store = openAppStore({ databasePath: join(tmpdir(), "oyster-flush-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
@@ -86,6 +89,7 @@ test("app store closes its owned database exactly once", () => {
   class FakeDatabase {
     constructor(path) { openedPath = path; }
     exec() {}
+    prepare() {}
     close() { closes++; }
   }
 
@@ -96,4 +100,52 @@ test("app store closes its owned database exactly once", () => {
 
   assert.equal(openedPath, resolve(databasePath));
   assert.equal(closes, 1);
+});
+
+test("app store closes the database when configuration or migration fails", () => {
+  let closes = 0;
+  class FakeDatabase {
+    exec() {}
+    prepare() {}
+    close() { closes++; }
+  }
+  const databasePath = join(tmpdir(), "oyster-failed-store.sqlite");
+
+  assert.throws(() => openAppStore({
+    databasePath,
+    Database: FakeDatabase,
+    migrate: () => { throw new Error("migration failed"); },
+  }), /migration failed/);
+  assert.equal(closes, 1);
+  assert.throws(() => openAppStore({
+    databasePath,
+    Database: FakeDatabase,
+    migrate: async () => ({}),
+  }), /migrations must be synchronous/);
+  assert.equal(closes, 2);
+
+  class InvalidDatabase {
+    close() { closes++; }
+  }
+  assert.throws(() => openAppStore({ databasePath, Database: InvalidDatabase, migrate: () => ({}) }), /invalid database/);
+  assert.equal(closes, 3);
+});
+
+test("app store recovers when beginning a transaction fails", () => {
+  let failBegin = true;
+  class FakeDatabase {
+    exec(sql) {
+      if (sql === "BEGIN IMMEDIATE" && failBegin) {
+        failBegin = false;
+        throw new Error("busy");
+      }
+    }
+    prepare() {}
+    close() {}
+  }
+  const store = openAppStore({ databasePath: join(tmpdir(), "oyster-begin-store.sqlite"), Database: FakeDatabase, migrate: () => ({}) });
+
+  assert.throws(() => store.transaction(() => {}), /busy/);
+  assert.equal(store.transaction(() => "retried"), "retried");
+  store.close();
 });
