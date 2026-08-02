@@ -1,6 +1,7 @@
 import { parseSearchTerms } from "./searchQuery.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const TOKEN_CHARACTER = /[\p{L}\p{M}\p{N}_]/u;
 
 function snippetText(result) {
   const snippet = result?.snippet ?? {};
@@ -9,20 +10,31 @@ function snippetText(result) {
 
 function quotedPhrases(query) {
   const phrases = [];
-  const source = String(query ?? "");
+  const seen = new Set();
+  const source = String(query ?? "").replaceAll("\0", "");
   let current = "";
   let quoted = false;
+  function pushPhrase() {
+    const phrase = current.trim().toLowerCase();
+    if (phrase && !seen.has(phrase)) {
+      seen.add(phrase);
+      phrases.push(phrase);
+    }
+    current = "";
+  }
+
   for (let index = 0; index < source.length; index++) {
     const character = source[index];
     if (character === "\\" && source[index + 1] === '"') {
       if (quoted) current += '"';
       index++;
     } else if (character === '"') {
-      if (quoted && current.trim()) phrases.push(current.trim().toLowerCase());
-      current = "";
+      if (quoted) pushPhrase();
+      else current = "";
       quoted = !quoted;
     } else if (quoted) current += character;
   }
+  if (quoted) pushPhrase();
   return phrases;
 }
 
@@ -32,9 +44,24 @@ function occurrences(text, term) {
   return positions;
 }
 
+function codePointBefore(text, index) {
+  if (index <= 0) return "";
+  const trailingUnit = text.charCodeAt(index - 1);
+  if (index > 1 && trailingUnit >= 0xDC00 && trailingUnit <= 0xDFFF) {
+    const leadingUnit = text.charCodeAt(index - 2);
+    if (leadingUnit >= 0xD800 && leadingUnit <= 0xDBFF) return text.slice(index - 2, index);
+  }
+  return text[index - 1];
+}
+
+function codePointAt(text, index) {
+  const value = text.codePointAt(index);
+  return value === undefined ? "" : String.fromCodePoint(value);
+}
+
 function hasTokenBoundaries(text, index, length) {
-  const token = /[\p{L}\p{N}_]/u;
-  return !token.test(text[index - 1] ?? "") && !token.test(text[index + length] ?? "");
+  return !TOKEN_CHARACTER.test(codePointBefore(text, index))
+    && !TOKEN_CHARACTER.test(codePointAt(text, index + length));
 }
 
 function proximityScore(positionSets) {
@@ -89,8 +116,10 @@ export function scoreSearchResult(result, query, { referenceTime = null } = {}) 
 /** Return a relevance-sorted copy, preserving original order for equal scores. */
 export function rescoreSearchResults(results, query) {
   const candidates = Array.isArray(results) ? results : [];
-  const timestamps = candidates.map((result) => Date.parse(result?.timestamp ?? "")).filter(Number.isFinite);
-  const referenceTime = timestamps.length ? Math.max(...timestamps) : null;
+  const referenceTime = candidates.reduce((latest, result) => {
+    const timestamp = Date.parse(result?.timestamp ?? "");
+    return Number.isFinite(timestamp) && (latest === null || timestamp > latest) ? timestamp : latest;
+  }, null);
   return candidates
     .map((result, index) => ({ result, index, score: scoreSearchResult(result, query, { referenceTime }) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
