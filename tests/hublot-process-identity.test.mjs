@@ -7,7 +7,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
-import { readProcessIdentity } from "../server/persistence/processIdentity.mjs";
+import {
+  processIdentityMatches, readProcessIdentity, verifyPersistedProcessIdentity,
+} from "../server/persistence/processIdentity.mjs";
 import {
   currentHublotTunnelProcessIsHealthy, listTunnels, persistHublotProcessIdentity,
   rebindHublot, recordHublotTransition, reserveHublot, updateHublotProcessMetadata,
@@ -43,6 +45,50 @@ test("process identity captures PID-reuse-resistant Linux metadata", () => {
     executable: "/usr/bin/node",
     commandSha256: createHash("sha256").update(command).digest("hex"),
   });
+});
+
+test("process identity parsing fails closed for malformed proc metadata", () => {
+  const pid = 321;
+  const identity = readProcessIdentity(pid, {
+    readFile(path) {
+      if (path === `/proc/${pid}/stat`) return `${pid + 1} (wrong pid) S 1 777`;
+      if (path === `/proc/${pid}/cmdline`) return { unsupported: true };
+      if (path === "/proc/sys/kernel/random/boot_id") return Buffer.from("not-text");
+      throw new Error("missing");
+    },
+    readlink: () => 42,
+  });
+
+  assert.deepEqual(identity, {
+    pid,
+    processGroupId: null,
+    bootId: null,
+    procStartTicks: null,
+    executable: null,
+    commandSha256: null,
+  });
+  assert.throws(() => readProcessIdentity(Number.MAX_SAFE_INTEGER + 1), /invalid process pid/);
+  assert.throws(() => readProcessIdentity(pid, null), /options must be an object/);
+  assert.throws(() => readProcessIdentity(pid, { readFile: "no" }), /readFile must be a function/);
+});
+
+test("process identity comparison rejects malformed and incomplete persisted values", () => {
+  const record = {
+    pid: 99, process_group_id: 90, boot_id: "boot", proc_start_ticks: "123",
+    executable: "/usr/bin/node", command_sha256: "command",
+  };
+  const observed = {
+    pid: 99, processGroupId: 90, bootId: "boot", procStartTicks: "123",
+    executable: "/usr/bin/node", commandSha256: "command",
+  };
+
+  assert.equal(processIdentityMatches(record, observed), true);
+  assert.equal(processIdentityMatches({ ...record, pid: " 99" }, observed), false);
+  assert.equal(processIdentityMatches({ ...record, process_group_id: "invalid" }, { ...observed, processGroupId: null }), false);
+  assert.equal(processIdentityMatches({ ...record, proc_start_ticks: "1e3" }, observed), false);
+  assert.equal(processIdentityMatches({ ...record, executable: 42 }, { ...observed, executable: 42 }), false);
+  assert.equal(processIdentityMatches({ get pid() { throw new Error("untrusted accessor"); } }, observed), false);
+  assert.equal(verifyPersistedProcessIdentity(null), false);
 });
 
 test("discovered hublot processes are persisted immediately with verifiable identity", async (t) => {
