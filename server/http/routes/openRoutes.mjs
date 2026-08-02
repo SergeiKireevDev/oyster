@@ -1,15 +1,55 @@
+const PERSISTENT_STORES = new Set(["jsonl", "sqlite"]);
+
+function nonNegativeInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function publicMigrationStatus(status) {
+  const currentVersion = nonNegativeInteger(status?.currentVersion);
+  const appliedVersions = Array.isArray(status?.appliedVersions)
+    ? status.appliedVersions.map(nonNegativeInteger).filter((version) => version !== null)
+    : [];
+  return { currentVersion, appliedVersions };
+}
+
+function publicRunnerDiagnostics(runners) {
+  if (!Array.isArray(runners)) return [];
+  return runners.map((runner) => ({
+    alive: runner?.alive === true,
+    busy: runner?.busy === true,
+  }));
+}
+
 function piDiagnostics(state) {
-  const bin = state.piProcesses?.bin ?? state.config.PI_BIN;
-  const persistentStore = state.piProcesses?.persistentStore ?? state.config.PERSISTENT_STORE;
-  return {
-    bin,
-    persistentStore,
-    sqlitePath: persistentStore === "sqlite" ? state.config.SQLITE_PATH : null,
-  };
+  const configuredStore = state.piProcesses?.persistentStore ?? state.config.PERSISTENT_STORE;
+  const persistentStore = PERSISTENT_STORES.has(configuredStore) ? configuredStore : "unknown";
+  return { persistentStore };
+}
+
+function disableCaching(res) {
+  // Authentication status and live diagnostics must not be reused by a browser
+  // cache or an intermediary after server state changes.
+  res.setHeader?.("cache-control", "no-store");
 }
 
 /** Build the routes that intentionally bypass authentication. */
-export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFailMax = 20 }) {
+export function createOpenRoutes(options = {}) {
+  const { state, listRunnerInfo, requestContext, authFailMax = 20 } = options;
+  if (!state || typeof state !== "object" || !state.config || typeof state.config !== "object") {
+    throw new TypeError("state.config is required");
+  }
+  if (typeof listRunnerInfo !== "function") throw new TypeError("listRunnerInfo is required");
+  const requiredContextMethods = [
+    "json", "text", "tokenMatches", "authCandidates", "clientIp",
+    "recentAuthFailures", "recordAuthFailure",
+  ];
+  if (!requestContext || requiredContextMethods.some((method) => typeof requestContext[method] !== "function")) {
+    throw new TypeError("requestContext authentication and response helpers are required");
+  }
+  if (!Number.isSafeInteger(authFailMax) || authFailMax < 0) {
+    throw new RangeError("authFailMax must be a non-negative safe integer");
+  }
+
   const {
     json,
     text,
@@ -22,6 +62,7 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
 
   return {
     "GET /runtime-config.js": (_req, res) => {
+      disableCaching(res);
       text(
         res,
         200,
@@ -33,38 +74,52 @@ export function createOpenRoutes({ state, listRunnerInfo, requestContext, authFa
     },
 
     "GET /health": (_req, res) => {
+      disableCaching(res);
       json(res, 200, {
         ok: true,
-        runners: listRunnerInfo(),
-        clients: state.sseClients.size,
-        reloadCount: state.reloadCount,
+        // This endpoint is public. Keep operationally useful process state,
+        // but never publish runner IDs, session references, or filesystem paths.
+        runners: publicRunnerDiagnostics(listRunnerInfo()),
+        clients: nonNegativeInteger(state.sseClients?.size),
+        reloadCount: nonNegativeInteger(state.reloadCount),
         appDatabase: {
-          path: state.appStore.path,
-          migrations: state.appStore.migrationStatus,
+          migrations: publicMigrationStatus(state.appStore?.migrationStatus),
         },
         pi: piDiagnostics(state),
       });
     },
 
     "GET /authcheck": (req, res, url) => {
+      disableCaching(res);
       if (state.config.UNAUTHENTICATED) {
         json(res, 200, { authorized: true, unauthenticated: true });
         return;
       }
       const ip = clientIp(req);
-      if (recentAuthFailures(ip).length >= authFailMax) {
+      const failures = recentAuthFailures(ip);
+      if (!Array.isArray(failures)) throw new TypeError("recentAuthFailures must return an array");
+      if (failures.length >= authFailMax) {
         json(res, 429, { error: "too many auth failures — try again later" });
         return;
       }
       const candidates = authCandidates(req, url);
-      const credentials = {};
-      for (const [name, value] of Object.entries(candidates)) {
-        credentials[name] = value
-          ? (tokenMatches(value) ? "valid" : `present-invalid(len=${String(value).length})`)
-          : "absent";
+      if (!candidates || typeof candidates !== "object" || Array.isArray(candidates)) {
+        throw new TypeError("authCandidates must return an object");
       }
-      const authorized = Object.values(candidates).some(tokenMatches);
-      if (!authorized && Object.values(candidates).some(Boolean)) recordAuthFailure(ip);
+      const credentials = {};
+      let authorized = false;
+      let credentialPresent = false;
+      for (const [name, value] of Object.entries(candidates)) {
+        const present = Boolean(value);
+        const valid = present && tokenMatches(value);
+        credentialPresent ||= present;
+        authorized ||= valid;
+        credentials[name] = valid
+          ? "valid"
+          : (present ? `present-invalid(len=${String(value).length})` : "absent");
+      }
+      if (authorized) state.authFails?.delete(ip);
+      else if (credentialPresent) recordAuthFailure(ip);
       json(res, 200, { authorized, credentials });
     },
   };
