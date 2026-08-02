@@ -62,7 +62,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/persistence/routineMaterializer.mjs`
 - [x] `server/persistence/sessionDeletion.mjs`
 - [x] `server/persistence/sessionDeletionReconciler.mjs`
-- [ ] `server/persistence/sessionOwners.mjs`
+- [x] `server/persistence/sessionOwners.mjs`
 - [ ] `server/persistence/stateInventory.mjs`
 
 ## Session catalogs and search
