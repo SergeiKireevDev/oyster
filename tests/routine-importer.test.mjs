@@ -78,3 +78,85 @@ test("a missing legacy directory is a no-op", (t) => {
     sourceDir, sourceCount: 0, importedCount: 0, existingCount: 0, orphanBindingCount: 0, status: "missing",
   });
 });
+
+test("owner resolution is completed before any routine is written", (t) => {
+  const { sourceDir, store } = fixture(t);
+  executable(join(sourceDir, "first.sh"), "first");
+  executable(join(sourceDir, "second.sh"), "second");
+  writeFileSync(join(sourceDir, "bindings.json"), JSON.stringify({
+    "second.sh": { sessionId: "missing-session" },
+  }));
+
+  assert.throws(
+    () => importLegacyRoutines({ repository: store.repositories.routines, resolveOwner: () => null, sourceDir }),
+    /session owner was not resolved/,
+  );
+  assert.deepEqual(store.repositories.routines.list(), []);
+});
+
+test("observer failures cannot leave a partial import and async observers are rejected", (t) => {
+  const { sourceDir, store } = fixture(t);
+  executable(join(sourceDir, "first.sh"), "first");
+  executable(join(sourceDir, "second.sh"), "second");
+  let observed = 0;
+
+  assert.throws(() => importLegacyRoutines({
+    repository: store.repositories.routines,
+    resolveOwner: () => null,
+    sourceDir,
+    onCandidate: () => {
+      observed++;
+      if (observed === 2) throw new Error("observer failed");
+    },
+  }), /observer failed/);
+  assert.deepEqual(store.repositories.routines.list(), []);
+
+  assert.throws(() => importLegacyRoutines({
+    repository: store.repositories.routines,
+    resolveOwner: () => null,
+    sourceDir,
+    onCandidate: async () => {},
+  }), /onCandidate must be synchronous/);
+  assert.deepEqual(store.repositories.routines.list(), []);
+});
+
+test("a custom bindings file inside the source directory is not imported as a routine", (t) => {
+  const { sourceDir, store } = fixture(t);
+  const bindingsPath = join(sourceDir, "custom-bindings.json");
+  executable(join(sourceDir, "build.sh"), "build");
+  executable(bindingsPath, JSON.stringify({ "build.sh": { cwd: "/work" } }));
+
+  const result = importLegacyRoutines({
+    repository: store.repositories.routines,
+    resolveOwner: () => null,
+    sourceDir,
+    bindingsPath,
+    now: () => "imported",
+  });
+
+  assert.equal(result.sourceCount, 1);
+  assert.equal(store.repositories.routines.findByName("custom-bindings.json"), null);
+  assert.equal(store.repositories.routines.findByName("build.sh").cwd, "/work");
+});
+
+test("conflict detection includes the resolved owner identity", (t) => {
+  const { sourceDir, store } = fixture(t);
+  executable(join(sourceDir, "build.sh"), "build");
+  writeFileSync(join(sourceDir, "bindings.json"), JSON.stringify({
+    "build.sh": { sessionId: "session-a" },
+  }));
+  const storedOwner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-a", storagePath: "/old", createdAt: "created" });
+  const expectedOwner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-a", storagePath: "/new", createdAt: "created" });
+  store.repositories.routines.upsert({ id: "existing", ownerId: storedOwner.id, name: "build.sh", script: "build", now: "created" });
+  const conflicts = [];
+
+  importLegacyRoutines({
+    repository: store.repositories.routines,
+    resolveOwner: () => expectedOwner,
+    sourceDir,
+    onConflict: (conflict) => conflicts.push(conflict),
+  });
+
+  assert.deepEqual(conflicts, [{ key: "build.sh", reason: "destination routine definition or binding differs" }]);
+  assert.equal(store.repositories.routines.findByName("build.sh").owner_id, storedOwner.id);
+});
