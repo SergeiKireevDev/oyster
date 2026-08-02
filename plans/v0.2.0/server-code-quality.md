@@ -39,7 +39,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/http/routes/oauthRoutes.mjs`
 - [x] `server/http/routes/openRoutes.mjs`
 - [x] `server/http/routes/routineRoutes.mjs`
-- [ ] `server/http/routes/runnerRoutes.mjs`
+- [x] `server/http/routes/runnerRoutes.mjs`
 - [ ] `server/http/routes/sessionRoutes.mjs`
 - [ ] `server/http/routes/staticRoutes.mjs`
 - [ ] `server/http/routes/tunnelRoutes.mjs`
