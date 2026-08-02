@@ -53,7 +53,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/persistence/checkpointRollbackJournal.mjs`
 - [x] `server/persistence/hublotScriptMaterializer.mjs`
 - [x] `server/persistence/hublotSupervisor.mjs`
-- [ ] `server/persistence/legacyBackup.mjs`
+- [x] `server/persistence/legacyBackup.mjs`
 - [ ] `server/persistence/legacyDataImport.mjs`
 - [ ] `server/persistence/legacyMigration.mjs`
 - [ ] `server/persistence/migrations.mjs`
