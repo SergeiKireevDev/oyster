@@ -55,6 +55,38 @@ test("SQLite exact-entry fork delegates to pi and preserves parent identity", {
   assert.equal(createSqliteSessionCatalog({ databasePath }).findById("forked").parentSessionId, "source");
 });
 
+test("session operations validate their required dependencies", () => {
+  const codec = createSessionReferenceCodec({ agentDir: "/agent" });
+  assert.throws(() => createSessionOperations(), /config\.PI_BIN is required/);
+  assert.throws(
+    () => createSessionOperations({ config: { PI_BIN: "/pi" }, sessionReferences: {} }),
+    /sessionReferences must provide validate and serialize/,
+  );
+  assert.throws(
+    () => createSessionOperations({ config: { PI_BIN: "/pi" }, sessionReferences: codec, unlinkFile: null }),
+    /unlinkFile must be a function/,
+  );
+  assert.throws(
+    () => createSessionOperations({ config: { PI_BIN: "/pi" }, sessionReferences: codec, loadSqliteRepository: true }),
+    /loadSqliteRepository must be a function/,
+  );
+});
+
+test("JSONL deletion waits for asynchronous file removal", async () => {
+  const codec = createSessionReferenceCodec({ agentDir: "/agent" });
+  const calls = [];
+  const operations = createSessionOperations({
+    config: { PI_BIN: "/missing/dist/cli.js" },
+    sessionReferences: codec,
+    unlinkFile: async (path) => { await Promise.resolve(); calls.push(path); },
+  });
+  const reference = { backend: "jsonl", id: "session", storagePath: "/agent/sessions/session.jsonl" };
+  assert.deepEqual(await operations.deleteSession(reference), {
+    backend: "jsonl", id: "session", deleted: "/agent/sessions/session.jsonl",
+  });
+  assert.deepEqual(calls, ["/agent/sessions/session.jsonl"]);
+});
+
 test("session operations expose capability failures without loading a repository", async () => {
   const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: "/agent/sessions.sqlite" });
   const operations = createSessionOperations({
@@ -66,6 +98,83 @@ test("session operations expose capability failures without loading a repository
     () => operations.deleteSession({ backend: "sqlite", id: "session", storagePath: "/agent/sessions.sqlite" }),
     (error) => error.code === "capability_unavailable",
   );
+});
+
+test("SQLite repository loading is cached and retried after transient failures", async () => {
+  const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: "/agent/sessions.sqlite" });
+  const reference = { backend: "sqlite", id: "session", storagePath: "/agent/sessions.sqlite" };
+  let loads = 0;
+  class Repository {
+    async deleteById() {}
+  }
+  const operations = createSessionOperations({
+    config: { PI_BIN: "/virtual/dist/cli.js" },
+    sessionReferences: codec,
+    loadSqliteRepository: async () => {
+      loads += 1;
+      if (loads === 1) throw new Error("temporary loader failure");
+      return Repository;
+    },
+  });
+
+  await assert.rejects(() => operations.deleteSession(reference), (error) => {
+    assert.equal(error.code, "capability_unavailable");
+    assert.match(error.message, /cannot load SQLite session operations/);
+    assert.equal(error.cause?.message, "temporary loader failure");
+    return true;
+  });
+  await operations.deleteSession(reference);
+  await operations.deleteSession(reference);
+  assert.equal(loads, 2);
+});
+
+test("SQLite fork closes invalid sessions and preserves operation and cleanup failures", async () => {
+  const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: "/agent/sessions.sqlite" });
+  const reference = { backend: "sqlite", id: "session", storagePath: "/agent/sessions.sqlite" };
+  const metadataError = new Error("metadata failed");
+  const closeError = new Error("close failed");
+  let closes = 0;
+  class Repository {
+    async fork() {
+      return {
+        async getMetadata() { throw metadataError; },
+        async close() { closes += 1; throw closeError; },
+      };
+    }
+  }
+  const operations = createSessionOperations({
+    config: { PI_BIN: "/virtual/dist/cli.js" },
+    sessionReferences: codec,
+    loadSqliteRepository: async () => Repository,
+  });
+
+  await assert.rejects(() => operations.forkSession(reference), (error) => {
+    assert(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [metadataError, closeError]);
+    assert.equal(error.cause, metadataError);
+    return true;
+  });
+  assert.equal(closes, 1);
+});
+
+test("SQLite fork closes a malformed session when cleanup is available", async () => {
+  const codec = createSessionReferenceCodec({ agentDir: "/agent", sqlitePath: "/agent/sessions.sqlite" });
+  const reference = { backend: "sqlite", id: "session", storagePath: "/agent/sessions.sqlite" };
+  let closed = false;
+  class Repository {
+    async fork() { return { async close() { closed = true; } }; }
+  }
+  const operations = createSessionOperations({
+    config: { PI_BIN: "/virtual/dist/cli.js" },
+    sessionReferences: codec,
+    loadSqliteRepository: async () => Repository,
+  });
+
+  await assert.rejects(
+    () => operations.forkSession(reference),
+    (error) => error.code === "capability_unavailable" && /invalid SQLite fork session/.test(error.message),
+  );
+  assert.equal(closed, true);
 });
 
 test("session route deletion releases resources only after repository success", async () => {

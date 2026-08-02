@@ -67,6 +67,21 @@ export function init(state) {
 `;
 }
 
+function delayedTransactionalFixture(version, delayMs = 0) {
+  return `
+export async function buildCandidate() {
+  console.log("[fixture] building:${version}");
+  await new Promise((resolve) => setTimeout(resolve, ${delayMs}));
+  return {
+    async handleRequest(_req, res) { res.end(JSON.stringify({ version: ${JSON.stringify(version)} })); },
+    async activate() { console.log("[fixture] activated:${version}"); },
+    async dispose() {},
+    startPi() {}, stopPi() {},
+  };
+}
+`;
+}
+
 function transactionalFixture(version, { activationError = false, disposalFailures = 0 } = {}) {
   return `
 export async function buildCandidate(state) {
@@ -230,6 +245,29 @@ test("the stable server atomically replaces its active application handler", asy
   await waitForOutput(child, "hot-reloaded app.mjs");
 
   assert.deepEqual(await readJson(port), { version: "after", reloadCount: 2, appStoreStable: true });
+});
+
+test("overlapping file changes are serialized so an older candidate cannot replace a newer one", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "oyster-serialized-reload-"));
+  const port = await availablePort();
+  await copyStableServer(root);
+  await writeFile(join(root, "server", "app.mjs"), delayedTransactionalFixture("initial"));
+
+  const child = spawn(process.execPath, ["server/server.mjs", "--host", "127.0.0.1", "--port", String(port), "--token", "test-token"], {
+    cwd: root, stdio: ["ignore", "pipe", "pipe"], env: serverEnv(root),
+  });
+  t.after(async () => {
+    if (child.exitCode === null) { child.kill("SIGTERM"); await once(child, "exit"); }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  await waitForOutput(child, "listening on");
+  await writeFile(join(root, "server", "app.mjs"), delayedTransactionalFixture("slow", 500));
+  await waitForOutput(child, "[fixture] building:slow");
+  await writeFile(join(root, "server", "app.mjs"), delayedTransactionalFixture("latest"));
+  await waitForOutput(child, "[fixture] activated:latest");
+
+  assert.deepEqual(await readJson(port), { version: "latest" });
 });
 
 test("transactional reload activates, swaps, and only then retires the old application", async (t) => {

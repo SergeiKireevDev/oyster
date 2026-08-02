@@ -19,7 +19,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/routines.mjs`
 - [x] `server/runner-restart-service.mjs`
 - [x] `server/runners.mjs`
-- [ ] `server/server.mjs`
+- [x] `server/server.mjs`
 - [ ] `server/session-operations.mjs`
 - [ ] `server/session-references.mjs`
 - [ ] `server/sessions.mjs`
