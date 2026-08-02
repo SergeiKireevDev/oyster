@@ -199,3 +199,114 @@ test("rollback saves dirty work, resets, forks, opens a runner, and preserves re
   assert.equal(saved[0].checkpoints.length, 1);
   assert.equal(commands[0].type, "set_session_name");
 });
+
+test("rollback validates required identifiers before querying the repository", async () => {
+  let queried = false;
+  const routes = createCheckpointRoutes({
+    state: { sessionCatalog: { backend: "sqlite" } },
+    requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
+    checkpointRepository: { ...repository(), findBySessionId() { queried = true; } },
+    checkpointRollbackJournal: rollbackJournal(),
+  });
+
+  const result = response();
+  await routes["POST /rollback"]({ body: { sessionId: "", hash: "" } }, result);
+
+  assert.equal(result.status, 400);
+  assert.deepEqual(result.body, { error: "sessionId and hash are required" });
+  assert.equal(queried, false);
+});
+
+test("rollback aborts before forking when worktree status cannot be established", async () => {
+  const sessionRef = { backend: "sqlite", id: "sqlite", storagePath: "/agent/sessions.sqlite" };
+  const events = [];
+  let forked = false;
+  const routes = createCheckpointRoutes({
+    state: {
+      sessionCatalog: { backend: "sqlite", findById: () => ({ id: "sqlite" }) },
+      sessionOperations: {
+        capabilities: { exactFork: { sqlite: true } },
+        async forkSession() { forked = true; },
+      },
+    },
+    requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
+    checkpointRepository: repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", sessionRef }] }),
+    checkpointRollbackJournal: rollbackJournal(events),
+    git: async () => ({ code: 1, stdout: "", stderr: "index unavailable" }),
+    logger: { error() {}, log() {} },
+  });
+
+  const result = response();
+  await routes["POST /rollback"]({ body: { sessionId: "sqlite", hash: "abc" } }, result);
+
+  assert.equal(result.status, 500);
+  assert.match(result.body.error, /git status failed: index unavailable/);
+  assert.equal(forked, false);
+  assert.deepEqual(events.map(([stage]) => stage), ["persisted", "failed"]);
+});
+
+test("rollback refuses to reset dirty work when its safety checkpoint fails", async () => {
+  const sessionRef = { backend: "sqlite", id: "sqlite", storagePath: "/agent/sessions.sqlite" };
+  const gitCommands = [];
+  let forked = false;
+  const routes = createCheckpointRoutes({
+    state: {
+      sessionCatalog: { backend: "sqlite", findById: () => ({ id: "sqlite" }) },
+      sessionOperations: {
+        capabilities: { exactFork: { sqlite: true } },
+        async forkSession() { forked = true; },
+      },
+      piProcesses: {},
+    },
+    requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
+    checkpointRepository: repository({ sqlite: [{ hash: "abc", dir: "/work", anchorId: "e1", sessionRef }] }),
+    checkpointRollbackJournal: rollbackJournal(),
+    git: async (_dir, args) => { gitCommands.push(args[0]); return { code: 0, stdout: " M file", stderr: "" }; },
+    checkpointWorkdir: async () => ({ status: 500, body: { error: "commit rejected" } }),
+    logger: { error() {}, log() {} },
+  });
+
+  const result = response();
+  await routes["POST /rollback"]({ body: { sessionId: "sqlite", hash: "abc" } }, result);
+
+  assert.equal(result.status, 500);
+  assert.match(result.body.error, /safety checkpoint failed: commit rejected/);
+  assert.deepEqual(gitCommands, ["status"]);
+  assert.equal(forked, false);
+});
+
+test("checkpoint mutations reject concurrent operations in the same worktree and release their lock", async () => {
+  let finishFirst;
+  let calls = 0;
+  const pending = new Promise((resolve) => { finishFirst = resolve; });
+  const state = { sessionCatalog: { backend: "jsonl" }, piProcesses: {} };
+  const routes = createCheckpointRoutes({
+    state,
+    requestContext: { json(res, status, body) { res.status = status; res.body = body; }, readJsonBody: async (req) => req.body },
+    runnerFromReq: () => ({ dir: "/work", sessionRef: null }),
+    checkpointWorkdir: async () => {
+      calls += 1;
+      if (calls === 1) await pending;
+      return { status: 200, body: { hash: "abc" } };
+    },
+    checkpointRepository: repository(),
+    checkpointRollbackJournal: rollbackJournal(),
+    logger: { error() {} },
+  });
+
+  const first = response();
+  const firstRequest = routes["POST /checkpoint"]({ body: {} }, first, new URL("http://localhost/checkpoint"));
+  await Promise.resolve();
+  const concurrent = response();
+  await routes["POST /checkpoint"]({ body: {} }, concurrent, new URL("http://localhost/checkpoint"));
+  assert.equal(concurrent.status, 409);
+  assert.equal(calls, 1);
+
+  finishFirst();
+  await firstRequest;
+  const after = response();
+  await routes["POST /checkpoint"]({ body: {} }, after, new URL("http://localhost/checkpoint"));
+  assert.equal(after.status, 200);
+  assert.equal(calls, 2);
+  assert.equal(state.checkpointWorkdirLocks.size, 0);
+});

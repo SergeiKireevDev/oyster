@@ -49,6 +49,7 @@ export const STABLE_STATE_INVENTORY = Object.freeze({
   authFails: entry("ephemeral", "short-lived authentication throttle buckets"),
   oauthFlows: entry("ephemeral", "bounded transient OAuth callbacks, prompts, and timers"),
   pinnedWidgetTranscodes: entry("ephemeral", "in-flight browser-video conversion promises"),
+  checkpointWorkdirLocks: entry("ephemeral", "workdirs with an in-flight checkpoint or rollback operation"),
 
   hublotSupervisor: entry("ephemeral", "live supervisor and timer"),
   piProcesses: entry("ephemeral", "process launcher service", null, "candidate-owned"),
@@ -74,6 +75,7 @@ export function createStableEphemeralState() {
     sseClients: new Set(),
     authFails: new Map(),
     pinnedWidgetTranscodes: new Map(),
+    checkpointWorkdirLocks: new Set(),
     reloadCount: 0,
   };
 }
