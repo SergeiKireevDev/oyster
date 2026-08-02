@@ -192,9 +192,12 @@ test("runner replay events persist exact payloads and enforce their configured c
   ]);
   store.repositories.runnerEvents.append({ runnerId: "r-events000", sseId: "event-5", payload: "duplicate", createdAt: "later", maxEntries: 3 });
   assert.equal(store.repositories.runnerEvents.list("r-events000").length, 3, "replayed SSE IDs are idempotent");
+  const emptyId = store.repositories.runnerEvents.append({ runnerId: "r-events000", sseId: "", payload: "empty ID", createdAt: "later", maxEntries: 3 });
+  const replayedEmptyId = store.repositories.runnerEvents.append({ runnerId: "r-events000", sseId: "", payload: "duplicate", createdAt: "latest", maxEntries: 3 });
+  assert.deepEqual(replayedEmptyId, emptyId, "all non-null SSE IDs are idempotent");
   store.close();
   store = openAppStore({ databasePath });
-  assert.deepEqual(store.repositories.runnerEvents.list("r-events000").map((event) => event.sequence), [3, 4, 5]);
+  assert.deepEqual(store.repositories.runnerEvents.list("r-events000").map((event) => event.sequence), [4, 5, 6]);
   store.repositories.runners.delete("r-events000");
   assert.deepEqual(store.repositories.runnerEvents.list("r-events000"), []);
 });

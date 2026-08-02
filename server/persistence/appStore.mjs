@@ -13,21 +13,54 @@ import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appS
  * callers must never open their own application-database connections.
  */
 export function openAppStore({ databasePath, Database = DatabaseSync, migrate = applyMigrations } = {}) {
-  if (!databasePath) throw new Error("application database path is required");
+  if (typeof databasePath !== "string" || !databasePath.trim()) {
+    throw new Error("application database path is required");
+  }
+  if (typeof Database !== "function") throw new TypeError("application database constructor is required");
+  if (typeof migrate !== "function") throw new TypeError("application database migration function is required");
+
   const path = resolve(databasePath);
   mkdirSync(dirname(path), { recursive: true });
 
-  const database = new Database(path);
-  database.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 5000;
-    PRAGMA synchronous = NORMAL;
-  `);
-  const migrationStatus = migrate(database);
+  let database;
+  let migrationStatus;
+  try {
+    database = new Database(path);
+    if (!database || typeof database.exec !== "function" || typeof database.prepare !== "function" || typeof database.close !== "function") {
+      throw new TypeError("application database constructor returned an invalid database");
+    }
+    database.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA foreign_keys = ON;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA synchronous = NORMAL;
+    `);
+    migrationStatus = migrate(database);
+    if (migrationStatus && typeof migrationStatus.then === "function") {
+      throw new TypeError("application database migrations must be synchronous");
+    }
+  } catch (error) {
+    try { database?.close?.(); } catch {}
+    throw error;
+  }
+
+  function writeAtomically(work) {
+    if (database.isTransaction) return work();
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = work();
+      database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try { database.exec("ROLLBACK"); } catch {}
+      throw error;
+    }
+  }
+
   const repositories = Object.freeze({
     settings: Object.freeze({
       get: (key) => {
+        assertGeneralAppSettingKey(key);
         const row = database.prepare("SELECT key, value, updated_at FROM app_settings WHERE key = ?").get(key);
         return row ? { ...row } : null;
       },
@@ -63,7 +96,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         `).get(sessionId, backend, hash);
         try { return row ? JSON.parse(row.payload) : null; } catch { return null; }
       },
-      record: (reference, checkpoint) => {
+      record: (reference, checkpoint) => writeAtomically(() => {
         const createdAt = checkpoint.timestamp ?? new Date().toISOString();
         database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
           .run(reference.backend, reference.id, reference.storagePath, createdAt);
@@ -74,24 +107,17 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         const row = database.prepare("SELECT payload FROM checkpoints WHERE owner_id = ? AND git_hash = ? AND anchor_id = ?")
           .get(owner.id, checkpoint.hash, checkpoint.anchorId);
         return JSON.parse(row.payload);
-      },
-      replaceForSession: (reference, checkpoints) => {
-        database.exec("BEGIN IMMEDIATE");
-        try {
-          const createdAt = checkpoints[0]?.timestamp ?? new Date().toISOString();
-          database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
-            .run(reference.backend, reference.id, reference.storagePath, createdAt);
-          const owner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?")
-            .get(reference.backend, reference.id, reference.storagePath);
-          database.prepare("DELETE FROM checkpoints WHERE owner_id = ?").run(owner.id);
-          const insert = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
-          for (const checkpoint of checkpoints) insert.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), checkpoint.timestamp ?? createdAt);
-          database.exec("COMMIT");
-        } catch (error) {
-          try { database.exec("ROLLBACK"); } catch {}
-          throw error;
-        }
-      },
+      }),
+      replaceForSession: (reference, checkpoints) => writeAtomically(() => {
+        const createdAt = checkpoints[0]?.timestamp ?? new Date().toISOString();
+        database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+          .run(reference.backend, reference.id, reference.storagePath, createdAt);
+        const owner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?")
+          .get(reference.backend, reference.id, reference.storagePath);
+        database.prepare("DELETE FROM checkpoints WHERE owner_id = ?").run(owner.id);
+        const insert = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
+        for (const checkpoint of checkpoints) insert.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), checkpoint.timestamp ?? createdAt);
+      }),
       deleteBySessionId: (sessionId, backend) => database.prepare(`
         DELETE FROM checkpoints WHERE owner_id IN (
           SELECT id FROM app_sessions WHERE session_id = ? AND backend = ?
@@ -108,31 +134,24 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
         }
         return grouped;
       },
-      save: (grouped) => {
-        database.exec("BEGIN IMMEDIATE");
-        try {
-          database.exec("DELETE FROM checkpoints");
-          const findOwner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?");
-          const insertOwner = database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING");
-          const insertCheckpoint = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
-          for (const [sessionId, checkpoints] of Object.entries(grouped ?? {})) {
-            for (const checkpoint of checkpoints ?? []) {
-              const reference = checkpoint.sessionRef ?? (checkpoint.sessionPath
-                ? { backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath }
-                : null);
-              if (!reference?.backend || !reference.storagePath) throw new Error(`checkpoint ${checkpoint.hash ?? "unknown"} has no session identity`);
-              const createdAt = checkpoint.timestamp ?? new Date().toISOString();
-              insertOwner.run(reference.backend, reference.id ?? sessionId, reference.storagePath, createdAt);
-              const owner = findOwner.get(reference.backend, reference.id ?? sessionId, reference.storagePath);
-              insertCheckpoint.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), createdAt);
-            }
+      save: (grouped) => writeAtomically(() => {
+        database.exec("DELETE FROM checkpoints");
+        const findOwner = database.prepare("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?");
+        const insertOwner = database.prepare("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING");
+        const insertCheckpoint = database.prepare("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)");
+        for (const [sessionId, checkpoints] of Object.entries(grouped ?? {})) {
+          for (const checkpoint of checkpoints ?? []) {
+            const reference = checkpoint.sessionRef ?? (checkpoint.sessionPath
+              ? { backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath }
+              : null);
+            if (!reference?.backend || !reference.storagePath) throw new Error(`checkpoint ${checkpoint.hash ?? "unknown"} has no session identity`);
+            const createdAt = checkpoint.timestamp ?? new Date().toISOString();
+            insertOwner.run(reference.backend, reference.id ?? sessionId, reference.storagePath, createdAt);
+            const owner = findOwner.get(reference.backend, reference.id ?? sessionId, reference.storagePath);
+            insertCheckpoint.run(owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), createdAt);
           }
-          database.exec("COMMIT");
-        } catch (error) {
-          try { database.exec("ROLLBACK"); } catch {}
-          throw error;
         }
-      },
+      }),
     }),
     sessions: Object.freeze({
       upsert: ({ backend, sessionId, storagePath = null, createdAt }) => {
@@ -206,17 +225,12 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       `).run(finishedAt, error).changes,
       appendLog: (runId, stream, text, createdAt, limit = 80) => {
         if (!Number.isInteger(limit) || limit < 1) throw new Error("routine log limit must be a positive integer");
-        database.exec("BEGIN IMMEDIATE");
-        try {
+        return writeAtomically(() => {
           const next = database.prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM routine_log_lines WHERE run_id = ?").get(runId).sequence;
           database.prepare("INSERT INTO routine_log_lines(run_id, sequence, stream, text, created_at) VALUES (?, ?, ?, ?, ?)").run(runId, next, stream, text, createdAt);
           database.prepare("DELETE FROM routine_log_lines WHERE run_id = ? AND sequence <= ?").run(runId, next - limit);
-          database.exec("COMMIT");
           return next;
-        } catch (error) {
-          try { database.exec("ROLLBACK"); } catch {}
-          throw error;
-        }
+        });
       },
       listLogs: (runId) => database.prepare("SELECT sequence, stream, text, created_at FROM routine_log_lines WHERE run_id = ? ORDER BY sequence").all(runId).map((row) => ({ ...row })),
     }),
@@ -264,14 +278,12 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
           .run(...entries.map(([, value]) => value), id).changes;
       },
       delete: (id) => database.prepare("DELETE FROM hublots WHERE id = ?").run(id).changes,
-      appendLifecycleEvent: ({ hublotId, status, desiredState, publicUrl = null, error = null, createdAt }) => {
-        database.prepare(`
-          INSERT INTO hublot_lifecycle_events(hublot_id, sequence, status, desired_state, public_url, error, created_at)
-          SELECT ?, COALESCE(MAX(sequence), 0) + 1, ?, ?, ?, ?, ?
-          FROM hublot_lifecycle_events WHERE hublot_id = ?
-        `).run(hublotId, status, desiredState, publicUrl, error, createdAt, hublotId);
-        return database.prepare("SELECT MAX(sequence) AS sequence FROM hublot_lifecycle_events WHERE hublot_id = ?").get(hublotId).sequence;
-      },
+      appendLifecycleEvent: ({ hublotId, status, desiredState, publicUrl = null, error = null, createdAt }) => database.prepare(`
+        INSERT INTO hublot_lifecycle_events(hublot_id, sequence, status, desired_state, public_url, error, created_at)
+        SELECT ?, COALESCE(MAX(sequence), 0) + 1, ?, ?, ?, ?, ?
+        FROM hublot_lifecycle_events WHERE hublot_id = ?
+        RETURNING sequence
+      `).get(hublotId, status, desiredState, publicUrl, error, createdAt, hublotId).sequence,
       listLifecycleEvents: (hublotId) => database.prepare(`
         SELECT hublot_id, sequence, status, desired_state, public_url, error, created_at
         FROM hublot_lifecycle_events WHERE hublot_id = ? ORDER BY sequence
@@ -447,7 +459,7 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       append: ({ runnerId, sseId = null, payload, createdAt, maxEntries = 400 }) => {
         if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error("runner event cap must be a positive integer");
         const append = () => {
-          if (sseId) {
+          if (sseId != null) {
             const existing = database.prepare("SELECT runner_id, sequence, sse_id, payload, created_at FROM runner_events WHERE runner_id = ? AND sse_id = ?").get(runnerId, sseId);
             if (existing) return { ...existing };
           }
@@ -504,10 +516,11 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
 
   function transaction(work) {
     if (closed) throw new Error("application database is closed");
-    if (transactionOpen) throw new Error("nested application database transactions are not supported");
+    if (typeof work !== "function") throw new TypeError("application database transaction work must be a function");
+    if (transactionOpen || database.isTransaction) throw new Error("nested application database transactions are not supported");
     transactionOpen = true;
-    database.exec("BEGIN IMMEDIATE");
     try {
+      database.exec("BEGIN IMMEDIATE");
       const result = work(repositories);
       if (result && typeof result.then === "function") {
         throw new Error("application database transactions must be synchronous");
@@ -556,8 +569,9 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
     get closed() { return closed; },
     close() {
       if (closed) return;
-      closed = true;
+      if (transactionOpen || database.isTransaction) throw new Error("cannot close application database during a transaction");
       database.close();
+      closed = true;
     },
   });
 }

@@ -163,6 +163,27 @@ test("startup reconciliation marks operations interrupted before hydration", (t)
   }]);
 });
 
+test("repository atomic writes compose with store transactions and roll back together", (t) => {
+  const { path, Database } = fixture(t);
+  const store = openAppStore({ databasePath: path, Database });
+  t.after(() => store.close());
+  const reference = { backend: "sqlite", id: "atomic", storagePath: "/agent/sessions.sqlite" };
+  const checkpoint = { hash: "hash", anchorId: "anchor", sessionRef: reference, timestamp: "created" };
+
+  assert.throws(() => store.transaction((repositories) => {
+    repositories.checkpoints.record(reference, checkpoint);
+    const owner = repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath });
+    repositories.routines.upsert({ id: "routine", ownerId: owner.id, name: "atomic.sh", script: "echo test", now: "created" });
+    repositories.routines.createRun({ id: "run", routineId: "routine", mode: "run", startedAt: "started" });
+    repositories.routines.appendLog("run", "stdout", "not committed", "logged");
+    throw new Error("roll everything back");
+  }), /roll everything back/);
+
+  assert.deepEqual(store.repositories.checkpoints.listForSession(reference), []);
+  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
+  assert.equal(store.repositories.routines.findByName("atomic.sh"), null);
+});
+
 test("closing and reopening the app store preserves data without rerunning migrations", (t) => {
   const { path, databases, Database } = fixture(t);
   const first = openAppStore({ databasePath: path, Database });
