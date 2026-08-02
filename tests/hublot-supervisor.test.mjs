@@ -154,6 +154,83 @@ test("repeated service failure uses bounded backoff and crash-loop protection in
   assert.equal(store.repositories.hublots.find(hublot.id).desired_state, "open", "cutoff remains durable until an operator intervenes");
 });
 
+test("supervisor does not overwrite a manual close during an asynchronous health check", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4203, serviceKind: "self_served" });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://race.test" });
+  let finishCheck;
+  const checkStarted = new Promise((resolve) => {
+    finishCheck = { started: resolve };
+  });
+  let resolveCheck;
+  const checkResult = new Promise((resolve) => { resolveCheck = resolve; });
+  let recoveryAttempts = 0;
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    checkService: async () => { finishCheck.started(); return checkResult; },
+    recoverTunnel: async () => { recoveryAttempts++; },
+    verifyIdentity: () => false,
+  });
+
+  const reconciliation = supervisor.reconcile();
+  await checkStarted;
+  recordHublotTransition(state, hublot.id, "closed", { desiredState: "closed", publicUrl: null, closedAt: "closed" });
+  resolveCheck(false);
+  const result = await reconciliation;
+
+  assert.equal(result.checked, 1);
+  assert.equal(result.recovering, 0);
+  assert.equal(recoveryAttempts, 0);
+  assert.equal(store.repositories.hublots.find(hublot.id).status, "closed");
+  assert.equal(store.repositories.hublots.find(hublot.id).desired_state, "closed");
+});
+
+test("supervisor does not turn a concurrently closed hublot into a restart failure", async (t) => {
+  const { store, state } = fixture(t);
+  const hublot = reserveHublot(state, { port: 4204, brief: "managed service" });
+  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://restart-race.test" });
+  let restartStarted;
+  const started = new Promise((resolve) => { restartStarted = resolve; });
+  let rejectRestart;
+  const restartResult = new Promise((resolve, reject) => { rejectRestart = reject; });
+  const messages = [];
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    restartService: async () => { restartStarted(); return restartResult; },
+    verifyIdentity: () => false,
+    logger: { error: (message) => messages.push(message) },
+  });
+
+  const reconciliation = supervisor.reconcile();
+  await started;
+  recordHublotTransition(state, hublot.id, "closed", { desiredState: "closed", publicUrl: null, closedAt: "closed" });
+  rejectRestart("spawn failed");
+  const result = await reconciliation;
+  const closed = store.repositories.hublots.find(hublot.id);
+
+  assert.equal(result.restarted, 0);
+  assert.equal(result.crashLooped, 0);
+  assert.equal(closed.status, "closed");
+  assert.equal(closed.desired_state, "closed");
+  assert.equal(closed.restart_count, 0);
+  assert.match(messages[0], /spawn failed/);
+});
+
+test("supervisor validates callbacks and timing configuration", (t) => {
+  const { store } = fixture(t);
+  const base = { appStore: store, recordTransition() {} };
+
+  assert.throws(() => createHublotSupervisor({ ...base, checkService: true }), /service check callback/);
+  assert.throws(() => createHublotSupervisor({ ...base, intervalMs: 0 }), /supervisor interval/);
+  assert.throws(
+    () => createHublotSupervisor({ ...base, restartBaseDelayMs: 20, restartMaxDelayMs: 10 }),
+    /maximum delay must not be less/,
+  );
+  assert.throws(() => createHublotSupervisor({ ...base, restartLimit: 1.5 }), /restart limit/);
+});
+
 test("periodic supervisor starts and stops one unrefed timer", async (t) => {
   const { store, state } = fixture(t);
   const hublot = reserveHublot(state, { port: 4203 });
@@ -179,6 +256,24 @@ test("periodic supervisor starts and stops one unrefed timer", async (t) => {
   assert.equal(supervisor.running, true);
   supervisor.stop();
   assert.equal(cleared, timer);
+  assert.equal(supervisor.running, false);
+});
+
+test("periodic supervisor supports a numeric zero timer handle", (t) => {
+  const { store } = fixture(t);
+  let cleared = null;
+  const supervisor = createHublotSupervisor({
+    appStore: store,
+    recordTransition() {},
+    setIntervalFn: () => 0,
+    clearIntervalFn: (handle) => { cleared = handle; },
+  });
+
+  assert.equal(supervisor.start(), 0);
+  assert.equal(supervisor.start(), 0);
+  assert.equal(supervisor.running, true);
+  supervisor.stop();
+  assert.equal(cleared, 0);
   assert.equal(supervisor.running, false);
 });
 

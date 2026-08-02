@@ -1,13 +1,42 @@
 import { verifyPersistedProcessIdentity } from "./processIdentity.mjs";
 
+const EMPTY_REPORT = Object.freeze({
+  skipped: true, checked: 0, recovering: 0, restarted: 0,
+  recoveredTunnels: 0, deferred: 0, crashLooped: 0, interrupted: 0,
+});
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function logError(logger, message) {
+  try { logger.error(message); } catch {}
+}
+
+function requireFunction(value, name) {
+  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
+}
+
+function requireOptionalFunction(value, name) {
+  if (value !== null && typeof value !== "function") throw new TypeError(`${name} must be a function or null`);
+}
+
+function requirePositiveInteger(value, name) {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} must be a positive integer`);
+}
+
 /**
  * Start periodic supervision immediately and reconcile persisted hublots in the
  * background so HTTP startup is not gated on service and tunnel recovery.
  */
 export function scheduleHublotStartupReconciliation({ state, supervisor, logger = console } = {}) {
-  if (!state) throw new Error("stable state is required");
-  if (!supervisor?.reconcile || !supervisor?.start) throw new Error("hublot supervisor is required");
+  if (!state || typeof state !== "object") throw new Error("stable state is required");
+  if (!supervisor || typeof supervisor !== "object") throw new Error("hublot supervisor is required");
+  requireFunction(supervisor.reconcile, "hublot supervisor reconcile");
+  requireFunction(supervisor.start, "hublot supervisor start");
+  requireFunction(logger?.error, "logger.error");
 
+  supervisor.start();
   if (!state.hublotStartupReconciled && !state.hublotStartupReconciliationTask) {
     const task = Promise.resolve()
       .then(() => supervisor.reconcile({ includeOpening: true, recoverMissing: false }))
@@ -17,7 +46,7 @@ export function scheduleHublotStartupReconciliation({ state, supervisor, logger 
         return report;
       })
       .catch((error) => {
-        logger.error(`[oyster] hublot startup reconciliation failed: ${error.message}`);
+        logError(logger, `[oyster] hublot startup reconciliation failed: ${errorMessage(error)}`);
         return null;
       })
       .finally(() => {
@@ -26,7 +55,6 @@ export function scheduleHublotStartupReconciliation({ state, supervisor, logger 
     state.hublotStartupReconciliationTask = task;
   }
 
-  supervisor.start();
   return state.hublotStartupReconciliationTask;
 }
 
@@ -48,13 +76,33 @@ export function createHublotSupervisor({
   now = () => new Date().toISOString(),
   logger = console,
 } = {}) {
-  if (!appStore?.repositories?.hublots) throw new Error("hublot repository is required");
-  if (typeof recordTransition !== "function") throw new Error("hublot transition recorder is required");
+  const repository = appStore?.repositories?.hublots;
+  if (!repository) throw new Error("hublot repository is required");
+  for (const method of ["list", "find", "update", "listProcesses", "updateProcess"]) {
+    requireFunction(repository[method], `hublot repository ${method}`);
+  }
+  requireFunction(appStore.transaction, "app store transaction");
+  requireFunction(recordTransition, "hublot transition recorder");
+  requireOptionalFunction(recoverTunnel, "tunnel recovery callback");
+  requireOptionalFunction(checkService, "service check callback");
+  requireOptionalFunction(restartService, "service restart callback");
+  requireFunction(verifyIdentity, "process identity verifier");
+  requirePositiveInteger(intervalMs, "supervisor interval");
+  requirePositiveInteger(restartBaseDelayMs, "restart base delay");
+  requirePositiveInteger(restartMaxDelayMs, "restart maximum delay");
+  if (restartMaxDelayMs < restartBaseDelayMs) throw new TypeError("restart maximum delay must not be less than the base delay");
+  requirePositiveInteger(restartLimit, "restart limit");
+  requireFunction(clock, "supervisor clock");
+  requireFunction(setIntervalFn, "interval scheduler");
+  requireFunction(clearIntervalFn, "interval clearer");
+  requireFunction(now, "timestamp provider");
+  requireFunction(logger?.error, "logger.error");
+
   let timer = null;
   let reconciling = false;
 
   async function reconcile({ includeOpening = false, recoverMissing = true } = {}) {
-    if (reconciling) return Object.freeze({ skipped: true, checked: 0, recovering: 0, restarted: 0, recoveredTunnels: 0, deferred: 0, crashLooped: 0, interrupted: 0 });
+    if (reconciling) return EMPTY_REPORT;
     reconciling = true;
     let checked = 0;
     let recovering = 0;
@@ -63,32 +111,40 @@ export function createHublotSupervisor({
     let deferred = 0;
     let crashLooped = 0;
     let interrupted = 0;
-    const resetRestartState = (id) => appStore.repositories.hublots.update(id, { restart_count: 0, next_restart_at: null });
+    const isEligible = (row) => row?.desired_state === "open" && !["closing", "closed"].includes(row.status);
+    const resetRestartState = (id) => repository.update(id, { restart_count: 0, next_restart_at: null });
     const recordRestartFailure = (id, error) => {
-      const current = appStore.repositories.hublots.find(id);
+      let current = repository.find(id);
+      if (!isEligible(current)) return false;
+      const failure = errorMessage(error);
       const count = current.restart_count + 1;
-      if (current.status !== "failed") recordTransition(id, "failed", { publicUrl: null, lastError: error.message });
+      if (current.status !== "failed") {
+        recordTransition(id, "failed", { publicUrl: null, lastError: failure });
+        current = repository.find(id);
+        if (!isEligible(current)) return false;
+      }
       if (count >= restartLimit) {
-        const message = `automatic restart disabled after ${count} consecutive failures: ${error.message}`;
+        const message = `automatic restart disabled after ${count} consecutive failures: ${failure}`;
         recordTransition(id, "interrupted", { publicUrl: null, lastError: message });
-        appStore.repositories.hublots.update(id, { restart_count: count, next_restart_at: null });
+        repository.update(id, { restart_count: count, next_restart_at: null });
         crashLooped++;
-        return;
+        return true;
       }
       const delay = Math.min(restartMaxDelayMs, restartBaseDelayMs * (2 ** (count - 1)));
-      appStore.repositories.hublots.update(id, {
+      repository.update(id, {
         restart_count: count,
         next_restart_at: new Date(clock() + delay).toISOString(),
-        last_error: error.message,
+        last_error: failure,
       });
+      return true;
     };
     try {
-      const desired = appStore.repositories.hublots.list()
+      const desired = repository.list()
         .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
         .filter((row) => includeOpening || row.status !== "opening");
       for (const hublot of desired) {
         checked++;
-        const processes = appStore.repositories.hublots.listProcesses(hublot.id);
+        const processes = repository.listProcesses(hublot.id);
         const active = processes.filter((process) => !process.ended_at && ["running", "starting"].includes(process.status));
         const observations = active.map((process) => ({ process, matches: verifyIdentity(process) }));
         const observedAt = now();
@@ -104,6 +160,9 @@ export function createHublotSupervisor({
         const selfServiceMissing = hublot.service_kind === "self_served" && checkService
           ? !(await checkService(hublot))
           : false;
+        // Async health checks and recovery hooks yield to operator requests. Never
+        // overwrite a close/delete that won the race while reconciliation waited.
+        if (!isEligible(repository.find(hublot.id))) continue;
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
         const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
         const needsSelfRecovery = hublot.service_kind === "self_served" && hublot.status === "interrupted" && !selfServiceMissing;
@@ -153,16 +212,22 @@ export function createHublotSupervisor({
           if ((!tunnelHealthy || needsSelfRecovery) && recoverTunnel) {
             try {
               const recovery = await recoverTunnel(hublot);
+              if (!isEligible(repository.find(hublot.id))) continue;
               if (recovery?.recovered) { resetRestartState(hublot.id); recoveredTunnels++; continue; }
             } catch (error) {
               recordRestartFailure(hublot.id, error);
-              logger.error(`[oyster] hublot ${hublot.id} tunnel recovery failed: ${error.message}`);
+              logError(logger, `[oyster] hublot ${hublot.id} tunnel recovery failed: ${errorMessage(error)}`);
               continue;
             }
           }
           if (serviceDead && restartService) {
-            try { await restartService(hublot); resetRestartState(hublot.id); restarted++; }
-            catch (error) { recordRestartFailure(hublot.id, error); logger.error(`[oyster] hublot ${hublot.id} service restart failed: ${error.message}`); }
+            try {
+              await restartService(hublot);
+              if (isEligible(repository.find(hublot.id))) { resetRestartState(hublot.id); restarted++; }
+            } catch (error) {
+              recordRestartFailure(hublot.id, error);
+              logError(logger, `[oyster] hublot ${hublot.id} service restart failed: ${errorMessage(error)}`);
+            }
           }
         } else if (hublot.restart_count || hublot.next_restart_at) {
           resetRestartState(hublot.id);
@@ -175,19 +240,19 @@ export function createHublotSupervisor({
   }
 
   function start() {
-    if (timer) return timer;
+    if (timer !== null) return timer;
     timer = setIntervalFn(() => {
-      Promise.resolve(reconcile()).catch((error) => logger.error(`[oyster] hublot supervisor: ${error.message}`));
+      Promise.resolve(reconcile()).catch((error) => logError(logger, `[oyster] hublot supervisor: ${errorMessage(error)}`));
     }, intervalMs);
     timer?.unref?.();
     return timer;
   }
 
   function stop() {
-    if (!timer) return;
+    if (timer === null) return;
     clearIntervalFn(timer);
     timer = null;
   }
 
-  return Object.freeze({ start, stop, reconcile, get running() { return !!timer; } });
+  return Object.freeze({ start, stop, reconcile, get running() { return timer !== null; } });
 }
