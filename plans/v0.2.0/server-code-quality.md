@@ -43,7 +43,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/http/routes/sessionRoutes.mjs`
 - [x] `server/http/routes/staticRoutes.mjs`
 - [x] `server/http/routes/tunnelRoutes.mjs`
-- [ ] `server/http/routes/workdirRoutes.mjs`
+- [x] `server/http/routes/workdirRoutes.mjs`
 
 ## Persistence
 
