@@ -21,7 +21,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 - [x] `server/runners.mjs`
 - [x] `server/server.mjs`
 - [x] `server/session-operations.mjs`
-- [ ] `server/session-references.mjs`
+- [x] `server/session-references.mjs`
 - [ ] `server/sessions.mjs`
 - [ ] `server/session-titles.mjs`
 - [ ] `server/tunnels.mjs`

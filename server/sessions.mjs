@@ -1,13 +1,37 @@
 /**
- * Backend-neutral saved-session catalog boundary.
+ * Compatibility boundary for the JSONL session catalog.
  *
- * JSONL remains the active compatibility implementation until the configured
- * SQLite catalog is composed here. Consumers can migrate to `sessionCatalog`
- * without importing storage-layout details; named re-exports keep existing
- * JSONL callers stable during that migration.
+ * New backend-neutral consumers should use `sessionCatalog`; the explicit
+ * re-exports preserve the legacy JSONL API without exposing future internal
+ * helpers by accident. Backend selection belongs to the application
+ * composition layer.
  */
 import { createJsonlSessionCatalog } from "./sessions/jsonlCatalog.mjs";
 
-export * from "./sessions/jsonlCatalog.mjs";
+export {
+  SESSIONS_ROOT,
+  createJsonlSessionCatalog,
+  decodeFolderName,
+  findSessionById,
+  forkSessionAt,
+  labelOf,
+  listSessionFolders,
+  listSessions,
+  parseSessionFile,
+  readSessionHeaderInfo,
+  searchSessionFile,
+  searchSessions,
+  sessionDirFor,
+  sessionEntries,
+  sessionFileFromSearch,
+  sessionFileNameParam,
+  sessionFileParam,
+  sessionMessages,
+  sessionTree,
+  summarizeSessionFile,
+  textOf,
+  transcriptMessage,
+} from "./sessions/jsonlCatalog.mjs";
 
+/** Shared, stateless JSONL adapter used by the default application backend. */
 export const sessionCatalog = createJsonlSessionCatalog();
