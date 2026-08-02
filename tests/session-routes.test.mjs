@@ -51,7 +51,7 @@ function setup() {
     unlinkFile: (path) => unlinked.push(path),
     logger: { log() {} },
   };
-  return { state, stopped, closed, unlinked, deletedRoutineOwners, searches, routes: createSessionRoutes(dependencies) };
+  return { state, dependencies, stopped, closed, unlinked, deletedRoutineOwners, searches, routes: createSessionRoutes(dependencies) };
 }
 
 function response() { return {}; }
@@ -78,6 +78,19 @@ test("session listing preserves root scope and live runner annotations", () => {
     parentSession: null,
     parentSessionKey: null,
   });
+});
+
+test("session catalog failures return bounded HTTP errors", () => {
+  const { dependencies, routes } = setup();
+  dependencies.sessions.catalog.list = () => { throw "catalog offline"; };
+  const listed = response();
+  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions"));
+  assert.deepEqual(listed, { status: 500, body: { error: "failed to list sessions: catalog offline" } });
+
+  dependencies.sessions.catalog.folders = () => { throw new Error("folder index corrupt"); };
+  const folders = response();
+  routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders"));
+  assert.deepEqual(folders, { status: 500, body: { error: "failed to list session folders: folder index corrupt" } });
 });
 
 test("session lookup, entries, messages, and folders preserve response shapes", () => {
@@ -196,6 +209,10 @@ test("JSONL session archive and unarchive cascade through nested children", asyn
   });
   const listed = response();
   routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
+
+  const invalidBody = response();
+  await routes["POST /session/archive"]({ body: null }, invalidBody);
+  assert.deepEqual(invalidBody, { status: 400, body: { error: "request body must be a JSON object" } });
 
   for (const archived of [true, false]) {
     const res = response();
