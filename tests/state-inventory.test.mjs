@@ -76,4 +76,27 @@ test("stable state reload ownership exceptions are explicit", () => {
 test("stable-core construction rejects an unclassified field", () => {
   assert.equal(assertStableStateInventory({ config: {}, appStore: {} }), true);
   assert.throws(() => assertStableStateInventory({ config: {}, surpriseDurableValue: 1 }), /surpriseDurableValue has no durability classification/);
+  assert.throws(
+    () => assertStableStateInventory({ constructor: "not a classification" }),
+    /constructor has no durability classification/,
+    "Object.prototype names must not be mistaken for inventory entries",
+  );
+});
+
+test("stable-core construction cannot hide unclassified own fields", () => {
+  const nonEnumerable = { config: {} };
+  Object.defineProperty(nonEnumerable, "hiddenResource", { value: {}, enumerable: false });
+  assert.throws(() => assertStableStateInventory(nonEnumerable), /hiddenResource has no durability classification/);
+
+  const symbolField = { config: {}, [Symbol("resource")]: {} };
+  assert.throws(() => assertStableStateInventory(symbolField), /Symbol\(resource\) has no durability classification/);
+});
+
+test("stable-core construction requires an object state container", () => {
+  for (const invalid of [null, undefined, "state", 42, [], () => {}]) {
+    assert.throws(() => assertStableStateInventory(invalid), {
+      name: "TypeError",
+      message: "stable state must be an object",
+    });
+  }
 });

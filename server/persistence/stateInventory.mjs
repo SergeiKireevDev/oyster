@@ -1,12 +1,24 @@
+const DURABILITY_CLASSIFICATIONS = Object.freeze([
+  "persistent",
+  "rebuildable",
+  "ephemeral",
+  "startup",
+]);
+const DURABILITY_CLASSIFICATION_SET = new Set(DURABILITY_CLASSIFICATIONS);
+const REPOSITORY_BACKED_CLASSIFICATIONS = new Set(["persistent", "rebuildable"]);
+
 export const RELOAD_OWNERSHIP_CLASSIFICATIONS = Object.freeze([
   "stable",
   "candidate-owned",
   "shared-immutable",
   "restart-required",
 ]);
+const RELOAD_OWNERSHIP_CLASSIFICATION_SET = new Set(RELOAD_OWNERSHIP_CLASSIFICATIONS);
 
 const entry = (classification, reason, repository = null, reloadOwnership = "stable") =>
   Object.freeze({ classification, reason, repository, reloadOwnership });
+
+const inventory = (entries) => Object.freeze(Object.assign(Object.create(null), entries));
 
 /**
  * Every property placed on the stable-core state object must be classified.
@@ -15,7 +27,9 @@ const entry = (classification, reason, repository = null, reloadOwnership = "sta
  * timers, diagnostics, or services; `startup` is immutable process config.
  * `reloadOwnership` separately records which reload lifecycle owns the value.
  */
-export const STABLE_STATE_INVENTORY = Object.freeze({
+// A null prototype makes this a true field-name dictionary: names inherited
+// from Object.prototype (for example, `constructor`) are not classifications.
+export const STABLE_STATE_INVENTORY = inventory({
   config: entry("startup", "validated immutable process configuration", null, "shared-immutable"),
   appStore: entry("ephemeral", "stable repository service and SQLite connection"),
   appSettings: entry("ephemeral", "typed facade over the settings repository"),
@@ -81,16 +95,35 @@ export function createStableEphemeralState() {
 }
 
 export function assertStableStateInventory(state) {
-  for (const key of Object.keys(state)) {
-    if (!STABLE_STATE_INVENTORY[key]) throw new Error(`stable state field ${key} has no durability classification`);
+  if (state === null || typeof state !== "object" || Array.isArray(state)) {
+    throw new TypeError("stable state must be an object");
   }
+
+  // Reflect.ownKeys prevents non-enumerable or symbol fields from bypassing
+  // the same classification requirement as ordinary object-literal fields.
+  for (const key of Reflect.ownKeys(state)) {
+    if (typeof key !== "string" || !Object.hasOwn(STABLE_STATE_INVENTORY, key)) {
+      throw new Error(`stable state field ${String(key)} has no durability classification`);
+    }
+  }
+
   for (const [key, metadata] of Object.entries(STABLE_STATE_INVENTORY)) {
-    if (!metadata.reason) throw new Error(`stable state field ${key} has no classification reason`);
-    if (!RELOAD_OWNERSHIP_CLASSIFICATIONS.includes(metadata.reloadOwnership)) {
+    if (!DURABILITY_CLASSIFICATION_SET.has(metadata.classification)) {
+      throw new Error(`stable state field ${key} has an invalid durability classification`);
+    }
+    if (typeof metadata.reason !== "string" || metadata.reason.trim() === "") {
+      throw new Error(`stable state field ${key} has no classification reason`);
+    }
+    if (!RELOAD_OWNERSHIP_CLASSIFICATION_SET.has(metadata.reloadOwnership)) {
       throw new Error(`stable state field ${key} has no reload ownership classification`);
     }
-    if (["persistent", "rebuildable"].includes(metadata.classification) && !metadata.repository) {
+
+    const repositoryBacked = REPOSITORY_BACKED_CLASSIFICATIONS.has(metadata.classification);
+    if (repositoryBacked && (typeof metadata.repository !== "string" || metadata.repository.trim() === "")) {
       throw new Error(`durable or rebuildable stable state field ${key} has no repository`);
+    }
+    if (!repositoryBacked && metadata.repository !== null) {
+      throw new Error(`non-durable stable state field ${key} must not name a repository`);
     }
   }
   return true;
