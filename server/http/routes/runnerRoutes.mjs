@@ -1,6 +1,22 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
+const MAX_PROMPT_BYTES = 5 * 1024 * 1024;
+const MAX_PARENT_SESSION_ID_BYTES = 512;
+const MAX_SUBAGENT_NAME_BYTES = 256;
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function disableCaching(res) {
+  res.setHeader?.("cache-control", "no-store");
+}
+
+function isJsonObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 /** Build runner process, SSE, and RPC routes from stable-state operations. */
 export function createRunnerRoutes({
   state,
@@ -26,9 +42,26 @@ export function createRunnerRoutes({
   resolvePath = resolve,
   isDirectory = (path) => statSync(path).isDirectory(),
 }) {
-  const json = requestContext?.json;
-  const readJsonBody = requestContext?.readJsonBody;
-  const resolveSafePath = requestContext?.resolveSafePath;
+  if (!state || typeof state !== "object" || !(state.runners instanceof Map) || !(state.sseClients instanceof Set)) {
+    throw new TypeError("state with runners Map and sseClients Set is required");
+  }
+  if (!requestContext || typeof requestContext.json !== "function"
+    || typeof requestContext.readJsonBody !== "function" || typeof requestContext.resolveSafePath !== "function") {
+    throw new TypeError("requestContext response, JSON body, and safe-path helpers are required");
+  }
+  const requiredFunctions = {
+    runnerFromReq, startRunner, listRunnerInfo, sendToRunner, stopRunner, stopRunnerFamily,
+    runnerInfo, openSessionRunner, sessionReferenceParam, lookupSessionReference,
+    setIntervalImpl, clearIntervalImpl, setTimeoutImpl,
+    clearTimeoutImpl, resolvePath, isDirectory, replayRunnerEvents,
+  };
+  const missingFunction = Object.entries(requiredFunctions).find(([, value]) => typeof value !== "function");
+  if (missingFunction) throw new TypeError(`${missingFunction[0]} must be a function`);
+  if (!Number.isFinite(subagentTimeoutMs) || subagentTimeoutMs <= 0) {
+    throw new RangeError("subagentTimeoutMs must be a positive finite number");
+  }
+
+  const { json, readJsonBody, resolveSafePath } = requestContext;
 
   return {
     "GET /events": (req, res, url) => {
@@ -46,10 +79,15 @@ export function createRunnerRoutes({
       state.sseClients.add(res);
 
       let ping = null;
-      req.on("close", () => {
-        if (ping) clearIntervalImpl(ping);
+      let closed = false;
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        if (ping !== null) clearIntervalImpl(ping);
         state.sseClients.delete(res);
-      });
+      };
+      req.once("close", cleanup);
+      res.once?.("close", cleanup);
 
       if (url.searchParams.get("replay") !== "0") {
         for (const line of replayRunnerEvents(runner)) res.write(`data: ${line}\n\n`);
@@ -62,17 +100,23 @@ export function createRunnerRoutes({
         workdir: runner.dir,
         runners: listRunnerInfo(),
       })}\n\n`);
-      ping = setIntervalImpl(
-        () => res.write(`data: ${JSON.stringify({ type: "ping", _server: true })}\n\n`),
-        25000,
-      );
+      if (!closed) {
+        ping = setIntervalImpl(() => {
+          if (res.writableEnded || res.destroyed) {
+            cleanup();
+            return;
+          }
+          res.write(`data: ${JSON.stringify({ type: "ping", _server: true })}\n\n`);
+        }, 25000);
+        ping?.unref?.();
+      }
     },
 
     "POST /rpc": async (req, res, url) => {
       const command = await readJsonBody(req, res);
       if (command === undefined) return;
-      if (!command || typeof command !== "object" || typeof command.type !== "string") {
-        json(res, 400, { error: "command must be an object with a string `type`" });
+      if (!isJsonObject(command) || typeof command.type !== "string" || !command.type.trim()) {
+        json(res, 400, { error: "command must be an object with a non-empty string `type`" });
         return;
       }
       const runner = runnerFromReq(url);
@@ -86,6 +130,7 @@ export function createRunnerRoutes({
     },
 
     "GET /runners": (_req, res) => {
+      disableCaching(res);
       json(res, 200, { runners: listRunnerInfo() });
     },
 
@@ -102,31 +147,40 @@ export function createRunnerRoutes({
     "POST /restart": (_req, res, url) => {
       const runner = runnerFromReq(url);
       stopRunner(runner);
-      setTimeoutImpl(() => {
+      const restartTimer = setTimeoutImpl(() => {
         if (state.runners.has(runner.id)) startRunner(runner);
       }, 300);
+      restartTimer?.unref?.();
       json(res, 202, { restarting: true, runner: runner.id });
     },
 
     "POST /subagents": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const prompt = typeof body?.prompt === "string" ? body.prompt : "";
-      const parentSessionId = typeof body?.parentSessionId === "string" ? body.parentSessionId.trim() : "";
-      const name = typeof body?.name === "string" ? body.name.trim() : "";
-      if (!prompt || prompt.length > 5 * 1024 * 1024) {
+      if (!isJsonObject(body)) {
+        json(res, 400, { error: "request body must be a JSON object" });
+        return;
+      }
+      const prompt = typeof body.prompt === "string" ? body.prompt : "";
+      const parentSessionId = typeof body.parentSessionId === "string" ? body.parentSessionId.trim() : "";
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!prompt || Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) {
         json(res, 400, { error: "prompt must be a non-empty string no larger than 5 MiB" });
         return;
       }
-      if (!parentSessionId || parentSessionId.length > 512) {
-        json(res, 400, { error: "parentSessionId must be a non-empty session identity" });
+      if (!parentSessionId || Buffer.byteLength(parentSessionId) > MAX_PARENT_SESSION_ID_BYTES || parentSessionId.includes("\0")) {
+        json(res, 400, { error: "parentSessionId must be a non-empty session identity no larger than 512 bytes" });
         return;
       }
-      if (!name || name.length > 256) {
-        json(res, 400, { error: "name must be a non-empty string no longer than 256 characters" });
+      if (!name || Buffer.byteLength(name) > MAX_SUBAGENT_NAME_BYTES || name.includes("\0")) {
+        json(res, 400, { error: "name must be a non-empty string no larger than 256 bytes" });
         return;
       }
-      const dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : state.currentDir;
+      if (body.dir !== undefined && (typeof body.dir !== "string" || !body.dir.trim())) {
+        json(res, 400, { error: "dir must be a non-empty string" });
+        return;
+      }
+      const dir = body.dir === undefined ? state.currentDir : resolveSafePath(resolvePath(body.dir));
       if (!dir) {
         json(res, 403, { error: `path outside the allowed roots: ${body?.dir}` });
         return;
@@ -156,66 +210,100 @@ export function createRunnerRoutes({
       res.flushHeaders?.();
       writeEvent({ type: "started", runner: runnerInfo(runner) });
 
-      let dispose = () => {};
+      let observerDispose = null;
+      let disposeRequested = false;
       let timer = null;
       let heartbeat = null;
-      let finish;
+      let done = false;
+      let resolveCompletion;
       let assistantOutput = "";
       let assistantError = "";
-      const completion = new Promise((resolveCompletion) => {
-        let done = false;
-        finish = (result) => {
-          if (done) return;
-          done = true;
-          dispose();
-          if (timer) clearTimeoutImpl(timer);
-          if (heartbeat) clearIntervalImpl(heartbeat);
-          resolveCompletion(result);
-        };
-        dispose = observeRunner(runner, (event) => {
+      const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+      const dispose = () => {
+        if (!observerDispose) {
+          disposeRequested = true;
+          return;
+        }
+        try { observerDispose(); } catch {}
+        observerDispose = null;
+      };
+      const finish = (result) => {
+        if (done) return;
+        done = true;
+        dispose();
+        if (timer !== null) clearTimeoutImpl(timer);
+        if (heartbeat !== null) clearIntervalImpl(heartbeat);
+        resolveCompletion(result);
+      };
+      const fail = (fallback, error) => finish({
+        ok: false,
+        output: assistantOutput,
+        errorLog: error === undefined || error === null || error === "" ? fallback : errorMessage(error),
+      });
+
+      try {
+        observerDispose = observeRunner(runner, (event) => {
+          if (!isJsonObject(event)) return;
           if (event.type === "message_end" && event.message?.role === "assistant") {
-            const text = event.message.content
-              ?.filter((part) => part.type === "text")
-              .map((part) => part.text || "")
+            const content = Array.isArray(event.message.content) ? event.message.content : [];
+            const text = content
+              .filter((part) => isJsonObject(part) && part.type === "text" && typeof part.text === "string")
+              .map((part) => part.text)
               .join("\n");
             if (text) assistantOutput = text;
             if (["error", "aborted"].includes(event.message.stopReason)) {
-              assistantError = event.message.errorMessage || `assistant stopped: ${event.message.stopReason}`;
+              assistantError = typeof event.message.errorMessage === "string" && event.message.errorMessage
+                ? event.message.errorMessage
+                : `assistant stopped: ${event.message.stopReason}`;
             }
           } else if (event.type === "agent_settled") {
             finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
           } else if (event.type === "response" && event.command === "prompt" && event.success === false) {
-            finish({ ok: false, output: assistantOutput, errorLog: event.error || "Subagent prompt was rejected." });
+            fail("Subagent prompt was rejected.", event.error);
           } else if (event.type === "pi_error") {
-            finish({ ok: false, output: assistantOutput, errorLog: event.error || "Subagent process failed." });
+            fail("Subagent process failed.", event.error);
           } else if (event.type === "pi_exit") {
-            finish({ ok: false, output: assistantOutput, errorLog: `Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.` });
+            fail(`Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.`);
           }
         });
+        if (typeof observerDispose !== "function") throw new TypeError("observeRunner must return a disposal function");
+        if (disposeRequested) dispose();
+      } catch (error) {
+        fail("Unable to observe subagent process.", error);
+      }
+
+      if (!done) {
         heartbeat = setIntervalImpl(() => {
           if (!res.writableEnded && !res.destroyed) writeEvent({ type: "heartbeat", timestamp: Date.now() });
         }, 25_000);
         heartbeat?.unref?.();
-        timer = setTimeoutImpl(() => {
-          finish({ ok: false, output: assistantOutput, errorLog: "Subagent timed out." });
-        }, subagentTimeoutMs);
+        timer = setTimeoutImpl(() => fail("Subagent timed out."), subagentTimeoutMs);
         timer?.unref?.();
-      });
+      }
 
       let disconnected = false;
       const cancel = () => {
         disconnected = true;
-        if (!res.writableEnded) finish({ ok: false, output: assistantOutput, errorLog: "Subagent request was cancelled." });
+        fail("Subagent request was cancelled.");
       };
       res.on?.("close", cancel);
       runner.subagentStatus = "running";
-      if (!sendToRunner(runner, { type: "prompt", message: prompt })) {
-        finish({ ok: false, output: "", errorLog: "Subagent process was unavailable." });
+      if (!done) {
+        try {
+          if (!sendToRunner(runner, { type: "prompt", message: prompt })) fail("Subagent process was unavailable.");
+        } catch (error) {
+          fail("Subagent process was unavailable.", error);
+        }
       }
-      const result = await completion;
+      let result = await completion;
       res.off?.("close", cancel);
       runner.subagentStatus = result.ok ? "succeeded" : "failed";
-      stopRunner(runner);
+      try {
+        stopRunner(runner);
+      } catch (error) {
+        result = { ok: false, output: result.output, errorLog: `Failed to stop subagent: ${errorMessage(error)}` };
+        runner.subagentStatus = "failed";
+      }
       if (!disconnected && !res.writableEnded && !res.destroyed) {
         writeEvent({ type: "complete", ...result, runner: runnerInfo(runner) });
         res.end();
@@ -225,8 +313,22 @@ export function createRunnerRoutes({
     "POST /open-session": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const requestedSession = body?.sessionKey || body?.sessionPath;
-      const sessionRef = requestedSession ? sessionReferenceParam(body) : null;
+      if (!isJsonObject(body)) {
+        json(res, 400, { error: "request body must be a JSON object" });
+        return;
+      }
+      for (const key of ["sessionKey", "sessionPath", "dir"]) {
+        if (body[key] !== undefined && (typeof body[key] !== "string" || !body[key].trim())) {
+          json(res, 400, { error: `${key} must be a non-empty string` });
+          return;
+        }
+      }
+      if (body.sessionKey !== undefined && body.sessionPath !== undefined) {
+        json(res, 400, { error: "provide either sessionKey or sessionPath, not both" });
+        return;
+      }
+      const requestedSession = body.sessionKey ?? body.sessionPath;
+      const sessionRef = requestedSession !== undefined ? sessionReferenceParam(body) : null;
       if (requestedSession && !sessionRef) {
         json(res, 400, { error: `not a session reference: ${requestedSession}` });
         return;
@@ -236,8 +338,8 @@ export function createRunnerRoutes({
         json(res, 404, { error: `session not found: ${sessionRef.id}` });
         return;
       }
-      let dir = body?.dir ? resolveSafePath(resolvePath(String(body.dir))) : null;
-      if (body?.dir && !dir) {
+      let dir = body.dir !== undefined ? resolveSafePath(resolvePath(body.dir)) : null;
+      if (body.dir !== undefined && !dir) {
         json(res, 403, { error: `path outside the allowed roots: ${body.dir}` });
         return;
       }

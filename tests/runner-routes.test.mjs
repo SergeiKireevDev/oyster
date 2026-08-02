@@ -239,6 +239,56 @@ test("managed subagent route validates its parent, prompt, and working directory
   const forbidden = response();
   await route({ body: { parentSessionId: "parent", prompt: "work", name: "child", dir: "/outside" } }, forbidden);
   assert.equal(forbidden.status, 403);
+
+  const array = response();
+  await route({ body: [] }, array);
+  assert.match(array.body.error, /JSON object/);
+
+  const nonStringDir = response();
+  await route({ body: { parentSessionId: "parent", prompt: "work", name: "child", dir: 42 } }, nonStringDir);
+  assert.match(nonStringDir.body.error, /dir must be/);
+
+  const oversizedMultibyteParent = response();
+  await route({ body: { parentSessionId: "😀".repeat(129), prompt: "work", name: "child" } }, oversizedMultibyteParent);
+  assert.match(oversizedMultibyteParent.body.error, /512 bytes/);
+});
+
+test("managed subagent route tolerates malformed events and cleans up send failures", async () => {
+  const { state, dependencies } = setup();
+  dependencies.sendToRunner = () => {
+    assert.doesNotThrow(() => dependencies.subagentListener(null));
+    assert.doesNotThrow(() => dependencies.subagentListener({
+      type: "message_end",
+      message: { role: "assistant", content: { unexpected: true }, stopReason: "stop" },
+    }));
+    throw new Error("send failed");
+  };
+  const route = createRunnerRoutes(dependencies)["POST /subagents"];
+  const res = response();
+  await route({ body: { parentSessionId: "parent", prompt: "work", name: "child" } }, res);
+
+  const child = state.runners.get("child-runner");
+  assert.equal(child.stopped, true);
+  assert.equal(child.subagentStatus, "failed");
+  const complete = JSON.parse(res.chunks.at(-1));
+  assert.equal(complete.type, "complete");
+  assert.equal(complete.ok, false);
+  assert.equal(complete.errorLog, "send failed");
+});
+
+test("managed subagent route disposes observers that complete synchronously", async () => {
+  const { dependencies } = setup();
+  let disposed = 0;
+  dependencies.observeRunner = (_runner, listener) => {
+    listener({ type: "agent_settled" });
+    return () => { disposed += 1; };
+  };
+  const res = response();
+  await createRunnerRoutes(dependencies)["POST /subagents"]({
+    body: { parentSessionId: "parent", prompt: "work", name: "child" },
+  }, res);
+  assert.equal(disposed, 1);
+  assert.equal(JSON.parse(res.chunks.at(-1)).ok, true);
 });
 
 test("open-session validates session and directory inputs before opening a runner", async () => {
@@ -291,6 +341,27 @@ test("open-session rejects stale SQLite IDs and uses the persisted cwd", async (
   await staleRoute({ body: { sessionKey: "stale-key" } }, stale);
   assert.equal(stale.status, 404);
   assert.match(stale.body.error, /session not found: stale/);
+});
+
+test("open-session rejects malformed and ambiguous payloads", async () => {
+  const { dependencies } = setup();
+  const route = createRunnerRoutes(dependencies)["POST /open-session"];
+
+  for (const body of [[], { dir: 12 }, { sessionKey: "sqlite-key", sessionPath: "valid.jsonl" }]) {
+    const res = response();
+    await route({ body }, res);
+    assert.equal(res.status, 400);
+  }
+});
+
+test("route construction rejects incomplete dependencies", () => {
+  const { dependencies } = setup();
+  assert.throws(
+    () => createRunnerRoutes({ ...dependencies, state: { runners: new Map(), sseClients: [] } }),
+    /sseClients Set/,
+  );
+  assert.throws(() => createRunnerRoutes({ ...dependencies, sendToRunner: null }), /sendToRunner must be a function/);
+  assert.throws(() => createRunnerRoutes({ ...dependencies, subagentTimeoutMs: 0 }), /positive finite/);
 });
 
 test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", () => {
