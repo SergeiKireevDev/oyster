@@ -25,8 +25,8 @@ function stableState() {
     appStore: {
       path: "/tmp/oyster.sqlite", migrationStatus: { currentVersion: 7, appliedVersions: [1, 2, 3, 4, 5, 6, 7] },
       repositories: {
-        sessions: { find: () => null, upsert: (owner) => owner },
-        operations: { listIncomplete: () => [], create() {}, updateWithPayload: () => 1 },
+        sessions: { find: () => null, upsert: (owner) => owner, markDeleting: () => 1, delete: () => 1 },
+        operations: { listIncomplete: () => [], create() {}, update: () => 1, updateWithPayload: () => 1 },
         checkpoints: { listForSession: () => [], load: () => ({}), save() {} },
         routines: { list: () => [] },
         hublots: { list: () => [], listProcesses: () => [] },
@@ -35,6 +35,7 @@ function stableState() {
         runnerEvents: { list: () => [] },
       },
       hydrate: () => ({ incompleteOperations: [] }),
+      transaction(work) { return work(this.repositories); },
     },
     broadcast() {},
     serverEvent() {},

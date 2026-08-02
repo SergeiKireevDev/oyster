@@ -25,6 +25,75 @@ function pendingDeletion(store, id, sessionId, stage) {
   return { owner, reference };
 }
 
+test("session deletion validates dependencies and work before creating a durable operation", async () => {
+  assert.throws(() => createSessionDeletionWorkflow(), /operation repository/);
+  assert.throws(() => createSessionDeletionWorkflow({
+    appStore: {
+      repositories: {
+        operations: { create() {}, update() {} },
+        sessions: { markDeleting() {}, delete() {} },
+      },
+      transaction() {},
+    },
+  }), /ensureSessionOwner must be a function/);
+
+  let transactions = 0;
+  const workflow = createSessionDeletionWorkflow({
+    appStore: {
+      repositories: {
+        operations: { create() {}, update() {} },
+        sessions: { markDeleting() {}, delete() {} },
+      },
+      transaction() { transactions++; },
+    },
+    ensureSessionOwner: () => ({ id: 1 }),
+  });
+  await assert.rejects(() => workflow({
+    reference: { backend: "jsonl", id: "session-a", storagePath: "/sessions/a.jsonl" },
+  }), /stopRunners must be a function/);
+  assert.equal(transactions, 0);
+});
+
+test("a failed journal update retains the last durable stage and does not mask non-Error failures", async () => {
+  const updates = [];
+  const repositories = {
+    operations: {
+      create() {},
+      update(_id, update) {
+        updates.push(update);
+        if (updates.length === 1) throw new Error("journal unavailable");
+        return 1;
+      },
+    },
+    sessions: { markDeleting: () => 1, delete: () => 1 },
+  };
+  const workflow = createSessionDeletionWorkflow({
+    appStore: { repositories, transaction: (work) => work(repositories) },
+    ensureSessionOwner: () => ({ id: 1 }),
+    operationId: () => "delete-with-update-failure",
+    now: () => "now",
+  });
+  const callbacks = {
+    reference: { backend: "jsonl", id: "session-a", storagePath: "/sessions/a.jsonl" },
+    stopRunners: () => [], closeHublots: () => [], stopRoutines: () => [], deleteRoutines: () => [],
+    deleteAgentSession: () => ({ deleted: true }), removeRuntime() {}, broadcast() {},
+  };
+
+  await assert.rejects(() => workflow(callbacks), /journal unavailable/);
+  assert.equal(updates.at(-1).status, "failed");
+  assert.equal(updates.at(-1).stage, "persisted");
+
+  repositories.operations.update = (_id, update) => { updates.push(update); return 1; };
+  callbacks.stopRunners = () => { throw "primitive failure"; };
+  try {
+    await workflow(callbacks);
+    assert.fail("expected primitive callback failure");
+  } catch (error) {
+    assert.equal(error, "primitive failure");
+  }
+  assert.equal(updates.at(-1).error, "primitive failure");
+});
+
 test("session deletion journals each cross-store stage and completes the app cascade before broadcast", async (t) => {
   const store = fixture(t, "oyster-session-delete-");
   const reference = { backend: "jsonl", id: "session-a", storagePath: "/agent/sessions/a.jsonl" };
