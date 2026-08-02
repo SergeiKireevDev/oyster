@@ -29,6 +29,14 @@ test("automatic allocation skips both live ports and durable reservations", asyn
   assert.equal(allocated.status, "opening");
 });
 
+test("automatic allocation rejects invalid search bounds", async (t) => {
+  const { state } = fixture(t);
+  for (const startPort of [0, 65536, 3.5, "not-a-port"]) {
+    await assert.rejects(allocateHublot(state, {}, { startPort }), /invalid starting port/);
+  }
+  await assert.rejects(allocateHublot(state, {}, { checkPort: null }), /availability check must be a function/);
+});
+
 test("concurrent allocators reserve distinct ports transactionally", async (t) => {
   const { store, state } = fixture(t);
   const [first, second] = await Promise.all([

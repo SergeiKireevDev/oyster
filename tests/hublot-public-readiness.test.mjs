@@ -76,6 +76,34 @@ test("a hublot stays opening and unpublished until its public health check passe
   assert.equal(events[0].type, "tunnel_opened");
 });
 
+test("tunnel URL detection tolerates stream chunk boundaries", async (t) => {
+  const { state } = fixture(t);
+  state.config.SKIP_PUBLIC_HUBLOT_READINESS = true;
+  const reserved = reserveHublot(state, { port: 4189, brief: "serve preview" });
+  const proc = new FakeTunnelProcess();
+  const opening = openTunnel(state, { id: reserved.id, port: reserved.port }, {
+    spawnProcess: () => proc,
+  });
+
+  proc.stderr.emit("data", "URL https://split.trycloud");
+  proc.stderr.emit("data", "flare.com assigned");
+
+  assert.equal((await opening).url, "https://split.trycloudflare.com");
+});
+
+test("synchronous tunnel spawn failures durably fail the reservation", async (t) => {
+  const { store, state } = fixture(t);
+  const reserved = reserveHublot(state, { port: 4190, brief: "serve preview" });
+
+  await assert.rejects(openTunnel(state, { id: reserved.id, port: reserved.port }, {
+    spawnProcess() { throw new Error("spawn unavailable"); },
+  }), /tunnel spawn failed: spawn unavailable/);
+
+  const failed = store.repositories.hublots.find(reserved.id);
+  assert.equal(failed.status, "failed");
+  assert.match(failed.last_error, /spawn unavailable/);
+});
+
 test("public readiness polling retries transient failures and times out clearly", async () => {
   let now = 0;
   let checks = 0;

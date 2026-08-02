@@ -88,6 +88,63 @@ test("setup agent waits for its startup artifact when the port already answers",
   assert.ok(validationAttempts >= 2);
 });
 
+test("setup-agent polling converts rejected health checks into a bounded failure", { timeout: 1_000 }, async (t) => {
+  const { state } = fixture(t);
+  const hublot = reserve(state);
+  const output = new EventEmitter();
+  const agent = new EventEmitter();
+  Object.assign(agent, {
+    pid: process.pid,
+    exitCode: null,
+    killed: false,
+    stdout: output,
+    stderr: output,
+    unref() {},
+    kill() { this.killed = true; },
+  });
+  state.piProcesses = { ephemeral: () => agent };
+
+  await assert.rejects(spawnHublotAgent(state, {
+    id: hublot.id,
+    port: hublot.port,
+    serviceStartScriptPath: hublot.service_start_script_path,
+  }, hublot.brief, {
+    checkPort: async () => { throw new Error("health probe failed"); },
+    pollIntervalMs: 5,
+    timeoutMs: 1,
+  }), /health probe failed/);
+  assert.equal(agent.killed, true);
+});
+
+test("setup-agent completion rejects instead of hanging when service discovery fails", { timeout: 1_000 }, async (t) => {
+  const { state } = fixture(t);
+  const hublot = reserve(state);
+  writeScript(hublot.service_start_script_path, "#!/bin/sh\n# oyster: idempotent\nexit 0\n");
+  const output = new EventEmitter();
+  const agent = new EventEmitter();
+  Object.assign(agent, {
+    pid: process.pid,
+    exitCode: null,
+    killed: false,
+    stdout: output,
+    stderr: output,
+    unref() {},
+    kill() { this.killed = true; },
+  });
+  state.piProcesses = { ephemeral: () => agent };
+
+  await assert.rejects(spawnHublotAgent(state, {
+    id: hublot.id,
+    port: hublot.port,
+    serviceStartScriptPath: hublot.service_start_script_path,
+  }, hublot.brief, {
+    checkPort: async () => true,
+    discoverPids: () => { throw new Error("lsof failed unexpectedly"); },
+    pollIntervalMs: 5,
+  }), /lsof failed unexpectedly/);
+  assert.equal(agent.killed, true);
+});
+
 test("validated startup source and SHA-256 become authoritative in SQLite", (t) => {
   const { store, state } = fixture(t);
   const hublot = reserve(state);
