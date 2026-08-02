@@ -175,6 +175,70 @@ test("new runners use unique persistence-safe IDs that survive manager reconstru
   assert.equal(reconstructed.listRunnerInfo().some((runner) => runner.id === first.id), true);
 });
 
+test("stopping and immediately restarting does not let the old exit clobber the new reader", (t) => {
+  const timers = [];
+  const { manager, spawns } = setup(t, {
+    setTimer(callback) {
+      const timer = { callback, unref() {} };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer() {},
+  });
+  const runner = manager.spawnRunner({ dir: "/workspace" });
+  const oldProc = spawns[0].proc;
+
+  manager.stopRunner(runner);
+  runner.lastSpawnAt = 0;
+  manager.startRunner(runner);
+  const replacementReader = runner.stdoutReader;
+  oldProc.emit("exit", 0, "SIGTERM");
+
+  assert.equal(runner.proc, spawns[1].proc);
+  assert.equal(runner.stdoutReader, replacementReader);
+  timers.find((timer) => timer.callback)?.callback();
+  assert.equal(oldProc.signal, "SIGKILL", "a signalled child that has not exited is forcibly killed");
+});
+
+test("a pending crash-loop restart is cancelled when a dormant runner is stopped", (t) => {
+  const timers = [];
+  const cleared = [];
+  const { manager, spawns } = setup(t, {
+    setTimer(callback) {
+      const timer = { callback, unref() {} };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer(timer) { if (timer) cleared.push(timer); },
+  });
+  const runner = manager.spawnRunner({ dir: "/workspace" });
+  spawns[0].proc.emit("exit", 1, null);
+  manager.startRunner(runner);
+  const pending = runner.startTimer;
+
+  manager.stopRunner(runner);
+  assert.equal(runner.startTimer, null);
+  assert.ok(cleared.includes(pending));
+  pending.callback();
+  assert.equal(spawns.length, 1, "the cancelled callback cannot revive a stopped runner");
+});
+
+test("synchronous process launch failures leave a dead, reusable descriptor", (t) => {
+  const { manager, state } = setup(t, {
+    spawnImpl() { throw new Error("spawn unavailable"); },
+  });
+
+  const runner = manager.spawnRunner({ dir: "/workspace" });
+  assert.equal(runner.proc, null);
+  assert.equal(state.runners.get(runner.id), runner);
+  assert.equal(manager.runnerInfo(runner).alive, false);
+});
+
+test("runner manager validates callback-facing state boundaries", () => {
+  assert.throws(() => createRunnerManager(null), /runner state is required/);
+  assert.throws(() => createRunnerManager({ config: {}, sessionReferences: {}, serverEvent() {}, sseClients: [] }), /sseClients must be a Set/);
+});
+
 test("runner ID generation rejects collisions instead of replacing a durable descriptor", (t) => {
   const { state } = setup(t);
   const manager = createRunnerManager(state, { createRunnerId: () => "same-runner-token", ensureSessionOwner: () => null });
