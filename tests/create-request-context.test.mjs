@@ -62,6 +62,26 @@ test("body helpers parse JSON, preserve binary input, and report malformed JSON 
   assert.match(JSON.parse(invalidResponse.body).error, /^invalid JSON:/);
 
   await assert.rejects(context.readBody(request("12345"), 4), /body too large/);
+  await assert.rejects(context.readBody(request(""), -1), /body limit must be a non-negative safe integer/);
+});
+
+test("body helpers enforce byte limits, handle aborted requests, and return 413 for oversized JSON", async () => {
+  const context = createRequestContext(state());
+  const encoded = request("é");
+  encoded.setEncoding("utf8");
+  await assert.rejects(context.readBody(encoded, 1), (error) => error.code === "body_too_large");
+
+  const aborted = new Readable({ read() {} });
+  const abortedBody = context.readBody(aborted);
+  aborted.emit("aborted");
+  aborted.emit("error", new Error("connection reset"));
+  await assert.rejects(abortedBody, (error) => error.code === "request_aborted");
+
+  const oversizedResponse = responseRecorder();
+  const oversized = request(`"${"x".repeat(5 * 1024 * 1024)}"`);
+  assert.equal(await context.readJsonBody(oversized, oversizedResponse), undefined);
+  assert.equal(oversizedResponse.status, 413);
+  assert.deepEqual(JSON.parse(oversizedResponse.body), { error: "request body too large" });
 });
 
 test("MIME lookup handles known extensions case-insensitively and defaults binary", () => {
@@ -84,8 +104,21 @@ test("token comparison and auth accept supported credentials while query auth st
   assert.equal(context.checkAuth(postQuery, new URL("http://localhost/path?token=secret-token")), "fail");
   const postBearer = request("", { method: "POST", ip: "127.0.0.2", headers: { authorization: "Bearer secret-token" } });
   assert.equal(context.checkAuth(postBearer, new URL("http://localhost/path")), "ok");
-  const eventSourceCookie = request("", { method: "GET", ip: "127.0.0.3", headers: { cookie: "oyster_token=secret-token" } });
+  const eventSourceCookie = request("", { method: "GET", ip: "127.0.0.3", headers: { cookie: "bad=%E0%A4%A; oyster_token=secret-token" } });
   assert.equal(context.checkAuth(eventSourceCookie, new URL("http://localhost/events")), "ok");
+});
+
+test("auth failure logs do not expose credential prefixes or permit control-character injection", () => {
+  let message = "";
+  const context = createRequestContext(state(), { logger: { log(value) { message = value; } } });
+  const req = request("", {
+    method: "GET",
+    headers: { authorization: "canary-credential", "user-agent": "agent\nforged" },
+  });
+  assert.equal(context.checkAuth(req, new URL("http://localhost/private")), "fail");
+  assert.doesNotMatch(message, /canary/);
+  assert.match(message, /bearer=present\(17\)/);
+  assert.doesNotMatch(message, /[\r\n]/);
 });
 
 test("unauthenticated mode accepts requests without credentials or auth-failure state", () => {
@@ -116,13 +149,15 @@ test("safe path resolution permits configured roots and rejects escapes and deni
   const allowed = join(root, "allowed.txt");
   const outsideLink = join(root, "outside-link");
   const tokenFile = join(root, ".ui-token");
+  const dirnameAlias = join(root, "dirname-alias");
   await writeFile(allowed, "ok");
   await writeFile(tokenFile, "secret");
   await symlink("/etc/passwd", outsideLink);
+  await symlink(root, dirnameAlias);
 
-  const context = createRequestContext(state({ PI_DIR: root, DIRNAME: root }));
+  const context = createRequestContext(state({ PI_DIR: root, DIRNAME: dirnameAlias }));
   assert.equal(context.resolveSafePath(allowed), allowed);
-  assert.equal(context.resolveSafePath(join(root, "new.txt")), join(root, "new.txt"));
+  assert.equal(context.resolveSafePath(join(root, "missing-parent", "new.txt")), join(root, "missing-parent", "new.txt"));
   assert.equal(context.resolveSafePath(outsideLink), null);
   assert.equal(context.resolveSafePath(tokenFile), null);
 });
