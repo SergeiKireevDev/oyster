@@ -34,7 +34,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 ## HTTP routes
 
 - [x] `server/http/routes/checkpointRoutes.mjs`
-- [ ] `server/http/routes/credentialRoutes.mjs`
+- [x] `server/http/routes/credentialRoutes.mjs`
 - [ ] `server/http/routes/fileRoutes.mjs`
 - [ ] `server/http/routes/oauthRoutes.mjs`
 - [ ] `server/http/routes/openRoutes.mjs`
