@@ -45,6 +45,97 @@ test("failed destination validation leaves every legacy source at its original p
   assert.equal(store.repositories.migrationLedger.list()[0].status, "failed");
 });
 
+test("backup failures mark the migration failed and do not report completion", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-import-backup-failure-"));
+  const sourcePath = join(root, "checkpoints.json");
+  writeFileSync(sourcePath, "{}");
+  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const codec = createSessionReferenceCodec({
+    agentDir: root,
+    jsonlRoot: join(root, "sessions"),
+    sqlitePath: join(root, "sessions.sqlite"),
+  });
+  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+
+  await assert.rejects(() => importLegacyAppData({
+    appStore: store,
+    mode: "apply",
+    serviceStopped: true,
+    sessionReferences: codec,
+    resolveOwner: () => null,
+    checkpointSourcePath: sourcePath,
+    routineSourceDir: join(root, "routines"),
+    now: () => "2026-07-16T05:00:00.000Z",
+    backupFile: () => { throw new Error("backup unavailable"); },
+  }), /backup unavailable/);
+
+  assert.equal(existsSync(sourcePath), true);
+  await assert.rejects(() => importLegacyAppData({
+    appStore: store,
+    mode: "apply",
+    serviceStopped: true,
+    sessionReferences: codec,
+    resolveOwner: () => null,
+    checkpointSourcePath: sourcePath,
+    routineSourceDir: join(root, "routines"),
+    now: () => "2026-07-16T05:00:00.000Z",
+    backupFile: async () => ({}),
+  }), /must synchronously return/);
+  assert.deepEqual(store.repositories.migrationLedger.list()
+    .map(({ status, error }) => ({ status, error }))
+    .sort((left, right) => left.error.localeCompare(right.error)), [
+    { status: "failed", error: "backup unavailable" },
+    { status: "failed", error: "legacy backup handler must synchronously return a backup report object" },
+  ]);
+});
+
+test("routine destination validation includes the bound session identity", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-import-routine-validation-"));
+  const routinesDir = join(root, "routines");
+  mkdirSync(routinesDir);
+  writeFileSync(join(routinesDir, "refresh.sh"), "#!/bin/sh\n");
+  chmodSync(join(routinesDir, "refresh.sh"), 0o755);
+  writeFileSync(join(routinesDir, "bindings.json"), JSON.stringify({
+    "refresh.sh": { sessionId: "expected-session" },
+  }));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  let storedRoutine = null;
+  let ledgerStatus = null;
+  const appStore = {
+    repositories: {
+      migrationLedger: {
+        start() {},
+        finish: ({ status }) => { ledgerStatus = status; },
+      },
+      checkpoints: {
+        listForSession: () => [],
+        record() {},
+      },
+      routines: {
+        findByName: () => storedRoutine,
+        upsert: ({ ownerId, name, script, cwd }) => {
+          storedRoutine = { owner_id: ownerId, session_id: "different-session", name, script, cwd };
+        },
+      },
+    },
+  };
+  const sessionReferences = { validate: (value) => value, equals: () => true };
+
+  await assert.rejects(() => importLegacyAppData({
+    appStore,
+    mode: "apply",
+    serviceStopped: true,
+    sessionReferences,
+    resolveOwner: () => ({ id: 7 }),
+    checkpointSourcePath: join(root, "missing-checkpoints.json"),
+    routineSourceDir: routinesDir,
+    now: () => "2026-07-16T05:00:00.000Z",
+  }), /routine validation failed for refresh\.sh/);
+  assert.equal(ledgerStatus, "failed");
+  assert.equal(existsSync(join(routinesDir, "refresh.sh")), true);
+});
+
 test("stopped-service import plans then applies checkpoints, routine definitions, and bindings", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-legacy-data-"));
   const store = openAppStore({ databasePath: join(root, "app.sqlite") });
