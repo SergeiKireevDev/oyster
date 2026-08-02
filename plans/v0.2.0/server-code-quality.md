@@ -67,7 +67,7 @@ This exhaustive inventory includes every Git-tracked file under `server/` in the
 
 ## Session catalogs and search
 
-- [ ] `server/sessions/jsonlCatalog.mjs`
+- [x] `server/sessions/jsonlCatalog.mjs`
 - [ ] `server/sessions/searchQuery.mjs`
 - [ ] `server/sessions/searchRescore.mjs`
 - [ ] `server/sessions/sqliteCatalog.mjs`
