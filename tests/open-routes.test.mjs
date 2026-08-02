@@ -6,7 +6,9 @@ import { createOpenRoutes } from "../server/http/routes/openRoutes.mjs";
 
 function response() {
   return {
-    writeHead(status, headers) { this.status = status; this.headers = headers; },
+    presetHeaders: {},
+    setHeader(name, value) { this.presetHeaders[name] = value; },
+    writeHead(status, headers) { this.status = status; this.headers = { ...this.presetHeaders, ...headers }; },
     end(body) { this.body = body; },
   };
 }
@@ -26,7 +28,7 @@ function setup(configOverrides = {}) {
   const requestContext = createRequestContext(state, { logger: { log() {} } });
   const routes = createOpenRoutes({
     state,
-    listRunnerInfo: () => [{ id: "runner-1" }],
+    listRunnerInfo: () => [{ id: "runner-1", dir: "/secret/worktree", sessionKey: "secret-session", alive: true, busy: false }],
     requestContext,
   });
   return { state, routes };
@@ -44,19 +46,21 @@ test("runtime config exposes spoke authentication mode without secrets", () => {
   }
 });
 
-test("health route reports stable state including the reload count without auth", () => {
+test("health route reports safe live diagnostics without exposing runner or filesystem identities", () => {
   const { routes } = setup();
   const res = response();
   routes["GET /health"]({ headers: {} }, res);
   assert.equal(res.status, 200);
+  assert.equal(res.headers["cache-control"], "no-store");
   assert.deepEqual(JSON.parse(res.body), {
     ok: true,
-    runners: [{ id: "runner-1" }],
+    runners: [{ alive: true, busy: false }],
     clients: 1,
     reloadCount: 7,
-    appDatabase: { path: "/agent/oyster.sqlite", migrations: { currentVersion: 1, appliedVersions: [1] } },
-    pi: { bin: "/running/pi", persistentStore: "sqlite", sqlitePath: "/agent/sessions.sqlite" },
+    appDatabase: { migrations: { currentVersion: 1, appliedVersions: [1] } },
+    pi: { persistentStore: "sqlite" },
   });
+  assert.doesNotMatch(res.body, /secret|runner-1|\/agent|\/running/);
 });
 
 test("health diagnostics follow the running launcher and cannot falsely claim SQLite", () => {
@@ -65,7 +69,7 @@ test("health diagnostics follow the running launcher and cannot falsely claim SQ
   const res = response();
   routes["GET /health"]({ headers: {} }, res);
   const health = JSON.parse(res.body);
-  assert.deepEqual(health.pi, { bin: "/global/pi", persistentStore: "jsonl", sqlitePath: null });
+  assert.deepEqual(health.pi, { persistentStore: "jsonl" });
   assert.equal(JSON.stringify(health).includes("open-token"), false);
 });
 
@@ -76,7 +80,7 @@ test("authcheck reports that credentials are unnecessary in explicit unauthentic
   assert.deepEqual(JSON.parse(res.body), { authorized: true, unauthenticated: true });
 });
 
-test("authcheck remains an open credential report without exposing token values", () => {
+test("authcheck remains an uncached credential report without exposing token values", () => {
   const { routes } = setup();
   const req = {
     method: "GET",
@@ -86,6 +90,7 @@ test("authcheck remains an open credential report without exposing token values"
   const res = response();
   routes["GET /authcheck"](req, res, new URL("http://localhost/authcheck"));
   assert.equal(res.status, 200);
+  assert.equal(res.headers["cache-control"], "no-store");
   assert.deepEqual(JSON.parse(res.body), {
     authorized: true,
     credentials: {
@@ -96,4 +101,57 @@ test("authcheck remains an open credential report without exposing token values"
       cookie: "absent",
     },
   });
+});
+
+test("route construction validates dependencies and the authentication limit", () => {
+  assert.throws(() => createOpenRoutes(), /state\.config is required/);
+  assert.throws(() => createOpenRoutes({ state: { config: {} }, listRunnerInfo() {} }), /requestContext/);
+  assert.throws(() => createOpenRoutes({
+    state: { config: {} }, listRunnerInfo() {},
+    requestContext: Object.fromEntries(
+      ["json", "text", "tokenMatches", "authCandidates", "clientIp", "recentAuthFailures", "recordAuthFailure"]
+        .map((name) => [name, () => {}]),
+    ),
+    authFailMax: -1,
+  }), /authFailMax/);
+});
+
+test("health diagnostics tolerate unavailable counters and malformed internal values", () => {
+  const { state, routes } = setup();
+  state.sseClients = null;
+  state.reloadCount = -1;
+  state.appStore.migrationStatus = { currentVersion: "secret", appliedVersions: [1, "bad", -2, 3] };
+  state.piProcesses.persistentStore = "/secret/backend";
+  const res = response();
+  routes["GET /health"]({}, res);
+  assert.deepEqual(JSON.parse(res.body), {
+    ok: true,
+    runners: [{ alive: true, busy: false }],
+    clients: null,
+    reloadCount: null,
+    appDatabase: { migrations: { currentVersion: null, appliedVersions: [1, 3] } },
+    pi: { persistentStore: "unknown" },
+  });
+  assert.doesNotMatch(res.body, /secret/);
+});
+
+test("a successful authcheck clears prior failures and compares each candidate only once", () => {
+  const { state } = setup();
+  state.authFails = new Map([["192.0.2.8", [1, 2]]]);
+  let comparisons = 0;
+  const requestContext = {
+    json: (res, status, body) => { res.status = status; res.body = body; },
+    text() {},
+    tokenMatches: (value) => { comparisons++; return value === "valid"; },
+    authCandidates: () => ({ bearer: "valid", cookie: "wrong", query: null }),
+    clientIp: () => "192.0.2.8",
+    recentAuthFailures: () => state.authFails.get("192.0.2.8") ?? [],
+    recordAuthFailure: () => assert.fail("valid authentication must not be recorded as a failure"),
+  };
+  const routes = createOpenRoutes({ state, listRunnerInfo: () => [], requestContext });
+  const res = response();
+  routes["GET /authcheck"]({}, res, new URL("http://localhost/authcheck"));
+  assert.equal(res.body.authorized, true);
+  assert.equal(comparisons, 2);
+  assert.equal(state.authFails.has("192.0.2.8"), false);
 });
