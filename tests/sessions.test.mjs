@@ -8,7 +8,7 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,9 +17,10 @@ process.env.HOME = FAKE_HOME;
 
 const {
   SESSIONS_ROOT, sessionDirFor, decodeFolderName, parseSessionFile,
-  textOf, labelOf, summarizeSessionFile, listSessions, listSessionFolders,
-  readSessionHeaderInfo, findSessionById, searchSessions, searchSessionFile,
-  sessionTree, sessionEntries, sessionMessages, forkSessionAt,
+  sessionFileParam, sessionFileNameParam, textOf, labelOf, summarizeSessionFile,
+  listSessions, listSessionFolders, readSessionHeaderInfo, findSessionById,
+  searchSessions, searchSessionFile, sessionTree, sessionEntries,
+  sessionMessages, transcriptMessage, forkSessionAt,
 } = await import("../server/sessions.mjs");
 
 after(() => rmSync(FAKE_HOME, { recursive: true, force: true }));
@@ -74,12 +75,28 @@ test("parseSessionFile: header, name, entries, byId", () => {
   assert.ok(p.byId.has("a3"));
 });
 
-test("parseSessionFile: skips unparseable lines, tolerates missing header", () => {
+test("parseSessionFile: skips invalid JSON values and tolerates a missing header", () => {
   const path = writeSession("broken.jsonl", []);
-  writeFileSync(path, 'not json\n{"type":"message","id":"x","parentId":null,"message":{"role":"user","content":"ok"}}\n');
+  writeFileSync(path, 'not json\nnull\n[]\n42\n{"type":"message","id":"x","parentId":null,"message":{"role":"user","content":"ok"}}\n');
   const p = parseSessionFile(path);
   assert.equal(p.header, null);
   assert.equal(p.entries.length, 1);
+  assert.equal(p.byId.get("x"), p.entries[0]);
+});
+
+test("session path resolvers reject directories and symlinks escaping the session root", () => {
+  const external = join(FAKE_HOME, "external.jsonl");
+  const link = join(FOLDER, "escaped.jsonl");
+  const fakeDirectory = join(FOLDER, "directory.jsonl");
+  writeFileSync(external, "{}\n");
+  symlinkSync(external, link);
+  mkdirSync(fakeDirectory);
+
+  assert.equal(sessionFileParam(MAIN), MAIN);
+  assert.equal(sessionFileParam(link), null);
+  assert.equal(sessionFileNameParam("escaped.jsonl"), null);
+  assert.equal(sessionFileParam(fakeDirectory), null);
+  assert.equal(sessionFileParam({ toString: () => MAIN }), null);
 });
 
 test("parseSessionFile: cache hit returns same object, mtime change invalidates", () => {
@@ -103,10 +120,12 @@ test("textOf handles string and block content", () => {
   assert.equal(textOf([{ type: "thinking", thinking: "x" }]), null);
 });
 
-test("labelOf falls back to tool/thinking markers", () => {
+test("labelOf falls back to tool/thinking markers and tolerates malformed blocks", () => {
   assert.equal(labelOf({ content: [{ type: "toolCall", name: "Bash" }] }), "[tool: Bash]");
   assert.equal(labelOf({ content: [{ type: "thinking", thinking: "x" }] }), "[thinking]");
+  assert.equal(labelOf({ content: [null, { type: "text", text: "safe" }] }), "safe");
   assert.equal(labelOf({ content: "hi" }), "hi");
+  assert.equal(transcriptMessage(null), null);
 });
 
 // ---------------------------------------------------------------- summaries
@@ -137,6 +156,14 @@ test("readSessionHeaderInfo / findSessionById", () => {
   assert.equal(info.parentSession, null);
   assert.equal(findSessionById("sess-1"), MAIN);
   assert.equal(findSessionById("nope"), null);
+  assert.equal(findSessionById(null), null);
+});
+
+test("findSessionById verifies filename matches against the file header", () => {
+  writeSession("2026-01-02_wrong-id.jsonl", [
+    { type: "session", id: "actual-id", timestamp: "2026-01-02T00:00:00Z", cwd: "/home/user/proj" },
+  ]);
+  assert.equal(findSessionById("wrong-id"), null);
 });
 
 // ---------------------------------------------------------------- branches
@@ -167,6 +194,19 @@ test("sessionTree exposes both branches with parent links", () => {
   assert.equal(byId.get("u3").parentId, "a1"); // sibling = real branch
   assert.equal(byId.get("a2").label, "[tool: Bash]");
   assert.equal(byId.get("n1").label, "named: my session");
+});
+
+test("active-branch readers terminate on corrupt parent cycles", () => {
+  const path = writeSession("cycle.jsonl", [
+    { type: "session", id: "cycle", timestamp: "2026-01-04T00:00:00Z", cwd: "/home/user/proj" },
+    { type: "message", id: "x", parentId: "y", message: { role: "user", content: "cycle text" } },
+    { type: "message", id: "y", parentId: "x", message: { role: "assistant", content: "cycle answer" } },
+  ]);
+
+  assert.deepEqual(sessionEntries(path).entries.map((entry) => entry.id), ["x", "y"]);
+  assert.equal(sessionMessages(path).messages.length, 2);
+  assert.equal(searchSessionFile(path, "cycle").length, 2);
+  assert.throws(() => forkSessionAt(path, "y"), /cycle detected/);
 });
 
 // ---------------------------------------------------------------- forking
@@ -231,4 +271,14 @@ test("search scope=session and scope=all agree on the fixture", () => {
   const b = searchSessions({ q: "hello", scope: "all" });
   assert.equal(a.results.length, 1);
   assert.ok(b.results.some((h) => h.sessionPath === MAIN));
+});
+
+test("search handles missing inputs and enforces result limits", () => {
+  assert.deepEqual(searchSessionFile(MAIN, null), []);
+  assert.deepEqual(searchSessionFile(MAIN, { terms: "hello" }), []);
+  assert.deepEqual(searchSessionFile(MAIN, "hello", 0), []);
+  assert.deepEqual(searchSessions(), { results: [], truncated: false, filesSearched: 0 });
+  const limited = searchSessions({ q: "other path", scope: "folder", path: FOLDER }, 0);
+  assert.equal(limited.results.length, 0);
+  assert.equal(limited.truncated, true);
 });

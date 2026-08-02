@@ -17,9 +17,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { rescoreSearchResults } from "./searchRescore.mjs";
 const searchQueryUrl = new URL("./searchQuery.mjs", import.meta.url);
 const { matchSearchText, parseSearchQuery } = await import(`${searchQueryUrl}?v=${statSync(searchQueryUrl).mtimeMs}`);
@@ -31,22 +31,32 @@ export function sessionDirFor(cwd) {
   return join(SESSIONS_ROOT, safePath);
 }
 
+function resolvedSessionFile(target) {
+  try {
+    const root = realpathSync(SESSIONS_ROOT);
+    const canonical = realpathSync(target);
+    const fromRoot = relative(root, canonical);
+    if (!fromRoot || fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || resolve(root, fromRoot) !== canonical) return null;
+    return statSync(canonical).isFile() ? canonical : null;
+  } catch {
+    return null;
+  }
+}
+
 export function sessionFileParam(raw) {
-  const value = String(raw ?? "").trim();
+  const value = typeof raw === "string" ? raw.trim() : "";
   if (!value || !value.endsWith(".jsonl")) return null;
-  const target = value.startsWith("/") ? resolve(value) : resolve(SESSIONS_ROOT, value);
-  return target.startsWith(`${SESSIONS_ROOT}/`) && existsSync(target) ? target : null;
+  return resolvedSessionFile(resolve(SESSIONS_ROOT, value));
 }
 
 export function sessionFileNameParam(raw) {
-  const file = String(raw ?? "").trim();
+  const file = typeof raw === "string" ? raw.trim() : "";
   if (!file || file !== basename(file) || !file.endsWith(".jsonl")) return null;
   try {
-    for (const folder of readdirSync(SESSIONS_ROOT)) {
-      const directory = join(SESSIONS_ROOT, folder);
-      try { if (!statSync(directory).isDirectory()) continue; } catch { continue; }
-      const target = join(directory, file);
-      if (existsSync(target)) return target;
+    for (const folder of readdirSync(SESSIONS_ROOT, { withFileTypes: true })) {
+      if (!folder.isDirectory()) continue;
+      const target = resolvedSessionFile(join(SESSIONS_ROOT, folder.name, file));
+      if (target) return target;
     }
   } catch {}
   return null;
@@ -60,6 +70,20 @@ export function sessionFileFromSearch(url) {
  *  "--home-alice-my-project--" -> "/home/alice/my/project" (lossy for dashes) */
 export function decodeFolderName(name) {
   return "/" + name.replace(/^--/, "").replace(/--$/, "").replace(/-/g, "/");
+}
+
+function directoryEntries(directory) {
+  try { return readdirSync(directory, { withFileTypes: true }); } catch { return []; }
+}
+
+function jsonlFileNames(directory) {
+  return directoryEntries(directory)
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+    .map((entry) => entry.name);
+}
+
+function sessionFolderEntries() {
+  return directoryEntries(SESSIONS_ROOT).filter((entry) => entry.isDirectory());
 }
 
 // ---------------------------------------------------------------- parse cache
@@ -93,10 +117,11 @@ export function parseSessionFile(path) {
     if (!line.trim()) continue;
     let e;
     try { e = JSON.parse(line); } catch { continue; }
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
     if (e.type === "session") { header ??= e; continue; }
-    if (e.type === "session_info") name = e.name ?? name;
+    if (e.type === "session_info" && typeof e.name === "string") name = e.name;
     entries.push(e);
-    if (e.id) byId.set(e.id, e);
+    if (typeof e.id === "string" && e.id) byId.set(e.id, e);
   }
   const parsed = { header, name, entries, byId };
   cache.set(path, { mtimeMs: st.mtimeMs, size: st.size, parsed });
@@ -108,9 +133,10 @@ export function parseSessionFile(path) {
 
 /** first text block of a message's content (string or block array) */
 export function textOf(content) {
-  return typeof content === "string"
-    ? content
-    : content?.find?.((b) => b.type === "text")?.text ?? null;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return null;
+  const text = content.find((block) => block?.type === "text")?.text;
+  return typeof text === "string" ? text : null;
 }
 
 /** short display label for a message: its text, else a tool/thinking marker */
@@ -118,10 +144,10 @@ export function labelOf(message) {
   const c = message?.content;
   let t = textOf(c);
   if (!t && Array.isArray(c)) {
-    const tc = c.find((b) => b.type === "toolCall");
-    if (tc) t = `[tool: ${tc.name}]`;
-    else if (c.find((b) => b.type === "toolResult") || message?.role === "toolResult") t = "[tool result]";
-    else if (c.find((b) => b.type === "thinking")) t = "[thinking]";
+    const tc = c.find((b) => b?.type === "toolCall");
+    if (tc) t = `[tool: ${tc.name ?? "?"}]`;
+    else if (c.find((b) => b?.type === "toolResult") || message?.role === "toolResult") t = "[tool result]";
+    else if (c.find((b) => b?.type === "thinking")) t = "[thinking]";
   }
   return t;
 }
@@ -135,9 +161,14 @@ function entryTexts(e) {
     if (typeof c === "string") out.push({ role: m.role, kind: "text", text: c });
     else if (Array.isArray(c)) {
       for (const b of c) {
-        if (b.type === "text" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
-        else if (b.type === "thinking" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
-        else if (b.type === "toolCall") out.push({ role: m.role, kind: "toolCall", text: `${b.name} ${JSON.stringify(b.arguments ?? {})}` });
+        if (!b || typeof b !== "object") continue;
+        if (b.type === "text" && typeof b.text === "string" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
+        else if (b.type === "thinking" && typeof b.thinking === "string" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
+        else if (b.type === "toolCall") {
+          let argumentsText = "{}";
+          try { argumentsText = JSON.stringify(b.arguments ?? {}) ?? "{}"; } catch { argumentsText = "[unserializable arguments]"; }
+          out.push({ role: m.role, kind: "toolCall", text: `${b.name ?? "?"} ${argumentsText}` });
+        }
       }
     }
   } else if (e.type === "session_info" && e.name) {
@@ -172,8 +203,7 @@ export function summarizeSessionFile(path) {
 export function listSessions(dir) {
   if (!existsSync(dir)) return [];
   const sessions = [];
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".jsonl")) continue;
+  for (const file of jsonlFileNames(dir)) {
     const path = join(dir, file);
     try {
       const summary = summarizeSessionFile(path);
@@ -182,17 +212,14 @@ export function listSessions(dir) {
       console.error(`[oyster] failed to read session ${file}: ${e.message}`);
     }
   }
-  sessions.sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));
+  sessions.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
   return sessions;
 }
 
 export function listSessionFolders() {
-  if (!existsSync(SESSIONS_ROOT)) return [];
-  return readdirSync(SESSIONS_ROOT, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+  return sessionFolderEntries()
     .map((e) => {
-      let count = 0;
-      try { count = readdirSync(join(SESSIONS_ROOT, e.name)).filter((f) => f.endsWith(".jsonl")).length; } catch {}
+      const count = jsonlFileNames(join(SESSIONS_ROOT, e.name)).length;
       return { dir: join(SESSIONS_ROOT, e.name), name: e.name, label: decodeFolderName(e.name), count };
     })
     .filter((f) => f.count > 0)
@@ -218,22 +245,17 @@ export function readSessionHeaderInfo(path) {
  *  Fast path: files are named <timestamp>_<id>.jsonl; fall back to reading
  *  each file's session header. */
 export function findSessionById(id) {
-  if (!existsSync(SESSIONS_ROOT)) return null;
-  const folders = readdirSync(SESSIONS_ROOT, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => join(SESSIONS_ROOT, e.name));
+  if (typeof id !== "string" || !id) return null;
+  const folders = sessionFolderEntries().map((entry) => join(SESSIONS_ROOT, entry.name));
   for (const dir of folders) {
-    let files;
-    try { files = readdirSync(dir); } catch { continue; }
-    for (const f of files) {
-      if (f.endsWith(`_${id}.jsonl`) || f === `${id}.jsonl`) return join(dir, f);
+    for (const f of jsonlFileNames(dir)) {
+      if (!f.endsWith(`_${id}.jsonl`) && f !== `${id}.jsonl`) continue;
+      const path = join(dir, f);
+      try { if (parseSessionFile(path).header?.id === id) return path; } catch {}
     }
   }
   for (const dir of folders) {
-    let files;
-    try { files = readdirSync(dir); } catch { continue; }
-    for (const f of files) {
-      if (!f.endsWith(".jsonl")) continue;
+    for (const f of jsonlFileNames(dir)) {
       const path = join(dir, f);
       try {
         if (parseSessionFile(path).header?.id === id) return path;
@@ -257,16 +279,22 @@ function makeSnippet(text, idx, qLen, ctx = 70) {
 
 export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
   const parsedQuery = Array.isArray(query) ? { terms: query, operator: "AND" }
-    : typeof query === "object" ? query : parseSearchQuery(query);
-  const { terms, operator } = parsedQuery;
-  if (!terms.length) return [];
+    : query && typeof query === "object" ? query : parseSearchQuery(query);
+  const terms = Array.isArray(parsedQuery.terms)
+    ? parsedQuery.terms.filter((term) => typeof term === "string" && term)
+    : [];
+  const operator = parsedQuery.operator === "OR" ? "OR" : "AND";
+  const hitLimit = Number.isSafeInteger(maxHitsPerFile) && maxHitsPerFile > 0 ? maxHitsPerFile : 0;
+  if (!terms.length || !hitLimit) return [];
   let parsed;
   try { parsed = parseSessionFile(path); } catch { return []; }
   const { header, name, entries, byId } = parsed;
   let leafId = null;
-  for (const entry of entries) if (entry.id) leafId = entry.id;
+  for (const entry of entries) if (typeof entry.id === "string" && entry.id) leafId = entry.id;
   const activeEntries = [];
-  for (let entry = leafId ? byId.get(leafId) : null; entry; entry = entry.parentId ? byId.get(entry.parentId) : null) {
+  const seen = new Set();
+  for (let entry = leafId ? byId.get(leafId) : null; entry && !seen.has(entry.id); entry = entry.parentId ? byId.get(entry.parentId) : null) {
+    seen.add(entry.id);
     activeEntries.push(entry);
   }
   activeEntries.reverse();
@@ -292,7 +320,7 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
         timestamp: e.timestamp ?? null,
         snippet: makeSnippet(t.text, match.index, match.length),
       });
-      if (hits.length >= maxHitsPerFile) break outer;
+      if (hits.length >= hitLimit) break outer;
     }
   }
   return hits.map((h) => ({ ...h, sessionMeta: meta }));
@@ -304,22 +332,21 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
  *   folder  -> path = a folder under SESSIONS_ROOT (default: defaultDir)
  *   all     -> every folder under SESSIONS_ROOT
  */
-export function searchSessions({ q, scope, path, includeTools = false, defaultDir = null }, maxResults = 200) {
+export function searchSessions({ q, scope, path, includeTools = false, defaultDir = null } = {}, maxResults = 200) {
   const parsedQuery = parseSearchQuery(q);
   const { terms } = parsedQuery;
   if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
+  const resultLimit = Number.isSafeInteger(maxResults) && maxResults >= 0 ? maxResults : 0;
   const files = [];
   if (scope === "session") {
-    files.push(path);
+    if (typeof path === "string" && path) files.push(path);
   } else {
     const dirs = scope === "all"
       ? listSessionFolders().map((f) => f.dir)
       : [path || defaultDir];
     for (const dir of dirs) {
       if (!dir || !existsSync(dir)) continue;
-      for (const f of readdirSync(dir)) {
-        if (f.endsWith(".jsonl")) files.push(join(dir, f));
-      }
+      for (const f of jsonlFileNames(dir)) files.push(join(dir, f));
     }
   }
   // newest first
@@ -329,9 +356,9 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
   for (const file of files) {
     const hits = searchSessionFile(file, parsedQuery, 25, includeTools);
     if (!hits.length) continue;
-    const folderName = dirname(file).split("/").pop();
+    const folderName = basename(dirname(file));
     for (const h of hits) {
-      if (results.length >= maxResults) { truncated = true; break; }
+      if (results.length >= resultLimit) { truncated = true; break; }
       const { sessionMeta, ...rest } = h;
       results.push({
         ...rest,
@@ -357,7 +384,7 @@ export function sessionTree(path) {
   const { header, entries } = parseSessionFile(path);
   const nodes = [];
   for (const e of entries) {
-    if (!e.id) continue;
+    if (typeof e.id !== "string" || !e.id) continue;
     const node = {
       id: e.id,
       parentId: e.parentId ?? null,
@@ -394,9 +421,11 @@ export function sessionTree(path) {
 export function sessionEntries(path) {
   const { header, entries, byId } = parseSessionFile(path);
   let leafId = null;
-  for (const e of entries) if (e.id) leafId = e.id;
+  for (const e of entries) if (typeof e.id === "string" && e.id) leafId = e.id;
   const chain = [];
-  for (let cur = leafId ? byId.get(leafId) : null; cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
+  const seen = new Set();
+  for (let cur = leafId ? byId.get(leafId) : null; cur && !seen.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : null) {
+    seen.add(cur.id);
     chain.push(cur);
   }
   chain.reverse();
@@ -414,7 +443,8 @@ export function sessionEntries(path) {
  *  pi's get_messages returns. Lets the UI render a transcript straight from
  *  the (cached) file while the pi process is still spawning/resuming. */
 export function transcriptMessage(entry) {
-  if (entry.type === "message" && entry.message) {
+  if (!entry || typeof entry !== "object") return null;
+  if (entry.type === "message" && entry.message && typeof entry.message === "object") {
     return { ...entry.message, entryTimestamp: entry.timestamp ?? null };
   }
   if (entry.type === "compaction") {
@@ -431,9 +461,11 @@ export function transcriptMessage(entry) {
 export function sessionMessages(path) {
   const { header, entries, byId } = parseSessionFile(path);
   let leafId = null;
-  for (const e of entries) if (e.id) leafId = e.id;
+  for (const e of entries) if (typeof e.id === "string" && e.id) leafId = e.id;
   const chain = [];
-  for (let cur = leafId ? byId.get(leafId) : null; cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
+  const seen = new Set();
+  for (let cur = leafId ? byId.get(leafId) : null; cur && !seen.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : null) {
+    seen.add(cur.id);
     chain.push(cur);
   }
   chain.reverse();
@@ -451,16 +483,21 @@ export function sessionMessages(path) {
 export function forkSessionAt(sessionPath, leafId, forkedAtHash = null) {
   const { header, byId } = parseSessionFile(sessionPath);
   if (!header) throw new Error("session header missing");
-  if (!byId.has(leafId)) throw new Error(`entry ${leafId} not found in session`);
+  if (typeof leafId !== "string" || !byId.has(leafId)) throw new Error(`entry ${leafId} not found in session`);
   const chain = [];
-  for (let cur = byId.get(leafId); cur; cur = cur.parentId ? byId.get(cur.parentId) : null) chain.push(cur);
+  const seen = new Set();
+  for (let cur = byId.get(leafId); cur; cur = cur.parentId ? byId.get(cur.parentId) : null) {
+    if (seen.has(cur.id)) throw new Error(`cycle detected at entry ${cur.id}`);
+    seen.add(cur.id);
+    chain.push(cur);
+  }
   chain.reverse();
   const id = randomUUID();
   const now = new Date();
   const newHeader = { ...header, id, timestamp: now.toISOString(), parentSession: sessionPath,
     ...(forkedAtHash ? { forkedAtHash } : {}) }; // extra field: pi ignores it, the tree view uses it
   const path = join(dirname(sessionPath), `${now.toISOString().replace(/[:.]/g, "-")}_${id}.jsonl`);
-  writeFileSync(path, [newHeader, ...chain].map((e) => JSON.stringify(e)).join("\n") + "\n");
+  writeFileSync(path, [newHeader, ...chain].map((e) => JSON.stringify(e)).join("\n") + "\n", { flag: "wx" });
   return { path, id, entryIds: new Set(chain.map((e) => e.id)) };
 }
 
