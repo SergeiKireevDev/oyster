@@ -238,7 +238,6 @@ export function applySessionState({ incoming, previousState, currentRunner, empt
     hooks.setRoutines(routinesNow.filter(routineVisible));
     hooks.setRoutineScopeAll(tunnelScopeAll);
     hooks.setRoutineCurrentSessionId(incoming?.sessionId ?? null);
-    hooks.loadHublots(); hooks.loadRoutines();
     hooks.syncUrlToSession(incoming?.sessionId);
   }
   hooks.updateHeaderState({ stateInfo: `${incoming.model ? incoming.model.provider : "?"} · ${incoming.messageCount} msgs` + (incoming.pendingMessageCount ? ` · ${incoming.pendingMessageCount} queued` : "") });

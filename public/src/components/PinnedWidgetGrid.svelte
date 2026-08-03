@@ -39,6 +39,7 @@
   let touchPreview = $state(null);
   let suppressClickUntil = 0;
   let monitorPreviews = $state({});
+  let mediaPreviewStates = $state({});
   const touchMoveFrame = createFrameScheduler(updateTouchPointer);
   const activeGroup = $derived($pinnedWidgetGroups.find((group) => group.id === $pinnedWidgetActiveGroup) ?? null);
   const widgetView = $derived(buildPinnedWidgetViewModel($pinnedWidgets, $pinnedWidgetGroups, SECTION_DEFINITIONS));
@@ -252,9 +253,22 @@
     return `Open ${group.name}, ${group.children.length} ${noun}`;
   }
 
-  function showVideoThumbnail(event) {
+  function setMediaPreviewState(widgetId, state) {
+    mediaPreviewStates = { ...mediaPreviewStates, [widgetId]: state };
+  }
+
+  function showVideoThumbnail(event, widgetId) {
     const video = event.currentTarget;
     if (video.duration > 0) video.currentTime = Math.min(0.1, video.duration / 2);
+    setMediaPreviewState(widgetId, "ready");
+  }
+
+  function previewPending(widget) {
+    if (widget.kind === "live_interface") return widget.availability === "opening";
+    if (widget.kind === "monitoring") return !monitorPreviews[widget.id];
+    return readyMedia(widget, "image") || readyMedia(widget, "video")
+      ? !mediaPreviewStates[widget.id]
+      : false;
   }
 
   function glyph(widget) {
@@ -293,15 +307,22 @@
     >
       <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true" use:monitorPreview={widget}>
         {#if readyMedia(widget, "image")}
-          <img src={browserActions.pinnedWidgetMediaSource(widget.id)} alt="" loading="lazy" />
+          <img
+            src={browserActions.pinnedWidgetMediaSource(widget.id)}
+            alt=""
+            loading="lazy"
+            onload={() => setMediaPreviewState(widget.id, "ready")}
+            onerror={() => setMediaPreviewState(widget.id, "error")}
+          />
         {:else if readyMedia(widget, "video")}
           <video
             src={browserActions.pinnedWidgetMediaSource(widget.id)}
             muted
             preload="metadata"
             playsinline
-            onloadedmetadata={showVideoThumbnail}
-          ></video><span class="pinned-widget-play">▶</span>
+            onloadedmetadata={(event) => showVideoThumbnail(event, widget.id)}
+            onerror={() => setMediaPreviewState(widget.id, "error")}
+          ></video>{#if mediaPreviewStates[widget.id] === "ready"}<span class="pinned-widget-play">▶</span>{/if}
         {:else if isFolderWidget(widget)}
           <FolderIcon size={30} />
         {:else if widget.kind === "monitoring" && monitorPreviews[widget.id]}
@@ -309,7 +330,8 @@
         {:else}
           <span class="pinned-widget-glyph">{glyph(widget)}</span>
         {/if}
-        {#if widget.kind === "live_interface"}<span class={`pinned-widget-status status-${widget.availability}`}></span>{/if}
+        {#if previewPending(widget)}<span class="spin pinned-widget-preview-spinner"></span>{/if}
+        {#if widget.kind === "live_interface" && widget.availability !== "opening"}<span class={`pinned-widget-status status-${widget.availability}`}></span>{/if}
       </span>
       <span class="pinned-widget-label">{widget.label}</span>
     </button>
@@ -598,6 +620,16 @@
   }
 
   .pinned-widget-monitor-preview.monitor-preview-error { color: var(--red); font-size: 7.5px; }
+  .pinned-widget-preview-spinner {
+    position: absolute;
+    z-index: 1;
+    width: 17px;
+    height: 17px;
+    border-width: 2px;
+    border-top-color: var(--accent);
+    background: color-mix(in srgb, var(--panel-2) 74%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--panel-2) 74%, transparent);
+  }
   .pinned-widget-glyph { font-size: 18px; font-weight: 700; letter-spacing: -.04em; }
 
   .pinned-widget-label {

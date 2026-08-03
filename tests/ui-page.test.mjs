@@ -13,6 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(root, "public", "src");
 const html = readFileSync(join(root, "public", "index.html"), "utf8");
 const runtimeImplementation = readFileSync(join(src, "runtime", "appCompositionRoot.js"), "utf8");
+const sessionRuntime = readFileSync(join(src, "runtime", "sessionRuntime.js"), "utf8");
 const entry = readFileSync(join(src, "main.js"), "utf8");
 const appRuntime = readFileSync(join(src, "runtime", "appRuntime.js"), "utf8");
 const composerAssembly = readFileSync(join(src, "features", "composer", "createComposerAssembly.js"), "utf8");
@@ -58,6 +59,13 @@ test("application composition root parses (node --check)", () => {
 
 test("application runtime controller injections use the Svelte toast store action", () => {
   assert.doesNotMatch(runtimeImplementation, /\n\s*toast,\n/);
+});
+
+test("pinned widgets refresh independently from transcript state and replay", () => {
+  assert.match(runtimeImplementation, /onRunnerChange:[\s\S]*void loadHublots\(\);[\s\S]*void loadRoutines\(\);/);
+  assert.match(runtimeImplementation, /onAuthenticatedStart:[\s\S]*void loadHublots\(\);[\s\S]*void loadRoutines\(\);/);
+  assert.match(runtimeImplementation, /function resourceSessionId\(\)[\s\S]*getCurrentRunner\(\)/);
+  assert.doesNotMatch(sessionRuntime, /setRoutineCurrentSessionId\([\s\S]{0,120}loadHublots/);
 });
 
 test("composer prompts delegate busy steering behavior to prompt actions", () => {
