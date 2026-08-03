@@ -214,6 +214,10 @@ const sessionAssembly = createSessionAssembly({
   onRunnerChange: ({ currentRunner }) => {
     cancelPendingRpc("runner switched");
     setActiveWorkspace(getRunners().find((runner) => runner.id === currentRunner)?.workspaceId, storage);
+    // Scoped resources have their own request lifecycle. Start it at runner
+    // selection rather than waiting for get_state/transcript replay to finish.
+    void loadHublots();
+    void loadRoutines();
   },
   stateApplier: {
     applySessionState,
@@ -228,8 +232,6 @@ const sessionAssembly = createSessionAssembly({
       setRoutines: routines.set,
       setRoutineScopeAll: routineScopeAll.set,
       setRoutineCurrentSessionId: routineCurrentSessionId.set,
-      loadHublots: () => loadHublots(),
-      loadRoutines: () => loadRoutines(),
       updateHeaderState,
       setBusy: (value) => setBusy(value),
       setCompacting: (value) => setCompacting(value),
@@ -541,7 +543,7 @@ const resourceAssembly = createResourceAssembly({
   },
   hublots: {
     isVisible: hublotVisible,
-    getSessionId: () => getSessionState()?.sessionId ?? null,
+    getSessionId: () => resourceSessionId(),
     resetCarousel: () => layoutOperations.reset(),
     openModal,
     createHublot: (options) => createHublot(fetch, options),
@@ -551,7 +553,7 @@ const resourceAssembly = createResourceAssembly({
     toast: addToast,
     listHublots: () => listHublots(fetch),
     listSidebarHublots: async () => {
-      const collection = await listPinnedWidgets(fetch, { sessionId: getSessionState()?.sessionId ?? null });
+      const collection = await listPinnedWidgets(fetch, { sessionId: resourceSessionId() });
       pinnedWidgetGroups.set(collection.groups ?? []);
       return collection.widgets ?? [];
     },
@@ -568,8 +570,8 @@ const resourceAssembly = createResourceAssembly({
   },
   routines: {
     listRoutines: () => listRoutines(fetch),
-    isVisible: (routine, scopeAll) => isRoutineVisible(routine, scopeAll, getSessionState()?.sessionId),
-    getSessionId: () => getSessionState()?.sessionId ?? null,
+    isVisible: (routine, scopeAll) => isRoutineVisible(routine, scopeAll, resourceSessionId()),
+    getSessionId: resourceSessionId,
     setRoutines: routines.set,
     setTotal: routinesTotal.set,
     setScopeAll: routineScopeAll.set,
@@ -719,7 +721,7 @@ const loadHublots = resourceOperations.loadHublots;
 
 const pinnedWidgetRuntime = createPinnedWidgetRuntime({
   fetchImpl: runtimeFetch,
-  getSessionId: () => getSessionState()?.sessionId,
+  getSessionId: resourceSessionId,
   getGroups: () => get(pinnedWidgetGroups),
   setCollection: setPinnedWidgetCollection,
   toast: addToast,
@@ -750,13 +752,18 @@ const filesActions = {
 // progression by printing `::progress <0-100> <message>` lines on stdout.
 
 function routineVisible(routine) {
-  return isRoutineVisible(routine, hublotRuntime.getScopeAll(), getSessionState()?.sessionId);
+  return isRoutineVisible(routine, hublotRuntime.getScopeAll(), resourceSessionId());
 }
 const routineRuntime = resourceAssembly.routines;
 const routineSidebarController = routineRuntime.sidebar;
 const routineController = routineRuntime.controller;
 const syncRoutinesStore = resourceOperations.syncRoutines;
 function loadRoutines() { if (token) return resourceOperations.loadRoutines(); }
+function resourceSessionId() {
+  return getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionId
+    ?? getSessionState()?.sessionId
+    ?? null;
+}
 function showRoutineGenerator() {
   resetRoutineManager();
   openModal({ title: "New routine", content: "routineManager" });
@@ -1057,7 +1064,12 @@ return createLifecycleAssembly({
   applyLayout: () => layoutOperations.apply(),
   start: {
     hasToken: () => Boolean(token), requireToken, boot,
-    onAuthenticatedStart: () => { void credentialsAssembly.operations.initialize(); },
+    onAuthenticatedStart: () => {
+      // Do not gate widget discovery on the canonical transcript reload.
+      void loadHublots();
+      void loadRoutines();
+      void credentialsAssembly.operations.initialize();
+    },
   },
   cancelDelayedTasks: () => delayedTasks.cancelAll(),
   cleanup: {

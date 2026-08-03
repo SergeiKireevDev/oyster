@@ -291,6 +291,9 @@ test("monitoring widgets persist scripts and execute preview and viewer content 
   assert.equal(created.body.widget.availability, "ready");
   assert.ok(created.body.widget.scriptDirectory.startsWith(join(root, ".oyster")));
   assert.equal(readFileSync(join(created.body.widget.scriptDirectory, "preview.sh"), "utf8"), "#!/bin/sh\nprintf '●3 ±2 ?1'\n");
+  const cwdPath = join(created.body.widget.scriptDirectory, "cwd");
+  assert.equal(readFileSync(cwdPath, "utf8"), root);
+  writeFileSync(cwdPath, `${root}\n`); // Legacy monitors stored one trailing line ending.
 
   const preview = response();
   await routes["GET /pinned-widget-monitor-preview"]({}, preview, new URL(`http://localhost/pinned-widget-monitor-preview?id=${created.body.widget.id}`));

@@ -375,7 +375,14 @@ export async function runMonitoringScript(row, mode, { resolveSafePath, execFile
     const cwdPath = join(target, "cwd");
     const cwdStat = statSync(cwdPath);
     if (!cwdStat.isFile() || cwdStat.size > 16 * 1024) throw new Error("invalid monitoring cwd metadata");
-    cwd = resolveSafePath(resolve(readFileSync(cwdPath, "utf8")));
+    let cwdValue = readFileSync(cwdPath, "utf8");
+    // Monitoring widgets created before hardened metadata writes include one
+    // trailing line ending. Accept that exact legacy encoding without letting
+    // arbitrary control characters become part of the execution directory.
+    if (cwdValue.endsWith("\r\n")) cwdValue = cwdValue.slice(0, -2);
+    else if (cwdValue.endsWith("\n")) cwdValue = cwdValue.slice(0, -1);
+    if (!cwdValue || /[\0\r\n]/.test(cwdValue)) throw new Error("invalid monitoring cwd metadata");
+    cwd = resolveSafePath(resolve(cwdValue));
     if (!cwd || !statSync(cwd).isDirectory()) throw new Error("invalid monitoring cwd");
   } catch (error) {
     throw Object.assign(new Error("monitoring working directory is unavailable"), { statusCode: 404, cause: error });
