@@ -220,17 +220,19 @@ test("canonical transcript controller lets only the newest reload render", async
   const releases = [];
   const calls = [];
   const controller = createCanonicalTranscriptController({
-    rpc: ({ type }) => new Promise((resolve) => releases.push(() => resolve(type === "get_state" ? { sessionFile: null } : { messages: [{ role: "user" }] }))),
-    applyState: () => calls.push("state"), fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [] }) }), sessionFileQuery: () => "",
+    rpc: ({ type }) => {
+      assert.equal(type, "get_state");
+      return new Promise((resolve) => releases.push(() => resolve({ sessionFile: "/session.jsonl" })));
+    },
+    applyState: () => calls.push("state"), fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [] }) }), sessionFileQuery: () => "path=session",
     clearPreview: () => calls.push("clear"), render: async () => { calls.push("render"); return true; }, setReplaying: () => {},
     takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => {},
   });
   const first = controller();
   const second = controller();
-  releases.splice(2).forEach((release) => release());
-  await new Promise((resolve) => setImmediate(resolve));
-  releases.splice(0).forEach((release) => release());
+  releases[1]();
   assert.equal(await second, true);
+  releases[0]();
   assert.equal(await first, false);
   assert.deepEqual(calls, ["state", "clear", "render"]);
 });
