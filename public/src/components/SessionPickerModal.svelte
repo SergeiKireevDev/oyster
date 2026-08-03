@@ -245,7 +245,10 @@
   onDestroy(() => clearTimeout(debounce));
 </script>
 
-<div class="session-picker" class:search-error={searchFailed} aria-busy={$sessionPicker.searching}>
+<div class="session-picker" class:search-error={searchFailed} aria-busy={$sessionPicker.loading || $sessionPicker.searching}>
+{#if $sessionPicker.loading}
+  <div class="session-picker-loading" role="status" aria-atomic="true"><span class="spin" aria-hidden="true"></span> Loading sessions…</div>
+{:else}
 <form class="search-row" role="search" onsubmit={submitSearch}>
   <input
     type="search"
@@ -340,6 +343,7 @@
       {/each}
     </details>
   {/if}
+{/if}
 {/if}
 
 {#snippet sessionRow(session, timelineStatus = null)}
@@ -438,6 +442,16 @@
 <style>
   .session-picker {
     min-width: 0;
+  }
+
+  .session-picker-loading {
+    display: flex;
+    min-height: 180px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
   }
 
   .search-row {

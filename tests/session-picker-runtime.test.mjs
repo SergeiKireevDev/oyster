@@ -38,6 +38,8 @@ test("session picker runtime owns picker actions and search-hit construction", a
   const created = [];
   const archived = [];
   const switched = [];
+  const pickerUpdates = [];
+  const modalEvents = [];
   let runnersHandler = "unset";
   const registered = new Map();
   const detached = [];
@@ -50,7 +52,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
     },
     storeSnapshot: () => ({ query: "", scope: "all", folderPath: "", excludeTools: true }),
     sessionPickerStore: {},
-    updateSessionPicker() {},
+    updateSessionPicker(patch) { pickerUpdates.push(patch); },
     fetchSearch: async () => ({ ok: true, status: 200, data: { results: [] } }),
     fetchSessions: async () => [],
     getRunners: () => [],
@@ -63,13 +65,16 @@ test("session picker runtime owns picker actions and search-hit construction", a
     refreshHublots() {},
     refreshRoutines() {},
     confirm: async () => true,
-    close() {},
+    close() { modalEvents.push("close"); },
     openSessionAtSearchHit() {},
-    loadInitialPickerData: async () => ({ sessions: [], folders: [], currentFolder: null }),
+    loadInitialPickerData: async () => {
+      modalEvents.push("request");
+      return { sessions: [], folders: [], currentFolder: null };
+    },
     getCurrentSessionId: () => null,
     setRunnersUpdateHandler: (handler) => { runnersHandler = handler; },
     getWorkdir: () => "/tmp",
-    open() {},
+    open() { modalEvents.push("open"); },
     openChosenSession: async () => {},
     getSessionId: () => null,
     openSearchSession: async () => {},
@@ -110,8 +115,13 @@ test("session picker runtime owns picker actions and search-hit construction", a
   assert.deepEqual(switched, ["runner-current"]);
   assert.deepEqual(archived, [["ps1_archive", true]]);
   assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived"]);
+  modalEvents.length = 0;
+  pickerUpdates.length = 0;
   await runtime.show();
   assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived", "no saved sessions"]);
+  assert.deepEqual(modalEvents, ["open", "request", "close"]);
+  assert.equal(pickerUpdates[0].loading, true);
+  assert.equal(pickerUpdates.at(-1).loading, false);
   assert.equal(runnersHandler, "unset");
   runtime.detachActions();
   runtime.detachActions();
