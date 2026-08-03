@@ -32,7 +32,8 @@ test("session picker bounds and cleans up deferred search work", () => {
 test("session picker owns its calm responsive modal presentation", () => {
   const globalStyles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
-  assert.match(source, /<div class="session-picker" class:search-error=\{searchFailed\} aria-busy=\{\$sessionPicker\.searching\}>/);
+  assert.match(source, /<div class="session-picker" class:search-error=\{searchFailed\} aria-busy=\{\$sessionPicker\.loading \|\| \$sessionPicker\.searching\}>/);
+  assert.match(source, /\$sessionPicker\.loading[\s\S]*role="status" aria-atomic="true"><span class="spin" aria-hidden="true"><\/span> Loading sessions…/);
   assert.match(source, /const searchFailed = \$derived\(\$sessionPicker\.searchStatus\.startsWith\("search failed"\)\)/);
   assert.match(source, /\.search-error \.m-path \{ color: var\(--red\); \}/);
   assert.match(source, /<style>[\s\S]*?\.search-row input\[type="search"\][\s\S]*?var\(--panel\)/);

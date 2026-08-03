@@ -270,10 +270,65 @@ export function createSessionPickerRuntime(deps) {
   }
 
   async function show() {
-    const { sessions: loadedSessions, allSessions: loadedAllSessions, folders, currentFolder } = await deps.loadInitialPickerData();
-    const initialRunners = deps.getRunners();
-    const { allSessions, otherFolderSessions, folders: activeFolders } = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, initialRunners);
-    if (!allSessions.length) { deps.toast("no saved sessions"); return; }
+    let settled = false;
+    let settlePicker;
+    const pickerChoice = new Promise((resolve) => {
+      settlePicker = (choice) => {
+        if (settled) return;
+        settled = true;
+        resolve(choice);
+      };
+    });
+    resolvePicker = settlePicker;
+    deps.updateSessionPicker({
+      loading: true,
+      sessions: [],
+      allSessions: [],
+      folders: [],
+      query: "",
+      searchStatus: "",
+      searchResults: [],
+      searching: false,
+      otherFolderSessions: {},
+      loadingFolders: {},
+    });
+    deps.open();
+
+    let loadedSessions;
+    let loadedAllSessions;
+    let folders;
+    let currentFolder;
+    let initialRunners;
+    let allSessions;
+    let otherFolderSessions;
+    let activeFolders;
+    try {
+      ({ sessions: loadedSessions, allSessions: loadedAllSessions, folders, currentFolder } = await deps.loadInitialPickerData());
+      if (settled) return;
+      initialRunners = deps.getRunners();
+      ({ allSessions, otherFolderSessions, folders: activeFolders } = await loadActiveFolders(loadedSessions ?? [], folders, currentFolder, initialRunners));
+    } catch (error) {
+      if (!settled) {
+        deps.updateSessionPicker({ loading: false });
+        deps.close();
+        settlePicker(null);
+      }
+      if (resolvePicker === settlePicker) resolvePicker = null;
+      throw error;
+    }
+    if (settled) {
+      if (resolvePicker === settlePicker) resolvePicker = null;
+      return;
+    }
+    if (!allSessions.length) {
+      deps.updateSessionPicker({ loading: false });
+      deps.close();
+      deps.toast("no saved sessions");
+      settlePicker(null);
+      if (resolvePicker === settlePicker) resolvePicker = null;
+      return;
+    }
+
     sessions = mergeSessions(allSessions, loadedAllSessions ?? []);
     const currentId = deps.getCurrentSessionId(sessions);
     let syncing = false;
@@ -295,32 +350,26 @@ export function createSessionPickerRuntime(deps) {
         syncing = false;
       }
     });
-    const chosen = await new Promise((resolve) => {
-      resolvePicker = resolve;
-      deps.updateSessionPicker({
-        sessions: loadedSessions,
-        allSessions: loadedAllSessions ?? allSessions,
-        folders: activeFolders,
-        currentFolder,
-        currentId,
-        currentWorkdir: deps.getWorkdir(),
-        runners: initialRunners,
-        query: "",
-        scope: "all",
-        folderPath: currentFolder ?? activeFolders[0]?.dir ?? "",
-        excludeTools: true,
-        searchStatus: "",
-        searchResults: [],
-        searchFilesSearched: 0,
-        searchTruncated: false,
-        searching: false,
-        otherFolderSessions,
-        loadingFolders: {},
-      });
-      deps.open();
+    deps.updateSessionPicker({
+      loading: false,
+      sessions: loadedSessions,
+      allSessions: loadedAllSessions ?? allSessions,
+      folders: activeFolders,
+      currentFolder,
+      currentId,
+      currentWorkdir: deps.getWorkdir(),
+      runners: initialRunners,
+      scope: "all",
+      folderPath: currentFolder ?? activeFolders[0]?.dir ?? "",
+      excludeTools: true,
+      searchFilesSearched: 0,
+      searchTruncated: false,
+      otherFolderSessions,
     });
+
+    const chosen = await pickerChoice;
     deps.setRunnersUpdateHandler(null);
-    resolvePicker = null;
+    if (resolvePicker === settlePicker) resolvePicker = null;
     const fullChoice = chosen ? (sessions.find((session) => sameSession(session, chosen) || session.id === chosen.id) ?? chosen) : null;
     if (!fullChoice) return;
     await deps.openChosenSession(fullChoice);
