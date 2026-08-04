@@ -57,7 +57,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
       const state = createCandidateState(stableState);
       try {
   const { config, appStore } = state;
-  const hydratedStore = validateRepositoryAvailability(appStore);
+  const hydratedStore = await validateRepositoryAvailability(appStore);
   const checkpointRepository = appStore.repositories.checkpoints;
 
   // Patch state created by an older stable core; migrations are idempotent.
@@ -80,7 +80,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     const candidateCatalog = state.sessionCatalog;
     scope.defer(() => candidateCatalog.close?.());
   }
-  validateCatalogAccess(state.sessionCatalog, {
+  await validateCatalogAccess(state.sessionCatalog, {
     backend: config.PERSISTENT_STORE ?? "jsonl",
     cwd: config.PI_DIR,
   });
@@ -100,7 +100,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
-  const runners = createRunnerManager(state, { appStore, ensureSessionOwner, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
+  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
@@ -136,8 +136,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
-    lookupSessionReference: (reference) => reference.backend === state.sessionCatalog.backend
-      ? state.sessionCatalog.findById(reference.id)
+    lookupSessionReference: async (reference) => reference.backend === state.sessionCatalog.backend
+      ? await state.sessionCatalog.findById(reference.id)
       : null,
   });
   const fileRoutes = createFileRoutes({ state, requestContext });

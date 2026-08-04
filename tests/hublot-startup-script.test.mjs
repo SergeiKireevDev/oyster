@@ -12,15 +12,15 @@ import {
   reserveHublot, spawnGitServerService, spawnHublotAgent, spawnMarkdownService, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-script-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, store, state };
 }
 
-function reserve(state, port = 4173) {
+async function reserve(state, port = 4173) {
   return reserveHublot(state, { port, brief: "serve the preview" });
 }
 
@@ -30,9 +30,9 @@ function writeScript(path, content, mode = 0o755) {
   chmodSync(path, mode);
 }
 
-test("setup-agent contract names the allocated idempotent script and requires invoking it", (t) => {
-  const { state } = fixture(t);
-  const hublot = reserve(state);
+test("setup-agent contract names the allocated idempotent script and requires invoking it", async (t) => {
+  const { state } = await fixture(t);
+  const hublot = await reserve(state);
   const prompt = hublotAgentPrompt({
     id: hublot.id,
     port: hublot.port,
@@ -46,8 +46,8 @@ test("setup-agent contract names the allocated idempotent script and requires in
 });
 
 test("setup agent waits for its startup artifact when the port already answers", { timeout: 1_000 }, async (t) => {
-  const { state } = fixture(t);
-  const hublot = reserve(state);
+  const { state } = await fixture(t);
+  const hublot = await reserve(state);
   const processOutput = new EventEmitter();
   const agent = new EventEmitter();
   Object.assign(agent, {
@@ -73,10 +73,10 @@ test("setup agent waits for its startup artifact when the port already answers",
     checkPort: async () => true,
     discoverPids: () => [],
     pollIntervalMs: 5,
-    validateStartupScript(...args) {
+    async validateStartupScript(...args) {
       validationAttempts += 1;
-      reportFirstValidation();
-      return validateAndStoreHublotStartupScript(...args);
+      try { return await validateAndStoreHublotStartupScript(...args); }
+      finally { reportFirstValidation(); }
     },
   });
   opening.then(() => { settled = true; }, () => { settled = true; });
@@ -89,8 +89,8 @@ test("setup agent waits for its startup artifact when the port already answers",
 });
 
 test("setup-agent polling converts rejected health checks into a bounded failure", { timeout: 1_000 }, async (t) => {
-  const { state } = fixture(t);
-  const hublot = reserve(state);
+  const { state } = await fixture(t);
+  const hublot = await reserve(state);
   const output = new EventEmitter();
   const agent = new EventEmitter();
   Object.assign(agent, {
@@ -117,8 +117,8 @@ test("setup-agent polling converts rejected health checks into a bounded failure
 });
 
 test("setup-agent completion rejects instead of hanging when service discovery fails", { timeout: 1_000 }, async (t) => {
-  const { state } = fixture(t);
-  const hublot = reserve(state);
+  const { state } = await fixture(t);
+  const hublot = await reserve(state);
   writeScript(hublot.service_start_script_path, "#!/bin/sh\n# oyster: idempotent\nexit 0\n");
   const output = new EventEmitter();
   const agent = new EventEmitter();
@@ -145,33 +145,33 @@ test("setup-agent completion rejects instead of hanging when service discovery f
   assert.equal(agent.killed, true);
 });
 
-test("validated startup source and SHA-256 become authoritative in SQLite", (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserve(state);
+test("validated startup source and SHA-256 become authoritative in SQLite", async (t) => {
+  const { store, state } = await fixture(t);
+  const hublot = await reserve(state);
   const script = "#!/bin/sh\n# oyster: idempotent\n# Return when healthy; otherwise start detached.\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
 
-  const validated = validateAndStoreHublotStartupScript(state, {
+  const validated = await validateAndStoreHublotStartupScript(state, {
     id: hublot.id,
     serviceStartScriptPath: hublot.service_start_script_path,
   });
 
   const sha256 = createHash("sha256").update(script).digest("hex");
   assert.deepEqual(validated, { path: hublot.service_start_script_path, content: script, sha256 });
-  const persisted = store.repositories.hublots.find(hublot.id);
+  const persisted = await store.repositories.hublots.find(hublot.id);
   assert.equal(persisted.service_start_script, script);
   assert.equal(persisted.service_start_script_sha256, sha256);
 });
 
-test("missing and mismatched startup artifacts are atomically restored before invocation", (t) => {
-  const { root, state } = fixture(t);
-  const hublot = reserve(state);
+test("missing and mismatched startup artifacts are atomically restored before invocation", async (t) => {
+  const { root, state } = await fixture(t);
+  const hublot = await reserve(state);
   const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
-  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+  await validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
 
   rmSync(hublot.service_start_script_path);
-  const restored = materializeHublotStartupScript(state, hublot.id);
+  const restored = await materializeHublotStartupScript(state, hublot.id);
   assert.equal(restored.rematerialized, true);
   assert.equal(readFileSync(restored.path, "utf8"), script);
   assert.equal(lstatSync(restored.path).mode & 0o777, 0o700);
@@ -179,7 +179,7 @@ test("missing and mismatched startup artifacts are atomically restored before in
 
   writeFileSync(restored.path, "#!/bin/sh\necho tampered\n", { mode: 0o755 });
   let observedAtInvoke = null;
-  const invoked = invokeHublotStartupScript(state, hublot.id, {
+  const invoked = await invokeHublotStartupScript(state, hublot.id, {
     spawnProcess(path) {
       observedAtInvoke = readFileSync(path, "utf8");
       return { pid: 1234 };
@@ -188,28 +188,28 @@ test("missing and mismatched startup artifacts are atomically restored before in
   assert.equal(invoked.rematerialized, true);
   assert.equal(observedAtInvoke, script);
   assert.deepEqual(invoked.proc, { pid: 1234 });
-  assert.equal(materializeHublotStartupScript(state, hublot.id).rematerialized, false);
+  assert.equal((await materializeHublotStartupScript(state, hublot.id)).rematerialized, false);
 });
 
-test("a missing startup script is rematerialized from SQLite contents and hash after restart", (t) => {
+test("a missing startup script is rematerialized from SQLite contents and hash after restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-script-restart-"));
   const databasePath = join(root, "app.sqlite");
   const agentDir = join(root, "agent");
-  let store = openAppStore({ databasePath });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  let store = await openAppStore({ databasePath });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   let state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
-  const hublot = reserve(state);
+  const hublot = await reserve(state);
   const script = "#!/bin/sh\n# oyster: idempotent\necho restored\n";
   const sha256 = createHash("sha256").update(script).digest("hex");
   writeScript(hublot.service_start_script_path, script);
-  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+  await validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
   rmSync(hublot.service_start_script_path);
-  store.close();
+  await store.close();
 
-  store = openAppStore({ databasePath });
+  store = await openAppStore({ databasePath });
   state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
   let invokedContent = null;
-  const invoked = invokeHublotStartupScript(state, hublot.id, {
+  const invoked = await invokeHublotStartupScript(state, hublot.id, {
     spawnProcess(path) {
       invokedContent = readFileSync(path, "utf8");
       return { pid: 4321 };
@@ -221,23 +221,23 @@ test("a missing startup script is rematerialized from SQLite contents and hash a
   assert.equal(invokedContent, script);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
   assert.equal(lstatSync(hublot.service_start_script_path).mode & 0o777, 0o700);
-  const persisted = store.repositories.hublots.find(hublot.id);
+  const persisted = await store.repositories.hublots.find(hublot.id);
   assert.equal(persisted.service_start_script, script);
   assert.equal(persisted.service_start_script_sha256, sha256);
 });
 
-test("rematerialization replaces symlinks without changing their targets", (t) => {
-  const { root, state } = fixture(t);
-  const hublot = reserve(state);
+test("rematerialization replaces symlinks without changing their targets", async (t) => {
+  const { root, state } = await fixture(t);
+  const hublot = await reserve(state);
   const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
   writeScript(hublot.service_start_script_path, script);
-  validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
+  await validateAndStoreHublotStartupScript(state, { id: hublot.id, serviceStartScriptPath: hublot.service_start_script_path });
   const victim = join(root, "victim.sh");
   writeScript(victim, "victim", 0o700);
   rmSync(hublot.service_start_script_path);
   symlinkSync(victim, hublot.service_start_script_path);
 
-  assert.equal(materializeHublotStartupScript(state, hublot.id).rematerialized, true);
+  assert.equal((await materializeHublotStartupScript(state, hublot.id)).rematerialized, true);
   assert.equal(lstatSync(hublot.service_start_script_path).isSymbolicLink(), false);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
   assert.equal(readFileSync(victim, "utf8"), "victim");
@@ -251,13 +251,13 @@ test("default Markdown reader and template are bundled in this repository", () =
 });
 
 test("Markdown service invokes the bundled Node.js reader and persists its restart command", async (t) => {
-  const { root, store, state } = fixture(t);
+  const { root, store, state } = await fixture(t);
   const markdownPath = join(root, "guide.md");
   const rendererPath = join(root, "markdown-reader.mjs");
   const nodePath = "/runtime/node";
   writeFileSync(markdownPath, "# Guide\n");
   writeFileSync(rendererPath, "export {};\n");
-  const hublot = reserve(state, 4177);
+  const hublot = await reserve(state, 4177);
   let invocation = null;
   class FakeProcess extends EventEmitter {
     pid = process.pid;
@@ -283,24 +283,24 @@ test("Markdown service invokes the bundled Node.js reader and persists its resta
   assert.equal(invocation.command, nodePath);
   assert.deepEqual(invocation.args, [rendererPath, markdownPath, String(hublot.port)]);
   assert.equal(invocation.options.detached, true);
-  const persisted = store.repositories.hublots.find(hublot.id);
+  const persisted = await store.repositories.hublots.find(hublot.id);
   assert.match(persisted.service_start_script, /# oyster: idempotent/);
   assert.match(persisted.service_start_script, new RegExp(nodePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(persisted.service_start_script, new RegExp(rendererPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(persisted.service_start_script, new RegExp(markdownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(persisted.service_start_script, /python3/);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
-  assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
+  assert.equal(await ((await store.repositories.hublots.listProcesses(hublot.id)).find((row) => row.role === "service")).status, "running");
 });
 
 test("Git server service directly invokes the bundled script and persists its restart command", async (t) => {
-  const { root, store, state } = fixture(t);
+  const { root, store, state } = await fixture(t);
   const worktreePath = join(root, "worktree");
   const serverPath = join(root, "serve-git-smart-http.sh");
   mkdirSync(worktreePath);
   execFileSync("git", ["init", "--quiet", worktreePath]);
   writeScript(serverPath, "#!/bin/sh\nexit 0\n");
-  const hublot = reserve(state, 4178);
+  const hublot = await reserve(state, 4178);
   let invocation = null;
   class FakeProcess extends EventEmitter {
     pid = process.pid;
@@ -327,40 +327,40 @@ test("Git server service directly invokes the bundled script and persists its re
   assert.deepEqual(invocation.args, ["--host", "127.0.0.1", "--port", String(hublot.port), "--state-dir", gitStateDir, worktreePath]);
   assert.equal(invocation.options.cwd, worktreePath);
   assert.equal(invocation.options.detached, true);
-  const persisted = store.repositories.hublots.find(hublot.id);
+  const persisted = await store.repositories.hublots.find(hublot.id);
   assert.match(persisted.service_start_script, /# oyster: idempotent/);
   assert.match(persisted.service_start_script, /--host 127\.0\.0\.1 --port 4178 --state-dir/);
   assert.match(persisted.service_start_script, new RegExp(worktreePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
-  assert.equal(store.repositories.hublots.listProcesses(hublot.id).find((row) => row.role === "service").status, "running");
+  assert.equal(await ((await store.repositories.hublots.listProcesses(hublot.id)).find((row) => row.role === "service")).status, "running");
 });
 
-test("startup validation rejects unsafe or non-protocol artifacts without persisting them", (t) => {
-  const { root, store, state } = fixture(t);
+test("startup validation rejects unsafe or non-protocol artifacts without persisting them", async (t) => {
+  const { root, store, state } = await fixture(t);
 
-  const nonExecutable = reserve(state, 4174);
+  const nonExecutable = await reserve(state, 4174);
   writeScript(nonExecutable.service_start_script_path, "#!/bin/sh\n# oyster: idempotent\n", 0o600);
-  assert.throws(() => validateAndStoreHublotStartupScript(state, {
+  await assert.rejects(() => validateAndStoreHublotStartupScript(state, {
     id: nonExecutable.id, serviceStartScriptPath: nonExecutable.service_start_script_path,
   }), /not executable/);
 
-  const nonIdempotent = reserve(state, 4175);
+  const nonIdempotent = await reserve(state, 4175);
   writeScript(nonIdempotent.service_start_script_path, "#!/bin/sh\nexit 0\n");
-  assert.throws(() => validateAndStoreHublotStartupScript(state, {
+  await assert.rejects(() => validateAndStoreHublotStartupScript(state, {
     id: nonIdempotent.id, serviceStartScriptPath: nonIdempotent.service_start_script_path,
   }), /idempotent hublot protocol/);
 
-  const linked = reserve(state, 4176);
+  const linked = await reserve(state, 4176);
   const outside = join(root, "outside.sh");
   writeScript(outside, "#!/bin/sh\n# oyster: idempotent\n");
   mkdirSync(dirname(linked.service_start_script_path), { recursive: true });
   symlinkSync(outside, linked.service_start_script_path);
-  assert.throws(() => validateAndStoreHublotStartupScript(state, {
+  await assert.rejects(() => validateAndStoreHublotStartupScript(state, {
     id: linked.id, serviceStartScriptPath: linked.service_start_script_path,
   }), /invalid hublot startup script/);
 
   for (const id of [nonExecutable.id, nonIdempotent.id, linked.id]) {
-    assert.equal(store.repositories.hublots.find(id).service_start_script, null);
-    assert.equal(store.repositories.hublots.find(id).service_start_script_sha256, null);
+    assert.equal((await store.repositories.hublots.find(id)).service_start_script, null);
+    assert.equal((await store.repositories.hublots.find(id)).service_start_script_sha256, null);
   }
 });

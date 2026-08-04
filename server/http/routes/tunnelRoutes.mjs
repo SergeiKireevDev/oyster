@@ -112,9 +112,9 @@ export function createTunnelRoutes({
 }) {
   const { json, readJsonBody } = requestContext;
   return {
-    "GET /tunnels": (_req, res) => {
+    "GET /tunnels": async (_req, res) => {
       disableCaching(res);
-      json(res, 200, { tunnels: listTunnels(state), bin: config.TUNNEL_BIN });
+      json(res, 200, { tunnels: await listTunnels(state), bin: config.TUNNEL_BIN });
     },
 
     "POST /tunnels": async (req, res) => {
@@ -135,7 +135,7 @@ export function createTunnelRoutes({
       let reserved = null;
       let claimedWarmTunnel = false;
       try {
-        const owner = options.sessionId ? ensureSessionOwner(options.sessionId) : null;
+        const owner = options.sessionId ? await ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
         options.brief = brief;
         // Auto-allocated hublots claim an already-connected quick tunnel.
@@ -148,11 +148,11 @@ export function createTunnelRoutes({
         // Pooling can be disabled; retain direct allocation as the fallback.
         if (!reserved) {
           reserved = options.port !== null
-            ? reserveHublot(state, options)
+            ? await reserveHublot(state, options)
             : await allocateHublot(state, options);
         }
         pinHublot(reserved);
-        const opening = listTunnels(state).find((item) => item.id === reserved.id);
+        const opening = (await listTunnels(state)).find((item) => item.id === reserved.id);
         if (opening) emitServerEvent(state, { type: "tunnel_opening", tunnel: opening });
         const reservedOptions = {
           ...options,
@@ -171,7 +171,7 @@ export function createTunnelRoutes({
         const tunnel = claimedWarmTunnel
           ? await activateHublotTunnelPoolEntry(state, reserved.id)
           : await openTunnel(state, reservedOptions);
-        const persisted = listTunnels(state).find((item) => item.id === tunnel.id) ?? tunnel;
+        const persisted = (await listTunnels(state)).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, {
           tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
           agent: !serviceType,
@@ -186,7 +186,7 @@ export function createTunnelRoutes({
         } catch { /* Preserve the original failure. */ }
         stopPreparedService(prepared);
         if (claimedWarmTunnel && reserved) {
-          try { closeTunnel(state, reserved.id); } catch { /* Best-effort rollback. */ }
+          try { await closeTunnel(state, reserved.id); } catch { /* Best-effort rollback. */ }
         }
         if (reserved) {
           emitServerEvent(state, {
@@ -225,17 +225,17 @@ export function createTunnelRoutes({
         return;
       }
 
-      const tunnel = listTunnels(state).find((item) => item.id === body.id);
+      const tunnel = (await listTunnels(state)).find((item) => item.id === body.id);
       if (!tunnel) {
         json(res, 404, { error: "no such hublot" });
         return;
       }
       const sessionId = body.sessionId ? body.sessionId.slice(0, MAX_SESSION_ID_LENGTH) : null;
       try {
-        const owner = sessionId ? ensureSessionOwner(sessionId) : null;
-        const rebound = rebindHublot(state, tunnel.id, owner?.id ?? null);
+        const owner = sessionId ? await ensureSessionOwner(sessionId) : null;
+        const rebound = await rebindHublot(state, tunnel.id, owner?.id ?? null);
         pinHublot(rebound);
-        const current = listTunnels(state).find((item) => item.id === tunnel.id);
+        const current = (await listTunnels(state)).find((item) => item.id === tunnel.id);
         emitServerEvent(state, { type: "tunnel_opened", tunnel: current });
         json(res, 200, { tunnel: current });
       } catch (error) {
@@ -243,9 +243,9 @@ export function createTunnelRoutes({
       }
     },
 
-    "DELETE /tunnels": (_req, res, url) => {
+    "DELETE /tunnels": async (_req, res, url) => {
       disableCaching(res);
-      const closed = closeTunnel(state, String(url.searchParams.get("id") ?? ""));
+      const closed = await closeTunnel(state, String(url.searchParams.get("id") ?? ""));
       if (!closed) {
         json(res, 404, { error: "no such tunnel" });
         return;

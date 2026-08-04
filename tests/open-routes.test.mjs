@@ -34,11 +34,11 @@ function setup(configOverrides = {}) {
   return { state, routes };
 }
 
-test("runtime config exposes spoke authentication mode without secrets", () => {
+test("runtime config exposes spoke authentication mode without secrets", async () => {
   for (const unauthenticated of [false, true]) {
     const { routes } = setup({ UNAUTHENTICATED: unauthenticated });
     const res = response();
-    routes["GET /runtime-config.js"]({ headers: {} }, res);
+    await routes["GET /runtime-config.js"]({ headers: {} }, res);
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "text/javascript; charset=utf-8");
     assert.equal(res.body, `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze({"unauthenticated":${unauthenticated}});\n`);
@@ -46,10 +46,10 @@ test("runtime config exposes spoke authentication mode without secrets", () => {
   }
 });
 
-test("health route reports safe live diagnostics without exposing runner or filesystem identities", () => {
+test("health route reports safe live diagnostics without exposing runner or filesystem identities", async () => {
   const { routes } = setup();
   const res = response();
-  routes["GET /health"]({ headers: {} }, res);
+  await routes["GET /health"]({ headers: {} }, res);
   assert.equal(res.status, 200);
   assert.equal(res.headers["cache-control"], "no-store");
   assert.deepEqual(JSON.parse(res.body), {
@@ -63,24 +63,24 @@ test("health route reports safe live diagnostics without exposing runner or file
   assert.doesNotMatch(res.body, /secret|runner-1|\/agent|\/running/);
 });
 
-test("health diagnostics follow the running launcher and cannot falsely claim SQLite", () => {
+test("health diagnostics follow the running launcher and cannot falsely claim SQLite", async () => {
   const { state, routes } = setup();
   state.piProcesses = { bin: "/global/pi", persistentStore: "jsonl" };
   const res = response();
-  routes["GET /health"]({ headers: {} }, res);
+  await routes["GET /health"]({ headers: {} }, res);
   const health = JSON.parse(res.body);
   assert.deepEqual(health.pi, { persistentStore: "jsonl" });
   assert.equal(JSON.stringify(health).includes("open-token"), false);
 });
 
-test("authcheck reports that credentials are unnecessary in explicit unauthenticated mode", () => {
+test("authcheck reports that credentials are unnecessary in explicit unauthenticated mode", async () => {
   const { routes } = setup({ UNAUTHENTICATED: true });
   const res = response();
-  routes["GET /authcheck"]({ method: "GET", headers: {}, socket: { remoteAddress: "192.0.2.3" } }, res, new URL("http://localhost/authcheck"));
+  await routes["GET /authcheck"]({ method: "GET", headers: {}, socket: { remoteAddress: "192.0.2.3" } }, res, new URL("http://localhost/authcheck"));
   assert.deepEqual(JSON.parse(res.body), { authorized: true, unauthenticated: true });
 });
 
-test("authcheck remains an uncached credential report without exposing token values", () => {
+test("authcheck remains an uncached credential report without exposing token values", async () => {
   const { routes } = setup();
   const req = {
     method: "GET",
@@ -88,7 +88,7 @@ test("authcheck remains an uncached credential report without exposing token val
     socket: { remoteAddress: "192.0.2.2" },
   };
   const res = response();
-  routes["GET /authcheck"](req, res, new URL("http://localhost/authcheck"));
+  await routes["GET /authcheck"](req, res, new URL("http://localhost/authcheck"));
   assert.equal(res.status, 200);
   assert.equal(res.headers["cache-control"], "no-store");
   assert.deepEqual(JSON.parse(res.body), {
@@ -116,14 +116,14 @@ test("route construction validates dependencies and the authentication limit", (
   }), /authFailMax/);
 });
 
-test("health diagnostics tolerate unavailable counters and malformed internal values", () => {
+test("health diagnostics tolerate unavailable counters and malformed internal values", async () => {
   const { state, routes } = setup();
   state.sseClients = null;
   state.reloadCount = -1;
   state.appStore.migrationStatus = { currentVersion: "secret", appliedVersions: [1, "bad", -2, 3] };
   state.piProcesses.persistentStore = "/secret/backend";
   const res = response();
-  routes["GET /health"]({}, res);
+  await routes["GET /health"]({}, res);
   assert.deepEqual(JSON.parse(res.body), {
     ok: true,
     runners: [{ alive: true, busy: false }],
@@ -135,7 +135,7 @@ test("health diagnostics tolerate unavailable counters and malformed internal va
   assert.doesNotMatch(res.body, /secret/);
 });
 
-test("a successful authcheck clears prior failures and compares each candidate only once", () => {
+test("a successful authcheck clears prior failures and compares each candidate only once", async () => {
   const { state } = setup();
   state.authFails = new Map([["192.0.2.8", [1, 2]]]);
   let comparisons = 0;
@@ -150,7 +150,7 @@ test("a successful authcheck clears prior failures and compares each candidate o
   };
   const routes = createOpenRoutes({ state, listRunnerInfo: () => [], requestContext });
   const res = response();
-  routes["GET /authcheck"]({}, res, new URL("http://localhost/authcheck"));
+  await routes["GET /authcheck"]({}, res, new URL("http://localhost/authcheck"));
   assert.equal(res.body.authorized, true);
   assert.equal(comparisons, 2);
   assert.equal(state.authFails.has("192.0.2.8"), false);

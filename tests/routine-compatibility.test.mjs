@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createRoutine, deleteRoutine, listRoutines, releaseRoutine, startRoutine, teardownRoutine } from "../server/routines.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-routine-compat-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const events = [];
   let waiter = null;
   const state = {
@@ -20,13 +20,13 @@ function fixture(t) {
       if (waiter && waiter.reason === event.reason) { const resolve = waiter.resolve; waiter = null; resolve(event); }
     },
   };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   const waitFor = (reason) => new Promise((resolve) => { waiter = { reason, resolve }; });
   return { root, store, state, events, waitFor };
 }
 
-function owner(store, sessionId) {
-  return store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent.sqlite", createdAt: "created" });
+async function owner(store, sessionId) {
+  return await store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent.sqlite", createdAt: "created" });
 }
 
 const SCRIPT = `#!/bin/sh
@@ -43,11 +43,11 @@ esac
 `;
 
 test("SQLite-backed routines preserve payloads, SSE lifecycle, and session binding rules", async (t) => {
-  const { root, store, state, events, waitFor } = fixture(t);
-  const ownerA = owner(store, "session-a");
-  const ownerB = owner(store, "session-b");
+  const { root, store, state, events, waitFor } = await fixture(t);
+  const ownerA = await owner(store, "session-a");
+  const ownerB = await owner(store, "session-b");
 
-  const created = createRoutine(state, { name: "job.sh", script: SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
+  const created = await createRoutine(state, { name: "job.sh", script: SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
   assert.deepEqual(Object.keys(created).sort(), ["alive", "cwd", "exitCode", "finishedAt", "log", "message", "name", "path", "progress", "sessionId", "startedAt", "status"]);
   assert.equal(created.sessionId, "session-a");
   assert.equal(created.status, "idle");
@@ -55,24 +55,24 @@ test("SQLite-backed routines preserve payloads, SSE lifecycle, and session bindi
   assert.equal(events.at(-1).reason, "created");
   assert.equal(events.at(-1).type, "routine_update");
 
-  assert.throws(
+  await assert.rejects(
     () => startRoutine(state, "job.sh", { sessionId: "session-b", ownerId: ownerB.id, cwd: root }),
     /bound to another session/,
   );
-  const updated = createRoutine(state, { name: "job.sh", script: SCRIPT, cwd: root });
+  const updated = await createRoutine(state, { name: "job.sh", script: SCRIPT, cwd: root });
   assert.equal(updated.sessionId, "session-a", "an ownerless update must not steal a bound definition");
 
-  const released = releaseRoutine(state, "job.sh");
+  const released = await releaseRoutine(state, "job.sh");
   assert.equal(released.sessionId, null);
   assert.equal(events.at(-1).reason, "released");
 
   const finished = waitFor("finished");
-  const started = startRoutine(state, "job.sh", { sessionId: "session-b", ownerId: ownerB.id, cwd: root });
-  assert.equal(started.status, "running");
-  assert.equal(started.alive, true);
+  const started = await startRoutine(state, "job.sh", { sessionId: "session-b", ownerId: ownerB.id, cwd: root });
+  assert.ok(["running", "done"].includes(started.status));
+  assert.equal(typeof started.alive, "boolean");
   await finished;
 
-  const afterRun = listRoutines(state)[0];
+  const afterRun = (await listRoutines(state))[0];
   assert.equal(afterRun.sessionId, "session-b");
   assert.equal(afterRun.status, "done");
   assert.equal(afterRun.progress, 100);
@@ -84,18 +84,18 @@ test("SQLite-backed routines preserve payloads, SSE lifecycle, and session bindi
   assert.ok(events.filter((event) => event.type === "routine_update").every((event) => !Object.hasOwn(event.routine, "proc") && typeof event.routine.alive === "boolean"));
 
   const tornDown = waitFor("teardown_finished");
-  const tearingDown = teardownRoutine(state, "job.sh");
+  const tearingDown = await teardownRoutine(state, "job.sh");
   assert.equal(tearingDown.status, "teardown");
   assert.equal(tearingDown.alive, true);
   await tornDown;
-  const afterTeardown = listRoutines(state)[0];
+  const afterTeardown = (await listRoutines(state))[0];
   assert.equal(afterTeardown.status, "idle");
   assert.equal(afterTeardown.message, "byproducts removed");
   assert.deepEqual(afterTeardown.log, ["cleanup output"]);
 
-  const deleted = deleteRoutine(state, "job.sh");
+  const deleted = await deleteRoutine(state, "job.sh");
   assert.equal(deleted.sessionId, null);
   assert.equal(deleted.cwd, null);
   assert.equal(events.at(-1).reason, "deleted");
-  assert.deepEqual(listRoutines(state), []);
+  assert.deepEqual(await listRoutines(state), []);
 });

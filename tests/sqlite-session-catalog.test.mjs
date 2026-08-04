@@ -76,7 +76,7 @@ async function createProcessFixture() {
   try {
     await runPi(agentDir, cwd, ["-p", "root prompt"]);
     const sourceCatalog = createSqliteSessionCatalog({ databasePath: join(agentDir, "sessions.sqlite") });
-    const rootId = sourceCatalog.list({ cwd })[0].id;
+    const rootId = (await sourceCatalog.list({ cwd }))[0].id;
     await runPi(agentDir, cwd, ["--fork", rootId, "-p", "fork prompt"]);
     const copiedDatabase = join(root, "catalog-copy.sqlite");
     copyFileSync(join(agentDir, "sessions.sqlite"), copiedDatabase);
@@ -95,19 +95,19 @@ if (SKIP_LOCAL) {
   runSessionCatalogContract("SQLite", createProcessFixture);
   test("SQLite catalog preserves process-created parent session IDs", async () => {
     const { catalog, rootId } = await createProcessFixture();
-    assert.equal(catalog.list().find((session) => session.id !== rootId).parentSessionId, rootId);
+    assert.equal((await catalog.list()).find((session) => session.id !== rootId).parentSessionId, rootId);
   });
 
   test("SQLite full-text search supports punctuation, AND, OR, and phrases", async () => {
     const { catalog, rootIdentity } = await createProcessFixture();
-    const punctuation = catalog.search({ q: "foo-bar", scope: "session", path: rootIdentity });
+    const punctuation = await catalog.search({ q: "foo-bar", scope: "session", path: rootIdentity });
     assert.equal(punctuation.results.length, 1);
     assert.equal(punctuation.results[0].snippet.match, "foo-bar");
-    assert.equal(catalog.search({ q: "bar durable", scope: "session", path: rootIdentity }).results.length, 1);
-    assert.equal(catalog.search({ q: "root durable", scope: "session", path: rootIdentity }).results.length, 0);
-    assert.equal(catalog.search({ q: "missing OR durable", scope: "session", path: rootIdentity }).results.length, 1);
-    assert.equal(catalog.search({ q: '"durable phrase"', scope: "session", path: rootIdentity }).results.length, 1);
-    assert.equal(catalog.search({ q: '"phrase durable"', scope: "session", path: rootIdentity }).results.length, 0);
+    assert.equal((await catalog.search({ q: "bar durable", scope: "session", path: rootIdentity })).results.length, 1);
+    assert.equal((await catalog.search({ q: "root durable", scope: "session", path: rootIdentity })).results.length, 0);
+    assert.equal((await catalog.search({ q: "missing OR durable", scope: "session", path: rootIdentity })).results.length, 1);
+    assert.equal((await catalog.search({ q: '"durable phrase"', scope: "session", path: rootIdentity })).results.length, 1);
+    assert.equal((await catalog.search({ q: '"phrase durable"', scope: "session", path: rootIdentity })).results.length, 0);
   });
 }
 
@@ -155,7 +155,7 @@ test("SQLite catalog keeps the full transcript and marks compaction in place", a
   assert.equal(messages[2].tokensBefore, 1234);
 });
 
-test("SQLite catalog preserves query failures when closing the read handle also fails", () => {
+test("SQLite catalog preserves query failures when closing the read handle also fails", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-close-error-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -169,7 +169,7 @@ test("SQLite catalog preserves query failures when closing the read handle also 
       close() { throw closeError; },
     }),
   });
-  assert.throws(() => failingCatalog.list(), (error) => error === queryError);
+  await assert.rejects(() => failingCatalog.list(), (error) => error === queryError);
 
   const closeOnlyCatalog = createSqliteSessionCatalog({
     databasePath: path,
@@ -178,7 +178,7 @@ test("SQLite catalog preserves query failures when closing the read handle also 
       close() { throw closeError; },
     }),
   });
-  assert.throws(() => closeOnlyCatalog.list(), (error) => error === closeError);
+  await assert.rejects(() => closeOnlyCatalog.list(), (error) => error === closeError);
 });
 
 test("SQLite catalog skips malformed entry payloads and closes every read handle", async () => {
@@ -205,13 +205,13 @@ test("SQLite catalog skips malformed entry payloads and closes every read handle
       } });
     },
   });
-  assert.equal(catalog.list()[0].name, null);
-  assert.deepEqual(catalog.tree("broken").nodes.map((node) => node.id), ["good"]);
+  assert.equal((await catalog.list())[0].name, null);
+  assert.deepEqual((await catalog.tree("broken")).nodes.map((node) => node.id), ["good"]);
   assert.deepEqual((await catalog.messages("broken")).messages.map((message) => message.content), ["durable phrase"]);
-  assert.equal(closes, 2);
+  assert.equal(closes, 3);
 });
 
-test("SQLite catalog treats database columns as authoritative and tolerates malformed payload fields", () => {
+test("SQLite catalog treats database columns as authoritative and tolerates malformed payload fields", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-defensive-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -235,7 +235,7 @@ test("SQLite catalog treats database columns as authoritative and tolerates malf
   writer.close();
 
   const catalog = createSqliteSessionCatalog({ databasePath: path });
-  assert.deepEqual(catalog.list()[0], {
+  assert.deepEqual((await catalog.list())[0], {
     id: "defensive",
     createdAt: "2026-01-01",
     modifiedAt: "2026-01-01",
@@ -246,7 +246,7 @@ test("SQLite catalog treats database columns as authoritative and tolerates malf
     messageCount: 0,
     storagePath: path,
   });
-  assert.deepEqual(catalog.tree("defensive").nodes[0], {
+  assert.deepEqual((await catalog.tree("defensive")).nodes[0], {
     id: "real-id",
     parentId: null,
     type: "message",
@@ -254,11 +254,11 @@ test("SQLite catalog treats database columns as authoritative and tolerates malf
     role: "assistant",
     label: "durable text",
   });
-  assert.equal(catalog.search({ q: "durable", scope: "session", path: "defensive" }).results[0].entryId, "real-id");
-  assert.throws(() => catalog.summarize({ id: 123 }), /SQLite session ID is required/);
+  assert.equal((await catalog.search({ q: "durable", scope: "session", path: "defensive" })).results[0].entryId, "real-id");
+  await assert.rejects(() => catalog.summarize({ id: 123 }), /SQLite session ID is required/);
 });
 
-test("SQLite trigram search scans for quoted terms shorter than three characters", () => {
+test("SQLite trigram search scans for quoted terms shorter than three characters", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-short-search-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -280,15 +280,15 @@ test("SQLite trigram search scans for quoted terms shorter than three characters
   writer.close();
 
   const catalog = createSqliteSessionCatalog({ databasePath: path });
-  const short = catalog.search({ q: '"a"', scope: "all" });
+  const short = await catalog.search({ q: '"a"', scope: "all" });
   assert.equal(short.results.length, 1);
   assert.equal(short.results[0].snippet.match, "a");
-  const missing = catalog.search({ q: "missing", scope: "all" });
+  const missing = await catalog.search({ q: "missing", scope: "all" });
   assert.equal(missing.results.length, 0);
   assert.equal(missing.filesSearched, 1);
 });
 
-test("SQLite catalog reads committed WAL updates while another handle remains open", () => {
+test("SQLite catalog reads committed WAL updates while another handle remains open", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-wal-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -298,8 +298,8 @@ test("SQLite catalog reads committed WAL updates while another handle remains op
   const insert = writer.prepare("INSERT INTO sessions VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?)");
   insert.run("one", "2026-01-01", "/work", "2026-01-01", "one", "one");
   const catalog = createSqliteSessionCatalog({ databasePath: path });
-  assert.deepEqual(catalog.list().map((session) => session.id), ["one"]);
+  assert.deepEqual((await catalog.list()).map((session) => session.id), ["one"]);
   insert.run("two", "2026-01-02", "/work", "2026-01-02", "two", "two");
-  assert.deepEqual(catalog.list().map((session) => session.id), ["two", "one"]);
+  assert.deepEqual((await catalog.list()).map((session) => session.id), ["two", "one"]);
   writer.close();
 });

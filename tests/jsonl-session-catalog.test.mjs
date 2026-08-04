@@ -37,7 +37,7 @@ async function createFixture() {
 
 runSessionCatalogContract("JSONL", createFixture);
 
-test("JSONL catalog keeps the full transcript and marks compaction in place", () => {
+test("JSONL catalog keeps the full transcript and marks compaction in place", async () => {
   mkdirSync(directory, { recursive: true });
   write(compactedPath, [
     { type: "session", id: "catalog-compacted", cwd, timestamp: "2026-01-03T00:00:00Z" },
@@ -48,7 +48,7 @@ test("JSONL catalog keeps the full transcript and marks compaction in place", ()
     { type: "message", id: "a2", parentId: "u2", timestamp: "2026-01-03T00:00:05Z", message: { role: "assistant", content: "newer answer" } },
   ]);
 
-  const messages = catalog.messages(compactedPath).messages;
+  const messages = (await catalog.messages(compactedPath)).messages;
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "compactionSummary", "user", "assistant"]);
   assert.equal(messages[2].tokensBefore, 1234);
 });

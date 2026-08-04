@@ -41,7 +41,7 @@ function readUtf8(path, description) {
 }
 
 /** Import legacy executable definitions and their bindings without modifying the source files. */
-export function importLegacyRoutines({
+export async function importLegacyRoutines({
   repository,
   resolveOwner,
   sourceDir = LEGACY_ROUTINES_DIR,
@@ -111,15 +111,14 @@ export function importLegacyRoutines({
 
   const names = new Set(candidates.map((candidate) => candidate.name));
   const orphanBindingCount = [...normalizedBindings.keys()].filter((name) => !names.has(name)).length;
-  const inspections = candidates.map((candidate) => {
-    const existing = repository.findByName(candidate.name);
+  const inspections = await Promise.all(candidates.map(async (candidate) => {
+    const existing = await repository.findByName(candidate.name);
     if (existing != null && (typeof existing !== "object" || Array.isArray(existing))) {
       throw new TypeError("routine repository findByName() must return an object or null");
     }
     let owner = null;
     if (candidate.binding.sessionId) {
-      owner = resolveOwner(candidate.binding.sessionId);
-      if (owner && typeof owner.then === "function") throw new TypeError("routine owner resolver must be synchronous");
+      owner = await resolveOwner(candidate.binding.sessionId);
       if (owner != null && (typeof owner !== "object" || Array.isArray(owner))) {
         throw new TypeError("routine owner resolver must return an object or null");
       }
@@ -128,7 +127,7 @@ export function importLegacyRoutines({
       }
     }
     return { candidate, existing, owner };
-  });
+  }));
 
   let existingCount = 0;
   const imports = [];
@@ -165,7 +164,7 @@ export function importLegacyRoutines({
         now: timestamp,
       };
     });
-    for (const row of pendingRows) repository.upsert(row);
+    for (const row of pendingRows) await repository.upsert(row);
   }
 
   return Object.freeze({

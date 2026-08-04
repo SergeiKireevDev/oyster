@@ -39,7 +39,7 @@ export function classifyPinnedPath(path, stat = statSync(path)) {
   return { kind: "file", mimeType: "application/octet-stream" };
 }
 
-function scopeIdentity(body, ensureSessionOwner) {
+async function scopeIdentity(body, ensureSessionOwner) {
   const rawScope = body?.scope;
   if (rawScope !== undefined && rawScope !== "session" && rawScope !== "workspace") {
     throw Object.assign(new Error("pinned widget scope must be session or workspace"), { statusCode: 400 });
@@ -56,7 +56,7 @@ function scopeIdentity(body, ensureSessionOwner) {
     return { scope: "workspace", ownerId: null, sessionId: null };
   }
   if (sessionId.length > 100) throw Object.assign(new Error("sessionId is too long"), { statusCode: 400 });
-  const owner = ensureSessionOwner(sessionId);
+  const owner = await ensureSessionOwner(sessionId);
   if (!owner) throw Object.assign(new Error("unknown session for pinned widget"), { statusCode: 404 });
   return { scope: "session", ownerId: owner.id, sessionId };
 }
@@ -99,7 +99,7 @@ function pathState(row, resolveSafePath) {
   }
 }
 
-export function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = null } = {}) {
+export async function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = null } = {}) {
   const base = {
     id: row.id,
     kind: row.kind,
@@ -113,7 +113,7 @@ export function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = n
     updatedAt: row.updated_at,
   };
   if (row.kind === "live_interface") {
-    const hublot = state.appStore.repositories.hublots.find(row.hublot_id);
+    const hublot = await state.appStore.repositories.hublots.find(row.hublot_id);
     const tunnel = activeTunnels?.find((item) => item.id === row.hublot_id) ?? null;
     const status = tunnel?.status ?? hublot?.status ?? "closed";
     return {
@@ -134,14 +134,14 @@ export function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = n
   return { ...base, availability: "ready", url: row.target };
 }
 
-export function listPinnedWidgets(state, { sessionId = null, scope = "session", resolveSafePath, listTunnels = () => [] } = {}) {
+export async function listPinnedWidgets(state, { sessionId = null, scope = "session", resolveSafePath, listTunnels = () => [] } = {}) {
   const repository = state.appStore.repositories.pinnedWidgets;
-  const activeTunnels = listTunnels(state);
+  const activeTunnels = await listTunnels(state);
   return {
-    widgets: repository.list()
+    widgets: await Promise.all((await repository.list())
       .filter((row) => rowVisible(row, sessionId, scope))
-      .map((row) => pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels })),
-    groups: repository.listGroups()
+      .map((row) => pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels }))),
+    groups: (await repository.listGroups())
       .filter((row) => rowVisible(row, sessionId, scope))
       .map((row) => ({
         id: row.id, name: row.name, scope: row.scope, sessionId: row.session_id ?? null,
@@ -150,36 +150,36 @@ export function listPinnedWidgets(state, { sessionId = null, scope = "session", 
   };
 }
 
-export function ensurePinnedHublot(state, hublot) {
+export async function ensurePinnedHublot(state, hublot) {
   if (!hublot) return null;
   const repository = state.appStore.repositories.pinnedWidgets;
-  const existing = repository.list().find((row) => row.hublot_id === hublot.id);
+  const existing = (await repository.list()).find((row) => row.hublot_id === hublot.id);
   const scope = hublot.owner_id == null ? "workspace" : "session";
   const now = new Date().toISOString();
   if (existing) {
     if (existing.owner_id !== (hublot.owner_id ?? null) || existing.scope !== scope) {
       const oldIdentity = { ownerId: existing.owner_id, scope: existing.scope };
       const nextIdentity = { ownerId: hublot.owner_id ?? null, scope };
-      state.appStore.transaction(() => {
-        repository.update(existing.id, {
+      await state.appStore.transaction(async () => {
+        await repository.update(existing.id, {
           owner_id: nextIdentity.ownerId,
           scope: nextIdentity.scope,
           group_id: null,
-          position: repository.nextPosition({ ...nextIdentity, groupId: null }),
+          position: await repository.nextPosition({ ...nextIdentity, groupId: null }),
           updated_at: now,
         });
-        normalizeContainer(repository, oldIdentity, existing.group_id ?? null);
+        await normalizeContainer(repository, oldIdentity, existing.group_id ?? null);
       });
     }
-    return repository.find(existing.id);
+    return await repository.find(existing.id);
   }
-  return repository.create({
+  return await repository.create({
     id: `hublot:${hublot.id}`,
     ownerId: hublot.owner_id ?? null,
     scope,
     kind: "live_interface",
     label: String(hublot.label || "Live interface").trim().slice(0, 200),
-    position: repository.nextPosition({ ownerId: hublot.owner_id ?? null, scope }),
+    position: await repository.nextPosition({ ownerId: hublot.owner_id ?? null, scope }),
     hublotId: hublot.id,
     createdAt: hublot.created_at ?? now,
     updatedAt: now,
@@ -192,9 +192,9 @@ function normalizeLabel(value, fallback) {
   return label;
 }
 
-function assertGroup(repository, groupId, identity) {
+async function assertGroup(repository, groupId, identity) {
   if (!groupId) return null;
-  const group = repository.findGroup(groupId);
+  const group = await repository.findGroup(groupId);
   if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
   if (group.scope !== identity.scope || group.owner_id !== identity.ownerId) {
     throw Object.assign(new Error("widget and group scopes do not match"), { statusCode: 409 });
@@ -202,41 +202,41 @@ function assertGroup(repository, groupId, identity) {
   return group;
 }
 
-function normalizeContainer(repository, identity, groupId) {
-  repository.list()
+async function normalizeContainer(repository, identity, groupId) {
+  const items = (await repository.list())
     .filter((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.group_id === groupId)
-    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
-    .forEach((item, position) => {
-      if (Number(item.position) !== position) repository.update(item.id, { position });
-    });
+    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
+  await Promise.all(items.map((item, position) => Number(item.position) !== position
+    ? repository.update(item.id, { position })
+    : null));
 }
 
-function normalizeGroupContainer(repository, identity) {
-  repository.listGroups()
+async function normalizeGroupContainer(repository, identity) {
+  const groups = (await repository.listGroups())
     .filter((group) => group.scope === identity.scope && group.owner_id === identity.ownerId)
-    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
-    .forEach((group, position) => {
-      if (Number(group.position) !== position) repository.updateGroup(group.id, { position });
-    });
+    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
+  await Promise.all(groups.map((group, position) => Number(group.position) !== position
+    ? repository.updateGroup(group.id, { position })
+    : null));
 }
 
-function reorderWidget(state, row, { groupId, beforeId, identity = null }, now) {
+async function reorderWidget(state, row, { groupId, beforeId, identity = null }, now) {
   const repository = state.appStore.repositories.pinnedWidgets;
   const oldIdentity = { scope: row.scope, ownerId: row.owner_id };
   const nextIdentity = identity ?? oldIdentity;
   const scopeChanged = nextIdentity.scope !== oldIdentity.scope || nextIdentity.ownerId !== oldIdentity.ownerId;
   const nextGroupId = groupId === undefined ? (scopeChanged ? null : row.group_id) : groupId || null;
-  assertGroup(repository, nextGroupId, nextIdentity);
+  await assertGroup(repository, nextGroupId, nextIdentity);
   const oldGroupId = row.group_id ?? null;
   if (!scopeChanged && beforeId === row.id && nextGroupId === oldGroupId) return row;
-  const siblings = repository.list()
+  const siblings = (await repository.list())
     .filter((item) => item.id !== row.id && item.scope === nextIdentity.scope && item.owner_id === nextIdentity.ownerId && item.group_id === nextGroupId)
     .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
   let index = beforeId ? siblings.findIndex((item) => item.id === beforeId) : siblings.length;
   if (beforeId && index < 0) throw Object.assign(new Error("reorder target is not in the destination group"), { statusCode: 409 });
   siblings.splice(index, 0, row);
-  state.appStore.transaction(() => {
-    siblings.forEach((item, position) => repository.update(item.id, {
+  await state.appStore.transaction(async () => {
+    await Promise.all(siblings.map(async (item, position) => repository.update(item.id, {
       position,
       ...(item.id === row.id ? {
         owner_id: nextIdentity.ownerId,
@@ -244,10 +244,10 @@ function reorderWidget(state, row, { groupId, beforeId, identity = null }, now) 
         group_id: nextGroupId,
         updated_at: now,
       } : {}),
-    }));
-    if (scopeChanged || oldGroupId !== nextGroupId) normalizeContainer(repository, oldIdentity, oldGroupId);
+    })));
+    if (scopeChanged || oldGroupId !== nextGroupId) await normalizeContainer(repository, oldIdentity, oldGroupId);
   });
-  return repository.find(row.id);
+  return await repository.find(row.id);
 }
 
 function assertRequestBody(body) {
@@ -303,8 +303,8 @@ function statArtifact(target, unavailableMessage) {
   }
 }
 
-function mediaTarget(state, widgetId, resolveSafePath) {
-  const row = state.appStore.repositories.pinnedWidgets.find(widgetId);
+async function mediaTarget(state, widgetId, resolveSafePath) {
+  const row = await state.appStore.repositories.pinnedWidgets.find(widgetId);
   if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
   if (!INLINE_KINDS.has(row.kind)) throw Object.assign(new Error("widget is not safe inline media"), { statusCode: 415 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
@@ -317,8 +317,8 @@ function mediaTarget(state, widgetId, resolveSafePath) {
   return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
 }
 
-function htmlTarget(state, widgetId, resolveSafePath) {
-  const row = state.appStore.repositories.pinnedWidgets.find(widgetId);
+async function htmlTarget(state, widgetId, resolveSafePath) {
+  const row = await state.appStore.repositories.pinnedWidgets.find(widgetId);
   if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
   const isHtml = row.kind === "file" && String(row.mime_type ?? "").startsWith("text/html");
   if (!isHtml) throw Object.assign(new Error("widget is not an HTML artifact"), { statusCode: 415 });
@@ -481,8 +481,8 @@ export function createPinnedWidgetRoutes({
   });
 
   return {
-    "GET /pinned-widgets": (_req, res, url) => {
-      json(res, 200, listPinnedWidgets(state, {
+    "GET /pinned-widgets": async (_req, res, url) => {
+      json(res, 200, await listPinnedWidgets(state, {
         sessionId: url.searchParams.get("sessionId"),
         scope: ["all", "workspace"].includes(url.searchParams.get("scope")) ? url.searchParams.get("scope") : "session",
         resolveSafePath,
@@ -497,7 +497,7 @@ export function createPinnedWidgetRoutes({
       let widgetCreated = false;
       try {
         const body = assertRequestBody(parsedBody);
-        const identity = scopeIdentity(body, ensureSessionOwner);
+        const identity = await scopeIdentity(body, ensureSessionOwner);
         let kind;
         let target = null;
         let mimeType = null;
@@ -538,10 +538,10 @@ export function createPinnedWidgetRoutes({
           mtimeMs = Math.trunc(stat.mtimeMs);
           fallbackLabel = basename(target);
         } else if (body.hublotId) {
-          const hublot = state.appStore.repositories.hublots.find(String(body.hublotId));
+          const hublot = await state.appStore.repositories.hublots.find(String(body.hublotId));
           if (!hublot) throw Object.assign(new Error("no such live interface"), { statusCode: 404 });
-          const pinned = ensurePinnedHublot(state, hublot);
-          json(res, 200, { widget: pinnedWidgetDto(state, pinned, { resolveSafePath, activeTunnels: listTunnels(state) }), ...currentCollection(body) });
+          const pinned = await ensurePinnedHublot(state, hublot);
+          json(res, 200, { widget: await pinnedWidgetDto(state, pinned, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
         } else if (body.url) {
           let url;
@@ -556,24 +556,24 @@ export function createPinnedWidgetRoutes({
         } else {
           throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
         }
-        const duplicate = repository.list().find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
+        const duplicate = (await repository.list()).find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
         if (duplicate) {
-          json(res, 200, { widget: pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: listTunnels(state) }), ...currentCollection(body) });
+          json(res, 200, { widget: await pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
         }
         const groupId = body.groupId ? String(body.groupId) : null;
         assertGroup(repository, groupId, identity);
         const now = new Date().toISOString();
-        const widget = repository.create({
+        const widget = await repository.create({
           id: widgetId, ...identity, groupId, kind,
           label: normalizeLabel(body.label, fallbackLabel),
-          position: repository.nextPosition({ ...identity, groupId }), target, mimeType,
+          position: await repository.nextPosition({ ...identity, groupId }), target, mimeType,
           size, mtimeMs, createdAt: now,
         });
         widgetCreated = true;
-        const dto = pinnedWidgetDto(state, widget, { resolveSafePath, activeTunnels: listTunnels(state) });
+        const dto = await pinnedWidgetDto(state, widget, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_created", { widget: dto });
-        json(res, 201, { widget: dto, ...currentCollection(body) });
+        json(res, 201, { widget: dto, ...await currentCollection(body) });
       } catch (error) {
         if (materializedTarget && !widgetCreated) rmSync(materializedTarget, { recursive: true, force: true });
         sendError(json, res, error);
@@ -585,7 +585,7 @@ export function createPinnedWidgetRoutes({
       if (parsedBody === undefined) return;
       try {
         const body = assertRequestBody(parsedBody);
-        const row = repository.find(String(body.id ?? ""));
+        const row = await repository.find(String(body.id ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         const now = new Date().toISOString();
         const nextLabel = body.label === undefined ? null : normalizeLabel(body.label);
@@ -594,32 +594,32 @@ export function createPinnedWidgetRoutes({
           if (row.kind === "builtin" && body.scope !== undefined && body.scope !== row.scope) {
             throw Object.assign(new Error("built-in widgets cannot change scope"), { statusCode: 409 });
           }
-          const identity = body.scope === undefined ? null : scopeIdentity(body, ensureSessionOwner);
-          updated = reorderWidget(state, row, {
+          const identity = body.scope === undefined ? null : await scopeIdentity(body, ensureSessionOwner);
+          updated = await reorderWidget(state, row, {
             groupId: body.groupId === undefined ? undefined : body.groupId ? String(body.groupId) : null,
             beforeId: body.beforeId ? String(body.beforeId) : null,
             identity,
           }, now);
         }
         if (nextLabel !== null) {
-          repository.update(row.id, { label: nextLabel, updated_at: now });
-          updated = repository.find(row.id);
+          await repository.update(row.id, { label: nextLabel, updated_at: now });
+          updated = await repository.find(row.id);
         }
-        const dto = pinnedWidgetDto(state, updated, { resolveSafePath, activeTunnels: listTunnels(state) });
+        const dto = await pinnedWidgetDto(state, updated, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_updated", { widget: dto });
-        json(res, 200, { widget: dto, ...currentCollection(body) });
+        json(res, 200, { widget: dto, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
-    "DELETE /pinned-widgets": (req, res, url) => {
+    "DELETE /pinned-widgets": async (req, res, url) => {
       try {
         const widgetId = String(url.searchParams.get("id") ?? "");
-        const row = repository.find(widgetId);
+        const row = await repository.find(widgetId);
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         if (row.kind === "builtin") throw Object.assign(new Error("built-in widgets cannot be unpinned"), { statusCode: 409 });
-        state.appStore.transaction(() => {
-          repository.delete(widgetId);
-          normalizeContainer(repository, { scope: row.scope, ownerId: row.owner_id }, row.group_id);
+        await state.appStore.transaction(async () => {
+          await repository.delete(widgetId);
+          await normalizeContainer(repository, { scope: row.scope, ownerId: row.owner_id }, row.group_id);
         });
         emit("pinned_widget_deleted", { widgetId });
         json(res, 200, { unpinned: widgetId });
@@ -631,14 +631,14 @@ export function createPinnedWidgetRoutes({
       if (parsedBody === undefined) return;
       try {
         const body = assertRequestBody(parsedBody);
-        const identity = scopeIdentity(body, ensureSessionOwner);
+        const identity = await scopeIdentity(body, ensureSessionOwner);
         const now = new Date().toISOString();
-        const group = repository.createGroup({
+        const group = await repository.createGroup({
           id: id("group"), ...identity, name: normalizeLabel(body.name).slice(0, 80),
-          position: repository.nextGroupPosition(identity), createdAt: now,
+          position: await repository.nextGroupPosition(identity), createdAt: now,
         });
         emit("pinned_widget_updated", { group });
-        json(res, 201, { group, ...currentCollection(body) });
+        json(res, 201, { group, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -647,43 +647,43 @@ export function createPinnedWidgetRoutes({
       if (parsedBody === undefined) return;
       try {
         const body = assertRequestBody(parsedBody);
-        const group = repository.findGroup(String(body.id ?? ""));
+        const group = await repository.findGroup(String(body.id ?? ""));
         if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
         const now = new Date().toISOString();
         const oldIdentity = { scope: group.scope, ownerId: group.owner_id };
-        const nextIdentity = body.scope === undefined ? oldIdentity : scopeIdentity(body, ensureSessionOwner);
+        const nextIdentity = body.scope === undefined ? oldIdentity : await scopeIdentity(body, ensureSessionOwner);
         const scopeChanged = nextIdentity.scope !== oldIdentity.scope || nextIdentity.ownerId !== oldIdentity.ownerId;
-        state.appStore.transaction(() => {
+        await state.appStore.transaction(async () => {
           if (scopeChanged) {
-            repository.updateGroup(group.id, {
+            await repository.updateGroup(group.id, {
               owner_id: nextIdentity.ownerId,
               scope: nextIdentity.scope,
-              position: repository.nextGroupPosition(nextIdentity),
+              position: await repository.nextGroupPosition(nextIdentity),
               updated_at: now,
             });
-            repository.list()
+            await Promise.all((await repository.list())
               .filter((widget) => widget.group_id === group.id)
-              .forEach((widget) => repository.update(widget.id, {
+              .map((widget) => repository.update(widget.id, {
                 owner_id: nextIdentity.ownerId,
                 scope: nextIdentity.scope,
                 updated_at: now,
-              }));
-            normalizeGroupContainer(repository, oldIdentity);
+              })));
+            await normalizeGroupContainer(repository, oldIdentity);
           }
-          if (body.name !== undefined) repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, 80), updated_at: now });
+          if (body.name !== undefined) await repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, 80), updated_at: now });
         });
-        const updated = repository.findGroup(group.id);
+        const updated = await repository.findGroup(group.id);
         emit("pinned_widget_updated", { group: updated });
-        json(res, 200, { group: updated, ...currentCollection(body) });
+        json(res, 200, { group: updated, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
-    "DELETE /pinned-widget-groups": (req, res, url) => {
+    "DELETE /pinned-widget-groups": async (req, res, url) => {
       try {
         const groupId = String(url.searchParams.get("id") ?? "");
-        const group = repository.findGroup(groupId);
+        const group = await repository.findGroup(groupId);
         if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
-        const children = repository.list().filter((item) => item.group_id === groupId);
+        const children = (await repository.list()).filter((item) => item.group_id === groupId);
         const ungroup = url.searchParams.get("ungroup") === "1";
         const deleteWidgets = url.searchParams.get("deleteWidgets") === "1";
         if (deleteWidgets && children.some((item) => item.kind === "builtin")) {
@@ -692,13 +692,12 @@ export function createPinnedWidgetRoutes({
         if (children.length && !ungroup && !deleteWidgets) {
           throw Object.assign(new Error("group is not empty; request ungroup=1 to keep its widgets or deleteWidgets=1 to remove them"), { statusCode: 409 });
         }
-        state.appStore.transaction(() => {
-          children.forEach((item) => {
-            if (deleteWidgets) repository.delete(item.id);
-            else repository.update(item.id, { group_id: null, updated_at: new Date().toISOString() });
-          });
-          repository.deleteGroup(groupId);
-          normalizeContainer(repository, { scope: group.scope, ownerId: group.owner_id }, null);
+        await state.appStore.transaction(async () => {
+          await Promise.all(children.map((item) => deleteWidgets
+            ? repository.delete(item.id)
+            : repository.update(item.id, { group_id: null, updated_at: new Date().toISOString() })));
+          await repository.deleteGroup(groupId);
+          await normalizeContainer(repository, { scope: group.scope, ownerId: group.owner_id }, null);
         });
         emit("pinned_widget_updated", { groupId, deleted: true, deletedWidgetIds: deleteWidgets ? children.map((item) => item.id) : [] });
         json(res, 200, { deleted: groupId, deletedWidgets: deleteWidgets ? children.map((item) => item.id) : [] });
@@ -707,7 +706,7 @@ export function createPinnedWidgetRoutes({
 
     "GET /pinned-widget-monitor-preview": async (_req, res, url) => {
       try {
-        const row = repository.find(String(url.searchParams.get("id") ?? ""));
+        const row = await repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         const preview = formatMonitoringPreview(await executeMonitor(row, "preview", { resolveSafePath }));
         json(res, 200, { id: row.id, preview });
@@ -716,16 +715,16 @@ export function createPinnedWidgetRoutes({
 
     "GET /pinned-widget-monitor-content": async (_req, res, url) => {
       try {
-        const row = repository.find(String(url.searchParams.get("id") ?? ""));
+        const row = await repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         const content = await executeMonitor(row, "content", { resolveSafePath });
         json(res, 200, { id: row.id, content, format: row.mime_type === "text/x-diff" ? "diff" : "text" });
       } catch (error) { sendError(json, res, error); }
     },
 
-    "GET /pinned-widget-content": (_req, res, url) => {
+    "GET /pinned-widget-content": async (_req, res, url) => {
       try {
-        const row = repository.find(String(url.searchParams.get("id") ?? ""));
+        const row = await repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
         if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a readable text artifact"), { statusCode: 415 });
         const target = row.target ? resolveSafePath(resolve(row.target)) : null;
@@ -740,9 +739,9 @@ export function createPinnedWidgetRoutes({
       } catch (error) { sendError(json, res, error); }
     },
 
-    "GET /pinned-widget-html": (req, res, url) => {
+    "GET /pinned-widget-html": async (req, res, url) => {
       try {
-        const { target, stat, mimeType } = htmlTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
+        const { target, stat, mimeType } = await htmlTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
         res.writeHead(200, {
           "content-type": mimeType,
           "content-length": stat.size,
@@ -763,7 +762,7 @@ export function createPinnedWidgetRoutes({
 
     "HEAD /pinned-widget-media": async (req, res, url) => {
       try {
-        const { stat, mimeType } = await prepareVideo(state, mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
+        const { stat, mimeType } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
         res.writeHead(200, {
           "content-type": mimeType, "content-length": stat.size, "accept-ranges": "bytes",
           "cache-control": "private, no-cache", "x-content-type-options": "nosniff",
@@ -778,7 +777,7 @@ export function createPinnedWidgetRoutes({
 
     "GET /pinned-widget-media": async (req, res, url) => {
       try {
-        const { target, stat, mimeType, displayName } = await prepareVideo(state, mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
+        const { target, stat, mimeType, displayName } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
         const etag = `W/\"${stat.size}-${Math.trunc(stat.mtimeMs)}\"`;
         if (!req.headers.range && req.headers["if-none-match"] === etag) {
           res.writeHead(304, { etag, "cache-control": "private, no-cache" });

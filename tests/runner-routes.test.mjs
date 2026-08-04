@@ -66,18 +66,18 @@ function setup() {
   return { runner, state, intervals, cleared, dependencies };
 }
 
-test("events route registers before replay, replays runner output, pings, and cleans up", () => {
+test("events route registers before replay, replays runner output, pings, and cleans up", async () => {
   const { state, intervals, cleared, dependencies } = setup();
   const handler = createRunnerRoutes(dependencies)["GET /events"];
   const req = new EventEmitter();
   const res = response();
-  handler(req, res, new URL("http://localhost/events?runner=runner-1"));
+  await handler(req, res, new URL("http://localhost/events?runner=runner-1"));
 
   assert.equal(res.status, 200);
   assert.equal(res.headers["content-type"], "text/event-stream");
   assert.equal(res.runnerId, "runner-1");
   assert.equal(state.sseClients.has(res), true);
-  assert.equal(dependencies.runnerFromReq().proc, null, "read-only SSE subscription must not start pi");
+  assert.equal(await dependencies.runnerFromReq().proc, null, "read-only SSE subscription must not start pi");
   assert.ok(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')));
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
   assert.equal(intervals[0].delay, 25000);
@@ -90,11 +90,11 @@ test("events route registers before replay, replays runner output, pings, and cl
   assert.deepEqual(cleared, [1]);
 });
 
-test("SSE reconnect can skip replay while still receiving replay completion", () => {
+test("SSE reconnect can skip replay while still receiving replay completion", async () => {
   const { dependencies } = setup();
   const handler = createRunnerRoutes(dependencies)["GET /events"];
   const res = response();
-  handler(new EventEmitter(), res, new URL("http://localhost/events?replay=0"));
+  await handler(new EventEmitter(), res, new URL("http://localhost/events?replay=0"));
   assert.equal(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')), false);
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
 });
@@ -132,29 +132,29 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   assert.equal(unavailable.status, 503);
 
   const listed = response();
-  routes["GET /runners"]({}, listed);
+  await routes["GET /runners"]({}, listed);
   assert.deepEqual(listed.body, { runners: [{ id: "runner-1", alive: false }] });
 });
 
-test("runner stop and restart routes preserve selection, status, and delayed restart", () => {
+test("runner stop and restart routes preserve selection, status, and delayed restart", async () => {
   const { runner, state, intervals, dependencies } = setup();
   const familyStops = [];
-  dependencies.stopRunnerFamily = (selected) => { familyStops.push(selected.id); dependencies.stopRunner(selected); };
+  dependencies.stopRunnerFamily = async (selected) => { familyStops.push(selected.id); await dependencies.stopRunner(selected); };
   const routes = createRunnerRoutes(dependencies);
 
   const missing = response();
-  routes["DELETE /runners"]({}, missing, new URL("http://localhost/runners?id=missing"));
+  await routes["DELETE /runners"]({}, missing, new URL("http://localhost/runners?id=missing"));
   assert.equal(missing.status, 404);
 
   const stopped = response();
-  routes["DELETE /runners"]({}, stopped, new URL("http://localhost/runners?id=runner-1"));
+  await routes["DELETE /runners"]({}, stopped, new URL("http://localhost/runners?id=runner-1"));
   assert.equal(stopped.status, 200);
   assert.equal(runner.stopped, true);
   assert.deepEqual(familyStops, ["runner-1"]);
 
   runner.stopped = false;
   const restarted = response();
-  routes["POST /restart"]({}, restarted, new URL("http://localhost/restart"));
+  await routes["POST /restart"]({}, restarted, new URL("http://localhost/restart"));
   assert.equal(restarted.status, 202);
   assert.equal(intervals[0].delay, 300);
   intervals[0].callback();
@@ -211,7 +211,9 @@ test("managed subagent stream sends heartbeats and cancels on disconnect", async
     name: "Loop iteration 1: item",
     prompt: "implement item",
   } }, res);
-  await Promise.resolve();
+  for (let attempt = 0; attempt < 10 && res.status === undefined; attempt++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
 
   assert.equal(res.status, 200, "headers must be acknowledged before the subagent completes");
   assert.equal(JSON.parse(res.chunks[0]).type, "started");
@@ -364,11 +366,11 @@ test("route construction rejects incomplete dependencies", () => {
   assert.throws(() => createRunnerRoutes({ ...dependencies, subagentTimeoutMs: 0 }), /positive finite/);
 });
 
-test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", () => {
+test("constructing reloaded runner routes leaves old SSE responses state-owned and writable", async () => {
   const { state, dependencies } = setup();
   const oldHandler = createRunnerRoutes(dependencies)["GET /events"];
   const res = response();
-  oldHandler(new EventEmitter(), res, new URL("http://localhost/events"));
+  await oldHandler(new EventEmitter(), res, new URL("http://localhost/events"));
 
   createRunnerRoutes(dependencies);
   state.broadcast('{"type":"after_reload"}');

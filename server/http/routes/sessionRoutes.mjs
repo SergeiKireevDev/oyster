@@ -16,7 +16,7 @@ function isWithin(path, root) {
 }
 
 /** Resolve a root session and every transitive child across catalog folders. */
-export function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
+export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
   const sqlite = catalog.backend === "sqlite";
   const validateReference = sessionReferences?.validate;
   if (typeof validateReference !== "function" && (sqlite || typeof sessionReferenceFor !== "function")) {
@@ -33,14 +33,14 @@ export function collectSessionFamilyReferences({ catalog, sessionReferences, ses
   };
   let summaries;
   if (sqlite) {
-    summaries = catalog.list({});
+    summaries = await catalog.list({});
   } else {
     const locations = new Set([dirname(rootReference.storagePath)]);
-    for (const folder of catalog.folders?.() ?? []) {
+    for (const folder of await catalog.folders?.() ?? []) {
       const location = typeof folder === "string" ? folder : folder?.dir;
       if (location) locations.add(location);
     }
-    summaries = [...locations].flatMap((location) => catalog.list({ location }));
+    summaries = (await Promise.all([...locations].map((location) => catalog.list({ location })))).flat();
   }
 
   const identity = (session) => sqlite ? session.id : session.path;
@@ -79,32 +79,32 @@ export function collectSessionFamilyReferences({ catalog, sessionReferences, ses
 }
 
 /** Persist one archive state across a root session and every transitive child. */
-export function setSessionFamilyArchived({ state, catalog, sessionReferenceFor = null, rootReference, archived, includeAncestors = false, now = () => Date.now() }) {
-  const references = collectSessionFamilyReferences({ catalog, sessionReferences: state.sessionReferences, sessionReferenceFor, rootReference, includeAncestors });
+export async function setSessionFamilyArchived({ state, catalog, sessionReferenceFor = null, rootReference, archived, includeAncestors = false, now = () => Date.now() }) {
+  const references = await collectSessionFamilyReferences({ catalog, sessionReferences: state.sessionReferences, sessionReferenceFor, rootReference, includeAncestors });
   const repository = state.appStore?.repositories?.sessions;
-  const updateFamily = (repositories) => {
+  const updateFamily = async (repositories) => {
     for (const reference of references) {
-      const owner = repositories.sessions.find({
+      const owner = await repositories.sessions.find({
         backend: reference.backend,
         sessionId: reference.id,
         storagePath: reference.storagePath ?? null,
-      }) ?? repositories.sessions.upsert({
+      }) ?? await repositories.sessions.upsert({
         backend: reference.backend,
         sessionId: reference.id,
         storagePath: reference.storagePath ?? null,
         createdAt: new Date(now()).toISOString(),
       });
-      repositories.sessions.setArchived(owner.id, archived);
+      await repositories.sessions.setArchived(owner.id, archived);
     }
   };
-  if (typeof state.appStore?.transaction === "function") state.appStore.transaction(updateFamily);
-  else updateFamily({ sessions: repository });
+  if (typeof state.appStore?.transaction === "function") await state.appStore.transaction(updateFamily);
+  else await updateFamily({ sessions: repository });
   return references;
 }
 
 /** Stop the runner for a parent session and every transitive child. */
-export function stopSessionFamilyRunners({ state, catalog, rootRunner, stopRunner }) {
-  const references = rootRunner.sessionRef ? collectSessionFamilyReferences({
+export async function stopSessionFamilyRunners({ state, catalog, rootRunner, stopRunner }) {
+  const references = rootRunner.sessionRef ? await collectSessionFamilyReferences({
     catalog,
     sessionReferences: state.sessionReferences,
     rootReference: rootRunner.sessionRef,
@@ -112,7 +112,7 @@ export function stopSessionFamilyRunners({ state, catalog, rootRunner, stopRunne
   const matching = references.length ? [...state.runners.values()].filter((runner) => runner.sessionRef
     ? references.some((reference) => state.sessionReferences.equals(runner.sessionRef, reference))
     : references.some((reference) => reference.backend === "jsonl" && runner.sessionFile === reference.storagePath)) : [rootRunner];
-  for (const runner of matching) stopRunner(runner);
+  for (const runner of matching) await stopRunner(runner);
   return matching;
 }
 
@@ -206,7 +206,7 @@ export function createSessionRoutes({
   }
 
   return {
-    "GET /analytics/usage": (_req, res, url) => {
+    "GET /analytics/usage": async (_req, res, url) => {
       if (!sqlite || typeof catalog.usageAnalytics !== "function") {
         json(res, 400, { error: "usage analytics requires the SQLite session backend" });
         return;
@@ -221,13 +221,13 @@ export function createSessionRoutes({
       const generatedAtMs = now();
       const since = durations[range] == null ? null : new Date(generatedAtMs - durations[range]).toISOString();
       try {
-        json(res, 200, { range, since, generatedAt: new Date(generatedAtMs).toISOString(), ...catalog.usageAnalytics({ bucket, since }) });
+        json(res, 200, { range, since, generatedAt: new Date(generatedAtMs).toISOString(), ...await catalog.usageAnalytics({ bucket, since }) });
       } catch (error) {
         json(res, 500, { error: `cannot aggregate usage: ${errorMessage(error)}` });
       }
     },
 
-    "GET /sessions": (_req, res, url) => {
+    "GET /sessions": async (_req, res, url) => {
       let cwd;
       let location;
       const all = sqlite && url.searchParams.get("all") === "1";
@@ -247,7 +247,7 @@ export function createSessionRoutes({
       else cwd = state.currentDir;
 
       try {
-        const summaries = catalog.list({ cwd, location });
+        const summaries = await catalog.list({ cwd, location });
         if (!Array.isArray(summaries)) throw new TypeError("session catalog returned an invalid list");
         const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
         const live = [...state.runners.values()];
@@ -286,7 +286,7 @@ export function createSessionRoutes({
         return;
       }
       const repository = state.appStore?.repositories?.sessions;
-      const owner = repository?.find({
+      const owner = await repository?.find({
         backend: reference.backend,
         sessionId: reference.id,
         storagePath: reference.storagePath ?? null,
@@ -297,13 +297,13 @@ export function createSessionRoutes({
       }
       const archived = body.archived !== false;
       try {
-        const references = setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
+        const references = await setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
         if (archived) {
           for (const runner of state.runners.values()) {
             const belongsToFamily = runner.sessionRef
               ? references.some((familyReference) => state.sessionReferences.equals(runner.sessionRef, familyReference))
               : references.some((familyReference) => familyReference.backend === "jsonl" && runner.sessionFile === familyReference.storagePath);
-            if (belongsToFamily && runner.proc) stopRunner(runner);
+            if (belongsToFamily && runner.proc) await stopRunner(runner);
           }
         }
         json(res, 200, { sessionKey: body.sessionKey, archived });
@@ -360,11 +360,11 @@ export function createSessionRoutes({
       try {
         const outcome = await workflow({
           reference,
-          stopRunners: () => { for (const runner of matchingRunners) stopRunner(runner); return matchingRunners; },
+          stopRunners: async () => { for (const runner of matchingRunners) await stopRunner(runner); return matchingRunners; },
           closeHublots: async () => {
             if (closeSessionHublots) return closeSessionHublots(state, reference.id);
             const closed = [];
-            for (const tunnel of listTunnels(state)) {
+            for (const tunnel of await listTunnels(state)) {
               if (tunnel.sessionId !== reference.id) continue;
               await closeTunnel(state, tunnel.id);
               closed.push(tunnel.port);
@@ -375,12 +375,12 @@ export function createSessionRoutes({
           stopRoutines: () => stopSessionRoutines(state, reference.id),
           deleteRoutines: () => deleteSessionRoutines(state, reference.id),
           deleteAgentSession: () => operations.deleteSession(reference),
-          removeRuntime: (stoppedRunners) => {
+          removeRuntime: async (stoppedRunners) => {
             for (const runner of stoppedRunners) {
               state.runners.delete(runner.id);
               if (state.defaultRunnerId === runner.id) {
                 state.defaultRunnerId = null;
-                state.appSettings?.setDefaultRunnerId(null);
+                await state.appSettings?.setDefaultRunnerId(null);
               }
             }
           },
@@ -397,11 +397,11 @@ export function createSessionRoutes({
       }
     },
 
-    "GET /session-by-id": (_req, res, url) => {
+    "GET /session-by-id": async (_req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
       if (!id) { json(res, 400, { error: "id required" }); return; }
       try {
-        const session = catalog.findById(id);
+        const session = await catalog.findById(id);
         if (!session) { json(res, 404, { error: `no session with id ${id}` }); return; }
         json(res, 200, { session: decorate(session) });
       } catch (error) {
@@ -409,10 +409,10 @@ export function createSessionRoutes({
       }
     },
 
-    "GET /session-entries": (_req, res, url) => {
+    "GET /session-entries": async (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
-      try { json(res, 200, catalog.entries(identity)); }
+      try { json(res, 200, await catalog.entries(identity)); }
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
@@ -423,16 +423,16 @@ export function createSessionRoutes({
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
-    "GET /session-folders": (_req, res, url) => {
+    "GET /session-folders": async (_req, res, url) => {
       const forDir = url.searchParams.get("dir") ? resolvePath(String(url.searchParams.get("dir"))) : state.currentDir;
       try {
-        json(res, 200, { folders: catalog.folders(), current: catalog.locationForCwd(forDir) });
+        json(res, 200, { folders: await catalog.folders(), current: catalog.locationForCwd(forDir) });
       } catch (error) {
         json(res, 500, { error: `failed to list session folders: ${errorMessage(error)}` });
       }
     },
 
-    "GET /search": (_req, res, url) => {
+    "GET /search": async (_req, res, url) => {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const scope = String(url.searchParams.get("scope") ?? "folder");
       const rawPath = url.searchParams.get("path");
@@ -458,7 +458,7 @@ export function createSessionRoutes({
         json(res, 400, { error: "folder must be under the sessions root" }); return;
       }
       try {
-        const result = catalog.search(sqlite ? {
+        const result = await catalog.search(sqlite ? {
           q: query,
           scope,
           path: scope === "session" ? sessionIdentity : path,

@@ -53,9 +53,9 @@ test("credential canary remains only in pi auth.json and is absent after removal
     models: [{ id: "canary-model", name: "Canary Model", reasoning: false, input: ["text"], contextWindow: 1000, maxTokens: 100, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
   } } }));
   const appDatabase = join(root, "oyster.sqlite");
-  const appStore = openAppStore({ databasePath: appDatabase });
-  appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
-  appStore.close();
+  const appStore = await openAppStore({ databasePath: appDatabase });
+  await appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
+  await appStore.close();
 
   const canary = `OYSTER_CREDENTIAL_CANARY_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const runners = new Map([

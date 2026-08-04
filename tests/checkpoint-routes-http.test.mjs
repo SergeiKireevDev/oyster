@@ -48,11 +48,11 @@ test("checkpoint create/list/tree routes preserve validation, model options, per
   assert.deepEqual(created.body, { hash: "abc123", committed: true, recorded: true, anchorId: "entry-1" });
   assert.deepEqual(calls[0], [{ bin: "pi" }, "/work", "save", "model/id"]);
   assert.deepEqual(owners, [runner.sessionRef]);
-  const missing = response(); routes["GET /checkpoints"]({}, missing, new URL("http://localhost/checkpoints")); assert.equal(missing.status, 400);
-  const listed = response(); routes["GET /checkpoints"]({}, listed, new URL("http://localhost/checkpoints?id=session"));
+  const missing = response(); await routes["GET /checkpoints"]({}, missing, new URL("http://localhost/checkpoints")); assert.equal(missing.status, 400);
+  const listed = response(); await routes["GET /checkpoints"]({}, listed, new URL("http://localhost/checkpoints?id=session"));
   assert.deepEqual(listed.body, { checkpoints: [{ hash: "abc123" }] });
-  const invalidTree = response(); routes["GET /checkpoint-tree"]({}, invalidTree, new URL("http://localhost/checkpoint-tree?path=no")); assert.equal(invalidTree.status, 400);
-  const tree = response(); routes["GET /checkpoint-tree"]({}, tree, new URL("http://localhost/checkpoint-tree?path=valid.jsonl"));
+  const invalidTree = response(); await routes["GET /checkpoint-tree"]({}, invalidTree, new URL("http://localhost/checkpoint-tree?path=no")); assert.equal(invalidTree.status, 400);
+  const tree = response(); await routes["GET /checkpoint-tree"]({}, tree, new URL("http://localhost/checkpoint-tree?path=valid.jsonl"));
   assert.deepEqual(tree.body, {
     path: "/session.jsonl", children: [],
     capabilities: { rollback: true, reason: null },

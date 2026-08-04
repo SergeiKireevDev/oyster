@@ -66,7 +66,7 @@ export async function reconcileSessionDeletions({
   requireFunction(logger?.error, "logger.error");
 
   const timestamp = () => requireNonEmptyString(now(), "session deletion reconciliation timestamp");
-  const incomplete = operationsRepository.listIncomplete();
+  const incomplete = await operationsRepository.listIncomplete();
   if (!Array.isArray(incomplete)) throw new TypeError("operations.listIncomplete() must return an array");
   const operations = incomplete.filter((operation) => operation?.kind === "delete_session");
   const results = [];
@@ -85,7 +85,7 @@ export async function reconcileSessionDeletions({
       if (reference.backend !== sessionCatalog.backend) {
         throw new Error(`operation backend ${reference.backend} does not match configured ${sessionCatalog.backend} catalog`);
       }
-      requireMatchingOwner(operation, sessionsRepository.find({
+      requireMatchingOwner(operation, await sessionsRepository.find({
         backend: reference.backend,
         sessionId: reference.id,
         storagePath: reference.storagePath,
@@ -93,7 +93,7 @@ export async function reconcileSessionDeletions({
 
       // A missing agent session means deletion completed before its stage was
       // journaled. If it still exists, backend deletion is safe to retry.
-      if (sessionCatalog.findById(reference.id)) {
+      if (await sessionCatalog.findById(reference.id)) {
         if (sessionOperations.capabilities?.delete?.[reference.backend] !== true) {
           const error = new Error(`${reference.backend} session deletion is unavailable during reconciliation`);
           error.code = "capability_unavailable";
@@ -104,8 +104,8 @@ export async function reconcileSessionDeletions({
 
       await closeSessionHublots(reference.id);
       await deleteSessionRoutines(reference.id);
-      appStore.transaction((repositories) => {
-        const owner = repositories.sessions.find({
+      await appStore.transaction(async (repositories) => {
+        const owner = await repositories.sessions.find({
           backend: reference.backend,
           sessionId: reference.id,
           storagePath: reference.storagePath,
@@ -115,11 +115,11 @@ export async function reconcileSessionDeletions({
         requireMatchingOwner(operation, owner);
         if (owner) {
           requireSingleUpdate(
-            repositories.sessions.delete(owner.id),
+            await repositories.sessions.delete(owner.id),
             `session owner ${owner.id} no longer exists`,
           );
         }
-        requireSingleUpdate(repositories.operations.update(operationId, {
+        requireSingleUpdate(await repositories.operations.update(operationId, {
           status: "completed", stage: "completed", error: null, updatedAt: timestamp(),
         }), `session deletion operation ${operationId} no longer exists`);
       });
@@ -127,7 +127,7 @@ export async function reconcileSessionDeletions({
     } catch (error) {
       const message = failureMessage(error);
       try {
-        requireSingleUpdate(operationsRepository.update(operationId, {
+        requireSingleUpdate(await operationsRepository.update(operationId, {
           status: "failed", stage: operation?.stage, error: message, updatedAt: timestamp(),
         }), `session deletion operation ${operationId ?? "unknown"} no longer exists`);
       } catch (journalError) {

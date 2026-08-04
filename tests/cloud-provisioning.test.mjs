@@ -447,7 +447,7 @@ test("Hub cloud authorization routes require API auth while provider callback re
   const config = { token: "hub-secret", timeoutMs: 1000, driver, cloud: { stateFile: null, publicUrl: "https://hub.example" } };
   const server = createOysterHub(config, { driver, cloudService, authorizationService, logger: { error() {} } });
   const baseUrl = await listen(server);
-  t.after(() => close(server));
+  t.after(async () => await close(server));
 
   assert.equal((await fetch(`${baseUrl}/api/v1/cloud/providers/digitalocean/authorization/start`, { method: "POST" })).status, 401);
   const started = await fetch(`${baseUrl}/api/v1/cloud/providers/digitalocean/authorization/start`, { method: "POST", headers: { "x-auth-token": "hub-secret" } });
@@ -483,7 +483,7 @@ test("Hub cloud routes are authenticated, merge environments, and keep cloud ser
   const config = { token: "hub-secret", timeoutMs: 1000, driver, cloud: { stateFile: null } };
   const server = createOysterHub(config, { driver, cloudService, logger: { error() {} } });
   const baseUrl = await listen(server);
-  t.after(() => close(server));
+  t.after(async () => await close(server));
 
   assert.equal((await fetch(`${baseUrl}/api/v1/cloud/providers`)).status, 401);
   const headers = { "x-auth-token": "hub-secret" };

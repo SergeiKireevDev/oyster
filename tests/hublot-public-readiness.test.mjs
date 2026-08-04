@@ -9,9 +9,9 @@ import {
   listTunnels, openTunnel, publicHublotAnswers, reserveHublot, waitForPublicHublot,
 } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-public-ready-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const events = [];
   const state = {
     appStore: store,
@@ -19,7 +19,7 @@ function fixture(t) {
     currentDir: root,
     serverEvent: (event) => events.push(event),
   };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { store, state, events };
 }
 
@@ -37,8 +37,8 @@ class FakeTunnelProcess extends EventEmitter {
 }
 
 test("a hublot stays opening and unpublished until its public health check passes", async (t) => {
-  const { store, state, events } = fixture(t);
-  const reserved = reserveHublot(state, { port: 4188, brief: "serve preview" });
+  const { store, state, events } = await fixture(t);
+  const reserved = await reserveHublot(state, { port: 4188, brief: "serve preview" });
   const proc = new FakeTunnelProcess();
   let releaseHealth;
   let reportHealthStarted;
@@ -57,12 +57,13 @@ test("a hublot stays opening and unpublished until its public health check passe
       await healthGate;
     },
   });
+  while (!proc.stderr.listenerCount("data")) await new Promise((resolve) => setImmediate(resolve));
   proc.stderr.emit("data", "URL https://waiting.trycloudflare.com assigned");
   await healthStarted;
 
-  assert.equal(store.repositories.hublots.find(reserved.id).status, "opening");
-  assert.equal(store.repositories.hublots.find(reserved.id).public_url, null);
-  const [pending] = listTunnels(state);
+  assert.equal((await store.repositories.hublots.find(reserved.id)).status, "opening");
+  assert.equal((await store.repositories.hublots.find(reserved.id)).public_url, null);
+  const [pending] = await listTunnels(state);
   assert.equal(pending.id, reserved.id);
   assert.equal(pending.status, "opening");
   assert.equal(pending.url, null);
@@ -71,20 +72,21 @@ test("a hublot stays opening and unpublished until its public health check passe
   releaseHealth();
   const opened = await opening;
   assert.equal(opened.url, "https://waiting.trycloudflare.com");
-  assert.equal(store.repositories.hublots.find(reserved.id).status, "open");
+  assert.equal((await store.repositories.hublots.find(reserved.id)).status, "open");
   assert.equal(events.length, 1);
   assert.equal(events[0].type, "tunnel_opened");
 });
 
 test("tunnel URL detection tolerates stream chunk boundaries", async (t) => {
-  const { state } = fixture(t);
+  const { state } = await fixture(t);
   state.config.SKIP_PUBLIC_HUBLOT_READINESS = true;
-  const reserved = reserveHublot(state, { port: 4189, brief: "serve preview" });
+  const reserved = await reserveHublot(state, { port: 4189, brief: "serve preview" });
   const proc = new FakeTunnelProcess();
   const opening = openTunnel(state, { id: reserved.id, port: reserved.port }, {
     spawnProcess: () => proc,
   });
 
+  while (!proc.stderr.listenerCount("data")) await new Promise((resolve) => setImmediate(resolve));
   proc.stderr.emit("data", "URL https://split.trycloud");
   proc.stderr.emit("data", "flare.com assigned");
 
@@ -92,14 +94,14 @@ test("tunnel URL detection tolerates stream chunk boundaries", async (t) => {
 });
 
 test("synchronous tunnel spawn failures durably fail the reservation", async (t) => {
-  const { store, state } = fixture(t);
-  const reserved = reserveHublot(state, { port: 4190, brief: "serve preview" });
+  const { store, state } = await fixture(t);
+  const reserved = await reserveHublot(state, { port: 4190, brief: "serve preview" });
 
   await assert.rejects(openTunnel(state, { id: reserved.id, port: reserved.port }, {
     spawnProcess() { throw new Error("spawn unavailable"); },
   }), /tunnel spawn failed: spawn unavailable/);
 
-  const failed = store.repositories.hublots.find(reserved.id);
+  const failed = await store.repositories.hublots.find(reserved.id);
   assert.equal(failed.status, "failed");
   assert.match(failed.last_error, /spawn unavailable/);
 });
@@ -118,7 +120,7 @@ test("public readiness polling retries transient failures and times out clearly"
 
   now = 0;
   await assert.rejects(
-    waitForPublicHublot("https://never.test", {
+    () => waitForPublicHublot("https://never.test", {
       timeoutMs: 25,
       intervalMs: 10,
       check: async () => false,

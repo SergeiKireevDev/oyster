@@ -399,10 +399,20 @@ function validateMigrations(migrations) {
   }
 }
 
-function readAppliedMigrations(database, migrations) {
+const queryAll = (database, sql, ...params) => database.all
+  ? database.all(sql, ...params)
+  : database.prepare(sql).all(...params);
+const queryGet = (database, sql, ...params) => database.get
+  ? database.get(sql, ...params)
+  : database.prepare(sql).get(...params);
+const executeRun = (database, sql, ...params) => database.run
+  ? database.run(sql, ...params)
+  : database.prepare(sql).run(...params);
+
+async function readAppliedMigrations(database, migrations) {
   const configured = new Map(migrations.map((migration) => [migration.version, migration.name]));
   const applied = new Map();
-  for (const row of database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all()) {
+  for (const row of await queryAll(database, "SELECT version, name FROM schema_migrations ORDER BY version")) {
     const version = Number(row.version);
     if (!Number.isSafeInteger(version) || version < 1 || typeof row.name !== "string") {
       throw new Error("application database migration history is invalid");
@@ -433,15 +443,17 @@ function migrationError(migration, error, rollbackError) {
 }
 
 /** Apply each pending migration atomically and return the resulting status. */
-export function applyMigrations(database, { migrations = APP_MIGRATIONS, now = () => new Date().toISOString() } = {}) {
-  if (!database || typeof database.exec !== "function" || typeof database.prepare !== "function") {
+export async function applyMigrations(database, { migrations = APP_MIGRATIONS, now = () => new Date().toISOString() } = {}) {
+  if (!database || typeof database.exec !== "function"
+      || (!(typeof database.get === "function" && typeof database.all === "function" && typeof database.run === "function")
+        && typeof database.prepare !== "function")) {
     throw new TypeError("application database connection is required");
   }
   if (database.isTransaction) throw new Error("cannot apply application database migrations inside a transaction");
   if (typeof now !== "function") throw new TypeError("application database migration clock must be a function");
   validateMigrations(migrations);
 
-  database.exec(`
+  await database.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -449,19 +461,15 @@ export function applyMigrations(database, { migrations = APP_MIGRATIONS, now = (
     );
   `);
 
-  const initiallyApplied = readAppliedMigrations(database, migrations);
-  const findApplied = database.prepare("SELECT name FROM schema_migrations WHERE version = ?");
-  const recordApplied = database.prepare(
-    "INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)",
-  );
+  const initiallyApplied = await readAppliedMigrations(database, migrations);
 
   for (const migration of migrations) {
     if (initiallyApplied.has(migration.version)) continue;
-    database.exec("BEGIN IMMEDIATE");
+    await database.exec("BEGIN IMMEDIATE");
     try {
       // Recheck while holding the write lock: another server may have applied
       // this migration after the initial history read.
-      const existing = findApplied.get(migration.version);
+      const existing = await queryGet(database, "SELECT name FROM schema_migrations WHERE version = ?", migration.version);
       if (existing) {
         if (existing.name !== migration.name) {
           throw new Error(`application database migration ${migration.version} name mismatch`);
@@ -471,18 +479,18 @@ export function applyMigrations(database, { migrations = APP_MIGRATIONS, now = (
         if (typeof appliedAt !== "string" || !appliedAt.trim()) {
           throw new TypeError("application database migration clock must return a timestamp string");
         }
-        database.exec(migration.sql);
-        recordApplied.run(migration.version, migration.name, appliedAt);
+        await database.exec(migration.sql);
+        await executeRun(database, "INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)", migration.version, migration.name, appliedAt);
       }
-      database.exec("COMMIT");
+      await database.exec("COMMIT");
     } catch (error) {
       let rollbackError;
-      try { database.exec("ROLLBACK"); } catch (caught) { rollbackError = caught; }
+      try { await database.exec("ROLLBACK"); } catch (caught) { rollbackError = caught; }
       throw migrationError(migration, error, rollbackError);
     }
   }
 
-  const applied = readAppliedMigrations(database, migrations);
+  const applied = await readAppliedMigrations(database, migrations);
   return Object.freeze({
     currentVersion: migrations.at(-1)?.version ?? 0,
     appliedVersions: Object.freeze([...applied.keys()]),

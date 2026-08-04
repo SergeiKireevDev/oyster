@@ -113,9 +113,9 @@ export function createHublotSupervisor({
     let interrupted = 0;
     const isEligible = (row) => row?.desired_state === "open" && !["closing", "closed"].includes(row.status);
     const isRecovering = (row) => isEligible(row) && ["recovering", "failed"].includes(row.status);
-    const resetRestartState = (id) => repository.update(id, { restart_count: 0, next_restart_at: null });
-    const recordRestartFailure = (id, error) => {
-      let current = repository.find(id);
+    const resetRestartState = async (id) => await repository.update(id, { restart_count: 0, next_restart_at: null });
+    const recordRestartFailure = async (id, error) => {
+      let current = await repository.find(id);
       // Recovery callbacks yield to operator actions and may also complete before
       // throwing during cleanup. Only mutate a hublot that is still recovering.
       if (!isRecovering(current)) return false;
@@ -123,18 +123,18 @@ export function createHublotSupervisor({
       const count = current.restart_count + 1;
       if (current.status !== "failed") {
         recordTransition(id, "failed", { publicUrl: null, lastError: failure });
-        current = repository.find(id);
+        current = await repository.find(id);
         if (!isEligible(current)) return false;
       }
       if (count >= restartLimit) {
         const message = `automatic restart disabled after ${count} consecutive failures: ${failure}`;
         recordTransition(id, "interrupted", { publicUrl: null, lastError: message });
-        repository.update(id, { restart_count: count, next_restart_at: null });
+        await repository.update(id, { restart_count: count, next_restart_at: null });
         crashLooped++;
         return true;
       }
       const delay = Math.min(restartMaxDelayMs, restartBaseDelayMs * (2 ** (count - 1)));
-      repository.update(id, {
+      await repository.update(id, {
         restart_count: count,
         next_restart_at: new Date(clock() + delay).toISOString(),
         last_error: failure,
@@ -142,18 +142,18 @@ export function createHublotSupervisor({
       return true;
     };
     try {
-      const desired = repository.list()
+      const desired = (await repository.list())
         .filter((row) => row.desired_state === "open" && !["closing", "closed"].includes(row.status))
         .filter((row) => includeOpening || row.status !== "opening");
       for (const hublot of desired) {
         checked++;
-        const processes = repository.listProcesses(hublot.id);
+        const processes = await repository.listProcesses(hublot.id);
         const active = processes.filter((process) => !process.ended_at && ["running", "starting"].includes(process.status));
         const observations = active.map((process) => ({ process, matches: verifyIdentity(process) }));
         const observedAt = now();
-        appStore.transaction((repositories) => {
+        await appStore.transaction(async (repositories) => {
           for (const { process, matches } of observations) {
-            repositories.hublots.updateProcess(process.id, matches
+            await repositories.hublots.updateProcess(process.id, matches
               ? { observed_at: observedAt }
               : { status: "lost", observed_at: observedAt, ended_at: observedAt, exit_code: null, signal: null });
           }
@@ -166,7 +166,7 @@ export function createHublotSupervisor({
         // Async health checks yield to operator actions and other recovery paths.
         // Do not act on a stale row or stale process inventory after they finish.
         if (hublot.service_kind === "self_served" && checkService) {
-          const current = repository.find(hublot.id);
+          const current = await repository.find(hublot.id);
           const rowChanged = !isEligible(current)
             || ["status", "desired_state", "public_url", "last_error", "restart_count", "next_restart_at"]
               .some((key) => current[key] !== hublot[key]);
@@ -174,13 +174,13 @@ export function createHublotSupervisor({
             .filter(({ matches }) => matches)
             .map(({ process }) => process.id)
             .sort();
-          const currentActiveIds = repository.listProcesses(hublot.id)
+          const currentActiveIds = (await repository.listProcesses(hublot.id))
             .filter((process) => !process.ended_at && ["running", "starting"].includes(process.status))
             .map((process) => process.id)
             .sort();
           if (rowChanged || expectedActiveIds.length !== currentActiveIds.length
             || expectedActiveIds.some((id, index) => id !== currentActiveIds[index])) continue;
-        } else if (!isEligible(repository.find(hublot.id))) {
+        } else if (!isEligible(await repository.find(hublot.id))) {
           continue;
         }
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
@@ -190,14 +190,14 @@ export function createHublotSupervisor({
         if (criticalIdentityMissing) {
           if (!recoverMissing) {
             const closedAt = observedAt;
-            recordTransition(hublot.id, "closed", {
+            await recordTransition(hublot.id, "closed", {
               desiredState: "closed",
               publicUrl: null,
               lastError: "server restarted; ephemeral cloudflared tunnels are not recreated automatically",
               closedAt,
               at: closedAt,
             });
-            resetRestartState(hublot.id);
+            await resetRestartState(hublot.id);
             interrupted++;
             continue;
           }
@@ -208,7 +208,7 @@ export function createHublotSupervisor({
           if (!selfServedMissing && hublot.restart_count >= restartLimit) {
             const message = `automatic restart disabled after ${hublot.restart_count} consecutive failures`;
             if (hublot.status !== "interrupted" || !hublot.last_error?.startsWith(message)) {
-              recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: message });
+              await recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: message });
             }
             crashLooped++;
             continue;
@@ -220,37 +220,37 @@ export function createHublotSupervisor({
           const missing = serviceDead ? "service" : "tunnel";
           const error = `persisted ${missing} process identity is not live`;
           if (!alreadySelfInterrupted && (hublot.status !== "recovering" || hublot.public_url !== null || hublot.last_error !== error)) {
-            recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
+            await recordTransition(hublot.id, "recovering", { publicUrl: null, lastError: error, at: observedAt });
             recovering++;
           }
           if (selfServedMissing) {
             if (!alreadySelfInterrupted) recordTransition(hublot.id, "interrupted", { publicUrl: null, lastError: selfServedError, at: observedAt });
-            resetRestartState(hublot.id);
+            await resetRestartState(hublot.id);
             interrupted++;
             continue;
           }
           if ((!tunnelHealthy || needsSelfRecovery) && recoverTunnel) {
             try {
               const recovery = await recoverTunnel(hublot);
-              if (!isEligible(repository.find(hublot.id))) continue;
+              if (!isEligible(await repository.find(hublot.id))) continue;
               if (recovery?.recovered) { resetRestartState(hublot.id); recoveredTunnels++; continue; }
             } catch (error) {
-              recordRestartFailure(hublot.id, error);
+              await recordRestartFailure(hublot.id, error);
               logError(logger, `[oyster] hublot ${hublot.id} tunnel recovery failed: ${errorMessage(error)}`);
               continue;
             }
           }
-          if (serviceDead && restartService && isRecovering(repository.find(hublot.id))) {
+          if (serviceDead && restartService && isRecovering(await repository.find(hublot.id))) {
             try {
               await restartService(hublot);
-              if (isEligible(repository.find(hublot.id))) { resetRestartState(hublot.id); restarted++; }
+              if (isEligible(await repository.find(hublot.id))) { resetRestartState(hublot.id); restarted++; }
             } catch (error) {
-              recordRestartFailure(hublot.id, error);
+              await recordRestartFailure(hublot.id, error);
               logError(logger, `[oyster] hublot ${hublot.id} service restart failed: ${errorMessage(error)}`);
             }
           }
         } else if (hublot.restart_count || hublot.next_restart_at) {
-          resetRestartState(hublot.id);
+          await resetRestartState(hublot.id);
         }
       }
       return Object.freeze({ skipped: false, checked, recovering, restarted, recoveredTunnels, deferred, crashLooped, interrupted });

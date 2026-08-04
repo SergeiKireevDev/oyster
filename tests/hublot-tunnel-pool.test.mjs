@@ -32,19 +32,19 @@ async function unusedPort() {
 
 test("reserved warm tunnels serve the waiting page and stay out of public hublot listings", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,
     config: { PI_AGENT_DIR: join(root, "agent"), HUBLOT_TUNNEL_POOL_SIZE: 2 },
     currentDir: root,
     hublotProcessHandles: new Map(),
   };
-  t.after(() => {
-    store.close();
+  t.after(async () => {
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
 
-  const reserved = reserveHublot(state, {
+  const reserved = await reserveHublot(state, {
     port: await unusedPort(),
     label: HUBLOT_TUNNEL_POOL_LABEL,
     brief: "__oyster_reserved_tunnel_waiting_for_hublot__",
@@ -54,20 +54,20 @@ test("reserved warm tunnels serve the waiting page and stay out of public hublot
   const response = await fetch(`http://127.0.0.1:${reserved.port}/`);
   assert.equal(response.status, 200);
   assert.match(await response.text(), /tunnel to be created here/);
-  assert.deepEqual(listTunnels(state), []);
+  assert.deepEqual(await listTunnels(state), []);
 
   dummy.serviceProc.ref();
   const exited = once(dummy.serviceProc, "exit");
   const shutdown = await shutdownHublots(state);
   await exited;
   assert.deepEqual(shutdown, { targeted: 1, escalated: 0, remaining: 0 });
-  assert.equal(store.repositories.hublots.findProcess(dummy.serviceProcess.id).status, "ended");
-  assert.equal(store.repositories.hublots.find(reserved.id).status, "closed");
+  assert.equal((await store.repositories.hublots.findProcess(dummy.serviceProcess.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.find(reserved.id)).status, "closed");
 });
 
 test("claiming a warm tunnel kills only the dummy and preserves its cloudflared URL", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-claim-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   let sizeReads = 0;
   const config = { PI_AGENT_DIR: join(root, "agent") };
   Object.defineProperty(config, "HUBLOT_TUNNEL_POOL_SIZE", {
@@ -90,19 +90,19 @@ test("claiming a warm tunnel kills only the dummy and preserves its cloudflared 
       tunnelProc.kill("SIGKILL");
       await exited;
     }
-    store.close();
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
 
-  const reserved = reserveHublot(state, {
+  const reserved = await reserveHublot(state, {
     port: await unusedPort(),
     label: HUBLOT_TUNNEL_POOL_LABEL,
     brief: "__oyster_reserved_tunnel_waiting_for_hublot__",
     serviceKind: "self_served",
   });
   const dummy = await spawnHublotTunnelPoolDummy(state, reserved);
-  persistHublotProcessIdentity(state, { hublotId: reserved.id, role: "tunnel", pid: tunnelProc.pid });
-  recordHublotTransition(state, reserved.id, "open", { publicUrl: "https://warm.trycloudflare.com" });
+  await persistHublotProcessIdentity(state, { hublotId: reserved.id, role: "tunnel", pid: tunnelProc.pid });
+  await recordHublotTransition(state, reserved.id, "open", { publicUrl: "https://warm.trycloudflare.com" });
   dummy.serviceProc.ref();
   const dummyExited = once(dummy.serviceProc, "exit");
 
@@ -119,8 +119,8 @@ test("claiming a warm tunnel kills only the dummy and preserves its cloudflared 
   assert.equal(claimed.service_kind, "agent_managed");
   assert.equal(claimed.status, "opening");
   assert.equal(tunnelProc.exitCode, null, "claiming must preserve the warm cloudflared process");
-  assert.equal(store.repositories.hublots.findProcess(dummy.serviceProcess.id).status, "ended");
-  assert.deepEqual(listTunnels(state), [{
+  assert.equal((await store.repositories.hublots.findProcess(dummy.serviceProcess.id)).status, "ended");
+  assert.deepEqual(await listTunnels(state), [{
     id: reserved.id,
     port: reserved.port,
     label: "real app",
@@ -134,7 +134,7 @@ test("claiming a warm tunnel kills only the dummy and preserves its cloudflared 
 
 test("an empty warm pool returns a cache miss while requesting background refill", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-miss-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,
     config: { PI_AGENT_DIR: join(root, "agent"), HUBLOT_TUNNEL_POOL_SIZE: 2 },
@@ -142,8 +142,8 @@ test("an empty warm pool returns a cache miss while requesting background refill
     hublotProcessHandles: new Map(),
     hublotTunnelPoolQueue: Promise.resolve(),
   };
-  t.after(() => {
-    store.close();
+  t.after(async () => {
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
   let refillRequests = 0;
@@ -158,7 +158,7 @@ test("an empty warm pool returns a cache miss while requesting background refill
 
 test("failed pool fills schedule bounded retries and a retry runs automatically", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-pool-retry-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,
     config: { PI_AGENT_DIR: join(root, "agent"), HUBLOT_TUNNEL_POOL_SIZE: 2 },
@@ -170,8 +170,8 @@ test("failed pool fills schedule bounded retries and a retry runs automatically"
     hublotTunnelPoolRetryAttempt: 0,
     hublotTunnelPoolStopping: false,
   };
-  t.after(() => {
-    store.close();
+  t.after(async () => {
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
   let scheduled = 0;

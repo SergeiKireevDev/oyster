@@ -36,8 +36,8 @@ const repository = {
 };
 const clearCheckpoints = () => { checkpointRows = {}; };
 const saveCheckpoints = (rows) => { checkpointRows = structuredClone(rows); };
-const recordCheckpoint = (session, dir, result, options = {}) => recordCheckpointCore(session, dir, result, { ...options, repository });
-const checkpointTree = (session, options = {}) => checkpointTreeCore(session, { ...options, repository });
+const recordCheckpoint = async (session, dir, result, options = {}) => recordCheckpointCore(session, dir, result, { ...options, repository });
+const checkpointTree = async (session, options = {}) => checkpointTreeCore(session, { ...options, repository });
 
 after(() => rmSync(FAKE_HOME, { recursive: true, force: true }));
 
@@ -65,27 +65,27 @@ const MAIN = writeSession("2026-01-01T00-00-00-000Z_root.jsonl",
 
 // ---------------------------------------------------------------- anchoring
 
-test("recordCheckpoint anchors to the session tip and dedupes", () => {
+test("recordCheckpoint anchors to the session tip and dedupes", async () => {
   clearCheckpoints();
-  const rec = recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
+  const rec = await recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
   assert.equal(rec.anchorId, "u2"); // last user/assistant message
   assert.equal(rec.leafId, "u2");
   assert.equal(rec.sessionPath, MAIN);
-  const again = recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
+  const again = await recordCheckpoint(MAIN, "/home/user/proj", { hash: "abc1234", message: "checkpoint: x" });
   assert.equal(checkpointRows.root.length, 1, "same hash@anchor recorded once");
   assert.equal(again.timestamp, rec.timestamp);
 });
 
-test("recordCheckpoint refuses sessions without messages", () => {
+test("recordCheckpoint refuses sessions without messages", async () => {
   const empty = writeSession("2026-01-02T00-00-00-000Z_empty.jsonl",
     { type: "session", id: "empty", timestamp: "2026-01-02T00:00:00Z", cwd: "/x" }, []);
-  assert.equal(recordCheckpoint(empty, "/x", { hash: "h" }), null);
+  assert.equal(await recordCheckpoint(empty, "/x", { hash: "h" }), null);
   rmSync(empty);
 });
 
 // ---------------------------------------------------------------- tree inheritance
 
-test("checkpointTree: forks nest under the root, inherited checkpoints shown once", () => {
+test("checkpointTree: forks nest under the root, inherited checkpoints shown once", async () => {
   clearCheckpoints();
   // root has two checkpoints; fork was created from cp1 and adds its own cp2
   const FORK = writeSession("2026-01-03T00-00-00-000Z_fork.jsonl",
@@ -105,7 +105,7 @@ test("checkpointTree: forks nest under the root, inherited checkpoints shown onc
     ],
   });
 
-  const { root } = checkpointTree(FORK); // asking from the FORK resolves the family root
+  const { root } = await checkpointTree(FORK); // asking from the FORK resolves the family root
   assert.equal(root.id, "root");
   assert.deepEqual(root.checkpoints.map((c) => c.hash).sort(), ["cp0", "cp1"]);
   assert.equal(root.children.length, 1);
@@ -117,7 +117,7 @@ test("checkpointTree: forks nest under the root, inherited checkpoints shown onc
   rmSync(FORK);
 });
 
-test("checkpointTree: malformed cyclic lineage terminates without duplicating nodes", () => {
+test("checkpointTree: malformed cyclic lineage terminates without duplicating nodes", async () => {
   const references = {
     a: { backend: "sqlite", id: "a", storagePath: "/sessions.sqlite" },
     b: { backend: "sqlite", id: "b", storagePath: "/sessions.sqlite" },
@@ -133,13 +133,13 @@ test("checkpointTree: malformed cyclic lineage terminates without duplicating no
   };
   const emptyRepository = { listForSession: () => [] };
 
-  const { root } = checkpointTreeCore(references.a, { catalog, repository: emptyRepository });
+  const { root } = await checkpointTreeCore(references.a, { catalog, repository: emptyRepository });
   assert.equal(root.id, "a");
   assert.deepEqual(root.children.map(({ id }) => id), ["b"]);
   assert.deepEqual(root.children[0].children, []);
 });
 
-test("checkpointTree: legacy forks infer forkedAtHash from newest inherited record", () => {
+test("checkpointTree: legacy forks infer forkedAtHash from newest inherited record", async () => {
   clearCheckpoints();
   const LEGACY = writeSession("2026-01-04T00-00-00-000Z_legacy.jsonl",
     { type: "session", id: "legacy", timestamp: "2026-01-04T00:00:00Z", cwd: "/home/user/proj",
@@ -150,7 +150,7 @@ test("checkpointTree: legacy forks infer forkedAtHash from newest inherited reco
     { hash: "new", anchorId: "a1", leafId: "a1", dir: "/d", sessionPath: MAIN, timestamp: "2026-01-01T02:00:00Z" },
   ];
   saveCheckpoints({ root: shared, legacy: shared.map((c) => ({ ...c, sessionPath: LEGACY })) });
-  const { root } = checkpointTree(MAIN);
+  const { root } = await checkpointTree(MAIN);
   const legacyNode = root.children.find((c) => c.id === "legacy");
   assert.equal(legacyNode.forkedAtHash, "new", "newest inherited record wins");
   rmSync(LEGACY);

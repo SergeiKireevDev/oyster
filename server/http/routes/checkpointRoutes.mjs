@@ -66,7 +66,7 @@ export function createCheckpointRoutes({
     "POST /checkpoint": async (req, res, url) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      const runner = runnerFromReq(url);
+      const runner = await runnerFromReq(url);
       const label = optionalMetadata(body?.label);
       const model = optionalMetadata(body?.model);
 
@@ -78,8 +78,8 @@ export function createCheckpointRoutes({
           // tree was already clean, HEAD identifies that state just as well.
           if (result.status === 200 && out.hash && runner.sessionRef) {
             try {
-              ensureSessionOwner(runner.sessionRef);
-              const record = recordCheckpoint(runner.sessionRef, runner.dir, out, {
+              await ensureSessionOwner(runner.sessionRef);
+              const record = await recordCheckpoint(runner.sessionRef, runner.dir, out, {
                 catalog: state.sessionCatalog,
                 repository,
               });
@@ -101,16 +101,16 @@ export function createCheckpointRoutes({
       });
     },
 
-    "GET /checkpoints": (req, res, url) => {
+    "GET /checkpoints": async (req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
       if (!id) {
         json(res, 400, { error: "id required" });
         return;
       }
-      json(res, 200, { checkpoints: repository.listBySessionId(id, state.sessionCatalog.backend) });
+      json(res, 200, { checkpoints: await repository.listBySessionId(id, state.sessionCatalog.backend) });
     },
 
-    "GET /checkpoint-tree": (req, res, url) => {
+    "GET /checkpoint-tree": async (req, res, url) => {
       const target = sessionReferenceFromSearch(url);
       if (!target || target.backend !== state.sessionCatalog.backend) {
         json(res, 400, { error: `not a session reference: ${url.searchParams.get("path") ?? url.searchParams.get("key")}` });
@@ -119,7 +119,7 @@ export function createCheckpointRoutes({
       try {
         const canRollback = Boolean(state.sessionOperations?.capabilities?.exactFork?.[target.backend]);
         json(res, 200, {
-          ...checkpointTree(target, {
+          ...await checkpointTree(target, {
             catalog: state.sessionCatalog,
             sessionReferences: state.sessionReferences,
             repository,
@@ -144,7 +144,7 @@ export function createCheckpointRoutes({
         return;
       }
       const model = optionalMetadata(body?.model);
-      const checkpoint = repository.findBySessionId(sessionId, state.sessionCatalog.backend, hash);
+      const checkpoint = await repository.findBySessionId(sessionId, state.sessionCatalog.backend, hash);
       if (!checkpoint) {
         json(res, 404, { error: "no such checkpoint" });
         return;
@@ -161,7 +161,7 @@ export function createCheckpointRoutes({
         json(res, 410, { error: "session file of this checkpoint is gone" });
         return;
       }
-      if (backend === "sqlite" && !state.sessionCatalog.findById(sessionRef.id)) {
+      if (backend === "sqlite" && !await state.sessionCatalog.findById(sessionRef.id)) {
         json(res, 410, { error: "session of this checkpoint is gone" });
         return;
       }
@@ -169,7 +169,7 @@ export function createCheckpointRoutes({
       await withWorkdirLock(state, res, json, checkpoint.dir, async () => {
         let rollbackOperation = null;
         try {
-          rollbackOperation = checkpointRollbackJournal.start({ reference: sessionRef, hash, dir: checkpoint.dir });
+          rollbackOperation = await checkpointRollbackJournal.start({ reference: sessionRef, hash, dir: checkpoint.dir });
 
           // Nothing may be lost: commit and anchor pending changes before
           // forking or resetting the worktree.
@@ -189,13 +189,13 @@ export function createCheckpointRoutes({
               throw new Error(`safety checkpoint failed: ${saved.body?.error ?? "worktree changes were not committed"}`);
             }
             safety = saved.body.hash;
-            const safetyRecord = recordCheckpoint(sessionRef, checkpoint.dir, saved.body, {
+            const safetyRecord = await recordCheckpoint(sessionRef, checkpoint.dir, saved.body, {
               catalog: state.sessionCatalog,
               repository,
             });
             if (!safetyRecord) throw new Error("safety checkpoint could not be associated with the session");
           }
-          rollbackOperation.advance("safety_checkpointed", { safetyHash: safety });
+          await rollbackOperation.advance("safety_checkpointed", { safetyHash: safety });
 
           // Fork before touching the worktree. Unsupported or failed backend
           // operations therefore cannot leave Git reset to another state.
@@ -215,43 +215,43 @@ export function createCheckpointRoutes({
                   sessionRef: { backend: "jsonl", id: created.id, storagePath: created.path },
                 };
               })();
-          ensureSessionOwner(fork.sessionRef);
-          rollbackOperation.advance("session_forked", { forkReference: fork.sessionRef });
+          await ensureSessionOwner(fork.sessionRef);
+          await rollbackOperation.advance("session_forked", { forkReference: fork.sessionRef });
           const forkEntries = backend === "sqlite"
-            ? new Set(state.sessionCatalog.entries(fork.id).entries.map((entry) => entry.id))
+            ? new Set((await state.sessionCatalog.entries(fork.id)).entries.map((entry) => entry.id))
             : fork.entryIds;
 
           const reset = await git(checkpoint.dir, ["reset", "--hard", hash]);
           if (reset.code !== 0) {
             const error = new Error(`git reset failed: ${(reset.stderr || reset.stdout).trim()}`);
-            rollbackOperation.fail(error);
+            await rollbackOperation.fail(error);
             json(res, 500, { error: error.message });
             return;
           }
-          rollbackOperation.advance("git_reset", { resetHash: hash });
+          await rollbackOperation.advance("git_reset", { resetHash: hash });
 
           // The fork keeps its ancestors' entry IDs, so inherit checkpoints
           // anchored to those entries.
-          const inheritedCheckpoints = repository.listForSession(sessionRef)
+          const inheritedCheckpoints = (await repository.listForSession(sessionRef))
             .filter((item) => forkEntries.has(item.anchorId))
             .map((item) => ({
               ...item,
               sessionRef: fork.sessionRef,
               ...(backend === "jsonl" ? { sessionPath: fork.path } : { sessionPath: undefined }),
             }));
-          repository.replaceForSession(fork.sessionRef, inheritedCheckpoints);
-          rollbackOperation.advance("inheritance_recorded", {
+          await repository.replaceForSession(fork.sessionRef, inheritedCheckpoints);
+          await rollbackOperation.advance("inheritance_recorded", {
             inheritedCheckpointCount: inheritedCheckpoints.length,
           });
 
-          const runner = openSessionRunner({ sessionRef: fork.sessionRef, dir: checkpoint.dir });
-          rollbackOperation.advance("runner_opened", { runnerId: runner.id });
+          const runner = await openSessionRunner({ sessionRef: fork.sessionRef, dir: checkpoint.dir });
+          await rollbackOperation.advance("runner_opened", { runnerId: runner.id });
           const sessionName = `\u23EA ${hash}`;
-          sendToRunner(runner, { id: srvId(), type: "set_session_name", name: sessionName });
+          await sendToRunner(runner, { id: srvId(), type: "set_session_name", name: sessionName });
           // Optimistic: lets the first prompt auto-title the fork immediately.
           runner.sessionName = sessionName;
           logger.log(`[oyster] rolled back ${checkpoint.dir} to ${hash}, forked session ${fork.id}`);
-          rollbackOperation.complete();
+          await rollbackOperation.complete();
           json(res, 200, {
             rolledBack: hash,
             safety,
@@ -266,7 +266,7 @@ export function createCheckpointRoutes({
         } catch (error) {
           if (rollbackOperation && rollbackOperation.stage !== "completed") {
             try {
-              rollbackOperation.fail(error);
+              await rollbackOperation.fail(error);
             } catch {
               // Preserve the original rollback failure.
             }

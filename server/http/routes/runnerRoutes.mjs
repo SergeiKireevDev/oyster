@@ -64,8 +64,8 @@ export function createRunnerRoutes({
   const { json, readJsonBody, resolveSafePath } = requestContext;
 
   return {
-    "GET /events": (req, res, url) => {
-      const runner = runnerFromReq(url);
+    "GET /events": async (req, res, url) => {
+      const runner = await runnerFromReq(url);
       // Subscribing is a read-only operation. Keep a stopped runner dormant;
       // commands sent through /rpc can revive it when work is requested.
       res.writeHead(200, {
@@ -90,7 +90,7 @@ export function createRunnerRoutes({
       res.once?.("close", cleanup);
 
       if (url.searchParams.get("replay") !== "0") {
-        for (const line of replayRunnerEvents(runner)) res.write(`data: ${line}\n\n`);
+        for (const line of await replayRunnerEvents(runner)) res.write(`data: ${line}\n\n`);
       }
       res.write(`data: ${JSON.stringify({
         type: "replay_done",
@@ -119,11 +119,11 @@ export function createRunnerRoutes({
         json(res, 400, { error: "command must be an object with a non-empty string `type`" });
         return;
       }
-      const runner = runnerFromReq(url);
+      const runner = await runnerFromReq(url);
       // State refreshes happen while opening a transcript and must not turn a
       // read-only visit into a live pi process. User commands still autostart.
       const readOnly = command.type === "get_state" || command.type === "get_messages";
-      const queued = sendToRunner(runner, command, { autostart: !readOnly });
+      const queued = await sendToRunner(runner, command, { autostart: !readOnly });
       json(res, queued ? 202 : 503, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
         : { error: "pi process unavailable" });
@@ -134,21 +134,21 @@ export function createRunnerRoutes({
       json(res, 200, { runners: listRunnerInfo() });
     },
 
-    "DELETE /runners": (_req, res, url) => {
+    "DELETE /runners": async (_req, res, url) => {
       const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
       if (!runner) {
         json(res, 404, { error: "no such runner" });
         return;
       }
-      stopRunnerFamily(runner);
+      await stopRunnerFamily(runner);
       json(res, 200, { stopped: runner.id });
     },
 
-    "POST /restart": (_req, res, url) => {
-      const runner = runnerFromReq(url);
-      stopRunner(runner);
-      const restartTimer = setTimeoutImpl(() => {
-        if (state.runners.has(runner.id)) startRunner(runner);
+    "POST /restart": async (_req, res, url) => {
+      const runner = await runnerFromReq(url);
+      await stopRunner(runner);
+      const restartTimer = setTimeoutImpl(async () => {
+        if (state.runners.has(runner.id)) await startRunner(runner);
       }, 300);
       restartTimer?.unref?.();
       json(res, 202, { restarting: true, runner: runner.id });
@@ -196,7 +196,7 @@ export function createRunnerRoutes({
         return;
       }
 
-      const runner = spawnRunner({
+      const runner = await spawnRunner({
         dir,
         autostart: false,
         initialArgs: ["--parent-session", parentSessionId, "--name", name, "--exclude-tools", "loop"],
@@ -290,7 +290,7 @@ export function createRunnerRoutes({
       runner.subagentStatus = "running";
       if (!done) {
         try {
-          if (!sendToRunner(runner, { type: "prompt", message: prompt })) fail("Subagent process was unavailable.");
+          if (!await sendToRunner(runner, { type: "prompt", message: prompt })) fail("Subagent process was unavailable.");
         } catch (error) {
           fail("Subagent process was unavailable.", error);
         }
@@ -299,7 +299,7 @@ export function createRunnerRoutes({
       res.off?.("close", cancel);
       runner.subagentStatus = result.ok ? "succeeded" : "failed";
       try {
-        stopRunner(runner);
+        await stopRunner(runner);
       } catch (error) {
         result = { ok: false, output: result.output, errorLog: `Failed to stop subagent: ${errorMessage(error)}` };
         runner.subagentStatus = "failed";
@@ -333,7 +333,7 @@ export function createRunnerRoutes({
         json(res, 400, { error: `not a session reference: ${requestedSession}` });
         return;
       }
-      const persistedSession = sessionRef ? lookupSessionReference(sessionRef) : null;
+      const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
       if (sessionRef && !persistedSession) {
         json(res, 404, { error: `session not found: ${sessionRef.id}` });
         return;
@@ -359,7 +359,7 @@ export function createRunnerRoutes({
         }
         state.currentDir = dir;
       }
-      const runner = openSessionRunner({ sessionRef, dir });
+      const runner = await openSessionRunner({ sessionRef, dir });
       json(res, 200, { runner: runnerInfo(runner) });
     },
   };

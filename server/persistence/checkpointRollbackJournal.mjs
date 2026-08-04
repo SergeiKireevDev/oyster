@@ -60,14 +60,14 @@ export function createCheckpointRollbackJournal({ appStore, ensureSessionOwner, 
   const timestamp = () => requireNonEmptyString(now(), "rollback operation timestamp");
 
   return Object.freeze({
-    start({ reference, hash, dir } = {}) {
+    async start({ reference, hash, dir } = {}) {
       if (!reference || typeof reference !== "object" || Array.isArray(reference)) {
         throw new TypeError("rollback session reference must be an object");
       }
       requireNonEmptyString(hash, "rollback checkpoint hash");
       requireNonEmptyString(dir, "rollback working directory");
 
-      const owner = ensureSessionOwner(reference);
+      const owner = await ensureSessionOwner(reference);
       if (!owner || !Number.isInteger(owner.id) || owner.id < 1) {
         throw new TypeError("ensureSessionOwner must return an owner with a positive integer id");
       }
@@ -75,12 +75,12 @@ export function createCheckpointRollbackJournal({ appStore, ensureSessionOwner, 
       let stage = "persisted";
       let status = "running";
       let payloadSnapshot = snapshotPayload({ reference, hash, dir }, "rollback operation payload");
-      operations.create({
+      await operations.create({
         id, ownerId: owner.id, kind: "checkpoint_rollback", status, stage,
         payload: payloadSnapshot.serialized, createdAt: timestamp(),
       });
 
-      const write = (nextStatus, nextStage, error = null, details = null) => {
+      const write = async (nextStatus, nextStage, error = null, details = null) => {
         if (status !== "running") throw new Error(`rollback operation ${id} is already ${status}`);
         const expectedStage = NEXT_STAGE[stage];
         if (nextStatus === "running" && nextStage !== expectedStage) {
@@ -92,7 +92,7 @@ export function createCheckpointRollbackJournal({ appStore, ensureSessionOwner, 
 
         const nextPayload = mergeDetails(payloadSnapshot.value, details);
         const nextSnapshot = snapshotPayload(nextPayload, "rollback operation payload");
-        const changes = operations.updateWithPayload(id, {
+        const changes = await operations.updateWithPayload(id, {
           status: nextStatus,
           stage: nextStage,
           error,
@@ -110,12 +110,12 @@ export function createCheckpointRollbackJournal({ appStore, ensureSessionOwner, 
       return Object.freeze({
         id,
         get stage() { return stage; },
-        advance(nextStage, details) {
+        async advance(nextStage, details) {
           requireNonEmptyString(nextStage, "rollback operation stage");
-          write("running", nextStage, null, details);
+          await write("running", nextStage, null, details);
         },
-        complete(details) { write("completed", "completed", null, details); },
-        fail(error) { write("failed", stage, failureMessage(error)); },
+        async complete(details) { await write("completed", "completed", null, details); },
+        async fail(error) { await write("failed", stage, failureMessage(error)); },
       });
     },
   });

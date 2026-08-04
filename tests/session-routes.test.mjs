@@ -56,14 +56,14 @@ function setup() {
 
 function response() { return {}; }
 
-test("session listing preserves root scope and live runner annotations", () => {
+test("session listing preserves root scope and live runner annotations", async () => {
   const { routes } = setup();
   const escaped = response();
-  routes["GET /sessions"]({}, escaped, new URL("http://localhost/sessions?path=/sessions-escape"));
+  await routes["GET /sessions"]({}, escaped, new URL("http://localhost/sessions?path=/sessions-escape"));
   assert.equal(escaped.status, 400);
 
   const listed = response();
-  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
+  await routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
   assert.equal(listed.status, 200);
   assert.deepEqual(listed.body.sessions[0], {
     id: "session-a",
@@ -80,23 +80,23 @@ test("session listing preserves root scope and live runner annotations", () => {
   });
 });
 
-test("session catalog failures return bounded HTTP errors", () => {
+test("session catalog failures return bounded HTTP errors", async () => {
   const { dependencies, routes } = setup();
   dependencies.sessions.catalog.list = () => { throw "catalog offline"; };
   const listed = response();
-  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions"));
+  await routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions"));
   assert.deepEqual(listed, { status: 500, body: { error: "failed to list sessions: catalog offline" } });
 
   dependencies.sessions.catalog.folders = () => { throw new Error("folder index corrupt"); };
   const folders = response();
-  routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders"));
+  await routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders"));
   assert.deepEqual(folders, { status: 500, body: { error: "failed to list session folders: folder index corrupt" } });
 });
 
-test("session lookup, entries, messages, and folders preserve response shapes", () => {
+test("session lookup, entries, messages, and folders preserve response shapes", async () => {
   const { routes } = setup();
   const lookup = response();
-  routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=session-a"));
+  await routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=session-a"));
   assert.deepEqual(lookup.body, { session: {
     path: "/sessions/folder/a.jsonl", id: "session-a", name: "A", archived: false,
     sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
@@ -106,35 +106,35 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
   } });
 
   const missingId = response();
-  routes["GET /session-by-id"]({}, missingId, new URL("http://localhost/session-by-id"));
+  await routes["GET /session-by-id"]({}, missingId, new URL("http://localhost/session-by-id"));
   assert.equal(missingId.status, 400);
 
   const entries = response();
-  routes["GET /session-entries"]({}, entries, new URL("http://localhost/session-entries?path=folder/a.jsonl"));
+  await routes["GET /session-entries"]({}, entries, new URL("http://localhost/session-entries?path=folder/a.jsonl"));
   assert.deepEqual(entries.body, [{ id: "entry", path: "/sessions/folder/a.jsonl" }]);
 
   const messages = response();
-  routes["GET /session-messages"]({}, messages, new URL("http://localhost/session-messages?path=missing"));
+  await routes["GET /session-messages"]({}, messages, new URL("http://localhost/session-messages?path=missing"));
   assert.equal(messages.status, 404);
 
   const folders = response();
-  routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/other"));
+  await routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/other"));
   assert.deepEqual(folders.body, { folders: ["/sessions/folder"], current: "/sessions/-other" });
 });
 
-test("search validates scope and preserves filtering options, snippets, and response shape", () => {
+test("search validates scope and preserves filtering options, snippets, and response shape", async () => {
   const { searches, routes } = setup();
   const short = response();
-  routes["GET /search"]({}, short, new URL("http://localhost/search?q=xy"));
+  await routes["GET /search"]({}, short, new URL("http://localhost/search?q=xy"));
   assert.equal(short.status, 400);
   assert.deepEqual(short.body, { error: "query must be at least 3 characters" });
 
   const escaped = response();
-  routes["GET /search"]({}, escaped, new URL("http://localhost/search?q=find&scope=folder&path=/sessions-escape"));
+  await routes["GET /search"]({}, escaped, new URL("http://localhost/search?q=find&scope=folder&path=/sessions-escape"));
   assert.equal(escaped.status, 400);
 
   const found = response();
-  routes["GET /search"]({}, found, new URL("http://localhost/search?q=find&scope=session&path=/sessions/folder/a.jsonl&tools=1"));
+  await routes["GET /search"]({}, found, new URL("http://localhost/search?q=find&scope=session&path=/sessions/folder/a.jsonl&tools=1"));
   assert.equal(found.status, 200);
   assert.deepEqual(found.body, {
     q: "find",
@@ -208,7 +208,7 @@ test("JSONL session archive and unarchive cascade through nested children", asyn
     resolvePath: (path) => path,
   });
   const listed = response();
-  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
+  await routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?path=/sessions/folder"));
 
   const invalidBody = response();
   await routes["POST /session/archive"]({ body: null }, invalidBody);

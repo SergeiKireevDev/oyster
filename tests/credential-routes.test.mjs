@@ -188,7 +188,7 @@ test("credential body parsing does not misclassify response writer failures as r
   const routes = createCredentialRoutes({ requestContext, credentialService: {} });
 
   await assert.rejects(
-    routes["POST /api-keys"]({ raw: "{" }, response()),
+    () => routes["POST /api-keys"]({ raw: "{" }, response()),
     (error) => error === failure,
   );
   assert.equal(writes, 1);

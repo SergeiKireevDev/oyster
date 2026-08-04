@@ -9,7 +9,7 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { importLegacyAppData } from "../server/persistence/legacyDataImport.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
-test("migration command requires stopped-service confirmation and records dry runs", (t) => {
+test("migration command requires stopped-service confirmation and records dry runs", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-migrate-command-"));
   const databasePath = join(root, "app.sqlite");
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -23,9 +23,9 @@ test("migration command requires stopped-service confirmation and records dry ru
   const report = JSON.parse(dryRun.stdout);
   assert.equal(report.mode, "dry-run");
   assert.deepEqual(report.sourceCounts, { checkpoints: 0, routines: 0 });
-  const store = openAppStore({ databasePath });
-  assert.equal(store.repositories.migrationLedger.list().length, 1);
-  store.close();
+  const store = await openAppStore({ databasePath });
+  assert.equal((await store.repositories.migrationLedger.list()).length, 1);
+  await store.close();
 });
 
 test("failed destination validation leaves every legacy source at its original path", async (t) => {
@@ -33,31 +33,31 @@ test("failed destination validation leaves every legacy source at its original p
   const sourcePath = join(root, "checkpoints.json");
   const sessionPath = join(root, "sessions", "session.jsonl");
   writeFileSync(sourcePath, JSON.stringify({ s1: [{ hash: "hash", anchorId: "anchor", sessionRef: { backend: "jsonl", id: "s1", storagePath: sessionPath } }] }));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const codec = createSessionReferenceCodec({ agentDir: root, jsonlRoot: join(root, "sessions"), sqlitePath: join(root, "sessions.sqlite") });
   const appStore = { ...store, repositories: { ...store.repositories, checkpoints: { ...store.repositories.checkpoints, record() {} } } };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
-  await assert.rejects(() => importLegacyAppData({
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
+  await assert.rejects(async () => await importLegacyAppData({
     appStore, mode: "apply", serviceStopped: true, sessionReferences: codec, resolveOwner: () => null,
     checkpointSourcePath: sourcePath, routineSourceDir: join(root, "routines"), now: () => "2026-07-16T05:00:00.000Z",
   }), /checkpoint validation failed/);
   assert.equal(existsSync(sourcePath), true);
-  assert.equal(store.repositories.migrationLedger.list()[0].status, "failed");
+  assert.equal((await store.repositories.migrationLedger.list())[0].status, "failed");
 });
 
 test("backup failures mark the migration failed and do not report completion", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-import-backup-failure-"));
   const sourcePath = join(root, "checkpoints.json");
   writeFileSync(sourcePath, "{}");
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const codec = createSessionReferenceCodec({
     agentDir: root,
     jsonlRoot: join(root, "sessions"),
     sqlitePath: join(root, "sessions.sqlite"),
   });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
 
-  await assert.rejects(() => importLegacyAppData({
+  await assert.rejects(async () => await importLegacyAppData({
     appStore: store,
     mode: "apply",
     serviceStopped: true,
@@ -70,7 +70,7 @@ test("backup failures mark the migration failed and do not report completion", a
   }), /backup unavailable/);
 
   assert.equal(existsSync(sourcePath), true);
-  await assert.rejects(() => importLegacyAppData({
+  await assert.rejects(async () => await importLegacyAppData({
     appStore: store,
     mode: "apply",
     serviceStopped: true,
@@ -81,7 +81,7 @@ test("backup failures mark the migration failed and do not report completion", a
     now: () => "2026-07-16T05:00:00.000Z",
     backupFile: async () => ({}),
   }), /must synchronously return/);
-  assert.deepEqual(store.repositories.migrationLedger.list()
+  assert.deepEqual((await store.repositories.migrationLedger.list())
     .map(({ status, error }) => ({ status, error }))
     .sort((left, right) => left.error.localeCompare(right.error)), [
     { status: "failed", error: "backup unavailable" },
@@ -122,7 +122,7 @@ test("routine destination validation includes the bound session identity", async
   };
   const sessionReferences = { validate: (value) => value, equals: () => true };
 
-  await assert.rejects(() => importLegacyAppData({
+  await assert.rejects(async () => await importLegacyAppData({
     appStore,
     mode: "apply",
     serviceStopped: true,
@@ -138,7 +138,7 @@ test("routine destination validation includes the bound session identity", async
 
 test("stopped-service import plans then applies checkpoints, routine definitions, and bindings", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-legacy-data-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const sessionsRoot = join(root, "sessions");
   const sessionPath = join(sessionsRoot, "workspace", "session.jsonl");
   const checkpointPath = join(root, "checkpoints.json");
@@ -158,10 +158,10 @@ test("stopped-service import plans then applies checkpoints, routine definitions
   });
   writeFileSync(join(routinesDir, "bindings.json"), bindingsSource);
   const codec = createSessionReferenceCodec({ agentDir: root, jsonlRoot: sessionsRoot, sqlitePath: join(root, "sessions.sqlite") });
-  const resolveOwner = () => store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }) ?? { id: 999999 };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const resolveOwner = async () => await store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }) ?? { id: 999999 };
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
 
-  await assert.rejects(() => importLegacyAppData({
+  await assert.rejects(async () => await importLegacyAppData({
     appStore: store, mode: "apply", serviceStopped: false, sessionReferences: codec, resolveOwner,
     checkpointSourcePath: checkpointPath, routineSourceDir: routinesDir,
   }), /service to be stopped/);
@@ -175,16 +175,16 @@ test("stopped-service import plans then applies checkpoints, routine definitions
   assert.deepEqual(dryRun.conflicts, [{
     domain: "routines", key: "bindings.json", reason: "1 binding(s) have no executable routine definition",
   }]);
-  assert.deepEqual(store.repositories.checkpoints.listForSession(reference), []);
-  assert.equal(store.repositories.routines.findByName("refresh.sh"), null);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(reference), []);
+  assert.equal(await store.repositories.routines.findByName("refresh.sh"), null);
 
   const applied = await importLegacyAppData({
     appStore: store, mode: "apply", serviceStopped: true, sessionReferences: codec, resolveOwner,
     checkpointSourcePath: checkpointPath, routineSourceDir: routinesDir, id: "apply", now: () => "2026-07-16T05:00:00.000Z",
   });
   assert.deepEqual(applied.destinationCounts, { checkpoints: 1, routines: 1 });
-  assert.equal(store.repositories.checkpoints.listForSession(reference).length, 1);
-  const routine = store.repositories.routines.findByName("refresh.sh");
+  assert.equal((await store.repositories.checkpoints.listForSession(reference)).length, 1);
+  const routine = await store.repositories.routines.findByName("refresh.sh");
   assert.equal(routine.session_id, "session-1");
   assert.equal(routine.cwd, "/workspace");
   assert.equal(routine.script, "#!/bin/sh\necho refresh\n");
@@ -202,7 +202,7 @@ test("stopped-service import plans then applies checkpoints, routine definitions
     assert.equal(backup.minimumReleaseCount, 1);
     assert.equal(statSync(backup.backupPath).mode & 0o222, 0, "legacy backups have no write bits");
   }
-  assert.deepEqual(store.repositories.migrationLedger.list().map((row) => [row.id, row.mode, row.status]), [
+  assert.deepEqual((await store.repositories.migrationLedger.list()).map((row) => [row.id, row.mode, row.status]), [
     ["apply", "apply", "completed"], ["dry", "dry-run", "completed"],
   ]);
 });

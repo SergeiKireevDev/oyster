@@ -60,11 +60,11 @@ function routineRuntime(state) {
   return state.routineRuntime;
 }
 
-function routineView(state, definition) {
+async function routineView(state, definition) {
   const repository = routineRepository(state);
-  const run = repository.findLatestRun(definition.id);
+  const run = await repository.findLatestRun(definition.id);
   const runtime = routineRuntime(state).get(definition.id);
-  const logs = run ? repository.listLogs(run.id).map((line) => line.text) : [];
+  const logs = run ? (await repository.listLogs(run.id)).map((line) => line.text) : [];
   return {
     name: definition.name,
     path: join(ROUTINES_DIR, definition.name),
@@ -81,12 +81,12 @@ function routineView(state, definition) {
   };
 }
 
-function emit(state, definition, reason) {
-  state.serverEvent({ type: "routine_update", reason, routine: routineView(state, definition) });
+async function emit(state, definition, reason) {
+  state.serverEvent({ type: "routine_update", reason, routine: await routineView(state, definition) });
 }
 
-export function listRoutines(state) {
-  return routineRepository(state).list().map((row) => routineView(state, row));
+export async function listRoutines(state) {
+  return Promise.all((await routineRepository(state).list()).map((row) => routineView(state, row)));
 }
 
 function findRoutine(state, name) {
@@ -118,7 +118,7 @@ function terminateRuntime(runtime) {
   runtime.stopTimer.unref();
 }
 
-function runScript(state, definition, mode) {
+async function runScript(state, definition, mode) {
   const repository = routineRepository(state);
   const cwd = definition.cwd && existsSync(definition.cwd) ? definition.cwd : state.currentDir;
   const executionPath = materializeRoutineScript({
@@ -130,40 +130,58 @@ function runScript(state, definition, mode) {
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
+  let pendingClose = null;
+  let finalizeClose = null;
+  proc.once("close", (code, signal) => {
+    if (finalizeClose) void finalizeClose(code, signal);
+    else pendingClose = [code, signal];
+  });
   const readers = new Set();
-  const runtime = { proc, readers, stopTimer: null };
+  const pendingLines = [];
+  let dispatchLine = (stream, value) => pendingLines.push([stream, value]);
+  const stdoutReader = createInterface({ input: proc.stdout }).on("line", (value) => dispatchLine("stdout", value));
+  const stderrReader = createInterface({ input: proc.stderr }).on("line", (value) => dispatchLine("stderr", value));
+  readers.add(stdoutReader);
+  readers.add(stderrReader);
+  let resolveCompletion;
+  const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+  const runtime = { proc, readers, stopTimer: null, completion };
   routineRuntime(state).set(definition.id, runtime);
-  const run = repository.createRun({
+  const run = await repository.createRun({
     id: randomUUID(), routineId: definition.id, mode,
     status: mode === "run" ? "running" : "teardown",
     startedAt: new Date().toISOString(),
   });
-  if (mode === "run") repository.updateProgress(run.id, 0, null);
+  if (mode === "run") await repository.updateProgress(run.id, 0, null);
   console.log(`[oyster] routine ${mode}: ${executionPath} (pid ${proc.pid}, cwd ${cwd}, session ${definition.session_id ?? "-"})`);
-  emit(state, definition, mode === "run" ? "started" : "teardown_started");
-
-  const onLine = (stream) => (value) => {
+  const onLine = (stream) => async (value) => {
     const line = value.trimEnd();
     if (!line) return;
     const match = line.match(PROGRESS_RE);
     if (match) {
-      const current = repository.findRun(run.id);
+      const current = await repository.findRun(run.id);
       const requested = match[1] === undefined ? current?.progress ?? null : Math.min(100, Number(match[1]));
       const progress = requested === null || current?.progress === null || current?.progress === undefined
         ? requested
         : Math.max(current.progress, requested);
       const message = match[2] || current?.message || null;
-      repository.updateProgress(run.id, progress, message);
-      emit(state, definition, "progress");
+      await repository.updateProgress(run.id, progress, message);
+      await emit(state, definition, "progress");
       return;
     }
-    repository.appendLog(run.id, stream, line, new Date().toISOString(), LOG_MAX);
-    emit(state, definition, "output");
+    await repository.appendLog(run.id, stream, line, new Date().toISOString(), LOG_MAX);
+    await emit(state, definition, "output");
   };
-  const stdoutReader = createInterface({ input: proc.stdout }).on("line", onLine("stdout"));
-  const stderrReader = createInterface({ input: proc.stderr }).on("line", onLine("stderr"));
-  readers.add(stdoutReader);
-  readers.add(stderrReader);
+  const lineTasks = new Set();
+  let lineQueue = Promise.resolve();
+  dispatchLine = (stream, value) => {
+    const task = lineQueue.then(() => onLine(stream)(value));
+    lineQueue = task.catch(() => {});
+    lineTasks.add(task);
+    void task.finally(() => lineTasks.delete(task));
+  };
+  for (const [stream, value] of pendingLines) dispatchLine(stream, value);
+  pendingLines.length = 0;
 
   const clearRuntime = () => {
     for (const reader of readers) reader.close();
@@ -179,129 +197,136 @@ function runScript(state, definition, mode) {
 
   // `close`, unlike `exit`, waits for stdio to drain. Finalizing on `exit`
   // could otherwise discard the script's last log or progress line.
-  proc.once("close", (code, signal) => {
+  finalizeClose = async (code, signal) => {
+    try {
+    await Promise.all([...lineTasks]);
     if (!clearRuntime()) return;
     if (spawnError) {
-      repository.finishRun(run.id, { status: "failed", error: spawnError.message, finishedAt: new Date().toISOString() });
-      emit(state, definition, "error");
+      await repository.finishRun(run.id, { status: "failed", error: spawnError.message, finishedAt: new Date().toISOString() });
+      await emit(state, definition, "error");
       return;
     }
-    const current = repository.findRun(run.id);
+    const current = await repository.findRun(run.id);
     console.log(`[oyster] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
     const exitReason = signal ? `signal ${signal}` : `exit ${code}`;
     if (current?.status === "stopping") {
-      repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
-      emit(state, definition, "stopped");
+      await repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
+      await emit(state, definition, "stopped");
     } else if (mode === "teardown") {
-      repository.finishRun(run.id, {
+      await repository.finishRun(run.id, {
         status: code === 0 ? "idle" : "failed",
         result: code === 0 ? "byproducts removed" : null,
         error: code === 0 ? null : (current?.message ?? `teardown failed (${exitReason})`),
         finishedAt: new Date().toISOString(), exitCode: code,
       });
-      emit(state, definition, "teardown_finished");
+      await emit(state, definition, "teardown_finished");
     } else {
-      if (code === 0 && current?.progress !== null) repository.updateProgress(run.id, 100, current?.message ?? null);
-      repository.finishRun(run.id, {
+      if (code === 0 && current?.progress !== null) await repository.updateProgress(run.id, 100, current?.message ?? null);
+      await repository.finishRun(run.id, {
         status: code === 0 ? "done" : "failed",
         error: code === 0 ? null : (current?.message ?? `run failed (${exitReason})`),
         finishedAt: new Date().toISOString(), exitCode: code,
       });
-      emit(state, definition, "finished");
+      await emit(state, definition, "finished");
     }
-  });
+    } finally {
+      resolveCompletion();
+    }
+  };
+  if (pendingClose) void finalizeClose(...pendingClose);
+  await emit(state, definition, mode === "run" ? "started" : "teardown_started");
 }
 
-export function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
+export async function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
   if (typeof name !== "string" || !/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
   if (typeof script !== "string") throw new Error("routine script must be a string");
   if (cwd !== null && typeof cwd !== "string") throw new Error("routine cwd must be a string or null");
   if (sessionId && !ownerId) throw new Error("session owner is required to bind a routine");
-  const existing = findRoutine(state, name);
+  const existing = await findRoutine(state, name);
   if (existing && activeRuntime(state, existing)?.proc) throw new Error(`routine "${name}" is currently running — stop it before overwriting`);
   if (existing?.session_id && sessionId && existing.session_id !== sessionId) throw new Error(`routine "${name}" exists and is bound to another session`);
-  const definition = routineRepository(state).upsert({
+  const definition = await routineRepository(state).upsert({
     id: existing?.id ?? randomUUID(),
     ownerId: sessionId ? ownerId : existing?.owner_id ?? null,
     name, script, cwd: cwd ?? existing?.cwd ?? null, now: new Date().toISOString(),
   });
   console.log(`[oyster] routine ${existing ? "updated" : "created"}: ${join(ROUTINES_DIR, name)} (session ${definition.session_id ?? "-"})`);
-  emit(state, definition, existing ? "updated" : "created");
+  await emit(state, definition, existing ? "updated" : "created");
   return routineView(state, definition);
 }
 
-export function deleteRoutine(state, name) {
-  const definition = findRoutine(state, name);
+export async function deleteRoutine(state, name) {
+  const definition = await findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   if (activeRuntime(state, definition)?.proc) throw new Error(`routine "${name}" is running — stop it first`);
-  const view = { ...routineView(state, definition), sessionId: null, cwd: null };
-  routineRepository(state).delete(definition.id);
+  const view = { ...await routineView(state, definition), sessionId: null, cwd: null };
+  await routineRepository(state).delete(definition.id);
   try { unlinkSync(join(ROUTINES_DIR, name)); } catch (error) { if (error.code !== "ENOENT") throw new Error(`failed to delete routine artifact: ${error.message}`); }
   state.serverEvent({ type: "routine_update", reason: "deleted", routine: view });
   return view;
 }
 
-export function startRoutine(state, name, { sessionId = null, ownerId = null, cwd = null } = {}) {
-  let definition = findRoutine(state, name);
+export async function startRoutine(state, name, { sessionId = null, ownerId = null, cwd = null } = {}) {
+  let definition = await findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   if (activeRuntime(state, definition)?.proc) throw new Error(`routine "${name}" is already running`);
   if (definition.session_id && sessionId && definition.session_id !== sessionId) throw new Error(`routine "${name}" is bound to another session — release it there first`);
   if (sessionId) {
     if (!ownerId) throw new Error("session owner is required to bind a routine");
-    routineRepository(state).bind(definition.id, ownerId, cwd, new Date().toISOString());
-    definition = findRoutine(state, name);
+    await routineRepository(state).bind(definition.id, ownerId, cwd, new Date().toISOString());
+    definition = await findRoutine(state, name);
   } else if (cwd) {
-    routineRepository(state).updateCwd(definition.id, cwd, new Date().toISOString());
-    definition = findRoutine(state, name);
+    await routineRepository(state).updateCwd(definition.id, cwd, new Date().toISOString());
+    definition = await findRoutine(state, name);
   }
-  runScript(state, definition, "run");
+  await runScript(state, definition, "run");
   return routineView(state, definition);
 }
 
-export function stopRoutine(state, name) {
-  const definition = findRoutine(state, name);
+export async function stopRoutine(state, name) {
+  const definition = await findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   const runtime = activeRuntime(state, definition);
   if (!runtime?.proc) throw new Error(`routine "${name}" is not running`);
-  const run = routineRepository(state).findLatestRun(definition.id);
-  if (run) routineRepository(state).updateRunStatus(run.id, "stopping");
-  emit(state, definition, "stopping");
+  const run = await routineRepository(state).findLatestRun(definition.id);
+  if (run) await routineRepository(state).updateRunStatus(run.id, "stopping");
+  await emit(state, definition, "stopping");
   terminateRuntime(runtime);
   return routineView(state, definition);
 }
 
-export function teardownRoutine(state, name) {
-  const definition = findRoutine(state, name);
+export async function teardownRoutine(state, name) {
+  const definition = await findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   if (activeRuntime(state, definition)?.proc) throw new Error(`routine "${name}" is running — stop it first`);
-  runScript(state, definition, "teardown");
+  await runScript(state, definition, "teardown");
   return routineView(state, definition);
 }
 
-export function releaseRoutine(state, name) {
-  let definition = findRoutine(state, name);
+export async function releaseRoutine(state, name) {
+  let definition = await findRoutine(state, name);
   if (!definition) throw new Error(`no such routine: ${name}`);
   if (activeRuntime(state, definition)?.proc) throw new Error(`routine "${name}" is running — stop it first`);
-  routineRepository(state).release(definition.id, new Date().toISOString());
-  definition = findRoutine(state, name);
-  emit(state, definition, "released");
+  await routineRepository(state).release(definition.id, new Date().toISOString());
+  definition = await findRoutine(state, name);
+  await emit(state, definition, "released");
   return routineView(state, definition);
 }
 
-export function stopSessionRoutines(state, sessionId) {
+export async function stopSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const stopped = [];
-  for (const definition of routineRepository(state).list().filter((row) => row.session_id === sessionId)) {
-    if (activeRuntime(state, definition)?.proc) try { stopRoutine(state, definition.name); } catch {}
+  for (const definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
+    if (activeRuntime(state, definition)?.proc) try { await stopRoutine(state, definition.name); } catch {}
     stopped.push(definition.name);
   }
   return stopped;
 }
 
-export function deleteSessionRoutines(state, sessionId) {
+export async function deleteSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const deleted = [];
-  for (const definition of routineRepository(state).list().filter((row) => row.session_id === sessionId)) {
+  for (const definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
     const runtime = activeRuntime(state, definition);
     if (runtime?.proc) {
       // Session deletion is irreversible, so do not leave a resistant
@@ -311,9 +336,10 @@ export function deleteSessionRoutines(state, sessionId) {
       signalProcessGroup(runtime.proc, "SIGKILL");
       for (const reader of runtime.readers) reader.close();
       routineRuntime(state).delete(definition.id);
+      await runtime.completion;
     }
-    const view = routineView(state, definition);
-    routineRepository(state).delete(definition.id);
+    const view = await routineView(state, definition);
+    await routineRepository(state).delete(definition.id);
     try { unlinkSync(join(ROUTINES_DIR, definition.name)); } catch (error) { if (error.code !== "ENOENT") throw error; }
     deleted.push(definition.name);
     state.serverEvent({ type: "routine_update", reason: "deleted", routine: view });
@@ -321,15 +347,15 @@ export function deleteSessionRoutines(state, sessionId) {
   return deleted;
 }
 
-export function releaseSessionRoutines(state, sessionId) {
+export async function releaseSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const released = [];
-  for (let definition of routineRepository(state).list().filter((row) => row.session_id === sessionId)) {
-    if (activeRuntime(state, definition)?.proc) try { stopRoutine(state, definition.name); } catch {}
-    routineRepository(state).release(definition.id, new Date().toISOString());
-    definition = findRoutine(state, definition.name);
+  for (let definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
+    if (activeRuntime(state, definition)?.proc) try { await stopRoutine(state, definition.name); } catch {}
+    await routineRepository(state).release(definition.id, new Date().toISOString());
+    definition = await findRoutine(state, definition.name);
     released.push(definition.name);
-    emit(state, definition, "released");
+    await emit(state, definition, "released");
   }
   return released;
 }
@@ -391,7 +417,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
   });
 }
 
-export function stopAllRoutines(state) {
+export async function stopAllRoutines(state) {
   const runtimes = state.routineRuntime;
   if (!runtimes) return;
   // Detach before signaling so late child events cannot write to a store that
@@ -403,4 +429,5 @@ export function stopAllRoutines(state) {
     for (const reader of runtime.readers) reader.close();
     signalProcessGroup(runtime.proc, "SIGKILL");
   }
+  await Promise.all([...runtimes.values()].map((runtime) => runtime.completion));
 }

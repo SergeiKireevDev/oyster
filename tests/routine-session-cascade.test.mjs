@@ -11,13 +11,13 @@ import { createRoutine, deleteSessionRoutines, startRoutine, stopRoutine, stopSe
 const SCRIPT = "#!/bin/sh\necho live-output\nsleep 30\n";
 const TERM_RESISTANT_SCRIPT = "#!/bin/sh\ntrap '' TERM\necho live-output\nwhile :; do sleep 1; done\n";
 
-function owner(store, sessionId) {
-  return store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent.sqlite", createdAt: "created" });
+async function owner(store, sessionId) {
+  return await store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent.sqlite", createdAt: "created" });
 }
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-routine-cascade-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const waiters = [];
   const state = {
     appStore: store,
@@ -32,50 +32,51 @@ function fixture(t) {
     },
   };
   const waitForEvent = (predicate) => new Promise((resolve) => waiters.push({ predicate, resolve }));
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, store, state, waitForEvent };
 }
 
 test("session deletion removes owned routine definitions, runs, logs, and live handles only", async (t) => {
-  const { root, store, state, waitForEvent } = fixture(t);
-  const ownerA = owner(store, "session-a");
-  const ownerB = owner(store, "session-b");
-  createRoutine(state, { name: "owned.sh", script: TERM_RESISTANT_SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
-  createRoutine(state, { name: "other.sh", script: SCRIPT, sessionId: "session-b", ownerId: ownerB.id, cwd: root });
-  createRoutine(state, { name: "global.sh", script: SCRIPT });
+  const { root, store, state, waitForEvent } = await fixture(t);
+  const ownerA = await owner(store, "session-a");
+  const ownerB = await owner(store, "session-b");
+  await createRoutine(state, { name: "owned.sh", script: TERM_RESISTANT_SCRIPT, sessionId: "session-a", ownerId: ownerA.id, cwd: root });
+  await createRoutine(state, { name: "other.sh", script: SCRIPT, sessionId: "session-b", ownerId: ownerB.id, cwd: root });
+  await createRoutine(state, { name: "global.sh", script: SCRIPT });
 
   const outputA = waitForEvent((event) => event.reason === "output" && event.routine.name === "owned.sh");
-  startRoutine(state, "owned.sh", { sessionId: "session-a", ownerId: ownerA.id, cwd: root });
+  await startRoutine(state, "owned.sh", { sessionId: "session-a", ownerId: ownerA.id, cwd: root });
   await outputA;
-  const ownedDefinition = store.repositories.routines.findByName("owned.sh");
-  const ownedRun = store.repositories.routines.findLatestRun(ownedDefinition.id);
+  const ownedDefinition = await store.repositories.routines.findByName("owned.sh");
+  const ownedRun = await store.repositories.routines.findLatestRun(ownedDefinition.id);
   const ownedProcess = state.routineRuntime.get(ownedDefinition.id).proc;
 
   const outputB = waitForEvent((event) => event.reason === "output" && event.routine.name === "other.sh");
-  startRoutine(state, "other.sh", { sessionId: "session-b", ownerId: ownerB.id, cwd: root });
+  await startRoutine(state, "other.sh", { sessionId: "session-b", ownerId: ownerB.id, cwd: root });
   await outputB;
-  const otherDefinition = store.repositories.routines.findByName("other.sh");
-  const otherRun = store.repositories.routines.findLatestRun(otherDefinition.id);
+  const otherDefinition = await store.repositories.routines.findByName("other.sh");
+  const otherRun = await store.repositories.routines.findLatestRun(otherDefinition.id);
   const otherRuntime = state.routineRuntime.get(otherDefinition.id);
 
-  assert.deepEqual(stopSessionRoutines(state, "session-a"), ["owned.sh"]);
-  assert.deepEqual(deleteSessionRoutines(state, "session-a"), ["owned.sh"]);
-  store.repositories.sessions.delete(ownerA.id);
+  assert.deepEqual(await stopSessionRoutines(state, "session-a"), ["owned.sh"]);
+  assert.deepEqual(await deleteSessionRoutines(state, "session-a"), ["owned.sh"]);
+  await store.repositories.sessions.delete(ownerA.id);
 
-  assert.equal(store.repositories.routines.findByName("owned.sh"), null);
-  assert.equal(store.repositories.routines.findRun(ownedRun.id), null);
-  assert.deepEqual(store.repositories.routines.listLogs(ownedRun.id), []);
+  assert.equal(await store.repositories.routines.findByName("owned.sh"), null);
+  assert.equal(await store.repositories.routines.findRun(ownedRun.id), null);
+  assert.deepEqual(await store.repositories.routines.listLogs(ownedRun.id), []);
   assert.equal(state.routineRuntime.has(ownedDefinition.id), false);
   for (let attempt = 0; attempt < 50 && ownedProcess.exitCode === null && ownedProcess.signalCode === null; attempt++) await delay(10);
   assert.equal(ownedProcess.signalCode, "SIGKILL", "session deletion must force-kill routines that ignore SIGTERM");
 
-  assert.equal(store.repositories.routines.findByName("other.sh").id, otherDefinition.id);
-  assert.equal(store.repositories.routines.findRun(otherRun.id).status, "running");
-  assert.deepEqual(store.repositories.routines.listLogs(otherRun.id).map((line) => line.text), ["live-output"]);
+  assert.equal((await store.repositories.routines.findByName("other.sh")).id, otherDefinition.id);
+  assert.equal((await store.repositories.routines.findRun(otherRun.id)).status, "running");
+  assert.deepEqual((await store.repositories.routines.listLogs(otherRun.id)).map((line) => line.text), ["live-output"]);
   assert.equal(state.routineRuntime.get(otherDefinition.id), otherRuntime);
-  assert.ok(store.repositories.routines.findByName("global.sh"));
+  assert.ok(await store.repositories.routines.findByName("global.sh"));
 
   const otherClose = once(otherRuntime.proc, "close");
-  stopRoutine(state, "other.sh");
+  await stopRoutine(state, "other.sh");
   await otherClose;
+  await otherRuntime.completion;
 });

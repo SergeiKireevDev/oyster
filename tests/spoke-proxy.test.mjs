@@ -25,12 +25,12 @@ test("Oyster Hub forwards spoke WebSocket upgrades to its embedded llmbox listen
     });
   });
   const backendPort = await listen(backend);
-  t.after(() => backend.listening && close(backend));
+  t.after(async () => backend.listening && await close(backend));
 
   const hub = createHttpServer((_request, response) => response.writeHead(404).end());
   const detach = attachSpokeProxy(hub, `127.0.0.1:${backendPort}`);
   const hubPort = await listen(hub);
-  t.after(() => { detach(); return hub.listening && close(hub); });
+  t.after(async () => { detach(); return hub.listening && await close(hub); });
 
   const client = connect(hubPort, "127.0.0.1");
   let response = "";

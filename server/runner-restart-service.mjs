@@ -49,7 +49,7 @@ export function createRestartActiveRunners({
 
     for (const item of captured) {
       try {
-        const stopping = stopRunner(item.runner);
+        const stopping = await stopRunner(item.runner);
         if (isPromiseLike(stopping)) await stopping;
       } catch {
         failedRunnerIds.add(item.runner.id);
@@ -80,7 +80,7 @@ export function createRestartActiveRunners({
         continue;
       }
       try {
-        const starting = startRunner(runner);
+        const starting = await startRunner(runner);
         if (isPromiseLike(starting)) await starting;
       } catch {
         failedRunnerIds.add(runner.id);

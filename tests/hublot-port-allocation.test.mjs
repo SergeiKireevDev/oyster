@@ -8,17 +8,17 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import { allocateHublot, isLocalPortAvailable, reserveHublot } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-port-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { store, state };
 }
 
 test("automatic allocation skips both live ports and durable reservations", async (t) => {
-  const { state } = fixture(t);
-  reserveHublot(state, { port: 3001 });
+  const { state } = await fixture(t);
+  await reserveHublot(state, { port: 3001 });
   const checked = [];
   const allocated = await allocateHublot(state, { label: "allocated" }, {
     startPort: 3000,
@@ -30,21 +30,21 @@ test("automatic allocation skips both live ports and durable reservations", asyn
 });
 
 test("automatic allocation rejects invalid search bounds", async (t) => {
-  const { state } = fixture(t);
+  const { state } = await fixture(t);
   for (const startPort of [0, 65536, 3.5, "not-a-port"]) {
-    await assert.rejects(allocateHublot(state, {}, { startPort }), /invalid starting port/);
+    await assert.rejects(async () => await allocateHublot(state, {}, { startPort }), /invalid starting port/);
   }
-  await assert.rejects(allocateHublot(state, {}, { checkPort: null }), /availability check must be a function/);
+  await assert.rejects(async () => await allocateHublot(state, {}, { checkPort: null }), /availability check must be a function/);
 });
 
 test("concurrent allocators reserve distinct ports transactionally", async (t) => {
-  const { store, state } = fixture(t);
+  const { store, state } = await fixture(t);
   const [first, second] = await Promise.all([
-    allocateHublot(state, { label: "first" }, { startPort: 3100, checkPort: async () => true }),
-    allocateHublot(state, { label: "second" }, { startPort: 3100, checkPort: async () => true }),
+    await allocateHublot(state, { label: "first" }, { startPort: 3100, checkPort: async () => true }),
+    await allocateHublot(state, { label: "second" }, { startPort: 3100, checkPort: async () => true }),
   ]);
   assert.deepEqual([first.port, second.port].sort(), [3100, 3101]);
-  assert.deepEqual(store.repositories.hublots.list().map((row) => row.port).sort(), [3100, 3101]);
+  assert.deepEqual((await store.repositories.hublots.list()).map((row) => row.port).sort(), [3100, 3101]);
 });
 
 test("live port checks bind the candidate instead of trusting process-local state", async (t) => {
@@ -65,13 +65,13 @@ test("process-local next-port state is absent from the server and route", () => 
   assert.match(source, /allocateHublot/);
 });
 
-test("active-port uniqueness is enforced by SQLite and closed ports are reusable", (t) => {
-  const { store, state } = fixture(t);
-  const first = reserveHublot(state, { port: 3200 });
-  assert.throws(() => store.repositories.hublots.create({
+test("active-port uniqueness is enforced by SQLite and closed ports are reusable", async (t) => {
+  const { store, state } = await fixture(t);
+  const first = await reserveHublot(state, { port: 3200 });
+  await assert.rejects(() => store.repositories.hublots.create({
     id: "conflict", port: 3200, workdir: "/workspace", serviceKind: "self_served",
     status: "opening", desiredState: "open", createdAt: "created",
   }), /unique constraint/i);
-  store.repositories.hublots.update(first.id, { status: "closed", desired_state: "closed" });
-  assert.equal(reserveHublot(state, { port: 3200 }).port, 3200);
+  await store.repositories.hublots.update(first.id, { status: "closed", desired_state: "closed" });
+  assert.equal((await reserveHublot(state, { port: 3200 })).port, 3200);
 });

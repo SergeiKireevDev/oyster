@@ -33,19 +33,19 @@ test("reload, connection, throttle, and timer state is explicitly ephemeral and 
   assert.notEqual(restarted.authFails, first.authFails);
 });
 
-test("ephemeral server and runner fields never enter app_settings", (t) => {
+test("ephemeral server and runner fields never enter app_settings", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-ephemeral-settings-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   const settings = createAppSettings({ repository: store.repositories.settings, startupWorkdir: "/workspace" });
-  settings.setCurrentWorkdir("/persisted");
-  settings.setDefaultRunnerId("r-12345678");
+  await settings.setCurrentWorkdir("/persisted");
+  await settings.setDefaultRunnerId("r-12345678");
 
-  const persistedKeys = new Set(store.repositories.settings.list().map((row) => row.key));
+  const persistedKeys = new Set((await store.repositories.settings.list()).map((row) => row.key));
   for (const field of [
     ...REQUIRED_EPHEMERAL,
     ...RUNNER_EPHEMERAL_FIELDS,
     ...RUNNER_MANAGER_EPHEMERAL_FIELDS,
-  ]) assert.equal(persistedKeys.has(field), false, `${field} leaked into app_settings`);
+  ]) assert.equal(await persistedKeys.has(field), false, `${field} leaked into app_settings`);
   assert.deepEqual([...persistedKeys].sort(), ["current_workdir", "default_runner_id"]);
 });
