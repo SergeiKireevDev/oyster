@@ -74,7 +74,7 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
       stopRunners, closeHublots, stopRoutines, deleteRoutines,
       deleteAgentSession, removeRuntime, broadcast,
     } = options;
-    const owner = ensureSessionOwner(reference);
+    const owner = await ensureSessionOwner(reference);
     if (!owner || !Number.isInteger(owner.id) || owner.id < 1) {
       throw new TypeError("ensureSessionOwner must return an owner with a positive integer id");
     }
@@ -85,51 +85,51 @@ export function createSessionDeletionWorkflow({ appStore, ensureSessionOwner, no
       storagePath: reference.storagePath,
     });
     let stage = "persisted";
-    const update = (status, nextStage, error = null) => {
-      const changes = operations.update(id, { status, stage: nextStage, error, updatedAt: timestamp() });
+    const update = async (status, nextStage, error = null) => {
+      const changes = await operations.update(id, { status, stage: nextStage, error, updatedAt: timestamp() });
       requireSingleUpdate(changes, `session deletion operation ${id} no longer exists`);
       stage = nextStage;
     };
 
-    appStore.transaction((repositories) => {
-      repositories.operations.create({
+    await appStore.transaction(async (repositories) => {
+      await repositories.operations.create({
         id, ownerId: owner.id, kind: "delete_session", status: "running", stage,
         payload, createdAt: timestamp(),
       });
       requireSingleUpdate(
-        repositories.sessions.markDeleting(owner.id),
+        await repositories.sessions.markDeleting(owner.id),
         `session owner ${owner.id} no longer exists`,
       );
     });
 
     try {
       const stoppedRunners = await stopRunners();
-      update("running", "runners_stopped");
+      await update("running", "runners_stopped");
       const stoppedRoutines = await stopRoutines();
-      update("running", "routines_stopped");
+      await update("running", "routines_stopped");
       const agentResult = await deleteAgentSession();
-      update("running", "agent_deleted");
+      await update("running", "agent_deleted");
       const closedHublots = await closeHublots();
-      update("running", "hublots_closed");
+      await update("running", "hublots_closed");
       const deletedRoutines = await deleteRoutines();
-      update("running", "routines_deleted");
-      appStore.transaction((repositories) => {
+      await update("running", "routines_deleted");
+      await appStore.transaction(async (repositories) => {
         requireSingleUpdate(
-          repositories.sessions.delete(owner.id),
+          await repositories.sessions.delete(owner.id),
           `session owner ${owner.id} no longer exists`,
         );
-        requireSingleUpdate(repositories.operations.update(id, {
+        requireSingleUpdate(await repositories.operations.update(id, {
           status: "running", stage: "app_resources_deleted", error: null, updatedAt: timestamp(),
         }), `session deletion operation ${id} no longer exists`);
       });
       stage = "app_resources_deleted";
       await removeRuntime(stoppedRunners);
-      update("running", "runtime_removed");
+      await update("running", "runtime_removed");
       await broadcast();
-      update("completed", "completed");
+      await update("completed", "completed");
       return { operationId: id, agentResult, closedHublots, stoppedRoutines, deletedRoutines };
     } catch (error) {
-      try { update("failed", stage, failureMessage(error)); } catch {}
+      try { await update("failed", stage, failureMessage(error)); } catch {}
       attachOperationId(error, id);
       throw error;
     }

@@ -29,7 +29,7 @@ function productionModules() {
   return files;
 }
 
-test("every stable state field has a repository or explicit non-durable classification", (t) => {
+test("every stable state field has a repository or explicit non-durable classification", async (t) => {
   const observed = new Set();
   for (const path of productionModules()) {
     const source = readFileSync(path, "utf8");
@@ -39,8 +39,8 @@ test("every stable state field has a repository or explicit non-durable classifi
   assert.deepEqual(unknown, [], `classify new stable state fields: ${unknown.join(", ")}`);
 
   const dbRoot = mkdtempSync(join(tmpdir(), "oyster-state-inventory-"));
-  const store = openAppStore({ databasePath: join(dbRoot, "app.sqlite") });
-  t.after(() => { store.close(); rmSync(dbRoot, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(dbRoot, "app.sqlite") });
+  t.after(async () => { await store.close(); rmSync(dbRoot, { recursive: true, force: true }); });
   for (const [field, metadata] of Object.entries(STABLE_STATE_INVENTORY)) {
     assert.ok(["persistent", "rebuildable", "ephemeral", "startup"].includes(metadata.classification), `invalid classification for ${field}`);
     assert.ok(RELOAD_OWNERSHIP_CLASSIFICATIONS.includes(metadata.reloadOwnership), `${field} must name a reload owner`);

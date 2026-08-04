@@ -61,8 +61,8 @@ function streamingRequest(target, { method = "POST", headers = {} } = {}) {
   const url = new URL(target);
   let request;
   const response = new Promise((resolvePromise, reject) => {
-    request = httpRequest(url, { method, headers }, (res) => {
-      requestBytes(res).then((body) => resolvePromise({ res, body }), reject);
+    request = httpRequest(url, { method, headers }, async (res) => {
+      await requestBytes(res).then((body) => resolvePromise({ res, body }), reject);
     });
     request.on("error", reject);
   });
@@ -172,13 +172,13 @@ function hubConfig(llmboxUrl, timeoutMs = 1000) {
 async function fleet(t, timeoutMs = 1000) {
   const upstream = fakeWorkspace();
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const llmbox = fakeLlmbox(upstreamUrl);
   const llmboxUrl = await listen(llmbox.server);
-  t.after(() => close(llmbox.server));
+  t.after(async () => await close(llmbox.server));
   const hub = createOysterHub(hubConfig(llmboxUrl, timeoutMs), { logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   return { hubUrl, llmbox, upstreamUrl };
 }
 
@@ -297,10 +297,10 @@ test("mock driver lists every configured local Oyster workspace", async () => {
 test("composite driver exposes configured local and llmbox environments together", async (t) => {
   const upstream = fakeWorkspace({ unauthenticated: true });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const llmbox = fakeLlmbox(upstreamUrl);
   const llmboxUrl = await listen(llmbox.server);
-  t.after(() => close(llmbox.server));
+  t.after(async () => await close(llmbox.server));
   const config = validateConfig({ token: "hub-secret", drivers: [
     { type: "mock", endpoint: upstreamUrl, environmentId: "local", environmentName: "Local", id: "direct", name: "Direct Oyster" },
     { type: "llmbox", endpoint: llmboxUrl, token: "llmbox-secret", tokenSecret: "workspace-token-secret" },
@@ -319,7 +319,7 @@ test("composite driver exposes configured local and llmbox environments together
 
   const hub = createOysterHub(config, { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const destroyed = await fetch(`${hubUrl}/api/v1/workspaces/local`, {
     method: "DELETE", headers: { authorization: "Bearer hub-secret" },
   });
@@ -331,12 +331,12 @@ test("composite driver exposes configured local and llmbox environments together
 test("mock driver exposes one local read-only workspace through a hub on port 8082", async (t) => {
   const upstream = fakeWorkspace({ unauthenticated: true });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const config = mockHubConfig(upstreamUrl);
   assert.equal(config.port, 8082);
   const hub = createOysterHub(config, { logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
 
   const overviewResponse = await fetch(`${hubUrl}/api/v1/overview`, {
     headers: { authorization: "Bearer hub-secret" },
@@ -395,7 +395,7 @@ test("Hub preserves an initializing workspace status while its Oyster endpoint s
   const cloudService = { async listEnvironments() { return []; }, async listWorkspaces() { return []; } };
   const hubServer = createOysterHub(mockHubConfig("http://127.0.0.1:1", 100), { driver, cloudService, logger: { error() {} } });
   const hubUrl = await listen(hubServer);
-  t.after(() => close(hubServer));
+  t.after(async () => await close(hubServer));
 
   const response = await fetch(`${hubUrl}/api/v1/workspaces`, { headers: { authorization: "Bearer hub-secret" } });
   assert.equal(response.status, 200);
@@ -412,7 +412,7 @@ test("fast workspace discovery skips health probes and shares driver discovery w
     sendJson(res, 500, { error: "health probing is not expected" });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   let discoveryCalls = 0;
   const workspace = { environmentId: "local", environmentName: "Local", id: "local", name: "Local", url: upstreamUrl, provider: { state: "running", phase: "running" } };
   const driver = {
@@ -423,7 +423,7 @@ test("fast workspace discovery skips health probes and shares driver discovery w
   const cloudService = { async listEnvironments() { return []; }, async listWorkspaces() { return []; } };
   const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, cloudService, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const headers = { "x-auth-token": "hub-secret" };
 
   const discovery = await fetch(`${hubUrl}/api/v1/workspaces?probe=0`, { headers });
@@ -572,7 +572,7 @@ test("workspace uploads stream before the browser finishes and outlive the norma
     sendJson(res, 200, { received: Buffer.concat(observed.chunks).length });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: "workspace-secret" };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -589,7 +589,7 @@ test("workspace uploads stream before the browser finishes and outlive the norma
   const transfers = [];
   const hub = createOysterHub(config, { driver, logger: { error() {} }, onTransfer: (event) => transfers.push(event) });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
 
   const chunks = [Buffer.alloc(64 * 1024, 1), Buffer.alloc(64 * 1024, 2), Buffer.alloc(64 * 1024, 3)];
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -628,7 +628,7 @@ test("workspace upload idle timeout aborts a stalled stream with an actionable e
     if (!res.headersSent) sendJson(res, 200, { unexpected: true });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -641,7 +641,7 @@ test("workspace upload idle timeout aborts a stalled stream with an actionable e
   }, {});
   const hub = createOysterHub(config, { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
 
   const { request, response } = streamingRequest(`${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=stalled.bin&offset=0&last=1`, {
     headers: { "x-auth-token": "hub-secret", "content-type": "application/octet-stream", "content-length": "2" },
@@ -669,7 +669,7 @@ test("workspace upload offsets recover from 409 and finalize through the Hub", a
     return sendJson(res, 200, last ? { saved: "/tmp/chunked.bin", bytes: stored.length } : { received: stored.length });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -678,7 +678,7 @@ test("workspace upload offsets recover from 409 and finalize through the Hub", a
   };
   const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const headers = { "x-auth-token": "hub-secret", "content-type": "application/octet-stream" };
   const upload = (offset, last, body) => fetch(`${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=chunked.bin&offset=${offset}&last=${last ? 1 : 0}`, {
     method: "POST", headers, body,
@@ -709,7 +709,7 @@ test("lost upload responses remain safe to retry through the Hub", async (t) => 
     sendJson(res, 200, { saved: "/tmp/retried.bin", bytes: applied.length });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -718,7 +718,7 @@ test("lost upload responses remain safe to retry through the Hub", async (t) => 
   };
   const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const target = `${hubUrl}/file-upload?workspace=alpha&dir=%2Ftmp&name=retried.bin&offset=0&last=1`;
   const options = {
     method: "POST",
@@ -751,7 +751,7 @@ test("workspace upload concurrency is bounded across Hub proxy routes", async (t
     sendJson(res, 200, { saved: true });
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: null };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -764,7 +764,7 @@ test("workspace upload concurrency is bounded across Hub proxy routes", async (t
   }, {});
   const hub = createOysterHub(config, { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const headers = { "x-auth-token": "hub-secret", "x-oyster-workspace": "alpha", "content-type": "application/octet-stream" };
 
   const first = fetch(`${hubUrl}/file-upload?name=one&offset=0&last=1`, { method: "POST", headers, body: "a" });
@@ -790,7 +790,7 @@ test("scoped workspace API preserves a large opaque upload byte-for-byte", async
     res.end(Buffer.from("saved"));
   });
   const upstreamUrl = await listen(upstream);
-  t.after(() => close(upstream));
+  t.after(async () => await close(upstream));
   const workspace = { id: "alpha", name: "Alpha", url: upstreamUrl, token: "workspace-secret" };
   const driver = {
     type: "test", endpoint: "memory://test", capabilities: { list: true },
@@ -799,7 +799,7 @@ test("scoped workspace API preserves a large opaque upload byte-for-byte", async
   };
   const hub = createOysterHub(mockHubConfig(upstreamUrl), { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const body = Buffer.alloc(8 * 1024 * 1024);
   for (let i = 0; i < body.length; i += 1) body[i] = i % 251;
 
@@ -854,8 +854,8 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
   const betaServer = workspaceServer("beta");
   const alphaUrl = await listen(alphaServer);
   const betaUrl = await listen(betaServer);
-  t.after(() => close(alphaServer));
-  t.after(() => close(betaServer));
+  t.after(async () => await close(alphaServer));
+  t.after(async () => await close(betaServer));
   const workspaces = [
     { environmentId: "edge-1", environmentName: "Edge 1", id: "alpha", name: "Alpha", url: alphaUrl, token: null },
     { environmentId: "edge-2", environmentName: "Edge 2", id: "beta", name: "Beta", url: betaUrl, token: null },
@@ -867,7 +867,7 @@ test("hub serves the Oyster UI and aggregates workspace-scoped sessions and runn
   };
   const hub = createOysterHub(mockHubConfig(alphaUrl), { driver, logger: { error() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const headers = { "x-auth-token": "hub-secret" };
 
   const documentResponse = await fetch(`${hubUrl}/`);
@@ -1026,8 +1026,8 @@ test("Hub forwards selected SSE before other workspace runner snapshots finish",
   });
   const alphaUrl = await listen(alpha);
   const betaUrl = await listen(beta);
-  t.after(() => close(alpha));
-  t.after(() => close(beta));
+  t.after(async () => await close(alpha));
+  t.after(async () => await close(beta));
   const workspaces = [
     { environmentId: "one", id: "alpha", name: "Alpha", url: alphaUrl },
     { environmentId: "two", id: "beta", name: "Beta", url: betaUrl },
@@ -1039,7 +1039,7 @@ test("Hub forwards selected SSE before other workspace runner snapshots finish",
   };
   const hub = createOysterHub(mockHubConfig(betaUrl), { driver, logger: { error() {}, warn() {} } });
   const hubUrl = await listen(hub);
-  t.after(() => close(hub));
+  t.after(async () => await close(hub));
   const abort = new AbortController();
   t.after(() => { releaseSnapshot(); abort.abort(); });
 

@@ -18,27 +18,27 @@ function response() {
 test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable across restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-compat-"));
   const databasePath = join(root, "app.sqlite");
-  let store = openAppStore({ databasePath });
+  let store = await openAppStore({ databasePath });
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
-  t.after(() => {
+  t.after(async () => {
     try { process.kill(-child.pid, "SIGKILL"); } catch {}
-    try { store.close(); } catch {}
+    try { await store.close(); } catch {}
     rmSync(root, { recursive: true, force: true });
   });
 
-  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: "/agent.sqlite", createdAt: "created" });
+  const owner = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: "/agent.sqlite", createdAt: "created" });
   let state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root, serverEvent() {} };
-  const reserved = reserveHublot(state, { port: 4242, label: "preview", sessionId: "session-1", ownerId: owner.id });
-  persistHublotProcessIdentity(state, { hublotId: reserved.id, role: "tunnel", pid: child.pid });
-  recordHublotTransition(state, reserved.id, "open", { publicUrl: "https://stable.trycloudflare.com" });
-  const beforeRestart = listTunnels(state)[0];
+  const reserved = await reserveHublot(state, { port: 4242, label: "preview", sessionId: "session-1", ownerId: owner.id });
+  await persistHublotProcessIdentity(state, { hublotId: reserved.id, role: "tunnel", pid: child.pid });
+  await recordHublotTransition(state, reserved.id, "open", { publicUrl: "https://stable.trycloudflare.com" });
+  const beforeRestart = (await listTunnels(state))[0];
   assert.equal(beforeRestart.id, reserved.id);
 
-  store.close();
-  store = openAppStore({ databasePath });
+  await store.close();
+  store = await openAppStore({ databasePath });
   const events = [];
   state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root, serverEvent: (event) => events.push(event) };
-  const restored = listTunnels(state)[0];
+  const restored = (await listTunnels(state))[0];
   assert.deepEqual(restored, beforeRestart);
   assert.equal(restored.id, reserved.id, "durable identity must not be regenerated on restart");
 
@@ -60,7 +60,7 @@ test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable a
     ensureSessionOwner: () => owner,
   });
   const listed = response();
-  routes["GET /tunnels"]({}, listed);
+  await routes["GET /tunnels"]({}, listed);
   assert.equal(listed.status, 200);
   assert.deepEqual(listed.body, { tunnels: [restored], bin: "cloudflared" });
 

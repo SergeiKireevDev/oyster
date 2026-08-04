@@ -56,10 +56,10 @@ export function createWorkdirRoutes({ state, requestContext, spawnRunner, runner
         return;
       }
 
-      state.appSettings?.setCurrentWorkdir(target);
+      await state.appSettings?.setCurrentWorkdir(target);
       state.currentDir = target;
       log(`[oyster] workdir changed to ${JSON.stringify(target)}, spawning a runner there`);
-      const runner = spawnRunner({ dir: target });
+      const runner = await spawnRunner({ dir: target });
       json(res, 200, { workdir: target, runner: runnerInfo(runner) });
     },
   };

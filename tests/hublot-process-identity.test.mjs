@@ -15,11 +15,11 @@ import {
   rebindHublot, recordHublotTransition, reserveHublot, updateHublotProcessMetadata,
 } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-process-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { store, state };
 }
 
@@ -92,12 +92,12 @@ test("process identity comparison rejects malformed and incomplete persisted val
 });
 
 test("discovered hublot processes are persisted immediately with verifiable identity", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4180 });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4180 });
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
 
-  const persisted = persistHublotProcessIdentity(state, {
+  const persisted = await persistHublotProcessIdentity(state, {
     hublotId: hublot.id, role: "service", pid: child.pid, startedAt: "spawned",
   });
 
@@ -110,7 +110,7 @@ test("discovered hublot processes are persisted immediately with verifiable iden
   assert.ok(persisted.proc_start_ticks);
   assert.ok(persisted.executable);
   assert.ok(persisted.command_sha256);
-  assert.equal(store.repositories.hublots.listProcesses(hublot.id)[0].id, persisted.id);
+  assert.equal((await store.repositories.hublots.listProcesses(hublot.id))[0].id, persisted.id);
 
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
@@ -118,21 +118,21 @@ test("discovered hublot processes are persisted immediately with verifiable iden
 });
 
 test("persisted URLs are published only while the current tunnel identity is healthy", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4182 });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4182 });
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
-  const tunnelProcess = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: child.pid });
-  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://confirmed.trycloudflare.com" });
+  const tunnelProcess = await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: child.pid });
+  await recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://confirmed.trycloudflare.com" });
 
-  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id), true);
-  assert.equal(listTunnels(state)[0].url, "https://confirmed.trycloudflare.com");
-  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id, { verifyIdentity: () => false }), false);
+  assert.equal(await currentHublotTunnelProcessIsHealthy(state, hublot.id), true);
+  assert.equal((await listTunnels(state))[0].url, "https://confirmed.trycloudflare.com");
+  assert.equal(await currentHublotTunnelProcessIsHealthy(state, hublot.id, { verifyIdentity: () => false }), false);
 
-  updateHublotProcessMetadata(state, tunnelProcess.id, { status: "lost", ended_at: "lost", observed_at: "lost" });
-  assert.equal(store.repositories.hublots.find(hublot.id).public_url, "https://confirmed.trycloudflare.com", "SQLite may retain the last observed URL for history");
-  assert.equal(currentHublotTunnelProcessIsHealthy(state, hublot.id), false);
-  assert.deepEqual(listTunnels(state), [], "an unconfirmed persisted URL must not be published as an active tunnel");
+  await updateHublotProcessMetadata(state, tunnelProcess.id, { status: "lost", ended_at: "lost", observed_at: "lost" });
+  assert.equal((await store.repositories.hublots.find(hublot.id)).public_url, "https://confirmed.trycloudflare.com", "SQLite may retain the last observed URL for history");
+  assert.equal(await currentHublotTunnelProcessIsHealthy(state, hublot.id), false);
+  assert.deepEqual(await listTunnels(state), [], "an unconfirmed persisted URL must not be published as an active tunnel");
 
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
@@ -140,28 +140,28 @@ test("persisted URLs are published only while the current tunnel identity is hea
 });
 
 test("session rebinding and process metadata updates commit transactionally", async (t) => {
-  const { store, state } = fixture(t);
-  const ownerA = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-a", storagePath: "/agent.sqlite", createdAt: "a" });
-  const ownerB = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-b", storagePath: "/agent.sqlite", createdAt: "b" });
-  const hublot = reserveHublot(state, { port: 4181, sessionId: "session-a", ownerId: ownerA.id });
+  const { store, state } = await fixture(t);
+  const ownerA = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-a", storagePath: "/agent.sqlite", createdAt: "a" });
+  const ownerB = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-b", storagePath: "/agent.sqlite", createdAt: "b" });
+  const hublot = await reserveHublot(state, { port: 4181, sessionId: "session-a", ownerId: ownerA.id });
 
-  const rebound = rebindHublot(state, hublot.id, ownerB.id);
+  const rebound = await rebindHublot(state, hublot.id, ownerB.id);
   assert.equal(rebound.owner_id, ownerB.id);
   assert.equal(rebound.session_id, "session-b");
-  assert.throws(() => rebindHublot(state, hublot.id, 999999), /foreign key constraint/i);
-  assert.equal(store.repositories.hublots.find(hublot.id).owner_id, ownerB.id);
+  await assert.rejects(() => rebindHublot(state, hublot.id, 999999), /foreign key constraint/i);
+  assert.equal((await store.repositories.hublots.find(hublot.id)).owner_id, ownerB.id);
 
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
-  const processRow = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: child.pid });
-  const ended = updateHublotProcessMetadata(state, processRow.id, {
+  const processRow = await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: child.pid });
+  const ended = await updateHublotProcessMetadata(state, processRow.id, {
     status: "ended", observed_at: "observed", ended_at: "ended", exit_code: 0, signal: null,
   });
   assert.equal(ended.status, "ended");
   assert.equal(ended.ended_at, "ended");
-  assert.throws(() => updateHublotProcessMetadata(state, processRow.id, { pid: 1 }), /unsupported hublot process field/);
-  assert.equal(store.repositories.hublots.findProcess(processRow.id).pid, child.pid);
-  assert.equal(store.repositories.hublots.findProcess(processRow.id).status, "ended");
+  await assert.rejects(() => updateHublotProcessMetadata(state, processRow.id, { pid: 1 }), /unsupported hublot process field/);
+  assert.equal((await store.repositories.hublots.findProcess(processRow.id)).pid, child.pid);
+  assert.equal((await store.repositories.hublots.findProcess(processRow.id)).status, "ended");
   const exited = once(child, "exit");
   process.kill(-child.pid, "SIGTERM");
   await exited;

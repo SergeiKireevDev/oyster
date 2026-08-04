@@ -6,16 +6,16 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import { APP_SETTING_KEYS, BROWSER_PREFERENCE_SYNC_POLICY } from "../server/persistence/appSettings.mjs";
 
-test("general app settings reject authentication and credential keys", (t) => {
+test("general app settings reject authentication and credential keys", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-auth-setting-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   for (const key of [
     "token", "oyster_token", "authToken", "refresh-token", "client_secret",
     "passwordHash", "credential_store", "bearer", "apiKey", "private_key",
     "oauthFlow", "authorization_code", "device-code", "redirectUrl", "flow_snapshot", "promptResponse",
   ]) {
-    assert.throws(() => store.repositories.settings.set(key, '"sensitive"', "now"), /forbidden in general app settings/, key);
+    await assert.rejects(() => store.repositories.settings.set(key, '"sensitive"', "now"), /forbidden in general app settings/, key);
   }
   for (const value of [
     JSON.stringify({ apiKey: "canary" }),
@@ -24,14 +24,14 @@ test("general app settings reject authentication and credential keys", (t) => {
     JSON.stringify({ oauth: { authorizationCode: "canary", redirectUrl: "https://callback.invalid/?code=canary" } }),
     JSON.stringify({ transient: { deviceCode: "canary", flowId: "canary", promptResponse: "canary" } }),
   ]) {
-    assert.throws(
+    await assert.rejects(
       () => store.repositories.settings.set("otherwise_safe", value, "now"),
       /forbidden in general app settings/,
     );
   }
-  assert.deepEqual(store.repositories.settings.list(), []);
-  store.repositories.settings.set(APP_SETTING_KEYS.currentWorkdir, '"/workspace"', "now");
-  assert.equal(store.repositories.settings.list().length, 1, "non-secret typed settings remain supported");
+  assert.deepEqual(await store.repositories.settings.list(), []);
+  await store.repositories.settings.set(APP_SETTING_KEYS.currentWorkdir, '"/workspace"', "now");
+  assert.equal((await store.repositories.settings.list()).length, 1, "non-secret typed settings remain supported");
 });
 
 test("credential services and routes cannot cross into general settings or browser preferences", () => {

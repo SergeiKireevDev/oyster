@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, copyFile, writeFile, readFile, rename, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rename, rm, stat, symlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,10 +9,12 @@ import { spawn } from "node:child_process";
 
 async function copyStableServer(root) {
   await mkdir(join(root, "server", "persistence"), { recursive: true });
+  await symlink(new URL("../node_modules", import.meta.url), join(root, "node_modules"), "dir");
   await Promise.all([
     copyFile(new URL("../server/server.mjs", import.meta.url), join(root, "server", "server.mjs")),
     copyFile(new URL("../server/reload-manifest.mjs", import.meta.url), join(root, "server", "reload-manifest.mjs")),
     copyFile(new URL("../server/persistence/appStore.mjs", import.meta.url), join(root, "server", "persistence", "appStore.mjs")),
+    copyFile(new URL("../server/persistence/sqliteDatabase.mjs", import.meta.url), join(root, "server", "persistence", "sqliteDatabase.mjs")),
     copyFile(new URL("../server/persistence/appSettings.mjs", import.meta.url), join(root, "server", "persistence", "appSettings.mjs")),
     copyFile(new URL("../server/persistence/stateInventory.mjs", import.meta.url), join(root, "server", "persistence", "stateInventory.mjs")),
     copyFile(new URL("../server/persistence/migrations.mjs", import.meta.url), join(root, "server", "persistence", "migrations.mjs")),
@@ -378,9 +380,9 @@ export function init(state) {
   return {
     async handleRequest(req, res) {
       if (req.method === "POST") {
-        state.appStore.transaction((repositories) => repositories.settings.set("restart-proof", JSON.stringify("durable"), "saved"));
+        await state.appStore.transaction((repositories) => repositories.settings.set("restart-proof", JSON.stringify("durable"), "saved"));
       }
-      res.end(JSON.stringify(state.appStore.repositories.settings.list()));
+      res.end(JSON.stringify(await state.appStore.repositories.settings.list()));
     },
     startPi() {}, stopTunnels() {}, stopRoutines() {},
     async stopPi() {
@@ -429,14 +431,14 @@ export function init(state) {
   const hublots = state.appStore.repositories.hublots;
   return {
     async handleRequest(req, res) {
-      if (req.method === "POST" && !hublots.find("persistent-hublot")) {
-        const owner = sessions.upsert({ backend: "jsonl", sessionId: "owned-session", storagePath: "/sessions/owned.jsonl", createdAt: "owner-created" });
-        hublots.create({ id: "persistent-hublot", ownerId: owner.id, port: 4173, label: "preview", brief: "durable preview", workdir: "/workspace", serviceKind: "self_served", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "created", openedAt: "opened" });
-        hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "opening", desiredState: "open", createdAt: "event-1" });
-        hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "event-2" });
+      if (req.method === "POST" && !await hublots.find("persistent-hublot")) {
+        const owner = await sessions.upsert({ backend: "jsonl", sessionId: "owned-session", storagePath: "/sessions/owned.jsonl", createdAt: "owner-created" });
+        await hublots.create({ id: "persistent-hublot", ownerId: owner.id, port: 4173, label: "preview", brief: "durable preview", workdir: "/workspace", serviceKind: "self_served", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "created", openedAt: "opened" });
+        await hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "opening", desiredState: "open", createdAt: "event-1" });
+        await hublots.appendLifecycleEvent({ hublotId: "persistent-hublot", status: "open", desiredState: "open", publicUrl: "https://durable.example", createdAt: "event-2" });
       }
-      const hublot = hublots.find("persistent-hublot");
-      const history = hublot ? hublots.listLifecycleEvents(hublot.id) : [];
+      const hublot = await hublots.find("persistent-hublot");
+      const history = hublot ? await hublots.listLifecycleEvents(hublot.id) : [];
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ hublot, history }));
     },

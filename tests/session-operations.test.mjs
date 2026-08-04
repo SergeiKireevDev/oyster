@@ -31,7 +31,7 @@ test("SQLite deletion delegates to the configured pi repository operation", {
   });
   assert.equal(operations.capabilities.delete.sqlite, true);
   await operations.deleteSession({ backend: "sqlite", id: "delete-me", storagePath: databasePath });
-  assert.equal(createSqliteSessionCatalog({ databasePath }).findById("delete-me"), null);
+  assert.equal(await createSqliteSessionCatalog({ databasePath }).findById("delete-me"), null);
 });
 
 test("SQLite exact-entry fork delegates to pi and preserves parent identity", {
@@ -52,7 +52,7 @@ test("SQLite exact-entry fork delegates to pi and preserves parent identity", {
     entryId, cwd: root, id: "forked",
   });
   assert.deepEqual(fork.sessionRef, { backend: "sqlite", id: "forked", storagePath: databasePath });
-  assert.equal(createSqliteSessionCatalog({ databasePath }).findById("forked").parentSessionId, "source");
+  assert.equal((await createSqliteSessionCatalog({ databasePath }).findById("forked")).parentSessionId, "source");
 });
 
 test("session operations validate their required dependencies", () => {

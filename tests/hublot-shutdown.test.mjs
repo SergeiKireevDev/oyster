@@ -9,9 +9,9 @@ import {
   persistHublotProcessIdentity, recordHublotTransition, reserveHublot, shutdownHublots,
 } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-shutdown-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = {
     appStore: store,
     config: { PI_AGENT_DIR: join(root, "agent") },
@@ -24,28 +24,28 @@ function fixture(t) {
     children.push(proc);
     return proc;
   };
-  t.after(() => {
+  t.after(async () => {
     for (const proc of children) try { process.kill(-proc.pid, "SIGKILL"); } catch {}
-    store.close();
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
   return { store, state, child };
 }
 
 test("graceful hublot shutdown awaits bounded escalation and retires ephemeral quick tunnels", async (t) => {
-  const { store, state, child } = fixture(t);
-  const managed = reserveHublot(state, { port: 4240, brief: "managed preview" });
-  const selfServed = reserveHublot(state, { port: 4241, serviceKind: "self_served" });
-  recordHublotTransition(state, managed.id, "open", { publicUrl: "https://managed.trycloudflare.com" });
-  recordHublotTransition(state, selfServed.id, "open", { publicUrl: "https://self.trycloudflare.com" });
+  const { store, state, child } = await fixture(t);
+  const managed = await reserveHublot(state, { port: 4240, brief: "managed preview" });
+  const selfServed = await reserveHublot(state, { port: 4241, serviceKind: "self_served" });
+  await recordHublotTransition(state, managed.id, "open", { publicUrl: "https://managed.trycloudflare.com" });
+  await recordHublotTransition(state, selfServed.id, "open", { publicUrl: "https://self.trycloudflare.com" });
 
-  const managedTunnel = persistHublotProcessIdentity(state, { hublotId: managed.id, role: "tunnel", pid: child().pid });
-  const managedService = persistHublotProcessIdentity(state, { hublotId: managed.id, role: "service", pid: child().pid });
-  const selfTunnel = persistHublotProcessIdentity(state, { hublotId: selfServed.id, role: "tunnel", pid: child().pid });
-  const selfService = persistHublotProcessIdentity(state, { hublotId: selfServed.id, role: "service", pid: child().pid });
+  const managedTunnel = await persistHublotProcessIdentity(state, { hublotId: managed.id, role: "tunnel", pid: child().pid });
+  const managedService = await persistHublotProcessIdentity(state, { hublotId: managed.id, role: "service", pid: child().pid });
+  const selfTunnel = await persistHublotProcessIdentity(state, { hublotId: selfServed.id, role: "tunnel", pid: child().pid });
+  const selfService = await persistHublotProcessIdentity(state, { hublotId: selfServed.id, role: "service", pid: child().pid });
   const alive = new Set([managedTunnel.id, managedService.id, selfTunnel.id, selfService.id]);
-  const processByPid = new Map(store.repositories.hublots.listProcesses(managed.id)
-    .concat(store.repositories.hublots.listProcesses(selfServed.id)).map((row) => [row.pid, row]));
+  const processByPid = new Map((await store.repositories.hublots.listProcesses(managed.id))
+    .concat(await store.repositories.hublots.listProcesses(selfServed.id)).map((row) => [row.pid, row]));
   const signals = [];
   let time = 0;
 
@@ -67,18 +67,18 @@ test("graceful hublot shutdown awaits bounded escalation and retires ephemeral q
   assert.equal(signals.filter((value) => value.endsWith(":SIGTERM")).length, 3);
   assert.deepEqual(signals.filter((value) => value.endsWith(":SIGKILL")), [`${managedService.id}:SIGKILL`]);
   for (const id of [managed.id, selfServed.id]) {
-    const row = store.repositories.hublots.find(id);
+    const row = await store.repositories.hublots.find(id);
     assert.equal(row.status, "closed");
     assert.equal(row.desired_state, "closed");
     assert.equal(row.public_url, null);
     assert.match(row.last_error, /ephemeral cloudflared tunnels are not recreated/);
   }
-  assert.equal(store.repositories.hublots.findProcess(managedTunnel.id).status, "ended");
-  assert.equal(store.repositories.hublots.findProcess(managedService.id).status, "ended");
-  assert.equal(store.repositories.hublots.findProcess(selfTunnel.id).status, "ended");
-  assert.equal(store.repositories.hublots.findProcess(selfService.id).status, "running", "self-served services are not app-managed");
+  assert.equal((await store.repositories.hublots.findProcess(managedTunnel.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.findProcess(managedService.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.findProcess(selfTunnel.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.findProcess(selfService.id)).status, "running", "self-served services are not app-managed");
 
-  const historyCounts = [managed.id, selfServed.id].map((id) => store.repositories.hublots.listLifecycleEvents(id).length);
+  const historyCounts = await Promise.all([managed.id, selfServed.id].map(async (id) => (await store.repositories.hublots.listLifecycleEvents(id)).length));
   assert.deepEqual(await shutdownHublots(state, { verifyIdentity: () => false }), { targeted: 0, escalated: 0, remaining: 0 });
-  assert.deepEqual([managed.id, selfServed.id].map((id) => store.repositories.hublots.listLifecycleEvents(id).length), historyCounts);
+  assert.deepEqual(await Promise.all([managed.id, selfServed.id].map(async (id) => (await store.repositories.hublots.listLifecycleEvents(id)).length)), historyCounts);
 });

@@ -50,9 +50,9 @@ test("OAuth tokens persist only in Pi auth while callback material remains trans
   chmodSync(authPath, 0o600);
 
   const databasePath = join(root, "oyster.sqlite");
-  const appStore = openAppStore({ databasePath });
-  appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
-  appStore.close();
+  const appStore = await openAppStore({ databasePath });
+  await appStore.repositories.settings.set("ordinary", JSON.stringify({ theme: "dark" }), "now");
+  await appStore.close();
 
   const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const secrets = {

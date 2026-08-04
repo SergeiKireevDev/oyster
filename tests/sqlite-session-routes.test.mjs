@@ -66,36 +66,36 @@ function setup({ sessionOperations = null } = {}) {
   return { routes, codec, sessions, state, lifecycle, owners };
 }
 
-test("SQLite usage analytics validates and forwards range aggregation", () => {
+test("SQLite usage analytics validates and forwards range aggregation", async () => {
   const { routes } = setup();
   const res = response();
-  routes["GET /analytics/usage"]({}, res, new URL("http://localhost/analytics/usage?range=7d&bucket=hour"));
+  await routes["GET /analytics/usage"]({}, res, new URL("http://localhost/analytics/usage?range=7d&bucket=hour"));
   assert.equal(res.status, 200);
   assert.equal(res.body.bucket, "hour");
   assert.equal(res.body.since, "2026-01-01T00:00:00.000Z");
   assert.equal(res.body.total.cost, 1.25);
   const invalid = response();
-  routes["GET /analytics/usage"]({}, invalid, new URL("http://localhost/analytics/usage?bucket=minute"));
+  await routes["GET /analytics/usage"]({}, invalid, new URL("http://localhost/analytics/usage?bucket=minute"));
   assert.equal(invalid.status, 400);
 });
 
-test("SQLite routes can list every known session without a cwd filter", () => {
+test("SQLite routes can list every known session without a cwd filter", async () => {
   const { routes, sessions } = setup();
   sessions.push({ id: "other", cwd: "/other", storagePath: "/agent/sessions.sqlite", parentSessionId: null, preview: "other", messageCount: 1 });
 
   const scoped = response();
-  routes["GET /sessions"]({}, scoped, new URL("http://localhost/sessions"));
+  await routes["GET /sessions"]({}, scoped, new URL("http://localhost/sessions"));
   assert.equal(scoped.body.sessions.length, 2);
 
   const all = response();
-  routes["GET /sessions"]({}, all, new URL("http://localhost/sessions?all=1"));
+  await routes["GET /sessions"]({}, all, new URL("http://localhost/sessions?all=1"));
   assert.equal(all.body.sessions.length, 3);
 });
 
-test("SQLite routes list distinct shared-database identities and parent keys", () => {
+test("SQLite routes list distinct shared-database identities and parent keys", async () => {
   const { routes, codec } = setup();
   const res = response();
-  routes["GET /sessions"]({}, res, new URL("http://localhost/sessions?dir=/work"));
+  await routes["GET /sessions"]({}, res, new URL("http://localhost/sessions?dir=/work"));
   assert.equal(res.status, 200);
   assert.equal(res.body.sessions.length, 2);
   assert.notEqual(res.body.sessions[0].sessionKey, res.body.sessions[1].sessionKey);
@@ -115,7 +115,7 @@ test("SQLite session archive route cascades archive and unarchive through descen
   state.runners.set("r-nested", { id: "r-nested", sessionRef: { backend: "sqlite", id: "nested", storagePath: "/agent/sessions.sqlite" }, proc: {} });
   state.runners.set("r-independent", { id: "r-independent", sessionRef: { backend: "sqlite", id: "independent", storagePath: "/agent/sessions.sqlite" }, proc: {} });
   const listed = response();
-  routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?dir=/work"));
+  await routes["GET /sessions"]({}, listed, new URL("http://localhost/sessions?dir=/work"));
   const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
 
   const archived = response();
@@ -123,7 +123,7 @@ test("SQLite session archive route cascades archive and unarchive through descen
   assert.deepEqual(archived.body, { sessionKey: key, archived: true });
 
   const afterArchive = response();
-  routes["GET /sessions"]({}, afterArchive, new URL("http://localhost/sessions?dir=/work"));
+  await routes["GET /sessions"]({}, afterArchive, new URL("http://localhost/sessions?dir=/work"));
   assert.equal(afterArchive.body.sessions.find((session) => session.id === "root").archived, true);
   assert.equal(afterArchive.body.sessions.find((session) => session.id === "fork").archived, true);
   assert.equal(afterArchive.body.sessions.find((session) => session.id === "nested").archived, true);
@@ -136,7 +136,7 @@ test("SQLite session archive route cascades archive and unarchive through descen
   assert.deepEqual(unarchived.body, { sessionKey: nestedKey, archived: false });
 
   const afterUnarchive = response();
-  routes["GET /sessions"]({}, afterUnarchive, new URL("http://localhost/sessions?dir=/work"));
+  await routes["GET /sessions"]({}, afterUnarchive, new URL("http://localhost/sessions?dir=/work"));
   for (const id of ["root", "fork", "nested"]) {
     assert.equal(afterUnarchive.body.sessions.find((session) => session.id === id).archived, false);
   }
@@ -147,11 +147,11 @@ test("SQLite routes resolve lookup, entries, messages, folders, and search by ke
   const key = codec.serialize({ backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" });
 
   const lookup = response();
-  routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=fork"));
+  await routes["GET /session-by-id"]({}, lookup, new URL("http://localhost/session-by-id?id=fork"));
   assert.equal(lookup.body.session.sessionKey, key);
 
   const entries = response();
-  routes["GET /session-entries"]({}, entries, new URL(`http://localhost/session-entries?key=${key}`));
+  await routes["GET /session-entries"]({}, entries, new URL(`http://localhost/session-entries?key=${key}`));
   assert.equal(entries.body.sessionId, "fork");
 
   const messages = response();
@@ -159,11 +159,11 @@ test("SQLite routes resolve lookup, entries, messages, folders, and search by ke
   assert.equal(messages.body.messages[0].content, "fork");
 
   const folders = response();
-  routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/work"));
+  await routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/work"));
   assert.deepEqual(folders.body.current, "/work");
 
   const search = response();
-  routes["GET /search"]({}, search, new URL(`http://localhost/search?q=phrase&scope=session&key=${key}`));
+  await routes["GET /search"]({}, search, new URL(`http://localhost/search?q=phrase&scope=session&key=${key}`));
   assert.equal(search.status, 200);
   assert.equal(search.body.results[0].sessionKey, key);
 });
@@ -199,7 +199,7 @@ test("SQLite deletion failure preserves session resources and runner identity", 
 test("SQLite routes reject file identities and unsupported mutation before side effects", async () => {
   const { routes, codec } = setup();
   const entries = response();
-  routes["GET /session-entries"]({}, entries, new URL("http://localhost/session-entries?path=/agent/sessions.sqlite"));
+  await routes["GET /session-entries"]({}, entries, new URL("http://localhost/session-entries?path=/agent/sessions.sqlite"));
   assert.equal(entries.status, 404);
   const bareDatabase = response();
   await routes["DELETE /session"]({}, bareDatabase, new URL("http://localhost/session?path=/agent/sessions.sqlite"));

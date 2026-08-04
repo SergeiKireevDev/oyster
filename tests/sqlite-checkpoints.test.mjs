@@ -36,9 +36,9 @@ const catalog = {
   list: ({ cwd }) => summaries.filter((session) => session.cwd === cwd),
 };
 
-test("SQLite checkpoint recording stores database-plus-ID identity and tip anchors", () => {
+test("SQLite checkpoint recording stores database-plus-ID identity and tip anchors", async () => {
   repositoryRecords = {};
-  const checkpoint = recordCheckpoint(rootRef, "/work", { hash: "abc", message: "checkpoint: sqlite" }, { catalog, repository });
+  const checkpoint = await recordCheckpoint(rootRef, "/work", { hash: "abc", message: "checkpoint: sqlite" }, { catalog, repository });
   assert.equal(checkpoint.anchorId, "a1");
   assert.equal(checkpoint.leafId, "a1");
   assert.deepEqual(checkpoint.sessionRef, rootRef);
@@ -46,13 +46,13 @@ test("SQLite checkpoint recording stores database-plus-ID identity and tip ancho
   assert.deepEqual(repositoryRecords.root[0].sessionRef, rootRef);
 });
 
-test("SQLite checkpoint trees group families by parent ID and expose opaque keys", () => {
+test("SQLite checkpoint trees group families by parent ID and expose opaque keys", async () => {
   const inherited = { hash: "base", anchorId: "a1", timestamp: "2026-01-01" };
   repositoryRecords = {
     root: [inherited],
     fork: [inherited, { hash: "fork-only", anchorId: "a2", timestamp: "2026-01-02" }],
   };
-  const { root } = checkpointTree(forkRef, { catalog, sessionReferences: codec, repository });
+  const { root } = await checkpointTree(forkRef, { catalog, sessionReferences: codec, repository });
   assert.equal(root.id, "root");
   assert.equal(root.sessionKey, codec.serialize(rootRef));
   assert.equal(root.path, null);

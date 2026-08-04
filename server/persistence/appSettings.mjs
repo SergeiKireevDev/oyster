@@ -88,10 +88,10 @@ export function createAppSettings({ repository, startupWorkdir, now = () => new 
   }
   if (typeof now !== "function") throw new TypeError("now must be a function");
   const startup = validateWorkdir(startupWorkdir);
-  const read = (key, validate, fallback) => {
+  const read = async (key, validate, fallback) => {
     // Repository failures indicate unavailable persistence and must not be
     // confused with a single corrupt value, which can safely use its default.
-    const row = repository.get(key);
+    const row = await repository.get(key);
     try {
       const value = decodeJson(row, key);
       return value === undefined ? fallback : validate(value);
@@ -99,16 +99,17 @@ export function createAppSettings({ repository, startupWorkdir, now = () => new 
       return fallback;
     }
   };
-  const write = (key, value) => {
-    repository.set(key, JSON.stringify(value), now());
+  const write = async (key, value) => {
+    await repository.set(key, JSON.stringify(value), now());
     return value;
   };
   return Object.freeze({
-    hydrate() {
-      return Object.freeze({
-        currentWorkdir: read(APP_SETTING_KEYS.currentWorkdir, validateWorkdir, startup),
-        defaultRunnerId: read(APP_SETTING_KEYS.defaultRunnerId, validateRunnerId, null),
-      });
+    async hydrate() {
+      const [currentWorkdir, defaultRunnerId] = await Promise.all([
+        read(APP_SETTING_KEYS.currentWorkdir, validateWorkdir, startup),
+        read(APP_SETTING_KEYS.defaultRunnerId, validateRunnerId, null),
+      ]);
+      return Object.freeze({ currentWorkdir, defaultRunnerId });
     },
     setCurrentWorkdir(value) { return write(APP_SETTING_KEYS.currentWorkdir, validateWorkdir(value)); },
     setDefaultRunnerId(value) { return write(APP_SETTING_KEYS.defaultRunnerId, validateRunnerId(value)); },

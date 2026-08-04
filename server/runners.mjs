@@ -100,7 +100,7 @@ function ensureRunnerRuntimeFields(runner) {
   return runner;
 }
 
-export function createRunnerManager(state, {
+export async function createRunnerManager(state, {
   spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = undefined, now = () => new Date().toISOString(),
   summarizeTitle = summarizeSessionTitle,
@@ -126,18 +126,18 @@ export function createRunnerManager(state, {
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // stable id -> runner
-  let persistedRunners = runnerRepository?.list() ?? [];
+  let persistedRunners = await runnerRepository?.list() ?? [];
   const previouslyLive = persistedRunners.filter((runner) =>
     !state.runners.has(runner.id) && ["starting", "running"].includes(runner.last_status));
   if (previouslyLive.length) {
-    const markInterrupted = (repositories) => {
-      for (const runner of previouslyLive) repositories.runners.update(runner.id, {
+    const markInterrupted = async (repositories) => {
+      for (const runner of previouslyLive) await repositories.runners.update(runner.id, {
         desired_state: "stopped", last_status: "interrupted", last_stopped_at: now(),
       });
     };
-    if (appStore?.transaction) appStore.transaction(markInterrupted);
+    if (appStore?.transaction) await appStore.transaction(markInterrupted);
     else markInterrupted({ runners: runnerRepository });
-    persistedRunners = runnerRepository.list();
+    persistedRunners = await runnerRepository.list();
   }
   for (const persisted of persistedRunners) {
     if (state.runners.has(persisted.id)) continue;
@@ -164,11 +164,11 @@ export function createRunnerManager(state, {
   if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId)
     || !compatibleWithConfiguredBackend(state.runners.get(state.defaultRunnerId)))) {
     state.defaultRunnerId = null;
-    state.appSettings?.setDefaultRunnerId(null);
+    await state.appSettings?.setDefaultRunnerId(null);
   }
   if (!state.defaultRunnerId && persistedDefault) {
     state.defaultRunnerId = persistedDefault.id;
-    state.appSettings?.setDefaultRunnerId(persistedDefault.id);
+    await state.appSettings?.setDefaultRunnerId(persistedDefault.id);
   }
   for (const runner of state.runners.values()) {
     ensureRunnerRuntimeFields(runner);
@@ -215,12 +215,12 @@ export function createRunnerManager(state, {
     return [...state.runners.values()].map(runnerInfo);
   }
 
-  function replayRunnerEvents(runner) {
+  async function replayRunnerEvents(runner) {
     // Oversized historical RPC responses are stale after a page load and can
     // otherwise block the event loop while gigabytes are replayed before the
     // browser ever receives replay_done.
-    return runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES })
-      .map((event) => event.payload) ?? [];
+    return (await runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES }))
+      ?.map((event) => event.payload) ?? [];
   }
 
   /** Global notification. Ordinary lifecycle changes carry one runner delta;
@@ -244,7 +244,7 @@ export function createRunnerManager(state, {
   }
 
   /** deliver a line only to SSE clients subscribed to this runner */
-  function runnerWrite(runner, line) {
+  async function runnerWrite(runner, line) {
     const eventLine = withSseId(line);
     let event = null;
     let sseId = null;
@@ -254,7 +254,7 @@ export function createRunnerManager(state, {
     } catch {}
     if (Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES) {
       try {
-        runnerEventRepository?.append({
+        await runnerEventRepository?.append({
           runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
         });
       } catch (error) {
@@ -316,12 +316,12 @@ export function createRunnerManager(state, {
       messages: messages.slice(0, SESSION_TITLE_MESSAGE_LIMIT),
       model: sessionState.model ?? null,
       onSpawn: (proc) => { runner.titleProcess = proc; },
-    })).then((title) => {
+    })).then(async (title) => {
       if (!title || runner.sessionId !== sessionId || (runner.sessionName ?? null) !== originalName) return;
       const name = originalName ? `\u23EA ${title}` : title;
       if (!sendToRunner(runner, { id: srvId(), type: "set_session_name", name }, { autostart: false })) return;
       runner.sessionName = name;
-      runnerRepository?.update(runner.id, { session_name: name });
+      await runnerRepository?.update(runner.id, { session_name: name });
       runnersChanged(runner);
     }).catch((error) => {
       console.error(`[oyster] cannot title session ${sessionId}: ${error.message}`);
@@ -331,7 +331,7 @@ export function createRunnerManager(state, {
   }
 
   /** watch a runner's stdout to maintain busy/session metadata */
-  function trackRunner(runner, line) {
+  async function trackRunner(runner, line) {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
     if (msg.type === "agent_start") { runner.busy = true; runnersChanged(runner); }
@@ -366,8 +366,8 @@ export function createRunnerManager(state, {
         runner.sessionId = d.sessionId ?? runner.sessionId;
         runner.sessionName = d.sessionName ?? null;
         if (changed) {
-          const owner = nextReference ? ensureSessionOwner(nextReference) : null;
-          runnerRepository?.update(runner.id, {
+          const owner = nextReference ? await ensureSessionOwner(nextReference) : null;
+          await runnerRepository?.update(runner.id, {
             owner_id: owner?.id ?? null,
             session_backend: nextReference?.backend ?? null,
             session_id: nextReference?.id ?? null,
@@ -411,12 +411,12 @@ export function createRunnerManager(state, {
     throw new Error("runner ID generator repeatedly returned an existing ID");
   }
 
-  function spawnRunner({ dir, sessionRef = null, autostart = true, initialArgs = [] }) {
+  async function spawnRunner({ dir, sessionRef = null, autostart = true, initialArgs = [] }) {
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
-    const owner = reference ? ensureSessionOwner(reference) : null;
+    const owner = reference ? await ensureSessionOwner(reference) : null;
     const id = allocateRunnerId();
     const createdAt = now();
-    runnerRepository?.create({
+    await runnerRepository?.create({
       id, ownerId: owner?.id ?? null, dir,
       sessionBackend: reference?.backend ?? null,
       sessionId: reference?.id ?? null,
@@ -436,11 +436,11 @@ export function createRunnerManager(state, {
       initialArgs: [...initialArgs],
     });
     state.runners.set(runner.id, runner);
-    if (autostart) startRunner(runner);
+    if (autostart) await startRunner(runner);
     return runner;
   }
 
-  function startRunner(runner) {
+  async function startRunner(runner) {
     if (runner.proc) return;
     const nowMs = Date.now();
     // crash-loop guard: if this runner died within 2s of spawning, wait
@@ -459,7 +459,7 @@ export function createRunnerManager(state, {
     runner.lastSpawnAt = nowMs;
     runner.startCount++;
     const startedAt = now();
-    runnerRepository?.update(runner.id, {
+    await runnerRepository?.update(runner.id, {
       desired_state: "running", last_status: "starting", start_count: runner.startCount, last_started_at: startedAt,
     });
     const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
@@ -480,13 +480,13 @@ export function createRunnerManager(state, {
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (error) {
-      runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
+      await runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
       runnerEvent(runner, { type: "pi_error", error: error?.message ?? String(error) });
       runnersChanged(runner);
       return;
     }
     runner.proc = proc;
-    runnerRepository?.update(runner.id, { last_status: "running" });
+    await runnerRepository?.update(runner.id, { last_status: "running" });
 
     // health watchdog bookkeeping: only procs started by watchdog-aware
     // code update lastLineAt, so only those are probed (watchdogOk)
@@ -512,7 +512,7 @@ export function createRunnerManager(state, {
       if (text) console.error(`[pi ${runner.id} stderr] ${text}`);
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", async (err) => {
       console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
       if (runner.proc === proc) runner.proc = null;
@@ -520,11 +520,11 @@ export function createRunnerManager(state, {
         rl.close();
         runner.stdoutReader = null;
       }
-      runnerRepository?.update(runner.id, { last_status: "dead" });
+      await runnerRepository?.update(runner.id, { last_status: "dead" });
       runnersChanged(runner);
     });
 
-    proc.on("exit", (code, signal) => {
+    proc.on("exit", async (code, signal) => {
       console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
       if (runner.proc === proc) {
         runner.proc = null;
@@ -533,7 +533,7 @@ export function createRunnerManager(state, {
           runner.stdoutReader = null;
         }
         runner.busy = false;
-        runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
+        await runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
         runnerEvent(runner, { type: "pi_exit", code, signal });
         runnersChanged(runner);
       }
@@ -559,9 +559,9 @@ export function createRunnerManager(state, {
     runnerEvent(runner, { type: "pi_started", startCount: runner.startCount });
   }
 
-  function stopRunner(runner) {
+  async function stopRunner(runner) {
     const proc = runner.proc;
-    runnerRepository?.update(runner.id, { desired_state: "stopped", last_status: "stopped", last_stopped_at: now() });
+    await runnerRepository?.update(runner.id, { desired_state: "stopped", last_status: "stopped", last_stopped_at: now() });
     try { runner.titleProcess?.kill("SIGTERM"); } catch {}
     runner.titleProcess = null;
     clearTimer(runner.startTimer);
@@ -598,23 +598,23 @@ export function createRunnerManager(state, {
     runnersChanged(runner);
   }
 
-  function unarchivePromptedSession(runner) {
+  async function unarchivePromptedSession(runner) {
     if (!runner.sessionRef) return;
     if (unarchiveSession) {
-      unarchiveSession(runner.sessionRef);
+      await unarchiveSession(runner.sessionRef);
       return;
     }
     const repository = appStore?.repositories?.sessions;
-    const owner = repository?.find({
+    const owner = await repository?.find({
       backend: runner.sessionRef.backend,
       sessionId: runner.sessionRef.id,
       storagePath: runner.sessionRef.storagePath ?? null,
     });
-    if (owner?.archived) repository.setArchived(owner.id, false);
+    if (owner?.archived) await repository.setArchived(owner.id, false);
   }
 
-  function sendToRunner(runner, obj, { autostart = true } = {}) {
-    if (!runner.proc && autostart) startRunner(runner);
+  async function sendToRunner(runner, obj, { autostart = true } = {}) {
+    if (!runner.proc && autostart) await startRunner(runner);
     if (!runner.proc || !runner.proc.stdin.writable) return false;
     if (runner.resumeId) {
       // a session resume is in flight; deliver after it completes
@@ -622,32 +622,32 @@ export function createRunnerManager(state, {
     } else {
       runner.proc.stdin.write(JSON.stringify(obj) + "\n");
     }
-    if (obj.type === "prompt") unarchivePromptedSession(runner);
+    if (obj.type === "prompt") await unarchivePromptedSession(runner);
     return true;
   }
 
   /** the runner new/unspecified clients get; created on demand */
-  function defaultRunner() {
+  async function defaultRunner() {
     let r = state.runners.get(state.defaultRunnerId);
     if (!r) {
       const compatible = [...state.runners.values()].filter(compatibleWithConfiguredBackend);
       r = compatible.find((x) => x.proc) ?? compatible[0];
-      if (!r) r = spawnRunner({ dir: state.currentDir });
+      if (!r) r = await spawnRunner({ dir: state.currentDir });
       state.defaultRunnerId = r.id;
-      runnerRepository?.setDefault(r.id);
-      state.appSettings?.setDefaultRunnerId(r.id);
+      await runnerRepository?.setDefault(r.id);
+      await state.appSettings?.setDefaultRunnerId(r.id);
     }
     return r;
   }
 
-  function runnerFromReq(url) {
+  async function runnerFromReq(url) {
     const id = url.searchParams.get("runner");
     const requested = id ? state.runners.get(id) : null;
-    return (requested && compatibleWithConfiguredBackend(requested)) ? requested : defaultRunner();
+    return (requested && compatibleWithConfiguredBackend(requested)) ? requested : await defaultRunner();
   }
 
   /** Reuse the runner attached to the full session identity, else spawn one. */
-  function openSessionRunner({ sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
+  async function openSessionRunner({ sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
     const inputReference = sessionRef ?? (sessionPath && sessionId
       ? { backend: "jsonl", id: sessionId, storagePath: sessionPath }
       : null);
@@ -741,7 +741,7 @@ export function createRunnerManager(state, {
   // Startup and read-only session selection only restore descriptors. An RPC
   // command that requests work starts the selected process.
   function startPi() {}
-  function stopPi() { for (const r of state.runners.values()) stopRunner(r); }
+  async function stopPi() { await Promise.all([...state.runners.values()].map((runner) => stopRunner(runner))); }
 
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,

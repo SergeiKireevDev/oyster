@@ -50,7 +50,7 @@ export async function importLegacyAppData({
       checkpoints: async () => {
         const conflicts = [];
         const candidates = [];
-        const report = importLegacyCheckpoints({
+        const report = await importLegacyCheckpoints({
           repository: appStore.repositories.checkpoints,
           sessionReferences,
           ...(checkpointSourcePath !== undefined ? { sourcePath: checkpointSourcePath } : {}),
@@ -59,7 +59,7 @@ export async function importLegacyAppData({
           onCandidate: (candidate) => candidates.push(candidate),
         });
         if (apply) for (const { reference, checkpoint } of candidates) {
-          const stored = appStore.repositories.checkpoints.listForSession(reference)
+          const stored = (await appStore.repositories.checkpoints.listForSession(reference))
             .find((item) => item.hash === checkpoint.hash && item.anchorId === checkpoint.anchorId);
           if (!isDeepStrictEqual(stored, checkpoint)) {
             throw new Error(`checkpoint validation failed for ${reference.id}:${checkpoint.hash}:${checkpoint.anchorId}`);
@@ -75,7 +75,7 @@ export async function importLegacyAppData({
       routines: async () => {
         const conflicts = [];
         const candidates = [];
-        const report = importLegacyRoutines({
+        const report = await importLegacyRoutines({
           repository: appStore.repositories.routines,
           resolveOwner,
           ...(routineSourceDir !== undefined ? { sourceDir: routineSourceDir } : {}),
@@ -86,8 +86,8 @@ export async function importLegacyAppData({
           onCandidate: (candidate) => candidates.push(candidate),
         });
         if (apply) for (const candidate of candidates) {
-          const stored = appStore.repositories.routines.findByName(candidate.name);
-          const expectedOwner = candidate.binding.sessionId ? resolveOwner(candidate.binding.sessionId) : null;
+          const stored = await appStore.repositories.routines.findByName(candidate.name);
+          const expectedOwner = candidate.binding.sessionId ? await resolveOwner(candidate.binding.sessionId) : null;
           if (!stored || stored.script !== candidate.script || (stored.cwd ?? null) !== (candidate.binding.cwd ?? null)
             || (stored.session_id ?? null) !== (candidate.binding.sessionId ?? null)
             || (stored.owner_id ?? null) !== (expectedOwner?.id ?? null)) {

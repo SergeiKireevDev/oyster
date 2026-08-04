@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createCheckpointRollbackJournal } from "../server/persistence/checkpointRollbackJournal.mjs";
 
-function setup(t) {
+async function setup(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-rollback-journal-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   const reference = { backend: "sqlite", id: "session-a", storagePath: "/agent/sessions.sqlite" };
-  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
+  const owner = await store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
   let sequence = 0;
   const journal = createCheckpointRollbackJournal({
     appStore: store, ensureSessionOwner: () => owner,
@@ -20,21 +20,21 @@ function setup(t) {
   return { store, reference, journal };
 }
 
-function advanceToCompletion(operation, reference) {
-  operation.advance("safety_checkpointed", { safetyHash: null });
-  operation.advance("session_forked", { forkReference: { ...reference, id: "fork" } });
-  operation.advance("git_reset", { resetHash: "abc" });
-  operation.advance("inheritance_recorded", { inheritedCheckpointCount: 2 });
-  operation.advance("runner_opened", { runnerId: "r2" });
+async function advanceToCompletion(operation, reference) {
+  await operation.advance("safety_checkpointed", { safetyHash: null });
+  await operation.advance("session_forked", { forkReference: { ...reference, id: "fork" } });
+  await operation.advance("git_reset", { resetHash: "abc" });
+  await operation.advance("inheritance_recorded", { inheritedCheckpointCount: 2 });
+  await operation.advance("runner_opened", { runnerId: "r2" });
 }
 
-test("checkpoint rollback journal persists cross-store stages and recovery details", (t) => {
-  const { store, reference, journal } = setup(t);
-  const operation = journal.start({ reference, hash: "abc", dir: "/work" });
-  advanceToCompletion(operation, reference);
-  operation.complete();
+test("checkpoint rollback journal persists cross-store stages and recovery details", async (t) => {
+  const { store, reference, journal } = await setup(t);
+  const operation = await journal.start({ reference, hash: "abc", dir: "/work" });
+  await advanceToCompletion(operation, reference);
+  await operation.complete();
 
-  const row = store.repositories.operations.find(operation.id);
+  const row = await store.repositories.operations.find(operation.id);
   assert.equal(row.kind, "checkpoint_rollback");
   assert.equal(row.status, "completed");
   assert.equal(row.stage, "completed");
@@ -45,20 +45,20 @@ test("checkpoint rollback journal persists cross-store stages and recovery detai
   });
 });
 
-test("checkpoint rollback journal retains its last completed stage on failure", (t) => {
-  const { store, reference, journal } = setup(t);
-  const operation = journal.start({ reference, hash: "abc", dir: "/work" });
-  operation.advance("safety_checkpointed");
-  operation.advance("session_forked", { forkReference: { ...reference, id: "fork" } });
-  operation.fail(new Error("git reset failed"));
+test("checkpoint rollback journal retains its last completed stage on failure", async (t) => {
+  const { store, reference, journal } = await setup(t);
+  const operation = await journal.start({ reference, hash: "abc", dir: "/work" });
+  await operation.advance("safety_checkpointed");
+  await operation.advance("session_forked", { forkReference: { ...reference, id: "fork" } });
+  await operation.fail(new Error("git reset failed"));
 
-  const row = store.repositories.operations.find(operation.id);
+  const row = await store.repositories.operations.find(operation.id);
   assert.equal(row.status, "failed");
   assert.equal(row.stage, "session_forked");
   assert.equal(row.error, "git reset failed");
 });
 
-test("checkpoint rollback journal validates dependencies and start inputs", () => {
+test("checkpoint rollback journal validates dependencies and start inputs", async () => {
   assert.throws(() => createCheckpointRollbackJournal(), /operation repository/);
   assert.throws(() => createCheckpointRollbackJournal({
     appStore: { repositories: { operations: { create() {}, updateWithPayload() {} } } },
@@ -68,43 +68,43 @@ test("checkpoint rollback journal validates dependencies and start inputs", () =
     appStore: { repositories: { operations: { create() { assert.fail("must not persist"); }, updateWithPayload() {} } } },
     ensureSessionOwner: () => ({ id: 1 }), operationId: () => "id", now: () => "now",
   });
-  assert.throws(() => journal.start(), /session reference/);
-  assert.throws(() => journal.start({ reference: {}, hash: "", dir: "/work" }), /checkpoint hash/);
-  assert.throws(() => journal.start({ reference: {}, hash: "abc", dir: " " }), /working directory/);
+  await assert.rejects(() => journal.start(), /session reference/);
+  await assert.rejects(() => journal.start({ reference: {}, hash: "", dir: "/work" }), /checkpoint hash/);
+  await assert.rejects(() => journal.start({ reference: {}, hash: "abc", dir: " " }), /working directory/);
 
   const invalidOwnerJournal = createCheckpointRollbackJournal({
     appStore: { repositories: { operations: { create() {}, updateWithPayload() {} } } },
     ensureSessionOwner: () => null, operationId: () => "id", now: () => "now",
   });
-  assert.throws(() => invalidOwnerJournal.start({ reference: {}, hash: "abc", dir: "/work" }), /positive integer id/);
+  await assert.rejects(() => invalidOwnerJournal.start({ reference: {}, hash: "abc", dir: "/work" }), /positive integer id/);
 });
 
-test("checkpoint rollback journal enforces ordered, terminal transitions", (t) => {
-  const { reference, journal } = setup(t);
-  const operation = journal.start({ reference, hash: "abc", dir: "/work" });
-  assert.throws(() => operation.advance("git_reset"), /cannot advance from persisted/);
+test("checkpoint rollback journal enforces ordered, terminal transitions", async (t) => {
+  const { reference, journal } = await setup(t);
+  const operation = await journal.start({ reference, hash: "abc", dir: "/work" });
+  await assert.rejects(() => operation.advance("git_reset"), /cannot advance from persisted/);
   assert.equal(operation.stage, "persisted");
-  assert.throws(() => operation.complete(), /cannot complete from persisted/);
-  operation.fail("cancelled externally");
-  assert.throws(() => operation.advance("safety_checkpointed"), /already failed/);
-  assert.throws(() => operation.fail(new Error("again")), /already failed/);
+  await assert.rejects(() => operation.complete(), /cannot complete from persisted/);
+  await operation.fail("cancelled externally");
+  await assert.rejects(() => operation.advance("safety_checkpointed"), /already failed/);
+  await assert.rejects(() => operation.fail(new Error("again")), /already failed/);
 });
 
-test("checkpoint rollback journal snapshots identity and protects it from details", (t) => {
-  const { store, reference, journal } = setup(t);
-  const operation = journal.start({ reference, hash: "abc", dir: "/work" });
+test("checkpoint rollback journal snapshots identity and protects it from details", async (t) => {
+  const { store, reference, journal } = await setup(t);
+  const operation = await journal.start({ reference, hash: "abc", dir: "/work" });
   reference.id = "mutated";
-  operation.advance("safety_checkpointed", { safetyHash: "safe" });
+  await operation.advance("safety_checkpointed", { safetyHash: "safe" });
 
-  assert.equal(JSON.parse(store.repositories.operations.find(operation.id).payload).reference.id, "session-a");
-  assert.throws(
+  assert.equal(JSON.parse((await store.repositories.operations.find(operation.id)).payload).reference.id, "session-a");
+  await assert.rejects(
     () => operation.advance("session_forked", { hash: "replacement" }),
     /cannot replace hash/,
   );
   assert.equal(operation.stage, "safety_checkpointed");
 });
 
-test("checkpoint rollback journal does not publish a stage when persistence fails", () => {
+test("checkpoint rollback journal does not publish a stage when persistence fails", async () => {
   const updates = [];
   const journal = createCheckpointRollbackJournal({
     appStore: {
@@ -117,19 +117,19 @@ test("checkpoint rollback journal does not publish a stage when persistence fail
     },
     ensureSessionOwner: () => ({ id: 1 }), operationId: () => "rollback-1", now: () => "now",
   });
-  const operation = journal.start({ reference: { backend: "sqlite" }, hash: "abc", dir: "/work" });
-  assert.throws(() => operation.advance("safety_checkpointed"), /no longer exists/);
+  const operation = await journal.start({ reference: { backend: "sqlite" }, hash: "abc", dir: "/work" });
+  await assert.rejects(() => operation.advance("safety_checkpointed"), /no longer exists/);
   assert.equal(operation.stage, "persisted");
   assert.equal(updates.length, 1);
 });
 
-test("checkpoint rollback journal rejects unserializable details without changing durable state", (t) => {
-  const { store, reference, journal } = setup(t);
-  const operation = journal.start({ reference, hash: "abc", dir: "/work" });
-  assert.throws(
+test("checkpoint rollback journal rejects unserializable details without changing durable state", async (t) => {
+  const { store, reference, journal } = await setup(t);
+  const operation = await journal.start({ reference, hash: "abc", dir: "/work" });
+  await assert.rejects(
     () => operation.advance("safety_checkpointed", { count: 1n }),
     /must be JSON serializable/,
   );
   assert.equal(operation.stage, "persisted");
-  assert.equal(store.repositories.operations.find(operation.id).stage, "persisted");
+  assert.equal((await store.repositories.operations.find(operation.id)).stage, "persisted");
 });

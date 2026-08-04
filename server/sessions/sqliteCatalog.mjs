@@ -1,6 +1,5 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import sqlite3 from "sqlite3";
 import { labelOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
@@ -87,6 +86,24 @@ function databaseAll(database, sql, ...params) {
   }));
 }
 
+function normalizeDatabase(database) {
+  if (database && typeof database.prepare === "function" && typeof database.get !== "function") {
+    const synchronous = database;
+    return Object.freeze({
+      get: (sql, params, callback) => {
+        try { callback(null, synchronous.prepare(sql).get(...params)); } catch (error) { callback(error); }
+      },
+      all: (sql, params, callback) => {
+        try { callback(null, synchronous.prepare(sql).all(...params)); } catch (error) { callback(error); }
+      },
+      close: (callback) => {
+        try { synchronous.close(); callback(); } catch (error) { callback(error); }
+      },
+    });
+  }
+  return database;
+}
+
 function closeAsyncDatabase(database) {
   return new Promise((resolvePromise, reject) => database.close((error) => error ? reject(error) : resolvePromise()));
 }
@@ -94,35 +111,14 @@ function closeAsyncDatabase(database) {
 /** Read-only catalog for the coding-agent SQLite session database. */
 export function createSqliteSessionCatalog({
   databasePath,
-  databaseFactory = (path) => new DatabaseSync(path, { readOnly: true, timeout: 1000 }),
-  asyncDatabaseFactory = openAsyncDatabase,
+  databaseFactory = openAsyncDatabase,
 } = {}) {
   if (!databasePath) throw new Error("databasePath is required for the SQLite session catalog");
   const storagePath = resolve(databasePath);
 
-  function withDatabase(operation, missingValue) {
+  async function withDatabase(operation, missingValue) {
     if (!existsSync(storagePath)) return missingValue;
-    const database = databaseFactory(storagePath);
-    let operationFailed = false;
-    try {
-      return operation(database);
-    } catch (error) {
-      operationFailed = true;
-      throw error;
-    } finally {
-      try {
-        database.close();
-      } catch (closeError) {
-        // A cleanup failure must not hide the query failure that explains why
-        // the operation itself did not complete.
-        if (!operationFailed) throw closeError;
-      }
-    }
-  }
-
-  async function withAsyncDatabase(operation, missingValue) {
-    if (!existsSync(storagePath)) return missingValue;
-    const database = await asyncDatabaseFactory(storagePath);
+    const database = normalizeDatabase(await databaseFactory(storagePath));
     let operationError = null;
     try {
       return await operation(database);
@@ -156,33 +152,33 @@ export function createSqliteSessionCatalog({
     };
   }
 
-  function list({ cwd } = {}) {
-    return withDatabase((database) => {
+  async function list({ cwd } = {}) {
+    return withDatabase(async (database) => {
       const rows = cwd
-        ? database.prepare(`${summarySelect} WHERE s.cwd = ? ORDER BY modified_at DESC`).all(resolve(cwd))
-        : database.prepare(`${summarySelect} ORDER BY modified_at DESC`).all();
+        ? await databaseAll(database, `${summarySelect} WHERE s.cwd = ? ORDER BY modified_at DESC`, resolve(cwd))
+        : await databaseAll(database, `${summarySelect} ORDER BY modified_at DESC`);
       return rows.map(rowSummary);
     }, []);
   }
 
-  function summarize(value) {
+  async function summarize(value) {
     const id = identityId(value);
-    return withDatabase((database) => {
-      const row = database.prepare(`${summarySelect} WHERE s.id = ?`).get(id);
+    return withDatabase(async (database) => {
+      const row = await databaseGet(database, `${summarySelect} WHERE s.id = ?`, id);
       if (!row) throw new Error(`SQLite session not found: ${id}`);
       return rowSummary(row);
     }, null);
   }
 
-  function findById(id) {
-    return withDatabase((database) => {
-      const row = database.prepare(`${summarySelect} WHERE s.id = ?`).get(id);
+  async function findById(id) {
+    return withDatabase(async (database) => {
+      const row = await databaseGet(database, `${summarySelect} WHERE s.id = ?`, id);
       return row ? rowSummary(row) : null;
     }, null);
   }
 
-  function readHeader(value) {
-    const summary = summarize(value);
+  async function readHeader(value) {
+    const summary = await summarize(value);
     return summary ? {
       id: summary.id,
       cwd: summary.cwd,
@@ -192,17 +188,17 @@ export function createSqliteSessionCatalog({
     } : null;
   }
 
-  function readSessionFromDatabase(database, id) {
-    const session = database.prepare("SELECT id, cwd, created_at, parent_session_id, active_leaf_id FROM sessions WHERE id = ?").get(id);
+  async function readSessionFromDatabase(database, id) {
+    const session = await databaseGet(database,
+      "SELECT id, cwd, created_at, parent_session_id, active_leaf_id FROM sessions WHERE id = ?", id);
     if (!session) throw new Error(`SQLite session not found: ${id}`);
-    const rows = database.prepare(
-      "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq",
-    ).all(id);
+    const rows = await databaseAll(database,
+      "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq", id);
     const allEntries = rows.map(decodeEntry).filter(Boolean);
     return { session, allEntries, byId: new Map(allEntries.map((entry) => [entry.id, entry])) };
   }
 
-  function readSession(value) {
+  async function readSession(value) {
     const id = identityId(value);
     return withDatabase((database) => readSessionFromDatabase(database, id), null);
   }
@@ -220,13 +216,13 @@ export function createSqliteSessionCatalog({
     return { ...loaded, branch };
   }
 
-  function activeBranch(value) {
-    const loaded = readSession(value);
+  async function activeBranch(value) {
+    const loaded = await readSession(value);
     return loaded ? activeBranchFromLoaded(loaded) : { session: null, allEntries: [], branch: [] };
   }
 
-  function entries(value) {
-    const { session, branch } = activeBranch(value);
+  async function entries(value) {
+    const { session, branch } = await activeBranch(value);
     return {
       sessionId: session?.id ?? null,
       leafId: session?.active_leaf_id ?? null,
@@ -243,7 +239,7 @@ export function createSqliteSessionCatalog({
 
   async function messages(value) {
     const id = identityId(value);
-    return withAsyncDatabase(async (database) => {
+    return withDatabase(async (database) => {
       const session = await databaseGet(database,
         "SELECT id, active_leaf_id FROM sessions WHERE id = ?", id);
       if (!session) throw new Error(`SQLite session not found: ${id}`);
@@ -259,8 +255,8 @@ export function createSqliteSessionCatalog({
     }, { sessionId: null, messages: [] });
   }
 
-  function tree(value) {
-    const { session, allEntries } = readSession(value) ?? { session: null, allEntries: [] };
+  async function tree(value) {
+    const { session, allEntries } = await readSession(value) ?? { session: null, allEntries: [] };
     return {
       session: session ? { id: session.id, timestamp: session.created_at, cwd: session.cwd } : null,
       nodes: allEntries.filter((entry) => entry.type !== "leaf").map((entry) => {
@@ -277,9 +273,9 @@ export function createSqliteSessionCatalog({
     };
   }
 
-  function folders() {
+  async function folders() {
     const counts = new Map();
-    for (const session of list()) {
+    for (const session of await list()) {
       if (session.cwd !== null) counts.set(session.cwd, (counts.get(session.cwd) ?? 0) + 1);
     }
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([cwd, count]) => ({
@@ -287,32 +283,31 @@ export function createSqliteSessionCatalog({
     }));
   }
 
-  function search({ q, scope = "folder", path, cwd = path, includeTools = false } = {}, maxResults = 200) {
+  async function search({ q, scope = "folder", path, cwd = path, includeTools = false } = {}, maxResults = 200) {
     const { terms, operator } = parseSearchQuery(q);
     if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
-    const selected = scope === "session" ? [findById(identityId(path))].filter(Boolean)
-      : scope === "all" ? list() : list({ cwd });
+    const selected = scope === "session" ? [await findById(identityId(path))].filter(Boolean)
+      : scope === "all" ? await list() : await list({ cwd });
     const filesSearched = selected.length;
     const resultLimit = Number.isSafeInteger(maxResults) && maxResults >= 0 ? maxResults : 0;
-    const searched = withDatabase((database) => {
+    const searched = await withDatabase(async (database) => {
       let candidates = selected;
       let indexedEntries = null;
       // Pi's FTS index uses the trigram tokenizer. Terms shorter than three
       // characters cannot be represented by MATCH, so scan in that case to
       // preserve the catalog's quoted-short-term search behavior.
       const canUseSearchIndex = terms.every((term) => [...term].length >= 3);
-      const hasSearchIndex = canUseSearchIndex && database.prepare(
-        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'",
-      ).get();
+      const hasSearchIndex = canUseSearchIndex && await databaseGet(database,
+        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'");
       if (hasSearchIndex) {
         const searchableFilter = includeTools
           ? ""
           : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
-        const rows = database.prepare(`
+        const rows = await databaseAll(database, `
           SELECT DISTINCT f.session_id, f.entry_id
           FROM session_search_fts f
           WHERE session_search_fts MATCH ? ${searchableFilter}
-        `).all(ftsSearchExpression(terms, operator));
+        `, ftsSearchExpression(terms, operator));
         indexedEntries = new Map();
         for (const row of rows) {
           if (!indexedEntries.has(row.session_id)) indexedEntries.set(row.session_id, new Set());
@@ -324,7 +319,7 @@ export function createSqliteSessionCatalog({
       const results = [];
       let truncated = false;
       for (const session of candidates) {
-        const loaded = activeBranchFromLoaded(readSessionFromDatabase(database, session.id));
+        const loaded = activeBranchFromLoaded(await readSessionFromDatabase(database, session.id));
         const hits = [];
         for (const entry of loaded.branch) {
           if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
@@ -363,11 +358,11 @@ export function createSqliteSessionCatalog({
     return { results: rescoreSearchResults(searched.results, q), truncated: searched.truncated, filesSearched };
   }
 
-  function usageAnalytics({ bucket = "day", since = null } = {}) {
-    return withDatabase((database) => {
+  async function usageAnalytics({ bucket = "day", since = null } = {}) {
+    return withDatabase(async (database) => {
       const rows = since
-        ? database.prepare(`SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' AND timestamp >= ? ORDER BY timestamp`).all(since)
-        : database.prepare("SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' ORDER BY timestamp").all();
+        ? await databaseAll(database, `SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' AND timestamp >= ? ORDER BY timestamp`, since)
+        : await databaseAll(database, "SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' ORDER BY timestamp");
       const records = rows.flatMap((row) => {
         try {
           const payload = JSON.parse(row.payload);

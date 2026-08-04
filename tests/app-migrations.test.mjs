@@ -20,7 +20,7 @@ const tableNames = (database) => database.prepare(
   "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
 ).all().map((row) => row.name);
 
-test("numbered migrations apply once and report stable status", (t) => {
+test("numbered migrations apply once and report stable status", async (t) => {
   const database = databaseFixture(t);
   let clockCalls = 0;
   const now = () => {
@@ -28,8 +28,8 @@ test("numbered migrations apply once and report stable status", (t) => {
     return "2026-07-16T00:00:00.000Z";
   };
 
-  const first = applyMigrations(database, { now });
-  const second = applyMigrations(database, { now });
+  const first = await applyMigrations(database, { now });
+  const second = await applyMigrations(database, { now });
 
   assert.equal(clockCalls, APP_MIGRATIONS.length);
   assert.deepEqual(first, { currentVersion: 15, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
@@ -54,9 +54,9 @@ test("numbered migrations apply once and report stable status", (t) => {
   ]);
 });
 
-test("video-container migration upgrades existing AVI file widgets", (t) => {
+test("video-container migration upgrades existing AVI file widgets", async (t) => {
   const database = databaseFixture(t);
-  applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 12) });
+  await applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 12) });
   database.prepare(`
     INSERT INTO pinned_widgets(
       id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
@@ -64,15 +64,15 @@ test("video-container migration upgrades existing AVI file widgets", (t) => {
     ) VALUES ('legacy-avi', NULL, 'workspace', NULL, 'file', 'Legacy AVI', 1,
       '/workspace/legacy.avi', NULL, 'application/octet-stream', 12, 1, 'now', 'now')
   `).run();
-  applyMigrations(database);
+  await applyMigrations(database);
   assert.deepEqual({ ...database.prepare("SELECT kind, mime_type FROM pinned_widgets WHERE id = 'legacy-avi'").get() }, {
     kind: "video", mime_type: "video/x-msvideo",
   });
 });
 
-test("SVG migration upgrades existing vector file widgets", (t) => {
+test("SVG migration upgrades existing vector file widgets", async (t) => {
   const database = databaseFixture(t);
-  applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 13) });
+  await applyMigrations(database, { migrations: APP_MIGRATIONS.slice(0, 13) });
   database.prepare(`
     INSERT INTO pinned_widgets(
       id, owner_id, scope, group_id, kind, label, position, target, hublot_id,
@@ -80,24 +80,24 @@ test("SVG migration upgrades existing vector file widgets", (t) => {
     ) VALUES ('legacy-svg', NULL, 'workspace', NULL, 'file', 'Legacy SVG', 1,
       '/workspace/legacy.svg', NULL, 'application/octet-stream', 12, 1, 'now', 'now')
   `).run();
-  applyMigrations(database);
+  await applyMigrations(database);
   assert.deepEqual({ ...database.prepare("SELECT kind, mime_type FROM pinned_widgets WHERE id = 'legacy-svg'").get() }, {
     kind: "image", mime_type: "image/svg+xml",
   });
 });
 
-test("a failed migration rolls back its schema and ledger row", (t) => {
+test("a failed migration rolls back its schema and ledger row", async (t) => {
   const database = databaseFixture(t);
   const migrations = [
     { version: 1, name: "broken", sql: "CREATE TABLE should_rollback(id INTEGER); THIS IS NOT SQL;" },
   ];
 
-  assert.throws(() => applyMigrations(database, { migrations }), /migration 1 \(broken\) failed/);
+  await assert.rejects(async () => await applyMigrations(database, { migrations }), /migration 1 \(broken\) failed/);
   assert.deepEqual(tableNames(database), ["schema_migrations"]);
   assert.deepEqual(database.prepare("SELECT * FROM schema_migrations").all(), []);
 });
 
-test("migration definitions are validated before changing the database", (t) => {
+test("migration definitions are validated before changing the database", async (t) => {
   const database = databaseFixture(t);
   const invalidLists = [
     null,
@@ -108,12 +108,12 @@ test("migration definitions are validated before changing the database", (t) => 
   ];
 
   for (const migrations of invalidLists) {
-    assert.throws(() => applyMigrations(database, { migrations }), /migrations must be an array|unique ascending integer versions|invalid application database migration/);
+    await assert.rejects(async () => await applyMigrations(database, { migrations }), /migrations must be an array|unique ascending integer versions|invalid application database migration/);
   }
   assert.deepEqual(tableNames(database), []);
 });
 
-test("migration history must be a matching contiguous prefix", (t) => {
+test("migration history must be a matching contiguous prefix", async (t) => {
   const database = databaseFixture(t);
   database.exec(`
     CREATE TABLE schema_migrations (
@@ -129,25 +129,25 @@ test("migration history must be a matching contiguous prefix", (t) => {
     { version: 2, name: "second", sql: "SELECT 1;" },
   ];
 
-  assert.throws(() => applyMigrations(database, { migrations }), /history has a gap/);
+  await assert.rejects(async () => await applyMigrations(database, { migrations }), /history has a gap/);
   database.exec("DELETE FROM schema_migrations");
   insert.run(1, "renamed");
-  assert.throws(() => applyMigrations(database, { migrations }), /migration 1 name mismatch/);
+  await assert.rejects(async () => await applyMigrations(database, { migrations }), /migration 1 name mismatch/);
   database.exec("DELETE FROM schema_migrations");
   insert.run(3, "future");
-  assert.throws(() => applyMigrations(database, { migrations }), /migration 3 is not supported/);
+  await assert.rejects(async () => await applyMigrations(database, { migrations }), /migration 3 is not supported/);
 });
 
-test("migration dependencies and clock are validated", (t) => {
+test("migration dependencies and clock are validated", async (t) => {
   const database = databaseFixture(t);
-  assert.throws(() => applyMigrations(null), /database connection is required/);
-  assert.throws(() => applyMigrations(database, { now: "soon" }), /clock must be a function/);
+  await assert.rejects(async () => await applyMigrations(null), /database connection is required/);
+  await assert.rejects(async () => await applyMigrations(database, { now: "soon" }), /clock must be a function/);
 
   database.exec("BEGIN");
-  assert.throws(() => applyMigrations(database), /inside a transaction/);
+  await assert.rejects(async () => await applyMigrations(database), /inside a transaction/);
   database.exec("ROLLBACK");
 
-  assert.throws(() => applyMigrations(database, {
+  await assert.rejects(async () => await applyMigrations(database, {
     migrations: [{ version: 1, name: "clock", sql: "CREATE TABLE clock_test(id INTEGER)" }],
     now: () => null,
   }), /clock must return a timestamp string/);

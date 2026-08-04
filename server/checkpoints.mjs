@@ -40,9 +40,9 @@ function requireRepository(repository) {
 }
 
 /** Anchor a commit to the current backend-neutral session tip. */
-export function recordCheckpoint(session, dir, { hash, message }, options = {}) {
+export async function recordCheckpoint(session, dir, { hash, message }, options = {}) {
   const { catalog, reference, identity } = checkpointContext(session, options);
-  const { sessionId, leafId, entries } = catalog.entries(identity);
+  const { sessionId, leafId, entries } = await catalog.entries(identity);
   const anchorId = entries[entries.length - 1]?.id ?? null;
   if (!sessionId || !anchorId || !hash) return null;
   const repository = requireRepository(options.repository);
@@ -53,19 +53,19 @@ export function recordCheckpoint(session, dir, { hash, message }, options = {}) 
     message: message ?? null,
     timestamp: new Date().toISOString(),
   };
-  return repository.record(reference, checkpoint);
+  return await repository.record(reference, checkpoint);
 }
 
 /** Build a checkpoint family from catalog lineage rather than directory scans. */
-export function checkpointTree(session, options = {}) {
+export async function checkpointTree(session, options = {}) {
   const { catalog, reference, identity } = checkpointContext(session, options);
-  const target = catalog.readHeader(identity);
+  const target = await catalog.readHeader(identity);
   if (!target) throw new Error("session not found");
   const summaries = catalog.backend === "sqlite"
-    ? catalog.list({ cwd: target.cwd })
-    : catalog.list({ location: dirname(reference.storagePath) });
-  const infos = summaries.map((summary) => {
-    const header = catalog.backend === "jsonl" ? catalog.readHeader(summary.path) : summary;
+    ? await catalog.list({ cwd: target.cwd })
+    : await catalog.list({ location: dirname(reference.storagePath) });
+  const infos = await Promise.all(summaries.map(async (summary) => {
+    const header = catalog.backend === "jsonl" ? await catalog.readHeader(summary.path) : summary;
     const sessionRef = catalog.backend === "sqlite"
       ? { backend: "sqlite", id: summary.id, storagePath: catalog.storagePath }
       : { backend: "jsonl", id: summary.id, storagePath: summary.path };
@@ -78,7 +78,7 @@ export function checkpointTree(session, options = {}) {
       path: catalog.backend === "jsonl" ? summary.path : null,
       parentId: catalog.backend === "sqlite" ? summary.parentSessionId : null,
     };
-  });
+  }));
   if (catalog.backend === "jsonl") {
     const idByPath = new Map(infos.map((info) => [info.path, info.id]));
     for (const info of infos) info.parentId = idByPath.get(info.parentSession) ?? null;
@@ -92,7 +92,7 @@ export function checkpointTree(session, options = {}) {
     root = byId.get(root.parentId);
   }
   const repository = requireRepository(options.repository);
-  const checkpointsById = new Map(infos.map((info) => [info.id, repository.listForSession(info.sessionRef)]));
+  const checkpointsById = new Map(await Promise.all(infos.map(async (info) => [info.id, await repository.listForSession(info.sessionRef)])));
   const childrenByParentId = new Map();
   for (const info of infos) {
     if (!info.parentId) continue;

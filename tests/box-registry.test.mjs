@@ -86,7 +86,7 @@ test("box registration consumes bootstrap auth, persists only hashes, and reconn
   assert.equal(closeCode, 4001);
 
   const secondClosed = once(second, "close");
-  second.close();
+  await second.close();
   await secondClosed;
   assert.equal((await registry.get(registration.boxId, registration.generation)).status, "offline");
 

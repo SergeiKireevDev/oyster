@@ -44,7 +44,7 @@ export function createSessionOwnerResolver({
   requireFunction(runners, "session runner provider");
   requireFunction(now, "session owner clock");
 
-  function referenceFromId(id) {
+  async function referenceFromId(id) {
     const activeRunners = runners();
     if (activeRunners == null || typeof activeRunners[Symbol.iterator] !== "function") {
       throw new TypeError("session runner provider must return an iterable");
@@ -56,10 +56,10 @@ export function createSessionOwnerResolver({
       if (runner.sessionId === id && runner.sessionRef) return runner.sessionRef;
     }
 
-    const summary = sessionCatalog.findById(id);
+    const summary = await sessionCatalog.findById(id);
     if (summary == null) throw new Error(`cannot own resources for unknown session ${id}`);
-    if (typeof summary !== "object" || Array.isArray(summary) || typeof summary.then === "function") {
-      throw new TypeError("session catalog findById must synchronously return an object or null");
+    if (typeof summary !== "object" || Array.isArray(summary)) {
+      throw new TypeError("session catalog findById must return an object or null");
     }
     return {
       backend: sessionCatalog.backend,
@@ -68,9 +68,9 @@ export function createSessionOwnerResolver({
     };
   }
 
-  return function ensureSessionOwner(session) {
+  return async function ensureSessionOwner(session) {
     const requestedId = typeof session === "string" ? requireSessionId(session) : null;
-    const reference = requestedId === null ? session : referenceFromId(requestedId);
+    const reference = requestedId === null ? session : await referenceFromId(requestedId);
     const valid = sessionReferences.validate(reference);
     if (!valid || typeof valid !== "object" || Array.isArray(valid) || typeof valid.then === "function") {
       throw new TypeError("session reference validator must synchronously return an object");
@@ -78,15 +78,12 @@ export function createSessionOwnerResolver({
     if (requestedId !== null && valid.id !== requestedId) {
       throw new Error(`resolved session reference does not match requested session ${requestedId}`);
     }
-    const owner = upsert.call(appStore.repositories.sessions, {
+    const owner = await upsert.call(appStore.repositories.sessions, {
       backend: valid.backend,
       sessionId: valid.id,
       storagePath: valid.storagePath,
       createdAt: requireTimestamp(now()),
     });
-    if (owner && typeof owner.then === "function") {
-      throw new TypeError("session owner repository upsert must be synchronous");
-    }
     return requireOwner(owner);
   };
 }

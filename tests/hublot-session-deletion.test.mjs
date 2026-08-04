@@ -11,7 +11,7 @@ import {
 
 test("session deletion stops service and tunnel before cascading hublot and startup records", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-delete-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root, hublotProcessHandles: new Map() };
   const children = [];
   const child = () => {
@@ -19,21 +19,21 @@ test("session deletion stops service and tunnel before cascading hublot and star
     children.push(proc);
     return proc;
   };
-  t.after(() => {
+  t.after(async () => {
     for (const proc of children) try { process.kill(-proc.pid, "SIGKILL"); } catch {}
-    store.close();
+    await store.close();
     rmSync(root, { recursive: true, force: true });
   });
 
-  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "delete-me", storagePath: "/agent.sqlite", createdAt: "created" });
-  const hublot = reserveHublot(state, { port: 4250, brief: "managed preview", sessionId: "delete-me", ownerId: owner.id });
+  const owner = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "delete-me", storagePath: "/agent.sqlite", createdAt: "created" });
+  const hublot = await reserveHublot(state, { port: 4250, brief: "managed preview", sessionId: "delete-me", ownerId: owner.id });
   const source = "#!/bin/sh\nexec node server/server.mjs\n";
-  store.repositories.hublots.update(hublot.id, { service_start_script: source, service_start_script_sha256: "hash" });
+  await store.repositories.hublots.update(hublot.id, { service_start_script: source, service_start_script_sha256: "hash" });
   mkdirSync(dirname(hublot.service_start_script_path), { recursive: true });
   writeFileSync(hublot.service_start_script_path, source, { mode: 0o700 });
-  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://delete.trycloudflare.com" });
-  const tunnel = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: child().pid });
-  const service = persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: child().pid });
+  await recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://delete.trycloudflare.com" });
+  const tunnel = await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: child().pid });
+  const service = await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: child().pid });
   const alive = new Set([tunnel.id, service.id]);
   const byPid = new Map([tunnel, service].map((row) => [row.pid, row]));
   const signals = [];
@@ -54,14 +54,14 @@ test("session deletion stops service and tunnel before cascading hublot and star
   });
   assert.deepEqual(ports, [4250]);
   assert.deepEqual(signals, ["tunnel:SIGTERM", "service:SIGTERM", "service:SIGKILL"]);
-  assert.equal(store.repositories.hublots.find(hublot.id).status, "closed");
-  assert.equal(store.repositories.hublots.find(hublot.id).desired_state, "closed");
-  assert.equal(store.repositories.hublots.findProcess(tunnel.id).status, "ended");
-  assert.equal(store.repositories.hublots.findProcess(service.id).status, "ended");
+  assert.equal((await store.repositories.hublots.find(hublot.id)).status, "closed");
+  assert.equal((await store.repositories.hublots.find(hublot.id)).desired_state, "closed");
+  assert.equal((await store.repositories.hublots.findProcess(tunnel.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.findProcess(service.id)).status, "ended");
   assert.equal(existsSync(hublot.service_start_script_path), false, "startup artifact is removed only after processes stop");
 
-  store.repositories.sessions.delete(owner.id);
-  assert.equal(store.repositories.hublots.find(hublot.id), null);
-  assert.equal(store.repositories.hublots.findProcess(tunnel.id), null);
-  assert.deepEqual(store.repositories.hublots.listLifecycleEvents(hublot.id), []);
+  await store.repositories.sessions.delete(owner.id);
+  assert.equal(await store.repositories.hublots.find(hublot.id), null);
+  assert.equal(await store.repositories.hublots.findProcess(tunnel.id), null);
+  assert.deepEqual(await store.repositories.hublots.listLifecycleEvents(hublot.id), []);
 });

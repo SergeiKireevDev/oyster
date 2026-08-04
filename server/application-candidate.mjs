@@ -81,7 +81,7 @@ export function createCandidateState(stableState) {
 }
 
 /** Verify the stable application store is complete and its connection is readable. */
-export function validateRepositoryAvailability(appStore) {
+export async function validateRepositoryAvailability(appStore) {
   if (!appStore?.repositories || typeof appStore.hydrate !== "function") {
     throw new Error("stable core did not provide a readable application store");
   }
@@ -92,7 +92,7 @@ export function validateRepositoryAvailability(appStore) {
     }
   }
   try {
-    const hydration = appStore.hydrate();
+    const hydration = await appStore.hydrate();
     if (!hydration || typeof hydration !== "object" || !Array.isArray(hydration.incompleteOperations)) {
       throw new TypeError("application store hydrate() returned an invalid snapshot");
     }
@@ -103,7 +103,7 @@ export function validateRepositoryAvailability(appStore) {
 }
 
 /** Verify the selected session catalog contract and perform one read probe. */
-export function validateCatalogAccess(catalog, { backend, cwd } = {}) {
+export async function validateCatalogAccess(catalog, { backend, cwd } = {}) {
   if (!catalog || catalog.backend !== backend) {
     throw new Error(`session catalog backend mismatch: expected "${backend}"`);
   }
@@ -112,7 +112,7 @@ export function validateCatalogAccess(catalog, { backend, cwd } = {}) {
   }
   let sessions;
   try {
-    sessions = catalog.list({ cwd });
+    sessions = await catalog.list({ cwd });
   } catch (cause) {
     throw new Error(`cannot read ${backend} session catalog`, { cause });
   }

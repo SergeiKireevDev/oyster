@@ -20,10 +20,10 @@ function sessionIdFromBody(body) {
   return body.sessionId;
 }
 
-function sessionCwd(state, sessionId) {
+async function sessionCwd(state, sessionId) {
   if (!sessionId) return state.currentDir;
   const runner = [...state.runners.values()].find((candidate) => candidate.sessionId === sessionId);
-  return runner?.dir ?? state.sessionCatalog?.findById?.(sessionId)?.cwd ?? state.currentDir;
+  return runner?.dir ?? (await state.sessionCatalog?.findById?.(sessionId))?.cwd ?? state.currentDir;
 }
 
 /** Build routine lifecycle routes around stable-core-owned routine state. */
@@ -50,9 +50,9 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
   } = routines;
 
   return {
-    "GET /routines": (_req, res) => {
+    "GET /routines": async (_req, res) => {
       disableCaching(res);
-      json(res, 200, { routines: listRoutines(state), dir: routinesDir() });
+      json(res, 200, { routines: await listRoutines(state), dir: routinesDir() });
     },
 
     "POST /routines": async (req, res) => {
@@ -95,9 +95,9 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
             json(res, 400, { error: "generate requires a current session" });
             return;
           }
-          ensureSessionOwner(sessionId);
+          await ensureSessionOwner(sessionId);
           const agent = await spawnRoutineAgent(state, { brief, sessionId });
-          json(res, 201, { agent: true, output: agent.output, routines: listRoutines(state) });
+          json(res, 201, { agent: true, output: agent.output, routines: await listRoutines(state) });
           return;
         }
 
@@ -107,19 +107,19 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
             json(res, 400, { error: "create requires a `script` string (max 256KB)" });
             return;
           }
-          const owner = sessionId ? ensureSessionOwner(sessionId) : null;
+          const owner = sessionId ? await ensureSessionOwner(sessionId) : null;
           json(res, 201, {
-            routine: createRoutine(state, {
-              name, script, sessionId, ownerId: owner?.id ?? null, cwd: sessionCwd(state, sessionId),
+            routine: await createRoutine(state, {
+              name, script, sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId),
             }),
           });
           return;
         }
         if (action === "start") {
-          const owner = sessionId ? ensureSessionOwner(sessionId) : null;
+          const owner = sessionId ? await ensureSessionOwner(sessionId) : null;
           json(res, 200, {
-            routine: startRoutine(state, name, {
-              sessionId, ownerId: owner?.id ?? null, cwd: sessionCwd(state, sessionId),
+            routine: await startRoutine(state, name, {
+              sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId),
             }),
           });
           return;
@@ -131,7 +131,7 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
           release: releaseRoutine,
           delete: deleteRoutine,
         }[action];
-        json(res, 200, { routine: operation(state, name) });
+        json(res, 200, { routine: await operation(state, name) });
       } catch (error) {
         json(res, 400, { error: errorMessage(error) });
       }

@@ -217,12 +217,12 @@ if (process.argv.includes("--check-config")) {
 
 // Open exactly once in the stable core. Hot-reloaded app modules receive this
 // same service through state rather than creating their own connections.
-const appStore = openAppStore({ databasePath: config.OYSTER_DB_PATH });
-const recoveredOperationCount = appStore.reconcileInterruptedOperations();
-const interruptedRoutineRunCount = appStore.reconcileInterruptedRoutineRuns();
-const appHydration = appStore.hydrate();
+const appStore = await openAppStore({ databasePath: config.OYSTER_DB_PATH });
+const recoveredOperationCount = await appStore.reconcileInterruptedOperations();
+const interruptedRoutineRunCount = await appStore.reconcileInterruptedRoutineRuns();
+const appHydration = await appStore.hydrate();
 const appSettings = createAppSettings({ repository: appStore.repositories.settings, startupWorkdir: config.PI_DIR });
-const hydratedSettings = appSettings.hydrate();
+const hydratedSettings = await appSettings.hydrate();
 
 const state = {
   config,
@@ -563,13 +563,13 @@ function shutdown() {
       }
     }
     server.closeAllConnections();
-    state.appStore.flush();
-    state.appStore.close();
+    await state.appStore.flush();
+    await state.appStore.close();
     process.exit(0);
-  })().catch((error) => {
+  })().catch(async (error) => {
     console.error(`[oyster] shutdown failed: ${error.stack ?? error}`);
     try { server.closeAllConnections(); } catch {}
-    try { state.appStore.close(); } catch {}
+    try { await state.appStore.close(); } catch {}
     process.exit(1);
   });
   return shutdownPromise;

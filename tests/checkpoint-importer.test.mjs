@@ -7,11 +7,11 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { importLegacyCheckpoints } from "../server/persistence/checkpointImporter.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
-function setup(t) {
+async function setup(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-checkpoint-import-"));
   const agentDir = join(root, ".pi", "agent");
-  const store = openAppStore({ databasePath: join(agentDir, "oyster.sqlite") });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(agentDir, "oyster.sqlite") });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return {
     root,
     store,
@@ -20,8 +20,8 @@ function setup(t) {
   };
 }
 
-test("legacy checkpoint import is repeatable and leaves its source untouched", (t) => {
-  const { store, codec, sourcePath } = setup(t);
+test("legacy checkpoint import is repeatable and leaves its source untouched", async (t) => {
+  const { store, codec, sourcePath } = await setup(t);
   const sessionPath = join(codec.jsonlRoot, "project", "session-a.jsonl");
   const source = JSON.stringify({
     "session-a": [
@@ -31,20 +31,20 @@ test("legacy checkpoint import is repeatable and leaves its source untouched", (
   }, null, 2);
   writeFileSync(sourcePath, source);
 
-  const first = importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath });
-  const second = importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath });
+  const first = await importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath });
+  const second = await importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath });
 
   assert.deepEqual({ ...first, sourcePath: undefined }, {
     sourcePath: undefined, sourceCount: 2, importedCount: 2, existingCount: 0, status: "imported",
   });
   assert.equal(second.importedCount, 0);
   assert.equal(second.existingCount, 2);
-  assert.equal(store.repositories.checkpoints.listBySessionId("session-a", "jsonl").length, 2);
+  assert.equal((await store.repositories.checkpoints.listBySessionId("session-a", "jsonl")).length, 2);
   assert.equal(readFileSync(sourcePath, "utf8"), source);
 });
 
-test("legacy checkpoint import validates the complete source before writing", (t) => {
-  const { store, codec, sourcePath } = setup(t);
+test("legacy checkpoint import validates the complete source before writing", async (t) => {
+  const { store, codec, sourcePath } = await setup(t);
   const sessionPath = join(codec.jsonlRoot, "project", "session-a.jsonl");
   writeFileSync(sourcePath, JSON.stringify({
     "session-a": [
@@ -53,19 +53,19 @@ test("legacy checkpoint import validates the complete source before writing", (t
     ],
   }));
 
-  assert.throws(() => importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath }), /malformed legacy checkpoint/);
-  assert.deepEqual(store.repositories.checkpoints.listBySessionId("session-a", "jsonl"), []);
+  await assert.rejects(async () => await importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath }), /malformed legacy checkpoint/);
+  assert.deepEqual(await store.repositories.checkpoints.listBySessionId("session-a", "jsonl"), []);
 });
 
-test("legacy checkpoint import reports a missing source as an idempotent no-op", (t) => {
-  const { store, codec, sourcePath } = setup(t);
-  assert.deepEqual(importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath }), {
+test("legacy checkpoint import reports a missing source as an idempotent no-op", async (t) => {
+  const { store, codec, sourcePath } = await setup(t);
+  assert.deepEqual(await importLegacyCheckpoints({ repository: store.repositories.checkpoints, sessionReferences: codec, sourcePath }), {
     sourcePath, sourceCount: 0, importedCount: 0, existingCount: 0, status: "missing",
   });
 });
 
-test("legacy checkpoint import rejects duplicate and invalid checkpoint identities before repository access", (t) => {
-  const { codec, sourcePath } = setup(t);
+test("legacy checkpoint import rejects duplicate and invalid checkpoint identities before repository access", async (t) => {
+  const { codec, sourcePath } = await setup(t);
   const sessionPath = join(codec.jsonlRoot, "project", "session-a.jsonl");
   let listCalls = 0;
   const repository = {
@@ -81,16 +81,16 @@ test("legacy checkpoint import rejects duplicate and invalid checkpoint identiti
     ],
   ]) {
     writeFileSync(sourcePath, JSON.stringify({ "session-a": checkpoints }));
-    assert.throws(
-      () => importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath }),
+    await assert.rejects(
+      async () => await importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath }),
       /malformed|duplicate legacy checkpoint/,
     );
   }
   assert.equal(listCalls, 0);
 });
 
-test("legacy checkpoint import inspects each session once and compares payloads independent of key order", (t) => {
-  const { codec, sourcePath } = setup(t);
+test("legacy checkpoint import inspects each session once and compares payloads independent of key order", async (t) => {
+  const { codec, sourcePath } = await setup(t);
   const sessionPath = join(codec.jsonlRoot, "project", "session-a.jsonl");
   const reference = codec.validate({ backend: "jsonl", id: "session-a", storagePath: sessionPath });
   const existing = {
@@ -109,7 +109,7 @@ test("legacy checkpoint import inspects each session once and compares payloads 
   let recordCalls = 0;
   const conflicts = [];
   const candidates = [];
-  const report = importLegacyCheckpoints({
+  const report = await importLegacyCheckpoints({
     repository: {
       listForSession() { listCalls++; return [existing]; },
       record() { recordCalls++; },
@@ -131,12 +131,12 @@ test("legacy checkpoint import inspects each session once and compares payloads 
   assert.equal(Object.isFrozen(candidates[0].checkpoint), true);
 });
 
-test("legacy checkpoint import validates dependencies, options, and session path consistency", (t) => {
-  const { codec, sourcePath } = setup(t);
+test("legacy checkpoint import validates dependencies, options, and session path consistency", async (t) => {
+  const { codec, sourcePath } = await setup(t);
   const repository = { listForSession: () => [], record: () => {} };
-  assert.throws(() => importLegacyCheckpoints({ sessionReferences: codec, sourcePath }), /checkpoint repository/);
-  assert.throws(() => importLegacyCheckpoints({ repository, sourcePath }), /session reference codec/);
-  assert.throws(() => importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath, apply: "yes" }), /apply must be a boolean/);
+  await assert.rejects(async () => await importLegacyCheckpoints({ sessionReferences: codec, sourcePath }), /checkpoint repository/);
+  await assert.rejects(async () => await importLegacyCheckpoints({ repository, sourcePath }), /session reference codec/);
+  await assert.rejects(async () => await importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath, apply: "yes" }), /apply must be a boolean/);
 
   const sessionPath = join(codec.jsonlRoot, "project", "session-a.jsonl");
   writeFileSync(sourcePath, JSON.stringify({
@@ -147,8 +147,8 @@ test("legacy checkpoint import validates dependencies, options, and session path
       sessionRef: { backend: "jsonl", id: "session-a", storagePath: join(codec.jsonlRoot, "other.jsonl") },
     }],
   }));
-  assert.throws(
-    () => importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath }),
+  await assert.rejects(
+    async () => await importLegacyCheckpoints({ repository, sessionReferences: codec, sourcePath }),
     /session paths differ/,
   );
 });

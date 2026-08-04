@@ -48,7 +48,7 @@ function fixture(overrides = {}) {
 test("routine routes validate and preserve every session-bound lifecycle action", async () => {
   const { calls, owners, routes } = fixture();
   const listed = res();
-  routes["GET /routines"]({}, listed);
+  await routes["GET /routines"]({}, listed);
   assert.deepEqual(listed.body, { routines: [{ name: "job", progress: 50 }], dir: "/routines" });
   assert.equal(listed.headers["cache-control"], "no-store");
 

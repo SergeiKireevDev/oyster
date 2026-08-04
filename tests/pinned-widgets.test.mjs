@@ -17,9 +17,9 @@ import {
   runMonitoringScript,
 } from "../server/pinned-widgets.mjs";
 
-function fixture(t, routeOptions = {}) {
+async function fixture(t, routeOptions = {}) {
   const root = mkdtempSync(join(tmpdir(), "oyster-pinned-widgets-"));
-  const appStore = openAppStore({ databasePath: join(root, "oyster.sqlite") });
+  const appStore = await openAppStore({ databasePath: join(root, "oyster.sqlite") });
   const state = {
     appStore,
     currentDir: root,
@@ -27,11 +27,11 @@ function fixture(t, routeOptions = {}) {
     serverEvent() {},
   };
   const requestContext = createRequestContext(state);
-  const ensureSessionOwner = (sessionId) => appStore.repositories.sessions.upsert({
+  const ensureSessionOwner = async (sessionId) => await appStore.repositories.sessions.upsert({
     backend: "sqlite", sessionId, storagePath: join(root, "agent.sqlite"), createdAt: "created",
   });
   const routes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels: () => [], monitorRoot: join(root, ".oyster", "monitoring-widgets"), ...routeOptions });
-  t.after(() => { appStore.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await appStore.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, state, appStore, requestContext, routes, ensureSessionOwner };
 }
 
@@ -58,52 +58,52 @@ function streamResponse() {
   return res;
 }
 
-test("pinned widget repository persists scoped groups and ordered artifacts", (t) => {
-  const { root, appStore, ensureSessionOwner } = fixture(t);
-  const owner = ensureSessionOwner("session-a");
+test("pinned widget repository persists scoped groups and ordered artifacts", async (t) => {
+  const { root, appStore, ensureSessionOwner } = await fixture(t);
+  const owner = await ensureSessionOwner("session-a");
   const repository = appStore.repositories.pinnedWidgets;
-  assert.equal(repository.find("builtin:file-explorer").kind, "builtin");
-  const group = repository.createGroup({ id: "group-a", ownerId: owner.id, scope: "session", name: "Results", position: 0, createdAt: "now" });
+  assert.equal((await repository.find("builtin:file-explorer")).kind, "builtin");
+  const group = await repository.createGroup({ id: "group-a", ownerId: owner.id, scope: "session", name: "Results", position: 0, createdAt: "now" });
   writeFileSync(join(root, "report.md"), "# Result");
-  const widget = repository.create({
+  const widget = await repository.create({
     id: "widget-a", ownerId: owner.id, scope: "session", groupId: group.id,
     kind: "markdown", label: "Report", position: 0, target: join(root, "report.md"),
     mimeType: "text/markdown; charset=utf-8", size: 8, mtimeMs: 1, createdAt: "now",
   });
-  assert.equal(repository.find(widget.id).session_id, "session-a");
-  assert.equal(repository.nextPosition({ ownerId: owner.id, scope: "session", groupId: group.id }), 1);
-  appStore.repositories.sessions.delete(owner.id);
-  assert.equal(repository.find(widget.id), null);
-  assert.equal(repository.findGroup(group.id), null);
-  assert.ok(repository.find("builtin:file-explorer"));
+  assert.equal((await repository.find(widget.id)).session_id, "session-a");
+  assert.equal(await repository.nextPosition({ ownerId: owner.id, scope: "session", groupId: group.id }), 1);
+  await appStore.repositories.sessions.delete(owner.id);
+  assert.equal(await repository.find(widget.id), null);
+  assert.equal(await repository.findGroup(group.id), null);
+  assert.ok(await repository.find("builtin:file-explorer"));
 });
 
-test("live interfaces receive one durable widget and preserve closed state", (t) => {
-  const { appStore, state } = fixture(t);
-  const hublot = appStore.repositories.hublots.create({
+test("live interfaces receive one durable widget and preserve closed state", async (t) => {
+  const { appStore, state } = await fixture(t);
+  const hublot = await appStore.repositories.hublots.create({
     id: "live-a", port: 4173, label: "Dashboard", workdir: "/tmp",
     serviceKind: "self_served", status: "open", desiredState: "open", createdAt: "created",
   });
-  const first = ensurePinnedHublot(state, hublot);
-  const second = ensurePinnedHublot(state, hublot);
+  const first = await ensurePinnedHublot(state, hublot);
+  const second = await ensurePinnedHublot(state, hublot);
   assert.equal(first.id, second.id);
-  assert.equal(appStore.repositories.pinnedWidgets.list().filter((row) => row.hublot_id === hublot.id).length, 1);
-  appStore.repositories.hublots.update(hublot.id, { status: "closed", desired_state: "closed", public_url: null });
-  const listed = listPinnedWidgets(state, { resolveSafePath: (path) => path, listTunnels: () => [] });
+  assert.equal(await ((await appStore.repositories.pinnedWidgets.list()).filter((row) => row.hublot_id === hublot.id)).length, 1);
+  await appStore.repositories.hublots.update(hublot.id, { status: "closed", desired_state: "closed", public_url: null });
+  const listed = await listPinnedWidgets(state, { resolveSafePath: (path) => path, listTunnels: () => [] });
   assert.equal(listed.widgets.find((widget) => widget.id === first.id).availability, "closed");
 
-  const owner = appStore.repositories.sessions.upsert({
+  const owner = await appStore.repositories.sessions.upsert({
     backend: "sqlite", sessionId: "session-a", storagePath: "/tmp/agent.sqlite", createdAt: "created",
   });
-  appStore.repositories.hublots.update(hublot.id, { owner_id: owner.id });
-  const moved = ensurePinnedHublot(state, appStore.repositories.hublots.find(hublot.id));
+  await appStore.repositories.hublots.update(hublot.id, { owner_id: owner.id });
+  const moved = await ensurePinnedHublot(state, await appStore.repositories.hublots.find(hublot.id));
   assert.equal(moved.scope, "session");
   assert.equal(moved.owner_id, owner.id);
   assert.equal(moved.position, 0);
 });
 
 test("widget routes classify files, render Markdown natively, group, move, and unpin", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   writeFileSync(join(root, "notes.md"), "# Native\n\nMarkdown");
   mkdirSync(join(root, "media"));
   writeFileSync(join(root, "media", "photo.png"), Buffer.from([1, 2, 3]));
@@ -115,7 +115,7 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   assert.equal(created.body.widget.availability, "ready");
 
   const content = response();
-  routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
+  await routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
   assert.equal(content.body.content, "# Native\n\nMarkdown");
 
   const grouped = response();
@@ -127,12 +127,12 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   assert.equal(moved.body.widget.groupId, grouped.body.group.id);
 
   const removed = response();
-  routes["DELETE /pinned-widgets"]({}, removed, new URL(`http://localhost/pinned-widgets?id=${created.body.widget.id}`));
+  await routes["DELETE /pinned-widgets"]({}, removed, new URL(`http://localhost/pinned-widgets?id=${created.body.widget.id}`));
   assert.equal(removed.status, 200);
 });
 
 test("an invalid widget label does not partially apply a requested move", async (t) => {
-  const { root, routes, appStore } = fixture(t);
+  const { root, routes, appStore } = await fixture(t);
   const path = join(root, "atomic.md");
   writeFileSync(path, "# Atomic");
   const created = response();
@@ -145,11 +145,11 @@ test("an invalid widget label does not partially apply a requested move", async 
     id: created.body.widget.id, groupId: grouped.body.group.id, label: "   ",
   }), patched);
   assert.equal(patched.status, 400);
-  assert.equal(appStore.repositories.pinnedWidgets.find(created.body.widget.id).group_id, null);
+  assert.equal((await appStore.repositories.pinnedWidgets.find(created.body.widget.id)).group_id, null);
 });
 
 test("widgets move between session-only and workspace-visible sections", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   writeFileSync(join(root, "shared.md"), "# Shared");
 
   const created = response();
@@ -166,7 +166,7 @@ test("widgets move between session-only and workspace-visible sections", async (
   assert.equal(madeDirectoryVisible.body.widget.sessionId, null);
 
   const visibleToAnotherSession = response();
-  routes["GET /pinned-widgets"]({}, visibleToAnotherSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-b"));
+  await routes["GET /pinned-widgets"]({}, visibleToAnotherSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-b"));
   assert.ok(visibleToAnotherSession.body.widgets.some((widget) => widget.id === created.body.widget.id));
 
   const madeSessionOnly = response();
@@ -177,12 +177,12 @@ test("widgets move between session-only and workspace-visible sections", async (
   assert.equal(madeSessionOnly.body.widget.sessionId, "session-b");
 
   const hiddenFromOriginalSession = response();
-  routes["GET /pinned-widgets"]({}, hiddenFromOriginalSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
+  await routes["GET /pinned-widgets"]({}, hiddenFromOriginalSession, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
   assert.ok(!hiddenFromOriginalSession.body.widgets.some((widget) => widget.id === created.body.widget.id));
 });
 
 test("groups and their widgets move together between visibility sections", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   writeFileSync(join(root, "grouped.md"), "# Grouped");
 
   const grouped = response();
@@ -201,7 +201,7 @@ test("groups and their widgets move together between visibility sections", async
   assert.equal(moved.body.group.session_id, "session-a");
 
   const listed = response();
-  routes["GET /pinned-widgets"]({}, listed, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
+  await routes["GET /pinned-widgets"]({}, listed, new URL("http://localhost/pinned-widgets?scope=session&sessionId=session-a"));
   const widget = listed.body.widgets.find((item) => item.id === created.body.widget.id);
   assert.equal(widget.scope, "session");
   assert.equal(widget.sessionId, "session-a");
@@ -209,7 +209,7 @@ test("groups and their widgets move together between visibility sections", async
 });
 
 test("deleting a group with its widgets preserves the source artifacts", async (t) => {
-  const { root, routes, appStore } = fixture(t);
+  const { root, routes, appStore } = await fixture(t);
   const paths = [join(root, "one.md"), join(root, "two.png")];
   writeFileSync(paths[0], "# One");
   writeFileSync(paths[1], Buffer.from([1, 2, 3]));
@@ -224,11 +224,11 @@ test("deleting a group with its widgets preserves the source artifacts", async (
   }
 
   const removed = response();
-  routes["DELETE /pinned-widget-groups"]({}, removed, new URL(`http://localhost/pinned-widget-groups?id=${grouped.body.group.id}&deleteWidgets=1`));
+  await routes["DELETE /pinned-widget-groups"]({}, removed, new URL(`http://localhost/pinned-widget-groups?id=${grouped.body.group.id}&deleteWidgets=1`));
   assert.equal(removed.status, 200);
   assert.deepEqual(removed.body.deletedWidgets, widgetIds);
-  assert.equal(appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id), null);
-  assert.ok(widgetIds.every((id) => appStore.repositories.pinnedWidgets.find(id) === null));
+  assert.equal(await appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id), null);
+  assert.ok(widgetIds.every(async (id) => await appStore.repositories.pinnedWidgets.find(id) === null));
   assert.ok(paths.every(existsSync));
 });
 
@@ -251,13 +251,13 @@ test("monitoring script materialization confines widget ids and rejects unknown 
   }), /invalid monitoring widget id/);
   assert.equal(readdirSync(root).length, 0);
   await assert.rejects(
-    runMonitoringScript({ kind: "monitoring" }, "invalid", { resolveSafePath: (path) => path }),
+    async () => await runMonitoringScript({ kind: "monitoring" }, "invalid", { resolveSafePath: (path) => path }),
     /monitoring mode must be preview or content/,
   );
 });
 
 test("failed monitoring widget creation removes newly materialized scripts", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   const monitorRoot = join(root, ".oyster", "monitoring-widgets");
   const base = {
     previewScript: "#!/bin/sh\ntrue",
@@ -274,7 +274,7 @@ test("failed monitoring widget creation removes newly materialized scripts", asy
 });
 
 test("monitoring widgets persist scripts and execute preview and viewer content on demand", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   writeFileSync(join(root, "tracked.txt"), "ready\n");
   const created = response();
   await routes["POST /pinned-widgets"](request({
@@ -306,7 +306,7 @@ test("monitoring widgets persist scripts and execute preview and viewer content 
 });
 
 test("mutation routes reject JSON values that are not objects", async (t) => {
-  const { routes } = fixture(t);
+  const { routes } = await fixture(t);
   for (const route of ["POST /pinned-widgets", "PATCH /pinned-widgets", "POST /pinned-widget-groups", "PATCH /pinned-widget-groups"]) {
     const res = response();
     await routes[route](request(null), res);
@@ -316,14 +316,14 @@ test("mutation routes reject JSON values that are not objects", async (t) => {
 });
 
 test("built-in widgets cannot be moved into session ownership or indirectly deleted with a group", async (t) => {
-  const { routes, appStore } = fixture(t);
+  const { routes, appStore } = await fixture(t);
 
   const moved = response();
   await routes["PATCH /pinned-widgets"](request({
     id: "builtin:file-explorer", scope: "session", sessionId: "session-a",
   }), moved);
   assert.equal(moved.status, 409);
-  assert.equal(appStore.repositories.pinnedWidgets.find("builtin:file-explorer").scope, "workspace");
+  assert.equal((await appStore.repositories.pinnedWidgets.find("builtin:file-explorer")).scope, "workspace");
 
   const grouped = response();
   await routes["POST /pinned-widget-groups"](request({ name: "Tools", scope: "workspace" }), grouped);
@@ -334,16 +334,16 @@ test("built-in widgets cannot be moved into session ownership or indirectly dele
   assert.equal(placed.status, 200);
 
   const removed = response();
-  routes["DELETE /pinned-widget-groups"]({}, removed, new URL(
+  await routes["DELETE /pinned-widget-groups"]({}, removed, new URL(
     `http://localhost/pinned-widget-groups?id=${grouped.body.group.id}&deleteWidgets=1`,
   ));
   assert.equal(removed.status, 409);
-  assert.ok(appStore.repositories.pinnedWidgets.find("builtin:file-explorer"));
-  assert.ok(appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id));
+  assert.ok(await appStore.repositories.pinnedWidgets.find("builtin:file-explorer"));
+  assert.ok(await appStore.repositories.pinnedWidgets.findGroup(grouped.body.group.id));
 });
 
 test("widget creation rejects malformed scopes and credential-bearing links", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   const path = join(root, "notes.md");
   writeFileSync(path, "# Notes");
 
@@ -363,7 +363,7 @@ test("widget creation rejects malformed scopes and credential-bearing links", as
 });
 
 test("standalone HTML of any size is streamed as a sandboxed pinned preview artifact", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   const path = join(root, "report.html");
   const html = `<!doctype html><html><head><style>body{color:navy}</style></head><body><h1>Report</h1><!--${"x".repeat(6 * 1024 * 1024)}--></body></html>`;
   writeFileSync(path, html);
@@ -377,7 +377,7 @@ test("standalone HTML of any size is streamed as a sandboxed pinned preview arti
   req.headers = {};
   const preview = streamResponse();
   const finished = new Promise((resolvePromise) => preview.on("finish", resolvePromise));
-  routes["GET /pinned-widget-html"](req, preview, new URL(`http://localhost/pinned-widget-html?id=${created.body.widget.id}`));
+  await routes["GET /pinned-widget-html"](req, preview, new URL(`http://localhost/pinned-widget-html?id=${created.body.widget.id}`));
   await finished;
   assert.equal(preview.status, 200);
   assert.equal(preview.headers["content-length"], Buffer.byteLength(html));
@@ -386,12 +386,12 @@ test("standalone HTML of any size is streamed as a sandboxed pinned preview arti
   assert.equal(preview.body().toString(), html);
 
   const content = response();
-  routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
+  await routes["GET /pinned-widget-content"]({}, content, new URL(`http://localhost/pinned-widget-content?id=${created.body.widget.id}`));
   assert.equal(content.status, 415);
 });
 
 test("media route streams safe ranges by widget identity", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   const bytes = Buffer.from("0123456789");
   const path = join(root, "clip.mp4");
   writeFileSync(path, bytes);
@@ -416,7 +416,7 @@ test("media route streams safe ranges by widget identity", async (t) => {
 });
 
 test("SVG artifacts stream only through the sandboxed native image viewer", async (t) => {
-  const { root, routes } = fixture(t);
+  const { root, routes } = await fixture(t);
   const path = join(root, "vector.svg");
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect width="10" height="10"/></svg>');
   writeFileSync(path, svg);
@@ -475,7 +475,7 @@ test("concurrent video preparation initializes and shares the transcode registry
 
 test("AVI artifacts open in the native player through a browser-compatible MP4 conversion", async (t) => {
   let converted = 0;
-  const { root, routes } = fixture(t, {
+  const { root, routes } = await fixture(t, {
     prepareVideo: async (_state, media) => {
       converted++;
       assert.equal(media.mimeType, "video/x-msvideo");

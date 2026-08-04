@@ -35,53 +35,53 @@ function catalog(overrides = {}) {
   return { ...value, ...overrides };
 }
 
-test("repository preflight requires every application boundary and probes the stable connection", () => {
+test("repository preflight requires every application boundary and probes the stable connection", async () => {
   let hydrated = 0;
   const store = appStore({
     hydrate() { hydrated += 1; return { incompleteOperations: [] }; },
   });
-  assert.deepEqual(validateRepositoryAvailability(store), { incompleteOperations: [] });
+  assert.deepEqual(await validateRepositoryAvailability(store), { incompleteOperations: [] });
   assert.equal(hydrated, 1);
 
   delete store.repositories.pinnedWidgets;
-  assert.throws(
-    () => validateRepositoryAvailability(store),
+  await assert.rejects(
+    async () => await validateRepositoryAvailability(store),
     /repository "pinnedWidgets" is unavailable \(missing list\(\)\)/,
   );
   assert.equal(hydrated, 1, "an incomplete registry must fail before database access");
 
-  assert.throws(
-    () => validateRepositoryAvailability(appStore({ hydrate: () => ({}) })),
+  await assert.rejects(
+    async () => await validateRepositoryAvailability(appStore({ hydrate: () => ({}) })),
     (error) => error.message === "application repository access failed"
       && error.cause?.message.includes("invalid snapshot"),
   );
 });
 
-test("repository and catalog access failures retain their original causes", () => {
+test("repository and catalog access failures retain their original causes", async () => {
   const databaseFailure = new Error("database is closed");
-  assert.throws(
-    () => validateRepositoryAvailability(appStore({ hydrate() { throw databaseFailure; } })),
+  await assert.rejects(
+    async () => await validateRepositoryAvailability(appStore({ hydrate() { throw databaseFailure; } })),
     (error) => error.message === "application repository access failed" && error.cause === databaseFailure,
   );
 
   const catalogFailure = new Error("malformed session schema");
-  assert.throws(
-    () => validateCatalogAccess(catalog({ list() { throw catalogFailure; } }), { backend: "jsonl", cwd: "/workspace" }),
+  await assert.rejects(
+    async () => await validateCatalogAccess(catalog({ list() { throw catalogFailure; } }), { backend: "jsonl", cwd: "/workspace" }),
     (error) => error.message === "cannot read jsonl session catalog" && error.cause === catalogFailure,
   );
 });
 
-test("catalog and constructed-dependency contracts fail before a candidate is usable", () => {
-  assert.throws(
-    () => validateCatalogAccess(catalog({ backend: "sqlite" }), { backend: "jsonl" }),
+test("catalog and constructed-dependency contracts fail before a candidate is usable", async () => {
+  await assert.rejects(
+    async () => await validateCatalogAccess(catalog({ backend: "sqlite" }), { backend: "jsonl" }),
     /catalog backend mismatch/,
   );
-  assert.throws(
-    () => validateCatalogAccess(catalog({ tree: undefined }), { backend: "jsonl" }),
+  await assert.rejects(
+    async () => await validateCatalogAccess(catalog({ tree: undefined }), { backend: "jsonl" }),
     /catalog is missing tree\(\)/,
   );
-  assert.throws(
-    () => validateCatalogAccess(catalog({ list: () => ({}) }), { backend: "jsonl" }),
+  await assert.rejects(
+    async () => await validateCatalogAccess(catalog({ list: () => ({}) }), { backend: "jsonl" }),
     /list\(\) must return an array/,
   );
 

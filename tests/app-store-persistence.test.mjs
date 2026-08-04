@@ -21,10 +21,10 @@ function fixture(t) {
   return { path, databases, Database: CapturingDatabase };
 }
 
-test("foundation constraints and explicit rollback preserve consistent rows", (t) => {
+test("foundation constraints and explicit rollback preserve consistent rows", async (t) => {
   const { path, databases, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   const database = databases[0];
 
   database.prepare("INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)")
@@ -41,96 +41,96 @@ test("foundation constraints and explicit rollback preserve consistent rows", (t
   assert.equal(database.prepare("SELECT count(*) AS count FROM operations").get().count, 0);
 });
 
-test("session owners are unique and durable operations retain their journal after owner deletion", (t) => {
+test("session owners are unique and durable operations retain their journal after owner deletion", async (t) => {
   const { path, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
 
-  const owner = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "created" });
-  const duplicate = store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "later" });
+  const owner = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "created" });
+  const duplicate = await store.repositories.sessions.upsert({ backend: "sqlite", sessionId: "session-1", storagePath: null, createdAt: "later" });
   assert.equal(duplicate.id, owner.id);
   assert.equal(duplicate.created_at, "created");
   assert.equal(duplicate.status, "active");
   assert.equal(duplicate.archived, 0);
-  assert.equal(store.repositories.sessions.setArchived(owner.id, true), 1);
-  assert.equal(store.repositories.sessions.find({ backend: "sqlite", sessionId: "session-1" }).archived, 1);
+  assert.equal(await store.repositories.sessions.setArchived(owner.id, true), 1);
+  assert.equal((await store.repositories.sessions.find({ backend: "sqlite", sessionId: "session-1" })).archived, 1);
 
-  store.transaction((repositories) => repositories.operations.create({
+  await store.transaction(async (repositories) => await repositories.operations.create({
     id: "delete-1", ownerId: owner.id, kind: "delete_session", status: "pending",
     stage: "persisted", payload: '{"sessionId":"session-1"}', createdAt: "created",
   }));
-  assert.equal(store.repositories.operations.find("delete-1").owner_id, owner.id);
-  assert.equal(store.repositories.sessions.delete(owner.id), 1);
-  assert.equal(store.repositories.operations.find("delete-1").owner_id, null);
-  assert.equal(store.repositories.operations.update("delete-1", { status: "completed", stage: "done", updatedAt: "finished" }), 1);
-  assert.equal(store.repositories.operations.find("delete-1").status, "completed");
+  assert.equal((await store.repositories.operations.find("delete-1")).owner_id, owner.id);
+  assert.equal(await store.repositories.sessions.delete(owner.id), 1);
+  assert.equal((await store.repositories.operations.find("delete-1")).owner_id, null);
+  assert.equal(await store.repositories.operations.update("delete-1", { status: "completed", stage: "done", updatedAt: "finished" }), 1);
+  assert.equal((await store.repositories.operations.find("delete-1")).status, "completed");
 });
 
-test("checkpoint repository atomically replaces and reloads backend-neutral records", (t) => {
+test("checkpoint repository atomically replaces and reloads backend-neutral records", async (t) => {
   const { path, Database } = fixture(t);
-  const first = openAppStore({ databasePath: path, Database });
+  const first = await openAppStore({ databasePath: path, Database });
   const checkpoint = {
     hash: "abc123", anchorId: "entry-1", leafId: "entry-2", dir: "/work",
     sessionRef: { backend: "sqlite", id: "session-1", storagePath: "/agent/sessions.sqlite" },
     message: "saved", timestamp: "2026-07-16T00:00:00.000Z",
   };
-  first.repositories.checkpoints.save({ "session-1": [checkpoint] });
-  assert.deepEqual(first.repositories.checkpoints.load(), { "session-1": [checkpoint] });
-  first.close();
+  await first.repositories.checkpoints.save({ "session-1": [checkpoint] });
+  assert.deepEqual(await first.repositories.checkpoints.load(), { "session-1": [checkpoint] });
+  await first.close();
 
-  const second = openAppStore({ databasePath: path, Database });
-  t.after(() => second.close());
-  assert.deepEqual(second.repositories.checkpoints.load(), { "session-1": [checkpoint] });
-  second.repositories.checkpoints.save({});
-  assert.deepEqual(second.repositories.checkpoints.load(), {});
+  const second = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await second.close());
+  assert.deepEqual(await second.repositories.checkpoints.load(), { "session-1": [checkpoint] });
+  await second.repositories.checkpoints.save({});
+  assert.deepEqual(await second.repositories.checkpoints.load(), {});
 });
 
-test("checkpoint row operations isolate identities and replace fork inheritance", (t) => {
+test("checkpoint row operations isolate identities and replace fork inheritance", async (t) => {
   const { path, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   const sqliteRef = { backend: "sqlite", id: "shared", storagePath: "/agent/sessions.sqlite" };
   const jsonlRef = { backend: "jsonl", id: "shared", storagePath: "/agent/sessions/shared.jsonl" };
   const sqliteCheckpoint = { hash: "same", anchorId: "sqlite-entry", sessionRef: sqliteRef, timestamp: "sqlite-time" };
   const jsonlCheckpoint = { hash: "same", anchorId: "jsonl-entry", sessionRef: jsonlRef, sessionPath: jsonlRef.storagePath, timestamp: "jsonl-time" };
 
-  assert.deepEqual(store.repositories.checkpoints.record(sqliteRef, sqliteCheckpoint), sqliteCheckpoint);
-  assert.deepEqual(store.repositories.checkpoints.record(jsonlRef, jsonlCheckpoint), jsonlCheckpoint);
-  assert.deepEqual(store.repositories.checkpoints.listForSession(sqliteRef), [sqliteCheckpoint]);
-  assert.deepEqual(store.repositories.checkpoints.listBySessionId("shared", "jsonl"), [jsonlCheckpoint]);
-  assert.deepEqual(store.repositories.checkpoints.findBySessionId("shared", "sqlite", "same"), sqliteCheckpoint);
+  assert.deepEqual(await store.repositories.checkpoints.record(sqliteRef, sqliteCheckpoint), sqliteCheckpoint);
+  assert.deepEqual(await store.repositories.checkpoints.record(jsonlRef, jsonlCheckpoint), jsonlCheckpoint);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(sqliteRef), [sqliteCheckpoint]);
+  assert.deepEqual(await store.repositories.checkpoints.listBySessionId("shared", "jsonl"), [jsonlCheckpoint]);
+  assert.deepEqual(await store.repositories.checkpoints.findBySessionId("shared", "sqlite", "same"), sqliteCheckpoint);
 
   const forkRef = { backend: "sqlite", id: "fork", storagePath: sqliteRef.storagePath };
   const inherited = [{ ...sqliteCheckpoint, sessionRef: forkRef }];
-  store.repositories.checkpoints.replaceForSession(forkRef, inherited);
-  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), inherited);
-  store.repositories.checkpoints.replaceForSession(forkRef, []);
-  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), []);
+  await store.repositories.checkpoints.replaceForSession(forkRef, inherited);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(forkRef), inherited);
+  await store.repositories.checkpoints.replaceForSession(forkRef, []);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(forkRef), []);
 });
 
-test("deleting one app-session owner cascades only its checkpoint rows", (t) => {
+test("deleting one app-session owner cascades only its checkpoint rows", async (t) => {
   const { path, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   const rootRef = { backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" };
   const forkRef = { backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" };
   const rootCheckpoint = { hash: "root-hash", anchorId: "root-entry", sessionRef: rootRef, timestamp: "root-time" };
   const forkCheckpoint = { hash: "fork-hash", anchorId: "fork-entry", sessionRef: forkRef, timestamp: "fork-time" };
-  store.repositories.checkpoints.record(rootRef, rootCheckpoint);
-  store.repositories.checkpoints.record(forkRef, forkCheckpoint);
-  const rootOwner = store.repositories.sessions.find({ backend: rootRef.backend, sessionId: rootRef.id, storagePath: rootRef.storagePath });
+  await store.repositories.checkpoints.record(rootRef, rootCheckpoint);
+  await store.repositories.checkpoints.record(forkRef, forkCheckpoint);
+  const rootOwner = await store.repositories.sessions.find({ backend: rootRef.backend, sessionId: rootRef.id, storagePath: rootRef.storagePath });
 
-  store.transaction((repositories) => repositories.sessions.delete(rootOwner.id));
+  await store.transaction(async (repositories) => await repositories.sessions.delete(rootOwner.id));
 
-  assert.deepEqual(store.repositories.checkpoints.listForSession(rootRef), []);
-  assert.deepEqual(store.repositories.checkpoints.listForSession(forkRef), [forkCheckpoint]);
-  assert.equal(store.repositories.sessions.find({ backend: forkRef.backend, sessionId: forkRef.id, storagePath: forkRef.storagePath }).status, "active");
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(rootRef), []);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(forkRef), [forkCheckpoint]);
+  assert.equal((await store.repositories.sessions.find({ backend: forkRef.backend, sessionId: forkRef.id, storagePath: forkRef.storagePath })).status, "active");
 });
 
-test("startup hydration rebuilds durable snapshots without starting resources", (t) => {
+test("startup hydration rebuilds durable snapshots without starting resources", async (t) => {
   const { path, databases, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   const database = databases[0];
   database.prepare("INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)")
     .run("workdir", '"/workspace"', "2026-07-16T00:00:00.000Z");
@@ -138,7 +138,7 @@ test("startup hydration rebuilds durable snapshots without starting resources", 
   insertOperation.run("pending", "delete_session", "running", "agent_delete", "2026-07-16T00:00:00.000Z", "2026-07-16T00:00:01.000Z");
   insertOperation.run("done", "delete_session", "completed", "done", "2026-07-15T00:00:00.000Z", "2026-07-15T00:00:01.000Z");
 
-  assert.deepEqual(store.hydrate(), {
+  assert.deepEqual(await store.hydrate(), {
     settings: [{ key: "workdir", value: '"/workspace"', updated_at: "2026-07-16T00:00:00.000Z" }],
     hublots: [],
     incompleteOperations: [{
@@ -148,61 +148,61 @@ test("startup hydration rebuilds durable snapshots without starting resources", 
   });
 });
 
-test("startup reconciliation marks operations interrupted before hydration", (t) => {
+test("startup reconciliation marks operations interrupted before hydration", async (t) => {
   const { path, databases, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   databases[0].prepare("INSERT INTO operations(id, kind, status, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
     .run("running", "delete_session", "running", "agent_delete", "created", "started");
 
-  assert.equal(store.reconcileInterruptedOperations("restarted"), 1);
-  assert.equal(store.reconcileInterruptedOperations("again"), 0);
-  assert.deepEqual(store.hydrate().incompleteOperations, [{
+  assert.equal(await store.reconcileInterruptedOperations("restarted"), 1);
+  assert.equal(await store.reconcileInterruptedOperations("again"), 0);
+  assert.deepEqual((await store.hydrate()).incompleteOperations, [{
     id: "running", owner_id: null, kind: "delete_session", status: "interrupted", stage: "agent_delete",
     payload: null, error: "server restarted during operation", created_at: "created", updated_at: "restarted",
   }]);
 });
 
-test("repository atomic writes compose with store transactions and roll back together", (t) => {
+test("repository atomic writes compose with store transactions and roll back together", async (t) => {
   const { path, Database } = fixture(t);
-  const store = openAppStore({ databasePath: path, Database });
-  t.after(() => store.close());
+  const store = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await store.close());
   const reference = { backend: "sqlite", id: "atomic", storagePath: "/agent/sessions.sqlite" };
   const checkpoint = { hash: "hash", anchorId: "anchor", sessionRef: reference, timestamp: "created" };
 
-  assert.throws(() => store.transaction((repositories) => {
-    repositories.checkpoints.record(reference, checkpoint);
-    const owner = repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath });
-    repositories.routines.upsert({ id: "routine", ownerId: owner.id, name: "atomic.sh", script: "echo test", now: "created" });
-    repositories.routines.createRun({ id: "run", routineId: "routine", mode: "run", startedAt: "started" });
-    repositories.routines.appendLog("run", "stdout", "not committed", "logged");
+  await assert.rejects(() => store.transaction(async (repositories) => {
+    await repositories.checkpoints.record(reference, checkpoint);
+    const owner = await repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath });
+    await repositories.routines.upsert({ id: "routine", ownerId: owner.id, name: "atomic.sh", script: "echo test", now: "created" });
+    await repositories.routines.createRun({ id: "run", routineId: "routine", mode: "run", startedAt: "started" });
+    await repositories.routines.appendLog("run", "stdout", "not committed", "logged");
     throw new Error("roll everything back");
   }), /roll everything back/);
 
-  assert.deepEqual(store.repositories.checkpoints.listForSession(reference), []);
-  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
-  assert.equal(store.repositories.routines.findByName("atomic.sh"), null);
+  assert.deepEqual(await store.repositories.checkpoints.listForSession(reference), []);
+  assert.equal(await store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
+  assert.equal(await store.repositories.routines.findByName("atomic.sh"), null);
 });
 
-test("closing and reopening the app store preserves data without rerunning migrations", (t) => {
+test("closing and reopening the app store preserves data without rerunning migrations", async (t) => {
   const { path, databases, Database } = fixture(t);
-  const first = openAppStore({ databasePath: path, Database });
+  const first = await openAppStore({ databasePath: path, Database });
   databases[0].prepare("INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)")
     .run("workdir", '"/workspace"', "2026-07-16T00:00:00.000Z");
-  first.close();
+  await first.close();
 
-  const second = openAppStore({ databasePath: path, Database });
-  t.after(() => second.close());
+  const second = await openAppStore({ databasePath: path, Database });
+  t.after(async () => await second.close());
   assert.deepEqual(second.migrationStatus, { currentVersion: 15, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
   assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 15);
 });
 
-test("WAL permits concurrent readers and committed cross-connection writes", (t) => {
+test("WAL permits concurrent readers and committed cross-connection writes", async (t) => {
   const { path, databases, Database } = fixture(t);
-  const first = openAppStore({ databasePath: path, Database });
-  const second = openAppStore({ databasePath: path, Database });
-  t.after(() => { second.close(); first.close(); });
+  const first = await openAppStore({ databasePath: path, Database });
+  const second = await openAppStore({ databasePath: path, Database });
+  t.after(async () => { await second.close(); await first.close(); });
   const [writer, reader] = databases;
 
   assert.equal(writer.prepare("PRAGMA journal_mode").get().journal_mode, "wal");

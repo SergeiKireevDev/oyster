@@ -12,26 +12,26 @@ function fixture(t) {
   return path;
 }
 
-test("routine definitions, bindings, progress, logs, results, and interruption survive restart", (t) => {
+test("routine definitions, bindings, progress, logs, results, and interruption survive restart", async (t) => {
   const path = fixture(t);
-  let store = openAppStore({ databasePath: path });
+  let store = await openAppStore({ databasePath: path });
   const routines = store.repositories.routines;
-  const owner = store.repositories.sessions.upsert({
+  const owner = await store.repositories.sessions.upsert({
     backend: "jsonl", sessionId: "session-a", storagePath: "/agent/sessions/session-a.jsonl", createdAt: "created",
   });
-  const definition = routines.upsert({
+  const definition = await routines.upsert({
     id: "routine-1", ownerId: owner.id, name: "build.sh", script: "#!/bin/sh\necho build\n", cwd: "/workspace", now: "created",
   });
-  routines.createRun({ id: "unfinished", routineId: definition.id, mode: "run", status: "running", startedAt: "started" });
-  routines.updateProgress("unfinished", 42, "building");
-  routines.appendLog("unfinished", "stdout", "durable output", "logged");
-  routines.createRun({ id: "complete", routineId: definition.id, mode: "teardown", status: "teardown", startedAt: "earlier" });
-  routines.appendLog("complete", "stderr", "teardown output", "complete-logged");
-  routines.finishRun("complete", { status: "idle", result: "removed", finishedAt: "finished", exitCode: 0 });
-  store.close();
+  await routines.createRun({ id: "unfinished", routineId: definition.id, mode: "run", status: "running", startedAt: "started" });
+  await routines.updateProgress("unfinished", 42, "building");
+  await routines.appendLog("unfinished", "stdout", "durable output", "logged");
+  await routines.createRun({ id: "complete", routineId: definition.id, mode: "teardown", status: "teardown", startedAt: "earlier" });
+  await routines.appendLog("complete", "stderr", "teardown output", "complete-logged");
+  await routines.finishRun("complete", { status: "idle", result: "removed", finishedAt: "finished", exitCode: 0 });
+  await store.close();
 
-  store = openAppStore({ databasePath: path });
-  const restoredDefinition = store.repositories.routines.findByName("build.sh");
+  store = await openAppStore({ databasePath: path });
+  const restoredDefinition = await store.repositories.routines.findByName("build.sh");
   assert.deepEqual({
     id: restoredDefinition.id,
     sessionId: restoredDefinition.session_id,
@@ -45,21 +45,21 @@ test("routine definitions, bindings, progress, logs, results, and interruption s
     cwd: "/workspace",
     revision: 1,
   });
-  assert.equal(store.reconcileInterruptedRoutineRuns("restarted"), 1);
-  assert.equal(store.reconcileInterruptedRoutineRuns("later"), 0);
+  assert.equal(await store.reconcileInterruptedRoutineRuns("restarted"), 1);
+  assert.equal(await store.reconcileInterruptedRoutineRuns("later"), 0);
 
-  const interrupted = store.repositories.routines.findRun("unfinished");
+  const interrupted = await store.repositories.routines.findRun("unfinished");
   assert.equal(interrupted.status, "interrupted");
   assert.equal(interrupted.finished_at, "restarted");
   assert.equal(interrupted.error, "server restarted before the routine process finished");
   assert.equal(interrupted.progress, 42);
   assert.equal(interrupted.message, "building");
-  assert.deepEqual(store.repositories.routines.listLogs("unfinished").map((line) => line.text), ["durable output"]);
+  assert.deepEqual((await store.repositories.routines.listLogs("unfinished")).map((line) => line.text), ["durable output"]);
 
-  const complete = store.repositories.routines.findRun("complete");
+  const complete = await store.repositories.routines.findRun("complete");
   assert.equal(complete.status, "idle");
   assert.equal(complete.result, "removed");
   assert.equal(complete.finished_at, "finished");
-  assert.deepEqual(store.repositories.routines.listLogs("complete").map((line) => [line.stream, line.text]), [["stderr", "teardown output"]]);
-  store.close();
+  assert.deepEqual((await store.repositories.routines.listLogs("complete")).map((line) => [line.stream, line.text]), [["stderr", "teardown output"]]);
+  await store.close();
 });

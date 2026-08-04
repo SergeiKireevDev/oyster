@@ -22,15 +22,15 @@ test("app is a small disposable composition root", () => {
 
 test("stable core owns one app-store service across application reloads", () => {
   assert.equal((stableSource.match(/openAppStore\(\{/g) ?? []).length, 1);
-  assert.match(stableSource, /const appStore = openAppStore\(\{ databasePath: config\.OYSTER_DB_PATH \}\);/);
+  assert.match(stableSource, /const appStore = await openAppStore\(\{ databasePath: config\.OYSTER_DB_PATH \}\);/);
   assert.match(stableSource, /const state = \{[\s\S]*?appStore,/);
   assert.match(stableSource, /const generation = \+\+nextApplicationGeneration;[\s\S]*buildCandidate\(state, \{ generation \}\)/);
   assert.match(stableSource, /if \(shutdownPromise\) return shutdownPromise;/);
-  assert.match(stableSource, /server\.close\(\);[\s\S]*Promise\.race\(\[cleanup, timeout\]\)[\s\S]*state\.appStore\.flush\(\);[\s\S]*state\.appStore\.close\(\);/);
+  assert.match(stableSource, /server\.close\(\);[\s\S]*Promise\.race\(\[cleanup, timeout\]\)[\s\S]*await state\.appStore\.flush\(\);[\s\S]*await state\.appStore\.close\(\);/);
   assert.ok(stableSource.indexOf("const appStore = openAppStore") < stableSource.indexOf("appStore.reconcileInterruptedOperations()"));
   assert.ok(stableSource.indexOf("appStore.reconcileInterruptedOperations()") < stableSource.indexOf("appStore.reconcileInterruptedRoutineRuns()"));
-  assert.ok(stableSource.indexOf("appStore.reconcileInterruptedRoutineRuns()") < stableSource.indexOf("const appHydration = appStore.hydrate()"));
-  assert.ok(stableSource.indexOf("const appHydration = appStore.hydrate()") < stableSource.indexOf("await loadApp();"));
+  assert.ok(stableSource.indexOf("appStore.reconcileInterruptedRoutineRuns()") < stableSource.indexOf("const appHydration = await appStore.hydrate()"));
+  assert.ok(stableSource.indexOf("const appHydration = await appStore.hydrate()") < stableSource.indexOf("await loadApp();"));
   assert.ok(stableSource.indexOf("await loadApp();") < stableSource.indexOf("server.listen("));
   assert.match(stableSource, /const appSettings = createAppSettings\(\{ repository: appStore\.repositories\.settings, startupWorkdir: config\.PI_DIR \}\)/);
   assert.match(stableSource, /currentDir: hydratedSettings\.currentWorkdir,[\s\S]*defaultRunnerId: hydratedSettings\.defaultRunnerId/);

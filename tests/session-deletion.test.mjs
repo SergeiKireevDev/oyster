@@ -7,18 +7,18 @@ import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createSessionDeletionWorkflow } from "../server/persistence/sessionDeletion.mjs";
 import { reconcileSessionDeletions } from "../server/persistence/sessionDeletionReconciler.mjs";
 
-function fixture(t, prefix) {
+async function fixture(t, prefix) {
   const root = mkdtempSync(join(tmpdir(), prefix));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return store;
 }
 
-function pendingDeletion(store, id, sessionId, stage) {
+async function pendingDeletion(store, id, sessionId, stage) {
   const reference = { backend: "sqlite", id: sessionId, storagePath: "/agent/sessions.sqlite" };
-  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId, storagePath: reference.storagePath, createdAt: "created" });
-  store.repositories.sessions.markDeleting(owner.id);
-  store.repositories.operations.create({
+  const owner = await store.repositories.sessions.upsert({ backend: reference.backend, sessionId, storagePath: reference.storagePath, createdAt: "created" });
+  await store.repositories.sessions.markDeleting(owner.id);
+  await store.repositories.operations.create({
     id, ownerId: owner.id, kind: "delete_session", status: "interrupted", stage,
     payload: JSON.stringify({ backend: reference.backend, sessionId, storagePath: reference.storagePath }), createdAt: "created",
   });
@@ -95,9 +95,9 @@ test("a failed journal update retains the last durable stage and does not mask n
 });
 
 test("session deletion journals each cross-store stage and completes the app cascade before broadcast", async (t) => {
-  const store = fixture(t, "oyster-session-delete-");
+  const store = await fixture(t, "oyster-session-delete-");
   const reference = { backend: "jsonl", id: "session-a", storagePath: "/agent/sessions/a.jsonl" };
-  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
+  const owner = await store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
   const order = [];
   let tick = 0;
   const removeStatuses = [];
@@ -115,18 +115,18 @@ test("session deletion journals each cross-store stage and completes the app cas
     stopRoutines: () => { order.push("routines"); return ["build.sh"]; },
     deleteAgentSession: () => { order.push("agent"); return { deleted: reference.storagePath }; },
     deleteRoutines: () => { order.push("routine-definitions"); return ["build.sh"]; },
-    removeRuntime: (runners) => {
+    removeRuntime: async (runners) => {
       order.push("runtime");
       assert.deepEqual(runners, ["r1"]);
-      removeStatuses.push(store.repositories.operations.find("delete-session-a").stage);
+      removeStatuses.push((await store.repositories.operations.find("delete-session-a")).stage);
     },
     broadcast: () => { order.push("broadcast"); },
   });
 
   assert.deepEqual(order, ["runners", "routines", "agent", "hublots", "routine-definitions", "runtime", "broadcast"]);
   assert.deepEqual(removeStatuses, ["app_resources_deleted"]);
-  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
-  assert.deepEqual(store.repositories.operations.find("delete-session-a"), {
+  assert.equal(await store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }), null);
+  assert.deepEqual(await store.repositories.operations.find("delete-session-a"), {
     id: "delete-session-a", owner_id: null, kind: "delete_session", status: "completed", stage: "completed",
     payload: JSON.stringify({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }),
     error: null, created_at: "time-1", updated_at: "time-9",
@@ -138,9 +138,9 @@ test("session deletion journals each cross-store stage and completes the app cas
 });
 
 test("agent deletion failure preserves every owned resource descriptor and database row", async (t) => {
-  const store = fixture(t, "oyster-session-delete-failure-");
+  const store = await fixture(t, "oyster-session-delete-failure-");
   const reference = { backend: "sqlite", id: "session-failure", storagePath: "/agent/sessions.sqlite" };
-  const owner = store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
+  const owner = await store.repositories.sessions.upsert({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath, createdAt: "created" });
   const resources = {
     runners: ["r1"],
     hublots: ["h1"],
@@ -167,17 +167,17 @@ test("agent deletion failure preserves every owned resource descriptor and datab
 
   assert.deepEqual(order, ["stop-runners", "stop-routines", "delete-agent"]);
   assert.deepEqual(resources, before);
-  assert.equal(store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath }).status, "deleting");
-  const operation = store.repositories.operations.find("delete-failure");
+  assert.equal((await store.repositories.sessions.find({ backend: reference.backend, sessionId: reference.id, storagePath: reference.storagePath })).status, "deleting");
+  const operation = await store.repositories.operations.find("delete-failure");
   assert.equal(operation.status, "failed");
   assert.equal(operation.stage, "routines_stopped");
   assert.equal(operation.owner_id, owner.id);
 });
 
 test("startup reconciliation retries agent deletion or infers its completion before cascading owners", async (t) => {
-  const store = fixture(t, "oyster-session-reconcile-");
-  const existing = pendingDeletion(store, "delete-existing", "existing", "routines_stopped");
-  const missing = pendingDeletion(store, "delete-missing", "missing", "routines_stopped");
+  const store = await fixture(t, "oyster-session-reconcile-");
+  const existing = await pendingDeletion(store, "delete-existing", "existing", "routines_stopped");
+  const missing = await pendingDeletion(store, "delete-missing", "missing", "routines_stopped");
   const deleted = [], deletedRoutineOwners = [];
   const results = await reconcileSessionDeletions({
     appStore: store,
@@ -197,21 +197,21 @@ test("startup reconciliation retries agent deletion or infers its completion bef
     { id: "delete-existing", status: "completed" },
     { id: "delete-missing", status: "completed" },
   ]);
-  assert.equal(store.repositories.sessions.find({ backend: "sqlite", sessionId: "existing", storagePath: existing.reference.storagePath }), null);
-  assert.equal(store.repositories.sessions.find({ backend: "sqlite", sessionId: "missing", storagePath: missing.reference.storagePath }), null);
-  assert.equal(store.repositories.operations.find("delete-existing").status, "completed");
-  assert.equal(store.repositories.operations.find("delete-missing").owner_id, null);
+  assert.equal(await store.repositories.sessions.find({ backend: "sqlite", sessionId: "existing", storagePath: existing.reference.storagePath }), null);
+  assert.equal(await store.repositories.sessions.find({ backend: "sqlite", sessionId: "missing", storagePath: missing.reference.storagePath }), null);
+  assert.equal((await store.repositories.operations.find("delete-existing")).status, "completed");
+  assert.equal((await store.repositories.operations.find("delete-missing")).owner_id, null);
 });
 
 test("reconciliation rejects mismatched operation ownership before destructive cleanup", async (t) => {
-  const store = fixture(t, "oyster-session-reconcile-owner-");
-  const first = store.repositories.sessions.upsert({
+  const store = await fixture(t, "oyster-session-reconcile-owner-");
+  const first = await store.repositories.sessions.upsert({
     backend: "sqlite", sessionId: "first", storagePath: "/agent/sessions.sqlite", createdAt: "created",
   });
-  store.repositories.sessions.upsert({
+  await store.repositories.sessions.upsert({
     backend: "sqlite", sessionId: "second", storagePath: "/agent/sessions.sqlite", createdAt: "created",
   });
-  store.repositories.operations.create({
+  await store.repositories.operations.create({
     id: "delete-owner-mismatch", ownerId: first.id, kind: "delete_session", status: "interrupted", stage: "persisted",
     payload: JSON.stringify({ backend: "sqlite", sessionId: "second", storagePath: "/agent/sessions.sqlite" }),
     createdAt: "created",
@@ -238,13 +238,13 @@ test("reconciliation rejects mismatched operation ownership before destructive c
     status: "failed",
     error: "session deletion operation delete-owner-mismatch owner does not match its session reference",
   }]);
-  assert.ok(store.repositories.sessions.find({ backend: "sqlite", sessionId: "first", storagePath: "/agent/sessions.sqlite" }));
-  assert.ok(store.repositories.sessions.find({ backend: "sqlite", sessionId: "second", storagePath: "/agent/sessions.sqlite" }));
+  assert.ok(await store.repositories.sessions.find({ backend: "sqlite", sessionId: "first", storagePath: "/agent/sessions.sqlite" }));
+  assert.ok(await store.repositories.sessions.find({ backend: "sqlite", sessionId: "second", storagePath: "/agent/sessions.sqlite" }));
 });
 
 test("reconciliation records primitive failures and ignores logger failures", async (t) => {
-  const store = fixture(t, "oyster-session-reconcile-errors-");
-  pendingDeletion(store, "delete-primitive-failure", "existing", "routines_stopped");
+  const store = await fixture(t, "oyster-session-reconcile-errors-");
+  await pendingDeletion(store, "delete-primitive-failure", "existing", "routines_stopped");
 
   const results = await reconcileSessionDeletions({
     appStore: store,
@@ -259,7 +259,7 @@ test("reconciliation records primitive failures and ignores logger failures", as
   });
 
   assert.deepEqual(results, [{ id: "delete-primitive-failure", status: "failed", error: "agent store busy" }]);
-  const operation = store.repositories.operations.find("delete-primitive-failure");
+  const operation = await store.repositories.operations.find("delete-primitive-failure");
   assert.equal(operation.status, "failed");
   assert.equal(operation.stage, "routines_stopped");
   assert.equal(operation.error, "agent store busy");
@@ -275,6 +275,6 @@ test("reconciliation validates its repository contracts before reading operation
     transaction() {},
   };
 
-  await assert.rejects(() => reconcileSessionDeletions({ appStore }), /sessionReferences\.validate must be a function/);
+  await assert.rejects(async () => await reconcileSessionDeletions({ appStore }), /sessionReferences\.validate must be a function/);
   assert.equal(listed, false);
 });

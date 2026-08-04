@@ -31,7 +31,7 @@ function callHook(hook, value, name) {
 }
 
 /** Import the legacy checkpoint snapshot without modifying or renaming it. */
-export function importLegacyCheckpoints({
+export async function importLegacyCheckpoints({
   repository,
   sessionReferences,
   sourcePath = LEGACY_CHECKPOINTS_PATH,
@@ -120,18 +120,19 @@ export function importLegacyCheckpoints({
   }
 
   const checkpointsBySession = new Map();
-  const inspections = candidates.map((candidate) => {
+  const inspections = [];
+  for (const candidate of candidates) {
     const { reference, checkpoint } = candidate;
     const sessionKey = `${reference.backend}\0${reference.id}\0${reference.storagePath}`;
     let currentCheckpoints = checkpointsBySession.get(sessionKey);
     if (!currentCheckpoints) {
-      currentCheckpoints = repository.listForSession(reference);
+      currentCheckpoints = await repository.listForSession(reference);
       if (!Array.isArray(currentCheckpoints)) throw new TypeError("checkpoint repository listForSession() must return an array");
       checkpointsBySession.set(sessionKey, currentCheckpoints);
     }
     const current = currentCheckpoints.find((item) => item?.hash === checkpoint.hash && item?.anchorId === checkpoint.anchorId);
-    return { candidate, current };
-  });
+    inspections.push({ candidate, current });
+  }
 
   let existingCount = 0;
   const imports = [];
@@ -152,7 +153,7 @@ export function importLegacyCheckpoints({
     }
   }
   if (apply) {
-    for (const { reference, checkpoint } of imports) repository.record(reference, checkpoint);
+    for (const { reference, checkpoint } of imports) await repository.record(reference, checkpoint);
   }
   const importedCount = imports.length;
   return Object.freeze({

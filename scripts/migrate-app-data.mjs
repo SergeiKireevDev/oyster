@@ -17,13 +17,13 @@ const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi
 const databasePath = resolve(process.env.OYSTER_DB_PATH ?? join(agentDir, "oyster.sqlite"));
 const jsonlRoot = resolve(process.env.PI_SESSION_DIR ?? join(agentDir, "sessions"));
 const sqlitePath = resolve(process.env.PI_SQLITE_PATH ?? join(agentDir, "sessions.sqlite"));
-const appStore = openAppStore({ databasePath });
+const appStore = await openAppStore({ databasePath });
 try {
   const sessionReferences = createSessionReferenceCodec({ agentDir, jsonlRoot, sqlitePath });
   const report = await importLegacyAppData({
     appStore, mode, serviceStopped: true, sessionReferences,
-    resolveOwner(sessionId) {
-      const owners = appStore.repositories.sessions.listBySessionId(sessionId);
+    async resolveOwner(sessionId) {
+      const owners = await appStore.repositories.sessions.listBySessionId(sessionId);
       if (owners.length > 1) throw new Error(`legacy routine binding ${sessionId} matches multiple session owners`);
       return owners[0] ?? null;
     },
@@ -32,5 +32,5 @@ try {
   });
   console.log(JSON.stringify(report, null, 2));
 } finally {
-  appStore.close();
+  await appStore.close();
 }

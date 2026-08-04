@@ -11,18 +11,18 @@ import {
   reserveHublot, restartHublotService,
 } from "../server/tunnels.mjs";
 
-function fixture(t) {
+async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oyster-hublot-restart-"));
-  const store = openAppStore({ databasePath: join(root, "app.sqlite") });
+  const store = await openAppStore({ databasePath: join(root, "app.sqlite") });
   const state = { appStore: store, config: { PI_AGENT_DIR: join(root, "agent") }, currentDir: root, serverEvent() {} };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   return { store, state };
 }
 
 test("dead services restart, pass a live port check, persist replacement PID, then reopen", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4230, brief: "serve preview" });
-  recordHublotTransition(state, hublot.id, "recovering", { publicUrl: null });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4230, brief: "serve preview" });
+  await recordHublotTransition(state, hublot.id, "recovering", { publicUrl: null });
   const order = [];
 
   const result = await restartHublotService(state, hublot, {
@@ -35,7 +35,7 @@ test("dead services restart, pass a live port check, persist replacement PID, th
     },
     async reopenTunnel(_state, options) {
       order.push(`reopen:${options.id}`);
-      const replacement = store.repositories.hublots.listProcesses(options.id)
+      const replacement = (await store.repositories.hublots.listProcesses(options.id))
         .find((row) => row.role === "service" && row.pid === process.pid && row.status === "running");
       assert.ok(replacement, "replacement service identity must commit before tunnel reopening");
       return { id: options.id, url: "https://replacement.test" };
@@ -52,7 +52,7 @@ test("dead services restart, pass a live port check, persist replacement PID, th
 });
 
 test("dead desired-open service executes its persisted script, persists its new PID, then reopens its tunnel", async (t) => {
-  const { store, state } = fixture(t);
+  const { store, state } = await fixture(t);
   const id = "persisted-script-recovery";
   const scriptPath = join(state.config.PI_AGENT_DIR, "hublots", id, "start.sh");
   const pidPath = join(state.config.PI_AGENT_DIR, "hublots", id, "service.pid");
@@ -61,13 +61,13 @@ test("dead desired-open service executes its persisted script, persists its new 
   mkdirSync(join(state.config.PI_AGENT_DIR, "hublots", id), { recursive: true });
   writeFileSync(scriptPath, script, { mode: 0o700 });
   chmodSync(scriptPath, 0o700);
-  const hublot = store.repositories.hublots.create({
+  const hublot = await store.repositories.hublots.create({
     id, port, workdir: state.currentDir, serviceKind: "agent_managed",
     serviceStartScriptPath: scriptPath, serviceStartScript: script,
     serviceStartScriptSha256: createHash("sha256").update(script).digest("hex"),
     status: "recovering", desiredState: "open", createdAt: "created",
   });
-  store.repositories.hublots.upsertProcess({
+  await store.repositories.hublots.upsertProcess({
     id: "dead-service", hublotId: id, role: "service", pid: 999999,
     processGroupId: 999999, bootId: "old-boot", procStartTicks: "1", executable: "/usr/bin/node",
     commandSha256: "old-command", status: "lost", startedAt: "old", endedAt: "dead",
@@ -82,11 +82,11 @@ test("dead desired-open service executes its persisted script, persists its new 
     },
     persistProcess: persistHublotProcessIdentity,
     async reopenTunnel(targetState, options) {
-      const service = store.repositories.hublots.listProcesses(options.id)
+      const service = (await store.repositories.hublots.listProcesses(options.id))
         .find((row) => row.role === "service" && row.pid === servicePid && row.status === "running");
       assert.ok(service, "replacement PID is durable before tunnel reopening");
-      persistHublotProcessIdentity(targetState, { hublotId: options.id, role: "tunnel", pid: process.pid });
-      recordHublotTransition(targetState, options.id, "open", { publicUrl: "https://restarted.test", openedAt: "reopened" });
+      await persistHublotProcessIdentity(targetState, { hublotId: options.id, role: "tunnel", pid: process.pid });
+      await recordHublotTransition(targetState, options.id, "open", { publicUrl: "https://restarted.test", openedAt: "reopened" });
       return { id: options.id, url: "https://restarted.test" };
     },
   });
@@ -94,18 +94,18 @@ test("dead desired-open service executes its persisted script, persists its new 
   assert.equal(result.servicePid, servicePid);
   assert.notEqual(result.servicePid, 999999);
   assert.equal(readFileSync(scriptPath, "utf8"), script);
-  const persistedService = store.repositories.hublots.findProcess(result.serviceProcess.id);
+  const persistedService = await store.repositories.hublots.findProcess(result.serviceProcess.id);
   assert.equal(persistedService.pid, servicePid);
   assert.ok(persistedService.boot_id);
   assert.ok(persistedService.proc_start_ticks);
-  assert.equal(store.repositories.hublots.find(id).public_url, "https://restarted.test");
-  assert.ok(store.repositories.hublots.listProcesses(id).some((row) => row.role === "tunnel" && row.status === "running"));
+  assert.equal((await store.repositories.hublots.find(id)).public_url, "https://restarted.test");
+  assert.ok((await store.repositories.hublots.listProcesses(id)).some((row) => row.role === "tunnel" && row.status === "running"));
 });
 
 test("an answering service receives a replacement tunnel identity and durable URL", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4233 });
-  recordHublotTransition(state, hublot.id, "recovering", { publicUrl: null });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4233 });
+  await recordHublotTransition(state, hublot.id, "recovering", { publicUrl: null });
   const order = [];
   const recovered = await recoverAnsweringHublotService(state, hublot, {
     checkPort: async (port) => { order.push(`answer:${port}`); return true; },
@@ -115,11 +115,11 @@ test("an answering service receives a replacement tunnel identity and durable UR
       return persistHublotProcessIdentity(targetState, details);
     },
     async reopenTunnel(targetState, options) {
-      const service = store.repositories.hublots.listProcesses(options.id).find((row) => row.role === "service" && row.status === "running");
+      const service = (await store.repositories.hublots.listProcesses(options.id)).find((row) => row.role === "service" && row.status === "running");
       assert.ok(service, "answering service identity must persist before replacement tunnel spawn");
       order.push("tunnel");
-      const tunnelProcess = persistHublotProcessIdentity(targetState, { hublotId: options.id, role: "tunnel", pid: process.pid });
-      recordHublotTransition(targetState, options.id, "open", { publicUrl: "https://new-url.test", openedAt: "reopened" });
+      const tunnelProcess = await persistHublotProcessIdentity(targetState, { hublotId: options.id, role: "tunnel", pid: process.pid });
+      await recordHublotTransition(targetState, options.id, "open", { publicUrl: "https://new-url.test", openedAt: "reopened" });
       return { id: options.id, url: "https://new-url.test", process: tunnelProcess };
     },
   });
@@ -127,15 +127,15 @@ test("an answering service receives a replacement tunnel identity and durable UR
   assert.equal(recovered.recovered, true);
   assert.equal(recovered.hublotId, hublot.id);
   assert.equal(recovered.tunnel.id, hublot.id);
-  const persisted = store.repositories.hublots.find(hublot.id);
+  const persisted = await store.repositories.hublots.find(hublot.id);
   assert.equal(persisted.status, "open");
   assert.equal(persisted.public_url, "https://new-url.test");
-  assert.ok(store.repositories.hublots.listProcesses(hublot.id).some((row) => row.role === "tunnel"));
+  assert.ok((await store.repositories.hublots.listProcesses(hublot.id)).some((row) => row.role === "tunnel"));
 });
 
 test("a silent local port is not tunneled or assigned a URL", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4234 });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4234 });
   let reopened = false;
   const result = await recoverAnsweringHublotService(state, hublot, {
     checkPort: async () => false,
@@ -143,34 +143,34 @@ test("a silent local port is not tunneled or assigned a URL", async (t) => {
   });
   assert.deepEqual(result, { recovered: false, answering: false, hublotId: hublot.id });
   assert.equal(reopened, false);
-  assert.equal(store.repositories.hublots.find(hublot.id).public_url, null);
+  assert.equal((await store.repositories.hublots.find(hublot.id)).public_url, null);
 });
 
 test("failed port verification records failure and never reopens a tunnel", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4231, brief: "serve preview" });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4231, brief: "serve preview" });
   let reopened = false;
-  await assert.rejects(() => restartHublotService(state, hublot, {
+  await assert.rejects(async () => await restartHublotService(state, hublot, {
     invoke() {},
     waitForPort: async () => { throw new Error("port remained down"); },
     reopenTunnel: async () => { reopened = true; },
   }), /port remained down/);
   assert.equal(reopened, false);
-  assert.equal(store.repositories.hublots.find(hublot.id).status, "failed");
-  assert.equal(store.repositories.hublots.find(hublot.id).public_url, null);
-  assert.equal(store.repositories.hublots.find(hublot.id).last_error, "port remained down");
+  assert.equal((await store.repositories.hublots.find(hublot.id)).status, "failed");
+  assert.equal((await store.repositories.hublots.find(hublot.id)).public_url, null);
+  assert.equal((await store.repositories.hublots.find(hublot.id)).last_error, "port remained down");
 });
 
 test("missing self-served services without startup scripts become actionable interruptions", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4236, serviceKind: "self_served" });
-  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale-self.test" });
-  persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: process.pid });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4236, serviceKind: "self_served" });
+  await recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale-self.test" });
+  await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "tunnel", pid: process.pid });
   let restartAttempts = 0;
   let recoveryChecks = 0;
   const supervisor = createHublotSupervisor({
     appStore: store,
-    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    recordTransition: async (id, status, options) => await recordHublotTransition(state, id, status, options),
     verifyIdentity: (row) => row.role === "tunnel",
     checkService: async () => { recoveryChecks++; return false; },
     recoverTunnel: async () => { throw new Error("missing self-served services must not be tunneled"); },
@@ -179,7 +179,7 @@ test("missing self-served services without startup scripts become actionable int
   });
 
   const result = await supervisor.reconcile();
-  const interrupted = store.repositories.hublots.find(hublot.id);
+  const interrupted = await store.repositories.hublots.find(hublot.id);
   assert.equal(result.interrupted, 1);
   assert.equal(interrupted.status, "interrupted");
   assert.equal(interrupted.desired_state, "open");
@@ -189,21 +189,21 @@ test("missing self-served services without startup scripts become actionable int
   assert.equal(interrupted.service_start_script, null);
   assert.equal(restartAttempts, 0);
 
-  const historyLength = store.repositories.hublots.listLifecycleEvents(hublot.id).length;
+  const historyLength = (await store.repositories.hublots.listLifecycleEvents(hublot.id)).length;
   await supervisor.reconcile();
   assert.equal(recoveryChecks, 2, "interrupted self-served services remain eligible for manual recovery");
-  assert.equal(store.repositories.hublots.listLifecycleEvents(hublot.id).length, historyLength, "unchanged interruption must not churn history");
+  assert.equal((await store.repositories.hublots.listLifecycleEvents(hublot.id)).length, historyLength, "unchanged interruption must not churn history");
   assert.equal(restartAttempts, 0);
 });
 
 test("supervisor recovers an answering service before considering service restart", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4235, brief: "serve preview" });
-  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://old-url.test" });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4235, brief: "serve preview" });
+  await recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://old-url.test" });
   const calls = [];
   const supervisor = createHublotSupervisor({
     appStore: store,
-    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    recordTransition: async (id, status, options) => await recordHublotTransition(state, id, status, options),
     verifyIdentity: () => false,
     recoverTunnel: async (row) => { calls.push(`recover:${row.id}`); return { recovered: true }; },
     restartService: async (row) => calls.push(`restart:${row.id}`),
@@ -215,13 +215,13 @@ test("supervisor recovers an answering service before considering service restar
 });
 
 test("supervisor delegates dead agent-managed services to restart recovery", async (t) => {
-  const { store, state } = fixture(t);
-  const hublot = reserveHublot(state, { port: 4232, brief: "serve preview" });
-  recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale.test" });
+  const { store, state } = await fixture(t);
+  const hublot = await reserveHublot(state, { port: 4232, brief: "serve preview" });
+  await recordHublotTransition(state, hublot.id, "open", { publicUrl: "https://stale.test" });
   const restarted = [];
   const supervisor = createHublotSupervisor({
     appStore: store,
-    recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options),
+    recordTransition: async (id, status, options) => await recordHublotTransition(state, id, status, options),
     verifyIdentity: () => false,
     restartService: async (row) => restarted.push(row.id),
     now: () => "observed",
@@ -229,6 +229,6 @@ test("supervisor delegates dead agent-managed services to restart recovery", asy
   const result = await supervisor.reconcile();
   assert.deepEqual(restarted, [hublot.id]);
   assert.equal(result.restarted, 1);
-  assert.equal(store.repositories.hublots.find(hublot.id).status, "recovering");
-  assert.equal(store.repositories.hublots.find(hublot.id).public_url, null);
+  assert.equal((await store.repositories.hublots.find(hublot.id)).status, "recovering");
+  assert.equal((await store.repositories.hublots.find(hublot.id)).public_url, null);
 });

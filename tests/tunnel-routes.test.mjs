@@ -38,7 +38,7 @@ test("tunnel routes prepare the local service before opening and publishing its 
   assert.equal(rebound.body.tunnel.sessionId, "s2"); assert.equal(events[1].type, "tunnel_opened");
   assert.deepEqual(owners, ["s1", "s2"]);
   assert.deepEqual(pins, ["t1", "t1"]);
-  const removed = response(); routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
+  const removed = response(); await routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
 });
 

@@ -30,24 +30,24 @@ async function setup(t) {
 test("browse stays confined and reports hidden directories and optional files", async (t) => {
   const { root, routes } = await setup(t);
   const listed = res();
-  routes["GET /browse"]({}, listed, new URL(`http://localhost/browse?path=${encodeURIComponent(root)}&files=1`));
+  await routes["GET /browse"]({}, listed, new URL(`http://localhost/browse?path=${encodeURIComponent(root)}&files=1`));
   assert.equal(listed.status, 200);
   assert.deepEqual(listed.body.dirs, [{ name: ".hidden-dir", hidden: true }, { name: "visible", hidden: false }]);
   assert.deepEqual(listed.body.files, [{ name: ".hidden.txt", size: 1, hidden: true }, { name: "file.txt", size: 4, hidden: false }]);
 
   const escaped = res();
-  routes["GET /browse"]({}, escaped, new URL("http://localhost/browse?path=/etc"));
+  await routes["GET /browse"]({}, escaped, new URL("http://localhost/browse?path=/etc"));
   assert.equal(escaped.status, 403);
 });
 
 test("file content and save routes enforce confinement and preserve text contracts", async (t) => {
   const { root, routes } = await setup(t);
   const content = res();
-  routes["GET /file-content"]({}, content, new URL(`http://localhost/file-content?path=${encodeURIComponent(join(root, "file.txt"))}`));
+  await routes["GET /file-content"]({}, content, new URL(`http://localhost/file-content?path=${encodeURIComponent(join(root, "file.txt"))}`));
   assert.deepEqual(content.body, { path: join(root, "file.txt"), content: "data" });
 
   const escaped = res();
-  routes["GET /file-content"]({}, escaped, new URL("http://localhost/file-content?path=/etc/passwd"));
+  await routes["GET /file-content"]({}, escaped, new URL("http://localhost/file-content?path=/etc/passwd"));
   assert.equal(escaped.status, 403);
 
   const saved = res();

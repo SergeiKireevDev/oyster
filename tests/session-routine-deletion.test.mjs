@@ -20,20 +20,20 @@ test("deleting a session removes its owned routine definitions instead of releas
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "orphan.sh"), "#!/bin/sh\\n"); chmodSync(join(dir, "orphan.sh"), 0o755);
     writeFileSync(join(dir, "bindings.json"), JSON.stringify({ "orphan.sh": { sessionId: "session-a", cwd: "/legacy" } }));
-    const store = openAppStore({ databasePath: join(process.env.HOME, "app.sqlite") });
+    const store = await openAppStore({ databasePath: join(process.env.HOME, "app.sqlite") });
     const state = { appStore: store, serverEvent() {} };
     const owner = (sessionId) => store.repositories.sessions.upsert({ backend: "sqlite", sessionId, storagePath: "/agent/sessions.sqlite", createdAt: "created" });
-    const ownerA = owner("session-a"), ownerB = owner("session-b"), ownerFork = owner("session-fork");
-    createRoutine(state, { name: "owned.sh", script: "#!/bin/sh\\n", sessionId: "session-a", ownerId: ownerA.id, cwd: "/work/a" });
-    createRoutine(state, { name: "fork.sh", script: "#!/bin/sh\\n", sessionId: "session-fork", ownerId: ownerFork.id, cwd: "/work/fork" });
-    createRoutine(state, { name: "global.sh", script: "#!/bin/sh\\n" });
-    createRoutine(state, { name: "rebound.sh", script: "#!/bin/sh\\n", sessionId: "session-a", ownerId: ownerA.id, cwd: "/work/a" });
-    releaseRoutine(state, "rebound.sh");
-    createRoutine(state, { name: "rebound.sh", script: "#!/bin/sh\\n", sessionId: "session-b", ownerId: ownerB.id, cwd: "/work/b" });
-    const deleted = deleteSessionRoutines(state, "session-a");
-    const rows = store.repositories.routines.list();
-    console.log(JSON.stringify({ deleted, names: listRoutines(state).map((item) => item.name).sort(), ownedExists: existsSync(join(dir, "owned.sh")), rows }));
-    store.close();
+    const ownerA = await owner("session-a"), ownerB = await owner("session-b"), ownerFork = await owner("session-fork");
+    await createRoutine(state, { name: "owned.sh", script: "#!/bin/sh\\n", sessionId: "session-a", ownerId: ownerA.id, cwd: "/work/a" });
+    await createRoutine(state, { name: "fork.sh", script: "#!/bin/sh\\n", sessionId: "session-fork", ownerId: ownerFork.id, cwd: "/work/fork" });
+    await createRoutine(state, { name: "global.sh", script: "#!/bin/sh\\n" });
+    await createRoutine(state, { name: "rebound.sh", script: "#!/bin/sh\\n", sessionId: "session-a", ownerId: ownerA.id, cwd: "/work/a" });
+    await releaseRoutine(state, "rebound.sh");
+    await createRoutine(state, { name: "rebound.sh", script: "#!/bin/sh\\n", sessionId: "session-b", ownerId: ownerB.id, cwd: "/work/b" });
+    const deleted = await deleteSessionRoutines(state, "session-a");
+    const rows = await store.repositories.routines.list();
+    console.log(JSON.stringify({ deleted, names: (await listRoutines(state)).map((item) => item.name).sort(), ownedExists: existsSync(join(dir, "owned.sh")), rows }));
+    await store.close();
   `;
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
     encoding: "utf8", env: { ...process.env, HOME: home },

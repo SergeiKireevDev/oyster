@@ -77,15 +77,15 @@ test("SQLite mutations are isolated to the oyster persistence boundary", () => {
     .filter(({ text }) => /from\s+["']node:sqlite["']|new\s+DatabaseSync/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteConstructors, ["server/persistence/appStore.mjs", "server/sessions/sqliteCatalog.mjs"]);
+  assert.deepEqual(sqliteConstructors, []);
 });
 
 test("only the app-store owner and read-only session catalog can construct SQLite connections", () => {
   const sqliteUsers = sources
-    .filter(({ text }) => /(?:from\s+|import\s*\()\s*["']node:sqlite["']/.test(text) || /\bnew\s+DatabaseSync\s*\(/.test(text))
+    .filter(({ text }) => /(?:from\s+|import\s*\()\s*["']sqlite3["']/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteUsers, ["server/persistence/appStore.mjs", "server/sessions/sqliteCatalog.mjs"]);
+  assert.deepEqual(sqliteUsers, ["server/persistence/sqliteDatabase.mjs", "server/sessions/sqliteCatalog.mjs"]);
 
   const appStoreImports = sources
     .filter(({ name }) => !["server/server.mjs", "scripts/migrate-app-data.mjs"].includes(name))
@@ -94,11 +94,11 @@ test("only the app-store owner and read-only session catalog can construct SQLit
   assert.deepEqual(appStoreImports, [], `only server.mjs or the stopped-service migration command may open the application store: ${appStoreImports.join(", ")}`);
 
   const catalog = sources.find(({ name }) => name === "server/sessions/sqliteCatalog.mjs").text;
-  assert.match(catalog, /new DatabaseSync\(path, \{ readOnly: true,/);
+  assert.match(catalog, /new sqlite3\.Database\(path, sqlite3\.OPEN_READONLY/);
   assert.doesNotMatch(catalog, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/);
 });
 
-test("opening and migrating oyster.sqlite leaves the coding-agent schema unchanged", (t) => {
+test("opening and migrating oyster.sqlite leaves the coding-agent schema unchanged", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-schema-boundary-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const agentPath = join(root, "sessions.sqlite");
@@ -109,8 +109,8 @@ test("opening and migrating oyster.sqlite leaves the coding-agent schema unchang
   const dataBefore = agent.prepare("SELECT * FROM sessions").all().map((row) => ({ ...row }));
   agent.close();
 
-  const appStore = openAppStore({ databasePath: appPath });
-  appStore.close();
+  const appStore = await openAppStore({ databasePath: appPath });
+  await appStore.close();
 
   const reopenedAgent = new DatabaseSync(agentPath, { readOnly: true });
   t.after(() => reopenedAgent.close());
