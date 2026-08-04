@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { runSessionCatalogContract } from "./helpers/session-catalog-contract.mjs";
 import { createSqliteSessionCatalog } from "../server/sessions/sqliteCatalog.mjs";
+import { transcriptMessage } from "../server/sessions/jsonlCatalog.mjs";
 
 const LOCAL_PI = process.env.PI_SQLITE_TEST_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
 const SKIP_LOCAL = process.env.PI_SQLITE_CONTRACT_TEST === "skip";
@@ -109,6 +110,26 @@ if (SKIP_LOCAL) {
     assert.equal(catalog.search({ q: '"phrase durable"', scope: "session", path: rootIdentity }).results.length, 0);
   });
 }
+
+test("canonical transcript messages omit persisted binary payloads", () => {
+  const entry = {
+    type: "message",
+    timestamp: "2026-01-01T00:00:00Z",
+    message: { role: "toolResult", content: [
+      { type: "text", text: "image dimensions" },
+      { type: "image", mimeType: "image/png", data: "base64-payload" },
+    ] },
+  };
+  assert.deepEqual(transcriptMessage(entry), {
+    role: "toolResult",
+    content: [
+      { type: "text", text: "image dimensions" },
+      { type: "image", mimeType: "image/png" },
+    ],
+    entryTimestamp: "2026-01-01T00:00:00Z",
+  });
+  assert.equal(entry.message.content[1].data, "base64-payload");
+});
 
 test("SQLite catalog keeps the full transcript and marks compaction in place", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-compacted-"));

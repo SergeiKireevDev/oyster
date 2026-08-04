@@ -445,7 +445,16 @@ export function sessionEntries(path) {
 export function transcriptMessage(entry) {
   if (!entry || typeof entry !== "object") return null;
   if (entry.type === "message" && entry.message && typeof entry.message === "object") {
-    return { ...entry.message, entryTimestamp: entry.timestamp ?? null };
+    const message = entry.message;
+    // Transcript rendering represents binary parts with a lightweight label;
+    // shipping persisted base64 data can turn a few screenshots into a huge
+    // response and exhaust both the server heap and browser main thread.
+    const content = Array.isArray(message.content)
+      ? message.content.map((part) => part && typeof part === "object" && typeof part.data === "string"
+        ? Object.fromEntries(Object.entries(part).filter(([key]) => key !== "data"))
+        : part)
+      : message.content;
+    return { ...message, content, entryTimestamp: entry.timestamp ?? null };
   }
   if (entry.type === "compaction") {
     return {
