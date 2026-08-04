@@ -306,7 +306,7 @@ const managedConnection = platformAssembly.configureConnection({
   log: lifecycleLog,
   onOpen: async ({ replay, skipTranscriptGate, started }) => {
     lifecycleLog("connect:onopen", { replay, skipTranscriptGate, ms: Math.round(performance.now() - started) }); managedConnection.state.opened();
-    await runCanonicalReload({ skipTranscriptGate, isReplaying: () => platformEvents.isReplaying(), setReplaying, refreshState, reloadTranscript,
+    await runCanonicalReload({ skipTranscriptGate, waitForReplayDone: replay, isReplaying: () => platformEvents.isReplaying(), setReplaying, refreshState, reloadTranscript,
       onError: (error) => { if (!String(error.message).includes("unauthorized")) addToast(`init failed: ${error.message}`, "error"); }, });
   },
   onError: () => { managedConnection.state.reconnecting(); probeTokenValidity(); },

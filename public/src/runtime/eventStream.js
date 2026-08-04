@@ -93,8 +93,12 @@ export function processEventMessage(raw, { dedupe, dispatch, onError, onReceived
   try { dispatch(message); } catch (error) { onError(error, message); }
 }
 
-export async function runCanonicalReload({ skipTranscriptGate, isReplaying, setReplaying, refreshState, reloadTranscript, onError }) {
+export async function runCanonicalReload({ skipTranscriptGate, waitForReplayDone = false, isReplaying, setReplaying, refreshState, reloadTranscript, onError }) {
   if (skipTranscriptGate) { refreshState(); return; }
+  // A replaying connection publishes replay_done only after every persisted
+  // event. Starting the faster canonical fetch on open can release replay state
+  // first, causing stale lifecycle events to surface as live toasts.
+  if (waitForReplayDone) return;
   if (isReplaying()) setReplaying(true, "canonical");
   try { await reloadTranscript(); }
   catch (error) { setReplaying(false); onError(error); }
