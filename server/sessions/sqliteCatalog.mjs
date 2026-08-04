@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import sqlite3 from "sqlite3";
 import { labelOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 import { rescoreSearchResults } from "./searchRescore.mjs";
@@ -62,8 +63,40 @@ function searchableParts(entry) {
   return parts;
 }
 
+function openAsyncDatabase(path) {
+  return new Promise((resolvePromise, reject) => {
+    const database = new sqlite3.Database(path, sqlite3.OPEN_READONLY, (error) => {
+      if (error) reject(error);
+      else {
+        database.configure("busyTimeout", 1000);
+        resolvePromise(database);
+      }
+    });
+  });
+}
+
+function databaseGet(database, sql, ...params) {
+  return new Promise((resolvePromise, reject) => database.get(sql, params, (error, row) => {
+    if (error) reject(error); else resolvePromise(row);
+  }));
+}
+
+function databaseAll(database, sql, ...params) {
+  return new Promise((resolvePromise, reject) => database.all(sql, params, (error, rows) => {
+    if (error) reject(error); else resolvePromise(rows);
+  }));
+}
+
+function closeAsyncDatabase(database) {
+  return new Promise((resolvePromise, reject) => database.close((error) => error ? reject(error) : resolvePromise()));
+}
+
 /** Read-only catalog for the coding-agent SQLite session database. */
-export function createSqliteSessionCatalog({ databasePath, databaseFactory = (path) => new DatabaseSync(path, { readOnly: true, timeout: 1000 }) }) {
+export function createSqliteSessionCatalog({
+  databasePath,
+  databaseFactory = (path) => new DatabaseSync(path, { readOnly: true, timeout: 1000 }),
+  asyncDatabaseFactory = openAsyncDatabase,
+} = {}) {
   if (!databasePath) throw new Error("databasePath is required for the SQLite session catalog");
   const storagePath = resolve(databasePath);
 
@@ -84,6 +117,21 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
         // the operation itself did not complete.
         if (!operationFailed) throw closeError;
       }
+    }
+  }
+
+  async function withAsyncDatabase(operation, missingValue) {
+    if (!existsSync(storagePath)) return missingValue;
+    const database = await asyncDatabaseFactory(storagePath);
+    let operationError = null;
+    try {
+      return await operation(database);
+    } catch (error) {
+      operationError = error;
+      throw error;
+    } finally {
+      try { await closeAsyncDatabase(database); }
+      catch (closeError) { if (!operationError) throw closeError; }
     }
   }
 
@@ -193,12 +241,22 @@ export function createSqliteSessionCatalog({ databasePath, databaseFactory = (pa
     };
   }
 
-  function messages(value) {
-    const { session, branch } = activeBranch(value);
-    return {
-      sessionId: session?.id ?? null,
-      messages: branch.map(transcriptMessage).filter(Boolean),
-    };
+  async function messages(value) {
+    const id = identityId(value);
+    return withAsyncDatabase(async (database) => {
+      const session = await databaseGet(database,
+        "SELECT id, active_leaf_id FROM sessions WHERE id = ?", id);
+      if (!session) throw new Error(`SQLite session not found: ${id}`);
+      const rows = await databaseAll(database,
+        "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq", id);
+      const allEntries = rows.map(decodeEntry).filter(Boolean);
+      const loaded = { session, allEntries, byId: new Map(allEntries.map((entry) => [entry.id, entry])) };
+      const { branch } = activeBranchFromLoaded(loaded);
+      return {
+        sessionId: session.id,
+        messages: branch.map(transcriptMessage).filter(Boolean),
+      };
+    }, { sessionId: null, messages: [] });
   }
 
   function tree(value) {

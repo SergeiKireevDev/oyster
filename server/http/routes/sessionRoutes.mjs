@@ -416,10 +416,10 @@ export function createSessionRoutes({
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
-    "GET /session-messages": (_req, res, url) => {
+    "GET /session-messages": async (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
-      try { json(res, 200, catalog.messages(identity)); }
+      try { json(res, 200, await catalog.messages(identity)); }
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
