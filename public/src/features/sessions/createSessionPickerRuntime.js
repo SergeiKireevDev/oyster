@@ -375,5 +375,5 @@ export function createSessionPickerRuntime(deps) {
     await deps.openChosenSession(fullChoice);
   }
 
-  return { show, searchHit, detachActions, getSessions: () => sessions };
+  return { show, searchHit, refreshSidebar, detachActions, getSessions: () => sessions };
 }

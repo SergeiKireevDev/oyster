@@ -226,6 +226,7 @@
   let clockTimer = null;
   let unsubscribeWorkspaceChanges = null;
   let unsubscribeRunnerChanges = null;
+  let unsubscribeResume = null;
   let clock = $state(Date.now());
   let workspaceRevision = 0;
   let runnerSignature = "";
@@ -241,6 +242,11 @@
       refreshEnvironmentCatalog(change.workspace?.environmentId);
     });
     unsubscribeRunnerChanges = appSession.subscribe(({ runners }) => refreshForRunnerChanges(runners));
+    unsubscribeResume = cloudBrowser.onResume(() => {
+      if (destroyed || cloudBrowser.hidden()) return;
+      refreshEnvironmentCatalog();
+      refreshSessions();
+    });
     if (hubMode && cloudBrowser.hasConnectionReturn()) openWorkspaceProvisioning();
   });
 
@@ -252,6 +258,7 @@
     clearInterval(clockTimer);
     unsubscribeWorkspaceChanges?.();
     unsubscribeRunnerChanges?.();
+    unsubscribeResume?.();
   });
 
   const searching = $derived($sessionPicker.query.trim().length >= SEARCH_QUERY_MIN_LENGTH);

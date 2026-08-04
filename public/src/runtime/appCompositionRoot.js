@@ -1065,7 +1065,8 @@ return createLifecycleAssembly({
   start: {
     hasToken: () => Boolean(token), requireToken, boot,
     onAuthenticatedStart: () => {
-      // Do not gate widget discovery on the canonical transcript reload.
+      // Do not gate sidebar/resource discovery on the canonical transcript reload.
+      void sessionPickerRuntime.refreshSidebar();
       void loadHublots();
       void loadRoutines();
       void credentialsAssembly.operations.initialize();
