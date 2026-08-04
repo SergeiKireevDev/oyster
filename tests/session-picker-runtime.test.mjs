@@ -88,6 +88,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
 
   assert.equal(typeof runtime.show, "function");
   assert.equal(typeof runtime.searchHit, "function");
+  assert.equal(typeof runtime.refreshSidebar, "function");
   assert.equal(typeof runtime.detachActions, "function");
   assert.deepEqual([...registered.keys()].sort(), [
     actionNames.SESSION_PICKER_SET_SCOPE_ACTION,
@@ -127,6 +128,11 @@ test("session picker runtime owns picker actions and search-hit construction", a
   runtime.detachActions();
   assert.equal(registered.size, 0);
   assert.equal(detached.length, 15);
+});
+
+test("authenticated startup eagerly loads the persistent session list", () => {
+  const source = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
+  assert.match(source, /onAuthenticatedStart: \(\) => \{[\s\S]*sessionPickerRuntime\.refreshSidebar\(\)/);
 });
 
 test("session picker component routes every workflow through scoped actions", () => {
@@ -200,6 +206,8 @@ test("session sidebar owns reactive state and browser resources safely", () => {
   assert.match(source, /const sessionGroups = \$derived/);
   assert.match(source, /onMount\(\(\) => \{[\s\S]*setInterval\(refreshEnvironmentCatalog, ENVIRONMENT_REFRESH_MS\)/);
   assert.match(source, /onDestroy\(\(\) => \{[\s\S]*catalogRequests\.invalidate\(\)[\s\S]*clearTimeout\(searchTimer\)[\s\S]*clearInterval\(environmentRefreshTimer\)[\s\S]*clearInterval\(clockTimer\)/);
+  assert.match(source, /cloudBrowser\.onResume\(\(\) => \{[\s\S]*cloudBrowser\.hidden\(\)[\s\S]*refreshSessions\(\)/);
+  assert.match(source, /unsubscribeResume\?\.\(\)/);
   assert.match(source, /if \(!workspace\?\.workspaceId \|\| workspaceActions\.has\(workspace\.workspaceId\)\) return/);
   assert.match(source, /disabled=\{managing \|\| !\["online", "paused"\]\.includes\(status\)/);
   assert.match(source, /aria-busy=\{\$sessionPicker\.searching\}/);
