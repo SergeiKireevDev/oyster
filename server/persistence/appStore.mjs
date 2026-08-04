@@ -452,10 +452,23 @@ export function openAppStore({ databasePath, Database = DatabaseSync, migrate = 
       delete: (id) => database.prepare("DELETE FROM runners WHERE id = ?").run(id).changes,
     }),
     runnerEvents: Object.freeze({
-      list: (runnerId) => database.prepare(`
-        SELECT runner_id, sequence, sse_id, payload, created_at
-        FROM runner_events WHERE runner_id = ? ORDER BY sequence
-      `).all(runnerId).map((row) => ({ ...row })),
+      list: (runnerId, { maxPayloadBytes = null } = {}) => {
+        if (maxPayloadBytes !== null && (!Number.isInteger(maxPayloadBytes) || maxPayloadBytes < 1)) {
+          throw new Error("runner event payload cap must be a positive integer");
+        }
+        const rows = maxPayloadBytes === null
+          ? database.prepare(`
+              SELECT runner_id, sequence, sse_id, payload, created_at
+              FROM runner_events WHERE runner_id = ? ORDER BY sequence
+            `).all(runnerId)
+          : database.prepare(`
+              SELECT runner_id, sequence, sse_id, payload, created_at
+              FROM runner_events
+              WHERE runner_id = ? AND length(CAST(payload AS BLOB)) <= ?
+              ORDER BY sequence
+            `).all(runnerId, maxPayloadBytes);
+        return rows.map((row) => ({ ...row }));
+      },
       append: ({ runnerId, sseId = null, payload, createdAt, maxEntries = 400 }) => {
         if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error("runner event cap must be a positive integer");
         const append = () => {

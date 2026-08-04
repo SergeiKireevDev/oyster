@@ -85,6 +85,9 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "state-response", success: true, command: "get_state", data: { sessionId: "session-1", sessionName: "Named runner" } })}\n`);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal(store.repositories.runners.find(runner.id).session_name, "Named runner");
+  processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "oversized-response", success: true, data: "x".repeat(1024 * 1024) })}\n`);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(store.repositories.runnerEvents.list(runner.id).some((event) => event.payload.includes("oversized-response")), false);
 
   manager.stopRunner(runner);
   persisted = store.repositories.runners.find(runner.id);
@@ -111,6 +114,7 @@ test("runner replay and selected workdir survive restart without eager process s
   });
   store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event-1", payload: '{"type":"persisted","part":1}', createdAt: "event-1" });
   store.repositories.runnerEvents.append({ runnerId, sseId: "persisted-event-2", payload: '{"type":"persisted","part":2}', createdAt: "event-2" });
+  store.repositories.runnerEvents.append({ runnerId, sseId: "oversized-event", payload: "x".repeat(1024 * 1024 + 1), createdAt: "event-3" });
   store.repositories.runners.create({
     id: "r-stopped0000", dir: "/stopped", desiredState: "stopped", lastStatus: "stopped", createdAt: "stopped-created", lastStoppedAt: "already-stopped",
   });
@@ -163,7 +167,7 @@ test("runner replay and selected workdir survive restart without eager process s
     '{"type":"persisted","part":1}', '{"type":"persisted","part":2}',
   ]);
   assert.deepEqual(store.repositories.runnerEvents.list(runnerId).map(({ sequence, sse_id }) => [sequence, sse_id]), [
-    [1, "persisted-event-1"], [2, "persisted-event-2"],
+    [1, "persisted-event-1"], [2, "persisted-event-2"], [3, "oversized-event"],
   ]);
   manager.startPi();
   assert.equal(spawnCount, 0, "server startup must not eagerly spawn restored runners");

@@ -36,6 +36,7 @@ import { createPiProcessLauncher } from "./pi-processes.mjs";
 import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-titles.mjs";
 
 const RUNNER_BUFFER_MAX = 400;
+const RUNNER_EVENT_MAX_BYTES = 1024 * 1024;
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 
@@ -214,7 +215,11 @@ export function createRunnerManager(state, {
   }
 
   function replayRunnerEvents(runner) {
-    return runnerEventRepository?.list(runner.id).map((event) => event.payload) ?? [];
+    // Oversized historical RPC responses are stale after a page load and can
+    // otherwise block the event loop while gigabytes are replayed before the
+    // browser ever receives replay_done.
+    return runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES })
+      .map((event) => event.payload) ?? [];
   }
 
   /** Global notification. Ordinary lifecycle changes carry one runner delta;
@@ -246,12 +251,14 @@ export function createRunnerManager(state, {
       event = JSON.parse(eventLine);
       sseId = event._sseId ?? null;
     } catch {}
-    try {
-      runnerEventRepository?.append({
-        runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
-      });
-    } catch (error) {
-      console.error(`[oyster] cannot persist event for runner ${runner.id}: ${error?.message ?? error}`);
+    if (Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES) {
+      try {
+        runnerEventRepository?.append({
+          runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
+        });
+      } catch (error) {
+        console.error(`[oyster] cannot persist event for runner ${runner.id}: ${error?.message ?? error}`);
+      }
     }
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
