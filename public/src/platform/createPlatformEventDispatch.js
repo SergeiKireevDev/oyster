@@ -4,6 +4,7 @@ import { createReplayBufferFlusher, isComposerReadyForSend, REPLAY_GATED_EVENT_T
 
 export function createPlatformEventDispatch(deps) {
   let replaying = true;
+  let replayPhase = "replay";
   let replayDoneSeen = false;
   let replayBufferedEvents = [];
 
@@ -11,7 +12,8 @@ export function createPlatformEventDispatch(deps) {
     const next = !!value;
     if (replaying !== next || phase) deps.log("setReplaying", { from: replaying, to: next, phase });
     replaying = next;
-    deps.updateReplayState(replaying, phase);
+    replayPhase = next ? phase : null;
+    deps.updateReplayState(replaying, replayPhase);
   }
 
   const flushBufferedEvents = createReplayBufferFlusher({
@@ -113,7 +115,7 @@ export function createPlatformEventDispatch(deps) {
     setReplayBuffer: (value) => { replayBufferedEvents = value; },
     takeBufferedEvents: () => { const buffered = replayBufferedEvents; replayBufferedEvents = []; return buffered; },
     flushBufferedEvents,
-    isComposerReady: (connected, gateRequired) => isComposerReadyForSend({ connected, replaying, transcriptGateRequired: gateRequired }),
+    isComposerReady: (connected, gateRequired) => isComposerReadyForSend({ connected, replaying, transcriptGateRequired: gateRequired, transcriptLoadPhase: replayPhase }),
     snapshot: () => ({ replaying, replayDoneSeen }),
   };
 }

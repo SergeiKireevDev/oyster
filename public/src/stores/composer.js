@@ -9,7 +9,9 @@ export function composerUiState(session, text) {
   const connected = !!session.connected;
   const replaying = !!session.replayingTranscript;
   const gateRequired = session.transcriptGateRequired !== false;
-  const gated = replaying && gateRequired;
+  // Canonical history can continue loading behind an interactive composer.
+  // Only the event replay that establishes the selected session blocks sends.
+  const gated = replaying && gateRequired && session.transcriptLoadPhase !== "canonical";
   const ready = connected && !gated;
   const hasText = !!String(text ?? "").trim();
   return {
@@ -23,11 +25,9 @@ export function composerUiState(session, text) {
       ? "connecting…"
       : gated && session.transcriptLoadPhase === "replay"
         ? "replaying transcript…"
-        : gated && session.transcriptLoadPhase === "canonical"
-          ? "loading canonical transcript…"
-          : gated
-            ? "loading transcript…"
-            : "Message Agent",
+        : gated
+          ? "loading transcript…"
+          : "Message Agent",
     sendText: busy ? "Steer" : "Send",
     sendHidden: busy && !hasText,
     stopHidden: !busy,

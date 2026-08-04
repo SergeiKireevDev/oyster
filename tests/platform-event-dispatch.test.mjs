@@ -41,6 +41,9 @@ test("platform event dispatch owns replay state and routes events", () => {
   const deps = createDeps();
   const runtime = createPlatformEventDispatch(deps);
   assert.equal(runtime.snapshot().replaying, true);
+  assert.equal(runtime.isComposerReady(true, true), false);
+  runtime.setReplaying(true, "canonical");
+  assert.equal(runtime.isComposerReady(true, true), true);
   runtime.setReplaying(false, "live");
   assert.equal(runtime.snapshot().replaying, false);
   assert.equal(runtime.isComposerReady(true, false), true);
