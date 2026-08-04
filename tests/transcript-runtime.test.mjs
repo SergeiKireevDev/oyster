@@ -23,10 +23,11 @@ test("transcript sync scheduler retries during replay before reloading", async (
   assert.equal(reloads, 1);
 });
 
-test("composer readiness preserves transcript replay gating", () => {
-  assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: true }), false);
+test("composer readiness blocks event replay but not background canonical loading", () => {
+  assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: true, transcriptLoadPhase: "replay" }), false);
+  assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: true, transcriptLoadPhase: "canonical" }), true);
   assert.equal(isComposerReadyForSend({ connected: true, replaying: true, transcriptGateRequired: false }), true);
-  assert.equal(isComposerReadyForSend({ connected: false, replaying: false, transcriptGateRequired: false }), false);
+  assert.equal(isComposerReadyForSend({ connected: false, replaying: true, transcriptGateRequired: true, transcriptLoadPhase: "canonical" }), false);
 });
 
 test("transcript snippet focus reveals matching nested details", () => {

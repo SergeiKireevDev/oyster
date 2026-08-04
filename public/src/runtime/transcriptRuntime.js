@@ -60,9 +60,12 @@ export async function reconcileTranscriptReload({ messages, render, setReplaying
 }
 
 /** Delay canonical sync until the selected runner is ready, retrying through replay. */
-/** A composer can send once transport is connected and replay is no longer gated. */
-export function isComposerReadyForSend({ connected, replaying, transcriptGateRequired }) {
-  return connected && (!replaying || !transcriptGateRequired);
+/** A composer can send once transport is connected and any event replay is complete.
+ * Canonical history loading stays gated for rendering consistency, but must not
+ * prevent a new message from being sent to the selected session. */
+export function isComposerReadyForSend({ connected, replaying, transcriptGateRequired, transcriptLoadPhase = null }) {
+  const blockingReplay = replaying && transcriptGateRequired && transcriptLoadPhase !== "canonical";
+  return connected && !blockingReplay;
 }
 
 export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
