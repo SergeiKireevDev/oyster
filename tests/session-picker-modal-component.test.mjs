@@ -41,8 +41,9 @@ test("session picker owns its calm responsive modal presentation", () => {
   assert.match(source, /\.session-row-content \{\s*display: flex;\s*min-width: 0;\s*align-items: center;/);
   assert.match(source, /\.session-row\.current \.s-name \{ color: var\(--selection-text\); \}/);
   assert.match(source, /\.s-del \{[\s\S]*?align-self: center;/);
-  assert.match(source, /\.s-del::before,\s*\.s-del::after \{[\s\S]*?width: 11px;/);
-  assert.match(source, /\.s-stop::before \{\s*width: 11px;\s*height: 11px;/);
+  assert.match(source, /\.s-del::before,\s*\.s-del::after \{[\s\S]*?top: 50%;\s*left: 50%;[\s\S]*?transform: translate\(-50%, -50%\) rotate\(45deg\);/);
+  assert.match(source, /\.s-del::after \{ transform: translate\(-50%, -50%\) rotate\(-45deg\); \}/);
+  assert.match(source, /\.s-stop::before \{\s*width: 11px;\s*height: 11px;[\s\S]*?transform: translate\(-50%, -50%\);/);
   assert.match(source, /\.s-del:hover \{[\s\S]*?var\(--red\)/);
   assert.match(source, /\.s-stop:hover \{[\s\S]*?var\(--yellow\)/);
   assert.match(source, /\.session-picker-empty \{[\s\S]*?var\(--muted\)/);

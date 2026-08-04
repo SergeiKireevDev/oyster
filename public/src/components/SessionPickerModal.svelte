@@ -614,12 +614,14 @@
   .s-del::after {
     content: "";
     position: absolute;
+    top: 50%;
+    left: 50%;
     width: 11px;
     border-top: 1.5px solid currentColor;
-    transform: rotate(45deg);
+    transform: translate(-50%, -50%) rotate(45deg);
   }
 
-  .s-del::after { transform: rotate(-45deg); }
+  .s-del::after { transform: translate(-50%, -50%) rotate(-45deg); }
 
   .s-del:hover {
     border-color: color-mix(in srgb, var(--red) 28%, var(--border));
@@ -633,7 +635,7 @@
     border: 0;
     border-radius: 2px;
     background: currentColor;
-    transform: none;
+    transform: translate(-50%, -50%);
   }
 
   .s-stop::after { content: none; }
