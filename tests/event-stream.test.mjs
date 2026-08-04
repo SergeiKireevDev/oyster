@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerExitController, createRunnerUnhealthyController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog } from "../public/src/runtime/eventStream.js";
+import { createPiErrorController, createPiStartedController, createReplayEventGate, createRunnerExitController, createRunnerUnhealthyController, eventLifecycleLogged, openEventStream, stateRefreshRequired, registerReconnectWatchdog, runCanonicalReload } from "../public/src/runtime/eventStream.js";
 
 test("reconnect watchdog registration runs checks and tears down", () => {
   let callback; let cleared;
@@ -14,6 +14,31 @@ test("reconnect watchdog registration runs checks and tears down", () => {
   assert.equal(expired, 1);
   teardown();
   assert.equal(cleared, 42);
+});
+
+test("canonical loading waits for replay_done before releasing historical events", async () => {
+  const calls = [];
+  await runCanonicalReload({
+    skipTranscriptGate: false,
+    waitForReplayDone: true,
+    isReplaying: () => true,
+    setReplaying: (...args) => calls.push(["replaying", ...args]),
+    refreshState: () => calls.push("state"),
+    reloadTranscript: async () => calls.push("transcript"),
+    onError: (error) => calls.push(error),
+  });
+  assert.deepEqual(calls, []);
+
+  await runCanonicalReload({
+    skipTranscriptGate: false,
+    waitForReplayDone: false,
+    isReplaying: () => true,
+    setReplaying: (...args) => calls.push(["replaying", ...args]),
+    refreshState: () => calls.push("state"),
+    reloadTranscript: async () => calls.push("transcript"),
+    onError: (error) => calls.push(error),
+  });
+  assert.deepEqual(calls, [["replaying", true, "canonical"], "transcript"]);
 });
 
 test("runner unhealthy controller clears busy state", () => {
