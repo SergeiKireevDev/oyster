@@ -62,7 +62,7 @@ const ORPHAN_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
-  "titleProcess", "titleSessionId", "initialArgs", "eventListeners", "subagentStatus",
+  "titleProcess", "titleSessionId", "titleLoadingSessionId", "initialArgs", "eventListeners", "subagentStatus",
 ]);
 export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
 
@@ -83,6 +83,7 @@ function initializeRunnerRuntime(descriptor) {
     watchdogOk: false,
     titleProcess: null,
     titleSessionId: null,
+    titleLoadingSessionId: null,
     initialArgs: Array.isArray(descriptor.initialArgs) ? [...descriptor.initialArgs] : [],
     eventListeners: descriptor.eventListeners instanceof Set ? descriptor.eventListeners : new Set(),
     subagentStatus: descriptor.subagentStatus ?? null,
@@ -288,22 +289,25 @@ export function createRunnerManager(state, {
     return !name || /^\u23EA [0-9a-f]{4,12}$/.test(name);
   }
 
-  function maybeTitleSession(runner, sessionState) {
+  async function maybeTitleSession(runner, sessionState) {
     const reference = runner.sessionRef;
     const sessionId = runner.sessionId;
     if (!reference || !sessionId || !titleEligible(runner.sessionName)) return;
-    if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId) return;
+    if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId || runner.titleLoadingSessionId === sessionId) return;
     const catalog = state.sessionCatalog;
     if (!catalog?.messages) return;
 
     const identity = reference.backend === "sqlite" ? reference.id : reference.storagePath;
     let messages;
-    try { messages = catalog.messages(identity)?.messages ?? []; }
+    runner.titleLoadingSessionId = sessionId;
+    try { messages = (await catalog.messages(identity))?.messages ?? []; }
     catch (error) {
       console.error(`[oyster] cannot read session ${sessionId} for title: ${error.message}`);
       return;
+    } finally {
+      if (runner.titleLoadingSessionId === sessionId) runner.titleLoadingSessionId = null;
     }
-    if (!messages.length) return;
+    if (!messages.length || runner.sessionId !== sessionId) return;
 
     const originalName = runner.sessionName ?? null;
     runner.titleSessionId = sessionId;
@@ -373,7 +377,7 @@ export function createRunnerManager(state, {
         }
         runner.busy = !!(d.isStreaming || d.isCompacting);
         if (changed) runnersChanged(runner);
-        maybeTitleSession(runner, d);
+        void maybeTitleSession(runner, d);
       } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
         requestState(runner);
       }

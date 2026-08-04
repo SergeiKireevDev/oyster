@@ -33,6 +33,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "katex": "^0.16.47",
+    "sqlite3": "^5.1.7",
     "ws": "^8.21.1"
   }
 }

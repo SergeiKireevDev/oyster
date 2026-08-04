@@ -131,7 +131,7 @@ test("canonical transcript messages omit persisted binary payloads", () => {
   assert.equal(entry.message.content[1].data, "base64-payload");
 });
 
-test("SQLite catalog keeps the full transcript and marks compaction in place", () => {
+test("SQLite catalog keeps the full transcript and marks compaction in place", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-compacted-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -150,7 +150,7 @@ test("SQLite catalog keeps the full transcript and marks compaction in place", (
   insert.run("compacted", "a2", 5, "u2", "message", "2026-01-01T00:00:05Z", JSON.stringify({ message: { role: "assistant", content: "newer answer" } }));
   writer.close();
 
-  const messages = createSqliteSessionCatalog({ databasePath: path }).messages("compacted").messages;
+  const messages = (await createSqliteSessionCatalog({ databasePath: path }).messages("compacted")).messages;
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "compactionSummary", "user", "assistant"]);
   assert.equal(messages[2].tokensBefore, 1234);
 });
@@ -181,7 +181,7 @@ test("SQLite catalog preserves query failures when closing the read handle also 
   assert.throws(() => closeOnlyCatalog.list(), (error) => error === closeError);
 });
 
-test("SQLite catalog skips malformed entry payloads and closes every read handle", () => {
+test("SQLite catalog skips malformed entry payloads and closes every read handle", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-malformed-"));
   roots.push(root);
   const path = join(root, "sessions.sqlite");
@@ -207,8 +207,8 @@ test("SQLite catalog skips malformed entry payloads and closes every read handle
   });
   assert.equal(catalog.list()[0].name, null);
   assert.deepEqual(catalog.tree("broken").nodes.map((node) => node.id), ["good"]);
-  assert.deepEqual(catalog.messages("broken").messages.map((message) => message.content), ["durable phrase"]);
-  assert.equal(closes, 3);
+  assert.deepEqual((await catalog.messages("broken")).messages.map((message) => message.content), ["durable phrase"]);
+  assert.equal(closes, 2);
 });
 
 test("SQLite catalog treats database columns as authoritative and tolerates malformed payload fields", () => {

@@ -142,7 +142,7 @@ test("SQLite session archive route cascades archive and unarchive through descen
   }
 });
 
-test("SQLite routes resolve lookup, entries, messages, folders, and search by key", () => {
+test("SQLite routes resolve lookup, entries, messages, folders, and search by key", async () => {
   const { routes, codec } = setup();
   const key = codec.serialize({ backend: "sqlite", id: "fork", storagePath: "/agent/sessions.sqlite" });
 
@@ -155,7 +155,7 @@ test("SQLite routes resolve lookup, entries, messages, folders, and search by ke
   assert.equal(entries.body.sessionId, "fork");
 
   const messages = response();
-  routes["GET /session-messages"]({}, messages, new URL(`http://localhost/session-messages?key=${key}`));
+  await routes["GET /session-messages"]({}, messages, new URL(`http://localhost/session-messages?key=${key}`));
   assert.equal(messages.body.messages[0].content, "fork");
 
   const folders = response();
