@@ -135,10 +135,10 @@
   const plural = (count, singular, pluralForm = `${singular}s`) => count === 1 ? singular : pluralForm;
 
   function searchResultName(group) {
-    return group.first.sessionName || group.first.sessionPreview || "(unnamed session)";
+    return group.first.sessionName || group.first.sessionPreview || "Empty session";
   }
 
-  function sessionName(session, fallback = "(empty session)") {
+  function sessionName(session, fallback = "Empty session") {
     return session.name || session.preview || fallback;
   }
 
