@@ -464,6 +464,30 @@ test("tail-first initial session render still starts at the latest message", asy
   assert.deepEqual(scrolls, [true]);
 });
 
+test("tail-first backfill releases the bottom when the reader scrolls up within the proximity threshold", async () => {
+  const scroller = { scrollHeight: 1000, scrollTop: 400 };
+  const scrolls = [];
+  const renderer = createTailFirstTranscriptRenderer({
+    messagesElement: { children: [] }, scroller,
+    splitTurns: (messages) => messages, takeTailChunk: (turns) => turns.slice(-1),
+    backfillTurns: async ({ beforePrepend, afterPrepend }) => {
+      scroller.scrollTop = 390;
+      const position = beforePrepend();
+      scroller.scrollHeight = 1060;
+      afterPrepend(position);
+      return true;
+    },
+    renderMessage() {}, clear() {}, rememberPrompt() {}, userMessageText: () => "",
+    scrollToBottom: (force) => scrolls.push(force), nearBottom: () => true,
+    isFollowingHead: () => false, tick: async () => {}, afterRender() {},
+  });
+
+  await renderer.render([{ role: "assistant", content: "older" }, { role: "assistant", content: "latest" }]);
+
+  assert.deepEqual(scrolls, [true], "only the initial tail render should force the bottom");
+  assert.equal(scroller.scrollTop, 450, "older content should be anchored above the reader");
+});
+
 test("earlier transcript pages prepend in bounded yielding chunks", async () => {
   const rendered = [];
   const batches = [];

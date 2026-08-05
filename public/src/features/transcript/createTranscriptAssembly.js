@@ -143,6 +143,7 @@ export function createTranscriptAssembly(deps) {
     userMessageText,
     scrollToBottom: (force) => transcriptScroll.scrollToBottom(force),
     nearBottom: () => transcriptScroll.nearBottom(),
+    isFollowingHead: () => transcriptScroll.isFollowingHead(),
     tick: deps.tick,
     afterRender: deps.placeCheckpoint,
   });
