@@ -14,6 +14,11 @@ test("session picker derives collection view models with Svelte 5 runes", () => 
   assert.doesNotMatch(source, /\$:/);
 });
 
+test("session picker labels empty sessions consistently", () => {
+  assert.match(source, /return group\.first\.sessionName \|\| group\.first\.sessionPreview \|\| "Empty session"/);
+  assert.match(source, /function sessionName\(session, fallback = "Empty session"\)/);
+});
+
 test("session picker keeps workflow state owned by its action boundary", () => {
   assert.match(source, /value=\{\$sessionPicker\.query\}/);
   assert.match(source, /value=\{\$sessionPicker\.scope\}/);
