@@ -432,7 +432,12 @@ export function createSessionRoutes({
         if (limit === null) { json(res, 200, transcript); return; }
         const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
         const end = before === null ? messages.length : Math.min(before, messages.length);
-        const start = Math.max(0, end - limit);
+        let start = Math.max(0, end - limit);
+        // Do not expose a page beginning in the middle of an agent turn. If
+        // the target window contains only assistant/tool activity, continue
+        // backward through the next user prompt so the prepended history has
+        // a meaningful conversation boundary.
+        while (start > 0 && messages[start]?.role !== "user") start--;
         json(res, 200, {
           ...transcript,
           messages: messages.slice(start, end),
