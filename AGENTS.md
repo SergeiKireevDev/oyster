@@ -102,8 +102,14 @@ When a unit of work is finished, run the complete validation suite:
 ./scripts/run-e2e-tests.sh
 ```
 
-If the unit and end-to-end tests pass, commit the completed changes before
-starting the next unit of work.
+After validation passes, rebuild the UI before committing:
+
+```sh
+npm run build
+```
+
+Commit the completed changes only after the unit tests, end-to-end tests, and
+UI rebuild all succeed, then start the next unit of work.
 
 Why this is non-negotiable in this repo: the server hot-reloads `server/app.mjs` and
 `public/index.html` **the moment you save them** — every edit deploys
