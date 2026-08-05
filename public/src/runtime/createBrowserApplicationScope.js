@@ -20,6 +20,8 @@ export function createBrowserApplicationScope({ windowTarget, documentTarget, lo
     rootElement: documentTarget.documentElement,
     themeColorElement: documentTarget.querySelector('meta[name="theme-color"]'),
     onThinkingVisibilityChanged: () => uiActions.invoke(SETTINGS_CHANGED_ACTION),
+    navigatorTarget: windowTarget.navigator,
+    fetchImpl: (...args) => windowTarget.fetch(...args),
   });
   const checkpointModelPicker = createCheckpointModelPickerService({
     modelPreference: {

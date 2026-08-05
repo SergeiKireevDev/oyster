@@ -1,4 +1,4 @@
-const CACHE_NAME = "oyster-shell-v1";
+const CACHE_NAME = "oyster-shell-v2";
 const APP_SHELL_URLS = [
   "/",
   "/manifest.webmanifest",
@@ -65,6 +65,35 @@ async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   return (await cache.match(request)) ?? putSuccessfulResponse(cache, request);
 }
+
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (windows.some((client) => client.visibilityState === "visible")) return;
+    let payload = {};
+    try { payload = event.data?.json() ?? {}; } catch {}
+    const url = typeof payload.url === "string" && payload.url.startsWith("/") && !payload.url.startsWith("//") ? payload.url : "/";
+    await self.registration.showNotification(payload.title || "Oyster", {
+      body: payload.body || "Oyster needs your attention.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: payload.tag || "oyster-attention",
+      renotify: true,
+      data: { url },
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const existing = windows.find((client) => new URL(client.url).pathname === new URL(target).pathname);
+    if (existing) return existing.focus();
+    return self.clients.openWindow(target);
+  })());
+});
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;

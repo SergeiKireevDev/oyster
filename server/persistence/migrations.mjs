@@ -381,6 +381,27 @@ export const APP_MIGRATIONS = Object.freeze([
         ON pinned_widgets(target) WHERE kind = 'builtin' AND scope = 'workspace';
     `,
   }),
+  Object.freeze({
+    version: 16,
+    name: "web_push",
+    sql: `
+      CREATE TABLE web_push_vapid (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        public_key TEXT NOT NULL,
+        private_key TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE web_push_subscriptions (
+        endpoint TEXT PRIMARY KEY,
+        expiration_time INTEGER,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_delivered_at TEXT
+      ) WITHOUT ROWID;
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

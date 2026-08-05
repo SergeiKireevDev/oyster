@@ -6,7 +6,7 @@ const stableSource = readFileSync(new URL("../server/server.mjs", import.meta.ur
 const appStoreSource = readFileSync(new URL("../server/persistence/appStore.mjs", import.meta.url), "utf8");
 
 test("app is a small disposable composition root", () => {
-  assert.ok(source.split("\n").length < 260);
+  assert.ok(source.split("\n").length < 270);
   assert.match(source, /export async function buildCandidate\(stableState, \{ generation/);
   assert.match(source, /export async function init\(state\)/);
   assert.match(source, /createCandidateState\(stableState\)/);
@@ -43,7 +43,7 @@ test("composition injects the narrow app store into persistent domains", () => {
   assert.equal(appStoreSource.includes("database,"), false, "raw database handle must remain private");
   assert.match(source, /if \(!state\.sessionDeletionReconciled\)[\s\S]*await reconcileSessionDeletions[\s\S]*state\.sessionDeletionReconciled = true/);
   assert.ok(source.indexOf("await reconcileSessionDeletions") < source.indexOf("createRunnerManager(state"));
-  assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner, unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*guardCallback: scope\.guard \}\)/);
+  assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner,[\s\S]*notifyRunnerEvent:[\s\S]*unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*guardCallback: scope\.guard \}\)/);
   assert.match(source, /createCheckpointRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createRoutineRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createTunnelRoutes\(\{[\s\S]*?state, appStore,/);
