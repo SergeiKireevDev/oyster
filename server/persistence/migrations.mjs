@@ -402,6 +402,18 @@ export const APP_MIGRATIONS = Object.freeze([
       ) WITHOUT ROWID;
     `,
   }),
+  Object.freeze({
+    version: 17,
+    name: "runner_attention_status",
+    sql: `
+      ALTER TABLE runners ADD COLUMN attention_status TEXT
+        CHECK (attention_status IN ('clarification', 'completed'));
+      ALTER TABLE runners ADD COLUMN attention_unread INTEGER NOT NULL DEFAULT 0
+        CHECK (attention_unread IN (0, 1));
+      CREATE INDEX runners_attention_status_idx ON runners(attention_status)
+        WHERE attention_status IS NOT NULL;
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

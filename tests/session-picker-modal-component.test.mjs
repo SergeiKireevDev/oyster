@@ -66,6 +66,9 @@ test("session picker controls and status indicators expose explicit semantics", 
     source.match(/<button\b[^>]*\btype="button"/g)?.length,
   );
   assert.match(source, /role="img" aria-label=\{sessionDotTitle\(alive, busy\)\}/);
+  assert.match(source, /runner\.attentionStatus[\s\S]*role="img" aria-label=\{attentionTitle\(runner\)\}/);
+  assert.match(source, /\.s-attention\.unread \{[\s\S]*animation: attention-glow/);
+  assert.match(source, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.s-attention\.unread \{ animation: none/);
   assert.match(source, /role="heading" aria-level="2"/);
   assert.match(source, /role="heading" aria-level="3"/);
   assert.match(source, /aria-busy=\{\$sessionPicker\.searching\}/);

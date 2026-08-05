@@ -104,7 +104,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
+    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
     runnerFromReq, openSessionRunner, startPi, stopPi,
   } = runners;
   validateDependencyConstruction({
@@ -135,7 +135,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
   const runnerRoutes = createRunnerRoutes({
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
-    sendToRunner, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
+    sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
     lookupSessionReference: async (reference) => reference.backend === state.sessionCatalog.backend
       ? await state.sessionCatalog.findById(reference.id)
