@@ -316,7 +316,7 @@ export async function releaseRoutine(state, name) {
 export async function stopSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const stopped = [];
-  for (const definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
+  for (const definition of await routineRepository(state).list({ sessionId })) {
     if (activeRuntime(state, definition)?.proc) try { await stopRoutine(state, definition.name); } catch {}
     stopped.push(definition.name);
   }
@@ -326,7 +326,7 @@ export async function stopSessionRoutines(state, sessionId) {
 export async function deleteSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const deleted = [];
-  for (const definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
+  for (const definition of await routineRepository(state).list({ sessionId })) {
     const runtime = activeRuntime(state, definition);
     if (runtime?.proc) {
       // Session deletion is irreversible, so do not leave a resistant
@@ -350,7 +350,7 @@ export async function deleteSessionRoutines(state, sessionId) {
 export async function releaseSessionRoutines(state, sessionId) {
   if (!sessionId) return [];
   const released = [];
-  for (let definition of (await routineRepository(state).list()).filter((row) => row.session_id === sessionId)) {
+  for (let definition of await routineRepository(state).list({ sessionId })) {
     if (activeRuntime(state, definition)?.proc) try { await stopRoutine(state, definition.name); } catch {}
     await routineRepository(state).release(definition.id, new Date().toISOString());
     definition = await findRoutine(state, definition.name);

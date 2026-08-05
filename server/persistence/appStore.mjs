@@ -176,10 +176,18 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       delete: async (id) => (await database.run("DELETE FROM app_sessions WHERE id = ?", id)).changes,
     }),
     routines: Object.freeze({
-      list: async () => (await database.all(`
-        SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
-        FROM routines r LEFT JOIN app_sessions s ON s.id = r.owner_id ORDER BY r.name
-      `)).map((row) => ({ ...row })),
+      list: async (filters = {}) => {
+        const where = [];
+        const params = [];
+        if (Object.hasOwn(filters, "sessionId")) { where.push("s.session_id IS ?"); params.push(filters.sessionId); }
+        if (Object.hasOwn(filters, "ownerId")) { where.push("r.owner_id IS ?"); params.push(filters.ownerId); }
+        return (await database.all(`
+          SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
+          FROM routines r LEFT JOIN app_sessions s ON s.id = r.owner_id
+          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+          ORDER BY r.name
+        `, ...params)).map((row) => ({ ...row }));
+      },
       findByName: async (name) => {
         const row = await database.get(`
           SELECT r.id, r.owner_id, s.session_id, r.name, r.script, r.revision, r.cwd, r.created_at, r.updated_at
@@ -239,9 +247,21 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       listLogs: async (runId) => (await database.all("SELECT sequence, stream, text, created_at FROM routine_log_lines WHERE run_id = ? ORDER BY sequence", runId)).map((row) => ({ ...row })),
     }),
     hublots: Object.freeze({
-      list: async () => (await database.all(`
-        SELECT h.*, s.session_id FROM hublots h LEFT JOIN app_sessions s ON s.id = h.owner_id ORDER BY h.created_at, h.id
-      `)).map((row) => ({ ...row })),
+      list: async (filters = {}) => {
+        const where = [];
+        const params = [];
+        for (const [property, column] of [["id", "h.id"], ["port", "h.port"], ["status", "h.status"],
+          ["desiredState", "h.desired_state"], ["ownerId", "h.owner_id"], ["sessionId", "s.session_id"],
+          ["label", "h.label"], ["brief", "h.brief"]]) {
+          if (Object.hasOwn(filters, property)) { where.push(`${column} IS ?`); params.push(filters[property]); }
+        }
+        if (Object.hasOwn(filters, "excludeStatus")) { where.push("h.status != ?"); params.push(filters.excludeStatus); }
+        return (await database.all(`
+          SELECT h.*, s.session_id FROM hublots h LEFT JOIN app_sessions s ON s.id = h.owner_id
+          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+          ORDER BY h.created_at, h.id
+        `, ...params)).map((row) => ({ ...row }));
+      },
       find: async (id) => {
         const row = await database.get(`
           SELECT h.*, s.session_id FROM hublots h LEFT JOIN app_sessions s ON s.id = h.owner_id WHERE h.id = ?
@@ -326,11 +346,27 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       listProcesses: async (hublotId) => (await database.all("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id", hublotId)).map((row) => ({ ...row })),
     }),
     pinnedWidgets: Object.freeze({
-      list: async () => (await database.all(`
-        SELECT w.*, s.session_id
-        FROM pinned_widgets w LEFT JOIN app_sessions s ON s.id = w.owner_id
-        ORDER BY w.scope, w.owner_id, w.group_id, w.position, w.id
-      `)).map((row) => ({ ...row })),
+      list: async (filters = {}) => {
+        const where = [];
+        const params = [];
+        if (filters.visibility?.scope === "workspace") where.push("w.scope = 'workspace'");
+        else if (filters.visibility?.scope === "session") {
+          where.push("(w.scope = 'workspace' OR (w.scope = 'session' AND s.session_id = ?))");
+          params.push(filters.visibility.sessionId ?? null);
+        }
+        if (Object.hasOwn(filters, "scope")) { where.push("w.scope = ?"); params.push(filters.scope); }
+        if (Object.hasOwn(filters, "ownerId")) { where.push("w.owner_id IS ?"); params.push(filters.ownerId); }
+        if (Object.hasOwn(filters, "groupId")) { where.push("w.group_id IS ?"); params.push(filters.groupId); }
+        if (Object.hasOwn(filters, "hublotId")) { where.push("w.hublot_id IS ?"); params.push(filters.hublotId); }
+        if (Object.hasOwn(filters, "kind")) { where.push("w.kind = ?"); params.push(filters.kind); }
+        if (Object.hasOwn(filters, "target")) { where.push("w.target IS ?"); params.push(filters.target); }
+        return (await database.all(`
+          SELECT w.*, s.session_id
+          FROM pinned_widgets w LEFT JOIN app_sessions s ON s.id = w.owner_id
+          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+          ORDER BY w.scope, w.owner_id, w.group_id, w.position, w.id
+        `, ...params)).map((row) => ({ ...row }));
+      },
       find: async (id) => {
         const row = await database.get(`
           SELECT w.*, s.session_id
@@ -367,11 +403,23 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         SELECT COALESCE(MAX(position), -1) + 1 AS position
         FROM pinned_widgets WHERE scope = ? AND owner_id IS ? AND group_id IS ?
       `, scope, ownerId, groupId)).position),
-      listGroups: async () => (await database.all(`
-        SELECT g.*, s.session_id
-        FROM pinned_widget_groups g LEFT JOIN app_sessions s ON s.id = g.owner_id
-        ORDER BY g.scope, g.owner_id, g.position, g.id
-      `)).map((row) => ({ ...row })),
+      listGroups: async (filters = {}) => {
+        const where = [];
+        const params = [];
+        if (filters.visibility?.scope === "workspace") where.push("g.scope = 'workspace'");
+        else if (filters.visibility?.scope === "session") {
+          where.push("(g.scope = 'workspace' OR (g.scope = 'session' AND s.session_id = ?))");
+          params.push(filters.visibility.sessionId ?? null);
+        }
+        if (Object.hasOwn(filters, "scope")) { where.push("g.scope = ?"); params.push(filters.scope); }
+        if (Object.hasOwn(filters, "ownerId")) { where.push("g.owner_id IS ?"); params.push(filters.ownerId); }
+        return (await database.all(`
+          SELECT g.*, s.session_id
+          FROM pinned_widget_groups g LEFT JOIN app_sessions s ON s.id = g.owner_id
+          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+          ORDER BY g.scope, g.owner_id, g.position, g.id
+        `, ...params)).map((row) => ({ ...row }));
+      },
       findGroup: async (id) => {
         const row = await database.get(`
           SELECT g.*, s.session_id

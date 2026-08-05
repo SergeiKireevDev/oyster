@@ -203,51 +203,53 @@ export function createSqliteSessionCatalog({
     return withDatabase((database) => readSessionFromDatabase(database, id), null);
   }
 
-  function activeBranchFromLoaded(loaded) {
-    const branch = [];
-    const seen = new Set();
-    let entry = loaded.session.active_leaf_id ? loaded.byId.get(loaded.session.active_leaf_id) : null;
-    while (entry && !seen.has(entry.id)) {
-      seen.add(entry.id);
-      branch.push(entry);
-      entry = entry.parentId ? loaded.byId.get(entry.parentId) : null;
-    }
-    branch.reverse();
-    return { ...loaded, branch };
-  }
-
-  async function activeBranch(value) {
-    const loaded = await readSession(value);
-    return loaded ? activeBranchFromLoaded(loaded) : { session: null, allEntries: [], branch: [] };
+  async function readActiveBranchFromDatabase(database, id) {
+    const session = await databaseGet(database,
+      "SELECT id, cwd, created_at, parent_session_id, active_leaf_id FROM sessions WHERE id = ?", id);
+    if (!session) throw new Error(`SQLite session not found: ${id}`);
+    if (!session.active_leaf_id) return { session, branch: [] };
+    const rows = await databaseAll(database, `
+      WITH RECURSIVE active(id, parent_id, type, timestamp, payload, depth, path) AS (
+        SELECT e.id, e.parent_id, e.type, e.timestamp, e.payload, 0,
+               char(31) || e.id || char(31)
+        FROM session_entries e
+        WHERE e.session_id = ? AND e.id = ?
+        UNION ALL
+        SELECT parent.id, parent.parent_id, parent.type, parent.timestamp, parent.payload,
+               active.depth + 1, active.path || parent.id || char(31)
+        FROM session_entries parent
+        JOIN active ON parent.session_id = ? AND parent.id = active.parent_id
+        WHERE instr(active.path, char(31) || parent.id || char(31)) = 0
+      )
+      SELECT id, parent_id, type, timestamp, payload
+      FROM active ORDER BY depth DESC
+    `, id, session.active_leaf_id, id);
+    return { session, branch: rows.map(decodeEntry).filter(Boolean) };
   }
 
   async function entries(value) {
-    const { session, branch } = await activeBranch(value);
-    return {
-      sessionId: session?.id ?? null,
-      leafId: session?.active_leaf_id ?? null,
-      entries: branch
-        .filter((entry) => entry.type === "message" && ["user", "assistant"].includes(entry.message?.role))
-        .map((entry) => ({
-          id: entry.id,
-          role: entry.message.role,
-          text: (labelOf(entry.message) ?? "").slice(0, 200),
-          timestamp: entry.timestamp ?? null,
-        })),
-    };
+    const id = identityId(value);
+    return withDatabase(async (database) => {
+      const { session, branch } = await readActiveBranchFromDatabase(database, id);
+      return {
+        sessionId: session.id,
+        leafId: session.active_leaf_id ?? null,
+        entries: branch
+          .filter((entry) => entry.type === "message" && ["user", "assistant"].includes(entry.message?.role))
+          .map((entry) => ({
+            id: entry.id,
+            role: entry.message.role,
+            text: (labelOf(entry.message) ?? "").slice(0, 200),
+            timestamp: entry.timestamp ?? null,
+          })),
+      };
+    }, { sessionId: null, leafId: null, entries: [] });
   }
 
   async function messages(value) {
     const id = identityId(value);
     return withDatabase(async (database) => {
-      const session = await databaseGet(database,
-        "SELECT id, active_leaf_id FROM sessions WHERE id = ?", id);
-      if (!session) throw new Error(`SQLite session not found: ${id}`);
-      const rows = await databaseAll(database,
-        "SELECT id, parent_id, type, timestamp, payload FROM session_entries WHERE session_id = ? ORDER BY entry_seq", id);
-      const allEntries = rows.map(decodeEntry).filter(Boolean);
-      const loaded = { session, allEntries, byId: new Map(allEntries.map((entry) => [entry.id, entry])) };
-      const { branch } = activeBranchFromLoaded(loaded);
+      const { session, branch } = await readActiveBranchFromDatabase(database, id);
       return {
         sessionId: session.id,
         messages: branch.map(transcriptMessage).filter(Boolean),
@@ -274,13 +276,47 @@ export function createSqliteSessionCatalog({
   }
 
   async function folders() {
-    const counts = new Map();
-    for (const session of await list()) {
-      if (session.cwd !== null) counts.set(session.cwd, (counts.get(session.cwd) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([cwd, count]) => ({
-      dir: cwd, name: cwd, label: cwd, count,
-    }));
+    return withDatabase(async (database) => (await databaseAll(database, `
+      SELECT cwd, COUNT(*) AS count
+      FROM sessions WHERE cwd IS NOT NULL
+      GROUP BY cwd ORDER BY cwd
+    `)).map((row) => ({
+      dir: row.cwd, name: row.cwd, label: row.cwd, count: Number(row.count),
+    })), []);
+  }
+
+  async function family(value, { includeAncestors = false } = {}) {
+    const id = identityId(value);
+    return withDatabase(async (database) => {
+      let rootId = id;
+      if (includeAncestors) {
+        const root = await databaseGet(database, `
+          WITH RECURSIVE ancestors(id, parent_session_id, depth, path) AS (
+            SELECT id, parent_session_id, 0, char(31) || id || char(31)
+            FROM sessions WHERE id = ?
+            UNION ALL
+            SELECT parent.id, parent.parent_session_id, ancestors.depth + 1,
+                   ancestors.path || parent.id || char(31)
+            FROM sessions parent JOIN ancestors ON parent.id = ancestors.parent_session_id
+            WHERE instr(ancestors.path, char(31) || parent.id || char(31)) = 0
+          )
+          SELECT id FROM ancestors ORDER BY depth DESC LIMIT 1
+        `, id);
+        if (root?.id) rootId = root.id;
+      }
+      const rows = await databaseAll(database, `
+        WITH RECURSIVE family(id, depth, path) AS (
+          SELECT id, 0, char(31) || id || char(31) FROM sessions WHERE id = ?
+          UNION ALL
+          SELECT child.id, family.depth + 1, family.path || child.id || char(31)
+          FROM sessions child JOIN family ON child.parent_session_id = family.id
+          WHERE instr(family.path, char(31) || child.id || char(31)) = 0
+        )
+        ${summarySelect} JOIN family ON family.id = s.id
+        ORDER BY family.depth, modified_at, s.id
+      `, rootId);
+      return rows.map(rowSummary);
+    }, []);
   }
 
   async function search({ q, scope = "folder", path, cwd = path, includeTools = false } = {}, maxResults = 200) {
@@ -303,11 +339,18 @@ export function createSqliteSessionCatalog({
         const searchableFilter = includeTools
           ? ""
           : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
+        const scopeFilter = scope === "session"
+          ? "AND f.session_id = ?"
+          : scope === "folder"
+            ? "AND EXISTS (SELECT 1 FROM sessions scoped WHERE scoped.id = f.session_id AND scoped.cwd = ?)"
+            : "";
+        const scopeParams = scope === "session" ? [identityId(path)]
+          : scope === "folder" ? [resolve(cwd)] : [];
         const rows = await databaseAll(database, `
           SELECT DISTINCT f.session_id, f.entry_id
           FROM session_search_fts f
-          WHERE session_search_fts MATCH ? ${searchableFilter}
-        `, ftsSearchExpression(terms, operator));
+          WHERE session_search_fts MATCH ? ${searchableFilter} ${scopeFilter}
+        `, ftsSearchExpression(terms, operator), ...scopeParams);
         indexedEntries = new Map();
         for (const row of rows) {
           if (!indexedEntries.has(row.session_id)) indexedEntries.set(row.session_id, new Set());
@@ -319,7 +362,7 @@ export function createSqliteSessionCatalog({
       const results = [];
       let truncated = false;
       for (const session of candidates) {
-        const loaded = activeBranchFromLoaded(await readSessionFromDatabase(database, session.id));
+        const loaded = await readActiveBranchFromDatabase(database, session.id);
         const hits = [];
         for (const entry of loaded.branch) {
           if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
@@ -360,9 +403,11 @@ export function createSqliteSessionCatalog({
 
   async function usageAnalytics({ bucket = "day", since = null } = {}) {
     return withDatabase(async (database) => {
+      const assistantFilter = `type = 'message' AND json_valid(payload)
+        AND json_extract(payload, '$.message.role') = 'assistant'`;
       const rows = since
-        ? await databaseAll(database, `SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' AND timestamp >= ? ORDER BY timestamp`, since)
-        : await databaseAll(database, "SELECT session_id, id, timestamp, payload FROM session_entries WHERE type = 'message' ORDER BY timestamp");
+        ? await databaseAll(database, `SELECT session_id, id, timestamp, payload FROM session_entries WHERE ${assistantFilter} AND timestamp >= ? ORDER BY timestamp`, since)
+        : await databaseAll(database, `SELECT session_id, id, timestamp, payload FROM session_entries WHERE ${assistantFilter} ORDER BY timestamp`);
       const records = rows.flatMap((row) => {
         try {
           const payload = JSON.parse(row.payload);
@@ -382,6 +427,7 @@ export function createSqliteSessionCatalog({
     locationForCwd: (cwd) => resolve(cwd),
     list,
     folders,
+    family,
     summarize,
     findById,
     readHeader,
