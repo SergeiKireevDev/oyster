@@ -160,6 +160,28 @@ test("session message pages extend backward to the next user prompt", async () =
   assert.deepEqual(page.body.page, { before: null, hasMore: false, total: 4 });
 });
 
+test("activity-heavy tail pages include the turn before their user prompt", async () => {
+  const { dependencies, routes } = setup();
+  dependencies.sessions.catalog.messages = () => ({
+    sessionId: "session-a",
+    messages: [
+      { role: "user", content: "earlier prompt" },
+      { role: "assistant", content: "earlier answer" },
+      { role: "user", content: "latest prompt" },
+      { role: "assistant", content: "thinking 1" },
+      { role: "toolResult", content: "result 1" },
+      { role: "assistant", content: "thinking 2" },
+      { role: "toolResult", content: "result 2" },
+    ],
+  });
+  const page = response();
+  await routes["GET /session-messages"]({}, page, new URL("http://localhost/session-messages?path=folder/a.jsonl&limit=2"));
+  assert.deepEqual(page.body.messages.map(({ content }) => content), [
+    "earlier prompt", "earlier answer", "latest prompt", "thinking 1", "result 1", "thinking 2", "result 2",
+  ]);
+  assert.deepEqual(page.body.page, { before: null, hasMore: false, total: 7 });
+});
+
 test("search validates scope and preserves filtering options, snippets, and response shape", async () => {
   const { searches, routes } = setup();
   const short = response();
