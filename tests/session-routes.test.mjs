@@ -31,7 +31,7 @@ function setup() {
         folders: () => ["/sessions/folder"],
         search: (options) => { searches.push(options); return { results: [{ sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text" }] }; },
         entries: (path) => [{ id: "entry", path }],
-        messages: (path) => [{ role: "user", path }],
+        messages: (path) => ({ sessionId: "session-a", messages: Array.from({ length: 5 }, (_, index) => ({ role: "user", content: `${path}:${index}` })) }),
         findById: (id) => id === "session-a" ? { id: "session-a", name: "A", path: "/sessions/folder/a.jsonl" } : null,
       },
       readSessionHeaderInfo: () => ({ id: "session-a" }),
@@ -120,6 +120,27 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
   const folders = response();
   await routes["GET /session-folders"]({}, folders, new URL("http://localhost/session-folders?dir=/other"));
   assert.deepEqual(folders.body, { folders: ["/sessions/folder"], current: "/sessions/-other" });
+});
+
+test("session messages support bounded backward pages", async () => {
+  const { routes } = setup();
+  const latest = response();
+  await routes["GET /session-messages"]({}, latest, new URL("http://localhost/session-messages?path=folder/a.jsonl&limit=2"));
+  assert.deepEqual(latest.body.messages.map(({ content }) => content), [
+    "/sessions/folder/a.jsonl:3", "/sessions/folder/a.jsonl:4",
+  ]);
+  assert.deepEqual(latest.body.page, { before: 3, hasMore: true, total: 5 });
+
+  const earlier = response();
+  await routes["GET /session-messages"]({}, earlier, new URL("http://localhost/session-messages?path=folder/a.jsonl&limit=2&before=3"));
+  assert.deepEqual(earlier.body.messages.map(({ content }) => content), [
+    "/sessions/folder/a.jsonl:1", "/sessions/folder/a.jsonl:2",
+  ]);
+  assert.deepEqual(earlier.body.page, { before: 1, hasMore: true, total: 5 });
+
+  const invalid = response();
+  await routes["GET /session-messages"]({}, invalid, new URL("http://localhost/session-messages?path=folder/a.jsonl&limit=201"));
+  assert.equal(invalid.status, 400);
 });
 
 test("search validates scope and preserves filtering options, snippets, and response shape", async () => {

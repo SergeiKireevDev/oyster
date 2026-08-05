@@ -1,4 +1,6 @@
 import { writable } from "svelte/store";
+import { setTranscriptHistory, resetTranscriptHistory } from "../../stores/transcriptHistory.js";
+import { TRANSCRIPT_LOAD_EARLIER_ACTION } from "../../runtime/uiActionNames.js";
 import { assistantMessageText, shouldShowThinking, toolResultText, userMessageText } from "../../lib/messageUtils.js";
 import { backfillTranscriptTurns } from "../../lib/transcriptBackfill.js";
 import { createMessageCopyController } from "../../lib/clipboardController.js";
@@ -18,6 +20,8 @@ import {
   createTranscriptScrollAdapter,
   createTranscriptStreamEventHandler,
   createTranscriptSyncScheduler,
+  fetchDurableTranscript,
+  TRANSCRIPT_PAGE_SIZE,
 } from "../../runtime/transcriptRuntime.js";
 
 /** Owns transcript rendering, stream assembly, local echoes, and DOM scrolling. */
@@ -32,6 +36,7 @@ export function createTranscriptAssembly(deps) {
   let permalinkOperations = null;
   let copyMessage = async () => {};
   let mounted = true;
+  const detachLoadEarlier = deps.uiActions?.register(TRANSCRIPT_LOAD_EARLIER_ACTION, () => synchronization?.loadEarlier()) ?? (() => {});
 
   const transcriptActions = createTranscriptActions({
     callbacks: {
@@ -155,6 +160,37 @@ export function createTranscriptAssembly(deps) {
 
   function configureSynchronization(syncDeps) {
     if (synchronization) return synchronization;
+    let historyCursor = null;
+    let historyIdentity = null;
+    let historyLoading = false;
+    const applyHistoryPage = (result, identity) => {
+      historyCursor = result?.page?.before ?? null;
+      historyIdentity = identity ?? null;
+      setTranscriptHistory({ hasMore: historyCursor !== null, loading: false });
+    };
+    const loadEarlier = async () => {
+      if (historyLoading || historyCursor === null || !historyIdentity) return false;
+      const generation = syncDeps.getGeneration?.() ?? 0;
+      const identity = historyIdentity;
+      historyLoading = true;
+      setTranscriptHistory({ loading: true });
+      try {
+        const page = await fetchDurableTranscript(syncDeps.fetchImpl, identity, syncDeps.sessionFileQuery, {
+          limit: TRANSCRIPT_PAGE_SIZE,
+          before: historyCursor,
+        });
+        if (generation !== (syncDeps.getGeneration?.() ?? 0) || identity !== historyIdentity) return false;
+        await renderer.prepend(page.messages ?? []);
+        applyHistoryPage(page, identity);
+        return true;
+      } catch (error) {
+        syncDeps.onSyncError?.("earlier", error);
+        return false;
+      } finally {
+        historyLoading = false;
+        setTranscriptHistory({ loading: false });
+      }
+    };
     const afterRender = createTranscriptAfterRenderController({
       annotate: syncDeps.annotate,
       refreshCheckpointMarkers: syncDeps.refreshCheckpointMarkers,
@@ -162,7 +198,11 @@ export function createTranscriptAssembly(deps) {
       takeAfterTranscript: () => {
         const callback = afterTranscript;
         afterTranscript = null;
-        return callback;
+        if (!callback) return null;
+        return async () => {
+          while (historyCursor !== null && await loadEarlier()) { /* Reveal a deferred permalink/search target. */ }
+          callback();
+        };
       },
     });
     const reloadTranscript = createCanonicalTranscriptController({
@@ -181,6 +221,7 @@ export function createTranscriptAssembly(deps) {
       takeBufferedEvents: syncDeps.takeBufferedEvents,
       flushBufferedEvents: syncDeps.flushBufferedEvents,
       afterRender,
+      onDurablePage: applyHistoryPage,
     });
     const scheduler = createTranscriptSyncScheduler({
       isReplaying: syncDeps.isReplaying,
@@ -207,12 +248,14 @@ export function createTranscriptAssembly(deps) {
       sessionFileQuery: syncDeps.sessionFileQuery,
       userMessageText,
       renderTranscript,
+      onPage: applyHistoryPage,
       log: syncDeps.logPostSend,
       setTimeoutImpl: syncDeps.setTimeoutImpl,
       clearTimeoutImpl: syncDeps.clearTimeoutImpl,
     });
     synchronization = {
       reloadTranscript,
+      loadEarlier,
       syncTranscriptSoon: scheduler.schedule,
       agentStart,
       agentCompletion,
@@ -287,6 +330,8 @@ export function createTranscriptAssembly(deps) {
     operations,
     teardown() {
       mounted = false;
+      detachLoadEarlier();
+      resetTranscriptHistory();
       synchronization?.teardown();
       transcriptScroll.teardown();
       renderer.cancel();

@@ -7,9 +7,13 @@
   import { appSession } from "../stores/appSession.js";
   import { checkpointRestores } from "../stores/checkpointRestores.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
+  import { transcriptHistory } from "../stores/transcriptHistory.js";
   import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { TRANSCRIPT_LOAD_EARLIER_ACTION } from "../runtime/uiActionNames.js";
   import { subscribeStoreGroup } from "../lib/storeGroup.js";
 
+  const uiActions = getUiActionRegistry();
   const isTurnBoundary = (item) => item.kind === "user" || item.kind === "compaction";
   const isActivityBlock = (block) => block.type === "thinking" || block.type === "toolCall";
 
@@ -95,6 +99,16 @@
 </script>
 
 <div id="messages" class="transcript" aria-busy={$appSession.busy || $appSession.compacting}>
+  {#if $transcriptHistory.hasMore}
+    <button
+      type="button"
+      class="load-earlier"
+      disabled={$transcriptHistory.loading}
+      onclick={() => uiActions.invoke(TRANSCRIPT_LOAD_EARLIER_ACTION)}
+    >
+      {$transcriptHistory.loading ? "Loading earlier messages…" : "Load earlier messages"}
+    </button>
+  {/if}
   {#each $transcriptItems as item (item.id)}
     {#if item.kind === "user"}
       <UserMessage
@@ -148,6 +162,11 @@
     padding: 32px 40px 22px;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .load-earlier {
+    align-self: center;
+    margin: 0 0 14px;
   }
 
   .transcript-status {

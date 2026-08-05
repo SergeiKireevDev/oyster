@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { get } from "svelte/store";
 import { createTranscriptAssembly } from "../public/src/features/transcript/createTranscriptAssembly.js";
 import { resetTranscriptItems, transcriptItems } from "../public/src/stores/transcriptItems.js";
+import { transcriptHistory } from "../public/src/stores/transcriptHistory.js";
+import { TRANSCRIPT_LOAD_EARLIER_ACTION } from "../public/src/runtime/uiActionNames.js";
 
 function createDependencies() {
   const messagesElement = {
@@ -71,6 +73,47 @@ test("canonical transcript chunks publish one store update per batch", async () 
   assert.equal(publications, 2, "the initial tail and older backfill each publish once");
   assert.deepEqual(get(transcriptItems).map(({ text }) => text), messages.map(({ content }) => content));
   unsubscribe();
+  assembly.teardown();
+  resetTranscriptItems();
+});
+
+test("transcript history loads older pages on demand", async () => {
+  resetTranscriptItems();
+  let loadEarlier;
+  const requests = [];
+  const deps = createDependencies();
+  deps.uiActions = { register(name, handler) {
+    assert.equal(name, TRANSCRIPT_LOAD_EARLIER_ACTION);
+    loadEarlier = handler;
+    return () => {};
+  } };
+  const assembly = createTranscriptAssembly(deps);
+  const synchronization = assembly.configureSynchronization({
+    rpc: async () => ({}), applyState() {}, isRunnerAlive: () => false,
+    getSessionIdentity: () => "session-key", getRunnerInfo: () => null, getGeneration: () => 1,
+    fetchImpl: async (url) => {
+      requests.push(url);
+      const earlier = url.includes("before=2");
+      return { ok: true, json: async () => earlier
+        ? { messages: [{ role: "user", content: "older" }], page: { before: null, hasMore: false, total: 2 } }
+        : { messages: [{ role: "user", content: "latest" }], page: { before: 2, hasMore: true, total: 2 } } };
+    },
+    sessionFileQuery: () => "key=session-key", clearPreview() {}, log() {}, setReplaying() {},
+    takeBufferedEvents: () => [], flushBufferedEvents() {}, annotate: async () => {},
+    refreshCheckpointMarkers: async () => {}, refreshTree() {}, isReplaying: () => false,
+    hasRunner: () => true, onSyncError() {}, setBusy() {}, setCompacting() {}, refreshState() {},
+    getRunner: () => "runner", getSessionFile: () => "session-key", logPostSend() {},
+  });
+
+  await synchronization.reloadTranscript();
+  assert.equal(get(transcriptHistory).hasMore, true);
+  await loadEarlier();
+  assert.deepEqual(requests, [
+    "/session-messages?key=session-key&limit=80",
+    "/session-messages?key=session-key&limit=80&before=2",
+  ]);
+  assert.deepEqual(get(transcriptItems).map(({ text }) => text), ["older", "latest"]);
+  assert.equal(get(transcriptHistory).hasMore, false);
   assembly.teardown();
   resetTranscriptItems();
 });

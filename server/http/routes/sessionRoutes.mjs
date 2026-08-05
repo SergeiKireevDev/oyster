@@ -419,8 +419,26 @@ export function createSessionRoutes({
     "GET /session-messages": async (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
-      try { json(res, 200, await catalog.messages(identity)); }
-      catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
+      const rawLimit = url.searchParams.get("limit");
+      const rawBefore = url.searchParams.get("before");
+      const limit = rawLimit === null ? null : Number(rawLimit);
+      const before = rawBefore === null ? null : Number(rawBefore);
+      if ((limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 200))
+        || (before !== null && (!Number.isInteger(before) || before < 0))) {
+        json(res, 400, { error: "invalid transcript page" }); return;
+      }
+      try {
+        const transcript = await catalog.messages(identity);
+        if (limit === null) { json(res, 200, transcript); return; }
+        const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
+        const end = before === null ? messages.length : Math.min(before, messages.length);
+        const start = Math.max(0, end - limit);
+        json(res, 200, {
+          ...transcript,
+          messages: messages.slice(start, end),
+          page: { before: start > 0 ? start : null, hasMore: start > 0, total: messages.length },
+        });
+      } catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
     "GET /session-folders": async (_req, res, url) => {

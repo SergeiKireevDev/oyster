@@ -136,6 +136,7 @@ const rememberPrompt = composerOperations.rememberPrompt;
 
 const transcriptAssembly = createTranscriptAssembly({
   findElement: $,
+  uiActions,
   storage,
   tick,
   log: lifecycleLog,
