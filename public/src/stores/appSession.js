@@ -24,7 +24,7 @@ export const appHeader = derived(appSession, ($appSession) => {
   return {
     connectionClass: $appSession.connected ? `dot ${$appSession.busy ? "busy" : "ok"}` : "dot",
     connectionLabel: !$appSession.connected ? "Disconnected" : $appSession.busy ? "Working" : "Connected",
-    sessionTitle: $appSession.titleOverride || state?.sessionName || "oyster",
+    sessionTitle: $appSession.titleOverride || state?.sessionName || "Empty session",
     modelChip: modelId,
     thinkChip: state ? `think: ${thinking}` : "think",
     cfgChip: state ? `${modelId} · ${thinking}` : "model · think",
