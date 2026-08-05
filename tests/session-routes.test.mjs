@@ -143,6 +143,23 @@ test("session messages support bounded backward pages", async () => {
   assert.equal(invalid.status, 400);
 });
 
+test("session message pages extend backward to the next user prompt", async () => {
+  const { dependencies, routes } = setup();
+  dependencies.sessions.catalog.messages = () => ({
+    sessionId: "session-a",
+    messages: [
+      { role: "user", content: "prompt" },
+      { role: "assistant", content: "thinking" },
+      { role: "toolResult", content: "result" },
+      { role: "assistant", content: "answer" },
+    ],
+  });
+  const page = response();
+  await routes["GET /session-messages"]({}, page, new URL("http://localhost/session-messages?path=folder/a.jsonl&limit=2"));
+  assert.deepEqual(page.body.messages.map(({ content }) => content), ["prompt", "thinking", "result", "answer"]);
+  assert.deepEqual(page.body.page, { before: null, hasMore: false, total: 4 });
+});
+
 test("search validates scope and preserves filtering options, snippets, and response shape", async () => {
   const { searches, routes } = setup();
   const short = response();
