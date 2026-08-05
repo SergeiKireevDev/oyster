@@ -513,8 +513,9 @@ export function createRenderJobs() {
 /** Own tail-first transcript rendering and cancellation while callers retain item construction. */
 export function createTailFirstTranscriptRenderer({
   messagesElement, scroller, splitTurns, takeTailChunk, backfillTurns, renderMessage,
-  clear, rememberPrompt, userMessageText, scrollToBottom, nearBottom, afterRender,
-  tick, renderBatch = (work) => work(), tailMessages = 40, chunkMessages = 60,
+  clear, rememberPrompt, userMessageText, scrollToBottom, nearBottom,
+  isFollowingHead = nearBottom, afterRender, tick,
+  renderBatch = (work) => work(), tailMessages = 40, chunkMessages = 60,
 }) {
   const jobs = createRenderJobs();
   let backfilling = false;
@@ -548,7 +549,7 @@ export function createTailFirstTranscriptRenderer({
       takeTailChunk,
       chunkSize: chunkMessages,
       isCurrent: () => jobs.isCurrent(job),
-      beforePrepend: () => ({ pinned: restoreTop === null && nearBottom(), height: scroller.scrollHeight, top: scroller.scrollTop }),
+      beforePrepend: () => ({ pinned: restoreTop === null && isFollowingHead(), height: scroller.scrollHeight, top: scroller.scrollTop }),
       renderPrepend: async (chunk) => { renderChunk(chunk, { prepend: true }); await tick(); },
       afterPrepend: ({ pinned, height, top }) => {
         if (restoreTop !== null) scroller.scrollTop = restoreTop;
