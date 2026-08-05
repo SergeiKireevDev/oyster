@@ -3,6 +3,8 @@
   import { getSettingsPreferences } from "../runtime/settingsPreferenceContext.js";
 
   const preferences = getSettingsPreferences();
+  let pushError = $state("");
+  let pushPending = $state(false);
   const preferenceOptions = $state([
     {
       id: "show-thinking",
@@ -10,6 +12,14 @@
       description: "Include model reasoning in the conversation transcript.",
       checked: preferences.isThinkingVisible(),
       save: (checked) => preferences.setThinkingVisible(checked),
+    },
+    {
+      id: "web-push",
+      label: "Mobile notifications",
+      description: "Notify this device when a long-running agent finishes or needs clarification. Push services receive only generic event metadata and a session link.",
+      checked: preferences.isWebPushEnabled(),
+      disabled: !preferences.isWebPushSupported(),
+      save: (checked) => preferences.setWebPushEnabled(checked),
     },
     {
       id: "light-mode",
@@ -20,10 +30,18 @@
     },
   ]);
 
-  function updatePreference(option, event) {
+  async function updatePreference(option, event) {
     const checked = event.currentTarget.checked;
-    option.save(checked);
+    const previous = option.checked;
     option.checked = checked;
+    if (option.id === "web-push") { pushPending = true; pushError = ""; }
+    try { await option.save(checked); }
+    catch (error) {
+      option.checked = previous;
+      pushError = error?.message ?? "Could not update notifications";
+    } finally {
+      if (option.id === "web-push") pushPending = false;
+    }
   }
 </script>
 
@@ -36,6 +54,7 @@
         checked={option.checked}
         aria-labelledby={`${option.id}-label`}
         aria-describedby={`${option.id}-description`}
+        disabled={option.disabled || (option.id === "web-push" && pushPending)}
         onchange={(event) => updatePreference(option, event)}
       />
       <span class="settings-copy">
@@ -44,6 +63,7 @@
       </span>
     </label>
   {/each}
+  {#if pushError}<p class="settings-error" role="alert">{pushError}</p>{/if}
 
   <div class="m-actions" id="mActions">
     <button class="btn" type="button" data-modal-cancel onclick={closeModalState}>Done</button>
@@ -109,6 +129,8 @@
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
+
+  .settings-error { margin: 8px 12px 0; color: var(--red); font-size: 11.5px; }
 
   @media (max-width: 760px) {
     .settings-option {

@@ -1,5 +1,6 @@
 export const THINKING_VISIBILITY_KEY = "pi_show_thinking";
 export const THEME_KEY = "pi_theme";
+export const WEB_PUSH_KEY = "pi_web_push";
 export const DARK_THEME = "dark";
 export const LIGHT_THEME = "light";
 export const THEME_COLORS = Object.freeze({
@@ -18,6 +19,8 @@ export function createSettingsPreferenceService({
   themeColorElement,
   onThinkingVisibilityChanged = () => {},
   onThemeChanged = () => {},
+  navigatorTarget = globalThis.navigator,
+  fetchImpl = (...args) => globalThis.fetch(...args),
 }) {
   let disposed = false;
   let notifyThinkingVisibilityChanged = onThinkingVisibilityChanged;
@@ -31,6 +34,49 @@ export function createSettingsPreferenceService({
 
   applyTheme(readTheme(storage));
 
+  const decodeVapidKey = (value) => {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+    return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  };
+  const pushSupported = () => !!(navigatorTarget?.serviceWorker && globalThis.PushManager && globalThis.Notification);
+
+  async function setWebPushEnabled(enabled) {
+    if (disposed) return false;
+    if (!pushSupported()) throw new Error("Web Push is not supported in this browser");
+    const registration = await navigatorTarget.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    if (!enabled) {
+      if (existing) {
+        await fetchImpl("/push/subscription", {
+          method: "DELETE", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
+        }).catch(() => {});
+        await existing.unsubscribe();
+      }
+      storage.setItem(WEB_PUSH_KEY, "0");
+      return false;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") throw new Error("Notification permission was not granted");
+    let subscription = existing;
+    if (!subscription) {
+      const response = await fetchImpl("/push/config");
+      if (!response.ok) throw new Error(`Cannot load push configuration (${response.status})`);
+      const { publicKey } = await response.json();
+      subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeVapidKey(publicKey) });
+    }
+    const saved = await fetchImpl("/push/subscription", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(subscription),
+    });
+    if (!saved.ok) {
+      if (!existing) await subscription.unsubscribe().catch(() => {});
+      throw new Error(`Cannot save push subscription (${saved.status})`);
+    }
+    storage.setItem(WEB_PUSH_KEY, "1");
+    return true;
+  }
+
   return Object.freeze({
     isThinkingVisible() {
       return storage.getItem(THINKING_VISIBILITY_KEY) !== "0";
@@ -40,6 +86,9 @@ export function createSettingsPreferenceService({
       storage.setItem(THINKING_VISIBILITY_KEY, visible ? "1" : "0");
       return notifyThinkingVisibilityChanged(visible);
     },
+    isWebPushSupported: pushSupported,
+    isWebPushEnabled() { return storage.getItem(WEB_PUSH_KEY) === "1"; },
+    setWebPushEnabled,
     isLightMode() {
       return readTheme(storage) === LIGHT_THEME;
     },

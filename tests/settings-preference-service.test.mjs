@@ -7,6 +7,7 @@ import {
   THEME_COLORS,
   THEME_KEY,
   THINKING_VISIBILITY_KEY,
+  WEB_PUSH_KEY,
 } from "../public/src/runtime/settingsPreferenceService.js";
 
 test("settings preference service defaults thinking visibility on and reads persisted values", () => {
@@ -70,6 +71,42 @@ test("settings preference service applies and persists the selected color theme"
   assert.equal(attributes.get("data-theme"), DARK_THEME);
   assert.equal(metaAttributes.get("content"), THEME_COLORS[DARK_THEME]);
   assert.deepEqual(changed, [DARK_THEME]);
+});
+
+test("settings preference service opts a device into and out of authenticated Web Push", async (t) => {
+  const originalNotification = globalThis.Notification;
+  const originalPushManager = globalThis.PushManager;
+  t.after(() => { globalThis.Notification = originalNotification; globalThis.PushManager = originalPushManager; });
+  globalThis.Notification = { requestPermission: async () => "granted" };
+  globalThis.PushManager = function PushManager() {};
+  const values = new Map();
+  const requests = [];
+  let subscription = null;
+  const pushSubscription = {
+    endpoint: "https://push.example/subscription",
+    keys: { p256dh: "key", auth: "auth" },
+    toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+    async unsubscribe() { subscription = null; return true; },
+  };
+  const registration = { pushManager: {
+    async getSubscription() { return subscription; },
+    async subscribe() { subscription = pushSubscription; return subscription; },
+  } };
+  const service = createSettingsPreferenceService({
+    storage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) },
+    navigatorTarget: { serviceWorker: { ready: Promise.resolve(registration) } },
+    fetchImpl: async (url, options = {}) => {
+      requests.push([url, options.method ?? "GET"]);
+      return { ok: true, json: async () => ({ publicKey: "AQ" }) };
+    },
+  });
+
+  assert.equal(service.isWebPushSupported(), true);
+  assert.equal(await service.setWebPushEnabled(true), true);
+  assert.equal(values.get(WEB_PUSH_KEY), "1");
+  assert.equal(await service.setWebPushEnabled(false), false);
+  assert.equal(values.get(WEB_PUSH_KEY), "0");
+  assert.deepEqual(requests, [["/push/config", "GET"], ["/push/subscription", "POST"], ["/push/subscription", "DELETE"]]);
 });
 
 test("settings preference service defaults invalid theme values to dark", () => {

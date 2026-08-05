@@ -115,10 +115,12 @@ export async function createRunnerManager(state, {
   guardCallback = (callback) => callback,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  notifyRunnerEvent = () => {},
 } = {}) {
   if (!state || typeof state !== "object") throw new TypeError("runner state is required");
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
   if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("runner timer functions are required");
+  if (typeof notifyRunnerEvent !== "function") throw new TypeError("runner notification callback is required");
   if (appStore === undefined) appStore = state.appStore;
   const { config, serverEvent, sessionReferences } = state;
   if (!config || typeof config !== "object") throw new TypeError("runner config is required");
@@ -347,6 +349,8 @@ export async function createRunnerManager(state, {
   async function trackRunner(runner, line) {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
+    try { notifyRunnerEvent(runner, msg); }
+    catch (error) { console.error(`[oyster] cannot notify for runner ${runner.id}: ${error?.message ?? error}`); }
     if (msg.type === "agent_start") { runner.busy = true; runnersChanged(runner); }
     else if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); }
     else if (msg.type === "agent_settled") { runner.busy = false; runnersChanged(runner); requestState(runner); }

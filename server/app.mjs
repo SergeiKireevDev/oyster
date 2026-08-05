@@ -28,18 +28,18 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor, scheduleHublotStartupReconciliation } = await import(bust("persistence/hublotSupervisor.mjs"));
   const { createPinnedWidgetRoutes, ensurePinnedHublot } = await import(bust("pinned-widgets.mjs"));
-
+  const { createWebPushService } = await import(bust("web-push-service.mjs"));
   const [
     { createRequestContext }, { createRouteTable },
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
     { createSessionRoutes, setSessionFamilyArchived, stopSessionFamilyRunners }, { createFileRoutes }, { createWorkdirRoutes },
     { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
-    { createCredentialRoutes }, { createOAuthRoutes },
+    { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes },
   ] = await Promise.all([
     "http/createRequestContext.mjs", "http/createRouteTable.mjs",
     ...[
       "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
-      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes",
+      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
 
@@ -100,7 +100,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
-  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
+  const webPushService = await createWebPushService({ repository: appStore.repositories.webPush });
+  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
@@ -167,6 +168,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
       teardownRoutine, releaseRoutine, deleteRoutine, spawnRoutineAgent,
     },
   });
+  const pushRoutes = createPushRoutes({ requestContext, pushService: webPushService });
   const sessionRoutes = createSessionRoutes({
     state,
     appStore,
@@ -183,7 +185,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes });
   const openRouteKeys = new Set(Object.keys(openRoutes)); const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
 
   // ---------------------------------------------------------------- dispatch

@@ -400,6 +400,29 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         FROM pinned_widget_groups WHERE scope = ? AND owner_id IS ?
       `, scope, ownerId)).position),
     }),
+    webPush: Object.freeze({
+      getVapidKeys: async () => {
+        const row = await database.get("SELECT public_key, private_key FROM web_push_vapid WHERE id = 1");
+        return row ? { publicKey: row.public_key, privateKey: row.private_key } : null;
+      },
+      createVapidKeys: async ({ publicKey, privateKey, createdAt }) => {
+        await database.run("INSERT OR IGNORE INTO web_push_vapid(id, public_key, private_key, created_at) VALUES (1, ?, ?, ?)", publicKey, privateKey, createdAt);
+        return rawRepositories.webPush.getVapidKeys();
+      },
+      listSubscriptions: async () => (await database.all("SELECT endpoint, expiration_time, p256dh, auth, created_at, last_delivered_at FROM web_push_subscriptions ORDER BY created_at")).map((row) => ({ ...row })),
+      upsertSubscription: async ({ endpoint, expirationTime, p256dh, auth, createdAt }) => {
+        await database.run(`
+          INSERT INTO web_push_subscriptions(endpoint, expiration_time, p256dh, auth, created_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(endpoint) DO UPDATE SET
+            expiration_time = excluded.expiration_time, p256dh = excluded.p256dh,
+            auth = excluded.auth, created_at = excluded.created_at
+        `, endpoint, expirationTime, p256dh, auth, createdAt);
+        return { ...await database.get("SELECT endpoint, expiration_time, p256dh, auth, created_at, last_delivered_at FROM web_push_subscriptions WHERE endpoint = ?", endpoint) };
+      },
+      markDelivered: async (endpoint, deliveredAt) => (await database.run("UPDATE web_push_subscriptions SET last_delivered_at = ? WHERE endpoint = ?", deliveredAt, endpoint)).changes,
+      deleteSubscription: async (endpoint) => (await database.run("DELETE FROM web_push_subscriptions WHERE endpoint = ?", endpoint)).changes,
+    }),
     runners: Object.freeze({
       list: async () => (await database.all("SELECT * FROM runners ORDER BY created_at, id")).map((row) => ({ ...row })),
       find: async (id) => {
