@@ -504,7 +504,7 @@ export function createRenderJobs() {
 export function createTailFirstTranscriptRenderer({
   messagesElement, scroller, splitTurns, takeTailChunk, backfillTurns, renderMessage,
   clear, rememberPrompt, userMessageText, scrollToBottom, nearBottom, afterRender,
-  tick, tailMessages = 40, chunkMessages = 60,
+  tick, renderBatch = (work) => work(), tailMessages = 40, chunkMessages = 60,
 }) {
   const jobs = createRenderJobs();
   let backfilling = false;
@@ -513,7 +513,9 @@ export function createTailFirstTranscriptRenderer({
     backfilling = true;
     try {
       const messages = prepend ? [...chunk].reverse() : chunk;
-      for (const message of messages) renderMessage(message, { prepend });
+      renderBatch(() => {
+        for (const message of messages) renderMessage(message, { prepend });
+      }, { prepend });
     } finally { backfilling = false; }
   }
 

@@ -132,6 +132,7 @@ export function createTranscriptAssembly(deps) {
     takeTailChunk,
     backfillTurns: backfillTranscriptTurns,
     renderMessage: renderFullMessage,
+    renderBatch: (work, options) => transcriptActions.batch(work, options),
     clear: clearMessages,
     rememberPrompt: deps.rememberPrompt,
     userMessageText,

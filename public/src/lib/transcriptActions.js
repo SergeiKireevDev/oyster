@@ -7,8 +7,29 @@ import { appendTranscriptItems, createTranscriptItem, prependTranscriptItems } f
  * component props and writable assistant state out of the orchestration loop.
  */
 export function createTranscriptActions({ callbacks, shouldShowThinking, assistantMessageText, storage, ensureToolCardStore }) {
+  let activeBatch = null;
+
   function insert(items, prepend) {
+    if (activeBatch) {
+      if (prepend !== activeBatch.prepend) throw new Error("transcript batch direction changed");
+      if (prepend) activeBatch.items.unshift(...items);
+      else activeBatch.items.push(...items);
+      return;
+    }
     (prepend ? prependTranscriptItems : appendTranscriptItems)(items);
+  }
+
+  /** Build a render chunk with one final store publication. */
+  function batch(work, { prepend = false } = {}) {
+    if (activeBatch) return work();
+    activeBatch = { prepend, items: [] };
+    let result;
+    try { result = work(); }
+    catch (error) { activeBatch = null; throw error; }
+    const items = activeBatch.items;
+    activeBatch = null;
+    insert(items, prepend);
+    return result;
   }
 
   function makeItem(item) {
@@ -73,5 +94,5 @@ export function createTranscriptActions({ callbacks, shouldShowThinking, assista
     return item;
   }
 
-  return { addAssistant, addCompaction, addUser, assistantPlainText, updateAssistant };
+  return { addAssistant, addCompaction, addUser, assistantPlainText, batch, updateAssistant };
 }
