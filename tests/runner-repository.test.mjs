@@ -86,8 +86,19 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal((await store.repositories.runners.find(runner.id)).session_name, "Named runner");
   processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "oversized-response", success: true, data: "x".repeat(1024 * 1024) })}\n`);
+  processes[0].stdout.write(`${JSON.stringify({ type: "message_update", message: { role: "assistant", content: "cumulative" } })}\n`);
+  processes[0].stdout.write(`${JSON.stringify({ type: "tool_execution_update", toolCallId: "tool-1", partialResult: "cumulative" })}\n`);
+  processes[0].stdout.write(`${JSON.stringify({ type: "agent_end", messages: [{ role: "assistant", content: "snapshot" }] })}\n`);
+  processes[0].stdout.write(`${JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "snapshot" } })}\n`);
+  processes[0].stdout.write(`${JSON.stringify({ type: "message_end", message: { role: "assistant", content: "terminal" } })}\n`);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
-  assert.equal((await store.repositories.runnerEvents.list(runner.id)).some((event) => event.payload.includes("oversized-response")), false);
+  const replayedEvents = await store.repositories.runnerEvents.list(runner.id);
+  const replayedTypes = replayedEvents.map((event) => JSON.parse(event.payload).type);
+  assert.equal(replayedEvents.some((event) => event.payload.includes("oversized-response")), false);
+  for (const type of ["response", "message_update", "tool_execution_update", "agent_end", "turn_end"]) {
+    assert.equal(replayedTypes.includes(type), false, `${type} snapshots must not enter durable replay`);
+  }
+  assert.equal(replayedTypes.includes("message_end"), true, "bounded terminal events remain replayable");
 
   await manager.stopRunner(runner);
   persisted = await store.repositories.runners.find(runner.id);
