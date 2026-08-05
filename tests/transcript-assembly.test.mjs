@@ -56,6 +56,25 @@ test("transcript assembly owns DOM, stream, action, tool-card, and renderer cons
   assembly.teardown();
 });
 
+test("canonical transcript chunks publish one store update per batch", async () => {
+  resetTranscriptItems();
+  const assembly = createTranscriptAssembly(createDependencies());
+  let publications = 0;
+  const unsubscribe = transcriptItems.subscribe(() => publications++);
+  publications = 0; // Ignore the writable store's immediate subscription value.
+
+  const messages = Array.from({ length: 41 }, (_, index) => ({
+    role: "user", content: `message ${index + 1}`, timestamp: index + 1,
+  }));
+  await assembly.operations.renderTranscript(messages);
+
+  assert.equal(publications, 2, "the initial tail and older backfill each publish once");
+  assert.deepEqual(get(transcriptItems).map(({ text }) => text), messages.map(({ content }) => content));
+  unsubscribe();
+  assembly.teardown();
+  resetTranscriptItems();
+});
+
 test("compaction summaries render as transcript markers", () => {
   resetTranscriptItems();
   const assembly = createTranscriptAssembly(createDependencies());
