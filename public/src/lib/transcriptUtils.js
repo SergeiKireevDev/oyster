@@ -18,7 +18,17 @@ export function splitTurns(messages = []) {
 
 export function takeTailChunk(turns, max) {
   const chunk = [];
-  while (turns.length && (chunk.length === 0 || chunk.length + turns[turns.length - 1].length <= max)) {
+  while (turns.length) {
+    const turn = turns[turns.length - 1];
+    const available = max - chunk.length;
+    if (turn.length > available) {
+      // Preserve ordinary turn boundaries, but never let one tool-heavy turn
+      // defeat the render budget and monopolize the browser main thread.
+      if (chunk.length) break;
+      chunk.unshift(...turn.splice(-max));
+      if (!turn.length) turns.pop();
+      break;
+    }
     chunk.unshift(...turns.pop());
     if (chunk.length >= max) break;
   }
