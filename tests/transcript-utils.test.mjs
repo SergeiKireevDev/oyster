@@ -47,3 +47,13 @@ test("transcript utils: takeTailChunk pops whole turns from the end", () => {
   assert.deepEqual(next.map((message) => message.id), [3, 4, 5]);
   assert.equal(turns.length, 1);
 });
+
+test("transcript utils: takeTailChunk splits a turn that exceeds the render budget", () => {
+  const messages = Array.from({ length: 95 }, (_, index) => ({ id: index + 1 }));
+  const turns = [[...messages]];
+
+  assert.deepEqual(takeTailChunk(turns, 40).map(({ id }) => id), messages.slice(-40).map(({ id }) => id));
+  assert.equal(turns[0].length, 55);
+  assert.deepEqual(takeTailChunk(turns, 60).map(({ id }) => id), messages.slice(0, 55).map(({ id }) => id));
+  assert.equal(turns.length, 0);
+});
