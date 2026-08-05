@@ -770,6 +770,7 @@
     width: 7px;
     height: 7px;
     flex: none;
+    margin-right: 23.5px;
     border-right: 1.5px solid var(--muted);
     border-bottom: 1.5px solid var(--muted);
     transform: rotate(45deg);
@@ -860,6 +861,6 @@
     .s-date { width: 100%; margin-left: 13px; }
     .s-loopgroup > summary { align-items: flex-start; flex-wrap: wrap; }
     .s-loop-status { order: 3; margin-left: 40px; }
-    .s-loop-chevron { margin: 11px 2px 0 auto; }
+    .s-loop-chevron { margin: 11px 28.5px 0 auto; }
   }
 </style>

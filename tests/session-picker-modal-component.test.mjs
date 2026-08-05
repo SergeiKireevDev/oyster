@@ -46,6 +46,8 @@ test("session picker owns its calm responsive modal presentation", () => {
   assert.match(source, /\.s-stop::before \{\s*width: 11px;\s*height: 11px;[\s\S]*?transform: translate\(-50%, -50%\);/);
   assert.match(source, /\.s-del:hover \{[\s\S]*?var\(--red\)/);
   assert.match(source, /\.s-stop:hover \{[\s\S]*?var\(--yellow\)/);
+  assert.match(source, /\.s-loop-chevron \{[\s\S]*?margin-right: 23\.5px;/);
+  assert.match(source, /@media \(max-width: 520px\) \{[\s\S]*?\.s-loop-chevron \{ margin: 11px 28\.5px 0 auto; \}/);
   assert.match(source, /\.session-picker-empty \{[\s\S]*?var\(--muted\)/);
   assert.match(source, /@media \(max-width: 760px\) \{[\s\S]*?\.s-del \{ width: 40px; height: 40px; \}/);
   assert.match(source, /@media \(max-width: 520px\) \{[\s\S]*?\.search-row \{ flex-wrap: wrap; \}/);
