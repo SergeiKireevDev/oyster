@@ -44,6 +44,9 @@ export function createSettingsPreferenceService({
   async function setWebPushEnabled(enabled) {
     if (disposed) return false;
     if (!pushSupported()) throw new Error("Web Push is not supported in this browser");
+    // Mobile Safari requires the permission prompt to happen in the original
+    // checkbox gesture. Do not place an await before requestPermission().
+    const permissionRequest = enabled ? Notification.requestPermission() : null;
     const registration = await navigatorTarget.serviceWorker.ready;
     const existing = await registration.pushManager.getSubscription();
     if (!enabled) {
@@ -57,7 +60,7 @@ export function createSettingsPreferenceService({
       storage.setItem(WEB_PUSH_KEY, "0");
       return false;
     }
-    const permission = await Notification.requestPermission();
+    const permission = await permissionRequest;
     if (permission !== "granted") throw new Error("Notification permission was not granted");
     let subscription = existing;
     if (!subscription) {
