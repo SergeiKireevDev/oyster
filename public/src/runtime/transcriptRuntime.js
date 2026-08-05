@@ -540,7 +540,7 @@ export function createTailFirstTranscriptRenderer({
       if (text && !/^Opening interface: /.test(text)) rememberPrompt(text);
     }
     const turns = splitTurns(messages);
-    renderChunk(takeTailChunk(turns, tailMessages));
+    renderChunk(takeTailChunk(turns, tailMessages, { preserveOversizedTurn: true }));
     await tick();
     if (restoreTop === null) scrollToBottom(true);
     else scroller.scrollTop = restoreTop;

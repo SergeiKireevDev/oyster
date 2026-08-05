@@ -71,9 +71,9 @@ test("file browsers incrementally reveal large keyed directory and file collecti
   assert.match(picker, /requestedFiles = DEFAULT_COLLECTION_PAGE_SIZE/);
 });
 
-test("transcripts load the tail first and backfill in bounded chunks", () => {
+test("transcripts render the latest turn atomically and backfill older turns in bounded chunks", () => {
   const runtime = readFileSync(new URL("../public/src/runtime/transcriptRuntime.js", import.meta.url), "utf8");
   assert.match(runtime, /tailMessages = 40, chunkMessages = 60/);
-  assert.match(runtime, /renderChunk\(takeTailChunk\(turns, tailMessages\)\)/);
+  assert.match(runtime, /renderChunk\(takeTailChunk\(turns, tailMessages, \{ preserveOversizedTurn: true \}\)\)/);
   assert.match(runtime, /backfillTurns\(\{/);
 });
