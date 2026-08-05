@@ -526,7 +526,7 @@
   }
 
   function label(session, runner) {
-    return runner?.sessionName || session?.name || session?.preview || `Session ${String(runner?.sessionId ?? session?.id).slice(0, 8)}`;
+    return runner?.sessionName || session?.name || session?.preview || "Empty session";
   }
 
   function snippetBefore(value, limit = 48) {
@@ -685,7 +685,7 @@
     {@const hitPage = collectionPage(group.hits, collectionLimits, `search-hits:${group.sessionKey}`, SEARCH_HIT_PAGE_SIZE)}
     <section class="session-sidebar-hit-group" title={group.sessionKey}>
       <div class="session-sidebar-hit-heading">
-        <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "(unnamed session)"}</span>
+        <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "Empty session"}</span>
         <span class="session-sidebar-hit-count">{group.hits.length}</span>
       </div>
       <span

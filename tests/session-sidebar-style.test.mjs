@@ -36,6 +36,12 @@ test("session sidebar owns its calm responsive presentation", () => {
   assert.doesNotMatch(globalStyles, /\.session-sidebar|\.session-loop|\.session-timeline|\.session-archive/);
 });
 
+test("session sidebar labels empty sessions consistently", () => {
+  assert.match(source, /runner\?\.sessionName \|\| session\?\.name \|\| session\?\.preview \|\| "Empty session"/);
+  assert.match(source, /group\.first\.sessionName \|\| group\.first\.sessionPreview \|\| "Empty session"/);
+  assert.doesNotMatch(source, /`Session \$\{String\(/);
+});
+
 test("session sidebar retains explicit state and control semantics", () => {
   assert.match(source, /<aside id="sessions" aria-label="Sessions">/);
   assert.match(source, /type="search"[\s\S]*?aria-label="Search sessions"[\s\S]*?aria-busy=\{\$sessionPicker\.searching\}/);
