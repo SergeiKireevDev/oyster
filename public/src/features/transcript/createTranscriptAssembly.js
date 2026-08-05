@@ -147,15 +147,22 @@ export function createTranscriptAssembly(deps) {
     afterRender: deps.placeCheckpoint,
   });
 
+  let transcriptRenderGeneration = 0;
   async function renderTranscript(messages) {
+    const generation = ++transcriptRenderGeneration;
+    setTranscriptHistory({ loading: true });
     deps.log("renderTranscript:start", { messages: messages?.length ?? 0 });
-    const complete = await renderer.render(messages);
-    if (!complete) {
-      deps.log("renderTranscript:superseded", { activeJob: renderer.currentJob });
-      return false;
+    try {
+      const complete = await renderer.render(messages);
+      if (!complete) {
+        deps.log("renderTranscript:superseded", { activeJob: renderer.currentJob });
+        return false;
+      }
+      deps.log("renderTranscript:complete", { domMessages: renderer.messageCount });
+      return true;
+    } finally {
+      if (generation === transcriptRenderGeneration) setTranscriptHistory({ loading: false });
     }
-    deps.log("renderTranscript:complete", { domMessages: renderer.messageCount });
-    return true;
   }
 
   function configureSynchronization(syncDeps) {
@@ -180,7 +187,8 @@ export function createTranscriptAssembly(deps) {
           before: historyCursor,
         });
         if (generation !== (syncDeps.getGeneration?.() ?? 0) || identity !== historyIdentity) return false;
-        await renderer.prepend(page.messages ?? []);
+        const complete = await renderer.prepend(page.messages ?? []);
+        if (!complete || generation !== (syncDeps.getGeneration?.() ?? 0) || identity !== historyIdentity) return false;
         applyHistoryPage(page, identity);
         return true;
       } catch (error) {

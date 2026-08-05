@@ -565,12 +565,21 @@ export function createTailFirstTranscriptRenderer({
 
   async function prepend(messages) {
     if (!messages?.length) return true;
-    const snapshot = { height: scroller.scrollHeight, top: scroller.scrollTop };
-    renderChunk(messages, { prepend: true });
-    await tick();
-    scroller.scrollTop = snapshot.top + (scroller.scrollHeight - snapshot.height);
-    afterRender();
-    return true;
+    const job = jobs.begin();
+    const turns = splitTurns(messages);
+    const complete = await backfillTurns({
+      turns,
+      takeTailChunk,
+      chunkSize: chunkMessages,
+      isCurrent: () => jobs.isCurrent(job),
+      beforePrepend: () => ({ height: scroller.scrollHeight, top: scroller.scrollTop }),
+      renderPrepend: async (chunk) => { renderChunk(chunk, { prepend: true }); await tick(); },
+      afterPrepend: ({ height, top }) => {
+        scroller.scrollTop = top + (scroller.scrollHeight - height);
+      },
+    });
+    if (complete) afterRender();
+    return complete;
   }
 
   return {
