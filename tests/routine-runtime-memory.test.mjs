@@ -33,6 +33,7 @@ test("routine memory contains only live process resources", async (t) => {
   await stopRoutine(state, "sleep.sh");
   assert.ok(runtime.stopTimer || !state.routineRuntime.has((await store.repositories.routines.findByName("sleep.sh")).id), "stopping should schedule termination or observe process closure");
   await closed;
+  await runtime.completion;
   assert.equal(runtime.stopTimer, null, "normal process closure should cancel forced termination");
   assert.equal(state.routineRuntime.size, 0);
 
