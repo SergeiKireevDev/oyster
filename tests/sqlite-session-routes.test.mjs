@@ -30,13 +30,13 @@ function setup({ sessionOperations = null } = {}) {
   const owners = new Map();
   let nextOwnerId = 1;
   const sessionRepository = {
-    upsert({ backend, sessionId, storagePath: path = null, createdAt }) {
+    async upsert({ backend, sessionId, storagePath: path = null, createdAt }) {
       const key = `${backend}:${sessionId}:${path ?? ""}`;
       if (!owners.has(key)) owners.set(key, { id: nextOwnerId++, backend, session_id: sessionId, storage_path: path, status: "active", archived: 0, created_at: createdAt });
       return { ...owners.get(key) };
     },
-    find({ backend, sessionId, storagePath: path = null }) { return owners.get(`${backend}:${sessionId}:${path ?? ""}`) ?? null; },
-    setArchived(id, archived) {
+    async find({ backend, sessionId, storagePath: path = null }) { return owners.get(`${backend}:${sessionId}:${path ?? ""}`) ?? null; },
+    async setArchived(id, archived) {
       const owner = [...owners.values()].find((candidate) => candidate.id === id);
       if (!owner) return 0;
       owner.archived = archived ? 1 : 0;
