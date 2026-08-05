@@ -184,7 +184,7 @@ test("canonical transcript controller reads dormant sessions without calling pi"
 
   assert.equal(await controller(), true);
   assert.deepEqual(calls, [
-    ["fetch", "/session-messages?key=ps1_saved"],
+    ["fetch", "/session-messages?key=ps1_saved&limit=80"],
     "state",
     "clear",
     ["render", [{ role: "user", content: "saved" }]],
@@ -249,7 +249,7 @@ test("canonical reload delegates state and backend-neutral durable transcript id
     getSessionIdentity: () => "ps1_sqlite",
   });
   assert.deepEqual(applied, [{ sessionFile: null, sessionId: "sqlite-session" }]);
-  assert.equal(requestedUrl, "/session-messages?key=ps1_sqlite");
+  assert.equal(requestedUrl, "/session-messages?key=ps1_sqlite&limit=80");
   assert.deepEqual(result.messages, [{ role: "user", content: "durable" }]);
 });
 

@@ -84,7 +84,7 @@ test("session actions fetch durable transcript previews", async () => {
     return { ok: true, json: async () => ({ messages: [{ role: "user", content: "saved" }] }) };
   };
   assert.deepEqual(await fetchSessionPreview(fetchImpl, "/home/me/.pi/agent/sessions/--workspace--/a.jsonl"), [{ role: "user", content: "saved" }]);
-  assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl");
+  assert.equal(requests[0], "/session-messages?path=--workspace--%2Fa.jsonl&limit=80");
   assert.equal(await fetchSessionPreview(async () => ({ ok: false }), "/other.jsonl"), null);
 });
 

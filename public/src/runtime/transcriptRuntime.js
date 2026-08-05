@@ -1,6 +1,8 @@
 import { createFrameScheduler } from "../lib/frameScheduler.js";
 import { loadCanonicalTranscript } from "../lib/transcriptReloadActions.js";
 
+export const TRANSCRIPT_PAGE_SIZE = 80;
+
 export const REPLAY_GATED_EVENT_TYPES = new Set([
   "message_start", "message_update", "message_end",
   "tool_execution_start", "tool_execution_update", "tool_execution_end",
@@ -16,7 +18,7 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
     applyState,
     onState,
     onMessages,
-    getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, getSessionIdentity(state), sessionFileQuery),
+    getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, getSessionIdentity(state), sessionFileQuery, { limit: TRANSCRIPT_PAGE_SIZE }),
     shouldGetDurableMessages: (state) => Boolean(getSessionIdentity(state)),
     onDurableMessages,
   });
@@ -242,7 +244,7 @@ export function createTranscriptAfterRenderController({ annotate, refreshCheckpo
   };
 }
 
-export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, getRunnerInfo = () => null, isRunnerAlive = () => true, getGeneration = () => 0, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender }) {
+export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity, getRunnerInfo = () => null, isRunnerAlive = () => true, getGeneration = () => 0, clearPreview, log = () => {}, now = () => performance.now(), render, setReplaying, takeBufferedEvents, flushBufferedEvents, afterRender, onDurablePage = () => {} }) {
   let latestJob = 0;
   return async () => {
     const job = ++latestJob;
@@ -255,8 +257,9 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
       if (!isRunnerAlive()) {
         const identity = getSessionIdentity?.();
         const durable = identity
-          ? await fetchDurableTranscript(fetchImpl, identity, sessionFileQuery)
+          ? await fetchDurableTranscript(fetchImpl, identity, sessionFileQuery, { limit: TRANSCRIPT_PAGE_SIZE })
           : { messages: [] };
+        onDurablePage(durable, identity);
         messages = Array.isArray(durable.messages) ? durable.messages : [];
         const runner = getRunnerInfo?.();
         if (runner?.sessionId && isCurrent()) applyState({
@@ -278,8 +281,14 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
           sessionFileQuery,
           getSessionIdentity,
           onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
-          onMessages: (result) => log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
-          onDurableMessages: (result) => log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 }),
+          onMessages: (result) => {
+            onDurablePage({ page: { before: null, hasMore: false, total: result?.messages?.length ?? 0 } }, getSessionIdentity?.());
+            log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
+          },
+          onDurableMessages: (result) => {
+            onDurablePage(result, getSessionIdentity?.());
+            log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
+          },
         }));
       }
     } catch (error) {
@@ -302,8 +311,9 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
 }
 
 /** Monotonic render-job ownership for cancelling stale transcript backfills. */
-export async function fetchDurableTranscript(fetchImpl, sessionFile, query) {
-  const res = await fetchImpl(`/session-messages?${query(sessionFile)}`);
+export async function fetchDurableTranscript(fetchImpl, sessionFile, query, { limit = null, before = null } = {}) {
+  const pagination = `${limit === null ? "" : `&limit=${encodeURIComponent(limit)}`}${before === null ? "" : `&before=${encodeURIComponent(before)}`}`;
+  const res = await fetchImpl(`/session-messages?${query(sessionFile)}${pagination}`);
   if (!res.ok) throw new Error(`session-messages failed (${res.status})`);
   return res.json();
 }
@@ -553,8 +563,19 @@ export function createTailFirstTranscriptRenderer({
     return complete;
   }
 
+  async function prepend(messages) {
+    if (!messages?.length) return true;
+    const snapshot = { height: scroller.scrollHeight, top: scroller.scrollTop };
+    renderChunk(messages, { prepend: true });
+    await tick();
+    scroller.scrollTop = snapshot.top + (scroller.scrollHeight - snapshot.height);
+    afterRender();
+    return true;
+  }
+
   return {
     render,
+    prepend,
     cancel: () => jobs.cancel(),
     get backfilling() { return backfilling; },
     get currentJob() { return jobs.current; },

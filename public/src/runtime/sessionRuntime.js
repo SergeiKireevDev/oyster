@@ -146,7 +146,7 @@ export const sessionFileQuery = sessionIdentityQuery;
 
 /** Read durable transcript history for an optimistic session-switch preview. */
 export async function fetchSessionPreview(fetchImpl, sessionPath) {
-  const res = await fetchImpl(`/session-messages?${sessionFileQuery(sessionPath)}`);
+  const res = await fetchImpl(`/session-messages?${sessionFileQuery(sessionPath)}&limit=80`);
   if (!res.ok) return null;
   const data = await res.json();
   return data.messages ?? [];

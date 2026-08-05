@@ -56,6 +56,8 @@ export const COMPOSER_SEND_ACTION = "composer.send";
 export const COMPOSER_ABORT_ACTION = "composer.abort";
 export const COMPOSER_VOICE_ACTION = "composer.voice";
 
+export const TRANSCRIPT_LOAD_EARLIER_ACTION = "transcript.loadEarlier";
+
 export const CHECKPOINT_TREE_OPEN_ACTION = "checkpointTree.open";
 export const CHECKPOINT_TREE_ROLLBACK_ACTION = "checkpointTree.rollback";
 
