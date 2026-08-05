@@ -25,6 +25,7 @@ export function createRunnerRoutes({
   listRunnerInfo,
   requestContext,
   sendToRunner,
+  acknowledgeRunnerAttention,
   stopRunner,
   stopRunnerFamily = stopRunner,
   spawnRunner,
@@ -50,7 +51,7 @@ export function createRunnerRoutes({
     throw new TypeError("requestContext response, JSON body, and safe-path helpers are required");
   }
   const requiredFunctions = {
-    runnerFromReq, startRunner, listRunnerInfo, sendToRunner, stopRunner, stopRunnerFamily,
+    runnerFromReq, startRunner, listRunnerInfo, sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily,
     runnerInfo, openSessionRunner, sessionReferenceParam, lookupSessionReference,
     setIntervalImpl, clearIntervalImpl, setTimeoutImpl,
     clearTimeoutImpl, resolvePath, isDirectory, replayRunnerEvents,
@@ -132,6 +133,12 @@ export function createRunnerRoutes({
     "GET /runners": (_req, res) => {
       disableCaching(res);
       json(res, 200, { runners: listRunnerInfo() });
+    },
+
+    "POST /runner/attention/read": async (_req, res, url) => {
+      const runner = await runnerFromReq(url);
+      acknowledgeRunnerAttention(runner);
+      json(res, 200, { runner: runner.id, attentionStatus: runner.attentionStatus ?? null, attentionUnread: false });
     },
 
     "DELETE /runners": async (_req, res, url) => {

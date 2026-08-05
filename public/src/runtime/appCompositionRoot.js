@@ -325,6 +325,13 @@ function setTranscriptGateRequired(value) {
 }
 const setReplaying = platformAssembly.setReplaying;
 const composerReadyForSend = transcriptOperations.composerReadyForSend;
+async function acknowledgeCurrentAttention() {
+  if (document.visibilityState !== "visible") return;
+  const runnerId = getCurrentRunner();
+  if (!runnerId) return;
+  try { await fetch(`/runner/attention/read?runner=${encodeURIComponent(runnerId)}`, { method: "POST" }); }
+  catch { /* Attention acknowledgement is best-effort. */ }
+}
 const platformEvents = platformAssembly.configureEvents({
   log: lifecycleLog,
   updateReplayState: (replaying, phase) => updateAppSession({ replayingTranscript: replaying, transcriptLoadPhase: replaying ? phase : null }),
@@ -348,7 +355,7 @@ const platformEvents = platformAssembly.configureEvents({
       scheduleRefresh: (delay) => delayedTasks.schedule(() => loadHublots(), delay),
     },
     checkpoints: { refreshTree: refreshTreeIfOpen },
-    extensionUi: { handleExtensionUI: (message) => handleExtensionUI(message) },
+    extensionUi: { handleExtensionUI: (message) => { void acknowledgeCurrentAttention(); return handleExtensionUI(message); } },
     transcript: {
       assistantAlreadyRendered,
       reloadTranscript: () => reloadTranscript(),
@@ -357,7 +364,7 @@ const platformEvents = platformAssembly.configureEvents({
       resetWorkTimer,
       isGateRequired: platformAssembly.state.isTranscriptGateRequired,
       agentStart: () => agentStart(),
-      agentCompletion: () => agentCompletion(),
+      agentCompletion: () => { void acknowledgeCurrentAttention(); return agentCompletion(); },
       transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
     },
   },
@@ -875,6 +882,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     try {
       setActiveWorkspace(fullChoice.workspaceId, storage);
       await getSessionRuntime().openAndSwitchSession({ ...sessionOpenSelection(fullChoice), dir: fullChoice.cwd || getWorkdir() });
+      await acknowledgeCurrentAttention();
       addToast(`switched to: ${fullChoice.name || fullChoice.preview || fullChoice.id.slice(0, 8)}`);
     } catch (e) {
       addToast(`switch failed: ${e.message}`, "error");

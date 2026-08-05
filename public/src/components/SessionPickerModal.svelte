@@ -72,7 +72,10 @@
   }
 
   function runnerFor(session) {
-    return runnerByIdentity.get(sessionIdentity(session)) ?? { id: session.runnerId, alive: session.alive, busy: session.busy };
+    return runnerByIdentity.get(sessionIdentity(session)) ?? {
+      id: session.runnerId, alive: session.alive, busy: session.busy,
+      attentionStatus: session.attentionStatus, attentionUnread: session.attentionUnread,
+    };
   }
 
   function isAlive(session) {
@@ -130,6 +133,11 @@
   }
 
   const sessionDotClass = (alive, busy) => `s-dot${busy ? " busy" : alive ? " on" : ""}`;
+  const attentionClass = (runner) => `s-attention status-${runner.attentionStatus}${runner.attentionUnread ? " unread" : ""}`;
+  const attentionGlyph = (status) => status === "clarification" ? "?" : "✓";
+  const attentionTitle = (runner) => runner.attentionStatus === "clarification"
+    ? `clarification needed${runner.attentionUnread ? " · not opened" : ""}`
+    : `work completed${runner.attentionUnread ? " · not opened" : ""}`;
   const sessionDotTitle = (alive, busy) => busy ? "agent working" : alive ? "process running (idle)" : "no running process";
   const sessionDateMeta = (session) => `${hubMode && session.workspaceName ? `${session.workspaceName} · ` : ""}${formatRelativeTime(session.modifiedAt)} · ${session.messageCount} msgs`;
   const plural = (count, singular, pluralForm = `${singular}s`) => count === 1 ? singular : pluralForm;
@@ -350,11 +358,13 @@
   {@const current = session.id === $sessionPicker.currentId}
   {@const alive = isAlive(session)}
   {@const busy = isBusy(session)}
+  {@const runner = runnerFor(session)}
   <div class={sessionRowClass(current, timelineStatus)}>
     <div class="session-row-content">
       <button type="button" class="s-session-main" onclick={() => choosePickedSession(sessionIdentity(session))}>
         <div class="s-title">
           {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} role="img" aria-label={sessionDotTitle(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
+          {#if runner.attentionStatus}<span class={attentionClass(runner)} role="img" aria-label={attentionTitle(runner)} title={attentionTitle(runner)}>{attentionGlyph(runner.attentionStatus)}</span>{/if}
           <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
           <span class="s-date">{sessionDateMeta(session)}</span>
         </div>
@@ -566,6 +576,31 @@
     gap: 7px;
     overflow: hidden;
     white-space: nowrap;
+  }
+
+  .s-attention {
+    display: inline-grid;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 760;
+    line-height: 1;
+  }
+
+  .s-attention.status-clarification { color: var(--yellow); }
+  .s-attention.status-completed { color: var(--green); }
+  .s-attention.unread {
+    animation: attention-glow 1.8s ease-in-out infinite;
+    background: color-mix(in srgb, currentColor 13%, transparent);
+  }
+
+  @keyframes attention-glow {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 48%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent); }
   }
 
   .s-name {
@@ -839,6 +874,10 @@
 
   @keyframes session-timeline-glow {
     50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 38%, transparent), 0 0 12px 3px color-mix(in srgb, var(--accent) 32%, transparent); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .s-attention.unread { animation: none; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 32%, transparent); }
   }
 
   @media (max-width: 760px) {

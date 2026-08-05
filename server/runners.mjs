@@ -17,6 +17,7 @@
  *     sessionId:   string?  – its session id (from get_state)
  *     sessionName: string?  – its session name (from get_state)
  *     busy:        boolean  – streaming/compacting right now
+ *     attentionStatus / attentionUnread – durable result or clarification state
  *     proc:        ChildProcess|null
  *     resumeId / resumeQueue / resumeTimer – in-flight session resume state
  *     lastLineAt / probeSentAt / probeMisses / watchdogOk – health watchdog
@@ -46,6 +47,7 @@ const NON_REPLAYABLE_RUNNER_EVENTS = new Set([
 ]);
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
+const CLARIFICATION_METHODS = new Set(["select", "confirm", "input", "editor"]);
 
 export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
   "Artifact pinning policy:",
@@ -164,6 +166,8 @@ export async function createRunnerManager(state, {
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
       sessionName: persisted.session_name,
+      attentionStatus: persisted.attention_status ?? null,
+      attentionUnread: persisted.attention_unread === 1,
       startCount: persisted.start_count,
     }));
   }
@@ -214,6 +218,8 @@ export async function createRunnerManager(state, {
       sessionFile: r.sessionRef?.backend === "jsonl" ? r.sessionRef.storagePath : null,
       sessionId: r.sessionId,
       sessionName: r.sessionName,
+      attentionStatus: r.attentionStatus ?? null,
+      attentionUnread: Boolean(r.attentionUnread),
       busy: r.busy,
       alive: !!r.proc,
       ...(r.subagentStatus ? { subagentStatus: r.subagentStatus } : {}),
@@ -240,6 +246,23 @@ export async function createRunnerManager(state, {
       runners: changedRunner ? [runnerInfo(changedRunner)] : listRunnerInfo(),
       partial: Boolean(changedRunner),
     });
+  }
+
+  function setRunnerAttention(runner, status, unread = status !== null) {
+    if ((runner.attentionStatus ?? null) === status && Boolean(runner.attentionUnread) === Boolean(unread)) return false;
+    runner.attentionStatus = status;
+    runner.attentionUnread = Boolean(unread);
+    runnersChanged(runner);
+    void runnerRepository?.update(runner.id, {
+      attention_status: status,
+      attention_unread: unread ? 1 : 0,
+    }).catch((error) => console.error(`[oyster] cannot persist runner ${runner.id} attention: ${error?.message ?? error}`));
+    return true;
+  }
+
+  function acknowledgeRunnerAttention(runner) {
+    if (!runner?.attentionUnread) return false;
+    return setRunnerAttention(runner, runner.attentionStatus ?? null, false);
   }
 
   function withSseId(line) {
@@ -351,9 +374,15 @@ export async function createRunnerManager(state, {
     try { msg = JSON.parse(line); } catch { return; }
     try { notifyRunnerEvent(runner, msg); }
     catch (error) { console.error(`[oyster] cannot notify for runner ${runner.id}: ${error?.message ?? error}`); }
-    if (msg.type === "agent_start") { runner.busy = true; runnersChanged(runner); }
+    if (msg.type === "extension_ui_request" && CLARIFICATION_METHODS.has(msg.method)) setRunnerAttention(runner, "clarification");
+    if (msg.type === "agent_start") { setRunnerAttention(runner, null, false); runner.busy = true; runnersChanged(runner); }
     else if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); }
-    else if (msg.type === "agent_settled") { runner.busy = false; runnersChanged(runner); requestState(runner); }
+    else if (msg.type === "agent_settled") {
+      runner.busy = false;
+      if (runner.attentionStatus !== "clarification") setRunnerAttention(runner, "completed");
+      runnersChanged(runner);
+      requestState(runner);
+    }
     else if (msg.type === "compaction_start") { runner.busy = true; runnersChanged(runner); }
     else if (msg.type === "compaction_end" && msg.reason === "manual") { runner.busy = false; runnersChanged(runner); requestState(runner); }
     else if (msg.type === "response" && msg.id === runner.resumeId) {
@@ -639,7 +668,12 @@ export async function createRunnerManager(state, {
     } else {
       runner.proc.stdin.write(JSON.stringify(obj) + "\n");
     }
-    if (obj.type === "prompt") await unarchivePromptedSession(runner);
+    if (obj.type === "prompt") {
+      setRunnerAttention(runner, null, false);
+      await unarchivePromptedSession(runner);
+    } else if (obj.type === "extension_ui_response") {
+      setRunnerAttention(runner, null, false);
+    }
     return true;
   }
 
@@ -762,7 +796,7 @@ export async function createRunnerManager(state, {
 
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner,
+    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
     defaultRunner, runnerFromReq, openSessionRunner,
     startPi, stopPi,
   };

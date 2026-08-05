@@ -39,6 +39,7 @@ function setup() {
       resolveSafePath: (path) => path.startsWith("/allowed") ? path : null,
     },
     sendToRunner: (_selected, command) => command.type !== "unavailable",
+    acknowledgeRunnerAttention: (selected) => { selected.attentionUnread = false; },
     stopRunner: (selected) => { selected.stopped = true; selected.proc = null; },
     spawnRunner: ({ dir, initialArgs }) => {
       const child = { id: "child-runner", dir, initialArgs, proc: { pid: 43 } };
@@ -354,6 +355,16 @@ test("open-session rejects malformed and ambiguous payloads", async () => {
     await route({ body }, res);
     assert.equal(res.status, 400);
   }
+});
+
+test("attention acknowledgement marks the selected runner opened", async () => {
+  const { runner, dependencies } = setup();
+  runner.attentionStatus = "completed";
+  runner.attentionUnread = true;
+  const res = response();
+  await createRunnerRoutes(dependencies)["POST /runner/attention/read"]({}, res, new URL("http://localhost/runner/attention/read?runner=runner-1"));
+  assert.equal(runner.attentionUnread, false);
+  assert.deepEqual(res.body, { runner: "runner-1", attentionStatus: "completed", attentionUnread: false });
 });
 
 test("route construction rejects incomplete dependencies", () => {

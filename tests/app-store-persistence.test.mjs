@@ -193,9 +193,9 @@ test("closing and reopening the app store preserves data without rerunning migra
 
   const second = await openAppStore({ databasePath: path, Database });
   t.after(async () => await second.close());
-  assert.deepEqual(second.migrationStatus, { currentVersion: 16, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] });
+  assert.deepEqual(second.migrationStatus, { currentVersion: 17, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] });
   assert.equal(databases[1].prepare("SELECT value FROM app_settings WHERE key = ?").get("workdir").value, '"/workspace"');
-  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 16);
+  assert.equal(databases[1].prepare("SELECT count(*) AS count FROM schema_migrations").get().count, 17);
 });
 
 test("WAL permits concurrent readers and committed cross-connection writes", async (t) => {

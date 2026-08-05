@@ -85,6 +85,13 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "state-response", success: true, command: "get_state", data: { sessionId: "session-1", sessionName: "Named runner" } })}\n`);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal((await store.repositories.runners.find(runner.id)).session_name, "Named runner");
+  processes[0].stdout.write(`${JSON.stringify({ type: "extension_ui_request", id: "clarify", method: "input" })}\n`);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal((await store.repositories.runners.find(runner.id)).attention_status, "clarification");
+  assert.equal((await store.repositories.runners.find(runner.id)).attention_unread, 1);
+  manager.acknowledgeRunnerAttention(runner);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal((await store.repositories.runners.find(runner.id)).attention_unread, 0);
   processes[0].stdout.write(`${JSON.stringify({ type: "response", id: "oversized-response", success: true, data: "x".repeat(1024 * 1024) })}\n`);
   processes[0].stdout.write(`${JSON.stringify({ type: "message_update", message: { role: "assistant", content: "cumulative" } })}\n`);
   processes[0].stdout.write(`${JSON.stringify({ type: "tool_execution_update", toolCallId: "tool-1", partialResult: "cumulative" })}\n`);

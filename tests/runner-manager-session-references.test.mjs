@@ -80,6 +80,8 @@ test("SQLite runners start and restart by ID with explicit store environment", a
     sessionFile: null,
     sessionId: "sqlite-one",
     sessionName: null,
+    attentionStatus: null,
+    attentionUnread: false,
     busy: false,
     alive: true,
   });
@@ -158,6 +160,30 @@ test("runner busy state follows compaction through the final settled event", asy
   await emit({ type: "compaction_start", reason: "manual" });
   await emit({ type: "compaction_end", reason: "manual", willRetry: false });
   assert.equal(manager.runnerInfo(runner).busy, false, "manual compaction settles without an agent run");
+});
+
+test("runner attention distinguishes unread clarification and completed work until opened or resumed", async (t) => {
+  const { manager, spawns } = await setup(t);
+  const runner = await manager.spawnRunner({ dir: "/workspace" });
+  const emit = async (event) => {
+    spawns[0].proc.stdout.write(`${JSON.stringify(event)}\n`);
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  await emit({ type: "extension_ui_request", id: "question", method: "confirm" });
+  assert.deepEqual(manager.runnerInfo(runner), { ...manager.runnerInfo(runner), attentionStatus: "clarification", attentionUnread: true });
+  assert.equal(manager.acknowledgeRunnerAttention(runner), true);
+  assert.equal(manager.runnerInfo(runner).attentionUnread, false);
+  await manager.sendToRunner(runner, { type: "extension_ui_response", id: "question", value: true });
+  assert.equal(manager.runnerInfo(runner).attentionStatus, null);
+
+  await emit({ type: "agent_start" });
+  await emit({ type: "agent_settled" });
+  assert.equal(manager.runnerInfo(runner).attentionStatus, "completed");
+  assert.equal(manager.runnerInfo(runner).attentionUnread, true);
+  await manager.sendToRunner(runner, { type: "prompt", message: "continue" });
+  assert.equal(manager.runnerInfo(runner).attentionStatus, null);
+  assert.equal(manager.runnerInfo(runner).attentionUnread, false);
 });
 
 test("new runners use unique persistence-safe IDs that survive manager reconstruction", async (t) => {
