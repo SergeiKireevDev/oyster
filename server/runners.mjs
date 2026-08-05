@@ -37,6 +37,13 @@ import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-ti
 
 const RUNNER_BUFFER_MAX = 400;
 const RUNNER_EVENT_MAX_BYTES = 1024 * 1024;
+// These events contain cumulative or request-scoped snapshots. Replaying them
+// is unnecessary because reconnects finish with an authoritative state and
+// transcript reload; persisting every streaming update also creates an
+// unbounded SQLite operation backlog under active runners.
+const NON_REPLAYABLE_RUNNER_EVENTS = new Set([
+  "response", "message_update", "tool_execution_update", "agent_end", "turn_end",
+]);
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 
@@ -252,15 +259,11 @@ export async function createRunnerManager(state, {
       event = JSON.parse(eventLine);
       sseId = event._sseId ?? null;
     } catch {}
-    if (Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES) {
-      try {
-        await runnerEventRepository?.append({
-          runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
-        });
-      } catch (error) {
-        console.error(`[oyster] cannot persist event for runner ${runner.id}: ${error?.message ?? error}`);
-      }
-    }
+
+    // Live delivery must never wait behind persistence I/O. In particular,
+    // sqlite3 serializes repository operations, so awaiting an append here
+    // used to delay both the active transcript and replay_done by the entire
+    // queue of cumulative streaming snapshots.
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
@@ -271,6 +274,16 @@ export async function createRunnerManager(state, {
       for (const listener of runner.eventListeners ?? []) {
         try { listener(event); }
         catch (error) { console.error(`[oyster] runner observer failed: ${error.message}`); }
+      }
+    }
+
+    if (!NON_REPLAYABLE_RUNNER_EVENTS.has(event?.type) && Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES) {
+      try {
+        await runnerEventRepository?.append({
+          runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,
+        });
+      } catch (error) {
+        console.error(`[oyster] cannot persist event for runner ${runner.id}: ${error?.message ?? error}`);
       }
     }
   }
