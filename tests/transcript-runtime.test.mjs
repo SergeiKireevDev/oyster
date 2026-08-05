@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { annotateTranscriptEntries, createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptAfterRenderController, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { backfillTranscriptTurns } from "../public/src/lib/transcriptBackfill.js";
+import { splitTurns, takeTailChunk } from "../public/src/lib/transcriptUtils.js";
 
 test("debounced transcript sync controller replaces its pending timer", () => {
   const cleared = []; const scheduled = [];
@@ -460,6 +462,31 @@ test("tail-first initial session render still starts at the latest message", asy
   });
   await renderer.render([{ role: "assistant", content: "latest" }]);
   assert.deepEqual(scrolls, [true]);
+});
+
+test("earlier transcript pages prepend in bounded yielding chunks", async () => {
+  const rendered = [];
+  const batches = [];
+  const scroller = { scrollHeight: 100, scrollTop: 10 };
+  let completed = 0;
+  const renderer = createTailFirstTranscriptRenderer({
+    messagesElement: { children: [] }, scroller, splitTurns, takeTailChunk,
+    backfillTurns: (options) => backfillTranscriptTurns({ ...options, yieldToBrowser: async () => {} }),
+    renderMessage(message) { rendered.push(message.id); scroller.scrollHeight++; },
+    renderBatch(work) { const before = rendered.length; work(); batches.push(rendered.length - before); },
+    clear() {}, rememberPrompt() {}, userMessageText: () => "", scrollToBottom() {}, nearBottom: () => false,
+    tick: async () => {}, afterRender: () => completed++, chunkMessages: 60,
+  });
+  const messages = Array.from({ length: 125 }, (_, index) => ({
+    id: index + 1,
+    role: index === 0 ? "user" : "assistant",
+  }));
+
+  assert.equal(await renderer.prepend(messages), true);
+  assert.deepEqual(batches, [60, 60, 5]);
+  assert.deepEqual(rendered, messages.map(({ id }) => id).reverse());
+  assert.equal(scroller.scrollTop, 135);
+  assert.equal(completed, 1);
 });
 
 test("render jobs cancel stale backfills", () => {
