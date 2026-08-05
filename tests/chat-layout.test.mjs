@@ -36,6 +36,8 @@ test("new transcript notice follows shared interaction and responsive contracts"
 
 test("chat layout names its scroll threshold and safely releases scheduled work", () => {
   assert.match(chatLayout, /const NOTICE_CLEARANCE_PX = 120;/);
+  assert.match(chatLayout, /const HISTORY_LOAD_THRESHOLD_PX = 480;/);
+  assert.match(chatLayout, /node\.scrollTop <= HISTORY_LOAD_THRESHOLD_PX[\s\S]*?TRANSCRIPT_LOAD_EARLIER_ACTION/);
   assert.match(chatLayout, /function isNearNewest\(node\)/);
   assert.match(chatLayout, /if \(!scroller\) return;/);
   assert.match(chatLayout, /onDestroy\(\(\) => scrollTracking\.cancel\(\)\);/);

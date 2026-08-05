@@ -5,9 +5,14 @@
   import Sidebars from "./Sidebars.svelte";
   import Transcript from "./Transcript.svelte";
   import { clearTranscriptNotice, transcriptNotice } from "../stores/transcriptNotice.js";
+  import { transcriptHistory } from "../stores/transcriptHistory.js";
   import { createFrameScheduler } from "../lib/frameScheduler.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { TRANSCRIPT_LOAD_EARLIER_ACTION } from "../runtime/uiActionNames.js";
 
   const NOTICE_CLEARANCE_PX = 120;
+  const HISTORY_LOAD_THRESHOLD_PX = 480;
+  const uiActions = getUiActionRegistry();
   let scroller = null;
 
   function isNearNewest(node) {
@@ -22,6 +27,9 @@
 
   const scrollTracking = createFrameScheduler((node) => {
     if (isNearNewest(node)) clearTranscriptNotice();
+    if (node.scrollTop <= HISTORY_LOAD_THRESHOLD_PX && $transcriptHistory.hasMore && !$transcriptHistory.loading) {
+      uiActions.invoke(TRANSCRIPT_LOAD_EARLIER_ACTION);
+    }
   });
 
   function trackScroll(event) {
