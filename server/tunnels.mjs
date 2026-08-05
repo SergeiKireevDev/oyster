@@ -205,8 +205,13 @@ async function persistedTunnelInfo(state, row) {
   };
 }
 
-export async function listTunnels(state) {
-  const tunnels = await Promise.all((await hublotRepository(state).list())
+export async function listTunnels(state, filters = {}) {
+  const rows = await hublotRepository(state).list({
+    excludeStatus: "closed",
+    ...(filters.id ? { id: filters.id } : {}),
+    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+  });
+  const tunnels = await Promise.all(rows
     .filter((row) => row.status !== "closed" && !isHublotTunnelPoolEntry(row))
     .map(async (row) => await persistedTunnelInfo(state, row)));
   return tunnels.filter((tunnel) => tunnel.url || ["opening", "recovering"].includes(tunnel.status));
@@ -232,7 +237,8 @@ export async function allocateHublot(state, options = {}, {
   }
   if (typeof checkPort !== "function") throw new TypeError("port availability check must be a function");
   for (let port = startPort; port <= 65535; port++) {
-    const inUse = (await hublotRepository(state).list()).some((row) => row.port === port && row.status !== "closed");
+    const inUse = (await hublotRepository(state).list({ port, excludeStatus: "closed" }))
+      .some((row) => row.port === port && row.status !== "closed");
     if (inUse || !(await checkPort(port))) continue;
     try { return await reserveHublot(state, { ...options, port }); }
     catch (error) {
@@ -250,7 +256,7 @@ export async function reserveHublot(state, {
 } = {}) {
   port = Number(port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
-  for (const row of await hublotRepository(state).list()) {
+  for (const row of await hublotRepository(state).list({ port, excludeStatus: "closed" })) {
     if (row.port === port && row.status !== "closed") throw new Error(`port ${port} is already tunneled: ${row.public_url}`);
   }
   const id = randomBytes(6).toString("hex");
@@ -560,7 +566,7 @@ export async function closeTunnel(state, id) {
 
 /** Legacy/manual bulk close: changes desired state to closed. */
 export async function closeAllTunnels(state) {
-  for (const row of await hublotRepository(state).list()) if (row.status !== "closed") await closeTunnel(state, row.id);
+  for (const row of await hublotRepository(state).list({ excludeStatus: "closed" })) await closeTunnel(state, row.id);
 }
 
 /** Graceful server shutdown: stop owned processes and retire ephemeral quick tunnels. */
@@ -575,7 +581,7 @@ export async function shutdownHublots(state, {
 } = {}) {
   const repository = hublotRepository(state);
   const targets = [];
-  for (const row of (await repository.list()).filter((entry) => entry.desired_state === "open")) {
+  for (const row of await repository.list({ desiredState: "open" })) {
     const error = "server stopped; ephemeral cloudflared tunnels are not recreated automatically";
     if (row.status !== "closing" || row.public_url !== null || row.last_error !== error) {
       await recordHublotTransition(state, row.id, "closing", {
@@ -619,7 +625,7 @@ export async function shutdownHublots(state, {
     });
     hublotProcessHandles(state).delete(processRow.id);
   }
-  for (const row of (await repository.list()).filter((entry) => entry.status === "closing" && entry.desired_state === "closed")) {
+  for (const row of await repository.list({ status: "closing", desiredState: "closed" })) {
     await recordHublotTransition(state, row.id, remaining.some((processRow) => processRow.hublot_id === row.id) ? "interrupted" : "closed", {
       desiredState: "closed", publicUrl: null, lastError: row.last_error,
       closedAt: stoppedAt, at: stoppedAt,
@@ -642,7 +648,7 @@ export async function closeSessionHublots(state, sessionId, {
   sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
 } = {}) {
   const repository = hublotRepository(state);
-  const rows = (await repository.list()).filter((row) => row.session_id === sessionId);
+  const rows = await repository.list({ sessionId });
   const targets = [];
   for (const row of rows) {
     if (row.status !== "closed") await recordHublotTransition(state, row.id, "closing", { desiredState: "closed", publicUrl: null, lastError: null });
@@ -764,7 +770,9 @@ function poolSize(state) {
 }
 
 async function poolRows(state) {
-  return (await hublotRepository(state).list()).filter((row) => isHublotTunnelPoolEntry(row) && row.status !== "closed");
+  return (await hublotRepository(state).list({
+    label: HUBLOT_TUNNEL_POOL_LABEL, brief: HUBLOT_TUNNEL_POOL_BRIEF, excludeStatus: "closed",
+  })).filter((row) => isHublotTunnelPoolEntry(row) && row.status !== "closed");
 }
 
 async function availablePoolRows(state) {

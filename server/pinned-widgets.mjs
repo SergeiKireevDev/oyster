@@ -137,11 +137,12 @@ export async function pinnedWidgetDto(state, row, { resolveSafePath, activeTunne
 export async function listPinnedWidgets(state, { sessionId = null, scope = "session", resolveSafePath, listTunnels = () => [] } = {}) {
   const repository = state.appStore.repositories.pinnedWidgets;
   const activeTunnels = await listTunnels(state);
+  const visibility = { scope, sessionId };
   return {
-    widgets: await Promise.all((await repository.list())
+    widgets: await Promise.all((await repository.list({ visibility }))
       .filter((row) => rowVisible(row, sessionId, scope))
       .map((row) => pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels }))),
-    groups: (await repository.listGroups())
+    groups: (await repository.listGroups({ visibility }))
       .filter((row) => rowVisible(row, sessionId, scope))
       .map((row) => ({
         id: row.id, name: row.name, scope: row.scope, sessionId: row.session_id ?? null,
@@ -153,7 +154,7 @@ export async function listPinnedWidgets(state, { sessionId = null, scope = "sess
 export async function ensurePinnedHublot(state, hublot) {
   if (!hublot) return null;
   const repository = state.appStore.repositories.pinnedWidgets;
-  const existing = (await repository.list()).find((row) => row.hublot_id === hublot.id);
+  const existing = (await repository.list({ hublotId: hublot.id })).find((row) => row.hublot_id === hublot.id);
   const scope = hublot.owner_id == null ? "workspace" : "session";
   const now = new Date().toISOString();
   if (existing) {
@@ -203,7 +204,7 @@ async function assertGroup(repository, groupId, identity) {
 }
 
 async function normalizeContainer(repository, identity, groupId) {
-  const items = (await repository.list())
+  const items = (await repository.list({ scope: identity.scope, ownerId: identity.ownerId, groupId }))
     .filter((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.group_id === groupId)
     .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
   await Promise.all(items.map((item, position) => Number(item.position) !== position
@@ -212,7 +213,7 @@ async function normalizeContainer(repository, identity, groupId) {
 }
 
 async function normalizeGroupContainer(repository, identity) {
-  const groups = (await repository.listGroups())
+  const groups = (await repository.listGroups({ scope: identity.scope, ownerId: identity.ownerId }))
     .filter((group) => group.scope === identity.scope && group.owner_id === identity.ownerId)
     .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
   await Promise.all(groups.map((group, position) => Number(group.position) !== position
@@ -229,7 +230,7 @@ async function reorderWidget(state, row, { groupId, beforeId, identity = null },
   await assertGroup(repository, nextGroupId, nextIdentity);
   const oldGroupId = row.group_id ?? null;
   if (!scopeChanged && beforeId === row.id && nextGroupId === oldGroupId) return row;
-  const siblings = (await repository.list())
+  const siblings = (await repository.list({ scope: nextIdentity.scope, ownerId: nextIdentity.ownerId, groupId: nextGroupId }))
     .filter((item) => item.id !== row.id && item.scope === nextIdentity.scope && item.owner_id === nextIdentity.ownerId && item.group_id === nextGroupId)
     .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
   let index = beforeId ? siblings.findIndex((item) => item.id === beforeId) : siblings.length;
@@ -556,7 +557,9 @@ export function createPinnedWidgetRoutes({
         } else {
           throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
         }
-        const duplicate = (await repository.list()).find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
+        const duplicate = (await repository.list({
+          scope: identity.scope, ownerId: identity.ownerId, kind, target,
+        })).find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
         if (duplicate) {
           json(res, 200, { widget: await pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
@@ -661,7 +664,7 @@ export function createPinnedWidgetRoutes({
               position: await repository.nextGroupPosition(nextIdentity),
               updated_at: now,
             });
-            await Promise.all((await repository.list())
+            await Promise.all((await repository.list({ groupId: group.id }))
               .filter((widget) => widget.group_id === group.id)
               .map((widget) => repository.update(widget.id, {
                 owner_id: nextIdentity.ownerId,
@@ -683,7 +686,7 @@ export function createPinnedWidgetRoutes({
         const groupId = String(url.searchParams.get("id") ?? "");
         const group = await repository.findGroup(groupId);
         if (!group) throw Object.assign(new Error("no such pinned widget group"), { statusCode: 404 });
-        const children = (await repository.list()).filter((item) => item.group_id === groupId);
+        const children = (await repository.list({ groupId })).filter((item) => item.group_id === groupId);
         const ungroup = url.searchParams.get("ungroup") === "1";
         const deleteWidgets = url.searchParams.get("deleteWidgets") === "1";
         if (deleteWidgets && children.some((item) => item.kind === "builtin")) {

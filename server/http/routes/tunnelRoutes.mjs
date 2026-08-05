@@ -152,7 +152,7 @@ export function createTunnelRoutes({
             : await allocateHublot(state, options);
         }
         pinHublot(reserved);
-        const opening = (await listTunnels(state)).find((item) => item.id === reserved.id);
+        const opening = (await listTunnels(state, { id: reserved.id })).find((item) => item.id === reserved.id);
         if (opening) emitServerEvent(state, { type: "tunnel_opening", tunnel: opening });
         const reservedOptions = {
           ...options,
@@ -171,7 +171,7 @@ export function createTunnelRoutes({
         const tunnel = claimedWarmTunnel
           ? await activateHublotTunnelPoolEntry(state, reserved.id)
           : await openTunnel(state, reservedOptions);
-        const persisted = (await listTunnels(state)).find((item) => item.id === tunnel.id) ?? tunnel;
+        const persisted = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, {
           tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
           agent: !serviceType,
@@ -225,7 +225,7 @@ export function createTunnelRoutes({
         return;
       }
 
-      const tunnel = (await listTunnels(state)).find((item) => item.id === body.id);
+      const tunnel = (await listTunnels(state, { id: body.id })).find((item) => item.id === body.id);
       if (!tunnel) {
         json(res, 404, { error: "no such hublot" });
         return;
@@ -235,7 +235,7 @@ export function createTunnelRoutes({
         const owner = sessionId ? await ensureSessionOwner(sessionId) : null;
         const rebound = await rebindHublot(state, tunnel.id, owner?.id ?? null);
         pinHublot(rebound);
-        const current = (await listTunnels(state)).find((item) => item.id === tunnel.id);
+        const current = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id);
         emitServerEvent(state, { type: "tunnel_opened", tunnel: current });
         json(res, 200, { tunnel: current });
       } catch (error) {

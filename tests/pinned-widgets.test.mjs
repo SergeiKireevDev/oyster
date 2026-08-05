@@ -71,6 +71,10 @@ test("pinned widget repository persists scoped groups and ordered artifacts", as
     mimeType: "text/markdown; charset=utf-8", size: 8, mtimeMs: 1, createdAt: "now",
   });
   assert.equal((await repository.find(widget.id)).session_id, "session-a");
+  assert.deepEqual((await repository.list({ scope: "session", ownerId: owner.id, groupId: group.id })).map((row) => row.id), [widget.id]);
+  assert.deepEqual((await repository.listGroups({ scope: "session", ownerId: owner.id })).map((row) => row.id), [group.id]);
+  assert.equal((await repository.list({ visibility: { scope: "workspace", sessionId: null } })).some((row) => row.id === widget.id), false);
+  assert.equal((await repository.list({ visibility: { scope: "session", sessionId: "session-a" } })).some((row) => row.id === widget.id), true);
   assert.equal(await repository.nextPosition({ ownerId: owner.id, scope: "session", groupId: group.id }), 1);
   await appStore.repositories.sessions.delete(owner.id);
   assert.equal(await repository.find(widget.id), null);

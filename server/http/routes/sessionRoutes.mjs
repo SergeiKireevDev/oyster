@@ -33,7 +33,9 @@ export async function collectSessionFamilyReferences({ catalog, sessionReference
   };
   let summaries;
   if (sqlite) {
-    summaries = await catalog.list({});
+    summaries = typeof catalog.family === "function"
+      ? await catalog.family(rootReference.id, { includeAncestors })
+      : await catalog.list({});
   } else {
     const locations = new Set([dirname(rootReference.storagePath)]);
     for (const folder of await catalog.folders?.() ?? []) {
