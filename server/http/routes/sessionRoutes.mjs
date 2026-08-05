@@ -169,7 +169,7 @@ export function createSessionRoutes({
       : sessionReferenceFor(session);
   }
 
-  function decorate(session, byLegacyPath = new Map()) {
+  async function decorate(session, byLegacyPath = new Map()) {
     const sessionRef = referenceFor(session);
     let parentSessionKey = null;
     if (sqlite && session.parentSessionId) {
@@ -177,7 +177,7 @@ export function createSessionRoutes({
     } else if (session.parentSession && byLegacyPath.has(session.parentSession)) {
       parentSessionKey = state.sessionReferences.serialize(referenceFor(byLegacyPath.get(session.parentSession)));
     }
-    const owner = state.appStore?.repositories?.sessions?.upsert({
+    const owner = await state.appStore?.repositories?.sessions?.upsert({
       backend: sessionRef.backend,
       sessionId: sessionRef.id,
       storagePath: sessionRef.storagePath ?? null,
@@ -251,13 +251,13 @@ export function createSessionRoutes({
         if (!Array.isArray(summaries)) throw new TypeError("session catalog returned an invalid list");
         const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
         const live = [...state.runners.values()];
-        const result = summaries.map((summary) => {
-          const session = decorate(summary, byLegacyPath);
+        const result = await Promise.all(summaries.map(async (summary) => {
+          const session = await decorate(summary, byLegacyPath);
           const runner = live.find((candidate) => candidate.sessionRef
             ? state.sessionReferences.equals(candidate.sessionRef, session.sessionRef)
             : candidate.sessionFile === session.path);
           return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
-        });
+        }));
         json(res, 200, { sessions: result });
       } catch (error) {
         json(res, 500, { error: `failed to list sessions: ${errorMessage(error)}` });
@@ -403,7 +403,7 @@ export function createSessionRoutes({
       try {
         const session = await catalog.findById(id);
         if (!session) { json(res, 404, { error: `no session with id ${id}` }); return; }
-        json(res, 200, { session: decorate(session) });
+        json(res, 200, { session: await decorate(session) });
       } catch (error) {
         json(res, 500, { error: `failed to read session: ${errorMessage(error)}` });
       }
