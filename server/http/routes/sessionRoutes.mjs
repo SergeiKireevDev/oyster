@@ -433,11 +433,17 @@ export function createSessionRoutes({
         const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
         const end = before === null ? messages.length : Math.min(before, messages.length);
         let start = Math.max(0, end - limit);
+        const targetStart = start;
         // Do not expose a page beginning in the middle of an agent turn. If
-        // the target window contains only assistant/tool activity, continue
-        // backward through the next user prompt so the prepended history has
-        // a meaningful conversation boundary.
+        // the target window begins with assistant/tool activity, continue
+        // backward through its user prompt. Include the preceding turn too,
+        // so a collapsed activity-heavy tail still leaves content above the
+        // prompt and the viewport can immediately scroll into older history.
         while (start > 0 && messages[start]?.role !== "user") start--;
+        if (start > 0 && start < targetStart) {
+          start--;
+          while (start > 0 && messages[start]?.role !== "user") start--;
+        }
         json(res, 200, {
           ...transcript,
           messages: messages.slice(start, end),
