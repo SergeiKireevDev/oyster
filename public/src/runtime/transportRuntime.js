@@ -28,12 +28,25 @@ export function createTransportRuntime({
     requireToken,
     toast,
   });
+  const invalidateToken = () => {
+    clearAuthToken({ storage: browser.storage, documentTarget: browser.document });
+    onInvalidToken();
+  };
+  const validateToken = async () => {
+    try {
+      const response = await browser.fetch("/authcheck");
+      if (!response.ok) return false;
+      const report = await response.json();
+      if (report.authorized === true) return true;
+      invalidateToken();
+    } catch {}
+    return false;
+  };
   const probeTokenValidity = createAuthProbe({
     fetchImpl: browser.fetch,
     getToken: () => token,
     onUnauthorized: () => {
-      clearAuthToken({ storage: browser.storage, documentTarget: browser.document });
-      onInvalidToken();
+      invalidateToken();
       requireToken();
     },
   });
@@ -44,5 +57,5 @@ export function createTransportRuntime({
     onPendingResume: () => toast("session is still resuming — message queued", "warning"),
   });
 
-  return { token, requireToken, handleUnauthorized, probeTokenValidity, ...rpcClient };
+  return { token, validateToken, requireToken, handleUnauthorized, probeTokenValidity, ...rpcClient };
 }
