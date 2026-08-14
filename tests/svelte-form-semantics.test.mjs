@@ -15,7 +15,7 @@ test("single-field workflows use native form submission instead of Enter key han
   assert.match(prompt, /<form class="text-prompt" onsubmit=\{submitTextPrompt\}>/);
   assert.match(prompt, /placeholder = \$derived\(String\(\$textPrompt\.placeholder \?\? ""\)\.trim\(\)\)/);
   assert.match(prompt, /inputLabel = \$derived\(placeholder \|\| String\(\$textPrompt\.title \?\? ""\)\.trim\(\) \|\| "Response"\)/);
-  assert.match(prompt, /<label class="text-prompt-field" for="textPromptInput">[\s\S]*?<span>Response<\/span>/);
+  assert.match(prompt, /<label class="text-prompt-field" for="textPromptInput">[\s\S]*?<span>\{fieldLabel\}<\/span>/);
   assert.match(prompt, /id="textPromptInput"[\s\S]*?aria-label=\{inputLabel\}/);
   assert.match(prompt, /placeholder=\{placeholder\}/);
   assert.match(prompt, /<button class="[^"]*\bbtn\b[^"]*" type="submit"/);

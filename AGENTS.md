@@ -11,6 +11,7 @@ This repo ships the pi extensions that power its features in `extensions/`:
 | `extensions/loop.ts` | `/loop` command + `loop` tool | Execute Markdown checklist items sequentially in isolated subagents, advancing only after an executable validation script passes. |
 | `extensions/pinned-widget.ts` | `pinned_widget` tool | Pin/list/group private files, media, Markdown, directories, and HTTPS links in the right sidebar. |
 | `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
+| `extensions/sudo.ts` | `bash` permission gate | Prompt through Oyster for a masked sudo password before a permissioned command executes. |
 
 pi loads extensions from `~/.pi/agent/extensions/`. To make these bundled files
 available (and keep them in sync with the repo), symlink or copy them:

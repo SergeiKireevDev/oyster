@@ -183,7 +183,7 @@ chown -R root:root /opt/oyster
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi/agent
 install -d -o oyster -g oyster -m 0700 /var/lib/oyster/.pi/agent/extensions
-for extension in file-explorer.ts hublot.ts loop.ts routine.ts; do
+for extension in file-explorer.ts hublot.ts loop.ts routine.ts sudo.ts; do
   test -f "/opt/oyster/extensions/$extension"
   ln -sfn "/opt/oyster/extensions/$extension" "/var/lib/oyster/.pi/agent/extensions/$extension"
   chown -h oyster:oyster "/var/lib/oyster/.pi/agent/extensions/$extension"

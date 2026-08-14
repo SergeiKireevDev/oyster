@@ -89,6 +89,11 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal((await store.repositories.runners.find(runner.id)).attention_status, "clarification");
   assert.equal((await store.repositories.runners.find(runner.id)).attention_unread, 1);
+  assert.equal((await manager.replayRunnerEvents(runner)).some((payload) => JSON.parse(payload).id === "clarify"), true,
+    "an unresolved extension prompt reopens after refresh");
+  await manager.sendToRunner(runner, { type: "extension_ui_response", id: "clarify", value: "private" });
+  assert.equal((await manager.replayRunnerEvents(runner)).some((payload) => JSON.parse(payload).id === "clarify"), false,
+    "a resolved extension prompt does not reopen after refresh");
   manager.acknowledgeRunnerAttention(runner);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal((await store.repositories.runners.find(runner.id)).attention_unread, 0);

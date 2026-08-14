@@ -13,6 +13,12 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/
 
 Restart pi after adding or changing extensions.
 
+## Sudo commands
+
+`extensions/sudo.ts` adds an explicit `sudo` boolean to the model-facing `bash` tool. With `sudo: true`, the command must omit its own `sudo` prefix; pi requests authorization and runs the complete command in a root-owned Bash process. With the flag omitted or false, Bash runs normally and no password prompt appears. Interactive `!` shell commands continue to recognize an exact leading `sudo` token.
+
+Before elevated execution, pi emits an extension UI request that Oyster forwards over the authenticated SSE connection. The browser displays a masked password field and returns the response only to the owning runner. The password is written directly to `sudo -S` on standard input; it is not added to command arguments, environment variables, tool output, or the session transcript. Cancelling the prompt blocks the command. Use Oyster over HTTPS whenever entering a sudo password. Non-interactive pi modes without a UI block explicitly elevated commands by default.
+
 ## Files
 
 The file explorer can browse, edit, and download workspace files. Server-side path checks confine file operations to the configured workspace, `$HOME`, and `/tmp`, while denying common credential stores.

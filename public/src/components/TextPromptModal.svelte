@@ -6,6 +6,8 @@
 
   let placeholder = $derived(String($textPrompt.placeholder ?? "").trim());
   let inputLabel = $derived(placeholder || String($textPrompt.title ?? "").trim() || "Response");
+  let fieldLabel = $derived($textPrompt.secret ? "Password" : "Response");
+  let inputType = $derived($textPrompt.secret ? "password" : "text");
 
   function submitTextPrompt(event) {
     event.preventDefault();
@@ -19,10 +21,11 @@
 
 <form class="text-prompt" onsubmit={submitTextPrompt}>
   <label class="text-prompt-field" for="textPromptInput">
-    <span>Response</span>
+    <span>{fieldLabel}</span>
     <input
       id="textPromptInput"
-      type="text"
+      type={inputType}
+      autocomplete={$textPrompt.secret ? "current-password" : "off"}
       aria-label={inputLabel}
       placeholder={placeholder}
       value={$textPrompt.value}

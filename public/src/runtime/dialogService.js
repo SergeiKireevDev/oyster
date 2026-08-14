@@ -1,6 +1,6 @@
 import { get, writable } from "svelte/store";
 
-export const emptyTextPrompt = Object.freeze({ title: "", placeholder: "", value: "" });
+export const emptyTextPrompt = Object.freeze({ title: "", placeholder: "", value: "", secret: false });
 export const emptyEditorPrompt = Object.freeze({ title: "", placeholder: "", value: "" });
 export const emptyConfirmPrompt = Object.freeze({ title: "", message: "" });
 export const emptyDialogOptionPicker = Object.freeze({
@@ -69,12 +69,12 @@ export function createDialogService({ createStore = writable } = {}) {
       modalShell = shell;
       return () => { if (modalShell === shell) modalShell = { open() {}, close() {} }; };
     },
-    openText(title, placeholder = "", prefill = "") {
+    openText(title, placeholder = "", prefill = "", { secret = false } = {}) {
       if (disposed) return Promise.resolve(null);
       pendingText?.(null);
       return new Promise((resolve) => {
         pendingText = resolve;
-        textPrompt.set({ title, placeholder: placeholder || "", value: prefill || "" });
+        textPrompt.set({ title, placeholder: placeholder || "", value: prefill || "", secret: !!secret });
         modalShell.open({ title, content: "textPrompt" });
       });
     },
