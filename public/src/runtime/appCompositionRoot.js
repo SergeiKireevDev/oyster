@@ -102,7 +102,7 @@ const platformAssembly = createPlatformAssembly({
   },
 });
 const delayedTasks = createLifecycleDelayedTasks();
-const { token, requireToken, probeTokenValidity, rpc, handleResponse, cancelPending: cancelPendingRpc, dispose: disposeRpcClient } = platformAssembly.transport;
+const { token, validateToken, requireToken, probeTokenValidity, rpc, handleResponse, cancelPending: cancelPendingRpc, dispose: disposeRpcClient } = platformAssembly.transport;
 // AuthGate.svelte owns the token-entry form behavior.
 
 // ------------------------------------------------------------ rpc plumbing
@@ -1072,7 +1072,7 @@ return createLifecycleAssembly({
   eventAttachers: [commandPaletteKeyboardController, settingsLayoutEvents],
   applyLayout: () => layoutOperations.apply(),
   start: {
-    hasToken: () => Boolean(token), requireToken, boot,
+    hasToken: () => Boolean(token), validateToken, requireToken, boot,
     onAuthenticatedStart: () => {
       // Do not gate sidebar/resource discovery on the canonical transcript reload.
       void sessionPickerRuntime.refreshSidebar();

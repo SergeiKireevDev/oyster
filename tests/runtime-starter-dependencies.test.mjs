@@ -4,7 +4,8 @@ import { createRuntimeStarterDependencies } from "../public/src/runtime/runtimeS
 
 test("runtime starter dependency assembly preserves startup callbacks", () => {
   const hasToken = () => true;
+  const validateToken = () => true;
   const requireToken = () => {};
   const boot = () => {};
-  assert.deepEqual(createRuntimeStarterDependencies({ hasToken, requireToken, boot }), { hasToken, requireToken, boot });
+  assert.deepEqual(createRuntimeStarterDependencies({ hasToken, validateToken, requireToken, boot }), { hasToken, validateToken, requireToken, boot });
 });
