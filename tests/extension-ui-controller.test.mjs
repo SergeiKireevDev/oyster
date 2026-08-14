@@ -15,3 +15,13 @@ test("extension UI controller marks cancelled prompts", async () => {
   await controller({ id: "request", method: "input" });
   assert.deepEqual(responses, [["request", { cancelled: true }]]);
 });
+
+test("extension UI controller forwards secret input presentation without echoing a value", async () => {
+  const calls = [];
+  const controller = createExtensionUiController({
+    respond: () => {}, toast: () => {}, confirm: async () => true, select: async () => null,
+    input: async (...args) => { calls.push(args); return null; }, editor: async () => null, setTitle: () => {},
+  });
+  await controller({ id: "sudo", method: "input", title: "Sudo password required", placeholder: "Password", secret: true });
+  assert.deepEqual(calls, [["Sudo password required", "Password", "", { secret: true }]]);
+});

@@ -72,6 +72,7 @@ export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
   "titleProcess", "titleSessionId", "titleLoadingSessionId", "initialArgs", "eventListeners", "subagentStatus",
+  "pendingExtensionUiRequestIds",
 ]);
 export const RUNNER_MANAGER_EPHEMERAL_FIELDS = Object.freeze(["runnerWatchdogTimer", "runnerReaperTimer"]);
 
@@ -95,6 +96,9 @@ function initializeRunnerRuntime(descriptor) {
     titleLoadingSessionId: null,
     initialArgs: Array.isArray(descriptor.initialArgs) ? [...descriptor.initialArgs] : [],
     eventListeners: descriptor.eventListeners instanceof Set ? descriptor.eventListeners : new Set(),
+    pendingExtensionUiRequestIds: descriptor.pendingExtensionUiRequestIds instanceof Set
+      ? descriptor.pendingExtensionUiRequestIds
+      : new Set(),
     subagentStatus: descriptor.subagentStatus ?? null,
   };
 }
@@ -104,7 +108,7 @@ function ensureRunnerRuntimeFields(runner) {
   for (const field of RUNNER_EPHEMERAL_FIELDS) {
     if (!(field in runner)) runner[field] = field === "resumeQueue" || field === "initialArgs"
       ? []
-      : field === "eventListeners" ? new Set() : defaults[field];
+      : field === "eventListeners" || field === "pendingExtensionUiRequestIds" ? new Set() : defaults[field];
   }
   return runner;
 }
@@ -233,9 +237,18 @@ export async function createRunnerManager(state, {
   async function replayRunnerEvents(runner) {
     // Oversized historical RPC responses are stale after a page load and can
     // otherwise block the event loop while gigabytes are replayed before the
-    // browser ever receives replay_done.
+    // browser ever receives replay_done. Resolved extension prompts must not
+    // reopen on every refresh; only replay requests still awaiting a response.
     return (await runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES }))
-      ?.map((event) => event.payload) ?? [];
+      ?.map((event) => event.payload)
+      .filter((payload) => {
+        try {
+          const event = JSON.parse(payload);
+          return event.type !== "extension_ui_request" || runner.pendingExtensionUiRequestIds.has(event.id);
+        } catch {
+          return true;
+        }
+      }) ?? [];
   }
 
   /** Global notification. Ordinary lifecycle changes carry one runner delta;
@@ -374,7 +387,10 @@ export async function createRunnerManager(state, {
     try { msg = JSON.parse(line); } catch { return; }
     try { notifyRunnerEvent(runner, msg); }
     catch (error) { console.error(`[oyster] cannot notify for runner ${runner.id}: ${error?.message ?? error}`); }
-    if (msg.type === "extension_ui_request" && CLARIFICATION_METHODS.has(msg.method)) setRunnerAttention(runner, "clarification");
+    if (msg.type === "extension_ui_request") {
+      if (msg.id) runner.pendingExtensionUiRequestIds.add(msg.id);
+      if (CLARIFICATION_METHODS.has(msg.method)) setRunnerAttention(runner, "clarification");
+    }
     if (msg.type === "agent_start") { setRunnerAttention(runner, null, false); runner.busy = true; runnersChanged(runner); }
     else if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); }
     else if (msg.type === "agent_settled") {
@@ -672,6 +688,7 @@ export async function createRunnerManager(state, {
       setRunnerAttention(runner, null, false);
       await unarchivePromptedSession(runner);
     } else if (obj.type === "extension_ui_response") {
+      if (obj.id) runner.pendingExtensionUiRequestIds.delete(obj.id);
       setRunnerAttention(runner, null, false);
     }
     return true;

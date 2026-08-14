@@ -116,8 +116,9 @@ test("text prompt replacement and teardown settle pending promises", async () =>
   dialogs.configureModalShell({ open: (options) => calls.push(["open", options]), close: () => calls.push(["close"]) });
 
   const replaced = dialogs.openText("First", "", "old");
-  const submitted = dialogs.openText("Second", "placeholder", "new");
+  const submitted = dialogs.openText("Second", "placeholder", "new", { secret: true });
   assert.equal(await replaced, null);
+  assert.deepEqual(get(dialogs.textPrompt), { title: "Second", placeholder: "placeholder", value: "new", secret: true });
   dialogs.setTextValue("changed");
   dialogs.submitText();
   assert.equal(await submitted, "changed");

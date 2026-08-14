@@ -10,7 +10,7 @@ const style = component.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
 
 test("text prompt presents a visible, associated label without replacing contextual input copy", () => {
   assert.match(component, /<form class="text-prompt" onsubmit=\{submitTextPrompt\}>/);
-  assert.match(component, /<label class="text-prompt-field" for="textPromptInput">[\s\S]*?<span>Response<\/span>/);
+  assert.match(component, /<label class="text-prompt-field" for="textPromptInput">[\s\S]*?<span>\{fieldLabel\}<\/span>/);
   assert.match(component, /id="textPromptInput"[\s\S]*?aria-label=\{inputLabel\}/);
   assert.match(component, /placeholder=\{placeholder\}/);
 });
