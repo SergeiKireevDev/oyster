@@ -114,6 +114,10 @@ npm run build
 Commit the completed changes only after the unit tests, end-to-end tests, and
 UI rebuild all succeed, then start the next unit of work.
 
+## Align remote branches with `origin/main`
+
+Before pushing a branch for review or merge, fetch the remote and rebase the branch onto the current `origin/main`. Verify that `git merge-base HEAD origin/main` equals `git rev-parse origin/main`; do not push a parallel history containing patch-equivalent copies of commits already on `origin/main`. If an already-published branch must be rebased, update it with `git push --force-with-lease`, never an unrestricted force push.
+
 Why this is non-negotiable in this repo: the server hot-reloads `server/app.mjs` and
 `public/index.html` **the moment you save them** — every edit deploys
 instantly to live browser sessions. There is no build step or review gate to
