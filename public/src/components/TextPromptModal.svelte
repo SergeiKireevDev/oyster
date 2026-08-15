@@ -1,5 +1,6 @@
 <script>
   import { getDialogService } from "../runtime/dialogServiceContext.js";
+  import { highlightShellSegments } from "../lib/shellHighlighter.js";
 
   const dialogs = getDialogService();
   const textPrompt = dialogs.textPrompt;
@@ -12,6 +13,7 @@
   let sudoCommand = $derived(String($textPrompt.title ?? "").startsWith(sudoTitlePrefix)
     ? String($textPrompt.title).slice(sudoTitlePrefix.length)
     : "");
+  let shellCommandSegments = $derived(highlightShellSegments(sudoCommand));
 
   function submitTextPrompt(event) {
     event.preventDefault();
@@ -27,7 +29,14 @@
   {#if sudoCommand}
     <div class="text-prompt-context">
       <span>Command</span>
-      <code>{sudoCommand}</code>
+      <code>{#each shellCommandSegments as segment (segment.start)}<span
+        class:tok-com={segment.type === "com"}
+        class:tok-str={segment.type === "str"}
+        class:tok-num={segment.type === "num"}
+        class:tok-kw={segment.type === "kw"}
+        class:tok-var={segment.type === "var"}
+        class:tok-op={segment.type === "op"}
+      >{segment.text}</span>{/each}</code>
     </div>
   {/if}
 
@@ -87,6 +96,13 @@
     overflow-wrap: anywhere;
     white-space: pre-wrap;
   }
+
+  .tok-com { color: var(--muted); font-style: italic; }
+  .tok-str { color: var(--green); }
+  .tok-num { color: color-mix(in srgb, var(--yellow) 72%, var(--red)); }
+  .tok-kw { color: color-mix(in srgb, var(--accent) 70%, var(--red)); }
+  .tok-var { color: color-mix(in srgb, var(--accent) 58%, var(--green)); }
+  .tok-op { color: var(--yellow); }
 
   .text-prompt-field input {
     min-width: 0;
