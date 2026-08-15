@@ -7,7 +7,11 @@
   let placeholder = $derived(String($textPrompt.placeholder ?? "").trim());
   let inputLabel = $derived(placeholder || String($textPrompt.title ?? "").trim() || "Response");
   let fieldLabel = $derived($textPrompt.secret ? "Password" : "Response");
+  const sudoTitlePrefix = "Sudo password required for: ";
   let inputType = $derived($textPrompt.secret ? "password" : "text");
+  let sudoCommand = $derived(String($textPrompt.title ?? "").startsWith(sudoTitlePrefix)
+    ? String($textPrompt.title).slice(sudoTitlePrefix.length)
+    : "");
 
   function submitTextPrompt(event) {
     event.preventDefault();
@@ -20,6 +24,13 @@
 </script>
 
 <form class="text-prompt" onsubmit={submitTextPrompt}>
+  {#if sudoCommand}
+    <div class="text-prompt-context">
+      <span>Command</span>
+      <code>{sudoCommand}</code>
+    </div>
+  {/if}
+
   <label class="text-prompt-field" for="textPromptInput">
     <span>{fieldLabel}</span>
     <input
@@ -46,13 +57,35 @@
     min-width: 0;
   }
 
-  .text-prompt { gap: 7px; }
+  .text-prompt { gap: 10px; }
   .text-prompt-field { gap: 5px; }
 
+  .text-prompt-context {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .text-prompt-context > span,
   .text-prompt-field > span {
     color: var(--muted);
     font-size: 10.5px;
     font-weight: 620;
+  }
+
+  .text-prompt-context code {
+    display: block;
+    max-height: 120px;
+    padding: 8px 10px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 11px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }
 
   .text-prompt-field input {
