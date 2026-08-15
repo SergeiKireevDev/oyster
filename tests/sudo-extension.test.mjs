@@ -14,7 +14,9 @@ test("sudo extension requests a masked RPC prompt when bash sudo is explicitly e
   assert.match(source, /requestPassword\(ctx, event\.command\)/);
   assert.match(source, /pendingPasswords\.set\(event\.toolCallId, password\)/);
   assert.match(prompt, /sudoTitlePrefix = "Sudo password required for: "/);
-  assert.match(prompt, /\{#if sudoCommand\}[\s\S]*?<span>Command<\/span>[\s\S]*?<code>\{sudoCommand\}<\/code>/);
+  assert.match(prompt, /shellCommandSegments = \$derived\(highlightShellSegments\(sudoCommand\)\)/);
+  assert.match(prompt, /\{#if sudoCommand\}[\s\S]*?<span>Command<\/span>[\s\S]*?\{#each shellCommandSegments/);
+  assert.match(prompt, /class:tok-str=\{segment\.type === "str"\}[\s\S]*?class:tok-op=\{segment\.type === "op"\}/);
   assert.match(prompt, /type=\{inputType\}/);
   assert.match(prompt, /current-password/);
 });
