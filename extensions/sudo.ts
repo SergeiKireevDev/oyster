@@ -33,9 +33,9 @@ function operationsWithPassword(password: string, { elevateEntireCommand = false
   };
 }
 
-async function requestPassword(ctx: any): Promise<string | undefined> {
+async function requestPassword(ctx: any, command: string): Promise<string | undefined> {
   if (!ctx.hasUI) return undefined;
-  return ctx.ui.input("Sudo password required", "Password", {
+  return ctx.ui.input(`Sudo password required for: ${command}`, "Password", {
     secret: true,
     signal: ctx.signal,
   });
@@ -56,7 +56,8 @@ export default function sudoExtension(pi: ExtensionAPI) {
     const sudo = (event.input as { sudo?: unknown }).sudo === true;
     if (!sudo) return undefined;
 
-    const password = await requestPassword(ctx);
+    const command = String((event.input as { command?: unknown }).command ?? "");
+    const password = await requestPassword(ctx, command);
     if (password === undefined) {
       return { block: true, reason: "Sudo command cancelled: no password was provided" };
     }
@@ -101,7 +102,7 @@ export default function sudoExtension(pi: ExtensionAPI) {
         },
       };
     }
-    const password = await requestPassword(ctx);
+    const password = await requestPassword(ctx, event.command);
     if (password === undefined) {
       return {
         result: {

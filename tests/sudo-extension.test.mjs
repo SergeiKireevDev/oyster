@@ -8,7 +8,10 @@ const prompt = readFileSync(new URL("../public/src/components/TextPromptModal.sv
 test("sudo extension requests a masked RPC prompt when bash sudo is explicitly enabled", () => {
   assert.match(source, /sudo: Type\.Optional\(Type\.Boolean/);
   assert.match(source, /const sudo = \(event\.input as \{ sudo\?: unknown \}\)\.sudo === true/);
-  assert.match(source, /ctx\.ui\.input\("Sudo password required", "Password", \{[\s\S]*secret: true/);
+  assert.match(source, /const command = String\(\(event\.input as \{ command\?: unknown \}\)\.command \?\? ""\)/);
+  assert.match(source, /ctx\.ui\.input\(`Sudo password required for: \$\{command\}`, "Password", \{[\s\S]*secret: true/);
+  assert.match(source, /requestPassword\(ctx, command\)/);
+  assert.match(source, /requestPassword\(ctx, event\.command\)/);
   assert.match(source, /pendingPasswords\.set\(event\.toolCallId, password\)/);
   assert.match(prompt, /type=\{inputType\}/);
   assert.match(prompt, /current-password/);

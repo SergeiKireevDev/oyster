@@ -48,6 +48,7 @@ async function startHub() {
   }));
   hubProcess = spawn(process.execPath, ["oyster-hub/server.mjs", "--config", configPath], {
     cwd: ROOT,
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   hubProcess.stdout.on("data", (chunk) => { hubOutput += chunk; });
