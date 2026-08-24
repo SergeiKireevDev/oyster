@@ -239,6 +239,7 @@ export function applySessionState({ incoming, previousState, currentRunner, empt
     hooks.setRoutineScopeAll(tunnelScopeAll);
     hooks.setRoutineCurrentSessionId(incoming?.sessionId ?? null);
     hooks.syncUrlToSession(incoming?.sessionId);
+    hooks.onSessionChanged?.(incoming);
   }
   hooks.updateHeaderState({ stateInfo: `${incoming.model ? incoming.model.provider : "?"} · ${incoming.messageCount} msgs` + (incoming.pendingMessageCount ? ` · ${incoming.pendingMessageCount} queued` : "") });
   hooks.setCompacting(!!incoming.isCompacting);

@@ -62,7 +62,7 @@ test("application runtime controller injections use the Svelte toast store actio
 });
 
 test("pinned widgets refresh independently from transcript state and replay", () => {
-  assert.match(runtimeImplementation, /onRunnerChange:[\s\S]*void loadHublots\(\);[\s\S]*void loadRoutines\(\);/);
+  assert.match(runtimeImplementation, /onRunnerChange:[\s\S]*void loadHublots\(selectedRunner\?\.sessionId \?\? null\);[\s\S]*void loadRoutines\(\);/);
   assert.match(runtimeImplementation, /onAuthenticatedStart:[\s\S]*void loadHublots\(\);[\s\S]*void loadRoutines\(\);/);
   assert.match(runtimeImplementation, /function resourceSessionId\(\)[\s\S]*getCurrentRunner\(\)/);
   assert.doesNotMatch(sessionRuntime, /setRoutineCurrentSessionId\([\s\S]{0,120}loadHublots/);

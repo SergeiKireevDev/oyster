@@ -51,21 +51,48 @@ test("hublot controller exposes pinned-widget load failures for retry", async ()
 test("hublot controller ignores stale overlapping sidebar refreshes", async () => {
   const pending = [];
   const rendered = [];
+  let sessionId = "previous-session";
   const controller = createHublotController({
     isAuthenticated: () => true,
-    listSidebarHublots: () => new Promise((resolve) => pending.push(resolve)),
+    getSessionId: () => sessionId,
+    listSidebarHublots: (requestedSessionId) => new Promise((resolve) => pending.push({ requestedSessionId, resolve })),
     setSidebarLoading: () => {},
     setSidebarTunnels: (value) => rendered.push(value),
   });
 
   const staleRefresh = controller.refreshSidebar();
+  sessionId = "current-session";
   const currentRefresh = controller.refreshSidebar();
-  pending[1]([{ id: "current-session" }]);
+  assert.deepEqual(pending.map((request) => request.requestedSessionId), ["previous-session", "current-session"]);
+  pending[1].resolve([{ id: "current-session" }]);
   await currentRefresh;
-  pending[0]([{ id: "previous-session" }]);
+  pending[0].resolve([{ id: "previous-session" }]);
   await staleRefresh;
 
   assert.deepEqual(rendered, [[{ id: "current-session" }]]);
+});
+
+test("hublot controller applies widget groups atomically after its stale-response guard", async () => {
+  const pending = [];
+  const rendered = [];
+  const controller = createHublotController({
+    isAuthenticated: () => true,
+    listSidebarHublots: () => new Promise((resolve) => pending.push(resolve)),
+    setSidebarLoading: () => {},
+    setSidebarTunnels: () => assert.fail("collection setter should own widgets and groups"),
+    setSidebarCollection: (value) => rendered.push(value),
+  });
+
+  const staleRefresh = controller.refreshSidebar();
+  const currentRefresh = controller.refreshSidebar();
+  const current = { widgets: [{ id: "current" }], groups: [{ id: "current-group" }] };
+  const stale = { widgets: [{ id: "stale" }], groups: [{ id: "stale-group" }] };
+  pending[1](current);
+  await currentRefresh;
+  pending[0](stale);
+  await staleRefresh;
+
+  assert.deepEqual(rendered, [current]);
 });
 
 test("hublot controller refreshes filtered manager state", async () => {

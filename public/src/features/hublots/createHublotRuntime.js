@@ -12,7 +12,7 @@ export function createHublotRuntime(deps) {
   const manager = createHublotManagerController({ openModal: deps.openModal, refresh, getScopeAll: () => scopeAll });
   controller = createHublotFeature({ createController: deps.createController ?? createHublotController, dependencies: {
     ...deps, getSessionId: deps.getSessionId, setDescription: (desc) => { form.desc = desc; deps.setDescription(desc); },
-    listSidebarHublots: () => deps.listSidebarHublots(visible), isVisible: visible,
+    listSidebarHublots: (sessionId) => deps.listSidebarHublots(sessionId, visible), isVisible: visible,
     getScopeAll: () => scopeAll, getDescription: () => form.desc,
   }});
   const toggleScope = () => refreshHublotScope({ scopeAll, setScope: (value) => { scopeAll = value; }, updateTitle: deps.updateTitle, refreshManager: () => refresh({ loading: true }), refreshSidebar: controller.refreshSidebar, refreshRoutines: deps.refreshRoutines });
