@@ -214,10 +214,17 @@ const sessionAssembly = createSessionAssembly({
   updateHeaderState,
   onRunnerChange: ({ currentRunner }) => {
     cancelPendingRpc("runner switched");
-    setActiveWorkspace(getRunners().find((runner) => runner.id === currentRunner)?.workspaceId, storage);
+    const selectedRunner = getRunners().find((runner) => runner.id === currentRunner);
+    setActiveWorkspace(selectedRunner?.workspaceId, storage);
+    // Never retain session-owned artifacts while the next runner's identity
+    // is resolving. Workspace widgets remain valid across the transition.
+    setPinnedWidgetCollection({
+      widgets: get(pinnedWidgets).filter((widget) => widget.scope === "workspace"),
+      groups: get(pinnedWidgetGroups).filter((group) => group.scope === "workspace"),
+    });
     // Scoped resources have their own request lifecycle. Start it at runner
     // selection rather than waiting for get_state/transcript replay to finish.
-    void loadHublots();
+    void loadHublots(selectedRunner?.sessionId ?? null);
     void loadRoutines();
   },
   stateApplier: {
@@ -233,6 +240,7 @@ const sessionAssembly = createSessionAssembly({
       setRoutines: routines.set,
       setRoutineScopeAll: routineScopeAll.set,
       setRoutineCurrentSessionId: routineCurrentSessionId.set,
+      onSessionChanged: () => { void loadHublots(); },
       updateHeaderState,
       setBusy: (value) => setBusy(value),
       setCompacting: (value) => setCompacting(value),
@@ -346,7 +354,7 @@ const platformEvents = platformAssembly.configureEvents({
       setRunners: setRunnersNow,
       setWorkdir,
       getRunners: () => getRunners(),
-      onRunnersChanged: sessionOperations.notifyRunnersChanged,
+      onRunnersChanged: handleRunnersChanged,
     },
     resources: {
       refreshHublots: () => loadHublots(),
@@ -560,15 +568,12 @@ const resourceAssembly = createResourceAssembly({
     close: closeModal,
     toast: addToast,
     listHublots: () => listHublots(fetch),
-    listSidebarHublots: async () => {
-      const collection = await listPinnedWidgets(fetch, { sessionId: resourceSessionId() });
-      pinnedWidgetGroups.set(collection.groups ?? []);
-      return collection.widgets ?? [];
-    },
+    listSidebarHublots: (sessionId) => listPinnedWidgets(fetch, { sessionId }),
     isAuthenticated: () => Boolean(token),
     setSidebarLoading: pinnedWidgetsLoading.set,
     setSidebarError: pinnedWidgetsError.set,
     setSidebarTunnels: pinnedWidgets.set,
+    setSidebarCollection: setPinnedWidgetCollection,
     deleteHublot: (id) => removeHublot(fetch, id),
     // Closing a live interface does not unpin its durable widget.
     removeSidebarHublot: () => {},
@@ -725,7 +730,7 @@ const hublotActions = {
   openCommandPalette: setupCommandPalette,
 };
 
-const loadHublots = resourceOperations.loadHublots;
+function loadHublots(sessionId) { return resourceOperations.loadHublots(sessionId); }
 
 const pinnedWidgetRuntime = createPinnedWidgetRuntime({
   fetchImpl: runtimeFetch,
@@ -771,6 +776,12 @@ function resourceSessionId() {
   return getRunners().find((runner) => runner.id === getCurrentRunner())?.sessionId
     ?? getSessionState()?.sessionId
     ?? null;
+}
+function handleRunnersChanged(runners) {
+  sessionOperations.notifyRunnersChanged(runners);
+  // A brand-new runner has no session id at selection time. Refresh when its
+  // authoritative runner metadata arrives instead of borrowing old state.
+  void loadHublots();
 }
 function showRoutineGenerator() {
   resetRoutineManager();

@@ -1,4 +1,4 @@
-export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, setSidebarError = () => {}, isVisible, updateManager, getScopeAll, getDescription }) {
+export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, setSidebarCollection, setSidebarError = () => {}, isVisible, updateManager, getScopeAll, getDescription }) {
   let sidebarRefreshGeneration = 0;
 
   async function create(description) {
@@ -15,19 +15,20 @@ export function createHublotController({ createHublot, getSessionId, setDescript
     try { const tunnels = await listHublots(); updateManager({ loading: false, tunnels: tunnels.filter(isVisible), total: tunnels.length, ...common }); }
     catch (error) { updateManager({ loading: false, tunnels: [], total: 0 }); toast(`failed to list hublots: ${error.message}`, "error"); }
   }
-  async function refreshSidebar() {
+  async function refreshSidebar(sessionId = getSessionId?.() ?? null) {
     if (!isAuthenticated()) return;
     const generation = ++sidebarRefreshGeneration;
     setSidebarLoading(true);
     setSidebarError("");
-    let tunnels = [];
+    let collection = setSidebarCollection ? { widgets: [], groups: [] } : [];
     let errorMessage = "";
-    try { tunnels = await listSidebarHublots(); }
+    try { collection = await listSidebarHublots(sessionId); }
     catch (error) { errorMessage = error.message || "Unable to load pinned widgets"; }
     // Session switches can overlap requests. Never let a slower response for
-    // the previous session replace the current session's pinned widgets.
+    // the previous session replace either half of the current collection.
     if (generation !== sidebarRefreshGeneration) return;
-    setSidebarTunnels(tunnels);
+    if (setSidebarCollection && !Array.isArray(collection)) setSidebarCollection(collection);
+    else setSidebarTunnels(Array.isArray(collection) ? collection : collection.widgets ?? []);
     setSidebarError(errorMessage);
     setSidebarLoading(false);
   }
