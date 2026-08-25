@@ -162,7 +162,7 @@
 <div class="m-actions" id="mActions">
   {#if $fileExplorer.mode === "edit"}
     <button class="btn modal-primary-action" type="submit" form="fileEditorForm" disabled={$fileExplorer.saving}>{$fileExplorer.saving ? "Saving…" : "Save"}</button>
-    <a class="chip chip-link" href={editedFileDownload.href} download={editedFileDownload.filename}>Download</a>
+    <a class="chip chip-link file-editor-download" href={editedFileDownload.href} download={editedFileDownload.filename}>Download</a>
     <button class="chip" type="button" onclick={backFileExplorer}>← Back</button>
   {:else}
     <button class="chip" type="button" title={`upload local files to ${$fileExplorer.path}`} disabled={$fileExplorer.uploading} onclick={uploadFileExplorer}>
@@ -278,6 +278,13 @@
 
   .file-editor-error {
     color: var(--red);
+  }
+
+  .file-editor-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: normal;
   }
 
   .toggle-hidden.active {

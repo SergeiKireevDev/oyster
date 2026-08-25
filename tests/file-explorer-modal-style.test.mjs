@@ -26,6 +26,8 @@ test("file explorer editor is labelled, responsive, and uses the shared primary 
   assert.match(component, /aria-describedby="fileEditorHint"/);
   assert.match(component, /<kbd>Ctrl<\/kbd>\/<kbd>⌘<\/kbd> \+ <kbd>S<\/kbd> to save/);
   assert.match(component, /class="btn modal-primary-action" type="submit" form="fileEditorForm"/);
+  assert.match(component, /class="chip chip-link file-editor-download"/);
+  assert.match(styles, /\.file-editor-download\s*\{[\s\S]*?display:\s*inline-flex;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;[\s\S]*?line-height:\s*normal;/);
   assert.match(styles, /height:\s*clamp\(260px, 50vh, 560px\);/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.file-explorer-row > \.chip \{[\s\S]*?min-height: var\(--icon-control-standard\);/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.m-actions > :is\(button, a\) \{ min-height: 40px; \}/);
