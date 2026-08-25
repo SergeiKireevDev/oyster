@@ -1,4 +1,4 @@
-const CACHE_NAME = "oyster-shell-v2";
+const CACHE_NAME = "oyster-shell-v3";
 const APP_SHELL_URLS = [
   "/",
   "/manifest.webmanifest",

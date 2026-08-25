@@ -1,10 +1,9 @@
 <script>
   import AppIcon from "./AppIcon.svelte";
-  import oysterIcon from "../assets/oyster.svg";
+  import oysterIcon from "../assets/oyster.png";
   import { appHeader } from "../stores/appSession.js";
   import { menuOpen } from "../stores/ui.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { isHubRuntime } from "../runtime/workspaceScope.js";
   import {
     HEADER_CHOOSE_MODEL_ACTION,
     HEADER_CYCLE_THINKING_ACTION,
@@ -12,7 +11,6 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
-  const hubMode = isHubRuntime();
 
   function openConfig() {
     uiActions.invoke(HEADER_OPEN_CONFIG_ACTION);
@@ -37,7 +35,7 @@
 </script>
 
 <header class="app-header">
-  <div class="brand-mark" class:hub-mode={hubMode} aria-hidden="true"><img src={oysterIcon} alt="" /></div>
+  <div class="brand-mark" aria-hidden="true"><img src={oysterIcon} alt="" /></div>
   <div class="header-context">
     <h1 class="title" id="sessionTitle" title={$appHeader.sessionTitle}>
       {$appHeader.sessionTitle}
@@ -119,17 +117,6 @@
     height: 32px;
     flex: none;
     place-items: center;
-    border: 1px solid var(--header-brand-border, color-mix(in srgb, var(--accent) 34%, var(--border)));
-    border-radius: 10px;
-    background: var(--header-brand-bg, linear-gradient(145deg, color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent-dim) 28%, transparent)));
-    box-shadow: var(--header-brand-shadow, inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent), 0 7px 20px color-mix(in srgb, var(--accent-dim) 22%, transparent));
-    color: var(--header-brand-color, var(--accent));
-  }
-
-  .brand-mark.hub-mode {
-    outline: 2px solid var(--accent);
-    outline-offset: -3px;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent), inset 0 0 8px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 42%, transparent);
   }
 
   .brand-mark img {
@@ -294,7 +281,6 @@
     .brand-mark {
       width: 30px;
       height: 30px;
-      border-radius: 8px;
     }
 
     .brand-mark img {

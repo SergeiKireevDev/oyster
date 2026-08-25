@@ -1,5 +1,5 @@
 <script>
-  import oysterIcon from "../assets/oyster.svg";
+  import oysterIcon from "../assets/oyster.png";
   import { getAuthBrowser } from "../runtime/authBrowserContext.js";
 
   const AUTHENTICATION_FAILED = "Authentication failed. Check the token and try again.";
