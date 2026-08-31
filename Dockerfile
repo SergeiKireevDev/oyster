@@ -46,6 +46,7 @@ COPY oyster-hub ./oyster-hub
 COPY public ./public
 COPY scripts ./scripts
 COPY docs ./docs
+COPY .do ./.do
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build

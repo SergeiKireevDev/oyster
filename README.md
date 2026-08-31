@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/SergeiKireevDev/oyster/tree/feature/digitalocean-app-platform"><img alt="Deploy to DigitalOcean" src="https://www.deploytodo.com/do-btn-blue.svg"></a>
   <img alt="Node.js ≥ 22.19" src="https://img.shields.io/badge/Node.js-%E2%89%A522.19-5FA04E?logo=nodedotjs&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-9DA9FF"></a>
 </p>
@@ -86,6 +87,12 @@ git pull --ff-only && ./scripts/install.sh  # update and restart safely
 ```
 
 See [Installation](docs/getting-started/installation.md), [Configuration](docs/getting-started/configuration.md), [Security](docs/getting-started/security.md), and [container deployment](docs/operations/containers.md) for manual and advanced setups.
+
+### Try it on DigitalOcean App Platform
+
+The **Deploy to DigitalOcean** button builds the repository's Dockerfile and creates an HTTPS App Platform service. This path is for short-lived evaluation only: App Platform has no persistent filesystem volumes, so deployments and instance replacements can erase workspaces, sessions, credentials, and application data. Review the selected plan and charges before deploying, replace the template's public `OYSTER_TOKEN` placeholder, and destroy the app when the experiment is finished.
+
+See the [DigitalOcean App Platform guide](docs/operations/digitalocean-app-platform.md) for deployment and login steps. Use the VM installer above for durable work.
 
 ## Highlights
 
