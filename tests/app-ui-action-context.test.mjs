@@ -27,9 +27,9 @@ test("Menu routes every action through the scoped registry", () => {
   assert.doesNotMatch(menuSource, /window\.dispatchEvent|CustomEvent|Compact context|data-action="compact"|Restart pi process|data-action="restart"/);
   assert.deepEqual(
     [...menuSource.matchAll(/data-action="([^"]+)"/g)].map((match) => match[1]),
-    ["analytics", "credentials", "settings", "logout"],
+    ["analytics", "credentials", "settings", "tutorial", "logout"],
   );
-  for (const icon of ["analytics", "key", "settings", "logout"]) {
+  for (const icon of ["analytics", "key", "settings", "tour", "logout"]) {
     assert.match(menuSource, new RegExp(`<AppIcon name="${icon}"`));
   }
   assert.match(menuSource, />Log out<\/span>/);

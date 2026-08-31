@@ -207,16 +207,16 @@
     authenticationMethod = "oauth";
   }
 
-  function deactivate() {
+  function deactivate(options) {
     if (deactivated) return;
     deactivated = true;
-    void uiActions.invoke(CREDENTIALS_CLOSE_ACTION);
+    void uiActions.invoke(CREDENTIALS_CLOSE_ACTION, options);
   }
 
   function close() {
     clearKey();
     clearOAuthInputs();
-    deactivate();
+    deactivate({ completedSetup: true });
     closeModalState();
   }
 

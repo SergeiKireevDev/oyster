@@ -9,6 +9,7 @@ const iconNames = [
   "analytics",
   "key",
   "settings",
+  "tour",
   "logout",
   "fork",
   "sliders",

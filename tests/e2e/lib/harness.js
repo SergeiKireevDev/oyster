@@ -109,7 +109,7 @@ export async function waitFor(fn, { timeout = 30000, interval = 500, label = "co
  * Load the UI with the token in the fragment and wait until the SSE stream is
  * connected (green dot). Returns once the composer is ready.
  */
-export async function login(page, { keepCredentialSetup = false } = {}) {
+export async function login(page, { keepCredentialSetup = false, keepTutorial = false } = {}) {
   await page.goto(`${baseUrl()}/#token=${authToken()}`);
   await page.waitForSelector("#connDot.ok", { timeout: 30000 });
   await page.waitForSelector("#input", { state: "visible" });
@@ -118,6 +118,13 @@ export async function login(page, { keepCredentialSetup = false } = {}) {
     if (await setup.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await page.getByRole("button", { name: "Close" }).click();
       await expectOverlayClosed(page);
+    }
+  }
+  if (!keepCredentialSetup && !keepTutorial) {
+    const tutorial = page.locator(".tutorial-card");
+    if (await tutorial.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+      await page.getByRole("button", { name: "Skip tour" }).click();
+      await tutorial.waitFor({ state: "detached" });
     }
   }
 }

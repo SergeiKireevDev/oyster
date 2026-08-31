@@ -98,6 +98,10 @@ test("Hub mobile session creation starts from its workspace card", async ({ page
   if (await credentialSetup.waitFor({ state: "visible", timeout: 3_000 }).then(() => true).catch(() => false)) {
     await page.getByRole("button", { name: "Close" }).click();
   }
+  const tutorial = page.locator(".tutorial-card");
+  if (await tutorial.waitFor({ state: "visible", timeout: 3_000 }).then(() => true).catch(() => false)) {
+    await page.getByRole("button", { name: "Skip tour" }).click();
+  }
 
   for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) {
     await swipe(page, "right");

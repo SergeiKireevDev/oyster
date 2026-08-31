@@ -101,7 +101,8 @@ test("API Keys modal form keeps submitted keys local and clears them on every ex
   assert.match(modal, /finally \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /function close\(\) \{[\s\S]*?clearKey\(\)/);
   assert.match(modal, /onDestroy\(\(\) => \{[\s\S]*?clearKey\(\)[\s\S]*?keyInput = undefined[\s\S]*?deactivate\(\)/);
-  assert.match(modal, /function deactivate\(\) \{[\s\S]*?if \(deactivated\) return;[\s\S]*?CREDENTIALS_CLOSE_ACTION/);
+  assert.match(modal, /function deactivate\(options\) \{[\s\S]*?if \(deactivated\) return;[\s\S]*?CREDENTIALS_CLOSE_ACTION, options/);
+  assert.match(modal, /deactivate\(\{ completedSetup: true \}\)/);
   assert.doesNotMatch(modal, /bind:value=\{key/);
 });
 
