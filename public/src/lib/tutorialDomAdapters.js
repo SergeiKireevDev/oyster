@@ -51,6 +51,14 @@ export function tutorialPresentation(node, options) {
     const cardWidth = card.offsetWidth;
     const cardHeight = card.offsetHeight;
     const target = visibleTarget(documentTarget, current.targets);
+    const mobileSwipeMode = viewportWidth <= 760 && Boolean(current.mobileSwipe);
+
+    if (mobileSwipeMode) {
+      scrim.style.display = "none";
+      spotlight.style.display = "none";
+      positionCard((viewportWidth - cardWidth) / 2, EDGE_GAP, viewportWidth, viewportHeight);
+      return;
+    }
 
     if (!target) {
       scrim.style.display = "block";

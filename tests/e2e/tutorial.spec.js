@@ -47,6 +47,22 @@ test("first-run tour waits for credentials, persists dismissal, and can be repla
   await page.getByRole("menuitem", { name: "Take the tour…" }).click();
   await expect(tutorial).toBeVisible();
   await expect(page.locator("#tutorialTitle")).toHaveText("Welcome to Oyster");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Next" }).click();
+  const swipePrompt = page.locator(".tutorial-swipe-prompt");
+  await expect(swipePrompt).toBeVisible();
+  await expect(swipePrompt).toContainText("Swipe right");
+  await expect(page.locator(".tutorial-scrim")).toBeHidden();
+  await expect(page.locator(".tutorial-spotlight")).toBeHidden();
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(swipePrompt).toBeVisible();
+  await expect(swipePrompt).toContainText("Swipe left");
+  await expect(page.locator(".tutorial-scrim")).toBeHidden();
+
   await page.getByRole("button", { name: "Skip tour" }).click();
   await expect(page.locator("#menuBtn")).toBeFocused();
 });
