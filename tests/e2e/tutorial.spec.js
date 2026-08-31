@@ -5,6 +5,27 @@ import { ensureContainer, teardownContainer } from "./lib/reset.js";
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => teardownContainer());
 
+async function swipeTutorial(page, direction) {
+  await page.locator(".tutorial-layer").evaluate((target, swipeDirection) => {
+    const y = window.innerHeight * 0.68;
+    const startX = swipeDirection === "right" ? 55 : window.innerWidth - 55;
+    const endX = swipeDirection === "right" ? window.innerWidth - 55 : 55;
+    const dispatch = (type, x) => {
+      const touch = new Touch({ identifier: 1, target, clientX: x, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: type === "touchend" ? [] : [touch],
+        changedTouches: [touch],
+        targetTouches: type === "touchend" ? [] : [touch],
+      }));
+    };
+    dispatch("touchstart", startX);
+    dispatch("touchmove", endX);
+    dispatch("touchend", endX);
+  }, direction);
+}
+
 test("first-run tour waits for credentials, persists dismissal, and can be replayed", async ({ page }) => {
   await page.route("**/api-keys", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();
@@ -56,13 +77,23 @@ test("first-run tour waits for credentials, persists dismissal, and can be repla
   await expect(page.locator(".tutorial-scrim")).toBeHidden();
   await expect(page.locator(".tutorial-spotlight")).toBeHidden();
 
+  await swipeTutorial(page, "right");
+  await expect(page.locator("#sessions")).toBeVisible();
+  await expect(tutorial).toBeVisible();
+
   await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.locator("#sessions")).toBeHidden();
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Next" }).click();
   await expect(swipePrompt).toBeVisible();
   await expect(swipePrompt).toContainText("Swipe left");
   await expect(page.locator(".tutorial-scrim")).toBeHidden();
 
+  await swipeTutorial(page, "left");
+  await expect(page.locator("#hublots")).toBeVisible();
+  await expect(tutorial).toBeVisible();
+
   await page.getByRole("button", { name: "Skip tour" }).click();
+  await expect(page.locator("#hublots")).toBeHidden();
   await expect(page.locator("#menuBtn")).toBeFocused();
 });
