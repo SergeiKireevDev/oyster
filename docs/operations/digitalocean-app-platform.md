@@ -19,7 +19,7 @@ The button imports [`.do/deploy.template.yaml`](https://github.com/SergeiKireevD
    ```
 
 2. Click **Deploy to DO** and sign in to DigitalOcean.
-3. In the app creation form, replace `REPLACE_WITH_A_LONG_RANDOM_TOKEN` in the secret `OYSTER_TOKEN` variable with the generated value. Do not leave the public placeholder unchanged.
+3. In the app creation form, enter the generated value for the blank secret `OYSTER_TOKEN` variable. The template deliberately supplies no default. If the field is not shown immediately, expand or edit the environment-variable section before deploying and set it there.
 4. Review the selected service size and estimated cost, then create the app.
 5. Wait for `/health` to pass and open the HTTPS application URL as:
 

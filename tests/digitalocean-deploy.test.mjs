@@ -25,6 +25,7 @@ test("DigitalOcean service preserves Oyster's authenticated container contract",
   assert.match(template, /dockerfile_path: Dockerfile/);
   assert.match(template, /http_port: 4000/);
   assert.match(template, /key: OYSTER_TOKEN[\s\S]*type: SECRET/);
+  assert.doesNotMatch(template, /key: OYSTER_TOKEN\n\s+value:/);
   assert.match(template, /http_path: \/health/);
   assert.doesNotMatch(template, /OYSTER_UNAUTHENTICATED/);
 });
@@ -33,5 +34,5 @@ test("DigitalOcean documentation discloses ephemeral storage and billing", () =>
   assert.match(deploymentGuide, /filesystem is ephemeral/i);
   assert.match(deploymentGuide, /does not support persistent volumes/i);
   assert.match(deploymentGuide, /charges continue until the app is destroyed/i);
-  assert.match(deploymentGuide, /REPLACE_WITH_A_LONG_RANDOM_TOKEN/);
+  assert.match(deploymentGuide, /template deliberately supplies no default/i);
 });
