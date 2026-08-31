@@ -16,9 +16,14 @@ test("DigitalOcean deploy button and template target the deployment branch", () 
   assert.match(template, /^spec:\n/);
   assert.ok(template.includes(`repo_clone_url: ${repository}.git`));
   assert.ok(template.includes(`branch: ${branch}`));
-  assert.ok(
-    readme.includes(`https://cloud.digitalocean.com/apps/new?repo=${repository}/tree/${branch}`),
-  );
+  const deployUrl = `https://cloud.digitalocean.com/apps/new?repo=${repository}/tree/${branch}`;
+  assert.ok(readme.includes(deployUrl));
+
+  const centeredRows = [...readme.matchAll(/<p align="center">([\s\S]*?)<\/p>/g)]
+    .map((match) => match[1]);
+  const deployRow = centeredRows.find((row) => row.includes(deployUrl));
+  assert.ok(deployRow, "Deploy to DigitalOcean button should be in a centered row");
+  assert.doesNotMatch(deployRow, /badge\.svg|Node\.js|MIT license/);
 });
 
 test("DigitalOcean service preserves Oyster's authenticated container contract", () => {
