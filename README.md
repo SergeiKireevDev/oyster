@@ -90,7 +90,7 @@ See [Installation](docs/getting-started/installation.md), [Configuration](docs/g
 
 ### Try it on DigitalOcean App Platform
 
-The **Deploy to DigitalOcean** button builds the repository's Dockerfile and creates an HTTPS App Platform service. This path is for short-lived evaluation only: App Platform has no persistent filesystem volumes, so deployments and instance replacements can erase workspaces, sessions, credentials, and application data. Review the selected plan and charges before deploying, replace the template's public `OYSTER_TOKEN` placeholder, and destroy the app when the experiment is finished.
+The **Deploy to DigitalOcean** button builds the repository's Dockerfile and creates an HTTPS App Platform service. This path is for short-lived evaluation only: App Platform has no persistent filesystem volumes, so deployments and instance replacements can erase workspaces, sessions, credentials, and application data. Review the selected plan and charges before deploying, enter a strong value for the requested secret `OYSTER_TOKEN`, and destroy the app when the experiment is finished.
 
 See the [DigitalOcean App Platform guide](docs/operations/digitalocean-app-platform.md) for deployment and login steps. Use the VM installer above for durable work.
 

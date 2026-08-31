@@ -12,7 +12,6 @@ spec:
       instance_size_slug: apps-s-1vcpu-2gb
       envs:
         - key: OYSTER_TOKEN
-          value: REPLACE_WITH_A_LONG_RANDOM_TOKEN
           scope: RUN_TIME
           type: SECRET
       health_check:
