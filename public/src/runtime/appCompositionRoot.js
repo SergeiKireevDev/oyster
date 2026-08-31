@@ -452,6 +452,7 @@ const tutorialAssembly = createTutorialAssembly({
   uiActions,
   storage,
   setState: updateTutorialState,
+  isMobile: () => window.matchMedia("(max-width: 760px)").matches,
 });
 const credentialsAssembly = createCredentialsAssembly({
   uiActions,

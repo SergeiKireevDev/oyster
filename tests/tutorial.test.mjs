@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createCredentialsAssembly } from "../public/src/features/credentials/createCredentialsAssembly.js";
 import { createTutorialAssembly } from "../public/src/features/tutorial/createTutorialAssembly.js";
-import { createTutorialController, TUTORIAL_COMPLETION_KEY } from "../public/src/features/tutorial/createTutorialController.js";
+import {
+  createTutorialController,
+  TUTORIAL_DESKTOP_COMPLETION_KEY,
+  TUTORIAL_MOBILE_COMPLETION_KEY,
+} from "../public/src/features/tutorial/createTutorialController.js";
 import { TUTORIAL_STEPS } from "../public/src/features/tutorial/tutorialSteps.js";
 import {
   CREDENTIALS_CLOSE_ACTION,
@@ -38,7 +42,8 @@ test("tutorial controller opens once, navigates, and remembers completion", () =
   assert.deepEqual(states.at(-1), { stepIndex: TUTORIAL_STEPS.length - 1 });
   assert.equal(controller.next(), true);
   assert.deepEqual(states.at(-1), { active: false, stepIndex: 0 });
-  assert.equal(storage.value(TUTORIAL_COMPLETION_KEY), "1");
+  assert.equal(storage.value(TUTORIAL_DESKTOP_COMPLETION_KEY), "1");
+  assert.equal(storage.value(TUTORIAL_MOBILE_COMPLETION_KEY), null);
 
   assert.equal(controller.open(), true, "the menu can replay a completed tutorial");
   assert.deepEqual(states.at(-1), { active: true, stepIndex: 0 });
@@ -47,12 +52,34 @@ test("tutorial controller opens once, navigates, and remembers completion", () =
 test("completed tutorial does not auto-open in a later application runtime", () => {
   const states = [];
   const controller = createTutorialController({
-    storage: memoryStorage({ [TUTORIAL_COMPLETION_KEY]: "1" }),
+    storage: memoryStorage({ [TUTORIAL_DESKTOP_COMPLETION_KEY]: "1" }),
     setState: (patch) => states.push(patch),
   });
 
   assert.equal(controller.initialize(), false);
   assert.deepEqual(states, []);
+});
+
+test("desktop and mobile tutorial completion are remembered independently", () => {
+  const storage = memoryStorage({ [TUTORIAL_DESKTOP_COMPLETION_KEY]: "1" });
+  const mobileStates = [];
+  const mobileController = createTutorialController({
+    storage,
+    isMobile: () => true,
+    setState: (patch) => mobileStates.push(patch),
+  });
+
+  assert.equal(mobileController.initialize(), true, "desktop completion must not suppress the mobile tour");
+  assert.deepEqual(mobileStates.at(-1), { active: true, stepIndex: 0 });
+  assert.equal(mobileController.finish(), true);
+  assert.equal(storage.value(TUTORIAL_MOBILE_COMPLETION_KEY), "1");
+
+  const laterMobileController = createTutorialController({
+    storage,
+    isMobile: () => true,
+    setState() {},
+  });
+  assert.equal(laterMobileController.initialize(), false, "mobile tour runs automatically only once");
 });
 
 test("tutorial assembly owns scoped actions and releases them on teardown", () => {
@@ -160,6 +187,7 @@ test("tutorial UI is an accessible responsive spotlight and remains replayable",
   assert.match(component, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(carousel, /ignoredSelector[^\n]*tutorial-layer/, "tutorial gestures must reach the mobile carousel");
   assert.match(menu, /data-action="tutorial"[\s\S]*>Take the tour…<\/span>/);
+  assert.match(root, /isMobile: \(\) => window\.matchMedia\("\(max-width: 760px\)"\)\.matches/);
   assert.match(root, /onSetupClosed: tutorialAssembly\.operations\.initialize/);
   assert.match(root, /credentialsAssembly\.operations\.initialize\(\)\.then\(\(setupOpened\) => \{\s*if \(!setupOpened\) tutorialAssembly\.operations\.initialize\(\)/);
 });
