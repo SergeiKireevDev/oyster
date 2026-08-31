@@ -11,6 +11,10 @@
 </p>
 
 <p align="center">
+  <a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/SergeiKireevDev/oyster/tree/feature/digitalocean-app-platform"><img alt="Deploy to DigitalOcean" src="https://www.deploytodo.com/do-btn-blue.svg"></a>
+</p>
+
+<p align="center">
   <img src="docs/images/oyster-desktop.png" alt="Oyster desktop workspace" width="100%">
 </p>
 
@@ -94,7 +98,11 @@ See [Installation](docs/getting-started/installation.md), [Configuration](docs/g
 - **Made for mobile** — steer an active agent, review work, and manage sessions from your phone.
 
 <p align="center">
-  <img src="docs/images/oyster-mobile.gif" alt="Creating a mobile Oyster session and opening a Markdown document in a hublot" width="390">
+  <img src="docs/images/oyster-animal-images.png" alt="An Oyster session for generating a coordinated animal image collection" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/oyster-mobile-sessions.png" alt="Todo-list and animal-image sessions in Oyster on mobile" width="390">
 </p>
 
 <p align="center">
