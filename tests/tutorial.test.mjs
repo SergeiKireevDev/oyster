@@ -155,7 +155,7 @@ test("tutorial UI is an accessible responsive spotlight and remains replayable",
   assert.match(component, /@keyframes tutorial-swipe-left/);
   assert.match(component, /\.tutorial-layer\.swipe-mode \.tutorial-scrim \{ display: none; \}/);
   assert.match(component, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(carousel, /\.tutorial-layer, #modal/, "tutorial gestures must not move the underlying carousel");
+  assert.doesNotMatch(carousel, /ignoredSelector[^\n]*tutorial-layer/, "tutorial gestures must reach the mobile carousel");
   assert.match(menu, /data-action="tutorial"[\s\S]*>Take the tour…<\/span>/);
   assert.match(root, /onSetupClosed: tutorialAssembly\.operations\.initialize/);
   assert.match(root, /credentialsAssembly\.operations\.initialize\(\)\.then\(\(setupOpened\) => \{\s*if \(!setupOpened\) tutorialAssembly\.operations\.initialize\(\)/);
