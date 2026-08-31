@@ -10,12 +10,13 @@ export function createTutorialAssembly({
   uiActions,
   storage,
   setState,
+  isMobile,
   createController = createTutorialController,
 } = {}) {
   if (!uiActions) throw new TypeError("uiActions is required");
 
   let tornDown = false;
-  const controller = createController({ storage, setState });
+  const controller = createController({ storage, setState, isMobile });
   const registrations = [
     [TUTORIAL_OPEN_ACTION, controller.open],
     [TUTORIAL_NEXT_ACTION, controller.next],
