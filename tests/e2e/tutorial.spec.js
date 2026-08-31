@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { login } from "./lib/harness.js";
 import { ensureContainer, teardownContainer } from "./lib/reset.js";
 
+test.use({ hasTouch: true });
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => teardownContainer());
 
@@ -54,7 +55,7 @@ test("first-run tour waits for credentials, persists per form factor, and can be
   await expect(page.locator("#tutorialTitle")).toHaveText("Keep sessions close");
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.locator("#tutorialTitle")).toHaveText("Welcome to Oyster");
-  await page.getByRole("button", { name: "Skip tour" }).click();
+  await page.getByRole("button", { name: "Skip tour" }).tap();
   await expect(tutorial).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("oyster_tutorial_v1_complete_desktop"))).toBe("1");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("oyster_tutorial_v1_complete_mobile"))).toBeNull();
