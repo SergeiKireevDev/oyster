@@ -198,7 +198,7 @@ export function createCarouselHeaderController({ isDesktop, hublots, loadHublots
 export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {
   let touchStart = null;
   let handled = false;
-  const ignoredSelector = "textarea, input, select, .toast, .pinned-widget-cell, #modal, #cmdPalette, #menu";
+  const ignoredSelector = "textarea, input, select, .toast, .pinned-widget-cell, .tutorial-card, #modal, #cmdPalette, #menu";
 
   function scrollableCodeSnippet(target) {
     const snippet = target.closest?.(".md pre");

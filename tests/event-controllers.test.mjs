@@ -131,7 +131,13 @@ test("carousel swipe controller routes horizontal single and multi-touch gesture
   });
   controller.onTouchMove({ touches: [{ clientX: -50, clientY: 30 }], preventDefault() {} });
   controller.onTouchEnd({ changedTouches: [{ clientX: -100, clientY: 60 }] });
-  assert.deepEqual(calls, [["page", 1], ["runner", -1], ["page", 1]]);
+  controller.onTouchStart({
+    target: { closest: (selector) => selector.includes(".tutorial-card") ? {} : null },
+    touches: [{ clientX: 0, clientY: 0 }],
+  });
+  controller.onTouchMove({ touches: [{ clientX: -80, clientY: 0 }], preventDefault() {} });
+  controller.onTouchEnd({ changedTouches: [{ clientX: -100, clientY: 0 }] });
+  assert.deepEqual(calls, [["page", 1], ["runner", -1], ["page", 1]], "tutorial card controls do not start carousel gestures");
 });
 
 test("carousel controller persists and applies mobile drawer pages", () => {

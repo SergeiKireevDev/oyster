@@ -261,6 +261,7 @@
   .tutorial-skip:hover { color: var(--text); text-decoration: underline; }
   .tutorial-navigation { display: flex; align-items: center; gap: 8px; }
   .tutorial-navigation :is(.chip, .btn) { min-width: 72px; min-height: 36px; }
+  .tutorial-actions button { touch-action: manipulation; }
 
   @media (max-width: 760px) {
     .tutorial-layer.swipe-mode .tutorial-scrim { display: none; }
