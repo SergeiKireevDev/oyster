@@ -4,6 +4,7 @@ description: Run Oyster as a service or container and protect persistent data.
 items:
   - path: service.md
   - path: containers.md
+  - path: digitalocean-app-platform.md
   - path: backup-and-recovery.md
 ---
 
@@ -11,4 +12,5 @@ Production deployments should restart the Node process for releases rather than 
 
 - [Systemd service](/operations/service/)
 - [Containers](/operations/containers/)
+- [DigitalOcean App Platform](/operations/digitalocean-app-platform/)
 - [Backup and recovery](/operations/backup-and-recovery/)

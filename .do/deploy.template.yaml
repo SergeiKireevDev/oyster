@@ -1,0 +1,25 @@
+spec:
+  name: oyster
+  services:
+    - name: oyster
+      git:
+        branch: feature/digitalocean-app-platform
+        repo_clone_url: https://github.com/SergeiKireevDev/oyster.git
+      source_dir: /
+      dockerfile_path: Dockerfile
+      http_port: 4000
+      instance_count: 1
+      instance_size_slug: apps-s-1vcpu-2gb
+      envs:
+        - key: OYSTER_TOKEN
+          value: REPLACE_WITH_A_LONG_RANDOM_TOKEN
+          scope: RUN_TIME
+          type: SECRET
+      health_check:
+        initial_delay_seconds: 10
+        period_seconds: 10
+        timeout_seconds: 5
+        success_threshold: 1
+        failure_threshold: 6
+        http_path: /health
+        port: 4000
