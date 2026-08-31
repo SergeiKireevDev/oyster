@@ -140,17 +140,20 @@ test("tutorial UI is an accessible responsive spotlight and remains replayable",
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   const carousel = readFileSync(new URL("../public/src/runtime/carouselController.js", import.meta.url), "utf8");
 
-  assert.deepEqual(
-    TUTORIAL_STEPS.filter((step) => step.mobileSwipe).map((step) => step.mobileSwipe),
-    ["right", "left"],
-  );
+  const swipeSteps = TUTORIAL_STEPS.filter((step) => step.mobileSwipe);
+  assert.deepEqual(swipeSteps.map((step) => step.mobileSwipe), ["right", "left"]);
+  assert.deepEqual(swipeSteps.map((step) => step.mobileSwipeClose), ["left", "right"]);
+  assert.equal(TUTORIAL_STEPS.at(-1).title, "You're ready");
   assert.match(component, /role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="tutorialTitle"/);
   assert.match(component, /use:tutorialPresentation=/);
   assert.match(component, />Skip tour<\/button>/);
   assert.match(component, /finalStep \? "Finish" : "Next"/);
   assert.match(component, /@media \(max-width: 520px\)/);
-  assert.match(component, /class:swipe-left=\{currentStep\.mobileSwipe === "left"\}/);
-  assert.match(component, /class:swipe-right=\{currentStep\.mobileSwipe === "right"\}/);
+  assert.match(component, /class:swipe-left=\{swipeDirection === "left"\}/);
+  assert.match(component, /class:swipe-right=\{swipeDirection === "right"\}/);
+  assert.match(component, /class:swipe-returning=\{swipeReturning\}/);
+  assert.match(component, /onSidebarOpened: sidebarOpened/);
+  assert.match(component, /onSidebarClosed: sidebarClosed/);
   assert.match(component, /@keyframes tutorial-swipe-right/);
   assert.match(component, /@keyframes tutorial-swipe-left/);
   assert.match(component, /\.tutorial-layer\.swipe-mode \.tutorial-scrim \{ display: none; \}/);

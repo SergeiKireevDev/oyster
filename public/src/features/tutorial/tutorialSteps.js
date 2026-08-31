@@ -11,6 +11,10 @@ export const TUTORIAL_STEPS = Object.freeze([
     mobileSwipe: "right",
     mobileSwipeLabel: "Swipe right",
     mobileSwipeSymbol: "→",
+    mobileSwipeClose: "left",
+    mobileSwipeCloseLabel: "Swipe left to close",
+    mobileSwipeCloseSymbol: "←",
+    mobileDrawerTarget: "#sessions",
   }),
   Object.freeze({
     title: "Tell pi what to build",
@@ -29,5 +33,14 @@ export const TUTORIAL_STEPS = Object.freeze([
     mobileSwipe: "left",
     mobileSwipeLabel: "Swipe left",
     mobileSwipeSymbol: "←",
+    mobileSwipeClose: "right",
+    mobileSwipeCloseLabel: "Swipe right to close",
+    mobileSwipeCloseSymbol: "→",
+    mobileDrawerTarget: "#hublots",
+  }),
+  Object.freeze({
+    title: "You're ready",
+    description: "That’s the Oyster workspace. Start a conversation, then bring either sidebar back whenever you need it.",
+    targets: ["#composer"],
   }),
 ]);

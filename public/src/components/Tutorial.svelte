@@ -11,20 +11,47 @@
   import { tutorialState } from "../stores/tutorial.js";
 
   const uiActions = getUiActionRegistry();
+  let returningStep = -1;
+  let closingStep = -1;
 
   $: currentStep = TUTORIAL_STEPS[$tutorialState.stepIndex] ?? TUTORIAL_STEPS[0];
   $: finalStep = $tutorialState.stepIndex === TUTORIAL_STEPS.length - 1;
+  $: swipeReturning = returningStep === $tutorialState.stepIndex;
+  $: swipeClosing = closingStep === $tutorialState.stepIndex;
+  $: swipeDirection = swipeReturning ? currentStep.mobileSwipeClose : currentStep.mobileSwipe;
+  $: swipeLabel = swipeReturning ? currentStep.mobileSwipeCloseLabel : currentStep.mobileSwipeLabel;
+  $: swipeSymbol = swipeReturning ? currentStep.mobileSwipeCloseSymbol : currentStep.mobileSwipeSymbol;
 
   function next() {
+    returningStep = -1;
+    closingStep = -1;
     uiActions.invoke(TUTORIAL_NEXT_ACTION);
   }
 
   function previous() {
+    returningStep = -1;
+    closingStep = -1;
     uiActions.invoke(TUTORIAL_PREVIOUS_ACTION);
   }
 
   function dismiss() {
+    returningStep = -1;
+    closingStep = -1;
     uiActions.invoke(TUTORIAL_DISMISS_ACTION);
+  }
+
+  function sidebarOpened() {
+    returningStep = $tutorialState.stepIndex;
+  }
+
+  function sidebarClosing() {
+    closingStep = $tutorialState.stepIndex;
+  }
+
+  function sidebarClosed() {
+    returningStep = -1;
+    closingStep = -1;
+    uiActions.invoke(TUTORIAL_NEXT_ACTION);
   }
 </script>
 
@@ -32,13 +59,21 @@
   <div
     class="tutorial-layer"
     class:swipe-mode={currentStep.mobileSwipe}
+    class:swipe-returning={swipeReturning}
+    class:drawer-closing={swipeClosing}
     use:tutorialPresentation={{
       targets: currentStep.targets,
       mobileSwipe: currentStep.mobileSwipe,
+      mobileDrawerTarget: currentStep.mobileDrawerTarget,
+      swipeDirection,
+      swipeReturning,
       stepIndex: $tutorialState.stepIndex,
       onNext: next,
       onPrevious: previous,
       onDismiss: dismiss,
+      onSidebarOpened: sidebarOpened,
+      onSidebarClosing: sidebarClosing,
+      onSidebarClosed: sidebarClosed,
     }}
   >
     <div class="tutorial-spotlight" aria-hidden="true"></div>
@@ -47,16 +82,17 @@
     {#if currentStep.mobileSwipe}
       <div
         class="tutorial-swipe-prompt"
-        class:swipe-left={currentStep.mobileSwipe === "left"}
-        class:swipe-right={currentStep.mobileSwipe === "right"}
-        aria-hidden="true"
+        class:swipe-left={swipeDirection === "left"}
+        class:swipe-right={swipeDirection === "right"}
+        role="status"
+        aria-live="polite"
       >
-        <span class="tutorial-swipe-motion">
+        <span class="tutorial-swipe-motion" aria-hidden="true">
           <span class="tutorial-swipe-track"></span>
-          <span class="tutorial-swipe-symbol">{currentStep.mobileSwipeSymbol}</span>
+          <span class="tutorial-swipe-symbol">{swipeSymbol}</span>
           <span class="tutorial-swipe-touch"><span></span></span>
         </span>
-        <strong>{currentStep.mobileSwipeLabel}</strong>
+        <strong>{swipeLabel}</strong>
       </div>
     {/if}
 
@@ -114,6 +150,7 @@
   }
 
   .tutorial-swipe-prompt { display: none; }
+  .tutorial-layer.swipe-returning .tutorial-card { display: none; }
 
   .tutorial-spotlight {
     position: fixed;
@@ -227,6 +264,7 @@
 
   @media (max-width: 760px) {
     .tutorial-layer.swipe-mode .tutorial-scrim { display: none; }
+    .tutorial-layer.drawer-closing .tutorial-swipe-prompt { display: none; }
 
     .tutorial-swipe-prompt {
       position: fixed;

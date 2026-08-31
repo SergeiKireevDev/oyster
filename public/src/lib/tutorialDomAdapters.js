@@ -32,6 +32,8 @@ export function tutorialPresentation(node, options) {
   const previousFocus = documentTarget.activeElement;
   let current = options;
   let scheduledFrame = null;
+  let closeFrame = null;
+  let touchStart = null;
   let destroyed = false;
 
   function positionCard(left, top, viewportWidth, viewportHeight) {
@@ -56,7 +58,9 @@ export function tutorialPresentation(node, options) {
     if (mobileSwipeMode) {
       scrim.style.display = "none";
       spotlight.style.display = "none";
-      positionCard((viewportWidth - cardWidth) / 2, EDGE_GAP, viewportWidth, viewportHeight);
+      if (!current.swipeReturning) {
+        positionCard((viewportWidth - cardWidth) / 2, EDGE_GAP, viewportWidth, viewportHeight);
+      }
       return;
     }
 
@@ -97,6 +101,47 @@ export function tutorialPresentation(node, options) {
     scheduledFrame = windowTarget.requestAnimationFrame(measure);
   }
 
+  function waitForDrawerClosed(drawer) {
+    if (destroyed) return;
+    if (!drawer.classList.contains("open")) {
+      closeFrame = null;
+      current.onSidebarClosed?.();
+      return;
+    }
+    closeFrame = windowTarget.requestAnimationFrame(() => waitForDrawerClosed(drawer));
+  }
+
+  function handleTouchStart(event) {
+    if (documentTarget.documentElement.clientWidth > 760 || !current.mobileSwipe || event.touches.length !== 1) return;
+    touchStart = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY,
+    };
+  }
+
+  function handleTouchEnd(event) {
+    if (!touchStart || !current.mobileSwipe) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.x;
+    const dy = touch.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.abs(dx) < 30 || Math.abs(dx) <= Math.abs(dy)) return;
+    const direction = dx > 0 ? "right" : "left";
+    if (direction !== current.swipeDirection) return;
+
+    const drawer = documentTarget.querySelector(current.mobileDrawerTarget);
+    if (!drawer) return;
+    if (!current.swipeReturning && drawer.classList.contains("open") && !drawer.classList.contains("closing")) {
+      current.onSidebarOpened?.();
+      return;
+    }
+    if (current.swipeReturning && drawer.classList.contains("closing")) {
+      current.onSidebarClosing?.();
+      if (closeFrame !== null) windowTarget.cancelAnimationFrame(closeFrame);
+      waitForDrawerClosed(drawer);
+    }
+  }
+
   function handleKeydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -129,6 +174,8 @@ export function tutorialPresentation(node, options) {
   }
 
   card.addEventListener("keydown", handleKeydown);
+  node.addEventListener("touchstart", handleTouchStart, { passive: true });
+  node.addEventListener("touchend", handleTouchEnd, { passive: true });
   windowTarget.addEventListener("resize", scheduleMeasure);
   queueMicrotask(() => {
     if (!destroyed) card.focus();
@@ -137,16 +184,27 @@ export function tutorialPresentation(node, options) {
 
   return {
     update(next) {
+      const stepChanged = next.stepIndex !== current.stepIndex;
       current = next;
       card.style.opacity = "0";
       card.style.transform = "translateY(4px)";
+      if (stepChanged) {
+        if (closeFrame !== null) windowTarget.cancelAnimationFrame(closeFrame);
+        closeFrame = null;
+        queueMicrotask(() => {
+          if (!destroyed) card.focus();
+        });
+      }
       scheduleMeasure();
     },
     destroy() {
       destroyed = true;
       card.removeEventListener("keydown", handleKeydown);
+      node.removeEventListener("touchstart", handleTouchStart);
+      node.removeEventListener("touchend", handleTouchEnd);
       windowTarget.removeEventListener("resize", scheduleMeasure);
       if (scheduledFrame !== null) windowTarget.cancelAnimationFrame(scheduledFrame);
+      if (closeFrame !== null) windowTarget.cancelAnimationFrame(closeFrame);
       const returnTarget = previousFocus?.isConnected && previousFocus !== documentTarget.body
         ? previousFocus
         : documentTarget.querySelector("#input");
