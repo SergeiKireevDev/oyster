@@ -79,10 +79,14 @@ test("first-run tour waits for credentials, persists dismissal, and can be repla
 
   await swipeTutorial(page, "right");
   await expect(page.locator("#sessions")).toBeVisible();
-  await expect(tutorial).toBeVisible();
+  await expect(page.locator(".tutorial-card")).toBeHidden();
+  await expect(swipePrompt).toContainText("Swipe left to close");
 
-  await page.getByRole("button", { name: "Next" }).click();
+  await swipeTutorial(page, "left");
   await expect(page.locator("#sessions")).toBeHidden();
+  await expect(page.locator("#tutorialTitle")).toHaveText("Tell pi what to build");
+  await expect(page.locator(".tutorial-card")).toBeVisible();
+
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Next" }).click();
   await expect(swipePrompt).toBeVisible();
@@ -91,9 +95,15 @@ test("first-run tour waits for credentials, persists dismissal, and can be repla
 
   await swipeTutorial(page, "left");
   await expect(page.locator("#hublots")).toBeVisible();
-  await expect(tutorial).toBeVisible();
+  await expect(page.locator(".tutorial-card")).toBeHidden();
+  await expect(swipePrompt).toContainText("Swipe right to close");
 
-  await page.getByRole("button", { name: "Skip tour" }).click();
+  await swipeTutorial(page, "right");
   await expect(page.locator("#hublots")).toBeHidden();
+  await expect(page.locator("#tutorialTitle")).toHaveText("You're ready");
+  await expect(page.locator(".tutorial-card")).toBeVisible();
+
+  await page.getByRole("button", { name: "Finish" }).click();
+  await expect(tutorial).toHaveCount(0);
   await expect(page.locator("#menuBtn")).toBeFocused();
 });
