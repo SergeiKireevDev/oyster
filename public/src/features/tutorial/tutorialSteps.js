@@ -1,0 +1,27 @@
+export const TUTORIAL_STEPS = Object.freeze([
+  Object.freeze({
+    title: "Welcome to Oyster",
+    description: "Oyster is your workspace for collaborating with pi from any browser. Here is a quick tour of the essentials.",
+    targets: [],
+  }),
+  Object.freeze({
+    title: "Keep sessions close",
+    description: "Start a session, resume earlier work, or search conversations from the sessions sidebar. On a phone, swipe right from the conversation to reveal it.",
+    targets: ["#sessions", "#carouselIndicator"],
+  }),
+  Object.freeze({
+    title: "Tell pi what to build",
+    description: "Use the composer for prompts, code, and file paths. Press Enter to send; use Shift+Enter when you need another line.",
+    targets: ["#composer .inner"],
+  }),
+  Object.freeze({
+    title: "Choose how pi thinks",
+    description: "The header controls let you switch models and adjust the thinking level for the current session.",
+    targets: [".header-actions"],
+  }),
+  Object.freeze({
+    title: "Make work visible and repeatable",
+    description: "Pinned Widgets keep useful outputs in view, while Routines turn recurring jobs into one-click workflows. On a phone, swipe left to find them.",
+    targets: ["#hublots", "#carouselIndicator"],
+  }),
+]);

@@ -26,6 +26,7 @@ test("every imperative browser or element listener module includes a cleanup pat
     "lib/fileExplorerController.js",
     "lib/modalDomAdapters.js",
     "lib/modalHistoryController.js",
+    "lib/tutorialDomAdapters.js",
     "runtime/carouselController.js",
     "runtime/eventControllers.js",
     "runtime/registerServiceWorker.js",

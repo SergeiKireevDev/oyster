@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   name: "analytics" | "key" | "settings" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "download" | "copy" | "link";
+   *   name: "analytics" | "key" | "settings" | "tour" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "download" | "copy" | "link";
    *   size?: number;
    *   class?: string;
    * }}
@@ -29,6 +29,9 @@
     {:else if name === "settings"}
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.94 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15.06 4.6a1.7 1.7 0 0 0 1.88-.34L17 4.2 19.83 7l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.6.66 1 1.52 1H21v4h-.08c-.86 0-1.38.4-1.52 1Z" />
+    {:else if name === "tour"}
+      <circle cx="12" cy="12" r="9" />
+      <path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" />
     {:else if name === "logout"}
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
     {:else if name === "fork"}

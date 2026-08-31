@@ -23,7 +23,7 @@ function locations(pattern) {
 
 test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
-    "components/Menu.svelte:94:<svelte:document onclick={close} />",
+    "components/Menu.svelte:100:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:86:<svelte:document onkeydowncapture={handleKeydown} />",
   ]);
 
@@ -51,6 +51,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/Overlays.svelte:use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}",
     "components/PinnedWidgetGrid.svelte:<span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden=\"true\" use:monitorPreview={widget}>",
     "components/SessionPickerModal.svelte:use:focusOnMount",
+    "components/Tutorial.svelte:use:tutorialPresentation={{",
     "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={empty} data-role={role} bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<details class=\"block tool interface-message\" class:ckpt-frozen={restore !== null} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<div class=\"message-row user-message-row\" data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",

@@ -5,6 +5,7 @@
   import ChatLayout from "./components/ChatLayout.svelte";
   import Overlays from "./components/Overlays.svelte";
   import AuthGate from "./components/AuthGate.svelte";
+  import Tutorial from "./components/Tutorial.svelte";
   import { provideUiActionRegistry } from "./runtime/uiActionContext.js";
   import { provideDialogService } from "./runtime/dialogServiceContext.js";
   import { provideBrowserActions } from "./runtime/browserActionsContext.js";
@@ -37,6 +38,7 @@
   <Menu />
   <ChatLayout />
   <Overlays />
+  <Tutorial />
   <AuthGate />
 </div>
 

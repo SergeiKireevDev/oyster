@@ -9,6 +9,10 @@ export const CREDENTIALS_START_OAUTH_ACTION = "credentials.startOAuth";
 export const CREDENTIALS_RESPOND_OAUTH_ACTION = "credentials.respondOAuth";
 export const CREDENTIALS_CANCEL_OAUTH_ACTION = "credentials.cancelOAuth";
 export const CREDENTIALS_LOGOUT_OAUTH_ACTION = "credentials.logoutOAuth";
+export const TUTORIAL_OPEN_ACTION = "tutorial.open";
+export const TUTORIAL_NEXT_ACTION = "tutorial.next";
+export const TUTORIAL_PREVIOUS_ACTION = "tutorial.previous";
+export const TUTORIAL_DISMISS_ACTION = "tutorial.dismiss";
 
 export const FILE_PICKER_BROWSE_ACTION = "filePicker.browse";
 export const FILE_PICKER_CHOOSE_ACTION = "filePicker.choose";

@@ -10,10 +10,10 @@ test("Menu exposes an accessible, stateful application menu", () => {
   assert.match(source, /role="menu"/);
   assert.match(source, /aria-label="Application menu"/);
   assert.match(source, /aria-hidden=\{!\$menuOpen\}/);
-  assert.equal((source.match(/<button/g) ?? []).length, 4);
-  assert.equal((source.match(/<button type="button" role="menuitem"/g) ?? []).length, 4);
-  assert.equal((source.match(/role="menuitem" tabindex="-1"/g) ?? []).length, 4);
-  assert.equal((source.match(/class="menu-option-icon" aria-hidden="true"/g) ?? []).length, 4);
+  assert.equal((source.match(/<button/g) ?? []).length, 5);
+  assert.equal((source.match(/<button type="button" role="menuitem"/g) ?? []).length, 5);
+  assert.equal((source.match(/role="menuitem" tabindex="-1"/g) ?? []).length, 5);
+  assert.equal((source.match(/class="menu-option-icon" aria-hidden="true"/g) ?? []).length, 5);
 });
 
 test("Menu supports menu keyboard navigation and focus lifecycle", () => {
@@ -28,7 +28,7 @@ test("Menu supports menu keyboard navigation and focus lifecycle", () => {
 });
 
 test("Menu actions use named handlers and explicit button behavior", () => {
-  for (const handler of ["openAnalytics", "openCredentials", "openSettings", "logOut"]) {
+  for (const handler of ["openAnalytics", "openCredentials", "openSettings", "openTutorial", "logOut"]) {
     assert.match(source, new RegExp(`onclick=\\{${handler}\\}`));
   }
   assert.doesNotMatch(source, /onclick=\{\(\) =>/);

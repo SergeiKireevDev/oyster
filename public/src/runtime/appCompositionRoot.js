@@ -20,6 +20,7 @@ import { runnerSessionIdentity, sameSession, sessionOpenSelection } from "../lib
 import { setCarouselPage } from "../stores/carousel.js";
 import { analytics, updateAnalytics } from "../stores/analytics.js";
 import { updateCredentialsState } from "../stores/credentials.js";
+import { updateTutorialState } from "../stores/tutorial.js";
 import { updateAppSession } from "../stores/appSession.js";
 import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
 import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
@@ -40,6 +41,7 @@ import { addToast } from "../stores/toasts.js";
 import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
+import { createTutorialAssembly } from "../features/tutorial/createTutorialAssembly.js";
 import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
 import { listPinnedWidgets } from "../lib/pinnedWidgetActions.js";
 import { createPinnedWidgetRuntime } from "../features/pinned-widgets/createPinnedWidgetRuntime.js";
@@ -446,6 +448,11 @@ const dialogAdapters = createDialogAdapters({
   setTitle: (title) => updateAppSession({ titleOverride: title }),
 });
 const extensionUiAdapters = dialogAdapters.extensionUi;
+const tutorialAssembly = createTutorialAssembly({
+  uiActions,
+  storage,
+  setState: updateTutorialState,
+});
 const credentialsAssembly = createCredentialsAssembly({
   uiActions,
   openModal: openModalState,
@@ -454,6 +461,7 @@ const credentialsAssembly = createCredentialsAssembly({
   toast: addToast,
   setState: updateCredentialsState,
   isModalOpen: dialogAdapters.modal.isOverlayOpen,
+  onSetupClosed: tutorialAssembly.operations.initialize,
 });
 const openModal = dialogAdapters.modal.open;
 const closeModal = dialogAdapters.modal.close;
@@ -1068,6 +1076,7 @@ const detachRuntimeEventAdapters = () => {
   transcriptAssembly.teardown();
   resourceAssembly.teardown();
   credentialsAssembly.teardown();
+  tutorialAssembly.teardown();
   dialogAdapters.teardown();
 };
 const featureAssembly = createFeatureAssembly({
@@ -1089,7 +1098,9 @@ return createLifecycleAssembly({
       void sessionPickerRuntime.refreshSidebar();
       void loadHublots();
       void loadRoutines();
-      void credentialsAssembly.operations.initialize();
+      void credentialsAssembly.operations.initialize().then((setupOpened) => {
+        if (!setupOpened) tutorialAssembly.operations.initialize();
+      });
     },
   },
   cancelDelayedTasks: () => delayedTasks.cancelAll(),

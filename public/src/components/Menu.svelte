@@ -2,7 +2,7 @@
   import AppIcon from "./AppIcon.svelte";
   import { menuOpen } from "../stores/ui.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { CREDENTIALS_OPEN_ACTION, MENU_ACTION } from "../runtime/uiActionNames.js";
+  import { CREDENTIALS_OPEN_ACTION, MENU_ACTION, TUTORIAL_OPEN_ACTION } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
   let returnFocusElement;
@@ -44,6 +44,12 @@
 
   function openSettings() {
     run("settings");
+  }
+
+  function openTutorial() {
+    close();
+    returnFocusElement?.focus();
+    uiActions.invoke(TUTORIAL_OPEN_ACTION);
   }
 
   function logOut() {
@@ -113,6 +119,10 @@
   <button type="button" role="menuitem" tabindex="-1" data-action="settings" onclick={openSettings}>
     <span class="menu-option-icon" aria-hidden="true"><AppIcon name="settings" size={17} /></span>
     <span>Settings…</span>
+  </button>
+  <button type="button" role="menuitem" tabindex="-1" data-action="tutorial" onclick={openTutorial}>
+    <span class="menu-option-icon" aria-hidden="true"><AppIcon name="tour" size={17} /></span>
+    <span>Take the tour…</span>
   </button>
   <button type="button" role="menuitem" tabindex="-1" class="menu-logout" data-action="logout" onclick={logOut}>
     <span class="menu-option-icon" aria-hidden="true"><AppIcon name="logout" size={17} /></span>
