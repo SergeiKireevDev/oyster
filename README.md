@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/SergeiKireevDev/oyster/tree/feature/digitalocean-app-platform"><img alt="Deploy to DigitalOcean" src="https://www.deploytodo.com/do-btn-blue.svg"></a>
   <img alt="Node.js ≥ 22.19" src="https://img.shields.io/badge/Node.js-%E2%89%A522.19-5FA04E?logo=nodedotjs&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-9DA9FF"></a>
 </p>
