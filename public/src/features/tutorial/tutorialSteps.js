@@ -8,6 +8,9 @@ export const TUTORIAL_STEPS = Object.freeze([
     title: "Keep sessions close",
     description: "Start a session, resume earlier work, or search conversations from the sessions sidebar. On a phone, swipe right from the conversation to reveal it.",
     targets: ["#sessions", "#carouselIndicator"],
+    mobileSwipe: "right",
+    mobileSwipeLabel: "Swipe right",
+    mobileSwipeSymbol: "→",
   }),
   Object.freeze({
     title: "Tell pi what to build",
@@ -23,5 +26,8 @@ export const TUTORIAL_STEPS = Object.freeze([
     title: "Make work visible and repeatable",
     description: "Pinned Widgets keep useful outputs in view, while Routines turn recurring jobs into one-click workflows. On a phone, swipe left to find them.",
     targets: ["#hublots", "#carouselIndicator"],
+    mobileSwipe: "left",
+    mobileSwipeLabel: "Swipe left",
+    mobileSwipeSymbol: "←",
   }),
 ]);

@@ -31,8 +31,10 @@
 {#if $tutorialState.active}
   <div
     class="tutorial-layer"
+    class:swipe-mode={currentStep.mobileSwipe}
     use:tutorialPresentation={{
       targets: currentStep.targets,
+      mobileSwipe: currentStep.mobileSwipe,
       stepIndex: $tutorialState.stepIndex,
       onNext: next,
       onPrevious: previous,
@@ -41,6 +43,22 @@
   >
     <div class="tutorial-spotlight" aria-hidden="true"></div>
     <div class="tutorial-scrim" aria-hidden="true"></div>
+
+    {#if currentStep.mobileSwipe}
+      <div
+        class="tutorial-swipe-prompt"
+        class:swipe-left={currentStep.mobileSwipe === "left"}
+        class:swipe-right={currentStep.mobileSwipe === "right"}
+        aria-hidden="true"
+      >
+        <span class="tutorial-swipe-motion">
+          <span class="tutorial-swipe-track"></span>
+          <span class="tutorial-swipe-symbol">{currentStep.mobileSwipeSymbol}</span>
+          <span class="tutorial-swipe-touch"><span></span></span>
+        </span>
+        <strong>{currentStep.mobileSwipeLabel}</strong>
+      </div>
+    {/if}
 
     <div
       class="tutorial-card"
@@ -94,6 +112,8 @@
     background: color-mix(in srgb, var(--bg) 72%, transparent);
     backdrop-filter: blur(2px);
   }
+
+  .tutorial-swipe-prompt { display: none; }
 
   .tutorial-spotlight {
     position: fixed;
@@ -205,6 +225,101 @@
   .tutorial-navigation { display: flex; align-items: center; gap: 8px; }
   .tutorial-navigation :is(.chip, .btn) { min-width: 72px; min-height: 36px; }
 
+  @media (max-width: 760px) {
+    .tutorial-layer.swipe-mode .tutorial-scrim { display: none; }
+
+    .tutorial-swipe-prompt {
+      position: fixed;
+      top: min(70%, calc(100dvh - 105px));
+      left: 50%;
+      display: grid;
+      width: 180px;
+      justify-items: center;
+      gap: 8px;
+      color: var(--text);
+      pointer-events: none;
+      translate: -50% -50%;
+    }
+
+    .tutorial-swipe-motion {
+      position: relative;
+      display: block;
+      width: 160px;
+      height: 54px;
+    }
+
+    .tutorial-swipe-track {
+      position: absolute;
+      top: 26px;
+      left: 25px;
+      width: 110px;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent), transparent);
+    }
+
+    .tutorial-swipe-symbol {
+      position: absolute;
+      top: 4px;
+      color: color-mix(in srgb, var(--accent) 82%, var(--text));
+      font: 500 34px/1 var(--mono);
+      filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent));
+    }
+
+    .swipe-right .tutorial-swipe-symbol { right: 4px; }
+    .swipe-left .tutorial-swipe-symbol { left: 4px; }
+
+    .tutorial-swipe-touch {
+      position: absolute;
+      top: 13px;
+      left: 66px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      box-sizing: border-box;
+      place-items: center;
+      border: 2px solid color-mix(in srgb, var(--accent) 84%, white);
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+      box-shadow: 0 5px 18px color-mix(in srgb, var(--bg) 58%, transparent), 0 0 0 6px color-mix(in srgb, var(--accent) 13%, transparent);
+    }
+
+    .tutorial-swipe-touch span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .swipe-right .tutorial-swipe-touch { animation: tutorial-swipe-right 1.8s ease-in-out infinite; }
+    .swipe-left .tutorial-swipe-touch { animation: tutorial-swipe-left 1.8s ease-in-out infinite; }
+
+    .tutorial-swipe-prompt strong {
+      padding: 6px 10px;
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+      box-shadow: 0 5px 18px color-mix(in srgb, var(--bg) 45%, transparent);
+      font-size: 11px;
+      font-weight: 680;
+      letter-spacing: .03em;
+    }
+  }
+
+  @keyframes tutorial-swipe-right {
+    0%, 8% { opacity: 0; transform: translateX(-48px) scale(.78); }
+    20% { opacity: 1; transform: translateX(-48px) scale(1); }
+    72% { opacity: 1; transform: translateX(48px) scale(1); }
+    88%, 100% { opacity: 0; transform: translateX(48px) scale(.78); }
+  }
+
+  @keyframes tutorial-swipe-left {
+    0%, 8% { opacity: 0; transform: translateX(48px) scale(.78); }
+    20% { opacity: 1; transform: translateX(48px) scale(1); }
+    72% { opacity: 1; transform: translateX(-48px) scale(1); }
+    88%, 100% { opacity: 0; transform: translateX(-48px) scale(.78); }
+  }
+
   @media (max-width: 520px) {
     .tutorial-card { gap: 14px; padding: 17px; }
     .tutorial-actions { align-items: stretch; flex-direction: column-reverse; }
@@ -217,5 +332,8 @@
     .tutorial-spotlight,
     .tutorial-card,
     .tutorial-progress span { transition: none; }
+    .tutorial-swipe-touch { animation: none; opacity: 1; }
+    .swipe-right .tutorial-swipe-touch { transform: translateX(42px); }
+    .swipe-left .tutorial-swipe-touch { transform: translateX(-42px); }
   }
 </style>
