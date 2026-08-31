@@ -1,4 +1,4 @@
-<h1 align="center"><img src="public/src/assets/oyster.svg" width="48" alt="Oyster logo" align="absmiddle"> Oyster</h1>
+<h1 align="center"><img src="public/src/assets/oyster.png" height="48" alt="Oyster logo" align="absmiddle"> Oyster</h1>
 
 <p align="center">
   Generalist work agents, available from any browser.
