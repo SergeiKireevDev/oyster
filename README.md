@@ -97,13 +97,13 @@ See [Installation](docs/getting-started/installation.md), [Configuration](docs/g
 - **Credentials** — use pi-native API key and OAuth storage without sending secrets to the browser.
 - **Made for mobile** — steer an active agent, review work, and manage sessions from your phone.
 
-<p align="center">
-  <img src="docs/images/oyster-animal-images.png" alt="An Oyster session for generating a coordinated animal image collection" width="100%">
-</p>
-
-<p align="center">
-  <img src="docs/images/oyster-mobile-sessions.png" alt="Todo-list and animal-image sessions in Oyster on mobile" width="390">
-</p>
+<table>
+  <tr>
+    <td align="center" width="33%"><sub><strong>Mobile · Session sidebar</strong></sub><br><img src="docs/images/oyster-mobile-sessions.png" alt="Todo-list and animal-image sessions in Oyster's mobile session sidebar" width="100%"></td>
+    <td align="center" width="33%"><sub><strong>Mobile · Transcript</strong></sub><br><img src="docs/images/oyster-mobile-transcript.png" alt="An Oyster mobile transcript for generating an animal image collection" width="100%"></td>
+    <td align="center" width="33%"><sub><strong>Mobile · Pinned widgets</strong></sub><br><img src="docs/images/oyster-mobile-widgets.png" alt="Generated animal SVGs pinned in Oyster's mobile widgets sidebar" width="100%"></td>
+  </tr>
+</table>
 
 <p align="center">
   <a href="docs/readme.md">Documentation</a>
