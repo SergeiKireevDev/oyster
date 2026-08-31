@@ -40,6 +40,12 @@
     uiActions.invoke(TUTORIAL_DISMISS_ACTION);
   }
 
+  function dismissOnPointerUp(event) {
+    if (event.pointerType !== "touch") return;
+    event.preventDefault();
+    dismiss();
+  }
+
   function sidebarOpened() {
     returningStep = $tutorialState.stepIndex;
   }
@@ -121,7 +127,7 @@
       </div>
 
       <footer class="tutorial-actions">
-        <button class="tutorial-skip" type="button" onclick={dismiss}>Skip tour</button>
+        <button class="tutorial-skip" type="button" onpointerup={dismissOnPointerUp} onclick={dismiss}>Skip tour</button>
         <span class="tutorial-navigation">
           {#if $tutorialState.stepIndex > 0}
             <button class="chip" type="button" onclick={previous}>Back</button>
