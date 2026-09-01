@@ -14,8 +14,8 @@ test("session sidebar owns its calm responsive presentation", () => {
   assert.doesNotMatch(source, /\.current-workspace > \.session-sidebar-workspace-heading \{[^}]*background/);
   assert.match(source, /\.session-sidebar-cwd\.current-cwd > summary \{ background: color-mix\(in srgb, var\(--accent\) 3%, transparent\)/);
   assert.match(source, /\.session-sidebar-cwd\[open\] > \.session-sidebar-workspace-sessions \{ padding-top: 4px; \}/);
-  assert.match(source, /\.session-sidebar-cwd-create \{[\s\S]*?width: 26px; height: 26px;[\s\S]*?var\(--accent\)/);
-  assert.match(source, /\.session-sidebar-cwd-create:focus-visible \{ outline: 2px solid/);
+  assert.match(source, /\.session-sidebar-placeholder \{[\s\S]*?min-height: 54px;[\s\S]*?border: 1px dashed/);
+  assert.match(source, /\.session-sidebar-placeholder:focus-visible \{ outline: 2px solid/);
   assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?var\(--accent\) 4%, var\(--panel-2\)[\s\S]*?box-shadow: inset 1px 0 0 var\(--selection-marker\)/);
   for (const token of ["selection-bg", "selection-border", "selection-marker", "selection-text"]) {
     assert.match(globalStyles, new RegExp(`--${token}:`));
@@ -52,10 +52,11 @@ test("session sidebar retains explicit state and control semantics", () => {
   assert.match(source, /class="session-timeline-marker" role="img" aria-label=\{loopStatusLabel\(timelineStatus\)\}/);
   assert.match(source, /aria-expanded=\{expanded\}/);
   assert.match(source, /disabled=\{managing \|\| !\["online", "paused"\]\.includes\(status\)\}/);
-  assert.match(source, /\{#if !archived\}[\s\S]*?class="session-sidebar-cwd-create"[\s\S]*?aria-label=\{`Add session in \$\{group\.cwd\}`\}/);
-  assert.match(source, /onclick=\{\(event\) => createSessionInGroup\(event, group\)\}/);
+  assert.match(source, /<div class="session-sidebar-workspace-sessions">\s*\{#if !archived\}[\s\S]*?class="session-sidebar-placeholder"[\s\S]*?aria-label=\{`Add session in \$\{group\.cwd\}`\}/);
+  assert.match(source, /onclick=\{\(\) => createSessionInGroup\(group\)\}/);
+  assert.match(source, /<span class="session-sidebar-name">Add session<\/span>/);
   assert.match(source, /const createSessionInGroup/);
-  assert.match(source, /event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);/);
+  assert.doesNotMatch(source, /session-sidebar-cwd-create/);
 
   const { warnings } = compile(source, {
     filename: "SessionSidebar.svelte",
