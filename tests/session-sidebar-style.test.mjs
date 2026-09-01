@@ -16,6 +16,8 @@ test("session sidebar owns its calm responsive presentation", () => {
   assert.match(source, /\.session-sidebar-cwd\[open\] > \.session-sidebar-workspace-sessions \{ padding-top: 4px; \}/);
   assert.match(source, /\.session-sidebar-placeholder \{[\s\S]*?min-height: 54px;[\s\S]*?border: 1px dashed/);
   assert.match(source, /\.session-sidebar-placeholder:focus-visible \{ outline: 2px solid/);
+  assert.match(source, /\.session-sidebar-placeholder-icon::before,[\s\S]*?top: 50%; left: 50%;[\s\S]*?transform: translate\(-50%, -50%\)/);
+  assert.match(source, /\.session-sidebar-placeholder-icon::after \{ transform: translate\(-50%, -50%\) rotate\(90deg\); \}/);
   assert.match(source, /\.session-sidebar-entry\.current \{[\s\S]*?var\(--accent\) 4%, var\(--panel-2\)[\s\S]*?box-shadow: inset 1px 0 0 var\(--selection-marker\)/);
   for (const token of ["selection-bg", "selection-border", "selection-marker", "selection-text"]) {
     assert.match(globalStyles, new RegExp(`--${token}:`));

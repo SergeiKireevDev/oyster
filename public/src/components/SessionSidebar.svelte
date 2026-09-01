@@ -1219,7 +1219,10 @@
   .session-sidebar-placeholder { display: flex; width: 100%; min-width: 0; min-height: 54px; align-items: center; gap: 8px; padding: 7px 9px; border: 1px dashed color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 3%, transparent); color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: border-color .14s, background-color .14s, color .14s, transform .14s; }
   .session-sidebar-placeholder:hover { border-style: solid; border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text); transform: translateX(2px); }
   .session-sidebar-placeholder:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
-  .session-sidebar-placeholder-icon { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: 50%; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: 16px; line-height: 1; }
+  .session-sidebar-placeholder-icon { position: relative; display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: 50%; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: 0; }
+  .session-sidebar-placeholder-icon::before,
+  .session-sidebar-placeholder-icon::after { position: absolute; top: 50%; left: 50%; width: 10px; height: 1.5px; border-radius: 999px; background: currentColor; content: ""; transform: translate(-50%, -50%); }
+  .session-sidebar-placeholder-icon::after { transform: translate(-50%, -50%) rotate(90deg); }
   .session-sidebar-placeholder .session-sidebar-name { color: color-mix(in srgb, var(--accent) 32%, var(--text)); }
   .session-sidebar-row { display: flex; min-width: 0; min-height: 54px; flex: 1; align-items: center; gap: 8px; padding: 7px 7px 7px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .session-sidebar-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
