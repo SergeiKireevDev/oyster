@@ -146,11 +146,17 @@ export function closeEventStream(source) {
   try { source?.close(); } catch {}
 }
 
-export function openEventStream({ runner, replay, EventSourceImpl = EventSource }) {
+export function createEventStreamNonce() {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function openEventStream({ runner, replay, streamNonce = createEventStreamNonce(), EventSourceImpl = EventSource }) {
   const workspace = isHubRuntime() ? getActiveWorkspace() : null;
   const workspaceQuery = workspace ? `&workspace=${encodeURIComponent(workspace)}` : "";
-  // Native EventSource cannot set an Authorization header. Same-origin
-  // requests include the oyster_token cookie established during browser auth.
-  const url = `/events?runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}${workspaceQuery}`;
+  // Give every EventSource instance a distinct cache key. Native EventSource
+  // cannot set an Authorization header, so same-origin requests authenticate
+  // with the oyster_token cookie established during browser auth.
+  const url = `/events?runner=${encodeURIComponent(runner ?? "")}&replay=${replay ? "1" : "0"}&stream=${encodeURIComponent(streamNonce)}${workspaceQuery}`;
   return new EventSourceImpl(url);
 }

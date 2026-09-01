@@ -59,6 +59,13 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
 
   const reference = { backend: "sqlite", id: "session-1", storagePath: sqlitePath };
   const runner = await manager.spawnRunner({ dir: "/workspace", sessionRef: reference });
+  const liveFrames = [];
+  state.sseClients.add({
+    runnerId: runner.id,
+    writableEnded: false,
+    destroyed: false,
+    write: (frame) => { liveFrames.push(frame); return true; },
+  });
   let persisted = await store.repositories.runners.find(runner.id);
   assert.equal(persisted.owner_id, owner.id);
   assert.equal(persisted.dir, "/workspace");
@@ -111,6 +118,10 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
     assert.equal(replayedTypes.includes(type), false, `${type} snapshots must not enter durable replay`);
   }
   assert.equal(replayedTypes.includes("message_end"), true, "bounded terminal events remain replayable");
+  const updateFrame = liveFrames.find((frame) => frame.includes('"type":"message_update"'));
+  const terminalFrame = liveFrames.find((frame) => frame.includes('"type":"message_end"'));
+  assert.doesNotMatch(updateFrame, /^id:/, "non-replayable updates must not advance Last-Event-ID");
+  assert.match(terminalFrame, /^id: [^\n]+\ndata:/, "durable terminal events expose their standard SSE ID");
 
   await manager.stopRunner(runner);
   persisted = await store.repositories.runners.find(runner.id);
@@ -186,9 +197,14 @@ test("runner replay and selected workdir survive restart without eager process s
   assert.equal((await store.repositories.runners.find(runnerId)).last_stopped_at, "now");
   assert.equal((await store.repositories.runners.find("r-stopped0000")).last_status, "stopped");
   assert.equal((await store.repositories.runners.find("r-stopped0000")).last_stopped_at, "already-stopped");
-  assert.deepEqual(await manager.replayRunnerEvents(restored), [
+  const retainedReplay = [
     '{"type":"persisted","part":1}', '{"type":"persisted","part":2}',
-  ]);
+  ];
+  assert.deepEqual(await manager.replayRunnerEvents(restored), retainedReplay);
+  assert.deepEqual(await manager.replayRunnerEvents(restored, { afterSseId: "persisted-event-1" }), [retainedReplay[1]]);
+  assert.deepEqual(await manager.replayRunnerEvents(restored, { afterSseId: "persisted-event-2" }), []);
+  assert.deepEqual(await manager.replayRunnerEvents(restored, { afterSseId: "evicted-or-unknown" }), retainedReplay,
+    "an unknown cursor replays the retained window so the client can deduplicate it");
   assert.deepEqual((await store.repositories.runnerEvents.list(runnerId)).map(({ sequence, sse_id }) => [sequence, sse_id]), [
     [1, "persisted-event-1"], [2, "persisted-event-2"], [3, "oversized-event"],
   ]);
