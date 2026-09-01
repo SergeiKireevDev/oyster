@@ -86,9 +86,7 @@
   };
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
   const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, cwd);
-  const createSessionInGroup = (event, group) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const createSessionInGroup = (group) => {
     if (hubMode) {
       if (group.environmentId) requestedEnvironmentId = group.environmentId;
       setActiveWorkspace(group.workspaceId);
@@ -631,9 +629,24 @@
   </div>
 {/snippet}
 
-{#snippet SessionRows({ families, archived = false, cwd = "", listKey = cwd })}
+{#snippet SessionRows({ families, group, archived = false, cwd = "", listKey = cwd })}
   {@const familyPage = collectionPage(families, collectionLimits, `families:${listKey}`)}
   <div class="session-sidebar-workspace-sessions">
+    {#if !archived}
+      <button
+        type="button"
+        class="session-sidebar-placeholder"
+        title={`Add session in ${group.cwd}`}
+        aria-label={`Add session in ${group.cwd}`}
+        onclick={() => createSessionInGroup(group)}
+      >
+        <span class="session-sidebar-placeholder-icon" aria-hidden="true">+</span>
+        <span class="session-sidebar-copy">
+          <span class="session-sidebar-name">Add session</span>
+          <span class="session-sidebar-meta">Start a new session in this directory</span>
+        </span>
+      </button>
+    {/if}
     {#each familyPage.items as family (entryIdentity(family.entry))}
       {@const familyKey = entryIdentity(family.entry)}
       {@const loopFamily = family.loop}
@@ -683,17 +696,8 @@
       <span class="session-sidebar-cwd-icon" aria-hidden="true"></span>
       <span class="session-sidebar-cwd-label">{abbreviateHomePath(group.cwd)}</span>
       <span class="session-sidebar-count">{group.entries.length}</span>
-      {#if !archived}
-        <button
-          type="button"
-          class="session-sidebar-cwd-create"
-          title={`Add session in ${group.cwd}`}
-          aria-label={`Add session in ${group.cwd}`}
-          onclick={(event) => createSessionInGroup(event, group)}
-        >+</button>
-      {/if}
     </summary>
-    {@render SessionRows({ families: group.families, archived, cwd: group.cwd, listKey: cwdExpansionKey(group) })}
+    {@render SessionRows({ families: group.families, group, archived, cwd: group.cwd, listKey: cwdExpansionKey(group) })}
   </details>
 {/snippet}
 
@@ -1198,9 +1202,6 @@
   .session-sidebar-cwd-label { min-width: 0; overflow: hidden; font-family: var(--mono); text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-count,
   .session-sidebar-hit-count { min-width: 21px; margin-left: auto; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--muted); font-size: 9px; text-align: center; }
-  .session-sidebar-cwd-create { display: grid; width: 26px; height: 26px; flex: none; place-items: center; padding: 0; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 7px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent); font: 15px/1 inherit; cursor: pointer; transition: border-color .14s, background-color .14s, color .14s; }
-  .session-sidebar-cwd-create:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 17%, transparent); color: var(--text); }
-  .session-sidebar-cwd-create:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
 
   .session-sidebar-workspace-sessions,
   .session-sidebar-child-list { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
@@ -1215,6 +1216,11 @@
   .session-sidebar-entry { position: relative; display: flex; min-height: 54px; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: 9px; transition: background-color .14s, border-color .14s, transform .14s; }
   .session-sidebar-entry:hover { background: color-mix(in srgb, var(--text) 4.5%, transparent); transform: translateX(2px); }
   .session-sidebar-entry.current { border-color: color-mix(in srgb, var(--accent) 14%, var(--border)); background: color-mix(in srgb, var(--accent) 4%, var(--panel-2)); box-shadow: inset 1px 0 0 var(--selection-marker); }
+  .session-sidebar-placeholder { display: flex; width: 100%; min-width: 0; min-height: 54px; align-items: center; gap: 8px; padding: 7px 9px; border: 1px dashed color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 3%, transparent); color: var(--muted); font: inherit; text-align: left; cursor: pointer; transition: border-color .14s, background-color .14s, color .14s, transform .14s; }
+  .session-sidebar-placeholder:hover { border-style: solid; border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text); transform: translateX(2px); }
+  .session-sidebar-placeholder:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+  .session-sidebar-placeholder-icon { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: 50%; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: 16px; line-height: 1; }
+  .session-sidebar-placeholder .session-sidebar-name { color: color-mix(in srgb, var(--accent) 32%, var(--text)); }
   .session-sidebar-row { display: flex; min-width: 0; min-height: 54px; flex: 1; align-items: center; gap: 8px; padding: 7px 7px 7px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .session-sidebar-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
   .session-sidebar-name,
@@ -1290,10 +1296,10 @@
     .session-sidebar-environment-create { width: var(--icon-control-important); }
     .session-sidebar-environment-info { width: var(--icon-control-standard); }
     .session-sidebar-entry,
-    .session-sidebar-row { min-height: 58px; }
+    .session-sidebar-row,
+    .session-sidebar-placeholder { min-height: 58px; }
     .session-sidebar-action,
     .session-sidebar-lifecycle { width: var(--icon-control-standard); height: var(--icon-control-standard); }
-    .session-sidebar-cwd-create { width: 32px; height: 32px; }
     .session-sidebar-cwd > summary,
     .session-sidebar-child-sessions > summary,
     .session-archive-divider,
@@ -1315,14 +1321,13 @@
     .session-sidebar-workspace-create { position: relative; }
     .session-sidebar-workspace-power::after,
     .session-sidebar-workspace-destroy::after { position: absolute; inset: -8px -6px; content: ""; }
-    .session-sidebar-workspace-create::after,
-    .session-sidebar-cwd-create::after { position: absolute; inset: -6px; content: ""; }
-    .session-sidebar-cwd-create { position: relative; }
+    .session-sidebar-workspace-create::after { position: absolute; inset: -6px; content: ""; }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .session-sidebar-workspace-icon,
     .session-timeline-entry.status-running .session-timeline-marker { animation: none; }
-    .session-sidebar-entry:hover { transform: none; }
+    .session-sidebar-entry:hover,
+    .session-sidebar-placeholder:hover { transform: none; }
   }
 </style>
