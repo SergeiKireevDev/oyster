@@ -44,8 +44,8 @@ test("DigitalOcean service preserves Oyster's authenticated container contract",
   assert.doesNotMatch(template, /disable_edge_cache/);
   assert.match(template, /dockerfile_path: Dockerfile/);
   assert.match(template, /http_port: 4000/);
-  assert.match(template, /instance_size_slug: apps-s-2vcpu-4gb/);
-  assert.doesNotMatch(template, /instance_size_slug: apps-s-1vcpu-2gb/);
+  assert.match(template, /instance_size_slug: apps-s-1vcpu-2gb/);
+  assert.doesNotMatch(template, /instance_size_slug: apps-s-2vcpu-4gb/);
   assert.match(template, /key: PI_DIR\n\s+scope: RUN_TIME\n\s+value: \/workspace/);
   assert.match(template, /key: OYSTER_TOKEN[\s\S]*type: SECRET/);
   assert.doesNotMatch(template, /key: OYSTER_TOKEN\n\s+value:/);
@@ -61,5 +61,7 @@ test("DigitalOcean documentation discloses ephemeral storage and billing", () =>
   assert.match(deploymentGuide, /setting only when the app has at least one custom domain/i);
   assert.match(deploymentGuide, /no_healthy_upstream/);
   assert.match(deploymentGuide, /exit code `137`/);
+  assert.match(deploymentGuide, /defaults to `apps-s-1vcpu-2gb`/i);
+  assert.match(deploymentGuide, /resize it to `apps-s-2vcpu-4gb` or larger/i);
   assert.match(deploymentGuide, /does not resize an existing app/i);
 });
