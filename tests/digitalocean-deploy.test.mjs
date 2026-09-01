@@ -11,13 +11,11 @@ const deploymentGuide = readFileSync(
   "utf8",
 );
 
-test("DigitalOcean deploy button and template target the deployment branch", () => {
+test("DigitalOcean deploy button targets the deployment branch", () => {
   const repository = "https://github.com/SergeiKireevDev/oyster";
   const branch = "feature/digitalocean-app-platform";
 
   assert.match(template, /^spec:\n/);
-  assert.ok(template.includes(`repo_clone_url: ${repository}.git`));
-  assert.ok(template.includes(`branch: ${branch}`));
   const deployUrl = `https://cloud.digitalocean.com/apps/new?repo=${repository}/tree/${branch}`;
   assert.ok(readme.includes(deployUrl));
 
@@ -40,9 +38,16 @@ test("CI publishes the browser-tested deployment image to public Docker Hub", { 
   assert.ok(workflow.indexOf("Run mobile and desktop smoke tests") < workflow.indexOf("Publish tested deployment image"));
 });
 
+test("DigitalOcean service uses the latest browser-tested public image", () => {
+  assert.match(template, /image:\n\s+registry_type: DOCKER_HUB/);
+  assert.match(template, /registry: sergeikireevdev/);
+  assert.match(template, /repository: oyster/);
+  assert.match(template, /tag: digitalocean/);
+  assert.doesNotMatch(template, /repo_clone_url|dockerfile_path|source_dir/);
+});
+
 test("DigitalOcean service preserves Oyster's authenticated container contract", () => {
   assert.doesNotMatch(template, /disable_edge_cache/);
-  assert.match(template, /dockerfile_path: Dockerfile/);
   assert.match(template, /http_port: 4000/);
   assert.match(template, /instance_size_slug: apps-s-1vcpu-2gb/);
   assert.doesNotMatch(template, /instance_size_slug: apps-s-2vcpu-4gb/);
@@ -57,6 +62,8 @@ test("DigitalOcean documentation discloses ephemeral storage and billing", () =>
   assert.match(deploymentGuide, /filesystem is ephemeral/i);
   assert.match(deploymentGuide, /does not support persistent volumes/i);
   assert.match(deploymentGuide, /charges continue until the app is destroyed/i);
+  assert.match(deploymentGuide, /sergeikireevdev\/oyster:digitalocean/);
+  assert.match(deploymentGuide, /does not automatically redeploy/i);
   assert.match(deploymentGuide, /template deliberately supplies no default/i);
   assert.match(deploymentGuide, /setting only when the app has at least one custom domain/i);
   assert.match(deploymentGuide, /no_healthy_upstream/);
