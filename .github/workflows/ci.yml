@@ -54,7 +54,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -80,8 +79,8 @@ jobs:
           load: true
           tags: |
             oyster:sqlite
-            ghcr.io/sergeikireevdev/oyster:digitalocean
-            ghcr.io/sergeikireevdev/oyster:sha-${{ github.sha }}
+            docker.io/sergeikireevdev/oyster:digitalocean
+            docker.io/sergeikireevdev/oyster:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -107,19 +106,19 @@ jobs:
         working-directory: tests/e2e
         run: npx playwright test mobile-modals.spec.js sessions.spec.js
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/feature/digitalocean-app-platform'
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Publish tested deployment image
         if: github.event_name == 'push' && github.ref == 'refs/heads/feature/digitalocean-app-platform'
         run: |
-          docker push "ghcr.io/sergeikireevdev/oyster:sha-${GITHUB_SHA}"
-          docker push "ghcr.io/sergeikireevdev/oyster:digitalocean"
+          docker push "docker.io/sergeikireevdev/oyster:sha-${GITHUB_SHA}"
+          docker push "docker.io/sergeikireevdev/oyster:digitalocean"
 
       - name: Upload browser diagnostics
         if: failure()

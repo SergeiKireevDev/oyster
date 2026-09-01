@@ -15,6 +15,7 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.PI_ARGS;
   delete childEnv.PI_BIN;
   delete childEnv.PI_CODING_AGENT_DIR;
+  delete childEnv.PI_DIR;
   delete childEnv.OYSTER_DB_PATH;
   delete childEnv.OYSTER_HUBLOT_TUNNEL_POOL_SIZE;
   delete childEnv.OYSTER_UNAUTHENTICATED;
@@ -119,6 +120,10 @@ test("configuration rejects invalid stores and missing executables", () => {
   result = checkConfig({ args: ["--pi", join(tmpdir(), "missing-pi")] });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /pi executable is missing or not executable/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { PI_DIR: join(tmpdir(), "missing-oyster-workdir") } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PI_DIR\/--dir must be an accessible directory/);
 
   result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_DB_PATH: join(tmpdir(), "app.db") } });
   assert.notEqual(result.status, 0);

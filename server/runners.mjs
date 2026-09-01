@@ -563,7 +563,46 @@ export async function createRunnerManager(state, {
       return;
     }
     runner.proc = proc;
+    let launchFailed = false;
+    let rl = null;
+
+    // Node reports executable and cwd failures asynchronously. Register the
+    // special `error` listener before the first await: an unhandled ChildProcess
+    // error terminates the entire Oyster server instead of only this runner.
+    proc.on("error", (err) => {
+      launchFailed = true;
+      console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
+      runnerEvent(runner, { type: "pi_error", error: err.message });
+      if (runner.proc === proc) runner.proc = null;
+      if (runner.stdoutReader === rl) {
+        rl?.close();
+        runner.stdoutReader = null;
+      }
+      Promise.resolve(runnerRepository?.update(runner.id, { last_status: "dead" }))
+        .catch((error) => console.error(`[oyster] cannot persist failed runner ${runner.id}: ${error?.message ?? error}`));
+      runnersChanged(runner);
+    });
+
+    // A successfully spawned child can also exit while persistence is yielding.
+    // Attach this listener before awaiting for the same reason, even though an
+    // unobserved `exit` event is not process-fatal.
+    proc.on("exit", async (code, signal) => {
+      console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
+      if (runner.proc === proc) {
+        runner.proc = null;
+        if (runner.stdoutReader === rl) {
+          rl?.close();
+          runner.stdoutReader = null;
+        }
+        runner.busy = false;
+        await runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
+        runnerEvent(runner, { type: "pi_exit", code, signal });
+        runnersChanged(runner);
+      }
+    });
+
     await runnerRepository?.update(runner.id, { last_status: "running" });
+    if (launchFailed || runner.proc !== proc) return;
 
     // health watchdog bookkeeping: only procs started by watchdog-aware
     // code update lastLineAt, so only those are probed (watchdogOk)
@@ -572,7 +611,7 @@ export async function createRunnerManager(state, {
     runner.probeSentAt = null;
     runner.probeMisses = 0;
 
-    const rl = createInterface({ input: proc.stdout });
+    rl = createInterface({ input: proc.stdout });
     runner.stdoutReader = rl;
     rl.on("line", (line) => {
       if (runner.proc !== proc) return;
@@ -587,33 +626,6 @@ export async function createRunnerManager(state, {
     proc.stderr.on("data", (chunk) => {
       const text = String(chunk).trim();
       if (text) console.error(`[pi ${runner.id} stderr] ${text}`);
-    });
-
-    proc.on("error", async (err) => {
-      console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
-      runnerEvent(runner, { type: "pi_error", error: err.message });
-      if (runner.proc === proc) runner.proc = null;
-      if (runner.stdoutReader === rl) {
-        rl.close();
-        runner.stdoutReader = null;
-      }
-      await runnerRepository?.update(runner.id, { last_status: "dead" });
-      runnersChanged(runner);
-    });
-
-    proc.on("exit", async (code, signal) => {
-      console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
-      if (runner.proc === proc) {
-        runner.proc = null;
-        if (runner.stdoutReader === rl) {
-          rl.close();
-          runner.stdoutReader = null;
-        }
-        runner.busy = false;
-        await runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
-        runnerEvent(runner, { type: "pi_exit", code, signal });
-        runnersChanged(runner);
-      }
     });
 
     // JSONL resumes retain the RPC switch contract. SQLite identity is not a

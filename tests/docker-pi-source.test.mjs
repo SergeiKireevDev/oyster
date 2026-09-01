@@ -2,17 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const fallback = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
+const deployment = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const local = readFileSync(new URL("../Dockerfile.local-pi", import.meta.url), "utf8");
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const containerDocs = readFileSync(new URL("../docs/operations/containers.md", import.meta.url), "utf8");
 
-test("published Docker fallback is explicit and version-labelled", () => {
-  assert.match(fallback, /ARG PI_PACKAGE_SPEC=@earendil-works\/pi-coding-agent@0\.80\.3/);
-  assert.match(fallback, /org\.opencontainers\.image\.pi-source="published-package"/);
-  assert.match(fallback, /org\.opencontainers\.image\.pi-version="\$\{PI_PACKAGE_VERSION\}"/);
-  assert.doesNotMatch(fallback, /npm install -g @earendil-works\/pi-coding-agent/);
-  assert.match(fallback, /PERSISTENT_STORE=jsonl/);
+test("deployment Docker image builds the pi submodule and uses SQLite", () => {
+  assert.match(deployment, /COPY pi\/package\.json pi\/package-lock\.json/);
+  assert.match(deployment, /COPY pi\/packages \.\/packages/);
+  assert.match(deployment, /npm pack --workspace packages\/coding-agent/);
+  assert.match(deployment, /org\.opencontainers\.image\.pi-source="git-submodule"/);
+  assert.match(deployment, /PI_BIN=\/opt\/pi\/node_modules\/\.bin\/pi/);
+  assert.match(deployment, /RUN PI_SQLITE_TEST_BIN="\$PI_BIN" npm test/);
+  assert.match(deployment, /PERSISTENT_STORE=sqlite/);
+  assert.doesNotMatch(deployment, /PI_PACKAGE_SPEC|published-package|PERSISTENT_STORE=jsonl/);
+  assert.doesNotMatch(deployment, /PI_SQLITE_CONTRACT_TEST=skip/);
 });
 
 test("local SQLite Docker build requires and packages the named pi source context", () => {
@@ -33,9 +37,9 @@ test("clean pi builds hydrate generated AI model data through the package build"
 });
 
 test("both runtime images include hublot process and Git server dependencies", () => {
-  assert.match(fallback, /procps ripgrep lsof python3/);
+  assert.match(deployment, /procps ripgrep lsof python3/);
   assert.match(local, /procps ripgrep lsof python3/);
-  assert.match(fallback, /COPY extensions \.\/extensions/);
+  assert.match(deployment, /COPY extensions \.\/extensions/);
   assert.match(local, /COPY extensions \.\/extensions/);
 });
 

@@ -785,6 +785,16 @@ async function availablePoolRows(state) {
   return available;
 }
 
+export function hublotTunnelPoolDummyWorkdir(state, hublot, { stat = statSync } = {}) {
+  let workdir = hublot?.workdir;
+  try {
+    if (!stat(workdir).isDirectory()) throw new Error("not a directory");
+  } catch {
+    workdir = state?.config?.PI_DIR;
+  }
+  return workdir;
+}
+
 /** Start the tiny origin used while a quick tunnel waits in the warm pool. */
 export async function spawnHublotTunnelPoolDummy(state, hublot, {
   spawnProcess = spawn,
@@ -797,8 +807,11 @@ export async function spawnHublotTunnelPoolDummy(state, hublot, {
   const source = `const http=require("node:http");const port=Number(process.argv[1]);` +
     `http.createServer((req,res)=>{res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});` +
     `res.end("<!doctype html><title>Reserved tunnel</title><p>${HUBLOT_TUNNEL_POOL_PAGE}</p>")}).listen(port,"127.0.0.1");`;
+  // The waiting page does not use the eventual hublot workdir. A persisted
+  // reservation can outlive that directory, and passing a missing cwd makes
+  // Node report the misleading `spawn <executable> ENOENT` error.
   const proc = spawnProcess(process.execPath, ["-e", source, String(row.port)], {
-    cwd: row.workdir,
+    cwd: hublotTunnelPoolDummyWorkdir(state, row),
     stdio: "ignore",
     detached: true,
   });

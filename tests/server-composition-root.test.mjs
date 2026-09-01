@@ -33,7 +33,8 @@ test("stable core owns one app-store service across application reloads", () => 
   assert.ok(stableSource.indexOf("const appHydration = await appStore.hydrate()") < stableSource.indexOf("await loadApp();"));
   assert.ok(stableSource.indexOf("await loadApp();") < stableSource.indexOf("server.listen("));
   assert.match(stableSource, /const appSettings = createAppSettings\(\{ repository: appStore\.repositories\.settings, startupWorkdir: config\.PI_DIR \}\)/);
-  assert.match(stableSource, /currentDir: hydratedSettings\.currentWorkdir,[\s\S]*defaultRunnerId: hydratedSettings\.defaultRunnerId/);
+  assert.match(stableSource, /let currentWorkdir = hydratedSettings\.currentWorkdir;[\s\S]*persisted workdir is unavailable; falling back[\s\S]*await appSettings\.setCurrentWorkdir\(currentWorkdir\)/);
+  assert.match(stableSource, /currentDir: currentWorkdir,[\s\S]*defaultRunnerId: hydratedSettings\.defaultRunnerId/);
   assert.match(stableSource, /incompleteOperations: new Map\(appHydration\.incompleteOperations/);
   assert.doesNotMatch(source, /openAppStore|node:sqlite/);
 });

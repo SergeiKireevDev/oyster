@@ -9,8 +9,11 @@ spec:
       dockerfile_path: Dockerfile
       http_port: 4000
       instance_count: 1
-      instance_size_slug: apps-s-1vcpu-2gb
+      instance_size_slug: apps-s-2vcpu-4gb
       envs:
+        - key: PI_DIR
+          scope: RUN_TIME
+          value: /workspace
         - key: OYSTER_TOKEN
           scope: RUN_TIME
           type: SECRET

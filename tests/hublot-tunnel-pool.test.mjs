@@ -11,6 +11,7 @@ import {
   HUBLOT_TUNNEL_POOL_LABEL,
   acquireHublotTunnelPoolEntry,
   ensureHublotTunnelPool,
+  hublotTunnelPoolDummyWorkdir,
   listTunnels,
   persistHublotProcessIdentity,
   recordHublotTransition,
@@ -63,6 +64,15 @@ test("reserved warm tunnels serve the waiting page and stay out of public hublot
   assert.deepEqual(shutdown, { targeted: 1, escalated: 0, remaining: 0 });
   assert.equal((await store.repositories.hublots.findProcess(dummy.serviceProcess.id)).status, "ended");
   assert.equal((await store.repositories.hublots.find(reserved.id)).status, "closed");
+});
+
+test("warm tunnel waiting pages fall back from a stale persisted workdir", () => {
+  const state = { config: { PI_DIR: "/workspace" } };
+  const directories = new Set(["/workspace"]);
+  const stat = (path) => ({ isDirectory: () => directories.has(path) });
+  assert.equal(hublotTunnelPoolDummyWorkdir(state, { workdir: "/deleted-workspace" }, { stat }), "/workspace");
+  directories.add("/live-workspace");
+  assert.equal(hublotTunnelPoolDummyWorkdir(state, { workdir: "/live-workspace" }, { stat }), "/live-workspace");
 });
 
 test("claiming a warm tunnel kills only the dummy and preserves its cloudflared URL", async (t) => {

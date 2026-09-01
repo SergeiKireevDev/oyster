@@ -138,6 +138,12 @@ function validateConfig(config) {
   if (typeof config.HOST !== "string" || config.HOST.trim() === "") {
     throw new Error("HOST/--host must not be empty");
   }
+  try {
+    if (!statSync(config.PI_DIR).isDirectory()) throw new Error("not a directory");
+    accessSync(config.PI_DIR, constants.R_OK | constants.X_OK);
+  } catch (error) {
+    throw new Error(`PI_DIR/--dir must be an accessible directory: ${config.PI_DIR} (${error.message})`);
+  }
   if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
     throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
   }
@@ -223,6 +229,15 @@ const interruptedRoutineRunCount = await appStore.reconcileInterruptedRoutineRun
 const appHydration = await appStore.hydrate();
 const appSettings = createAppSettings({ repository: appStore.repositories.settings, startupWorkdir: config.PI_DIR });
 const hydratedSettings = await appSettings.hydrate();
+let currentWorkdir = hydratedSettings.currentWorkdir;
+try {
+  if (!statSync(currentWorkdir).isDirectory()) throw new Error("not a directory");
+  accessSync(currentWorkdir, constants.R_OK | constants.X_OK);
+} catch (error) {
+  console.warn(`[oyster] persisted workdir is unavailable; falling back to ${config.PI_DIR}: ${error.message}`);
+  currentWorkdir = config.PI_DIR;
+  await appSettings.setCurrentWorkdir(currentWorkdir);
+}
 
 const state = {
   config,
@@ -233,7 +248,7 @@ const state = {
   recoveredOperationCount,
   /** cwd for the pi process (changed via POST /workdir) */
   // Persisted mutable settings override startup defaults when valid.
-  currentDir: hydratedSettings.currentWorkdir,
+  currentDir: currentWorkdir,
   defaultRunnerId: hydratedSettings.defaultRunnerId,
   // Fresh per-process handles, connections, throttle buckets, and counters.
   ...createStableEphemeralState(),
