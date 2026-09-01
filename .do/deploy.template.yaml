@@ -1,5 +1,6 @@
 spec:
   name: oyster
+  disable_edge_cache: true
   services:
     - name: oyster
       git:
