@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const template = readFileSync(new URL("../.do/deploy.template.yaml", import.meta.url), "utf8");
+const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const deploymentGuide = readFileSync(
   new URL("../docs/operations/digitalocean-app-platform.md", import.meta.url),
@@ -24,6 +25,16 @@ test("DigitalOcean deploy button and template target the deployment branch", () 
   const deployRow = centeredRows.find((row) => row.includes(deployUrl));
   assert.ok(deployRow, "Deploy to DigitalOcean button should be in a centered row");
   assert.doesNotMatch(deployRow, /badge\.svg|Node\.js|MIT license/);
+});
+
+test("CI publishes the browser-tested deployment image to GHCR", () => {
+  assert.match(workflow, /packages: write/);
+  assert.match(workflow, /ghcr\.io\/sergeikireevdev\/oyster:digitalocean/);
+  assert.match(workflow, /ghcr\.io\/sergeikireevdev\/oyster:sha-\$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /docker\/login-action@v3/);
+  assert.match(workflow, /password: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/feature\/digitalocean-app-platform'/);
+  assert.ok(workflow.indexOf("Run mobile and desktop smoke tests") < workflow.indexOf("Publish tested deployment image"));
 });
 
 test("DigitalOcean service preserves Oyster's authenticated container contract", () => {
