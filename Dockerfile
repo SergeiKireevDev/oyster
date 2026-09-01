@@ -92,13 +92,14 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     PERSISTENT_STORE=sqlite
 
+# Workspace the pi agent operates in (mount your project here if you like).
+# Create it before tests because server startup validates PI_DIR.
+RUN mkdir -p /workspace
+
 # Run the test suite at build time — the build fails if the repo is broken,
 # including when that same pi binary cannot persist and restore an RPC session
 # through SQLite. PI_SQLITE_TEST_BIN is scoped to this test command only.
 RUN PI_SQLITE_TEST_BIN="$PI_BIN" npm test
-
-# Workspace the pi agent operates in (mount your project here if you like)
-RUN mkdir -p /workspace
 
 ENV PORT=4000 \
     HOST=0.0.0.0 \

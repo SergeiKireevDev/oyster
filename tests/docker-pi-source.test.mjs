@@ -43,6 +43,12 @@ test("both runtime images include hublot process and Git server dependencies", (
   assert.match(local, /COPY extensions \.\/extensions/);
 });
 
+test("both runtime images create PI_DIR before running build-time tests", () => {
+  for (const dockerfile of [deployment, local]) {
+    assert.ok(dockerfile.indexOf("RUN mkdir -p /workspace") < dockerfile.indexOf("npm test"));
+  }
+});
+
 test("local-source build documentation pins context, revision, and version", () => {
   assert.match(containerDocs, /docker build -f Dockerfile\.local-pi/);
   assert.match(containerDocs, /--build-context pi-source=\.\/pi/);
