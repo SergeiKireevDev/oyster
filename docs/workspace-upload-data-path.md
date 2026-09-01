@@ -298,4 +298,4 @@ make test-e2e-cluster
 | `llmbox/internal/shared/cluster/proxy.go` | Transport-neutral `BoxDialer` interface. |
 | `llmbox/internal/shared/cluster/stream.go` | Multiplexed stream and flow-control implementation. |
 | `llmbox/internal/shared/cluster/proto.go` | Stream frames and capability wire protocol. |
-| `plans/stream-workspace-file-uploads.md` | Completed implementation plan and decisions. |
+| `docs/plans/v0.1.0/stream-workspace-file-uploads.md` | Completed implementation plan and decisions. |
