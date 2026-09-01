@@ -110,10 +110,25 @@ test("replay event gate buffers only events that arrive after replay completion"
   assert.equal(gate({ type: "response" }), false);
 });
 
-test("event stream relies on the auth cookie and keeps credentials out of its URL", () => {
+test("event stream relies on the auth cookie and uses a unique cache key", () => {
   let url;
-  const source = openEventStream({ token: "a b", runner: "runner/1", replay: false, EventSourceImpl: class { constructor(value) { url = value; } } });
+  const source = openEventStream({
+    token: "a b",
+    runner: "runner/1",
+    replay: false,
+    streamNonce: "stream one",
+    EventSourceImpl: class { constructor(value) { url = value; } },
+  });
   assert.ok(source);
-  assert.equal(url, "/events?runner=runner%2F1&replay=0");
+  assert.equal(url, "/events?runner=runner%2F1&replay=0&stream=stream%20one");
   assert.doesNotMatch(url, /token=/);
+});
+
+test("each EventSource instance gets a different default stream nonce", () => {
+  const urls = [];
+  const EventSourceImpl = class { constructor(value) { urls.push(value); } };
+  openEventStream({ runner: "runner-1", replay: true, EventSourceImpl });
+  openEventStream({ runner: "runner-1", replay: true, EventSourceImpl });
+  assert.notEqual(urls[0], urls[1]);
+  for (const url of urls) assert.ok(new URL(url, "http://localhost").searchParams.get("stream"));
 });

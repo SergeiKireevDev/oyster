@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeLastEventId, sseDataFrame } from "../../sse.mjs";
 
 const MAX_PROMPT_BYTES = 5 * 1024 * 1024;
 const MAX_PARENT_SESSION_ID_BYTES = 512;
@@ -71,11 +72,17 @@ export function createRunnerRoutes({
       // commands sent through /rpc can revive it when work is requested.
       res.writeHead(200, {
         "content-type": "text/event-stream",
-        "cache-control": "no-cache, no-transform",
+        "cache-control": "private, no-store, no-cache, must-revalidate, no-transform",
+        "cdn-cache-control": "no-store",
+        "surrogate-control": "no-store",
+        pragma: "no-cache",
+        expires: "0",
+        vary: "Last-Event-ID",
         connection: "keep-alive",
         "x-accel-buffering": "no",
       });
-      res.write(`: connected ${" ".repeat(2048)}\n\n`);
+      res.flushHeaders?.();
+      res.write(`retry: 2000\n: connected ${" ".repeat(2048)}\n\n`);
       res.runnerId = runner.id;
       state.sseClients.add(res);
 
@@ -91,23 +98,24 @@ export function createRunnerRoutes({
       res.once?.("close", cleanup);
 
       if (url.searchParams.get("replay") !== "0") {
-        for (const line of await replayRunnerEvents(runner)) res.write(`data: ${line}\n\n`);
+        const afterSseId = normalizeLastEventId(req.headers?.["last-event-id"]);
+        for (const line of await replayRunnerEvents(runner, { afterSseId })) res.write(sseDataFrame(line));
       }
-      res.write(`data: ${JSON.stringify({
+      res.write(sseDataFrame(JSON.stringify({
         type: "replay_done",
         _server: true,
         runner: runner.id,
         piRunning: !!runner.proc,
         workdir: runner.dir,
         runners: listRunnerInfo(),
-      })}\n\n`);
+      })));
       if (!closed) {
         ping = setIntervalImpl(() => {
           if (res.writableEnded || res.destroyed) {
             cleanup();
             return;
           }
-          res.write(`data: ${JSON.stringify({ type: "ping", _server: true })}\n\n`);
+          res.write(sseDataFrame(JSON.stringify({ type: "ping", _server: true })));
         }, 25000);
         ping?.unref?.();
       }

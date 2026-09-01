@@ -35,6 +35,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createPiProcessLauncher } from "./pi-processes.mjs";
 import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-titles.mjs";
+import { normalizeLastEventId, sseDataFrame } from "./sse.mjs";
 
 const RUNNER_BUFFER_MAX = 400;
 const RUNNER_EVENT_MAX_BYTES = 1024 * 1024;
@@ -234,13 +235,20 @@ export async function createRunnerManager(state, {
     return [...state.runners.values()].map(runnerInfo);
   }
 
-  async function replayRunnerEvents(runner) {
+  async function replayRunnerEvents(runner, { afterSseId = null } = {}) {
     // Oversized historical RPC responses are stale after a page load and can
     // otherwise block the event loop while gigabytes are replayed before the
     // browser ever receives replay_done. Resolved extension prompts must not
     // reopen on every refresh; only replay requests still awaiting a response.
-    return (await runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES }))
-      ?.map((event) => event.payload)
+    const stored = await runnerEventRepository?.list(runner.id, { maxPayloadBytes: RUNNER_EVENT_MAX_BYTES }) ?? [];
+    const cursor = normalizeLastEventId(afterSseId);
+    const cursorIndex = cursor === null ? -1 : stored.findIndex((event) => event.sse_id === cursor);
+    // An unknown cursor may have fallen out of the bounded replay window. Replay
+    // the complete retained window and let the browser's SSE-ID deduper discard
+    // duplicates rather than risk skipping events.
+    const replayable = cursor !== null && cursorIndex >= 0 ? stored.slice(cursorIndex + 1) : stored;
+    return replayable
+      .map((event) => event.payload)
       .filter((payload) => {
         try {
           const event = JSON.parse(payload);
@@ -248,7 +256,7 @@ export async function createRunnerManager(state, {
         } catch {
           return true;
         }
-      }) ?? [];
+      });
   }
 
   /** Global notification. Ordinary lifecycle changes carry one runner delta;
@@ -298,6 +306,13 @@ export async function createRunnerManager(state, {
       sseId = event._sseId ?? null;
     } catch {}
 
+    const replayable = !NON_REPLAYABLE_RUNNER_EVENTS.has(event?.type)
+      && Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES;
+    // Only durable events become the browser's Last-Event-ID cursor. Advancing
+    // the cursor for an intentionally non-replayable update could make a later
+    // reconnect skip the next durable event.
+    const frame = sseDataFrame(eventLine, { includeId: replayable });
+
     // Live delivery must never wait behind persistence I/O. In particular,
     // sqlite3 serializes repository operations, so awaiting an append here
     // used to delay both the active transcript and replay_done by the entire
@@ -305,7 +320,7 @@ export async function createRunnerManager(state, {
     for (const res of state.sseClients) {
       if (res.runnerId !== runner.id) continue;
       if (res.writableEnded || res.destroyed) continue; // dead client, reaped on 'close'
-      try { res.write(`data: ${eventLine}\n\n`); }
+      try { res.write(frame); }
       catch (error) { console.error(`[oyster] cannot write runner ${runner.id} event: ${error?.message ?? error}`); }
     }
     if (event) {
@@ -315,7 +330,7 @@ export async function createRunnerManager(state, {
       }
     }
 
-    if (!NON_REPLAYABLE_RUNNER_EVENTS.has(event?.type) && Buffer.byteLength(eventLine) <= RUNNER_EVENT_MAX_BYTES) {
+    if (replayable) {
       try {
         await runnerEventRepository?.append({
           runnerId: runner.id, sseId, payload: eventLine, createdAt: now(), maxEntries: RUNNER_BUFFER_MAX,

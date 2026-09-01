@@ -25,12 +25,16 @@ function setup() {
   };
   const intervals = [];
   const cleared = [];
+  const replayCalls = [];
   const dependencies = {
     state,
     runnerFromReq: () => runner,
     startRunner: (selected) => { selected.proc = { pid: 42 }; },
     listRunnerInfo: () => [{ id: runner.id, alive: !!runner.proc }],
-    replayRunnerEvents: () => ['{"type":"old"}'],
+    replayRunnerEvents: (selected, options) => {
+      replayCalls.push({ runner: selected.id, options });
+      return ['{"type":"old","_sseId":"event-old"}'];
+    },
     setIntervalImpl: (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; },
     clearIntervalImpl: (id) => cleared.push(id),
     requestContext: {
@@ -64,7 +68,7 @@ function setup() {
     resolvePath: (path) => path,
     isDirectory: (path) => path !== "/allowed/file",
   };
-  return { runner, state, intervals, cleared, dependencies };
+  return { runner, state, intervals, cleared, replayCalls, dependencies };
 }
 
 test("events route registers before replay, replays runner output, pings, and cleans up", async () => {
@@ -76,10 +80,16 @@ test("events route registers before replay, replays runner output, pings, and cl
 
   assert.equal(res.status, 200);
   assert.equal(res.headers["content-type"], "text/event-stream");
+  assert.match(res.headers["cache-control"], /private/);
+  assert.match(res.headers["cache-control"], /no-store/);
+  assert.match(res.headers["cache-control"], /no-transform/);
+  assert.equal(res.headers["cdn-cache-control"], "no-store");
+  assert.equal(res.headers["surrogate-control"], "no-store");
+  assert.equal(res.headers.vary, "Last-Event-ID");
   assert.equal(res.runnerId, "runner-1");
   assert.equal(state.sseClients.has(res), true);
   assert.equal(await dependencies.runnerFromReq().proc, null, "read-only SSE subscription must not start pi");
-  assert.ok(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')));
+  assert.ok(res.chunks.some((chunk) => chunk.includes('id: event-old\ndata: {"type":"old","_sseId":"event-old"}')));
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
   assert.equal(intervals[0].delay, 25000);
   intervals[0].callback();
@@ -92,12 +102,26 @@ test("events route registers before replay, replays runner output, pings, and cl
 });
 
 test("SSE reconnect can skip replay while still receiving replay completion", async () => {
-  const { dependencies } = setup();
+  const { replayCalls, dependencies } = setup();
   const handler = createRunnerRoutes(dependencies)["GET /events"];
   const res = response();
   await handler(new EventEmitter(), res, new URL("http://localhost/events?replay=0"));
-  assert.equal(res.chunks.some((chunk) => chunk.includes('{"type":"old"}')), false);
+  assert.equal(res.chunks.some((chunk) => chunk.includes('{"type":"old"')), false);
   assert.ok(res.chunks.some((chunk) => chunk.includes('"type":"replay_done"')));
+  assert.deepEqual(replayCalls, []);
+});
+
+test("SSE reconnect passes a valid Last-Event-ID cursor into durable replay", async () => {
+  const { replayCalls, dependencies } = setup();
+  const handler = createRunnerRoutes(dependencies)["GET /events"];
+  const req = Object.assign(new EventEmitter(), { headers: { "last-event-id": "event-before" } });
+  const res = response();
+  await handler(req, res, new URL("http://localhost/events?replay=1"));
+  assert.deepEqual(replayCalls, [{ runner: "runner-1", options: { afterSseId: "event-before" } }]);
+
+  const invalidReq = Object.assign(new EventEmitter(), { headers: { "last-event-id": "bad\nvalue" } });
+  await handler(invalidReq, response(), new URL("http://localhost/events?replay=1"));
+  assert.deepEqual(replayCalls.at(-1), { runner: "runner-1", options: { afterSseId: null } });
 });
 
 test("runner RPC routes preserve validation, queue status, and listing contracts", async () => {
