@@ -80,8 +80,9 @@ ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     HOST=0.0.0.0 \
     PI_DIR=/workspace \
     OYSTER_URL=http://127.0.0.1:4000
-RUN npm test
+# Server startup validates PI_DIR, including during build-time tests.
 RUN mkdir -p /workspace
+RUN npm test
 
 EXPOSE 4000
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
