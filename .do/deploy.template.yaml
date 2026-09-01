@@ -2,11 +2,11 @@ spec:
   name: oyster
   services:
     - name: oyster
-      git:
-        branch: feature/digitalocean-app-platform
-        repo_clone_url: https://github.com/SergeiKireevDev/oyster.git
-      source_dir: /
-      dockerfile_path: Dockerfile
+      image:
+        registry_type: DOCKER_HUB
+        registry: sergeikireevdev
+        repository: oyster
+        tag: digitalocean
       http_port: 4000
       instance_count: 1
       instance_size_slug: apps-s-1vcpu-2gb
