@@ -22,6 +22,52 @@ function fakeProcess() {
   return proc;
 }
 
+test("asynchronous spawn errors cannot crash Oyster while runner persistence yields", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "oyster-runner-spawn-error-"));
+  const updates = [];
+  const runnerRepository = {
+    list: async () => [],
+    create: async () => {},
+    update: async (_id, changes) => { updates.push(changes); },
+  };
+  const state = {
+    appStore: { repositories: { runners: runnerRepository } },
+    config: { PI_BIN: "/missing-pi", PI_EXTRA_ARGS: [], PERSISTENT_STORE: "jsonl", SQLITE_PATH: null },
+    currentDir: root,
+    runners: new Map(),
+    sseClients: new Set(),
+    sessionReferences: createSessionReferenceCodec({
+      agentDir: root,
+      jsonlRoot: join(root, "sessions"),
+      sqlitePath: join(root, "sessions.sqlite"),
+    }),
+    serverEvent() {},
+  };
+  state.piProcesses = createPiProcessLauncher({
+    config: state.config,
+    spawnImpl() {
+      const proc = fakeProcess();
+      queueMicrotask(() => proc.emit("error", Object.assign(new Error("spawn /missing-pi ENOENT"), { code: "ENOENT" })));
+      return proc;
+    },
+  });
+  const manager = await createRunnerManager(state, {
+    appStore: state.appStore,
+    createRunnerId: () => "spawnerror123456",
+  });
+  t.after(() => {
+    clearInterval(state.runnerWatchdogTimer);
+    clearInterval(state.runnerReaperTimer);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const runner = await manager.spawnRunner({ dir: root });
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(runner.proc, null);
+  assert.equal(runner.stdoutReader, null);
+  assert.equal(updates.some((changes) => changes.last_status === "dead"), true);
+});
+
 test("runner repository persists descriptors, default selection, lifecycle, and ownership", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "oyster-runner-repository-"));
   const store = await openAppStore({ databasePath: join(root, "app.sqlite") });

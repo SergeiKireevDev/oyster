@@ -1,4 +1,4 @@
-# oyster — end-to-end test image
+# oyster — production and end-to-end test image
 #
 # Build:  docker build -t oyster .
 # Run:    docker run -d -p 4000:4000 \
@@ -13,12 +13,37 @@
 # Token:  docker logs oyster | grep "auth token"
 # Open:   http://localhost:4000/#token=<TOKEN>
 
-FROM node:22-slim
+# Build the exact pi source pinned by the repository's pi submodule. Packaging
+# its workspaces produces a self-contained runtime install while retaining the
+# SQLite storage package and its native dependency.
+FROM node:22-slim AS pi-builder
+WORKDIR /src
+COPY pi/package.json pi/package-lock.json pi/.npmrc pi/tsconfig.json pi/tsconfig.base.json pi/biome.json ./
+COPY pi/scripts ./scripts
+COPY pi/packages ./packages
+# The AI package's generated TypeScript imports ignored JSON model data, so its
+# package build must hydrate that data before compiling a clean source checkout.
+# Remove copied model data first: Docker OverlayFS can keep that directory in a
+# lower layer, which makes the generator's atomic rename fail with EXDEV.
+RUN rm -rf packages/ai/src/providers/data \
+    && npm ci --ignore-scripts \
+    && npx --no-install tsgo -p packages/tui/tsconfig.build.json \
+    && npm run build --workspace packages/ai \
+    && npm run build --workspace packages/agent \
+    && npm run build --workspace packages/storage/sqlite-node \
+    && npm run build --workspace packages/coding-agent \
+    && mkdir -p /tarballs /opt/pi \
+    && npm pack --workspace packages/tui --pack-destination /tarballs \
+    && npm pack --workspace packages/ai --pack-destination /tarballs \
+    && npm pack --workspace packages/agent --pack-destination /tarballs \
+    && npm pack --workspace packages/storage/sqlite-node --pack-destination /tarballs \
+    && npm pack --workspace packages/coding-agent --pack-destination /tarballs \
+    && cd /opt/pi \
+    && npm init -y >/dev/null \
+    && npm install --omit=dev --ignore-scripts /tarballs/*.tgz
 
-ARG PI_PACKAGE_SPEC=@earendil-works/pi-coding-agent@0.80.3
-ARG PI_PACKAGE_VERSION=0.80.3
-LABEL org.opencontainers.image.pi-source="published-package" \
-      org.opencontainers.image.pi-version="${PI_PACKAGE_VERSION}"
+FROM node:22-slim
+LABEL org.opencontainers.image.pi-source="git-submodule"
 
 # Tools the pi agent (and the UI's file explorer / routines) rely on
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,9 +57,7 @@ RUN curl -fsSL -o /usr/local/bin/cloudflared \
         https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
     && chmod +x /usr/local/bin/cloudflared
 
-# Intentional release fallback. SQLite/local-source images use
-# Dockerfile.local-pi and a named BuildKit context instead.
-RUN mkdir -p /opt/pi && npm install --prefix /opt/pi "${PI_PACKAGE_SPEC}"
+COPY --from=pi-builder /opt/pi /opt/pi
 
 WORKDIR /app
 
@@ -65,15 +88,14 @@ COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
 
-# This release-image path intentionally uses the published JSONL pi until the
-# local-source BuildKit context is added. It also keeps build-time server
-# fixtures from resolving the host-only development default.
+# Deployed pi processes use the submodule-built binary and SQLite backend.
 ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
-    PERSISTENT_STORE=jsonl \
-    PI_SQLITE_CONTRACT_TEST=skip
+    PERSISTENT_STORE=sqlite
 
-# Run the test suite at build time — the build fails if the repo is broken
-RUN npm test
+# Run the test suite at build time — the build fails if the repo is broken,
+# including when that same pi binary cannot persist and restore an RPC session
+# through SQLite. PI_SQLITE_TEST_BIN is scoped to this test command only.
+RUN PI_SQLITE_TEST_BIN="$PI_BIN" npm test
 
 # Workspace the pi agent operates in (mount your project here if you like)
 RUN mkdir -p /workspace
