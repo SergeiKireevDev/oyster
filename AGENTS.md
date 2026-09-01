@@ -25,7 +25,7 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 
 Restart pi afterwards. When developing an extension through Oyster, stop and restart every affected session runner after changing the extension; existing pi RPC sessions keep their originally loaded extension code. Sending `/reload` from Oyster does not reload an RPC session because `/reload` is handled only by pi's interactive mode, and refreshing the browser is also insufficient.
 
-Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. For deterministic hublots, `type="markdown"` takes an absolute document path, while `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
+Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. For deterministic hublots, `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
 from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
 `OYSTER_TOKEN` or the project-root `.ui-token` file.
 

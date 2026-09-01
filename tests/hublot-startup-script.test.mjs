@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
-  hublotAgentPrompt, invokeHublotStartupScript, markdownReaderScriptPath, materializeHublotStartupScript,
-  reserveHublot, spawnGitServerService, spawnHublotAgent, spawnMarkdownService, validateAndStoreHublotStartupScript,
+  hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
+  reserveHublot, spawnGitServerService, spawnHublotAgent, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
 async function fixture(t) {
@@ -241,56 +241,6 @@ test("rematerialization replaces symlinks without changing their targets", async
   assert.equal(lstatSync(hublot.service_start_script_path).isSymbolicLink(), false);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
   assert.equal(readFileSync(victim, "utf8"), "victim");
-});
-
-test("default Markdown reader and template are bundled in this repository", () => {
-  const rendererPath = markdownReaderScriptPath();
-  assert.match(rendererPath, /\/markdown-tool\/markdown-reader\.mjs$/);
-  assert.equal(lstatSync(rendererPath).isFile(), true);
-  assert.equal(lstatSync(join(dirname(rendererPath), "reader-template.html")).isFile(), true);
-});
-
-test("Markdown service invokes the bundled Node.js reader and persists its restart command", async (t) => {
-  const { root, store, state } = await fixture(t);
-  const markdownPath = join(root, "guide.md");
-  const rendererPath = join(root, "markdown-reader.mjs");
-  const nodePath = "/runtime/node";
-  writeFileSync(markdownPath, "# Guide\n");
-  writeFileSync(rendererPath, "export {};\n");
-  const hublot = await reserve(state, 4177);
-  let invocation = null;
-  class FakeProcess extends EventEmitter {
-    pid = process.pid;
-    exitCode = null;
-    unref() {}
-    kill() { this.exitCode = 0; }
-  }
-
-  const service = await spawnMarkdownService(state, {
-    id: hublot.id,
-    port: hublot.port,
-  }, markdownPath, {
-    rendererPath,
-    nodePath,
-    spawnProcess(command, args, options) {
-      invocation = { command, args, options };
-      return new FakeProcess();
-    },
-    waitForPort: async () => true,
-  });
-
-  assert.equal(service.servicePid, process.pid);
-  assert.equal(invocation.command, nodePath);
-  assert.deepEqual(invocation.args, [rendererPath, markdownPath, String(hublot.port)]);
-  assert.equal(invocation.options.detached, true);
-  const persisted = await store.repositories.hublots.find(hublot.id);
-  assert.match(persisted.service_start_script, /# oyster: idempotent/);
-  assert.match(persisted.service_start_script, new RegExp(nodePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(persisted.service_start_script, new RegExp(rendererPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(persisted.service_start_script, new RegExp(markdownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.doesNotMatch(persisted.service_start_script, /python3/);
-  assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), persisted.service_start_script);
-  assert.equal(await ((await store.repositories.hublots.listProcesses(hublot.id)).find((row) => row.role === "service")).status, "running");
 });
 
 test("Git server service directly invokes the bundled script and persists its restart command", async (t) => {

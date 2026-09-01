@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-const SERVICE_TYPES = new Set(["markdown", "git-server"]);
+const SERVICE_TYPES = new Set(["git-server"]);
 const MAX_BRIEF_BYTES = 20_000;
 const MAX_LABEL_LENGTH = 200;
 const MAX_SESSION_ID_LENGTH = 100;
@@ -46,7 +46,7 @@ function parseCreateBody(body) {
       throw new TypeError(`type='${serviceType}' requires an absolute path`);
     }
   } else if (servicePath !== null) {
-    throw new TypeError("path is only valid with type='markdown' or type='git-server'");
+    throw new TypeError("path is only valid with type='git-server'");
   }
 
   let port = null;
@@ -105,7 +105,6 @@ export function createTunnelRoutes({
   acquireHublotTunnelPoolEntry = null,
   activateHublotTunnelPoolEntry = null,
   spawnHublotAgent,
-  spawnMarkdownService,
   spawnGitServerService,
   ensureSessionOwner = () => null,
   pinHublot = () => null,
@@ -160,11 +159,9 @@ export function createTunnelRoutes({
           port: reserved.port,
           serviceStartScriptPath: reserved.service_start_script_path,
         };
-        prepared = serviceType === "markdown"
-          ? await spawnMarkdownService(state, reservedOptions, servicePath)
-          : serviceType === "git-server"
-            ? await spawnGitServerService(state, reservedOptions, servicePath)
-            : await spawnHublotAgent(state, reservedOptions, brief);
+        prepared = serviceType === "git-server"
+          ? await spawnGitServerService(state, reservedOptions, servicePath)
+          : await spawnHublotAgent(state, reservedOptions, brief);
         if (claimedWarmTunnel && typeof activateHublotTunnelPoolEntry !== "function") {
           throw new Error("warm tunnel activation is unavailable");
         }
