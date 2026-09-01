@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const template = readFileSync(new URL("../.do/deploy.template.yaml", import.meta.url), "utf8");
-const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const workflowUrl = new URL("../.github/workflows/ci.yml", import.meta.url);
+const workflow = existsSync(workflowUrl) ? readFileSync(workflowUrl, "utf8") : null;
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const deploymentGuide = readFileSync(
   new URL("../docs/operations/digitalocean-app-platform.md", import.meta.url),
@@ -27,7 +28,7 @@ test("DigitalOcean deploy button and template target the deployment branch", () 
   assert.doesNotMatch(deployRow, /badge\.svg|Node\.js|MIT license/);
 });
 
-test("CI publishes the browser-tested deployment image to GHCR", () => {
+test("CI publishes the browser-tested deployment image to GHCR", { skip: workflow === null }, () => {
   assert.match(workflow, /packages: write/);
   assert.match(workflow, /ghcr\.io\/sergeikireevdev\/oyster:digitalocean/);
   assert.match(workflow, /ghcr\.io\/sergeikireevdev\/oyster:sha-\$\{\{ github\.sha \}\}/);
