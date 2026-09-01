@@ -26,6 +26,6 @@ test("every Playwright scenario defaults to the local SQLite image", () => {
     const workflow = readFileSync(workflowUrl, "utf8");
     assert.match(workflow, /name: Build SQLite E2E image/);
     assert.match(workflow, /file: Dockerfile\.local-pi/);
-    assert.match(workflow, /tags: oyster:sqlite/);
+    assert.match(workflow, /tags:\s*\|[\s\S]*?\n\s+oyster:sqlite/);
   }
 });
