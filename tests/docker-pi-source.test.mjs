@@ -32,11 +32,11 @@ test("clean pi builds hydrate generated AI model data through the package build"
   assert.doesNotMatch(local, /tsgo -p packages\/ai/);
 });
 
-test("both runtime images include hublot process, Markdown reader, and Git server dependencies", () => {
+test("both runtime images include hublot process and Git server dependencies", () => {
   assert.match(fallback, /procps ripgrep lsof python3/);
   assert.match(local, /procps ripgrep lsof python3/);
-  assert.match(fallback, /COPY markdown-tool \.\/markdown-tool/);
-  assert.match(local, /COPY markdown-tool \.\/markdown-tool/);
+  assert.match(fallback, /COPY extensions \.\/extensions/);
+  assert.match(local, /COPY extensions \.\/extensions/);
 });
 
 test("local-source build documentation pins context, revision, and version", () => {

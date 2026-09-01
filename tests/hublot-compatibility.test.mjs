@@ -76,7 +76,7 @@ test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable a
   assert.match(toolSource, /api\("POST", "\/tunnels"/);
   assert.match(toolSource, /api\("GET", "\/tunnels"/);
   assert.match(toolSource, /api\("DELETE", `\/tunnels\?id=/);
-  assert.match(toolSource, /StringEnum\(\["markdown", "git-server"\]/);
+  assert.match(toolSource, /StringEnum\(\["git-server"\]/);
   assert.match(toolSource, /type='\$\{params\.type\}' requires an absolute path/);
   assert.match(toolSource, /type='git-server'/);
   assert.match(toolSource, /read-only Git Smart HTTP server/);

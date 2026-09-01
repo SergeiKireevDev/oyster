@@ -139,48 +139,6 @@ test("tunnel routes reject opens without an agent brief", async () => {
   assert.equal(reserved, false);
 });
 
-test("markdown hublots directly start the reader with an absolute document path", async () => {
-  const order = [];
-  const routes = createTunnelRoutes({
-    state: {}, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [],
-    reserveHublot: (_state, options) => {
-      order.push(["reserve", options.port]);
-      return { id: "markdown-1", port: options.port, service_start_script_path: "/agent/hublots/markdown-1/start.sh" };
-    },
-    rebindHublot: () => null,
-    openTunnel: async (_state, options) => {
-      order.push(["tunnel", options.port]);
-      return { id: options.id, port: options.port, url: "https://markdown.test" };
-    },
-    closeTunnel: () => null,
-    spawnHublotAgent: async () => { throw new Error("setup agent must not run for Markdown"); },
-    spawnMarkdownService: async (_state, options, path) => {
-      order.push(["markdown", options.port, path]);
-      return { servicePid: 456 };
-    },
-  });
-
-  const created = response();
-  await routes["POST /tunnels"]({
-    body: { port: 4001, brief: "serve docs", type: "markdown", path: "/workspace/README.md" },
-  }, created);
-
-  assert.equal(created.status, 201);
-  assert.deepEqual(order, [
-    ["reserve", 4001],
-    ["markdown", 4001, "/workspace/README.md"],
-    ["tunnel", 4001],
-  ]);
-  assert.equal(created.body.agent, false);
-  assert.equal(created.body.type, "markdown");
-  assert.equal(created.body.tunnel.servicePid, 456);
-});
-
 test("git-server hublots deterministically serve an absolute worktree without a setup agent", async () => {
   const order = [];
   const routes = createTunnelRoutes({
@@ -313,7 +271,7 @@ test("tunnel patch validates input and reports ownership failures", async () => 
   assert.deepEqual(ownershipFailure, { status: 400, body: { error: "no such session" } });
 });
 
-test("deterministic hublots reject missing, relative, and unsupported service arguments", async () => {
+test("deterministic Git hublots reject missing, relative, and unsupported service arguments", async () => {
   let reserved = false;
   const routes = createTunnelRoutes({
     state: {}, config: {},
@@ -325,8 +283,6 @@ test("deterministic hublots reject missing, relative, and unsupported service ar
   });
 
   for (const body of [
-    { brief: "docs", type: "markdown" },
-    { brief: "docs", type: "markdown", path: "README.md" },
     { brief: "source", type: "git-server" },
     { brief: "source", type: "git-server", path: "workspace" },
     { brief: "docs", type: "pdf", path: "/workspace/file.pdf" },
