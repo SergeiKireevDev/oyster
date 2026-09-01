@@ -3,7 +3,7 @@
 ## Goal
 
 Eliminate module-global feature action bridges and component-owned feature
-workflows identified in `plans/ui-responsibility-audit.md`. Components should
+workflows identified in `docs/plans/v0.1.0/ui-responsibility-audit.md`. Components should
 render feature state and invoke mount-scoped services; assemblies should own
 feature behavior, network calls, and teardown.
 

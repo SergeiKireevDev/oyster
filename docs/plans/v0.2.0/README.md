@@ -4,7 +4,7 @@
 
 Turn the remaining July 2026 server-audit findings into ordered, standalone
 Markdown checklists. Each linked plan can be supplied directly as a checklist
-plan argument, with `plans/v0.2.0/validate.sh` as its executable validator. The
+plan argument, with `docs/plans/v0.2.0/validate.sh` as its executable validator. The
 executor advances one unchecked item at a time only after validation succeeds.
 
 The critical loopback authentication bypass and generated-token persistence

@@ -5,7 +5,7 @@ import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, path
 test("path trigger recognizes every slash-containing token at the caret", () => {
   assert.deepEqual(pathTrigger({ value: "read ./src/ap", selectionStart: 13 }), { text: "./src/ap", start: 5 });
   assert.deepEqual(pathTrigger({ value: "/home/u later", selectionStart: 7 }), { text: "/home/u", start: 0 });
-  assert.deepEqual(pathTrigger({ value: "open plans/", selectionStart: 11 }), { text: "plans/", start: 5 });
+  assert.deepEqual(pathTrigger({ value: "open docs/plans/", selectionStart: 16 }), { text: "docs/plans/", start: 5 });
   assert.deepEqual(pathTrigger({ value: "../src", selectionStart: 6 }), { text: "../src", start: 0 });
   assert.equal(pathTrigger({ value: "src", selectionStart: 3 }), null);
 });
@@ -25,16 +25,16 @@ test("path completion resolves relative directories and filters files and folder
 });
 
 test("a fully typed file is exact and is omitted from completion choices", () => {
-  const trigger = { text: "plans/done.md", start: 0 };
+  const trigger = { text: "docs/plans/done.md", start: 0 };
   const request = pathCompletionRequest(trigger.text, "/work");
-  const data = { path: "/work/plans", dirs: [{ name: "drafts" }], files: [{ name: "done.md" }] };
+  const data = { path: "/work/docs/plans", dirs: [{ name: "drafts" }], files: [{ name: "done.md" }] };
   assert.equal(pathCompletionIsExact(trigger, request, data), true);
   assert.deepEqual(pathCompletionItems(trigger, request, data), []);
 });
 
 test("plain and parent-relative paths resolve from the workdir", () => {
-  assert.deepEqual(pathCompletionRequest("plans/", "/work/project"), {
-    browsePath: "/work/project/plans/", typedDir: "plans/", prefix: "",
+  assert.deepEqual(pathCompletionRequest("docs/plans/", "/work/project"), {
+    browsePath: "/work/project/docs/plans/", typedDir: "docs/plans/", prefix: "",
   });
   assert.deepEqual(pathCompletionRequest("../shared/mo", "/work/project"), {
     browsePath: "/work/project/../shared/", typedDir: "../shared/", prefix: "mo",
