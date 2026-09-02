@@ -188,6 +188,51 @@ async function body(page, { mobile = false } = {}) {
   await expect(liveWidget).toHaveClass(/unavailable/);
 }
 
+test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
+  await login(page);
+  const sessionId = await waitFor(() => currentSessionId(page), {
+    timeout: 30000, label: "a session id",
+  });
+  const fileName = `mermaid-diagram-${Date.now()}.md`;
+  const markdown = [
+    "# Delivery flow",
+    "",
+    "```mermaid",
+    "flowchart LR",
+    "  Request --> Review",
+    "  Review --> Ship",
+    "```",
+  ].join("\n");
+  const saved = await api("POST", "/file-save", { path: `/workspace/${fileName}`, content: markdown });
+  expect(saved.status).toBe(200);
+  const created = await api("POST", "/pinned-widgets", {
+    path: `/workspace/${fileName}`,
+    sessionId,
+    scope: "session",
+  });
+  expect(created.status).toBe(201);
+  expect(created.json.widget.kind).toBe("markdown");
+
+  const widget = page.locator("#hublots .pinned-widget-cell", { hasText: fileName }).first();
+  await expect(widget).toBeVisible();
+  await widget.locator(".pinned-widget-tile").click();
+  await expect(page.locator(".pinned-markdown-viewer .mermaid-diagram svg")).toBeVisible();
+  await expect(page.locator(".pinned-markdown-viewer .mermaid-diagram-error")).toHaveCount(0);
+  await expect(page.locator(".pinned-markdown-viewer")).toContainText("Delivery flow");
+
+  await page.getByRole("button", { name: "Explore Mermaid diagram 1" }).click();
+  await expect(page.getByText("Diagram explorer", { exact: true })).toBeVisible();
+  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("100%");
+  await expect(page.locator(".mermaid-explorer-render .mermaid-diagram svg")).toBeVisible();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("125%");
+  await expect(page.locator(".mermaid-explorer-render")).toHaveClass(/mermaid-zoom-125/);
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("100%");
+  await page.getByRole("button", { name: "Back to reader" }).click();
+  await expect(page.locator(".pinned-markdown-viewer")).toContainText("Delivery flow");
+});
+
 test("git status monitor refreshes without cropping mobile viewer text", async ({ page }) => {
   await page.setViewportSize(MOBILE_VIEWPORT);
   dexec(`

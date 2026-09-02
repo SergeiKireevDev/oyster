@@ -33,6 +33,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "katex": "^0.16.47",
+    "mermaid": "^11.17.2",
     "sqlite3": "^5.1.7",
     "web-push": "^3.6.7",
     "ws": "^8.21.1"

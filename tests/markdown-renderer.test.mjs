@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderSanitizedMarkdown } from "../public/src/lib/markdownRenderer.js";
+import { extractMermaidDiagrams, renderSanitizedMarkdown } from "../public/src/lib/markdownRenderer.js";
 
 test("markdown renderer escapes content while preserving supported markup", () => {
   const html = renderSanitizedMarkdown("# Heading\n\n<script>x</script> **bold**\n\n```js\nconst value = 1;\n```");
@@ -46,4 +46,43 @@ test("markdown renderer keeps loose ordered lists in one numbering sequence", ()
   const html = renderSanitizedMarkdown("1. first\n\n2. second\n\n3. third");
   assert.equal(html, "<ol><li>first</li><li>second</li><li>third</li></ol>");
   assert.equal(renderSanitizedMarkdown("4. fourth\n5. fifth"), '<ol start="4"><li>fourth</li><li>fifth</li></ol>');
+});
+
+test("markdown renderer discovers Mermaid fences but leaves them as code unless enabled", () => {
+  const source = "~~~MERMAID\ngraph TD\n  A --> B\n~~~\n\n```js\nconst untouched = true;\n```";
+  assert.deepEqual(extractMermaidDiagrams(source), ["graph TD\n  A --> B"]);
+  const html = renderSanitizedMarkdown(source);
+  assert.match(html, /class="code-lang">MERMAID/);
+  assert.doesNotMatch(html, /class="mermaid-diagram/);
+});
+
+test("markdown renderer exposes safe Mermaid loading, rendered, and error states", () => {
+  const source = "```mermaid\ngraph TD\n  A --> B\n```";
+  const loading = renderSanitizedMarkdown(source, { enableMermaid: true });
+  assert.match(loading, /mermaid-diagram-loading/);
+  assert.match(loading, /role="status"/);
+
+  const rendered = renderSanitizedMarkdown(source, {
+    enableMermaid: true,
+    mermaidResults: [{ status: "rendered", svg: '<svg role="graphics-document"><text>diagram</text></svg>' }],
+  });
+  assert.match(rendered, /class="mermaid-diagram"/);
+  assert.match(rendered, /<svg role="graphics-document">/);
+  assert.doesNotMatch(rendered, /mermaid-explore-action/);
+  const explorable = renderSanitizedMarkdown(source, {
+    enableMermaid: true,
+    showMermaidExplore: true,
+    mermaidResults: [{ status: "rendered", svg: '<svg role="graphics-document"></svg>' }],
+  });
+  assert.match(explorable, /class="mermaid-explore-action" data-mermaid-index="0"/);
+  assert.match(explorable, /aria-label="Explore Mermaid diagram 1"/);
+
+  const invalidSource = "```mermaid\ngraph TD\n<script>alert(1)</script>\n```";
+  const failed = renderSanitizedMarkdown(invalidSource, {
+    enableMermaid: true,
+    mermaidResults: [{ status: "error" }],
+  });
+  assert.match(failed, /Unable to render Mermaid diagram/);
+  assert.match(failed, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(failed, /<script>/);
 });

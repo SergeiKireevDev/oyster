@@ -671,6 +671,7 @@ button:focus-visible, a[href]:focus-visible, input:focus-visible, select:focus-v
 .sanitized-markdown table,
 .sanitized-markdown .codeblock,
 .sanitized-markdown .math-block { max-width: 100%; }
+.sanitized-markdown .mermaid-diagram { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
 .sanitized-markdown pre,
 .sanitized-markdown table,
 .sanitized-markdown .math-block {
@@ -1090,7 +1091,8 @@ html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in s
 .pinned-markdown-viewer blockquote,
 .pinned-markdown-viewer table,
 .pinned-markdown-viewer .codeblock,
-.pinned-markdown-viewer .math-block {
+.pinned-markdown-viewer .math-block,
+.pinned-markdown-viewer .mermaid-diagram {
   margin: 0 0 1.15em;
 }
 
@@ -1191,6 +1193,102 @@ html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in s
 
 .pinned-markdown-viewer .math-block {
   padding: 0.7em 0;
+}
+
+.pinned-markdown-viewer .mermaid-diagram {
+  min-height: 5rem;
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-2) 72%, var(--panel));
+}
+
+.pinned-markdown-viewer .mermaid-diagram-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.55rem;
+}
+
+.pinned-markdown-viewer .mermaid-explore-action {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--muted);
+  font: 0.7em/1.2 var(--mono);
+  cursor: pointer;
+}
+
+.pinned-markdown-viewer .mermaid-explore-action:hover,
+.pinned-markdown-viewer .mermaid-explore-action:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.pinned-markdown-viewer .mermaid-explore-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pinned-markdown-viewer .mermaid-diagram > svg {
+  display: block;
+  width: auto;
+  min-width: min(100%, 24rem);
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+}
+
+.pinned-markdown-viewer.mermaid-explorer-render {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 32px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mermaid-explorer-render.mermaid-zoom-50 { width: 50%; }
+.mermaid-explorer-render.mermaid-zoom-75 { width: 75%; }
+.mermaid-explorer-render.mermaid-zoom-100 { width: 100%; }
+.mermaid-explorer-render.mermaid-zoom-125 { width: 125%; }
+.mermaid-explorer-render.mermaid-zoom-150 { width: 150%; }
+.mermaid-explorer-render.mermaid-zoom-200 { width: 200%; }
+.mermaid-explorer-render.mermaid-zoom-300 { width: 300%; }
+
+.mermaid-explorer-render .mermaid-diagram > svg {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.pinned-markdown-viewer .mermaid-diagram-loading {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font: 0.78em/1.4 var(--mono);
+}
+
+.pinned-markdown-viewer .mermaid-diagram-error {
+  color: var(--muted);
+}
+
+.pinned-markdown-viewer .mermaid-diagram-error p {
+  margin-bottom: 0.65rem;
+  color: var(--red);
+  font: 0.82em/1.4 var(--mono);
+}
+
+.pinned-markdown-viewer .mermaid-diagram-error pre {
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.8em 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel));
+  font: 0.78em/1.5 var(--mono);
 }
 
 @media (max-width: 1080px) {

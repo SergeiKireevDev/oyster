@@ -224,7 +224,7 @@ test("Markdown raster images SVG vectors and video use native Svelte artifact di
   assert.match(html, /onerror=\{handleError\}/);
   assert.doesNotMatch(html, /srcdoc/);
   assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
-  assert.match(markdown, /element="article" className="pinned-markdown-viewer"/);
+  assert.match(markdown, /element="article"[\s\S]*className="pinned-markdown-viewer"/);
   assert.match(viewer, /class:markdown-stage=\{widget\.kind === "markdown"\}/);
   assert.match(viewer, /copyTextToClipboard\(String\(widget\.content \?\? ""\)\)/);
   assert.match(viewer, /"Copy raw"/);
