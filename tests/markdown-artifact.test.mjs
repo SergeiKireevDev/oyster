@@ -29,7 +29,7 @@ test("MarkdownArtifact preserves raw content and exposes semantic content states
 });
 
 test("MarkdownArtifact exposes a dedicated, accessible Mermaid zoom explorer", () => {
-  assert.match(source, /ZOOM_LEVELS = Object\.freeze\(\[50, 75, 100, 125, 150, 200, 300\]\)/);
+  assert.match(source, /ZOOM_LEVELS = Object\.freeze\(\[50, 75, 100, 125, 150, 200, 300, 400, 600, 800, 1000, 1200\]\)/);
   assert.match(source, /class="mermaid-explorer" aria-label=\{exploredLabel\}/);
   assert.match(source, /role="group" aria-label="Diagram zoom controls"/);
   assert.match(source, /aria-label="Zoom out"/);

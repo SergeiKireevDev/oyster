@@ -107,7 +107,7 @@ test("desktop drag, wheel pan, Control-wheel zoom, and double-click mirror touch
 test("gesture zoom is bounded and teardown cancels pending work", () => {
   const { gestures, transforms } = controller();
   gestures.zoomTo(100);
-  assert.equal(transforms.at(-1).scale, 3);
+  assert.equal(transforms.at(-1).scale, 12);
   gestures.zoomTo(0.01);
   assert.equal(transforms.at(-1).scale, 0.5);
   gestures.destroy();
