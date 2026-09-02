@@ -84,7 +84,7 @@
       >
         <div
           class="mermaid-explorer-canvas"
-          style:--mermaid-scale={viewTransform.scale}
+          style:--mermaid-render-size={`${viewTransform.scale * 100}%`}
           style:--mermaid-pan-x={`${viewTransform.x}px`}
           style:--mermaid-pan-y={`${viewTransform.y}px`}
         >
@@ -184,9 +184,11 @@
   }
 
   .mermaid-explorer-viewport {
+    display: grid;
     min-width: 0;
     min-height: 0;
     flex: 1;
+    place-items: center;
     overflow: hidden;
     cursor: grab;
     overscroll-behavior: contain;
@@ -200,11 +202,10 @@
 
   .mermaid-explorer-canvas {
     display: grid;
-    width: 100%;
-    min-height: 100%;
-    transform: translate(var(--mermaid-pan-x), var(--mermaid-pan-y)) scale(var(--mermaid-scale));
-    transform-origin: center;
-    will-change: transform;
+    width: var(--mermaid-render-size);
+    height: var(--mermaid-render-size);
+    flex: none;
+    transform: translate(var(--mermaid-pan-x), var(--mermaid-pan-y));
   }
 
   @media (max-width: 620px) {

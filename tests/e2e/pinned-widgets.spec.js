@@ -225,11 +225,14 @@ test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
   const zoom = page.locator(".mermaid-explorer-zoom");
   const viewport = page.locator(".mermaid-explorer-viewport");
   const canvas = page.locator(".mermaid-explorer-canvas");
+  const explorerSvg = page.locator(".mermaid-explorer-render .mermaid-diagram svg");
   await expect(zoom).toHaveText("100%");
-  await expect(page.locator(".mermaid-explorer-render .mermaid-diagram svg")).toBeVisible();
+  await expect(explorerSvg).toBeVisible();
+  const initialSvgWidth = (await explorerSvg.boundingBox()).width;
   await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(zoom).toHaveText("125%");
-  await expect(canvas).toHaveAttribute("style", /--mermaid-scale: 1\.25/);
+  await expect(canvas).toHaveAttribute("style", /--mermaid-render-size: 125%/);
+  await expect.poll(async () => (await explorerSvg.boundingBox())?.width ?? 0).toBeGreaterThan(initialSvgWidth * 1.2);
   await page.getByRole("button", { name: "Zoom out" }).click();
   await expect(zoom).toHaveText("100%");
 
@@ -248,6 +251,7 @@ test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
   });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await expect(zoom).toHaveText("200%");
+  await expect.poll(async () => (await explorerSvg.boundingBox())?.width ?? 0).toBeGreaterThan(initialSvgWidth * 1.9);
 
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...center, id: 3 }] });
   await cdp.send("Input.dispatchTouchEvent", {
@@ -255,7 +259,7 @@ test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
     touchPoints: [{ x: center.x + 35, y: center.y + 20, id: 3 }],
   });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).not.toBe("matrix(2, 0, 0, 2, 0, 0)");
+  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).not.toBe("matrix(1, 0, 0, 1, 0, 0)");
 
   for (let tap = 0; tap < 2; tap++) {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...center, id: 4 + tap }] });
