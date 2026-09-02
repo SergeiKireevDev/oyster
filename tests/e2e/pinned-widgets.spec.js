@@ -222,13 +222,64 @@ test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
 
   await page.getByRole("button", { name: "Explore Mermaid diagram 1" }).click();
   await expect(page.getByText("Diagram explorer", { exact: true })).toBeVisible();
-  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("100%");
+  const zoom = page.locator(".mermaid-explorer-zoom");
+  const viewport = page.locator(".mermaid-explorer-viewport");
+  const canvas = page.locator(".mermaid-explorer-canvas");
+  await expect(zoom).toHaveText("100%");
   await expect(page.locator(".mermaid-explorer-render .mermaid-diagram svg")).toBeVisible();
   await page.getByRole("button", { name: "Zoom in" }).click();
-  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("125%");
-  await expect(page.locator(".mermaid-explorer-render")).toHaveClass(/mermaid-zoom-125/);
+  await expect(zoom).toHaveText("125%");
+  await expect(canvas).toHaveAttribute("style", /--mermaid-scale: 1\.25/);
   await page.getByRole("button", { name: "Zoom out" }).click();
-  await expect(page.locator(".mermaid-explorer-toolbar span")).toHaveText("100%");
+  await expect(zoom).toHaveText("100%");
+
+  // Touch equivalents: two fingers expand the canvas, one finger pans it,
+  // and a double tap restores both scale and position.
+  const bounds = await viewport.boundingBox();
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ ...center, x: center.x - 30, id: 1 }, { ...center, x: center.x + 30, id: 2 }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ ...center, x: center.x - 60, id: 1 }, { ...center, x: center.x + 60, id: 2 }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(zoom).toHaveText("200%");
+
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...center, id: 3 }] });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x: center.x + 35, y: center.y + 20, id: 3 }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).not.toBe("matrix(2, 0, 0, 2, 0, 0)");
+
+  for (let tap = 0; tap < 2; tap++) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...center, id: 4 + tap }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  }
+  await cdp.detach();
+  await expect(zoom).toHaveText("100%");
+  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).toBe("matrix(1, 0, 0, 1, 0, 0)");
+
+  // Desktop equivalents: drag pans, Control-wheel zooms, and double-click centers.
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 45, center.y + 25);
+  await page.mouse.up();
+  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).not.toBe("matrix(1, 0, 0, 1, 0, 0)");
+  await viewport.hover();
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => Number.parseInt(await zoom.textContent(), 10)).toBeGreaterThan(100);
+  await viewport.dblclick({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
+  await expect(zoom).toHaveText("100%");
+  await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).transform)).toBe("matrix(1, 0, 0, 1, 0, 0)");
+
   await page.getByRole("button", { name: "Back to reader" }).click();
   await expect(page.locator(".pinned-markdown-viewer")).toContainText("Delivery flow");
 });
