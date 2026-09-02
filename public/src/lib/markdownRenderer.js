@@ -118,28 +118,74 @@ function inlineMd(s) {
 // Security boundary for every Svelte {@html} use. User/model/file input is
 // escaped before supported markup is generated; links are restricted to HTTP(S),
 // and KaTeX runs with trust disabled.
-function renderSanitizedMarkdown(source) {
+function fencedCodeAt(lines, index) {
+  const opening = lines[index]?.match(/^\s*(`{3,}|~{3,})(.*)$/);
+  if (!opening) return null;
+  const marker = opening[1];
+  const info = opening[2].trim();
+  const language = info.split(/\s+/)[0] || "";
+  const closing = new RegExp(`^\\s*${marker[0] === "`" ? "`" : "~"}{${marker.length},}\\s*$`);
+  const body = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length && !closing.test(lines[nextIndex])) body.push(lines[nextIndex++]);
+  if (nextIndex < lines.length) nextIndex++;
+  return { language, source: body.join("\n"), nextIndex };
+}
+
+function isMermaidLanguage(language) {
+  return String(language).toLowerCase() === "mermaid";
+}
+
+function renderMermaidBlock(source, result, index, showExplore) {
+  const label = `Mermaid diagram ${index + 1}`;
+  if (result?.status === "rendered" && typeof result.svg === "string") {
+    const toolbar = showExplore
+      ? `<div class="mermaid-diagram-toolbar"><button type="button" class="mermaid-explore-action" data-mermaid-index="${index}" aria-label="Explore ${label}">Explore diagram</button></div>`
+      : "";
+    return `<div class="mermaid-diagram" role="group" aria-label="${label}">${toolbar}${result.svg}</div>`;
+  }
+  if (result?.status === "error") {
+    return `<div class="mermaid-diagram mermaid-diagram-error" role="group" aria-label="${label}"><p role="alert">Unable to render Mermaid diagram.</p><pre><code>${escapeHtml(source)}</code></pre></div>`;
+  }
+  return `<div class="mermaid-diagram mermaid-diagram-loading" role="status" aria-label="${label}" aria-live="polite">Rendering diagram…</div>`;
+}
+
+function extractMermaidDiagrams(source) {
+  const lines = String(source ?? "").split("\n");
+  const diagrams = [];
+  for (let i = 0; i < lines.length;) {
+    const fence = fencedCodeAt(lines, i);
+    if (!fence) { i++; continue; }
+    if (isMermaidLanguage(fence.language)) diagrams.push(fence.source);
+    i = fence.nextIndex;
+  }
+  return diagrams;
+}
+
+function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults = [], showMermaidExplore = false } = {}) {
   // Normalize at the renderer boundary so callers can only pass source data;
   // components never prepare or forward an HTML-shaped value.
   const lines = String(source ?? "").split("\n");
   const out = [];
   let i = 0;
+  let mermaidIndex = 0;
   let para = [];
   const flushPara = () => {
     if (para.length) { out.push(`<p>${inlineMd(escapeHtml(para.join("\n"))).replace(/\n/g, "<br>")}</p>`); para = []; }
   };
   while (i < lines.length) {
     const line = lines[i];
-    const fence = line.match(/^\s*```(.*)$/);
+    const fence = fencedCodeAt(lines, i);
     if (fence) {
       flushPara();
-      const lang = fence[1].trim().split(/\s+/)[0] || "";
-      const buf = [];
-      i++;
-      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
-      i++; // skip closing fence
-      const label = lang ? `<div class="code-lang">${escapeHtml(lang)}</div>` : "";
-      out.push(`<div class="codeblock">${label}<pre><code>${highlightCode(buf.join("\n"), lang)}</code></pre></div>`);
+      i = fence.nextIndex;
+      if (enableMermaid && isMermaidLanguage(fence.language)) {
+        out.push(renderMermaidBlock(fence.source, mermaidResults[mermaidIndex], mermaidIndex, showMermaidExplore));
+        mermaidIndex++;
+        continue;
+      }
+      const label = fence.language ? `<div class="code-lang">${escapeHtml(fence.language)}</div>` : "";
+      out.push(`<div class="codeblock">${label}<pre><code>${highlightCode(fence.source, fence.language)}</code></pre></div>`);
       continue;
     }
     const mathFence = line.match(/^\s*(\$\$|\\\[)\s*(.*?)\s*(?:\$\$|\\\])?\s*$/);
@@ -220,4 +266,4 @@ function renderSanitizedMarkdown(source) {
 // ------------------------------------------------------------ message rendering
 
 
-export { renderSanitizedMarkdown };
+export { extractMermaidDiagrams, renderSanitizedMarkdown };

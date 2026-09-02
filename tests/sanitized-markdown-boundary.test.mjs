@@ -42,10 +42,11 @@ test("the necessary dynamic HTML exception is documented and owned by the saniti
   assert.deepEqual(injections, ["components/SanitizedMarkdown.svelte"]);
 
   const boundary = source("public/src/components/SanitizedMarkdown.svelte");
-  assert.match(boundary, /renderSanitizedMarkdown\(source\)/);
-  assert.match(boundary, /Runtime Markdown and KaTeX produce variable nested structures/);
+  assert.match(boundary, /renderSanitizedMarkdown\(source, \{[\s\S]*enableMermaid,[\s\S]*mermaidResults: \$mermaidResultsStore/);
+  assert.match(boundary, /Runtime Markdown, KaTeX, and strict-mode Mermaid produce variable nested/);
   assert.match(boundary, /Never pass caller-provided HTML to this component/);
   assert.match(boundary, /\{@html renderedHtml\}/);
+  assert.match(boundary, /createMermaidResultsStore\(mermaidSources\)/);
 
   const rendererReferences = svelteFiles(sourceRoot)
     .filter((path) => /renderSanitizedMarkdown/.test(source(path)))
@@ -65,7 +66,7 @@ test("the Markdown boundary limits its root markup and omits empty attributes", 
   assert.match(boundary, /callerClass = \$derived\(optionalTrimmedString\(className\)\)/);
   assert.match(boundary, /callerClass \? `sanitized-markdown \$\{callerClass\}` : "sanitized-markdown"/);
   assert.match(boundary, /accessibleLabel = \$derived\(optionalTrimmedString\(label\)\)/);
-  assert.match(boundary, /class=\{rootClass\} aria-label=\{accessibleLabel\}/);
+  assert.match(boundary, /class=\{rootClass\}[\s\S]*role=\{typeof onMermaidExplore[\s\S]*aria-label=\{accessibleLabel\}/);
   assert.doesNotMatch(boundary, /this=\{element\}|class=\{className\}|aria-label=\{label\}/);
 });
 
