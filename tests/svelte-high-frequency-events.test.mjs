@@ -93,6 +93,8 @@ test("high-frequency component events avoid per-event reactive and global update
   const chat = component("ChatLayout.svelte");
   const widgets = component("PinnedWidgetGrid.svelte");
   const toast = component("ToastItem.svelte");
+  const markdown = component("MarkdownArtifact.svelte");
+  const diagramGestures = library("diagramGestureController.js");
   const command = component("CommandPalette.svelte");
   const option = component("OptionPickerItem.svelte");
   const picker = component("SessionPickerModal.svelte");
@@ -103,6 +105,9 @@ test("high-frequency component events avoid per-event reactive and global update
     assert.match(source, /createFrameScheduler/);
     assert.match(source, /\.cancel\(\)|onDestroy\([^)]*\.cancel\)/);
   }
+  assert.match(diagramGestures, /createFrameScheduler\(onTransform/);
+  assert.match(diagramGestures, /publisher\.cancel\(\)/);
+  assert.match(markdown, /onDestroy\(explorerGestures\.destroy\)/);
   assert.doesNotMatch(command, /onmousemove=/);
   assert.doesNotMatch(option, /onmousemove=/);
   assert.doesNotMatch(modalDom, /addEventListener\("mousemove"/);

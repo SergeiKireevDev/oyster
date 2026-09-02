@@ -1251,14 +1251,6 @@ html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in s
   box-shadow: none;
 }
 
-.mermaid-explorer-render.mermaid-zoom-50 { width: 50%; }
-.mermaid-explorer-render.mermaid-zoom-75 { width: 75%; }
-.mermaid-explorer-render.mermaid-zoom-100 { width: 100%; }
-.mermaid-explorer-render.mermaid-zoom-125 { width: 125%; }
-.mermaid-explorer-render.mermaid-zoom-150 { width: 150%; }
-.mermaid-explorer-render.mermaid-zoom-200 { width: 200%; }
-.mermaid-explorer-render.mermaid-zoom-300 { width: 300%; }
-
 .mermaid-explorer-render .mermaid-diagram > svg {
   width: 100% !important;
   max-width: none !important;
