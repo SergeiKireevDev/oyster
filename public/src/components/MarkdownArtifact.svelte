@@ -6,7 +6,7 @@
   /** @type {{ source?: string; label?: string }} */
   let { source = "", label = "Markdown artifact" } = $props();
 
-  const ZOOM_LEVELS = Object.freeze([50, 75, 100, 125, 150, 200, 300]);
+  const ZOOM_LEVELS = Object.freeze([50, 75, 100, 125, 150, 200, 300, 400, 600, 800, 1000, 1200]);
   const hasRenderableContent = $derived(source.trim().length > 0);
   let exploredDiagram = $state(null);
   let viewTransform = $state({ ...DEFAULT_TRANSFORM });

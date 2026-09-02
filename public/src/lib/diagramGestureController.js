@@ -32,7 +32,7 @@ function isInteractiveTarget(target) {
 export function createDiagramGestureController({
   onTransform,
   minimumScale = 0.5,
-  maximumScale = 3,
+  maximumScale = 12,
   now = () => Date.now(),
   requestFrame = globalThis.requestAnimationFrame?.bind(globalThis),
   cancelFrame = globalThis.cancelAnimationFrame?.bind(globalThis),
