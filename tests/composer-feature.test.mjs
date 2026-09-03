@@ -21,6 +21,11 @@ test("composer exposes named message, voice, and stop controls", () => {
   assert.match(source, /id="stopBtn"[^>]*disabled=\{aborting\}[^>]*aria-label="Stop agent"/);
 });
 
+test("composer prevents iOS focus zoom while keeping its highlight layer aligned", () => {
+  assert.match(source, /\.composer-highlight\s*\{[^}]*font-size:\s*16px/s);
+  assert.match(source, /#input\s*\{[^}]*font-size:\s*16px/s);
+});
+
 test("composer reuses highlight nodes and always gives transcription a useful tooltip", () => {
   assert.match(source, /voice\.status \|\| "Transcribing voice input"/);
   assert.match(source, /voiceButtonDisabled = \$composerVoice\.transcribing \|\| voiceIsStarting\(\$composerVoice\)/);

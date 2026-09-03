@@ -198,6 +198,8 @@
     overflow: hidden;
     color: var(--text);
     font: inherit;
+    /* iOS zooms focused form controls whose text is smaller than 16px. */
+    font-size: 16px;
     line-height: 1.45;
     overflow-wrap: break-word;
     pointer-events: none;
@@ -232,6 +234,8 @@
     color: transparent;
     caret-color: var(--text);
     font: inherit;
+    /* Keep this in sync with the highlight layer and prevent iOS focus zoom. */
+    font-size: 16px;
     line-height: 1.45;
     resize: none;
   }
