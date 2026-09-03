@@ -82,6 +82,7 @@ test("installed Claude Code accepts the driver's stream-json launch contract", {
   const driver = createClaudeCodeDriver({ bin: "/tmp/oyster-claude-code/node_modules/.bin/claude" });
   const runner = { sessionRef: null, sessionId: null, sessionName: null };
   const { process: child } = driver.launch({ runner, cwd: home, systemPrompt: "Reply briefly." });
+  driver.sendCommand(runner, child, { id: "native-model", type: "set_model", provider: "anthropic", modelId: "sonnet" });
   const records = [];
   let buffer = "";
   child.stdout.on("data", (chunk) => {
@@ -98,6 +99,7 @@ test("installed Claude Code accepts the driver's stream-json launch contract", {
   const canonical = records.flatMap((record) => driver.decodeLine(runner, JSON.stringify(record)));
   assert.equal(canonical.some((event) => event.type === "message_end"), true);
   assert.equal(canonical.some((event) => event.type === "agent_settled"), true);
+  assert.equal(canonical.some((event) => event.type === "response" && event.id === "native-model" && event.success), true);
 });
 
 test("Claude Code driver translates init, messages, tools, results, and local RPC state", async () => {
@@ -144,6 +146,19 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.equal(toolEvents[1].message.toolName, "Bash");
   assert.equal(toolEvents[1].message.content[0].text, "ok");
 
+  driver.sendCommand(runner, child, { id: "models", type: "get_available_models" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(localEvents.find((event) => event.id === "models").data.models.map((model) => model.id), [
+    "default", "sonnet", "opus", "haiku", "fable", "claude-sonnet-4-5",
+  ]);
+  assert.equal(driver.sendCommand(runner, child, { id: "model-1", type: "set_model", provider: "anthropic", modelId: "opus" }), true);
+  assert.deepEqual(line(child.stdin), {
+    type: "control_request", request_id: "oyster-model-model-1", request: { subtype: "set_model", model: "opus" },
+  });
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({
+    type: "control_response", response: { subtype: "success", request_id: "oyster-model-model-1" },
+  })), [{ type: "response", id: "model-1", command: "set_model", success: true, data: {} }]);
+
   assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "result", subtype: "success", session_id: "cc-1" })), [
     { type: "agent_end", willRetry: false }, { type: "agent_settled" },
   ]);
@@ -152,5 +167,8 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   const snapshot = localEvents.find((event) => event.id === "messages");
   assert.equal(snapshot.success, true);
   assert.equal(snapshot.data.messages.length, 3);
+  driver.sendCommand(runner, child, { id: "state-after-model", type: "get_state" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(localEvents.find((event) => event.id === "state-after-model").data.model, { provider: "anthropic", id: "opus" });
   assert.deepEqual(driver.sessionReference({ sessionId: "cc-1" }), { backend: "claude-code", id: "cc-1", storagePath: null });
 });

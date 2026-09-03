@@ -85,9 +85,10 @@ RUN mkdir -p /root/.pi/agent/extensions \
 # credential mounts, no external model calls. Production behavior is unchanged
 # unless E2E_MOCK_LLM=1 is set.
 COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
+COPY tests/e2e/mock-claude-code.mjs /opt/mock-claude-code.mjs
 COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared /opt/mock-claude-code.mjs
 
 # Deployed pi processes use the submodule-built binary and SQLite backend.
 ENV PI_BIN=/opt/pi/node_modules/.bin/pi \

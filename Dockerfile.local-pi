@@ -70,9 +70,10 @@ RUN npm run build \
     && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
 
 COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
+COPY tests/e2e/mock-claude-code.mjs /opt/mock-claude-code.mjs
 COPY tests/e2e/mock-cloudflared.sh /usr/local/bin/e2e-cloudflared
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared /opt/mock-claude-code.mjs
 
 ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     PI_SQLITE_TEST_BIN=/opt/pi/node_modules/.bin/pi \
