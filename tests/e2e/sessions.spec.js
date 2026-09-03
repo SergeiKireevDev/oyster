@@ -25,9 +25,10 @@ test.afterEach(() => { teardownContainer(); });
 const RUN = Date.now();
 const tag = (base) => `${base}-${RUN}`;
 
-async function newSession(page) {
+async function newSession(page, { harness = null } = {}) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
+  if (harness) await page.getByRole("combobox", { name: "New session harness" }).selectOption(harness);
   const opened = page.waitForResponse((response) =>
     response.request().method() === "POST" && new URL(response.url()).pathname === "/open-session"
   );
@@ -42,25 +43,37 @@ async function newSession(page) {
   expect(new URL(eventRequest.url()).searchParams.get("runner")).toBe(runner.id);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pi_runner"))).toBe(runner.id);
   if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
+  return runner;
 }
 
 test("new-session harness selector starts a Claude Code runner", async ({ page }) => {
   await login(page);
   await openSessionSidebar(page);
-  const harness = page.getByRole("combobox", { name: "New session harness" });
-  await expect(harness).toContainText("Claude Code");
-  await harness.selectOption("claude-code");
-  const opened = page.waitForResponse((response) => {
-    if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/open-session") return false;
-    try { return response.request().postDataJSON()?.harness === "claude-code"; }
-    catch { return false; }
-  });
-  await page.locator("#newSessionHere").click();
-  const response = await opened;
-  expect(response.ok()).toBe(true);
-  const { runner } = await response.json();
+  await expect(page.getByRole("combobox", { name: "New session harness" })).toContainText("Claude Code");
+  const runner = await newSession(page, { harness: "claude-code" });
   expect(runner.harness).toBe("claude-code");
   await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
+});
+
+test("Claude Code model selection uses its native control protocol and persists the chosen model", async ({ page }) => {
+  await login(page);
+  const runner = await newSession(page, { harness: "claude-code" });
+  await expect(modelChip(page, false)).toContainText("sonnet", { timeout: 15000 });
+  await modelChip(page, false).click();
+  await expect(page.locator("#mTitle")).toHaveText("Select model");
+  await page.getByRole("option", { name: "anthropic/opus", exact: true }).click();
+  await expect(modelChip(page, false)).toContainText("opus", { timeout: 15000 });
+  await expect.poll(async () => (await page.evaluate(() => window.rpc({ type: "get_state" }))).model?.id).toBe("opus");
+
+  const prompt = tag("CLAUDE-MODEL-OPUS");
+  await sendPrompt(page, prompt);
+  await expect(page.locator(".msg.assistant", { hasText: `Mock Claude persisted: ${prompt}` }).last()).toBeVisible();
+  await waitFor(async () => {
+    const selected = (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id);
+    if (!selected?.sessionKey) return false;
+    const result = await api("GET", `/session-messages?key=${encodeURIComponent(selected.sessionKey)}`);
+    return result.json.messages?.some((message) => message.role === "assistant" && message.model === "opus");
+  }, { timeout: 15000, label: "Claude opus transcript mirrored into SQLite" });
 });
 
 async function openSessionSidebar(page, mobile = false) {
@@ -311,6 +324,54 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
       async () => Boolean((await byKey()).alpha?.runner?.alive),
       { timeout: 15000, label: "ALPHA revived after prompt" }
     );
+  });
+
+  test("switches and restarts pi and Claude Code sessions without changing their harness", async ({ page }) => {
+    await login(page);
+    const piToken = tag(`MIXED-PI-${mobile ? "M" : "D"}`);
+    const claudeToken = tag(`MIXED-CLAUDE-${mobile ? "M" : "D"}`);
+
+    const piRunner = await newSession(page, { harness: "pi" });
+    await sendPrompt(page, `Reply with exactly the word ${piToken}`);
+    const claudeRunner = await newSession(page, { harness: "claude-code" });
+    await sendPrompt(page, claudeToken);
+    await expect(page.locator(".msg.assistant", { hasText: claudeToken }).last()).toBeVisible();
+    await waitFor(async () => {
+      const result = await api("GET", "/sessions?dir=/workspace");
+      return result.json.sessions?.some((session) => (session.preview ?? "").includes(claudeToken));
+    }, { timeout: 15000, label: "Claude session mirrored before mixed-harness restart" });
+
+    let result = await api("DELETE", `/runners?id=${encodeURIComponent(claudeRunner.id)}`);
+    expect(result.status, result.json.error).toBe(200);
+    await waitFor(async () => {
+      const runners = (await api("GET", "/runners")).json.runners ?? [];
+      return runners.find((runner) => runner.id === claudeRunner.id)?.alive === false;
+    }, { label: "Claude runner stopped" });
+
+    await switchToSessionByToken(page, piToken, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: piToken }).last()).toBeVisible({ timeout: 15000 });
+    result = await api("POST", `/restart?runner=${encodeURIComponent(claudeRunner.id)}`);
+    expect(result.status, result.json.error).toBe(202);
+    await waitFor(async () => {
+      const runners = (await api("GET", "/runners")).json.runners ?? [];
+      const claude = runners.find((runner) => runner.id === claudeRunner.id);
+      return claude?.alive && claude.harness === "claude-code";
+    }, { label: "Claude runner restarted while pi is selected" });
+
+    await switchToSessionByToken(page, claudeToken, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: claudeToken }).last()).toBeVisible({ timeout: 15000 });
+    result = await api("DELETE", `/runners?id=${encodeURIComponent(piRunner.id)}`);
+    expect(result.status, result.json.error).toBe(200);
+    result = await api("POST", `/restart?runner=${encodeURIComponent(piRunner.id)}`);
+    expect(result.status, result.json.error).toBe(202);
+    await waitFor(async () => {
+      const runners = (await api("GET", "/runners")).json.runners ?? [];
+      const pi = runners.find((runner) => runner.id === piRunner.id);
+      return pi?.alive && pi.harness === "pi";
+    }, { label: "pi runner restarted while Claude is selected" });
+
+    await switchToSessionByToken(page, piToken, { mobile });
+    await expect(page.locator(".msg.assistant", { hasText: piToken }).last()).toBeVisible({ timeout: 15000 });
   });
 
   test("switch between sessions — transcript follows the selection", async ({ page }) => {
