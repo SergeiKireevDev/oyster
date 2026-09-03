@@ -14,6 +14,10 @@ test("pinned widget viewer owns a semantic, theme-aligned artifact surface", () 
   assert.doesNotMatch(globalStyles, /\.pinned-widget-viewer-stage\s*\{/);
   assert.match(component, /\.pinned-widget-viewer-stage\s*\{[^}]*border: 1px solid var\(--border\);[^}]*background: color-mix\(in srgb, var\(--bg\)/s);
   assert.match(component, /\.pinned-widget-viewer-stage\.markdown-stage,[\s\S]*background: var\(--bg\);/);
+  assert.match(component, /class:diagram-explorer-active=\{diagramExplorerActive\}/);
+  assert.match(component, /widget\.kind === "markdown" && !diagramExplorerActive/);
+  assert.match(component, /\{#if !diagramExplorerActive\}[\s\S]*class="m-actions pinned-widget-viewer-actions"/);
+  assert.match(component, /\.diagram-explorer-active \.pinned-widget-viewer-stage\s*\{[^}]*border: 0;[^}]*border-radius: 0;/s);
   assert.match(component, /\.pinned-widget-unavailable\s*\{[^}]*border: 1px dashed var\(--border\);[^}]*color: var\(--muted\);/s);
   assert.doesNotMatch(component, /html\[data-theme="light"\]/);
 });

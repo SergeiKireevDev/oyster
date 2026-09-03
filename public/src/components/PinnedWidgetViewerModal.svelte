@@ -28,6 +28,7 @@
   const copyRequests = createAsyncRequestGuard();
 
   let copyFeedback = $state({ widgetId: null, status: "idle" });
+  let diagramExplorerWidgetId = $state(null);
   let copyRawTimer;
   const widget = $derived($modalState.context?.widget ?? EMPTY_WIDGET);
   const source = $derived(widget.id ? browserActions.pinnedWidgetMediaSource(widget.id) : "");
@@ -41,6 +42,11 @@
   const copyRawSucceeded = $derived(copyRawState === "copied");
   const copyRawFailed = $derived(copyRawState === "failed");
   const previewLabel = $derived(`${widget.label || "Pinned widget"} preview`);
+  const diagramExplorerActive = $derived(diagramExplorerWidgetId === widget.id);
+
+  function setDiagramExplorerActive(active) {
+    diagramExplorerWidgetId = active ? widget.id : null;
+  }
 
   function openAdjacentWidget(target) {
     if (!target) return;
@@ -77,8 +83,8 @@
   });
 </script>
 
-<section class="pinned-widget-viewer">
-  {#if widget.kind === "markdown"}
+<section class="pinned-widget-viewer" class:diagram-explorer-active={diagramExplorerActive}>
+  {#if widget.kind === "markdown" && !diagramExplorerActive}
     <div class="pinned-markdown-toolbar">
       <span>Markdown preview</span>
       <button
@@ -116,7 +122,7 @@
       {:else if widget.kind === "video"}
         <VideoArtifact src={source} label={widget.label} autoplay={true} />
       {:else if widget.kind === "markdown"}
-        <MarkdownArtifact source={widget.content ?? ""} label={widget.label} />
+        <MarkdownArtifact source={widget.content ?? ""} label={widget.label} onExploreChange={setDiagramExplorerActive} />
       {:else if widget.kind === "monitoring"}
         <MonitoringArtifact content={widget.content ?? ""} format={widget.format ?? "text"} />
       {:else if isHtml}
@@ -127,38 +133,40 @@
     </div>
   {/key}
 
-  <div class="m-actions pinned-widget-viewer-actions">
-    {#if navigation.total > 1}
-      <div class="pinned-widget-viewer-navigation" role="group" aria-label="Pinned widget navigation">
-        <button
-          type="button"
-          class="chip pinned-widget-viewer-arrow"
-          aria-label="Previous pinned widget"
-          title={navigation.previous ? `Previous: ${navigation.previous.label}` : "No previous pinned widget"}
-          disabled={!navigation.previous}
-          onclick={() => openAdjacentWidget(navigation.previous)}
-        ><span aria-hidden="true">←</span></button>
-        <span role="status" aria-live="polite" aria-atomic="true">
-          {navigation.index + 1} / {navigation.total}
-        </span>
-        <button
-          type="button"
-          class="chip pinned-widget-viewer-arrow"
-          aria-label="Next pinned widget"
-          title={navigation.next ? `Next: ${navigation.next.label}` : "No next pinned widget"}
-          disabled={!navigation.next}
-          onclick={() => openAdjacentWidget(navigation.next)}
-        ><span aria-hidden="true">→</span></button>
-      </div>
-    {/if}
-    {#if download}
-      <a class="chip" href={download.href} download={download.filename}>Download</a>
-    {/if}
-    {#if widget.path}
-      <button type="button" class="chip" onclick={revealWidget}>Reveal in Files</button>
-    {/if}
-    <button type="button" class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
-  </div>
+  {#if !diagramExplorerActive}
+    <div class="m-actions pinned-widget-viewer-actions">
+      {#if navigation.total > 1}
+        <div class="pinned-widget-viewer-navigation" role="group" aria-label="Pinned widget navigation">
+          <button
+            type="button"
+            class="chip pinned-widget-viewer-arrow"
+            aria-label="Previous pinned widget"
+            title={navigation.previous ? `Previous: ${navigation.previous.label}` : "No previous pinned widget"}
+            disabled={!navigation.previous}
+            onclick={() => openAdjacentWidget(navigation.previous)}
+          ><span aria-hidden="true">←</span></button>
+          <span role="status" aria-live="polite" aria-atomic="true">
+            {navigation.index + 1} / {navigation.total}
+          </span>
+          <button
+            type="button"
+            class="chip pinned-widget-viewer-arrow"
+            aria-label="Next pinned widget"
+            title={navigation.next ? `Next: ${navigation.next.label}` : "No next pinned widget"}
+            disabled={!navigation.next}
+            onclick={() => openAdjacentWidget(navigation.next)}
+          ><span aria-hidden="true">→</span></button>
+        </div>
+      {/if}
+      {#if download}
+        <a class="chip" href={download.href} download={download.filename}>Download</a>
+      {/if}
+      {#if widget.path}
+        <button type="button" class="chip" onclick={revealWidget}>Reveal in Files</button>
+      {/if}
+      <button type="button" class="chip" data-modal-cancel onclick={closeModalState}>Close</button>
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -238,6 +246,11 @@
   .pinned-widget-viewer-stage.html-stage {
     display: block;
     background: #fff;
+  }
+
+  .diagram-explorer-active .pinned-widget-viewer-stage {
+    border: 0;
+    border-radius: 0;
   }
 
   .pinned-widget-unavailable {

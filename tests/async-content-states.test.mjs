@@ -39,7 +39,7 @@ test("browser-loaded artifact viewers share loading, failure, retry, and empty s
   assert.match(html, /import ArtifactLoadState from "\.\/ArtifactLoadState\.svelte"/);
   assert.match(html, /<ArtifactLoadState kind="html" available=\{Boolean\(src\)\} \{status\} onRetry=\{retry\}/);
   const markdown = component("MarkdownArtifact.svelte");
-  assert.match(markdown, /let \{ source = "", label = "Markdown artifact" \} = \$props\(\)/);
+  assert.match(markdown, /let \{ source = "", label = "Markdown artifact", onExploreChange = null \} = \$props\(\)/);
   assert.match(markdown, /\$derived\(source\.trim\(\)\.length > 0\)/);
   assert.match(markdown, /role="status" aria-atomic="true">[\s\S]*This Markdown artifact is empty/);
 });

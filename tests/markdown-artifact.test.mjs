@@ -34,7 +34,7 @@ test("MarkdownArtifact exposes a dedicated, accessible Mermaid zoom explorer", (
   assert.match(source, /role="group" aria-label="Diagram zoom controls"/);
   assert.match(source, /aria-label="Zoom out"/);
   assert.match(source, /aria-label="Zoom in"/);
-  assert.match(source, /Back to reader/);
+  assert.match(source, /data-modal-cancel onclick=\{closeExplorer\}>Back to reader/);
   assert.match(source, /createDiagramGestureController/);
   assert.match(source, /onpointerdown=\{explorerGestures\.pointerDown\}/);
   assert.match(source, /onpointermove=\{explorerGestures\.pointerMove\}/);
@@ -61,6 +61,10 @@ test("MarkdownArtifact uses the tokenized responsive reader contract", () => {
   assert.doesNotMatch(source, /scale\(var\(--mermaid-scale\)\)/);
   assert.doesNotMatch(source, /will-change: transform/);
   assert.match(styles, /\.mermaid-explorer-render \.mermaid-diagram > svg\s*\{[^}]*width: 100% !important;/);
+  assert.match(styles, /#overlay:has\(#modal\.markdown-reader-modal \.mermaid-explorer\)\s*\{/);
+  assert.match(styles, /#modal\.markdown-reader-modal:has\(\.mermaid-explorer\)\s*\{[^}]*width: 100%;[^}]*height: 100%;[^}]*max-height: none;/s);
+  assert.match(styles, /#modal\.markdown-reader-modal:has\(\.mermaid-explorer\) \.m-body \{ padding: 0; \}/);
+  assert.match(source, /@media \(max-width: 620px\)[\s\S]*\.mermaid-explorer-heading strong,[\s\S]*display: none;/);
   assert.match(styles, /@media \(max-width: 1080px\)[\s\S]*\.pinned-markdown-viewer/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.pinned-markdown-viewer/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*\.pinned-markdown-viewer/);

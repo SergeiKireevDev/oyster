@@ -222,9 +222,18 @@ test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
 
   await page.getByRole("button", { name: "Explore Mermaid diagram 1" }).click();
   await expect(page.getByText("Diagram explorer", { exact: true })).toBeVisible();
+  await expect(page.locator(".pinned-markdown-toolbar")).toBeHidden();
+  await expect(page.locator(".pinned-widget-viewer-actions")).toBeHidden();
   const zoom = page.locator(".mermaid-explorer-zoom");
   const viewport = page.locator(".mermaid-explorer-viewport");
   const canvas = page.locator(".mermaid-explorer-canvas");
+  const modalBounds = await page.locator("#modal").boundingBox();
+  const viewportBounds = await viewport.boundingBox();
+  const screen = page.viewportSize();
+  expect(modalBounds.width).toBeGreaterThan(screen.width * 0.98);
+  expect(modalBounds.height).toBeGreaterThan(screen.height * 0.98);
+  expect(viewportBounds.width).toBeGreaterThan(modalBounds.width * 0.98);
+  expect(viewportBounds.height).toBeGreaterThan(modalBounds.height * 0.85);
   const explorerSvg = page.locator(".mermaid-explorer-render .mermaid-diagram svg");
   await expect(zoom).toHaveText("100%");
   await expect(explorerSvg).toBeVisible();
