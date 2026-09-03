@@ -24,9 +24,20 @@ docker run --rm -p 4000:4000 \
   oyster:sqlite
 ```
 
-The image sets `PI_BIN` to the submodule-built CLI and `PERSISTENT_STORE=sqlite`. Its build-time test suite includes a process-level SQLite persistence and restore contract test.
+The image sets `PI_BIN` to the submodule-built CLI and `PERSISTENT_STORE=sqlite`. It also installs the pinned Claude Code CLI, so the new-session **Harness** selector offers both pi and Claude Code. Its build-time test suite includes a process-level SQLite persistence and restore contract test.
 
-Mount pi's credential files or provide supported provider environment variables when real model access is needed. Do not bake credentials into an image.
+Mount the relevant credential files or provide supported provider environment variables when real model access is needed. pi reads its normal `~/.pi/agent` configuration. Claude Code reads its normal `~/.claude` configuration or `ANTHROPIC_API_KEY`; for example:
+
+```bash
+docker run --rm -p 4000:4000 \
+  -e OYSTER_TOKEN='<strong-random-token>' \
+  -e ANTHROPIC_API_KEY \
+  -v "$PWD:/workspace" \
+  -v "$HOME/.claude:/root/.claude" \
+  oyster:sqlite
+```
+
+Do not bake credentials into an image. Claude Code sessions default to `acceptEdits`; configure `CLAUDE_CODE_PERMISSION_MODE` and `CLAUDE_CODE_ARGS` according to the container's isolation and tool policy.
 
 ## SQLite pi from an explicit source context
 

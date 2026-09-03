@@ -34,6 +34,7 @@
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { validateRunnerDriver } from "./runner-drivers/contract.mjs";
+import { createRunnerDriverRegistry, validateRunnerDriverRegistry } from "./runner-drivers/registry.mjs";
 import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-titles.mjs";
 import { normalizeLastEventId, sseDataFrame } from "./sse.mjs";
 
@@ -70,7 +71,7 @@ const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
 const ORPHAN_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
-  "proc", "stdoutReader", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
+  "proc", "stdoutReader", "driverEmit", "driverRuntime", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
   "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
   "titleProcess", "titleSessionId", "titleLoadingSessionId", "initialArgs", "eventListeners", "subagentStatus",
   "pendingExtensionUiRequestIds",
@@ -82,6 +83,8 @@ function initializeRunnerRuntime(descriptor) {
     ...descriptor,
     proc: null,
     stdoutReader: null,
+    driverEmit: null,
+    driverRuntime: null,
     busy: false,
     resumeId: null,
     resumeQueue: [],
@@ -124,6 +127,7 @@ export async function createRunnerManager(state, {
   clearTimer = clearTimeout,
   notifyRunnerEvent = () => {},
   runnerDriver: configuredRunnerDriver = null,
+  runnerDrivers: configuredRunnerDrivers = null,
 } = {}) {
   if (!state || typeof state !== "object") throw new TypeError("runner state is required");
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
@@ -136,7 +140,11 @@ export async function createRunnerManager(state, {
   if (!(state.sseClients instanceof Set)) throw new TypeError("sseClients must be a Set");
   const runnerRepository = appStore?.repositories?.runners ?? null;
   const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
-  const runnerDriver = validateRunnerDriver(configuredRunnerDriver);
+  const runnerDrivers = validateRunnerDriverRegistry(configuredRunnerDrivers ?? createRunnerDriverRegistry({
+    drivers: [validateRunnerDriver(configuredRunnerDriver)],
+    defaultId: configuredRunnerDriver.id,
+  }));
+  const driverFor = (runner) => runnerDrivers.get(runner?.harness ?? runnerDrivers.defaultId);
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // stable id -> runner
@@ -165,6 +173,7 @@ export async function createRunnerManager(state, {
     state.runners.set(persisted.id, initializeRunnerRuntime({
       id: persisted.id,
       dir: persisted.dir,
+      harness: persisted.harness ?? runnerDrivers.defaultId,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
@@ -174,7 +183,10 @@ export async function createRunnerManager(state, {
       startCount: persisted.start_count,
     }));
   }
-  const compatibleWithConfiguredBackend = (runner) => runnerDriver.isSessionCompatible(runner?.sessionRef ?? null);
+  const compatibleWithConfiguredBackend = (runner) => {
+    try { return driverFor(runner).isSessionCompatible(runner?.sessionRef ?? null); }
+    catch { return false; }
+  };
   const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1
     && compatibleWithConfiguredBackend(state.runners.get(runner.id)));
   if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId)
@@ -216,6 +228,7 @@ export async function createRunnerManager(state, {
     return {
       id: r.id,
       dir: r.dir,
+      harness: r.harness ?? runnerDrivers.defaultId,
       sessionRef: r.sessionRef ?? null,
       sessionKey: r.sessionRef ? sessionReferences.serialize(r.sessionRef) : null,
       sessionFile: r.sessionRef?.backend === "jsonl" ? r.sessionRef.storagePath : null,
@@ -356,7 +369,7 @@ export async function createRunnerManager(state, {
   async function maybeTitleSession(runner, sessionState) {
     const reference = runner.sessionRef;
     const sessionId = runner.sessionId;
-    if (!reference || !sessionId || !titleEligible(runner.sessionName)) return;
+    if (!reference || !sessionId || (state.sessionCatalog?.backend && reference.backend !== state.sessionCatalog.backend) || !titleEligible(runner.sessionName)) return;
     if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId || runner.titleLoadingSessionId === sessionId) return;
     const catalog = state.sessionCatalog;
     if (!catalog?.messages) return;
@@ -421,7 +434,7 @@ export async function createRunnerManager(state, {
     else if (msg.type === "response" && msg.success) {
       if (msg.command === "get_state" && msg.data) {
         const d = msg.data;
-        const extractedReference = runnerDriver.sessionReference(d, runner.sessionRef ?? null);
+        const extractedReference = driverFor(runner).sessionReference(d, runner.sessionRef ?? null);
         const nextReference = extractedReference ? sessionReferences.validate(extractedReference) : null;
         const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
         const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
@@ -455,7 +468,7 @@ export async function createRunnerManager(state, {
   }
 
   function requestState(runner) {
-    sendToRunner(runner, runnerDriver.stateCommand(srvId()), { autostart: false });
+    sendToRunner(runner, driverFor(runner).stateCommand(srvId()), { autostart: false });
   }
 
   /** flush commands that were held back while a session resume was in flight */
@@ -467,7 +480,7 @@ export async function createRunnerManager(state, {
     const queued = runner.resumeQueue ?? [];
     runner.resumeQueue = [];
     for (const obj of queued) {
-      if (runner.proc) runnerDriver.sendCommand(runner, runner.proc, obj);
+      if (runner.proc) driverFor(runner).sendCommand(runner, runner.proc, obj);
     }
   }
 
@@ -481,13 +494,17 @@ export async function createRunnerManager(state, {
     throw new Error("runner ID generator repeatedly returned an existing ID");
   }
 
-  async function spawnRunner({ dir, sessionRef = null, autostart = true, initialArgs = [] }) {
+  async function spawnRunner({ dir, harness = runnerDrivers.defaultId, sessionRef = null, autostart = true, initialArgs = [] }) {
+    const selectedDriver = runnerDrivers.get(harness);
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
+    if (reference && !selectedDriver.isSessionCompatible(reference)) {
+      throw new Error(`session ${reference.id} is incompatible with harness ${harness}`);
+    }
     const owner = reference ? await ensureSessionOwner(reference) : null;
     const id = allocateRunnerId();
     const createdAt = now();
     await runnerRepository?.create({
-      id, ownerId: owner?.id ?? null, dir,
+      id, ownerId: owner?.id ?? null, dir, harness,
       sessionBackend: reference?.backend ?? null,
       sessionId: reference?.id ?? null,
       sessionStoragePath: reference?.storagePath ?? null,
@@ -498,6 +515,7 @@ export async function createRunnerManager(state, {
     const runner = initializeRunnerRuntime({
       id,
       dir,
+      harness,
       sessionRef: reference,
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
@@ -534,6 +552,7 @@ export async function createRunnerManager(state, {
     });
     const initialArgs = Array.isArray(runner.initialArgs) ? runner.initialArgs : [];
     runner.initialArgs = [];
+    const runnerDriver = driverFor(runner);
     let proc;
     try {
       const launched = runnerDriver.launch({
@@ -562,7 +581,7 @@ export async function createRunnerManager(state, {
       launchFailed = true;
       console.error(`[oyster] failed to spawn runner ${runner.id}: ${err.message}`);
       runnerEvent(runner, { type: "pi_error", error: err.message });
-      if (runner.proc === proc) runner.proc = null;
+      if (runner.proc === proc) { runner.proc = null; runner.driverEmit = null; }
       if (runner.stdoutReader === rl) {
         rl?.close();
         runner.stdoutReader = null;
@@ -579,6 +598,7 @@ export async function createRunnerManager(state, {
       console.log(`[oyster] runner ${runner.id} exited (code=${code}, signal=${signal})`);
       if (runner.proc === proc) {
         runner.proc = null;
+        runner.driverEmit = null;
         if (runner.stdoutReader === rl) {
           rl?.close();
           runner.stdoutReader = null;
@@ -600,6 +620,13 @@ export async function createRunnerManager(state, {
     runner.probeSentAt = null;
     runner.probeMisses = 0;
 
+    const emitDriverEvent = (event) => {
+      if (runner.proc !== proc || !event || typeof event !== "object") return;
+      try { trackRunner(runner, event); }
+      catch (error) { console.error(`[oyster] cannot track runner ${runner.id} output: ${error?.message ?? error}`); }
+      runnerWrite(runner, JSON.stringify(event));
+    };
+    runner.driverEmit = emitDriverEvent;
     rl = createInterface({ input: proc.stdout });
     runner.stdoutReader = rl;
     rl.on("line", (line) => {
@@ -614,11 +641,7 @@ export async function createRunnerManager(state, {
         return;
       }
       if (!Array.isArray(events)) events = events ? [events] : [];
-      for (const event of events) {
-        try { trackRunner(runner, event); }
-        catch (error) { console.error(`[oyster] cannot track runner ${runner.id} output: ${error?.message ?? error}`); }
-        runnerWrite(runner, JSON.stringify(event));
-      }
+      for (const event of events) emitDriverEvent(event);
     });
 
     proc.stderr.on("data", (chunk) => {
@@ -652,6 +675,7 @@ export async function createRunnerManager(state, {
     runner.startTimer = null;
     if (!proc) return;
     runner.proc = null;
+    runner.driverEmit = null;
     runner.busy = false;
     clearTimeout(runner.resumeTimer);
     runner.resumeTimer = null;
@@ -683,7 +707,7 @@ export async function createRunnerManager(state, {
   }
 
   async function unarchivePromptedSession(runner) {
-    if (!runner.sessionRef) return;
+    if (!runner.sessionRef || (state.sessionCatalog?.backend && runner.sessionRef.backend !== state.sessionCatalog.backend)) return;
     if (unarchiveSession) {
       await unarchiveSession(runner.sessionRef);
       return;
@@ -703,7 +727,7 @@ export async function createRunnerManager(state, {
     if (runner.resumeId) {
       // a session resume is in flight; deliver after it completes
       (runner.resumeQueue ??= []).push(obj);
-    } else if (!runnerDriver.sendCommand(runner, runner.proc, obj)) {
+    } else if (!driverFor(runner).sendCommand(runner, runner.proc, obj)) {
       return false;
     }
     if (obj.type === "prompt") {
@@ -737,11 +761,13 @@ export async function createRunnerManager(state, {
   }
 
   /** Reuse the runner attached to the full session identity, else spawn one. */
-  async function openSessionRunner({ sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
+  async function openSessionRunner({ harness = null, sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
     const inputReference = sessionRef ?? (sessionPath && sessionId
       ? { backend: "jsonl", id: sessionId, storagePath: sessionPath }
       : null);
     const reference = inputReference ? sessionReferences.validate(inputReference) : null;
+    const selectedHarness = harness ?? (reference ? runnerDrivers.compatible(reference)?.id : runnerDrivers.defaultId);
+    if (!selectedHarness) throw new Error(`no harness can open session ${reference?.id ?? "unknown"}`);
     if (reference) {
       for (const r of state.runners.values()) {
         if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) return r;
@@ -749,7 +775,7 @@ export async function createRunnerManager(state, {
     }
     // Brand-new sessions need the driver to establish their durable identity.
     // Saved sessions already have an identity and can remain dormant while read.
-    return spawnRunner({ dir: dir || state.currentDir, sessionRef: reference, autostart: !reference });
+    return spawnRunner({ dir: dir || state.currentDir, harness: selectedHarness, sessionRef: reference, autostart: !reference });
   }
 
   // ------------------------------------------------------------ watchdog
@@ -782,7 +808,7 @@ export async function createRunnerManager(state, {
           runner.probeMisses = 0;
           runnerEvent(runner, {
             type: "runner_unhealthy",
-            reason: `${runnerDriver.label ?? runnerDriver.id} did not answer health probes`, action: "restart",
+            reason: `${driverFor(runner).label ?? runner.harness} did not answer health probes`, action: "restart",
           });
           stopRunner(runner);
           startRunner(runner);
@@ -841,6 +867,6 @@ export async function createRunnerManager(state, {
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
     defaultRunner, runnerFromReq, openSessionRunner,
     startDrivers, stopDrivers, startPi, stopPi,
-    runnerDriver,
+    runnerDriver: runnerDrivers.get(runnerDrivers.defaultId), runnerDrivers,
   };
 }

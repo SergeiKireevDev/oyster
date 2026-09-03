@@ -139,16 +139,21 @@ test("session open controller previews resumed sessions and marks new runners em
   const previews = [];
   const empty = [];
   const opened = [];
+  const requests = [];
   const open = createSessionOpenController({
-    open: async (options) => ({ id: options.sessionPath ? "resumed" : "new", workspaceId: "workspace-a" }),
+    open: async (options) => { requests.push(options); return { id: options.sessionPath ? "resumed" : "new", workspaceId: "workspace-a" }; },
     onOpened: (runner) => opened.push(runner),
     getCurrentRunner: () => "current",
     getRunners: () => [{ id: "current", sessionFile: "/current.jsonl" }],
     preview: { begin: (path) => previews.push(path) },
     markEmpty: (id) => empty.push(id),
   });
-  await open({ sessionPath: "/other.jsonl" });
-  await open({});
+  await open({ sessionPath: "/other.jsonl", harness: "claude-code" });
+  await open({ harness: "claude-code" });
+  assert.deepEqual(requests, [
+    { sessionPath: "/other.jsonl", dir: null },
+    { dir: null, harness: "claude-code" },
+  ]);
   assert.deepEqual(previews, ["/other.jsonl"]);
   assert.deepEqual(empty, ["new"]);
   assert.deepEqual(opened.map(({ id, workspaceId }) => [id, workspaceId]), [["resumed", "workspace-a"], ["new", "workspace-a"]]);

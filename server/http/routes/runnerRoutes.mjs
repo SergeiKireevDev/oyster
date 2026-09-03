@@ -35,6 +35,7 @@ export function createRunnerRoutes({
   replayRunnerEvents = () => [],
   openSessionRunner,
   sessionReferenceParam,
+  runnerHarnesses = () => [{ id: "pi", label: "pi" }],
   lookupSessionReference = () => ({}),
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
@@ -53,7 +54,7 @@ export function createRunnerRoutes({
   }
   const requiredFunctions = {
     runnerFromReq, startRunner, listRunnerInfo, sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily,
-    runnerInfo, openSessionRunner, sessionReferenceParam, lookupSessionReference,
+    runnerInfo, openSessionRunner, sessionReferenceParam, runnerHarnesses, lookupSessionReference,
     setIntervalImpl, clearIntervalImpl, setTimeoutImpl,
     clearTimeoutImpl, resolvePath, isDirectory, replayRunnerEvents,
   };
@@ -140,7 +141,7 @@ export function createRunnerRoutes({
 
     "GET /runners": (_req, res) => {
       disableCaching(res);
-      json(res, 200, { runners: listRunnerInfo() });
+      json(res, 200, { runners: listRunnerInfo(), harnesses: runnerHarnesses() });
     },
 
     "POST /runner/attention/read": async (_req, res, url) => {
@@ -332,7 +333,7 @@ export function createRunnerRoutes({
         json(res, 400, { error: "request body must be a JSON object" });
         return;
       }
-      for (const key of ["sessionKey", "sessionPath", "dir"]) {
+      for (const key of ["sessionKey", "sessionPath", "dir", "harness"]) {
         if (body[key] !== undefined && (typeof body[key] !== "string" || !body[key].trim())) {
           json(res, 400, { error: `${key} must be a non-empty string` });
           return;
@@ -343,13 +344,23 @@ export function createRunnerRoutes({
         return;
       }
       const requestedSession = body.sessionKey ?? body.sessionPath;
+      const harnesses = runnerHarnesses();
+      const harness = body.harness ?? null;
+      if (harness && !harnesses.some((candidate) => candidate.id === harness)) {
+        json(res, 400, { error: `unknown or unavailable harness: ${harness}` });
+        return;
+      }
+      if (requestedSession && harness) {
+        json(res, 400, { error: "harness can only be selected for a new session" });
+        return;
+      }
       const sessionRef = requestedSession !== undefined ? sessionReferenceParam(body) : null;
       if (requestedSession && !sessionRef) {
         json(res, 400, { error: `not a session reference: ${requestedSession}` });
         return;
       }
       const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
-      if (sessionRef && !persistedSession) {
+      if (sessionRef && sessionRef.backend !== "claude-code" && !persistedSession) {
         json(res, 404, { error: `session not found: ${sessionRef.id}` });
         return;
       }
@@ -374,7 +385,7 @@ export function createRunnerRoutes({
         }
         state.currentDir = dir;
       }
-      const runner = await openSessionRunner({ sessionRef, dir });
+      const runner = await openSessionRunner({ harness, sessionRef, dir });
       json(res, 200, { runner: runnerInfo(runner) });
     },
   };

@@ -28,9 +28,9 @@ export function createFolderBrowserController({ browse, mkdir, update, updateTit
     }
   }
 
-  async function createSessionInFolder(path) {
+  async function createSessionInFolder(path, harness = null) {
     try {
-      await openAndSwitchSession({ dir: path }, { onOpened: () => setWorkdir(path) });
+      await openAndSwitchSession({ dir: path, ...(harness ? { harness } : {}) }, { onOpened: () => setWorkdir(path) });
       toast(`folder: ${path}`);
       return true;
     } catch (error) {

@@ -195,18 +195,22 @@ export function createSessionPickerRuntime(deps) {
       }
     }),
     deps.uiActions.register(SESSION_SIDEBAR_REFRESH_ACTION, refreshSidebar),
-    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, async (cwd) => {
+    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, async (request) => {
+      const cwd = typeof request === "string" ? request : request?.cwd;
+      const harness = typeof request === "object" ? request?.harness : null;
       if (!cwd) return;
       try {
-        await deps.createSessionInCwd(cwd);
-        deps.toast(`new session in: ${cwd}`);
+        await deps.createSessionInCwd({ cwd, harness });
+        deps.toast(`new ${harness ? `${harness} ` : ""}session in: ${cwd}`);
       } catch (error) {
         deps.toast(`new session failed: ${error.message}`, "error");
       }
     }),
-    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, async (workspace = null) => {
+    deps.uiActions.register(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, async (request = null) => {
+      const workspace = request && Object.hasOwn(request, "workspace") ? request.workspace : request;
+      const harness = request && Object.hasOwn(request, "harness") ? request.harness : null;
       try {
-        await deps.showFolderBrowser(workspace);
+        await deps.showFolderBrowser(workspace, harness);
       } catch (error) {
         deps.toast(`new session failed: ${error.message}`, "error");
       }

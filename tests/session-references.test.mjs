@@ -14,9 +14,10 @@ const jsonl = {
   storagePath: join(jsonlRoot, "--workspace--", "turns.jsonl"),
 };
 const sqlite = { backend: "sqlite", id: "session-sqlite", storagePath: sqlitePath };
+const claude = { backend: "claude-code", id: "session-claude", storagePath: null };
 
 test("session references round-trip through canonical URL-safe opaque keys", () => {
-  for (const reference of [jsonl, sqlite]) {
+  for (const reference of [jsonl, sqlite, claude]) {
     const key = codec.serialize(reference);
     assert.match(key, /^ps1_[A-Za-z0-9_-]+$/);
     assert.deepEqual(codec.parse(key), reference);
@@ -29,6 +30,8 @@ test("session equality includes backend, ID, and storage path", () => {
   assert.equal(codec.equals(sqlite, { ...sqlite, id: "other" }), false);
   assert.equal(codec.equals(jsonl, { ...jsonl, id: "other" }), false);
   assert.equal(codec.equals(jsonl, sqlite), false);
+  assert.equal(codec.equals(claude, { ...claude }), true);
+  assert.equal(codec.equals(claude, { ...claude, id: "other" }), false);
 });
 
 test("multiple SQLite sessions sharing one database remain distinct", () => {
@@ -42,6 +45,7 @@ test("session references reject malformed identities and traversal", () => {
   for (const reference of [
     null,
     { ...sqlite, backend: "memory" },
+    { ...claude, storagePath: "/unexpected" },
     { ...sqlite, id: "" },
     { ...sqlite, id: " leading-space" },
     { ...sqlite, id: "bad\nvalue" },

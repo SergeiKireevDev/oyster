@@ -18,7 +18,7 @@ test("app store creates its database directory and closes idempotently", async (
   assert.equal(existsSync(databasePath), true);
   assert.deepEqual(Object.keys(store.repositories), ["settings", "checkpoints", "sessions", "routines", "hublots", "pinnedWidgets", "webPush", "runners", "runnerEvents", "migrationLedger", "operations"]);
   assert.deepEqual(await store.hydrate(), { settings: [], hublots: [], incompleteOperations: [] });
-  assert.deepEqual(store.migrationStatus, { currentVersion: 17, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] });
+  assert.deepEqual(store.migrationStatus, { currentVersion: 18, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] });
   assert.equal(Object.isFrozen(store.repositories), true);
   assert.equal(store.closed, false);
 

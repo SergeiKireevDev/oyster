@@ -137,7 +137,7 @@ test("application construction defers candidate resource acquisition until activ
   for (const acquisition of [
     "createSqliteSessionCatalog",
     "createPiProcessLauncher({ config })",
-    "createPiRpcDriver({ config, processLauncher: state.piProcesses })",
+    "createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses })",
     "createRunnerManager(state",
     "scheduleHublotStartupReconciliation({ state",
   ]) {
@@ -146,7 +146,7 @@ test("application construction defers candidate resource acquisition until activ
   assert.doesNotMatch(appSource, /state\.sessionCatalog\?\.close/);
   assert.match(appSource, /scope\.defer\(\(\) => candidateCatalog\.close/);
   assert.match(appSource, /scope\.defer\(\(\) => \{ clearInterval\(reaperTimer\); clearInterval\(watchdogTimer\); \}\)/);
-  assert.match(appSource, /createRunnerManager\(state, \{ appStore, ensureSessionOwner,[\s\S]*notifyRunnerEvent:[\s\S]*unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*runnerDriver, guardCallback: scope\.guard \}\)/);
+  assert.match(appSource, /createRunnerManager\(state, \{ appStore, ensureSessionOwner,[\s\S]*notifyRunnerEvent:[\s\S]*unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*runnerDrivers, guardCallback: scope\.guard \}\)/);
   assert.match(appSource, /setTimer: \(callback, delay\) => setTimeout\(scope\.guard\(callback\), delay\)/);
   assert.match(appSource, /state\.oauthFlows\.set\(generation, oauthRegistry\)/);
   assert.match(appSource, /scope\.defer\(\(\) => state\.oauthFlows\.delete\(generation\)\)/);

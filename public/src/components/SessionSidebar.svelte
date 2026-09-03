@@ -11,6 +11,7 @@
   import { createAsyncRequestGuard } from "../lib/asyncRequestGuard.js";
   import { effectiveWorkspaceStatus, isHubRuntime, setActiveWorkspace } from "../runtime/workspaceScope.js";
   import { getWorkspaceService } from "../runtime/workspaceServiceContext.js";
+  import { getSettingsPreferences } from "../runtime/settingsPreferenceContext.js";
   import { openModal } from "../stores/modal.js";
   import { workspaceChanges } from "../stores/workspaces.js";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
@@ -31,6 +32,7 @@
 
   const uiActions = getUiActionRegistry();
   const workspaceService = getWorkspaceService();
+  const settingsPreferences = getSettingsPreferences();
   const runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__ ?? {};
   const hubMode = isHubRuntime(runtimeConfig);
   const hierarchyDefaults = {
@@ -68,6 +70,17 @@
   };
 
   let requestedEnvironmentId = $state(null);
+  const harnesses = Array.isArray(runtimeConfig.harnesses) && runtimeConfig.harnesses.length
+    ? runtimeConfig.harnesses
+    : [{ id: "pi", label: "pi" }];
+  let selectedHarness = $state(harnesses.some((harness) => harness.id === settingsPreferences.getNewSessionHarness())
+    ? settingsPreferences.getNewSessionHarness()
+    : harnesses[0].id);
+
+  function chooseHarness(event) {
+    selectedHarness = event.currentTarget.value;
+    settingsPreferences.setNewSessionHarness(selectedHarness);
+  }
 
   const switchRunner = (id) => {
     const runner = $appSession.runners.find((candidate) => candidate.id === id);
@@ -85,7 +98,7 @@
     return uiActions.invoke(SESSION_PICKER_CHOOSE_ACTION, sessionIdentity(session));
   };
   const refreshSessions = () => uiActions.invoke(SESSION_SIDEBAR_REFRESH_ACTION);
-  const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, cwd);
+  const createSessionInCwd = (cwd) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_CWD_ACTION, { cwd, harness: selectedHarness });
   const createSessionInGroup = (group) => {
     if (hubMode) {
       if (group.environmentId) requestedEnvironmentId = group.environmentId;
@@ -93,7 +106,7 @@
     }
     return createSessionInCwd(group.cwd);
   };
-  const createSessionInFolder = (workspace = null) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, workspace);
+  const createSessionInFolder = (workspace = null) => uiActions.invoke(SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION, { workspace, harness: selectedHarness });
   const openSearchHit = (group, hit) => {
     if (hubMode) {
       requestedEnvironmentId = hit.environmentId || group.first?.environmentId || selectedEnvironmentId;
@@ -811,6 +824,14 @@
     />
   </form>
   {#if !hubMode && !searching}
+    <label class="session-sidebar-harness">
+      <span>Harness</span>
+      <select aria-label="New session harness" value={selectedHarness} onchange={chooseHarness}>
+        {#each harnesses as harness (harness.id)}
+          <option value={harness.id}>{harness.label}</option>
+        {/each}
+      </select>
+    </label>
     <div class="session-sidebar-new">
       <button
         type="button"
@@ -1017,6 +1038,27 @@
   }
   .session-sidebar-search[aria-busy="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 
+  .session-sidebar-harness {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 0 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .session-sidebar-harness select {
+    min-width: 0;
+    min-height: 34px;
+    padding: 5px 28px 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+  }
+  .session-sidebar-harness select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
   .session-sidebar-new { display: flex; width: 100%; filter: drop-shadow(0 7px 18px color-mix(in srgb, var(--bg) 35%, transparent)); }
   .session-sidebar-create,
   .session-sidebar-create-folder {

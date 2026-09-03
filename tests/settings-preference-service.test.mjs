@@ -4,6 +4,7 @@ import {
   createSettingsPreferenceService,
   DARK_THEME,
   LIGHT_THEME,
+  NEW_SESSION_HARNESS_KEY,
   THEME_COLORS,
   THEME_KEY,
   THINKING_VISIBILITY_KEY,
@@ -21,6 +22,17 @@ test("settings preference service defaults thinking visibility on and reads pers
   assert.equal(service.isThinkingVisible(), false);
   values.set(THINKING_VISIBILITY_KEY, "1");
   assert.equal(service.isThinkingVisible(), true);
+});
+
+test("settings preference service remembers the new-session harness", () => {
+  const values = new Map();
+  const service = createSettingsPreferenceService({
+    storage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) },
+  });
+  assert.equal(service.getNewSessionHarness(), "");
+  assert.equal(service.setNewSessionHarness("claude-code"), "claude-code");
+  assert.equal(values.get(NEW_SESSION_HARNESS_KEY), "claude-code");
+  assert.equal(service.getNewSessionHarness(), "claude-code");
 });
 
 test("settings preference service persists thinking visibility and refreshes the runtime", () => {

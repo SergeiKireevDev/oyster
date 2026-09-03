@@ -1,6 +1,7 @@
 export const THINKING_VISIBILITY_KEY = "pi_show_thinking";
 export const THEME_KEY = "pi_theme";
 export const WEB_PUSH_KEY = "pi_web_push";
+export const NEW_SESSION_HARNESS_KEY = "oyster_new_session_harness";
 export const DARK_THEME = "dark";
 export const LIGHT_THEME = "light";
 export const THEME_COLORS = Object.freeze({
@@ -81,6 +82,14 @@ export function createSettingsPreferenceService({
   }
 
   return Object.freeze({
+    getNewSessionHarness() {
+      return storage.getItem(NEW_SESSION_HARNESS_KEY) ?? "";
+    },
+    setNewSessionHarness(harness) {
+      if (disposed) return undefined;
+      storage.setItem(NEW_SESSION_HARNESS_KEY, harness);
+      return harness;
+    },
     isThinkingVisible() {
       return storage.getItem(THINKING_VISIBILITY_KEY) !== "0";
     },

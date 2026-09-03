@@ -1,7 +1,7 @@
 import { resolve, relative, isAbsolute } from "node:path";
 
 const KEY_PREFIX = "ps1_";
-const BACKENDS = new Set(["jsonl", "sqlite"]);
+const BACKENDS = new Set(["jsonl", "sqlite", "claude-code"]);
 
 function requirePathOption(value, name, { optional = false } = {}) {
   if (optional && value === undefined) return undefined;
@@ -46,6 +46,12 @@ export function createSessionReferenceCodec({ agentDir, sqlitePath, jsonlRoot } 
     const backend = reference.backend;
     if (!BACKENDS.has(backend)) throw new Error(`unsupported session reference backend: ${backend ?? "missing"}`);
     const id = requireId(reference.id);
+    if (backend === "claude-code") {
+      if (reference.storagePath !== null && reference.storagePath !== undefined) {
+        throw new Error("Claude Code session references do not use a storagePath");
+      }
+      return Object.freeze({ backend, id, storagePath: null });
+    }
     if (typeof reference.storagePath !== "string" || !reference.storagePath) {
       throw new Error("session reference storagePath is required");
     }

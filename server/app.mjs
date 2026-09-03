@@ -21,7 +21,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
-  const { createPiRpcDriver } = await import(bust("runner-drivers/pi-rpc.mjs"));
+  const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
@@ -102,8 +102,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const webPushService = await createWebPushService({ repository: appStore.repositories.webPush });
-  const runnerDriver = createPiRpcDriver({ config, processLauncher: state.piProcesses });
-  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), runnerDriver, guardCallback: scope.guard });
+  const runnerDrivers = createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses });
+  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), runnerDrivers, guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
@@ -113,7 +113,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionReferences: { value: state.sessionReferences, methods: ["validate", "serialize"] },
     sessionOperations: { value: state.sessionOperations, methods: ["deleteSession", "forkSession"] },
     piProcesses: { value: state.piProcesses, methods: ["launch", "ephemeral"] },
-    runnerDriver: { value: runnerDriver, methods: ["launch", "decodeLine", "sendCommand", "stateCommand", "startup", "sessionReference"] },
+    runnerDrivers: { value: runnerDrivers, methods: ["get", "has", "compatible", "list"] },
     runnerManager: { value: runners, methods: ["startRunner", "stopRunner", "runnerFromReq", "startPi", "stopPi"] },
   });
   const watchdogTimer = state.runnerWatchdogTimer;
@@ -123,7 +123,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const {
     json, checkAuth,
   } = requestContext;
-  const openRoutes = createOpenRoutes({ state, listRunnerInfo, requestContext });
+  const openRoutes = createOpenRoutes({ state, listRunnerInfo, runnerHarnesses: () => runnerDrivers.list(), requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
   const {
     referenceFor: sessionReferenceFor,
@@ -140,6 +140,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
     sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
+    runnerHarnesses: () => runnerDrivers.list(),
     lookupSessionReference: async (reference) => reference.backend === state.sessionCatalog.backend
       ? await state.sessionCatalog.findById(reference.id)
       : null,

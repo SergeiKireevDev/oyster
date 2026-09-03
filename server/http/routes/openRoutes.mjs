@@ -34,11 +34,12 @@ function disableCaching(res) {
 
 /** Build the routes that intentionally bypass authentication. */
 export function createOpenRoutes(options = {}) {
-  const { state, listRunnerInfo, requestContext, authFailMax = 20 } = options;
+  const { state, listRunnerInfo, runnerHarnesses = () => [{ id: "pi", label: "pi" }], requestContext, authFailMax = 20 } = options;
   if (!state || typeof state !== "object" || !state.config || typeof state.config !== "object") {
     throw new TypeError("state.config is required");
   }
   if (typeof listRunnerInfo !== "function") throw new TypeError("listRunnerInfo is required");
+  if (typeof runnerHarnesses !== "function") throw new TypeError("runnerHarnesses is required");
   const requiredContextMethods = [
     "json", "text", "tokenMatches", "authCandidates", "clientIp",
     "recentAuthFailures", "recordAuthFailure",
@@ -68,6 +69,7 @@ export function createOpenRoutes(options = {}) {
         200,
         `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze(${JSON.stringify({
           unauthenticated: Boolean(state.config.UNAUTHENTICATED),
+          harnesses: runnerHarnesses(),
         })});\n`,
         "text/javascript; charset=utf-8",
       );

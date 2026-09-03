@@ -43,6 +43,7 @@ const JSONL_COMPATIBILITY_BOUNDARIES = new Set([
   "public/src/runtime/appCompositionRoot.js",
   "public/src/runtime/sessionRuntime.js",
   "public/src/runtime/transcriptRuntime.js",
+  "server/runner-drivers/claude-code.mjs",
   "server/runner-drivers/pi-rpc.mjs",
   "server/runners.mjs",
   "server/session-references.mjs",

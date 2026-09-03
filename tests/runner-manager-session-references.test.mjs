@@ -78,6 +78,7 @@ test("SQLite runners start and restart by ID with explicit store environment", a
   assert.deepEqual(manager.runnerInfo(runner), {
     id: runner.id,
     dir: "/workspace",
+    harness: "pi",
     sessionRef,
     sessionKey: manager.runnerInfo(runner).sessionKey,
     sessionFile: null,

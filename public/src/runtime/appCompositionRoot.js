@@ -649,7 +649,7 @@ async function chooseNewSessionWorkspace() {
   return selected ?? false;
 }
 
-async function showFolderBrowser(requestedWorkspace = null) {
+async function showFolderBrowser(requestedWorkspace = null, harness = null) {
   const workspace = requestedWorkspace || await chooseNewSessionWorkspace();
   if (workspace === false) return false;
   Object.assign(folderBrowserState, {
@@ -677,7 +677,7 @@ async function showFolderBrowser(requestedWorkspace = null) {
   const chosen = await finished;
   if (!chosen) return false;
   // Spawns a new runner in the selected workspace and folder; the current session keeps running.
-  return folderBrowserController.createSessionInFolder(chosen);
+  return folderBrowserController.createSessionInFolder(chosen, harness);
 }
 
 const createFolderBrowser = () => {
@@ -849,7 +849,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
   },
   getRunners: () => getRunners(),
   toast: addToast,
-  createSessionInCwd: (cwd) => getSessionRuntime().openAndSwitchSession({ dir: cwd }),
+  createSessionInCwd: ({ cwd, harness = null }) => getSessionRuntime().openAndSwitchSession({ dir: cwd, harness }),
   showFolderBrowser,
   stopRunner: (id) => getSessionRuntime().stopSession(id),
   async archiveSession(sessionKey, archived) {

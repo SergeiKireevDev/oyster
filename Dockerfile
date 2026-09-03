@@ -48,6 +48,7 @@ LABEL org.opencontainers.image.pi-source="git-submodule"
 # Tools the pi agent (and the UI's file explorer / routines) rely on
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates procps ripgrep lsof python3 ffmpeg \
+    && npm install --global @anthropic-ai/claude-code@2.1.259 \
     && git config --system user.name "Jane Doe" \
     && git config --system user.email "jane.doe@example.com" \
     && rm -rf /var/lib/apt/lists/*

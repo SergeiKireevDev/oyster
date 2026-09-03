@@ -15,6 +15,9 @@ Flags take precedence over their corresponding environment variables.
 | `--dir` | `PI_DIR` | current directory | Initial agent workspace |
 | `--pi` | `PI_BIN` | local development CLI | pi executable |
 | `--pi-args` | `PI_ARGS` | empty | Extra `pi --mode rpc` arguments |
+| `--claude-code` | `CLAUDE_CODE_BIN` | `claude` on `PATH`, if present | Enable the Claude Code harness with this executable |
+| — | `CLAUDE_CODE_ARGS` | empty | Extra Claude Code headless arguments, split on spaces |
+| — | `CLAUDE_CODE_PERMISSION_MODE` | `acceptEdits` | Claude Code permission mode used for remote sessions |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | Tunnel executable |
 | — | `OYSTER_HUBLOT_TUNNEL_POOL_SIZE` | `2` | Warm Quick Tunnels kept ready for auto-allocated hublots (`0` disables pooling) |
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
@@ -22,6 +25,14 @@ Flags take precedence over their corresponding environment variables.
 | — | `OYSTER_DB_PATH` | `~/.pi/agent/oyster.sqlite` | Oyster application database |
 
 Environment and workspace selection belong to Oyster Hub. A direct spoke runs inside one llmbox microVM, so its session sidebar begins at working-directory categories.
+
+## Agent harnesses
+
+The new-session controls include a **Harness** selector. pi is always available. Claude Code appears when `claude` is executable on `PATH`, when `CLAUDE_CODE_BIN` points to an executable, or when `--claude-code` supplies one. The selection is stored per runner, so stopping, restarting, and resuming a session uses the same harness.
+
+Claude Code runs in headless stream-JSON mode and uses its normal credentials (`~/.claude`, `ANTHROPIC_API_KEY`, or a configured third-party provider). Oyster does not copy pi credentials into Claude Code. The default `acceptEdits` permission mode avoids interactive edit prompts that cannot be answered through the current web protocol; set `CLAUDE_CODE_PERMISSION_MODE=default` for a more restrictive setup or provide explicit tool policy through `CLAUDE_CODE_ARGS`. Only use `bypassPermissions` inside an appropriately isolated sandbox.
+
+Claude Code session identity and harness selection are persisted through Oyster runner descriptors, while conversation data remains in Claude Code's own session store. Oyster translates the live stream into its transcript UI. pi catalog-wide search, checkpoints, and forks currently remain pi-only capabilities.
 
 Oyster keeps two auto-allocated Quick Tunnels warm by default. Each reserved port serves a no-cache “tunnel to be created here” page until a hublot claims it; Oyster then stops that dummy origin, starts the requested service on the same port, and replenishes the pool in the background. Requests for an explicit local port bypass the pool. Set `OYSTER_HUBLOT_TUNNEL_POOL_SIZE=0` to restore on-demand tunnel startup.
 
