@@ -95,7 +95,7 @@ test("composed dispatch keeps open routes public and authenticated routes protec
   const authorized = response();
   await application.handleRequest(request("/runners", { authorization: "Bearer dispatch-token" }), authorized);
   assert.equal(authorized.status, 200);
-  assert.deepEqual(JSON.parse(authorized.body), { runners: [] });
+  assert.deepEqual(JSON.parse(authorized.body), { runners: [], harnesses: [{ id: "pi", label: "pi" }] });
 });
 
 test("loopback routine and hublot requests require explicit authentication", async () => {
@@ -127,7 +127,7 @@ test("composed dispatch bypasses token checks only when the Oyster instance is e
   const runners = response();
   await application.handleRequest(request("/runners"), runners);
   assert.equal(runners.status, 200);
-  assert.deepEqual(JSON.parse(runners.body), { runners: [] });
+  assert.deepEqual(JSON.parse(runners.body), { runners: [], harnesses: [{ id: "pi", label: "pi" }] });
 
   const credentials = response();
   await application.handleRequest(request("/api-keys"), credentials);

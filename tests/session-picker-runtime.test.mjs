@@ -112,7 +112,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
   await registered.get(actionNames.SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION)(workspace);
   await registered.get(actionNames.SESSION_PICKER_ARCHIVE_ACTION)({ sessionKey: "ps1_archive" });
   await registered.get(actionNames.SESSION_SWITCH_RUNNER_ACTION)("runner-current");
-  assert.deepEqual(created, [["cwd", "/workspace/project"], ["folder", workspace]]);
+  assert.deepEqual(created, [["cwd", { cwd: "/workspace/project", harness: null }], ["folder", workspace]]);
   assert.deepEqual(switched, ["runner-current"]);
   assert.deepEqual(archived, [["ps1_archive", true]]);
   assert.deepEqual(toasts, ["new session in: /workspace/project", "session archived"]);
@@ -271,7 +271,7 @@ test("session sidebar routes switching and management through scoped actions", (
   assert.match(source, /\{@render SearchGroups\(\{ groups: \$sessionPicker\.searchResults, listKey: "local" \}\)\}/);
   assert.match(source, /createSessionInFolder\(\{ id: workspace\.workspaceId, name: workspace\.workspaceName \}\)/);
   const compositionRoot = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
-  assert.match(compositionRoot, /async function showFolderBrowser\(requestedWorkspace = null\)/);
+  assert.match(compositionRoot, /async function showFolderBrowser\(requestedWorkspace = null, harness = null\)/);
   assert.match(compositionRoot, /const workspace = requestedWorkspace \|\| await chooseNewSessionWorkspace\(\)/);
   assert.doesNotMatch(source, /class="session-sidebar-cwd-add"/);
   assert.match(source, /groupSessionsByCwd\(\$sessionPicker\.allSessions, sidebarRunners\)/);

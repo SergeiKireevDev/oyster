@@ -16,6 +16,9 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.PI_BIN;
   delete childEnv.PI_CODING_AGENT_DIR;
   delete childEnv.PI_DIR;
+  delete childEnv.CLAUDE_CODE_BIN;
+  delete childEnv.CLAUDE_CODE_ARGS;
+  delete childEnv.CLAUDE_CODE_PERMISSION_MODE;
   delete childEnv.OYSTER_DB_PATH;
   delete childEnv.OYSTER_HUBLOT_TUNNEL_POOL_SIZE;
   delete childEnv.OYSTER_UNAUTHENTICATED;
@@ -51,6 +54,16 @@ test("configuration accepts an explicit executable and JSONL rollback", () => {
   assert.equal(config.sqlitePath, null);
   assert.match(config.appDbPath, /\.pi\/agent\/oyster\.sqlite$/);
   assert.equal(config.node, process.versions.node);
+});
+
+test("configuration enables Claude Code as an optional harness", () => {
+  const result = checkConfig({ args: ["--pi", process.execPath, "--claude-code", process.execPath] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).claudeCodeBin, process.execPath);
+
+  const missing = checkConfig({ args: ["--pi", process.execPath], env: { CLAUDE_CODE_BIN: join(tmpdir(), "missing-claude") } });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /Claude Code executable is missing or not executable/);
 });
 
 test("SQLite database follows the configured agent or session directory", () => {

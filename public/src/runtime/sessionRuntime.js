@@ -125,9 +125,9 @@ export function markRunnerStopped(runners, id) {
 }
 
 /** Open or resume a runner, normalizing the server's response and errors. */
-export async function openSession(fetchImpl, { sessionKey = null, sessionPath = null, dir = null } = {}) {
+export async function openSession(fetchImpl, { sessionKey = null, sessionPath = null, dir = null, harness = null } = {}) {
   const selection = sessionOpenSelection(sessionKey ?? sessionPath);
-  const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...selection, dir }) });
+  const res = await fetchImpl("/open-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...selection, dir, ...(!selection.sessionKey && !selection.sessionPath && harness ? { harness } : {}) }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `open-session failed (${res.status})`);
   return data.runner;
@@ -267,13 +267,13 @@ export function createSessionStateApplier({ applySessionState, getState, setStat
 
 /** Orchestrate a runner open while retaining the durable-preview fast path. */
 export function createSessionOpenController({ open, onOpened = () => {}, getCurrentRunner, getRunners, preview, markEmpty, log = () => {}, now = () => performance.now() }) {
-  return async ({ sessionKey = null, sessionPath = null, dir = null } = {}) => {
+  return async ({ sessionKey = null, sessionPath = null, dir = null, harness = null } = {}) => {
     const started = now();
     const identity = sessionKey ?? sessionPath;
     log("openSessionRunner:start", { sessionIdentity: identity, dir });
     const current = getRunners().find((runner) => runner.id === getCurrentRunner());
     if (identity && identity !== runnerSessionIdentity(current)) preview.begin(identity);
-    const runner = await open({ ...sessionOpenSelection(identity), dir });
+    const runner = await open({ ...sessionOpenSelection(identity), dir, ...(!identity && harness ? { harness } : {}) });
     onOpened(runner);
     if (!identity && runner?.id) markEmpty(runner.id);
     log("openSessionRunner:done", {

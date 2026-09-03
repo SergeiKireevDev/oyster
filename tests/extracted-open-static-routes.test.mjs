@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 const appSource = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
 
 test("app composition uses extracted open and static route factories", () => {
-  assert.match(appSource, /createOpenRoutes\(\{ state, listRunnerInfo, requestContext \}\)/);
+  assert.match(appSource, /createOpenRoutes\(\{ state, listRunnerInfo, runnerHarnesses: \(\) => runnerDrivers\.list\(\), requestContext \}\)/);
   assert.match(appSource, /createStaticRoutes\(\{ config, requestContext \}\)/);
   assert.match(appSource, /createRouteTable\(\{[^}]*static: staticRoutes[^}]*open: openRoutes[^}]*\}\)/);
 });

@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { validateRunnerDriver } from "../server/runner-drivers/contract.mjs";
 import { createPiRpcDriver } from "../server/runner-drivers/pi-rpc.mjs";
+import { createRunnerDriverRegistry } from "../server/runner-drivers/registry.mjs";
 import { createRunnerManager } from "../server/runners.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
@@ -70,6 +71,43 @@ test("pi RPC driver owns pi arguments, NDJSON commands, resume, and state identi
     commands: [{ id: "resume-1", type: "switch_session", sessionPath: "/agent/sessions/one.jsonl" }],
     resumeResponseId: "resume-1",
   });
+});
+
+test("runner manager selects and persists a harness per runner", async (t) => {
+  const launches = [];
+  const rows = [];
+  const events = [];
+  const makeDriver = (id, backend) => ({
+    id, label: id,
+    isSessionCompatible: (reference) => !reference || reference.backend === backend,
+    launch({ runner }) { const process = fakeProcess(); launches.push({ id, runner, process }); return { process, description: id }; },
+    decodeLine(_runner, line) { return [JSON.parse(line)]; },
+    sendCommand(_runner, process, command) { process.stdin.write(`${JSON.stringify(command)}\n`); return true; },
+    stateCommand: (requestId) => ({ id: requestId, type: "get_state" }),
+    startup: ({ requestId }) => ({ commands: [{ id: requestId, type: "get_state" }], resumeResponseId: null }),
+    sessionReference(state, current) { return state.sessionId ? { backend, id: state.sessionId, storagePath: backend === "claude-code" ? null : "/agent/sessions.sqlite" } : current; },
+  });
+  const registry = createRunnerDriverRegistry({ drivers: [makeDriver("pi", "sqlite"), makeDriver("claude-code", "claude-code")], defaultId: "pi" });
+  const state = {
+    config: {}, currentDir: "/work", runners: new Map(), sseClients: new Set(), serverEvent() {},
+    sessionReferences: createSessionReferenceCodec({ agentDir: "/agent", jsonlRoot: "/agent/sessions", sqlitePath: "/agent/sessions.sqlite" }),
+  };
+  const appStore = { repositories: { runners: {
+    list: async () => [],
+    create: async (row) => rows.push(row),
+    update: async (_id, changes) => events.push(changes),
+  } } };
+  const manager = await createRunnerManager(state, { appStore, runnerDrivers: registry, ensureSessionOwner: () => ({ id: 7 }) });
+  t.after(async () => { clearInterval(state.runnerWatchdogTimer); clearInterval(state.runnerReaperTimer); await manager.stopPi(); });
+
+  const runner = await manager.spawnRunner({ dir: "/work", harness: "claude-code" });
+  assert.equal(runner.harness, "claude-code");
+  assert.equal(launches[0].id, "claude-code");
+  assert.equal(rows[0].harness, "claude-code");
+  launches[0].process.stdout.write(`${JSON.stringify({ type: "response", id: "state", command: "get_state", success: true, data: { sessionId: "cc-1" } })}\n`);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(runner.sessionRef, { backend: "claude-code", id: "cc-1", storagePath: null });
+  assert.equal(events.some((change) => change.session_backend === "claude-code"), true);
 });
 
 test("runner manager is driven by a non-pi process and protocol adapter", async (t) => {

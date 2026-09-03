@@ -478,21 +478,21 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         return row ? { ...row } : null;
       },
       create: async ({
-        id, ownerId = null, dir, sessionBackend = null, sessionId = null, sessionStoragePath = null,
+        id, ownerId = null, dir, harness = "pi", sessionBackend = null, sessionId = null, sessionStoragePath = null,
         sessionName = null, attentionStatus = null, attentionUnread = false, isDefault = false, desiredState = "running", lastStatus = "starting",
         startCount = 0, createdAt, lastStartedAt = null, lastStoppedAt = null,
       }) => {
         await database.run(`
           INSERT INTO runners(
-            id, owner_id, dir, session_backend, session_id, session_storage_path, session_name,
+            id, owner_id, dir, harness, session_backend, session_id, session_storage_path, session_name,
             attention_status, attention_unread, is_default, desired_state, last_status, start_count, created_at, last_started_at, last_stopped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, id, ownerId, dir, sessionBackend, sessionId, sessionStoragePath, sessionName, attentionStatus, attentionUnread ? 1 : 0, isDefault ? 1 : 0, desiredState, lastStatus, startCount, createdAt, lastStartedAt, lastStoppedAt);
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, id, ownerId, dir, harness, sessionBackend, sessionId, sessionStoragePath, sessionName, attentionStatus, attentionUnread ? 1 : 0, isDefault ? 1 : 0, desiredState, lastStatus, startCount, createdAt, lastStartedAt, lastStoppedAt);
         return rawRepositories.runners.find(id);
       },
       update: async (id, changes) => {
         const allowed = new Set([
-          "owner_id", "dir", "session_backend", "session_id", "session_storage_path", "session_name", "attention_status", "attention_unread",
+          "owner_id", "dir", "harness", "session_backend", "session_id", "session_storage_path", "session_name", "attention_status", "attention_unread",
           "is_default", "desired_state", "last_status", "start_count", "last_started_at", "last_stopped_at",
         ]);
         const entries = Object.entries(changes ?? {});

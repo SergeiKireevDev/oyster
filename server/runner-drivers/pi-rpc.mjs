@@ -23,7 +23,7 @@ export function createPiRpcDriver({ config, processLauncher } = {}) {
   requireMethod(processLauncher, "launch");
 
   return Object.freeze(validateRunnerDriver({
-    id: "pi-rpc",
+    id: "pi",
     label: "pi",
     sessionBackend: config.PERSISTENT_STORE,
 

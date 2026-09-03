@@ -44,6 +44,25 @@ async function newSession(page) {
   if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
 }
 
+test("new-session harness selector starts a Claude Code runner", async ({ page }) => {
+  await login(page);
+  await openSessionSidebar(page);
+  const harness = page.getByRole("combobox", { name: "New session harness" });
+  await expect(harness).toContainText("Claude Code");
+  await harness.selectOption("claude-code");
+  const opened = page.waitForResponse((response) => {
+    if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/open-session") return false;
+    try { return response.request().postDataJSON()?.harness === "claude-code"; }
+    catch { return false; }
+  });
+  await page.locator("#newSessionHere").click();
+  const response = await opened;
+  expect(response.ok()).toBe(true);
+  const { runner } = await response.json();
+  expect(runner.harness).toBe("claude-code");
+  await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
+});
+
 async function openSessionSidebar(page, mobile = false) {
   if (mobile) {
     for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) {

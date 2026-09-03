@@ -414,6 +414,14 @@ export const APP_MIGRATIONS = Object.freeze([
         WHERE attention_status IS NOT NULL;
     `,
   }),
+  Object.freeze({
+    version: 18,
+    name: "runner_harness",
+    sql: `
+      ALTER TABLE runners ADD COLUMN harness TEXT NOT NULL DEFAULT 'pi';
+      CREATE INDEX runners_harness_idx ON runners(harness);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

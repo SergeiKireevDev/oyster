@@ -41,7 +41,7 @@ test("runtime config exposes spoke authentication mode without secrets", async (
     await routes["GET /runtime-config.js"]({ headers: {} }, res);
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "text/javascript; charset=utf-8");
-    assert.equal(res.body, `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze({"unauthenticated":${unauthenticated}});\n`);
+    assert.equal(res.body, `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze({"unauthenticated":${unauthenticated},"harnesses":[{"id":"pi","label":"pi"}]});\n`);
     assert.equal(res.body.includes("open-token"), false);
   }
 });

@@ -115,6 +115,12 @@ function resolveExecutable(value) {
   return value;
 }
 
+function detectExecutable(value) {
+  const resolved = resolveExecutable(value);
+  try { accessSync(resolved, constants.X_OK); return resolved; }
+  catch { return null; }
+}
+
 function newestMtime(path) {
   let newest = 0;
   for (const entry of readdirSync(path, { withFileTypes: true })) {
@@ -168,6 +174,10 @@ function validateConfig(config) {
   } catch {
     throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Initialize and build the pi submodule or set PI_BIN/--pi explicitly.`);
   }
+  if (config.CLAUDE_CODE_BIN) {
+    try { accessSync(config.CLAUDE_CODE_BIN, constants.X_OK); }
+    catch { throw new Error(`Claude Code executable is missing or not executable: ${config.CLAUDE_CODE_BIN}`); }
+  }
   if (config.PI_BIN === DEFAULT_LOCAL_PI) {
     const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
     if (!existsSync(sourceRoot)) throw new Error(`local pi source is missing: ${sourceRoot}`);
@@ -178,6 +188,9 @@ function validateConfig(config) {
 }
 
 const piExtraArgs = (argValue("--pi-args") ?? process.env.PI_ARGS ?? "").split(" ").filter(Boolean);
+const requestedClaudeCodeBin = argValue("--claude-code") ?? process.env.CLAUDE_CODE_BIN ?? null;
+const claudeCodeBin = requestedClaudeCodeBin ? resolveExecutable(requestedClaudeCodeBin) : detectExecutable("claude");
+const claudeCodeArgs = (process.env.CLAUDE_CODE_ARGS ?? "").split(" ").filter(Boolean);
 const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
 const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
 const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
@@ -187,6 +200,9 @@ const config = Object.freeze({
   PI_BIN: resolveExecutable(argValue("--pi") ?? process.env.PI_BIN ?? DEFAULT_LOCAL_PI),
   PI_DIR: resolve(argValue("--dir") ?? process.env.PI_DIR ?? process.cwd()),
   PI_EXTRA_ARGS: Object.freeze(piExtraArgs),
+  CLAUDE_CODE_BIN: claudeCodeBin ? resolveExecutable(claudeCodeBin) : null,
+  CLAUDE_CODE_ARGS: Object.freeze(claudeCodeArgs),
+  CLAUDE_CODE_PERMISSION_MODE: process.env.CLAUDE_CODE_PERMISSION_MODE ?? "acceptEdits",
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -208,6 +224,7 @@ process.env.PERSISTENT_STORE = config.PERSISTENT_STORE;
 if (process.argv.includes("--check-config")) {
   console.log(JSON.stringify({
     piBin: config.PI_BIN,
+    claudeCodeBin: config.CLAUDE_CODE_BIN,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.OYSTER_DB_PATH,

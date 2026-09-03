@@ -54,8 +54,8 @@ function setup() {
       dependencies.subagentListener = listener;
       return () => { dependencies.subagentListener = null; };
     },
-    runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir, ...(selected.sessionRef ? { sessionRef: selected.sessionRef } : {}) }),
-    openSessionRunner: ({ sessionRef, dir }) => ({ id: "opened", sessionRef, dir }),
+    runnerInfo: (selected) => ({ id: selected.id, dir: selected.dir, ...(selected.harness ? { harness: selected.harness } : {}), ...(selected.sessionRef ? { sessionRef: selected.sessionRef } : {}) }),
+    openSessionRunner: ({ harness, sessionRef, dir }) => ({ id: "opened", harness, sessionRef, dir }),
     sessionReferenceParam: ({ sessionKey, sessionPath }) => {
       if (sessionKey === "sqlite-key") return { backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite" };
       if (sessionPath === "valid.jsonl") return { backend: "jsonl", id: "jsonl-id", storagePath: "/sessions/valid.jsonl" };
@@ -67,6 +67,7 @@ function setup() {
     clearTimeoutImpl: () => {},
     resolvePath: (path) => path,
     isDirectory: (path) => path !== "/allowed/file",
+    runnerHarnesses: () => [{ id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" }],
   };
   return { runner, state, intervals, cleared, replayCalls, dependencies };
 }
@@ -158,7 +159,9 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
 
   const listed = response();
   await routes["GET /runners"]({}, listed);
-  assert.deepEqual(listed.body, { runners: [{ id: "runner-1", alive: false }] });
+  assert.deepEqual(listed.body, { runners: [{ id: "runner-1", alive: false }], harnesses: [
+    { id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" },
+  ] });
 });
 
 test("runner stop and restart routes preserve selection, status, and delayed restart", async () => {
@@ -350,6 +353,26 @@ test("open-session validates session and directory inputs before opening a runne
   assert.deepEqual(sqlite.body.runner.sessionRef, {
     backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite",
   });
+});
+
+test("open-session starts a new session with the selected harness", async () => {
+  const { dependencies } = setup();
+  const route = createRunnerRoutes(dependencies)["POST /open-session"];
+
+  const opened = response();
+  await route({ body: { dir: "/allowed/project", harness: "claude-code" } }, opened);
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.runner.harness, "claude-code");
+
+  const unavailable = response();
+  await route({ body: { dir: "/allowed/project", harness: "missing" } }, unavailable);
+  assert.equal(unavailable.status, 400);
+  assert.match(unavailable.body.error, /unavailable harness/);
+
+  const savedOverride = response();
+  await route({ body: { sessionKey: "sqlite-key", harness: "claude-code" } }, savedOverride);
+  assert.equal(savedOverride.status, 400);
+  assert.match(savedOverride.body.error, /only be selected for a new session/);
 });
 
 test("open-session rejects stale SQLite IDs and uses the persisted cwd", async () => {
