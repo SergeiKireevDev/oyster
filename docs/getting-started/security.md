@@ -44,7 +44,7 @@ Do not use this mode merely because a reverse proxy provides TLS. The outer laye
 
 ## Credential boundaries
 
-Provider credentials remain in pi's `auth.json`, but authenticated users can manage them and can run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
+Provider credentials remain in agent-owned files: pi's `auth.json` and, when the Claude Code harness is enabled, Claude Code's `.credentials.json` projection of Anthropic OAuth. Authenticated users can manage these credentials and run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
 
 Removing a local API key or OAuth credential does not revoke it upstream. Revoke compromised keys and connected-app grants with the provider.
 
@@ -53,7 +53,7 @@ Removing a local API key or OAuth credential does not revoke it upstream. Revoke
 1. Expose only an HTTPS URL with valid TLS.
 2. Keep the Node listener on loopback or a trusted private interface.
 3. Use a unique, high-entropy UI token.
-4. Protect `.ui-token`, `auth.json`, SQLite files, and backups with host permissions.
+4. Protect `.ui-token`, `auth.json`, `.credentials.json`, SQLite files, and backups with host permissions.
 5. Keep Oyster, pi, Node.js, the TLS proxy, and `cloudflared` updated.
 6. Review tunnel and service logs without recording secrets.
 7. Close tunnels when remote access is no longer needed.

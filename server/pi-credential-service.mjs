@@ -118,8 +118,12 @@ export function resolveConfiguredPiSdk(piBin) {
  * Load credential primitives only from the installation owning PI_BIN.
  * No package-name import is used, preventing fallback to another global pi.
  */
-export function createPiCredentialService({ config, importSdk = (url) => import(url) } = {}) {
+export function createPiCredentialService({ config, importSdk = (url) => import(url), claudeOAuthCredentialSink = null } = {}) {
   if (!config || typeof config !== "object") throw new TypeError("config is required");
+  if (claudeOAuthCredentialSink !== null
+    && (typeof claudeOAuthCredentialSink?.project !== "function" || typeof claudeOAuthCredentialSink?.remove !== "function")) {
+    throw new TypeError("claudeOAuthCredentialSink must expose project and remove functions");
+  }
   const agentDir = config.PI_AGENT_DIR;
   if (typeof agentDir !== "string" || !isAbsolute(agentDir) || resolve(agentDir) !== agentDir) {
     throw capabilityError("validated absolute PI_AGENT_DIR is required for credential support");
@@ -373,6 +377,26 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       : adapter.authStorage.get(provider);
   }
 
+  async function restoreStoredCredential(adapter, provider, credential) {
+    if (adapter.kind === "runtime") {
+      if (credential) await adapter.authStorage.modify(provider, async () => credential);
+      else await adapter.authStorage.delete(provider);
+    } else if (credential) {
+      adapter.authStorage.set(provider, credential);
+    } else {
+      adapter.authStorage.remove(provider);
+    }
+  }
+
+  async function rollbackOrFail(adapter, provider, credential, cause) {
+    try {
+      await restoreStoredCredential(adapter, provider, credential);
+    } catch (rollbackCause) {
+      throw capabilityError("Anthropic OAuth credential synchronization and rollback failed", rollbackCause);
+    }
+    throw credentialError("claude_credential_sync_failed", "Anthropic OAuth credential could not be synchronized with Claude Code", cause);
+  }
+
   function registeredProviders(adapter) {
     return adapter.kind === "runtime"
       ? safeRegisteredProviders(adapter.modelRuntime.getProviders())
@@ -497,10 +521,19 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       if (current && replace !== true) {
         throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
       }
+      const previous = current ? structuredClone(current) : null;
       if (adapter.kind === "runtime") {
         await adapter.modelRuntime.login(providerId, "oauth", runtimeOAuthInteraction(safeCallbacks));
       } else {
         await adapter.authStorage.login(providerId, safeCallbacks);
+      }
+      if (providerId === "anthropic" && claudeOAuthCredentialSink) {
+        const credential = storedCredential(adapter, providerId);
+        try {
+          await claudeOAuthCredentialSink.project(credential);
+        } catch (cause) {
+          await rollbackOrFail(adapter, providerId, previous, cause);
+        }
       }
       return Object.freeze({ provider: providerId, credentialType: "oauth" });
     });
@@ -519,8 +552,16 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         }
         throw capabilityError("configured pi auth storage contains an unsupported credential entry");
       }
+      const previous = structuredClone(current);
       if (adapter.kind === "runtime") await adapter.modelRuntime.logout(providerId);
       else adapter.authStorage.logout(providerId);
+      if (providerId === "anthropic" && claudeOAuthCredentialSink) {
+        try {
+          await claudeOAuthCredentialSink.remove();
+        } catch (cause) {
+          await rollbackOrFail(adapter, providerId, previous, cause);
+        }
+      }
       return Object.freeze({ provider: providerId, removed: true });
     });
   }

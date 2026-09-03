@@ -19,6 +19,7 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.CLAUDE_CODE_BIN;
   delete childEnv.CLAUDE_CODE_ARGS;
   delete childEnv.CLAUDE_CODE_PERMISSION_MODE;
+  delete childEnv.CLAUDE_CONFIG_DIR;
   delete childEnv.OYSTER_DB_PATH;
   delete childEnv.OYSTER_HUBLOT_TUNNEL_POOL_SIZE;
   delete childEnv.OYSTER_UNAUTHENTICATED;
@@ -59,7 +60,15 @@ test("configuration accepts an explicit executable and JSONL rollback", () => {
 test("configuration enables Claude Code as an optional harness", () => {
   const result = checkConfig({ args: ["--pi", process.execPath, "--claude-code", process.execPath] });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).claudeCodeBin, process.execPath);
+  const config = JSON.parse(result.stdout);
+  assert.equal(config.claudeCodeBin, process.execPath);
+  assert.equal(config.claudeConfigDir, join(result.testHome, ".claude"));
+  assert.equal(config.claudeCodeProjectsDir, join(result.testHome, ".claude", "projects"));
+
+  const customClaudeDir = join(tmpdir(), "custom-claude-config");
+  const custom = checkConfig({ args: ["--pi", process.execPath, "--claude-code", process.execPath], env: { CLAUDE_CONFIG_DIR: customClaudeDir } });
+  assert.equal(custom.status, 0, custom.stderr);
+  assert.equal(JSON.parse(custom.stdout).claudeConfigDir, customClaudeDir);
 
   const missing = checkConfig({ args: ["--pi", process.execPath], env: { CLAUDE_CODE_BIN: join(tmpdir(), "missing-claude") } });
   assert.notEqual(missing.status, 0);

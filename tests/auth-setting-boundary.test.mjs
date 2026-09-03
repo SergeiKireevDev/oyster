@@ -36,6 +36,7 @@ test("general app settings reject authentication and credential keys", async (t)
 
 test("credential services and routes cannot cross into general settings or browser preferences", () => {
   const serverCredentialSources = [
+    "../server/claude-oauth-credential-sink.mjs",
     "../server/pi-credential-service.mjs",
     "../server/pi-oauth-flow-service.mjs",
     "../server/http/routes/credentialRoutes.mjs",

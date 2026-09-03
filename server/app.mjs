@@ -24,7 +24,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs")); const { createClaudeTranscriptSink } = await import(bust("persistence/claudeTranscriptSink.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
-  const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
+  const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createClaudeOAuthCredentialSink } = await import(bust("claude-oauth-credential-sink.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
   const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor, scheduleHublotStartupReconciliation } = await import(bust("persistence/hublotSupervisor.mjs"));
@@ -157,7 +157,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     pinHublot: (hublot) => ensurePinnedHublot(state, hublot),
   });
   const pinnedWidgetRoutes = createPinnedWidgetRoutes({ state, requestContext, ensureSessionOwner, listTunnels });
-  const credentialService = createPiCredentialService({ config });
+  const claudeOAuthCredentialSink = config.CLAUDE_CODE_BIN ? createClaudeOAuthCredentialSink({ configDir: config.CLAUDE_CONFIG_DIR }) : null;
+  const credentialService = createPiCredentialService({ config, claudeOAuthCredentialSink });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners });
   state.oauthFlows ??= new Map(); const oauthRegistry = new Map(); state.oauthFlows.set(generation, oauthRegistry); scope.defer(() => state.oauthFlows.delete(generation));
