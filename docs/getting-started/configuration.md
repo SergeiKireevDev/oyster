@@ -18,6 +18,7 @@ Flags take precedence over their corresponding environment variables.
 | `--claude-code` | `CLAUDE_CODE_BIN` | `claude` on `PATH`, if present | Enable the Claude Code harness with this executable |
 | — | `CLAUDE_CODE_ARGS` | empty | Extra Claude Code headless arguments, split on spaces |
 | — | `CLAUDE_CODE_PERMISSION_MODE` | `acceptEdits` | Claude Code permission mode used for remote sessions |
+| — | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude configuration root; Oyster reads transcripts from its `projects/` directory |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | Tunnel executable |
 | — | `OYSTER_HUBLOT_TUNNEL_POOL_SIZE` | `2` | Warm Quick Tunnels kept ready for auto-allocated hublots (`0` disables pooling) |
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
@@ -32,7 +33,9 @@ The new-session controls include a **Harness** selector. pi is always available.
 
 Claude Code runs in headless stream-JSON mode and uses its normal credentials (`~/.claude`, `ANTHROPIC_API_KEY`, or a configured third-party provider). Oyster does not copy pi credentials into Claude Code. The default `acceptEdits` permission mode avoids interactive edit prompts that cannot be answered through the current web protocol; set `CLAUDE_CODE_PERMISSION_MODE=default` for a more restrictive setup or provide explicit tool policy through `CLAUDE_CODE_ARGS`. Only use `bypassPermissions` inside an appropriately isolated sandbox.
 
-Claude Code session identity and harness selection are persisted through Oyster runner descriptors, while conversation data remains in Claude Code's own session store. Oyster translates the live stream into its transcript UI. pi catalog-wide search, checkpoints, and forks currently remain pi-only capabilities.
+Claude Code's project JSONL remains the conversation source of truth. With the default SQLite session store, Oyster polls the selected Claude runner's JSONL every two seconds, reconciles it through pi's SQLite repository, and reloads the transcript only when persisted messages change. Stable Claude record UUIDs make unchanged polls idempotent; an appended JSONL adds entries, while a rewritten transcript rebuilds its mirror. The resulting SQLite mirror enables the normal session catalog and search paths without changing how Claude resumes its own session.
+
+Set `CLAUDE_CONFIG_DIR` when Claude stores configuration somewhere other than `~/.claude`. The configured directory must be visible to the Oyster process. JSONL session-store rollback mode continues to use only Claude's live stream and does not create the SQLite mirror. Checkpoints and conversation forks remain pi-only capabilities.
 
 Oyster keeps two auto-allocated Quick Tunnels warm by default. Each reserved port serves a no-cache “tunnel to be created here” page until a hublot claims it; Oyster then stops that dummy origin, starts the requested service on the same port, and replenishes the pool in the background. Requests for an explicit local port bypass the pool. Set `OYSTER_HUBLOT_TUNNEL_POOL_SIZE=0` to restore on-demand tunnel startup.
 

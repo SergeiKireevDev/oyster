@@ -37,6 +37,8 @@ export function createRunnerRoutes({
   sessionReferenceParam,
   runnerHarnesses = () => [{ id: "pi", label: "pi" }],
   lookupSessionReference = () => ({}),
+  syncClaudeTranscript = async () => { throw new Error("Claude transcript sink is unavailable"); },
+  updateRunnerSessionReference = async () => {},
   setIntervalImpl = setInterval,
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
@@ -55,6 +57,7 @@ export function createRunnerRoutes({
   const requiredFunctions = {
     runnerFromReq, startRunner, listRunnerInfo, sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily,
     runnerInfo, openSessionRunner, sessionReferenceParam, runnerHarnesses, lookupSessionReference,
+    syncClaudeTranscript, updateRunnerSessionReference,
     setIntervalImpl, clearIntervalImpl, setTimeoutImpl,
     clearTimeoutImpl, resolvePath, isDirectory, replayRunnerEvents,
   };
@@ -137,6 +140,27 @@ export function createRunnerRoutes({
       json(res, queued ? 202 : 503, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
         : { error: "pi process unavailable" });
+    },
+
+    "POST /runner/transcript/sync": async (_req, res, url) => {
+      const runner = await runnerFromReq(url);
+      if (runner.harness !== "claude-code") {
+        json(res, 409, { error: "transcript polling is only available for Claude Code runners" });
+        return;
+      }
+      if (!runner.sessionId) {
+        json(res, 409, { error: "Claude Code session identity is not available yet" });
+        return;
+      }
+      try {
+        const result = await syncClaudeTranscript({ sessionId: runner.sessionId, cwd: runner.dir });
+        if (result.reference) await updateRunnerSessionReference(runner, result.reference);
+        disableCaching(res);
+        json(res, 200, result);
+      } catch (error) {
+        console.error(`[oyster] cannot sync Claude transcript ${runner.sessionId}: ${errorMessage(error)}`);
+        json(res, 500, { error: errorMessage(error) });
+      }
     },
 
     "GET /runners": (_req, res) => {

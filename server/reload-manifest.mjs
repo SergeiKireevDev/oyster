@@ -65,6 +65,7 @@ const manifest = createReloadManifest({
     "routines.mjs",
     "runner-restart-service.mjs",
     "runner-drivers/claude-code.mjs",
+    "runner-drivers/claude-transcript.mjs",
     "runner-drivers/configured.mjs",
     "runner-drivers/contract.mjs",
     "runner-drivers/pi-rpc.mjs",
@@ -93,6 +94,7 @@ const manifest = createReloadManifest({
   ],
   persistence: [
     "persistence/checkpointRollbackJournal.mjs",
+    "persistence/claudeTranscriptSink.mjs",
     "persistence/hublotScriptMaterializer.mjs",
     "persistence/hublotSupervisor.mjs",
     "persistence/processIdentity.mjs",

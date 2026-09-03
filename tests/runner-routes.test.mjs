@@ -164,6 +164,33 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   ] });
 });
 
+test("Claude transcript sync route adopts the mirrored SQLite reference", async () => {
+  const { runner, dependencies } = setup();
+  runner.harness = "claude-code";
+  runner.sessionId = "cc-session";
+  const calls = [];
+  const reference = { backend: "sqlite", id: "cc-session", storagePath: "/agent/sessions.sqlite" };
+  dependencies.syncClaudeTranscript = async (options) => {
+    calls.push(options);
+    return { found: true, changed: true, appended: 2, reference };
+  };
+  dependencies.updateRunnerSessionReference = async (selected, next) => calls.push({ runner: selected.id, reference: next });
+  const route = createRunnerRoutes(dependencies)["POST /runner/transcript/sync"];
+  const res = response();
+  await route({}, res, new URL("http://localhost/runner/transcript/sync?runner=runner-1"));
+  assert.equal(res.status, 200);
+  assert.equal(res.body.changed, true);
+  assert.deepEqual(calls, [
+    { sessionId: "cc-session", cwd: "/workspace" },
+    { runner: "runner-1", reference },
+  ]);
+
+  runner.harness = "pi";
+  const rejected = response();
+  await route({}, rejected, new URL("http://localhost/runner/transcript/sync?runner=runner-1"));
+  assert.equal(rejected.status, 409);
+});
+
 test("runner stop and restart routes preserve selection, status, and delayed restart", async () => {
   const { runner, state, intervals, dependencies } = setup();
   const familyStops = [];

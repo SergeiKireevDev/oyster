@@ -37,7 +37,19 @@ docker run --rm -p 4000:4000 \
   oyster:sqlite
 ```
 
-Do not bake credentials into an image. Claude Code sessions default to `acceptEdits`; configure `CLAUDE_CODE_PERMISSION_MODE` and `CLAUDE_CODE_ARGS` according to the container's isolation and tool policy.
+The `~/.claude` mount must be writable if Claude Code should create and resume sessions. While a Claude runner is selected, Oyster polls `/root/.claude/projects` and mirrors its JSONL transcript into `/root/.pi/agent/sessions.sqlite`; persist `/root/.pi/agent` as well if the searchable SQLite catalog should survive container replacement:
+
+```bash
+docker run --rm -p 4000:4000 \
+  -e OYSTER_TOKEN='<strong-random-token>' \
+  -e ANTHROPIC_API_KEY \
+  -v "$PWD:/workspace" \
+  -v oyster-pi-agent:/root/.pi/agent \
+  -v "$HOME/.claude:/root/.claude" \
+  oyster:sqlite
+```
+
+Set `CLAUDE_CONFIG_DIR` if the Claude configuration mount uses another in-container path. Do not bake credentials into an image. Claude Code sessions default to `acceptEdits`; configure `CLAUDE_CODE_PERMISSION_MODE` and `CLAUDE_CODE_ARGS` according to the container's isolation and tool policy.
 
 ## SQLite pi from an explicit source context
 
