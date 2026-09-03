@@ -1,6 +1,6 @@
 ---
 title: Credentials and OAuth
-description: Safely manage pi API keys and OAuth credentials from the browser.
+description: Safely manage agent API keys and OAuth credentials from the browser.
 tags: credentials, oauth, security
 ---
 
@@ -8,7 +8,7 @@ Open **Credentials…** from the application menu. The modal reads and writes cr
 
 ## Credential ownership
 
-Credentials remain in `PI_CODING_AGENT_DIR/auth.json`, normally `~/.pi/agent/auth.json`, with mode `0600`. Oyster does not copy key or token material into its SQLite database, browser storage, logs, runner state, or event stream.
+Credentials remain in `PI_CODING_AGENT_DIR/auth.json`, normally `~/.pi/agent/auth.json`, with mode `0600`. If the Claude Code harness is enabled, Anthropic OAuth is additionally translated into `CLAUDE_CONFIG_DIR/.credentials.json` so both harnesses use the same login; logout removes both copies. Oyster does not copy key or token material into its SQLite database, browser storage, logs, runner state, or event stream.
 
 A stored `auth.json` credential takes precedence over environment variables and `models.json`. Removing a stored credential may reveal one of those fallback sources, so removal does not necessarily make a provider unauthenticated.
 
@@ -26,7 +26,7 @@ OAuth flows expire after 15 minutes of inactivity and can be cancelled. For a lo
 
 ### Device-code login
 
-When an OAuth provider supports both browser and device-code login, Oyster selects device-code login automatically instead of presenting a method picker. This includes OpenAI Codex and dynamically configured Radius providers. Copy the one-time code, open the linked verification page, and enter it there. Keep the Credentials modal open while pi polls the provider; after approval, pi stores the OAuth credential and Oyster restarts the active pi processes automatically.
+When an OAuth provider supports both browser and device-code login, Oyster selects device-code login automatically instead of presenting a method picker. This includes OpenAI Codex and dynamically configured Radius providers. Copy the one-time code, open the linked verification page, and enter it there. Keep the Credentials modal open while pi polls the provider; after approval, pi stores the OAuth credential, projects Anthropic OAuth for Claude Code when enabled, and Oyster restarts the active runners automatically.
 
 Signing out removes the local OAuth credential but does not revoke the upstream grant. Revoke connected-app access with the provider when required.
 

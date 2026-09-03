@@ -12,6 +12,7 @@ const SAFE_FAILURE_CODES = new Set([
   "credential_type_conflict",
   "oauth_provider_not_found",
   "credential_service_unavailable",
+  "claude_credential_sync_failed",
 ]);
 
 function flowError(code, message) {

@@ -193,6 +193,7 @@ const claudeCodeBin = requestedClaudeCodeBin ? resolveExecutable(requestedClaude
 const claudeCodeArgs = (process.env.CLAUDE_CODE_ARGS ?? "").split(" ").filter(Boolean);
 const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
 const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
+const claudeConfigDir = resolve(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"));
 const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
 const config = Object.freeze({
   PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
@@ -203,7 +204,8 @@ const config = Object.freeze({
   CLAUDE_CODE_BIN: claudeCodeBin ? resolveExecutable(claudeCodeBin) : null,
   CLAUDE_CODE_ARGS: Object.freeze(claudeCodeArgs),
   CLAUDE_CODE_PERMISSION_MODE: process.env.CLAUDE_CODE_PERMISSION_MODE ?? "acceptEdits",
-  CLAUDE_CODE_PROJECTS_DIR: resolve(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects"),
+  CLAUDE_CONFIG_DIR: claudeConfigDir,
+  CLAUDE_CODE_PROJECTS_DIR: resolve(claudeConfigDir, "projects"),
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -226,6 +228,7 @@ if (process.argv.includes("--check-config")) {
   console.log(JSON.stringify({
     piBin: config.PI_BIN,
     claudeCodeBin: config.CLAUDE_CODE_BIN,
+    claudeConfigDir: config.CLAUDE_CONFIG_DIR,
     claudeCodeProjectsDir: config.CLAUDE_CODE_PROJECTS_DIR,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,

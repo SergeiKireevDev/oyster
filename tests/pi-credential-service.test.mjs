@@ -4,6 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, syml
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createClaudeOAuthCredentialSink } from "../server/claude-oauth-credential-sink.mjs";
 import { createPiCredentialService, resolveConfiguredPiSdk } from "../server/pi-credential-service.mjs";
 
 const LOCAL_PI = process.env.PI_BIN ?? fileURLToPath(new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url));
@@ -370,6 +371,109 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     assert.equal(stored["orphan-oauth"], undefined);
     assert.equal(stored["api-only"].key, "unrelated-replacement-canary");
     assert.equal(stored["concurrent-refresh"].refresh, "fresh-refresh");
+  } finally {
+    item.cleanup();
+  }
+});
+
+test("Anthropic OAuth login and logout project credentials into both Pi and Claude stores", async () => {
+  const item = fixture({ sdkSource: `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const provider = { id: "anthropic", name: "Anthropic", async login() {
+      return { access: "dual-access-canary", refresh: "dual-refresh-canary", expires: 1800000000000 };
+    } };
+    export class AuthStorage {
+      static create(path) { return new AuthStorage(path); }
+      constructor(path) { this.path = path; this.reload(); }
+      reload() { try { this.data = JSON.parse(readFileSync(this.path, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; this.data = {}; } }
+      drainErrors() { return []; }
+      list() { return Object.keys(this.data); }
+      get(id) { return this.data[id]; }
+      getOAuthProviders() { return [provider]; }
+      set(id, value) { this.reload(); this.data[id] = value; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      remove(id) { this.reload(); delete this.data[id]; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      async login(id, callbacks) { this.set(id, { type: "oauth", ...(await provider.login(callbacks)) }); }
+      logout(id) { this.remove(id); }
+    }
+    export class ModelRegistry { static create() { return {}; } }
+  ` });
+  try {
+    const claudeConfigDir = join(item.root, "claude");
+    mkdirSync(claudeConfigDir);
+    const claudePath = join(claudeConfigDir, ".credentials.json");
+    writeFileSync(claudePath, JSON.stringify({ untouched: { value: true } }), { mode: 0o600 });
+    const service = createPiCredentialService({
+      config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir },
+      claudeOAuthCredentialSink: createClaudeOAuthCredentialSink({ configDir: claudeConfigDir }),
+    });
+    const callbacks = { onAuth() {}, onDeviceCode() {}, async onPrompt() {}, async onSelect() {} };
+
+    assert.deepEqual(await service.loginOAuth("anthropic", callbacks), { provider: "anthropic", credentialType: "oauth" });
+    const piStored = JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8"));
+    const claudeStored = JSON.parse(readFileSync(claudePath, "utf8"));
+    assert.equal(piStored.anthropic.access, "dual-access-canary");
+    assert.equal(claudeStored.claudeAiOauth.accessToken, "dual-access-canary");
+    assert.equal(claudeStored.claudeAiOauth.refreshToken, "dual-refresh-canary");
+    assert.equal(claudeStored.claudeAiOauth.expiresAt, 1800000000000);
+    assert.deepEqual(claudeStored.untouched, { value: true });
+    assert.equal(statSync(claudePath).mode & 0o777, 0o600);
+
+    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true });
+    assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic, undefined);
+    const afterLogout = JSON.parse(readFileSync(claudePath, "utf8"));
+    assert.equal(afterLogout.claudeAiOauth, undefined);
+    assert.deepEqual(afterLogout.untouched, { value: true });
+  } finally {
+    item.cleanup();
+  }
+});
+
+test("Anthropic OAuth dual-write failures roll Pi storage back", async () => {
+  const item = fixture({ sdkSource: `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const provider = { id: "anthropic", name: "Anthropic", async login() {
+      return { access: "new-access-canary", refresh: "new-refresh-canary", expires: 1800000000000 };
+    } };
+    export class AuthStorage {
+      static create(path) { return new AuthStorage(path); }
+      constructor(path) { this.path = path; this.reload(); }
+      reload() { try { this.data = JSON.parse(readFileSync(this.path, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; this.data = {}; } }
+      drainErrors() { return []; }
+      list() { return Object.keys(this.data); }
+      get(id) { return this.data[id]; }
+      getOAuthProviders() { return [provider]; }
+      set(id, value) { this.reload(); this.data[id] = value; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      remove(id) { this.reload(); delete this.data[id]; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      async login(id, callbacks) { this.set(id, { type: "oauth", ...(await provider.login(callbacks)) }); }
+      logout(id) { this.remove(id); }
+    }
+    export class ModelRegistry { static create() { return {}; } }
+  ` });
+  try {
+    const authPath = join(item.agentDir, "auth.json");
+    const previousApiKey = { type: "api_key", key: "previous-key-canary" };
+    writeFileSync(authPath, JSON.stringify({ anthropic: previousApiKey }), { mode: 0o600 });
+    const claudeConfigDir = join(item.root, "claude");
+    mkdirSync(claudeConfigDir);
+    const claudePath = join(claudeConfigDir, ".credentials.json");
+    writeFileSync(claudePath, "{malformed", { mode: 0o600 });
+    const service = createPiCredentialService({
+      config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir },
+      claudeOAuthCredentialSink: createClaudeOAuthCredentialSink({ configDir: claudeConfigDir }),
+    });
+    const callbacks = { onAuth() {}, onDeviceCode() {}, async onPrompt() {}, async onSelect() {} };
+
+    await assert.rejects(service.loginOAuth("anthropic", callbacks, { replace: true }), {
+      code: "claude_credential_sync_failed",
+      message: "Anthropic OAuth credential could not be synchronized with Claude Code",
+    });
+    assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")).anthropic, previousApiKey);
+    assert.equal(readFileSync(claudePath, "utf8"), "{malformed");
+
+    const previousOAuth = { type: "oauth", access: "old-access-canary", refresh: "old-refresh-canary", expires: 42 };
+    writeFileSync(authPath, JSON.stringify({ anthropic: previousOAuth }), { mode: 0o600 });
+    await assert.rejects(service.logoutOAuth("anthropic"), { code: "claude_credential_sync_failed" });
+    assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")).anthropic, previousOAuth);
   } finally {
     item.cleanup();
   }

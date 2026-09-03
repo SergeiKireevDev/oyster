@@ -40,7 +40,7 @@ function context() {
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const escaped = (value) => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
-test("OAuth tokens persist only in Pi auth while callback material remains transient", async (t) => {
+test("non-Anthropic OAuth tokens remain only in Pi auth while callback material stays transient", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-oauth-canary-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const agentDir = join(root, "agent");
