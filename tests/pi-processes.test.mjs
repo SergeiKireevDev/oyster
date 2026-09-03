@@ -87,12 +87,16 @@ test("ephemeral pi processes always receive --no-session exactly once", () => {
   ]);
 });
 
-test("runner, checkpoint, and hublot code use the centralized pi launcher", () => {
+test("runner drivers, checkpoints, and hublots preserve centralized process boundaries", () => {
   for (const path of ["../server/runners.mjs", "../server/checkpoints.mjs", "../server/tunnels.mjs"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /spawn\([^\n]*(?:PI_BIN|piBin)/);
   }
-  assert.match(readFileSync(new URL("../server/runners.mjs", import.meta.url), "utf8"), /piProcesses\.launch/);
+  const runners = readFileSync(new URL("../server/runners.mjs", import.meta.url), "utf8");
+  const piDriver = readFileSync(new URL("../server/runner-drivers/pi-rpc.mjs", import.meta.url), "utf8");
+  assert.match(runners, /runnerDriver\.launch/);
+  assert.doesNotMatch(runners, /piProcesses\.launch/);
+  assert.match(piDriver, /processLauncher\.launch/);
   assert.match(readFileSync(new URL("../server/checkpoints.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
   assert.match(readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
 });

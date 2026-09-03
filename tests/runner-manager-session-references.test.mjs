@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createRunnerManager, PINNED_ARTIFACT_SYSTEM_PROMPT } from "../server/runners.mjs";
 import { createPiProcessLauncher } from "../server/pi-processes.mjs";
+import { createPiRpcDriver } from "../server/runner-drivers/pi-rpc.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
 function fakeProcess() {
@@ -40,15 +41,17 @@ async function setup(t, managerOptions = {}) {
     sessionReferences,
     serverEvent(event) { eventTimeline.push(event.type); },
   };
+  const { spawnImpl: overrideSpawn, ...runnerOptions } = managerOptions;
   state.piProcesses = createPiProcessLauncher({
     config: state.config,
-    spawnImpl(bin, args, options) {
+    spawnImpl: overrideSpawn ?? ((bin, args, options) => {
       const proc = fakeProcess();
       spawns.push({ bin, args, options, proc });
       return proc;
-    },
+    }),
   });
-  const manager = await createRunnerManager(state, { ensureSessionOwner: (reference) => owners.push(reference), ...managerOptions });
+  const runnerDriver = createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses });
+  const manager = await createRunnerManager(state, { ensureSessionOwner: (reference) => owners.push(reference), runnerDriver, ...runnerOptions });
   t.after(async () => {
     clearInterval(state.runnerWatchdogTimer);
     clearInterval(state.runnerReaperTimer);
@@ -195,7 +198,7 @@ test("new runners use unique persistence-safe IDs that survive manager reconstru
   assert.notEqual(first.id, second.id);
   assert.equal("runnerSeq" in state, false, "IDs must not depend on a process-local counter");
 
-  const reconstructed = await createRunnerManager(state, { ensureSessionOwner: () => null });
+  const reconstructed = await createRunnerManager(state, { ensureSessionOwner: () => null, runnerDriver: manager.runnerDriver });
   assert.equal(await reconstructed.runnerFromReq(new URL(`http://localhost/?runner=${first.id}`)), first);
   assert.equal(state.runners.get(first.id), first);
   assert.equal(reconstructed.listRunnerInfo().some((runner) => runner.id === first.id), true);
@@ -267,7 +270,11 @@ test("runner manager validates callback-facing state boundaries", async () => {
 
 test("runner ID generation rejects collisions instead of replacing a durable descriptor", async (t) => {
   const { state } = await setup(t);
-  const manager = await createRunnerManager(state, { createRunnerId: () => "same-runner-token", ensureSessionOwner: () => null });
+  const manager = await createRunnerManager(state, {
+    createRunnerId: () => "same-runner-token",
+    ensureSessionOwner: () => null,
+    runnerDriver: state.piProcesses && createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses }),
+  });
   await manager.spawnRunner({ dir: "/workspace" });
   await assert.rejects(() => manager.spawnRunner({ dir: "/other" }), /repeatedly returned an existing ID/);
   assert.equal(state.runners.size, 1);

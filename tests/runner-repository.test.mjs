@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import { createAppSettings } from "../server/persistence/appSettings.mjs";
 import { createPiProcessLauncher } from "../server/pi-processes.mjs";
+import { createPiRpcDriver } from "../server/runner-drivers/pi-rpc.mjs";
 import { createRunnerManager, RUNNER_EPHEMERAL_FIELDS, RUNNER_MANAGER_EPHEMERAL_FIELDS } from "../server/runners.mjs";
 import { createSessionReferenceCodec } from "../server/session-references.mjs";
 
@@ -51,8 +52,9 @@ test("asynchronous spawn errors cannot crash Oyster while runner persistence yie
       return proc;
     },
   });
+  const runnerDriver = createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses });
   const manager = await createRunnerManager(state, {
-    appStore: state.appStore,
+    appStore: state.appStore, runnerDriver,
     createRunnerId: () => "spawnerror123456",
   });
   t.after(() => {
@@ -89,8 +91,9 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
     config: state.config,
     spawnImpl() { const proc = fakeProcess(); processes.push(proc); return proc; },
   });
+  const runnerDriver = createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses });
   const manager = await createRunnerManager(state, {
-    appStore: store,
+    appStore: store, runnerDriver,
     ensureSessionOwner: () => owner,
     createRunnerId: () => "12345678-1234-4123-8123-123456789abc",
     now: () => "time",
@@ -124,7 +127,7 @@ test("runner repository persists descriptors, default selection, lifecycle, and 
   assert.equal(persisted.created_at, "time");
   assert.equal(persisted.last_started_at, "time");
   const streamReader = runner.stdoutReader;
-  const reloadedManager = await createRunnerManager(state, { appStore: store, ensureSessionOwner: () => owner, now: () => "reload" });
+  const reloadedManager = await createRunnerManager(state, { appStore: store, ensureSessionOwner: () => owner, runnerDriver, now: () => "reload" });
   assert.equal(state.runners.get(runner.id).proc, processes[0], "hot reload retains the live process handle");
   assert.equal(state.runners.get(runner.id).stdoutReader, streamReader, "hot reload retains the stream reader");
   assert.equal((await store.repositories.runners.find(runner.id)).last_status, "running", "hot reload must not interrupt a retained process");
@@ -214,7 +217,8 @@ test("runner replay and selected workdir survive restart without eager process s
     serverEvent() {},
   };
   state.piProcesses = createPiProcessLauncher({ config: state.config, spawnImpl() { spawnCount++; return fakeProcess(); } });
-  const manager = await createRunnerManager(state, { appStore: store, now: () => "now" });
+  const runnerDriver = createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses });
+  const manager = await createRunnerManager(state, { appStore: store, runnerDriver, now: () => "now" });
   t.after(async () => {
     clearInterval(state.runnerWatchdogTimer);
     clearInterval(state.runnerReaperTimer);
@@ -324,8 +328,9 @@ test("backend rollback ignores an incompatible persisted default runner without 
     currentDir: "/workspace", sseClients: new Set(), sessionReferences, serverEvent() {},
   };
   state.piProcesses = createPiProcessLauncher({ config: state.config, spawnImpl() { spawnCount++; return fakeProcess(); } });
+  const runnerDriver = createPiRpcDriver({ config: state.config, processLauncher: state.piProcesses });
   const manager = await createRunnerManager(state, {
-    appStore: store, createRunnerId: () => "87654321-4321-4321-8321-cba987654321", now: () => "now",
+    appStore: store, runnerDriver, createRunnerId: () => "87654321-4321-4321-8321-cba987654321", now: () => "now",
   });
   t.after(async () => {
     clearInterval(state.runnerWatchdogTimer);
