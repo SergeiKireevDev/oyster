@@ -1,8 +1,8 @@
 /**
- * oyster — pi runner manager
+ * oyster — coding-agent runner manager
  *
- * One durable runner descriptor per opened session, with a pi process started
- * on demand when work is sent. Live runners keep working in the background
+ * One durable runner descriptor per opened session, with a driver-managed
+ * process started on demand when work is sent. Live runners keep working in the background
  * when the browser looks at another session; each SSE client
  * subscribes to exactly one runner, and runner status (busy/idle/dead) is
  * broadcast to everyone so session lists can show live indicators.
@@ -11,7 +11,7 @@
  * state object) so they survive hot reloads of app.mjs. Each value:
  *   {
  *     id:          "r-<uuid>" – durable opaque handle used by clients (?runner=id)
- *     dir:         string   – cwd the pi process runs in
+ *     dir:         string   – cwd the coding-agent process runs in
  *     sessionRef:  object?  – backend-neutral persisted session identity
  *     sessionFile: string?  – JSONL compatibility path (never SQLite DB path)
  *     sessionId:   string?  – its session id (from get_state)
@@ -23,9 +23,9 @@
  *     lastLineAt / probeSentAt / probeMisses / watchdogOk – health watchdog
  *   }
  *
- * Watchdog: a live pi process is not necessarily a responsive one (wedged
- * RPC loop, full stdin pipe). Every WATCHDOG_INTERVAL_MS we send a cheap
- * get_state to each runner that has subscribed SSE clients; any stdout line
+ * Watchdog: a live process is not necessarily responsive (wedged protocol
+ * loop, full stdin pipe). Every WATCHDOG_INTERVAL_MS we ask the selected
+ * driver for a state command for each subscribed runner; any stdout line
  * counts as proof of life. Two consecutive silent probes → restart the
  * runner and tell its clients why. The get_state responses double as a
  * reconciler for a stuck `busy` flag (isStreaming/isCompacting overwrite it).
@@ -33,7 +33,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { createPiProcessLauncher } from "./pi-processes.mjs";
+import { validateRunnerDriver } from "./runner-drivers/contract.mjs";
 import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-titles.mjs";
 import { normalizeLastEventId, sseDataFrame } from "./sse.mjs";
 
@@ -60,7 +60,7 @@ export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
   "Do not merely mention the artifacts, and do not pin other source code, configuration, or test files solely because of this policy.",
 ].join(" ");
 
-// Pi processes that the user never sent a real message to (sessionName is
+// Coding-agent processes that never received a real message (sessionName is
 // still null) are leaked workers spawned for work that never followed through.
 // They sit idle, burning RAM and
 // cluttering the runner list. Reap them after MAX_ORPHAN_AGE_MS of nameless
@@ -115,7 +115,7 @@ function ensureRunnerRuntimeFields(runner) {
 }
 
 export async function createRunnerManager(state, {
-  spawnImpl = null, ensureSessionOwner = () => null, createRunnerId = randomUUID,
+  ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = undefined, now = () => new Date().toISOString(),
   summarizeTitle = summarizeSessionTitle,
   unarchiveSession = null,
@@ -123,6 +123,7 @@ export async function createRunnerManager(state, {
   setTimer = setTimeout,
   clearTimer = clearTimeout,
   notifyRunnerEvent = () => {},
+  runnerDriver: configuredRunnerDriver = null,
 } = {}) {
   if (!state || typeof state !== "object") throw new TypeError("runner state is required");
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
@@ -135,10 +136,7 @@ export async function createRunnerManager(state, {
   if (!(state.sseClients instanceof Set)) throw new TypeError("sseClients must be a Set");
   const runnerRepository = appStore?.repositories?.runners ?? null;
   const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
-  const piProcesses = spawnImpl
-    ? createPiProcessLauncher({ config, spawnImpl })
-    : state.piProcesses;
-  if (!piProcesses) throw new Error("pi process launcher is required");
+  const runnerDriver = validateRunnerDriver(configuredRunnerDriver);
   if (!sessionReferences) throw new Error("session reference codec is required");
 
   if (!state.runners) state.runners = new Map(); // stable id -> runner
@@ -176,9 +174,9 @@ export async function createRunnerManager(state, {
       startCount: persisted.start_count,
     }));
   }
-  const compatibleWithConfiguredBackend = (runner) => !runner?.sessionRef || runner.sessionRef.backend === config.PERSISTENT_STORE;
+  const compatibleWithConfiguredBackend = (runner) => runnerDriver.isSessionCompatible(runner?.sessionRef ?? null);
   const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1
-    && (!runner.session_backend || runner.session_backend === config.PERSISTENT_STORE));
+    && compatibleWithConfiguredBackend(state.runners.get(runner.id)));
   if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId)
     || !compatibleWithConfiguredBackend(state.runners.get(state.defaultRunnerId)))) {
     state.defaultRunnerId = null;
@@ -396,10 +394,9 @@ export async function createRunnerManager(state, {
     });
   }
 
-  /** watch a runner's stdout to maintain busy/session metadata */
-  async function trackRunner(runner, line) {
-    let msg;
-    try { msg = JSON.parse(line); } catch { return; }
+  /** Apply a canonical driver event to runner lifecycle and session metadata. */
+  async function trackRunner(runner, msg) {
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
     try { notifyRunnerEvent(runner, msg); }
     catch (error) { console.error(`[oyster] cannot notify for runner ${runner.id}: ${error?.message ?? error}`); }
     if (msg.type === "extension_ui_request") {
@@ -424,12 +421,8 @@ export async function createRunnerManager(state, {
     else if (msg.type === "response" && msg.success) {
       if (msg.command === "get_state" && msg.data) {
         const d = msg.data;
-        let nextReference = runner.sessionRef ?? null;
-        if (d.sessionId && d.sessionFile) {
-          nextReference = sessionReferences.validate({ backend: "jsonl", id: d.sessionId, storagePath: d.sessionFile });
-        } else if (d.sessionId && config.PERSISTENT_STORE === "sqlite") {
-          nextReference = sessionReferences.validate({ backend: "sqlite", id: d.sessionId, storagePath: config.SQLITE_PATH });
-        }
+        const extractedReference = runnerDriver.sessionReference(d, runner.sessionRef ?? null);
+        const nextReference = extractedReference ? sessionReferences.validate(extractedReference) : null;
         const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
         const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
         const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
@@ -462,7 +455,7 @@ export async function createRunnerManager(state, {
   }
 
   function requestState(runner) {
-    sendToRunner(runner, { id: srvId(), type: "get_state" }, { autostart: false });
+    sendToRunner(runner, runnerDriver.stateCommand(srvId()), { autostart: false });
   }
 
   /** flush commands that were held back while a session resume was in flight */
@@ -474,7 +467,7 @@ export async function createRunnerManager(state, {
     const queued = runner.resumeQueue ?? [];
     runner.resumeQueue = [];
     for (const obj of queued) {
-      if (runner.proc?.stdin.writable) runner.proc.stdin.write(JSON.stringify(obj) + "\n");
+      if (runner.proc) runnerDriver.sendCommand(runner, runner.proc, obj);
     }
   }
 
@@ -539,23 +532,19 @@ export async function createRunnerManager(state, {
     await runnerRepository?.update(runner.id, {
       desired_state: "running", last_status: "starting", start_count: runner.startCount, last_started_at: startedAt,
     });
-    const sqliteResumeArgs = runner.sessionRef?.backend === "sqlite" ? ["--session", runner.sessionRef.id] : [];
     const initialArgs = Array.isArray(runner.initialArgs) ? runner.initialArgs : [];
     runner.initialArgs = [];
-    const args = [
-      "--mode", "rpc",
-      ...sqliteResumeArgs,
-      ...initialArgs,
-      ...config.PI_EXTRA_ARGS,
-      "--append-system-prompt", PINNED_ARTIFACT_SYSTEM_PROMPT,
-    ];
-    console.log(`[oyster] spawning runner ${runner.id}: ${config.PI_BIN} ${args.join(" ")} (cwd: ${runner.dir})`);
     let proc;
     try {
-      proc = piProcesses.launch(args, {
+      const launched = runnerDriver.launch({
+        runner,
+        initialArgs,
         cwd: runner.dir,
-        stdio: ["pipe", "pipe", "pipe"],
+        systemPrompt: PINNED_ARTIFACT_SYSTEM_PROMPT,
       });
+      proc = launched?.process;
+      if (!proc) throw new Error(`runner driver ${runnerDriver.id} did not return a process`);
+      console.log(`[oyster] spawning runner ${runner.id} with ${runnerDriver.id}: ${launched.description ?? "process"} (cwd: ${runner.dir})`);
     } catch (error) {
       await runnerRepository?.update(runner.id, { last_status: "dead", last_stopped_at: now() });
       runnerEvent(runner, { type: "pi_error", error: error?.message ?? String(error) });
@@ -618,28 +607,34 @@ export async function createRunnerManager(state, {
       line = line.trim();
       if (!line) return;
       runner.lastLineAt = Date.now();
-      try { trackRunner(runner, line); }
-      catch (error) { console.error(`[oyster] cannot track runner ${runner.id} output: ${error?.message ?? error}`); }
-      runnerWrite(runner, line);
+      let events;
+      try { events = runnerDriver.decodeLine(runner, line); }
+      catch (error) {
+        console.error(`[oyster] runner driver ${runnerDriver.id} cannot decode output for ${runner.id}: ${error?.message ?? error}`);
+        return;
+      }
+      if (!Array.isArray(events)) events = events ? [events] : [];
+      for (const event of events) {
+        try { trackRunner(runner, event); }
+        catch (error) { console.error(`[oyster] cannot track runner ${runner.id} output: ${error?.message ?? error}`); }
+        runnerWrite(runner, JSON.stringify(event));
+      }
     });
 
     proc.stderr.on("data", (chunk) => {
       const text = String(chunk).trim();
-      if (text) console.error(`[pi ${runner.id} stderr] ${text}`);
+      if (text) console.error(`[${runnerDriver.id} ${runner.id} stderr] ${text}`);
     });
 
-    // JSONL resumes retain the RPC switch contract. SQLite identity is not a
-    // file, so it is selected atomically at process startup with --session.
-    // Hold commands only for the JSONL switch race.
-    if (runner.sessionRef?.backend === "jsonl") {
-      runner.resumeId = srvId();
-      proc.stdin.write(JSON.stringify({ id: runner.resumeId, type: "switch_session", sessionPath: runner.sessionRef.storagePath }) + "\n");
-      // safety valve: never hold commands forever if the response goes missing
+    const startupRequestId = srvId();
+    const startup = runnerDriver.startup({ runner, requestId: startupRequestId }) ?? {};
+    runner.resumeId = startup.resumeResponseId ?? null;
+    for (const command of startup.commands ?? []) runnerDriver.sendCommand(runner, proc, command);
+    if (runner.resumeId) {
+      // Safety valve: never hold commands forever if a driver's resume response goes missing.
       clearTimeout(runner.resumeTimer);
       runner.resumeTimer = setTimeout(() => finishResume(runner), 15000);
       runner.resumeTimer.unref?.();
-    } else {
-      requestState(runner);
     }
     // Publish alive=true before pi_started. Clients use the start event to
     // request authoritative state, so delivering it first would leave a race
@@ -704,12 +699,12 @@ export async function createRunnerManager(state, {
 
   async function sendToRunner(runner, obj, { autostart = true } = {}) {
     if (!runner.proc && autostart) await startRunner(runner);
-    if (!runner.proc || !runner.proc.stdin.writable) return false;
+    if (!runner.proc) return false;
     if (runner.resumeId) {
       // a session resume is in flight; deliver after it completes
       (runner.resumeQueue ??= []).push(obj);
-    } else {
-      runner.proc.stdin.write(JSON.stringify(obj) + "\n");
+    } else if (!runnerDriver.sendCommand(runner, runner.proc, obj)) {
+      return false;
     }
     if (obj.type === "prompt") {
       setRunnerAttention(runner, null, false);
@@ -752,8 +747,8 @@ export async function createRunnerManager(state, {
         if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) return r;
       }
     }
-    // Brand-new sessions need pi to establish their durable identity. Saved
-    // sessions already have an identity and can remain dormant while read.
+    // Brand-new sessions need the driver to establish their durable identity.
+    // Saved sessions already have an identity and can remain dormant while read.
     return spawnRunner({ dir: dir || state.currentDir, sessionRef: reference, autostart: !reference });
   }
 
@@ -787,7 +782,7 @@ export async function createRunnerManager(state, {
           runner.probeMisses = 0;
           runnerEvent(runner, {
             type: "runner_unhealthy",
-            reason: "pi did not answer health probes", action: "restart",
+            reason: `${runnerDriver.label ?? runnerDriver.id} did not answer health probes`, action: "restart",
           });
           stopRunner(runner);
           startRunner(runner);
@@ -833,15 +828,19 @@ export async function createRunnerManager(state, {
   state.runnerReaperTimer = setInterval(guardCallback(reaperTick), ORPHAN_REAP_INTERVAL_MS);
   state.runnerReaperTimer.unref?.();
 
-  // Startup and read-only session selection only restore descriptors. An RPC
-  // command that requests work starts the selected process.
-  function startPi() {}
-  async function stopPi() { await Promise.all([...state.runners.values()].map((runner) => stopRunner(runner))); }
+  // Startup and read-only session selection only restore descriptors. A command
+  // that requests work starts the selected process.
+  function startDrivers() {}
+  async function stopDrivers() { await Promise.all([...state.runners.values()].map((runner) => stopRunner(runner))); }
+  // Stable application lifecycle aliases retained for API compatibility.
+  const startPi = startDrivers;
+  const stopPi = stopDrivers;
 
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
     defaultRunner, runnerFromReq, openSessionRunner,
-    startPi, stopPi,
+    startDrivers, stopDrivers, startPi, stopPi,
+    runnerDriver,
   };
 }

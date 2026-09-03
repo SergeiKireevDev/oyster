@@ -21,6 +21,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
+  const { createPiRpcDriver } = await import(bust("runner-drivers/pi-rpc.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
@@ -101,7 +102,8 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const webPushService = await createWebPushService({ repository: appStore.repositories.webPush });
-  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), guardCallback: scope.guard });
+  const runnerDriver = createPiRpcDriver({ config, processLauncher: state.piProcesses });
+  const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), runnerDriver, guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
@@ -111,6 +113,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionReferences: { value: state.sessionReferences, methods: ["validate", "serialize"] },
     sessionOperations: { value: state.sessionOperations, methods: ["deleteSession", "forkSession"] },
     piProcesses: { value: state.piProcesses, methods: ["launch", "ephemeral"] },
+    runnerDriver: { value: runnerDriver, methods: ["launch", "decodeLine", "sendCommand", "stateCommand", "startup", "sessionReference"] },
     runnerManager: { value: runners, methods: ["startRunner", "stopRunner", "runnerFromReq", "startPi", "stopPi"] },
   });
   const watchdogTimer = state.runnerWatchdogTimer;
