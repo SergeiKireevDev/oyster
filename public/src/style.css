@@ -1029,6 +1029,30 @@ html[data-theme="light"] .toast.error { box-shadow: inset 3px 0 0 color-mix(in s
 #modal.markdown-reader-modal { width: min(1120px, calc(100vw - 32px)); max-width: 1120px; height: min(92dvh, 940px); max-height: calc(100dvh - 32px); }
 #modal.markdown-reader-modal .m-body { display: flex; min-height: 0; flex: 1; padding: 6px 12px 12px; overflow: hidden; }
 #modal.markdown-reader-modal .pinned-widget-viewer { min-height: 0; flex: 1; }
+#overlay:has(#modal.markdown-reader-modal .mermaid-explorer) {
+  padding:
+    max(4px, env(safe-area-inset-top))
+    max(4px, env(safe-area-inset-right))
+    max(4px, env(safe-area-inset-bottom))
+    max(4px, env(safe-area-inset-left));
+}
+#modal.markdown-reader-modal:has(.mermaid-explorer) {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 8px;
+}
+#modal.markdown-reader-modal:has(.mermaid-explorer) .m-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+#modal.markdown-reader-modal:has(.mermaid-explorer) .m-body { padding: 0; }
 #modal .pinned-widget-viewer-arrow { min-width: 34px; padding-inline: 9px; font-size: 16px; line-height: 1; }
 #modal .pinned-widget-viewer-arrow:disabled { opacity: .4; cursor: default; transform: none; }
 .pinned-monitor-output { box-sizing: border-box; width: max-content; min-width: 100%; min-height: 100%; margin: 0; padding: 18px; color: #d9e1ec; font: 12px/1.55 var(--mono); white-space: pre; tab-size: 4; }

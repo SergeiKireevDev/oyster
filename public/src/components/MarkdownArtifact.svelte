@@ -3,8 +3,8 @@
   import SanitizedMarkdown from "./SanitizedMarkdown.svelte";
   import { createDiagramGestureController, DEFAULT_TRANSFORM } from "../lib/diagramGestureController.js";
 
-  /** @type {{ source?: string; label?: string }} */
-  let { source = "", label = "Markdown artifact" } = $props();
+  /** @type {{ source?: string; label?: string; onExploreChange?: ((active: boolean) => void) | null }} */
+  let { source = "", label = "Markdown artifact", onExploreChange = null } = $props();
 
   const ZOOM_LEVELS = Object.freeze([50, 75, 100, 125, 150, 200, 300, 400, 600, 800, 1000, 1200]);
   const hasRenderableContent = $derived(source.trim().length > 0);
@@ -33,11 +33,13 @@
   function exploreDiagram(diagram) {
     exploredDiagram = diagram;
     explorerGestures.reset();
+    onExploreChange?.(true);
   }
 
   function closeExplorer() {
     exploredDiagram = null;
     explorerGestures.reset();
+    onExploreChange?.(false);
   }
 
   function zoomOut() {
@@ -68,7 +70,7 @@
           <button type="button" class="chip" onclick={zoomOut} disabled={!canZoomOut} aria-label="Zoom out">−</button>
           <button type="button" class="chip" onclick={resetView} disabled={zoomPercent === 100 && viewTransform.x === 0 && viewTransform.y === 0}>Center</button>
           <button type="button" class="chip" onclick={zoomIn} disabled={!canZoomIn} aria-label="Zoom in">+</button>
-          <button type="button" class="chip mermaid-explorer-close" onclick={closeExplorer}>Back to reader</button>
+          <button type="button" class="chip mermaid-explorer-close" data-modal-cancel onclick={closeExplorer}>Back to reader</button>
         </div>
       </header>
       <div
@@ -117,12 +119,15 @@
   .markdown-artifact {
     display: grid;
     width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 100%;
   }
 
   .mermaid-explorer {
     display: flex;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 100%;
     flex-direction: column;
@@ -210,25 +215,28 @@
 
   @media (max-width: 620px) {
     .mermaid-explorer-toolbar {
-      align-items: flex-start;
-      flex-direction: column;
+      min-height: 44px;
+      gap: 5px;
+      padding: 4px 6px;
     }
 
     .mermaid-explorer-heading {
-      flex-wrap: wrap;
+      flex: none;
     }
 
+    .mermaid-explorer-heading strong,
     .mermaid-explorer-hint {
-      width: 100%;
-      order: 3;
+      display: none;
     }
 
     .mermaid-explorer-actions {
-      width: 100%;
+      flex: 1;
+      gap: 4px;
     }
 
     .mermaid-explorer-actions .chip {
-      min-height: 40px;
+      min-height: 36px;
+      padding-inline: 8px;
     }
 
     .mermaid-explorer-close {
