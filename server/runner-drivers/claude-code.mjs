@@ -1,88 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { validateRunnerDriver } from "./contract.mjs";
+import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs";
 
 function nonEmpty(value, name) {
   if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
   return value.trim();
-}
-
-function finite(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : 0;
-}
-
-function timestamp(value) {
-  const parsed = Date.parse(value ?? "");
-  return Number.isFinite(parsed) ? parsed : Date.now();
-}
-
-function textContent(content) {
-  if (typeof content === "string") return [{ type: "text", text: content }];
-  if (!Array.isArray(content)) return [];
-  return content.flatMap((block) => {
-    if (block?.type === "text") return [{ type: "text", text: String(block.text ?? "") }];
-    if (block?.type === "thinking") return [{ type: "thinking", thinking: String(block.thinking ?? ""), ...(block.signature ? { thinkingSignature: block.signature } : {}) }];
-    if (block?.type === "tool_use") return [{ type: "toolCall", id: String(block.id ?? randomUUID()), name: String(block.name ?? "tool"), arguments: block.input && typeof block.input === "object" ? block.input : {} }];
-    if (block?.type === "image" && block.source?.type === "base64") return [{ type: "image", data: String(block.source.data ?? ""), mimeType: String(block.source.media_type ?? "application/octet-stream") }];
-    return [];
-  });
-}
-
-function usageFrom(message, totalCost = 0) {
-  const usage = message?.usage ?? {};
-  const input = finite(usage.input_tokens);
-  const output = finite(usage.output_tokens);
-  const cacheRead = finite(usage.cache_read_input_tokens);
-  const cacheWrite = finite(usage.cache_creation_input_tokens);
-  return {
-    input, output, cacheRead, cacheWrite,
-    totalTokens: input + output + cacheRead + cacheWrite,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: finite(totalCost) },
-  };
-}
-
-function stopReason(reason) {
-  return ({ end_turn: "stop", stop_sequence: "stop", max_tokens: "length", tool_use: "toolUse" })[reason] ?? "stop";
-}
-
-function assistantMessage(record) {
-  const message = record.message ?? {};
-  return {
-    role: "assistant",
-    content: textContent(message.content),
-    api: "anthropic-messages",
-    provider: "anthropic",
-    model: String(message.model ?? record.model ?? "claude"),
-    ...(message.id ? { responseId: message.id } : {}),
-    usage: usageFrom(message),
-    stopReason: record.error ? "error" : stopReason(message.stop_reason),
-    ...(record.error ? { errorMessage: String(message.content?.[0]?.text ?? record.error) } : {}),
-    timestamp: timestamp(record.timestamp),
-  };
-}
-
-function toolResults(record, runtime) {
-  const blocks = Array.isArray(record.message?.content) ? record.message.content : [];
-  return blocks.filter((block) => block?.type === "tool_result").flatMap((block) => {
-    const toolCallId = String(block.tool_use_id ?? "");
-    if (!toolCallId) return [];
-    const content = textContent(block.content).filter((item) => item.type === "text" || item.type === "image");
-    return [{
-      role: "toolResult",
-      toolCallId,
-      toolName: runtime.toolNames.get(toolCallId) ?? "tool",
-      content: content.length ? content : [{ type: "text", text: "" }],
-      isError: block.is_error === true,
-      timestamp: timestamp(record.timestamp),
-    }];
-  });
-}
-
-function userMessage(record) {
-  const content = textContent(record.message?.content).filter((item) => item.type === "text" || item.type === "image");
-  if (!content.length) return null;
-  return { role: "user", content, timestamp: timestamp(record.timestamp) };
 }
 
 function response(id, command, data, success = true, error = undefined) {
@@ -122,6 +45,7 @@ export function createClaudeCodeDriver({
   extraArgs = [],
   spawnImpl = spawn,
   permissionMode = "default",
+  sqlitePath = null,
 } = {}) {
   const executable = nonEmpty(bin, "Claude Code executable");
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError("Claude Code arguments must be strings");
@@ -131,7 +55,7 @@ export function createClaudeCodeDriver({
     label: "Claude Code",
 
     isSessionCompatible(reference) {
-      return !reference || reference.backend === "claude-code";
+      return !reference || reference.backend === "claude-code" || (Boolean(sqlitePath) && reference.backend === "sqlite");
     },
 
     launch({ runner, cwd, systemPrompt }) {
@@ -175,16 +99,15 @@ export function createClaudeCodeDriver({
         for (const block of message.content) if (block.type === "toolCall") runtime.toolNames.set(block.id, block.name);
         events.push({ type: "message_start", message }, { type: "message_end", message });
       } else if (record.type === "user") {
-        const results = toolResults(record, runtime);
-        for (const message of results) {
+        const messages = claudeRecordMessages(record, runtime.toolNames);
+        for (const message of messages) {
           runtime.messages.push(message);
-          events.push({ type: "tool_execution_end", toolCallId: message.toolCallId, result: message, isError: message.isError });
-          events.push({ type: "message_end", message });
-        }
-        const user = userMessage(record);
-        if (user && !results.length) {
-          runtime.messages.push(user);
-          events.push({ type: "message_start", message: user });
+          if (message.role === "toolResult") {
+            events.push({ type: "tool_execution_end", toolCallId: message.toolCallId, result: message, isError: message.isError });
+            events.push({ type: "message_end", message });
+          } else {
+            events.push({ type: "message_start", message });
+          }
         }
       } else if (record.type === "result") {
         runtime.streaming = false;
@@ -247,7 +170,9 @@ export function createClaudeCodeDriver({
     sessionReference(state, currentReference) {
       const id = state?.sessionId ?? currentReference?.id;
       if (!id) return null;
-      return { backend: "claude-code", id, storagePath: null };
+      return sqlitePath
+        ? { backend: "sqlite", id, storagePath: sqlitePath }
+        : { backend: "claude-code", id, storagePath: null };
     },
   }));
 }

@@ -760,6 +760,29 @@ export async function createRunnerManager(state, {
     return (requested && compatibleWithConfiguredBackend(requested)) ? requested : await defaultRunner();
   }
 
+  /** Adopt a durable identity created outside the runner protocol (for example a transcript sink). */
+  async function updateRunnerSessionReference(runner, reference) {
+    if (!runner || !state.runners.has(runner.id)) throw new Error("runner is unavailable");
+    const nextReference = sessionReferences.validate(reference);
+    if (!driverFor(runner).isSessionCompatible(nextReference)) {
+      throw new Error(`session ${nextReference.id} is incompatible with harness ${runner.harness}`);
+    }
+    const changed = !runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference);
+    runner.sessionRef = nextReference;
+    runner.sessionFile = nextReference.backend === "jsonl" ? nextReference.storagePath : null;
+    runner.sessionId = nextReference.id;
+    if (!changed) return runnerInfo(runner);
+    const owner = await ensureSessionOwner(nextReference);
+    await runnerRepository?.update(runner.id, {
+      owner_id: owner?.id ?? null,
+      session_backend: nextReference.backend,
+      session_id: nextReference.id,
+      session_storage_path: nextReference.storagePath ?? null,
+    });
+    runnersChanged(runner);
+    return runnerInfo(runner);
+  }
+
   /** Reuse the runner attached to the full session identity, else spawn one. */
   async function openSessionRunner({ harness = null, sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
     const inputReference = sessionRef ?? (sessionPath && sessionId
@@ -865,7 +888,7 @@ export async function createRunnerManager(state, {
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
-    defaultRunner, runnerFromReq, openSessionRunner,
+    defaultRunner, runnerFromReq, openSessionRunner, updateRunnerSessionReference,
     startDrivers, stopDrivers, startPi, stopPi,
     runnerDriver: runnerDrivers.get(runnerDrivers.defaultId), runnerDrivers,
   };

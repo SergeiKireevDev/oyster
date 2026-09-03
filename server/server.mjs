@@ -203,6 +203,7 @@ const config = Object.freeze({
   CLAUDE_CODE_BIN: claudeCodeBin ? resolveExecutable(claudeCodeBin) : null,
   CLAUDE_CODE_ARGS: Object.freeze(claudeCodeArgs),
   CLAUDE_CODE_PERMISSION_MODE: process.env.CLAUDE_CODE_PERMISSION_MODE ?? "acceptEdits",
+  CLAUDE_CODE_PROJECTS_DIR: resolve(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects"),
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -225,6 +226,7 @@ if (process.argv.includes("--check-config")) {
   console.log(JSON.stringify({
     piBin: config.PI_BIN,
     claudeCodeBin: config.CLAUDE_CODE_BIN,
+    claudeCodeProjectsDir: config.CLAUDE_CODE_PROJECTS_DIR,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.OYSTER_DB_PATH,

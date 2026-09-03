@@ -9,6 +9,7 @@ import { createPlatformAssembly } from "../platform/createPlatformAssembly.js";
 import { installDebugHooks } from "./debugHooks.js";
 import { createLifecycleLogger } from "./lifecycleLogger.js";
 import { createLifecycleAssembly, createLifecycleDelayedTasks } from "./createLifecycleAssembly.js";
+import { createClaudeTranscriptPoller } from "./claudeTranscriptPoller.js";
 import { createFeatureAssembly } from "./featureAssembly.js";
 import { createSessionAssembly } from "../features/sessions/createSessionAssembly.js";
 import { createTranscriptAssembly } from "../features/transcript/createTranscriptAssembly.js";
@@ -412,6 +413,18 @@ transcriptAssembly.configureSynchronization({
   logPostSend: (status, sessionFile) => lifecycleLog("postSendFileSync:session-messages:stop", { status, sessionFile }),
 });
 const reloadTranscript = transcriptOperations.reloadTranscript;
+const claudeTranscriptPoller = createClaudeTranscriptPoller({
+  getRunner: () => getRunners().find((runner) => runner.id === getCurrentRunner()) ?? null,
+  sync: async (runner) => {
+    const response = await fetch(`/runner/transcript/sync?runner=${encodeURIComponent(runner.id)}`, { method: "POST" });
+    if (response.status === 409) return { changed: false };
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Claude transcript sync failed (${response.status})`);
+    return result;
+  },
+  reload: () => reloadTranscript(),
+  onError: (error) => lifecycleLog("claudeTranscriptPoller:error", { error: error?.message ?? String(error) }),
+});
 const syncTranscriptSoon = transcriptOperations.syncTranscriptSoon;
 const agentStart = transcriptOperations.agentStart;
 const agentCompletion = transcriptOperations.agentCompletion;
@@ -1075,6 +1088,7 @@ const detachRuntimeEventAdapters = () => {
   detachCheckpointTreeActions();
   detachSessionPickerActions();
   transcriptAssembly.teardown();
+  claudeTranscriptPoller.teardown();
   resourceAssembly.teardown();
   credentialsAssembly.teardown();
   tutorialAssembly.teardown();
@@ -1095,6 +1109,7 @@ return createLifecycleAssembly({
   start: {
     hasToken: () => Boolean(token), validateToken, requireToken, boot,
     onAuthenticatedStart: () => {
+      claudeTranscriptPoller.start();
       // Do not gate sidebar/resource discovery on the canonical transcript reload.
       void sessionPickerRuntime.refreshSidebar();
       void loadHublots();

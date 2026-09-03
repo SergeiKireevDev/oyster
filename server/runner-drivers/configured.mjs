@@ -14,6 +14,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         bin: config.CLAUDE_CODE_BIN,
         extraArgs: config.CLAUDE_CODE_ARGS,
         permissionMode: config.CLAUDE_CODE_PERMISSION_MODE,
+        sqlitePath: config.SQLITE_PATH,
       })] : []),
     ],
   });

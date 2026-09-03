@@ -62,6 +62,12 @@ test("Claude Code driver launches new and resumed stream-json sessions", () => {
   assert.deepEqual(launches[1].args.slice(8, 10), ["--resume", "cc-session"]);
   assert.equal(driver.isSessionCompatible(resumed.sessionRef), true);
   assert.equal(driver.isSessionCompatible({ backend: "sqlite" }), false);
+
+  const mirrored = createClaudeCodeDriver({ bin: "/bin/claude", sqlitePath: "/agent/sessions.sqlite", spawnImpl: () => fakeProcess() });
+  assert.equal(mirrored.isSessionCompatible({ backend: "sqlite", id: "cc-session", storagePath: "/agent/sessions.sqlite" }), true);
+  assert.deepEqual(mirrored.sessionReference({ sessionId: "cc-session" }), {
+    backend: "sqlite", id: "cc-session", storagePath: "/agent/sessions.sqlite",
+  });
 });
 
 test("installed Claude Code accepts the driver's stream-json launch contract", {
