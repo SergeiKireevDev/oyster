@@ -71,7 +71,7 @@ export default defineConfig({
   // Docker matrix. Retry once in a fresh per-test container; deterministic
   // product failures still fail on the second attempt with retained traces.
   retries: 1,
-  timeout: 6 * 60 * 1000, // per test (hublot agent + tunnel can take minutes)
+  timeout: 60 * 1000, // fail stalled tests quickly; E2E tunnels are deterministic mocks
   expect: { timeout: 30 * 1000 },
   globalSetup: "./global-setup.js",
   globalTeardown: "./global-teardown.js",
