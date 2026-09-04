@@ -147,10 +147,38 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.equal(toolEvents[1].message.content[0].text, "ok");
 
   driver.sendCommand(runner, child, { id: "models", type: "get_available_models" });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(localEvents.find((event) => event.id === "models").data.models.map((model) => model.id), [
-    "default", "sonnet", "opus", "haiku", "fable", "claude-sonnet-4-5",
-  ]);
+  assert.deepEqual(line(child.stdin), {
+    type: "control_request", request_id: "oyster-models-models", request: { subtype: "list_models" },
+  });
+  const modelEvents = driver.decodeLine(runner, JSON.stringify({
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: "oyster-models-models",
+      response: { models: [
+        { value: "default", resolvedModel: "claude-sonnet-5", displayName: "Default (recommended)", description: "Sonnet 5" },
+        { value: "astra", resolvedModel: "claude-astra-1", displayName: "Astra" },
+        { value: "astra", resolvedModel: "duplicate" },
+        { value: "disabled-model", displayName: "Disabled", disabled: true },
+        { displayName: "Missing value" },
+      ] },
+    },
+  }));
+  assert.deepEqual(modelEvents, [{
+    type: "response", id: "models", command: "get_available_models", success: true,
+    data: { models: [
+      { provider: "anthropic", id: "default", name: "Default (recommended)", description: "Sonnet 5", resolvedModel: "claude-sonnet-5" },
+      { provider: "anthropic", id: "astra", name: "Astra", resolvedModel: "claude-astra-1" },
+      { provider: "anthropic", id: "claude-sonnet-4-5" },
+    ] },
+  }]);
+  driver.sendCommand(runner, child, { id: "models-error", type: "get_available_models" });
+  assert.deepEqual(line(child.stdin).request, { subtype: "list_models" });
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({
+    type: "control_response", response: { subtype: "error", request_id: "oyster-models-models-error", error: "catalog unavailable" },
+  })), [{
+    type: "response", id: "models-error", command: "get_available_models", success: false, error: "catalog unavailable",
+  }]);
   assert.equal(driver.sendCommand(runner, child, { id: "model-1", type: "set_model", provider: "anthropic", modelId: "opus" }), true);
   assert.deepEqual(line(child.stdin), {
     type: "control_request", request_id: "oyster-model-model-1", request: { subtype: "set_model", model: "opus" },
