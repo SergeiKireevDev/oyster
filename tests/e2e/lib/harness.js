@@ -56,7 +56,7 @@ export function dexec(cmd, { allowFail = false } = {}) {
 }
 
 /** Stable logical snapshot of the coding-agent SQLite store (ignores WAL/header churn). */
-export function sqliteSessionManifest(path = "/root/.pi/agent/sessions.sqlite") {
+export function sqliteSessionManifest(path = "/home/node/.pi/agent/sessions.sqlite") {
   const script = `
     import { DatabaseSync } from "node:sqlite";
     const db = new DatabaseSync(process.argv[1], { readOnly: true });

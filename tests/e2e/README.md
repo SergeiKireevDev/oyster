@@ -26,7 +26,7 @@ no network model calls, fully deterministic**.
 The image bundles a mock LLM, so no host credentials or external model access
 are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`,
 `E2E_MOCK_TUNNELS=1`, `PERSISTENT_STORE=sqlite`, and a fresh named volume
-at `/root/.pi/agent`. Set `E2E_MOCK_TUNNELS=0` in a persistent test/staging
+at `/home/node/.pi/agent`. The image runs Oyster as the unprivileged `node` user. Set `E2E_MOCK_TUNNELS=0` in a persistent test/staging
 container to retain the deterministic model while using real Cloudflare Quick
 Tunnels.
 The SQLite persistence scenario retains that volume across deliberate container

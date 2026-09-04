@@ -19,7 +19,7 @@ function installSecuredMockProvider() {
     },
   };
   const encoded = Buffer.from(JSON.stringify(config)).toString("base64");
-  dexec(`printf %s ${encoded} | base64 -d > /root/.pi/agent/models.json`);
+  dexec(`printf %s ${encoded} | base64 -d > /home/node/.pi/agent/models.json`);
 }
 
 async function openApiKeys(page, { expectActive = false } = {}) {
@@ -100,6 +100,6 @@ test("API Keys menu adds, replaces, and removes a mock provider key without expo
   await confirmYes(page);
   await waitForStoredType(null);
   await expectModelAvailability(page, false);
-  expect(dexec(`grep -F ${JSON.stringify(firstKey)} /root/.pi/agent/auth.json >/dev/null; echo $?`)).not.toBe("0");
-  expect(dexec(`grep -F ${JSON.stringify(replacementKey)} /root/.pi/agent/auth.json >/dev/null; echo $?`)).not.toBe("0");
+  expect(dexec(`grep -F ${JSON.stringify(firstKey)} /home/node/.pi/agent/auth.json >/dev/null; echo $?`)).not.toBe("0");
+  expect(dexec(`grep -F ${JSON.stringify(replacementKey)} /home/node/.pi/agent/auth.json >/dev/null; echo $?`)).not.toBe("0");
 });
