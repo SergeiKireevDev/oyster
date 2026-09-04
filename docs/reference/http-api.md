@@ -52,16 +52,16 @@ Canonical session references are opaque `ps1_…` keys. JSONL path parameters re
 
 | Route | Purpose |
 |---|---|
-| `GET /api-keys` | Return safe provider and source status, never key material |
+| `GET /api-keys` | Return safe provider, harness, and source status, never key material |
 | `POST /api-keys` | Save or replace an API key |
 | `DELETE /api-keys` | Remove a locally stored API key |
-| `POST /oauth/start` | Begin a transient Pi-owned OAuth flow |
+| `POST /oauth/start` | Begin a transient OAuth flow for pi or Claude Code |
 | `POST /oauth/status` | Poll a flow's current interaction or terminal state |
 | `POST /oauth/respond` | Answer one pending interaction |
 | `POST /oauth/cancel` | Cancel and abort a flow |
-| `DELETE /oauth` | Remove a local OAuth credential |
+| `DELETE /oauth` | Remove one harness's local OAuth credential |
 
-Credential mutations can restart runners that were active at mutation time. Local removal does not revoke provider keys or grants.
+`POST /oauth/start` and `DELETE /oauth` accept `harness: "pi" | "claude-code"`; omission remains equivalent to `"pi"`. Claude Code currently offers a separate Anthropic OAuth connection. Credential mutations restart only active runners for the affected harness. Local removal does not revoke provider keys or grants.
 
 ## Files
 

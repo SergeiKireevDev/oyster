@@ -53,6 +53,10 @@
     return provider?.credentialType === "oauth" ? "Re-authenticate" : "Sign in with OAuth";
   }
 
+  function harnessLabel(provider) {
+    return provider?.harness === "claude-code" ? "Claude Code" : "pi";
+  }
+
   function apiKeyActionLabel(provider) {
     return provider?.credentialType === "api_key" ? "Replace and restart pi" : "Save and restart pi";
   }
@@ -63,12 +67,13 @@
 
   function restartProcessLabel(runnerIds) {
     const count = runnerIds.length;
-    return `${count} pi ${count === 1 ? "process" : "processes"}`;
+    return `${count} ${count === 1 ? "process" : "processes"}`;
   }
 
-  $: activeProviders = $credentialsState.providers.filter((provider) => provider.configured);
+  $: credentialRows = $credentialsState.providers.filter((provider) => provider.configured || provider.harness === "claude-code");
   $: selectableProviders = $credentialsState.providers.filter((provider) =>
-    provider.credentialType !== "oauth" && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
+    (provider.harness ?? "pi") === "pi" && provider.credentialType !== "oauth"
+      && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
   $: if (!selectableProviders.some((provider) => provider.provider === selectedProvider)) {
     selectedProvider = selectableProviders[0]?.provider ?? "";
   }
@@ -230,8 +235,8 @@
   });
 </script>
 
-<section class="api-keys-modal" aria-label="Pi credentials" aria-busy={$credentialsState.loading || oauthOperationPending}>
-  <p class="api-keys-intro">Credentials are stored by pi in its own auth file. Existing key values are never displayed.</p>
+<section class="api-keys-modal" aria-label="Agent credentials" aria-busy={$credentialsState.loading || oauthOperationPending}>
+  <p class="api-keys-intro">pi and Claude Code keep separate OAuth connections so either harness can refresh without invalidating the other. Existing credential values are never displayed.</p>
   {#if $credentialsState.setupMode}
     <p class="api-keys-state" role="status">Choose a provider below to authenticate pi.</p>
   {/if}
@@ -239,14 +244,14 @@
   {#if $credentialsState.flow}
     <section class="oauth-flow" aria-label="OAuth sign-in" aria-live="polite">
       {#if $credentialsState.flow.status === "pending"}
-        <h3>Sign in to {$credentialsState.flow.provider}</h3>
+        <h3>Sign in to {$credentialsState.flow.provider} for {harnessLabel($credentialsState.flow)}</h3>
         {#if $credentialsState.flow.authorization}
           {#if $credentialsState.flow.authorization.instructions}<p>{$credentialsState.flow.authorization.instructions}</p>{/if}
           <a class="btn oauth-auth-link" href={$credentialsState.flow.authorization.url} target="_blank" rel="noopener noreferrer">Open authorization page</a>
         {/if}
         {#if $credentialsState.flow.deviceCode}
           <div class="oauth-device-code">
-            <p>Open the verification page and enter this one-time code. Oyster will finish binding pi to your account automatically.</p>
+            <p>Open the verification page and enter this one-time code. Oyster will finish binding {harnessLabel($credentialsState.flow)} to your account automatically.</p>
             <div class="oauth-device-code-entry">
               <label>
                 <span>Device code</span>
@@ -303,7 +308,7 @@
         <p class="api-keys-state error" role="alert">Sign-in failed. Try again.</p>
       {/if}
       {#if $credentialsState.flow.restart}
-        <p role="status">Pi restart: {$credentialsState.flow.restart.status}</p>
+        <p role="status">{harnessLabel($credentialsState.flow)} restart: {$credentialsState.flow.restart.status}</p>
       {/if}
     </section>
   {/if}
@@ -315,24 +320,24 @@
   {:else if !$credentialsState.providers.length}
     <p class="api-keys-state">No providers are available from the configured pi installation.</p>
   {:else}
-    {#if activeProviders.length}
-    <div class="api-key-list" role="list" aria-label="Active provider credential status">
-      {#each activeProviders as provider (provider.provider)}
-        <div class="api-key-row" role="listitem" data-provider={provider.provider}>
+    {#if credentialRows.length}
+    <div class="api-key-list" role="list" aria-label="Provider credential status">
+      {#each credentialRows as provider (`${provider.harness ?? "pi"}:${provider.provider}`)}
+        <div class="api-key-row" role="listitem" data-provider={provider.provider} data-harness={provider.harness ?? "pi"}>
           <div class="api-key-provider">
             <strong>{provider.displayName}</strong>
-            <span>{provider.provider}</span>
+            <span>{provider.provider} · {harnessLabel(provider)}</span>
           </div>
           <div class="api-key-status">
             <span class="api-key-source">{sourceLabel(provider.source)}</span>
             {#if provider.credentialType === "oauth"}
               {#if provider.oauthCapable}
-                <button class="chip api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
+                <button class="chip api-key-oauth" type="button" onclick={() => startOAuth(provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                   Re-authenticate
                 </button>
               {/if}
-              <button class="chip api-key-remove" type="button" onclick={() => logoutOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
-                Sign out from pi
+              <button class="chip api-key-remove" type="button" onclick={() => logoutOAuth(provider)} disabled={$credentialsState.loading || oauthOperationPending}>
+                Sign out from {harnessLabel(provider)}
               </button>
             {:else}
               {#if provider.credentialType === "api_key"}
@@ -341,7 +346,7 @@
                 </button>
               {/if}
               {#if provider.oauthCapable}
-                <button class="chip api-key-oauth" type="button" onclick={() => startOAuth(provider.provider)} disabled={$credentialsState.loading || oauthOperationPending}>
+                <button class="chip api-key-oauth" type="button" onclick={() => startOAuth(provider)} disabled={$credentialsState.loading || oauthOperationPending}>
                   {providerOAuthLabel(provider)}
                 </button>
               {/if}
@@ -364,7 +369,7 @@
   {/if}
 
   <p class="api-key-removal-note">
-    Removing a key or signing out from pi does not revoke it at the upstream provider. Revoke upstream access separately in the provider account. If an environment or models.json fallback remains, pi may continue to authenticate after removal.
+    Removing a key or signing out does not revoke access at the upstream provider. Revoke upstream access separately in the provider account. pi and Claude Code credentials are removed independently; an environment or models.json fallback may still authenticate pi.
   </p>
 
   <form class="api-key-form" onsubmit={saveKey}>

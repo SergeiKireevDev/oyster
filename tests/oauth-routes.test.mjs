@@ -90,6 +90,40 @@ test("OAuth start validates provider capability and explicit replacement", async
   assert.equal(accepted.body.flow.flowId, FLOW_ID);
 });
 
+test("OAuth routes target independent harness credentials and restart only that harness", async () => {
+  const calls = [];
+  const routes = createOAuthRoutes(dependencies({
+    credentialService: {
+      async listProviders() {
+        return [
+          { provider: "anthropic", oauthCapable: true, credentialType: "oauth" },
+          { provider: "anthropic", harness: "claude-code", oauthCapable: true, credentialType: "oauth", source: "stored_oauth" },
+        ];
+      },
+      async logoutOAuth(provider, options) { calls.push(["logout", provider, options]); },
+    },
+    flowService: {
+      start(provider, options) { calls.push(["start", provider, options]); return { flowId: FLOW_ID, provider, harness: options.harness, status: "pending" }; },
+      getStatus() {}, respond() {}, cancel() {},
+    },
+    async restartActiveRunners(options) { calls.push(["restart", options]); return { status: "restarted", runnerIds: ["claude-runner"] }; },
+  }));
+
+  const started = response();
+  await routes["POST /oauth/start"]({ body: { provider: "anthropic", harness: "claude-code", replace: true } }, started);
+  assert.equal(started.status, 202);
+  assert.deepEqual(calls.shift(), ["start", "anthropic", { replace: true, harness: "claude-code" }]);
+
+  const loggedOut = response();
+  await routes["DELETE /oauth"]({ body: { provider: "anthropic", harness: "claude-code", restart: true } }, loggedOut);
+  assert.equal(loggedOut.status, 200);
+  assert.deepEqual(calls, [
+    ["logout", "anthropic", { harness: "claude-code" }],
+    ["restart", { harness: "claude-code" }],
+  ]);
+  assert.deepEqual(loggedOut.body.credential, { provider: "anthropic", harness: "claude-code", removed: true });
+});
+
 test("OAuth routes map failures to stable safe statuses without echoing inputs", async () => {
   const cases = [
     ["invalid_provider", 400],

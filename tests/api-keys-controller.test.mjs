@@ -144,6 +144,43 @@ test("credentials controller starts, polls, responds to, cancels, and re-authent
   controller.teardown();
 });
 
+test("credentials controller targets Claude Code OAuth independently from pi", async () => {
+  const flowId = "f".repeat(64);
+  const claudeProvider = {
+    provider: "anthropic", harness: "claude-code", displayName: "Anthropic",
+    credentialType: null, source: "not_configured", oauthCapable: true,
+  };
+  const signIn = harness([
+    response(200, { providers: [claudeProvider] }),
+    response(202, { flow: { flowId, provider: "anthropic", harness: "claude-code", status: "pending" } }),
+  ], [true]);
+  signIn.controller.activate();
+  await signIn.controller.load();
+  assert.equal((await signIn.controller.startOAuth(claudeProvider)).ok, true);
+  assert.match(signIn.confirms[0].title, /Anthropic for Claude Code/);
+  assert.deepEqual(JSON.parse(signIn.calls[1].options.body), {
+    provider: "anthropic", harness: "claude-code", replace: false,
+  });
+  signIn.controller.teardown();
+
+  const connected = { ...claudeProvider, credentialType: "oauth", source: "stored_oauth", configured: true };
+  const signOut = harness([
+    response(200, { providers: [connected] }),
+    response(200, {
+      credential: { provider: "anthropic", harness: "claude-code", removed: true },
+      source: "not_configured", restart: { status: "restarted", runnerIds: ["claude-runner"] },
+    }),
+    response(200, { providers: [claudeProvider] }),
+  ], [true]);
+  await signOut.controller.load();
+  assert.equal((await signOut.controller.logoutOAuth(connected)).ok, true);
+  assert.match(signOut.confirms[0].title, /Anthropic from Claude Code/);
+  assert.deepEqual(JSON.parse(signOut.calls[1].options.body), {
+    provider: "anthropic", harness: "claude-code", restart: true,
+  });
+  assert.match(signOut.toasts[0].message, /Claude Code/);
+});
+
 test("OAuth providers skip browser selection whenever they offer device-code login", async () => {
   const flowId = "d".repeat(64);
   const requestId = "e".repeat(64);

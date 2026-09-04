@@ -57,6 +57,28 @@ test("OAuth flow coordinator uses host registry, random IDs, and safe snapshots"
   assert.doesNotMatch(JSON.stringify(completed), /access|refresh|token-canary/);
 });
 
+test("OAuth flow coordinator carries harness identity through login and targeted restart", async () => {
+  const calls = [];
+  const service = createPiOAuthFlowService({
+    registry: new Map(),
+    credentialService: {
+      async loginOAuth(provider, _callbacks, options) { calls.push(["login", provider, options]); },
+    },
+    async restartActiveRunners(options) { calls.push(["restart", options]); return { status: "restarted", runnerIds: ["claude-runner"] }; },
+    randomBytes: deterministicBytes(),
+  });
+
+  const started = service.start("anthropic", { harness: "claude-code", replace: true });
+  assert.equal(started.harness, "claude-code");
+  await settle();
+  assert.deepEqual(calls, [
+    ["login", "anthropic", { replace: true, harness: "claude-code" }],
+    ["restart", { harness: "claude-code" }],
+  ]);
+  assert.deepEqual(service.getStatus(started.flowId).restart, { status: "restarted", runnerIds: ["claude-runner"] });
+  assert.throws(() => service.start("anthropic", { harness: "other" }), { code: "invalid_harness" });
+});
+
 test("OAuth flow coordinator adapts interactive callbacks with one-time bounded responses", async () => {
   const registry = new Map();
   const login = deferred();

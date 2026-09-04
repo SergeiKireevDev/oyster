@@ -11,6 +11,7 @@ const FALLBACK_SOURCES = new Set([
 ]);
 const OPERATION_STATUSES = Object.freeze({
   invalid_provider: 400,
+  invalid_harness: 400,
   oauth_invalid_response: 400,
   oauth_provider_not_found: 404,
   oauth_flow_not_found: 404,
@@ -34,7 +35,13 @@ function providerInput(body) {
   if (!provider || provider.length > MAX_PROVIDER_LENGTH || PROVIDER_CONTROL_CHARACTERS.test(provider)) {
     return { error: "valid provider required" };
   }
-  return { provider };
+  const harness = body.harness ?? "pi";
+  if (harness !== "pi" && harness !== "claude-code") return { error: "valid harness required" };
+  return { provider, harness };
+}
+
+function providerHarness(provider) {
+  return provider?.harness === "claude-code" ? "claude-code" : "pi";
 }
 
 function flowInput(body) {
@@ -114,7 +121,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       try {
         const providers = await credentialService.listProviders();
         if (!Array.isArray(providers)) throw new TypeError("invalid provider list");
-        const provider = providers.find((item) => item?.provider === input.provider);
+        const provider = providers.find((item) => item?.provider === input.provider && providerHarness(item) === input.harness);
         if (!provider?.oauthCapable) {
           operationError(res, Object.assign(new Error("not found"), { code: "oauth_provider_not_found" }));
           return;
@@ -123,7 +130,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
           operationError(res, Object.assign(new Error("replace required"), { code: "credential_replace_required" }));
           return;
         }
-        json(res, 202, { flow: await flowService.start(input.provider, { replace: body.replace }) });
+        json(res, 202, { flow: await flowService.start(input.provider, { replace: body.replace, harness: input.harness }) });
       } catch (error) {
         operationError(res, error);
       }
@@ -176,7 +183,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         return;
       }
       try {
-        await credentialService.logoutOAuth(input.provider);
+        await credentialService.logoutOAuth(input.provider, { harness: input.harness });
       } catch (error) {
         operationError(res, error);
         return;
@@ -186,7 +193,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       try {
         const providers = await credentialService.listProviders();
         if (!Array.isArray(providers)) throw new TypeError("invalid provider list");
-        const candidate = providers.find((item) => item?.provider === input.provider)?.source;
+        const candidate = providers.find((item) => item?.provider === input.provider && providerHarness(item) === input.harness)?.source;
         if (FALLBACK_SOURCES.has(candidate)) source = candidate;
       } catch {
         // Logout is already durable. Failure to refresh safe fallback metadata
@@ -195,16 +202,20 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       // Never forward credential-service return data: an adapter must not be
       // able to expose removed OAuth tokens through this HTTP boundary.
       const result = {
-        credential: { provider: input.provider, removed: true },
+        credential: {
+          provider: input.provider,
+          ...(input.harness === "claude-code" ? { harness: input.harness } : {}),
+          removed: true,
+        },
         source,
         upstreamRevoked: false,
       };
       try {
-        const restart = publicRestartResult(await restartActiveRunners());
+        const restart = publicRestartResult(await restartActiveRunners({ harness: input.harness }));
         if (!restart) throw new TypeError("invalid runner restart result");
         if (restart.status === "partial") {
           json(res, 503, {
-            error: "OAuth credential removed but some pi runners failed to restart",
+            error: "OAuth credential removed but some harness runners failed to restart",
             code: "runner_restart_partial",
             ...result,
             restart,
@@ -214,7 +225,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         json(res, 200, { ...result, restart });
       } catch {
         json(res, 503, {
-          error: "OAuth credential removed but pi runners could not be restarted",
+          error: "OAuth credential removed but harness runners could not be restarted",
           code: "runner_restart_failed",
           ...result,
           restart: { status: "failed", runnerIds: [] },

@@ -30,12 +30,24 @@ function validatedCredential(credential) {
     || typeof credential.access !== "string" || !credential.access
     || typeof credential.refresh !== "string" || !credential.refresh
     || !Number.isFinite(credential.expires)) {
-    throw syncError("Anthropic OAuth credential cannot be projected into Claude Code");
+    throw syncError("Anthropic OAuth credential cannot be stored for Claude Code");
   }
   return credential;
 }
 
-/** Atomically project Oyster's Anthropic OAuth credential into Claude Code's store. */
+function hasValidClaudeCredential(root) {
+  if (!Object.hasOwn(root, "claudeAiOauth")) return false;
+  const credential = root.claudeAiOauth;
+  if (!plainObject(credential)
+    || typeof credential.accessToken !== "string" || !credential.accessToken
+    || typeof credential.refreshToken !== "string" || !credential.refreshToken
+    || !Number.isFinite(credential.expiresAt)) {
+    throw syncError("Claude OAuth credential is invalid");
+  }
+  return true;
+}
+
+/** Atomically manage Claude Code's independent Anthropic OAuth credential. */
 export function createClaudeOAuthCredentialSink({ configDir } = {}) {
   if (typeof configDir !== "string" || !isAbsolute(configDir) || resolve(configDir) !== configDir) {
     throw new TypeError("validated absolute Claude config directory is required");
@@ -83,6 +95,11 @@ export function createClaudeOAuthCredentialSink({ configDir } = {}) {
     }
   }
 
+  function status() {
+    const { root } = readRoot();
+    return Object.freeze({ configured: hasValidClaudeCredential(root) });
+  }
+
   function project(credential) {
     const value = validatedCredential(credential);
     const { root } = readRoot();
@@ -107,7 +124,7 @@ export function createClaudeOAuthCredentialSink({ configDir } = {}) {
     return true;
   }
 
-  return Object.freeze({ credentialPath, project, remove });
+  return Object.freeze({ credentialPath, status, project, remove });
 }
 
 export const CLAUDE_OAUTH_SCOPES = ANTHROPIC_SCOPES;

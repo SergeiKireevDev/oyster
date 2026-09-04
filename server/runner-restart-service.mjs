@@ -40,9 +40,12 @@ export function createRestartActiveRunners({
     throw new RangeError("restartDelayMs must be a non-negative finite number");
   }
 
-  return async function restartActiveRunners() {
+  return async function restartActiveRunners({ harness = null } = {}) {
+    if (harness !== null && harness !== "pi" && harness !== "claude-code") {
+      throw new TypeError("restart harness must be pi, claude-code, or null");
+    }
     const captured = runnerValues(runners())
-      .filter((runner) => runner?.proc)
+      .filter((runner) => runner?.proc && (harness === null || (runner.harness ?? "pi") === harness))
       .map((runner) => ({ runner, queuedResumeWork: [...(runner.resumeQueue ?? [])] }));
     const runnerIds = captured.map(({ runner }) => runner.id);
     const failedRunnerIds = new Set();

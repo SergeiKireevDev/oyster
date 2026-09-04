@@ -21,7 +21,7 @@ const credential = (suffix = "one") => ({
   expires: 1_800_000_000_000,
 });
 
-test("Claude OAuth sink projects Pi credentials atomically in Claude Code's schema", () => {
+test("Claude OAuth sink stores an independent credential atomically in Claude Code's schema", () => {
   const item = fixture();
   try {
     mkdirSync(item.configDir);
@@ -52,11 +52,14 @@ test("Claude OAuth sink replaces and removes only the Anthropic OAuth entry", ()
   const item = fixture();
   try {
     const sink = createClaudeOAuthCredentialSink({ configDir: item.configDir });
+    assert.deepEqual(sink.status(), { configured: false });
     sink.project(credential("old"));
+    assert.deepEqual(sink.status(), { configured: true });
     sink.project(credential("new"));
     let stored = JSON.parse(readFileSync(sink.credentialPath, "utf8"));
     assert.equal(stored.claudeAiOauth.accessToken, "access-new-canary");
     assert.equal(sink.remove(), true);
+    assert.deepEqual(sink.status(), { configured: false });
     stored = JSON.parse(readFileSync(sink.credentialPath, "utf8"));
     assert.deepEqual(stored, {});
     assert.equal(sink.remove(), false);
