@@ -169,6 +169,7 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
     data: { models: [
       { provider: "anthropic", id: "default", name: "Default (recommended)", description: "Sonnet 5", resolvedModel: "claude-sonnet-5" },
       { provider: "anthropic", id: "astra", name: "Astra", resolvedModel: "claude-astra-1" },
+      { provider: "anthropic", id: "disabled-model", name: "Disabled", disabled: true },
       { provider: "anthropic", id: "claude-sonnet-4-5" },
     ] },
   }]);

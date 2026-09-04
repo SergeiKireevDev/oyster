@@ -42,11 +42,20 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
         subtype: "success",
         request_id: input.request_id,
         response: {
-          models: [...supportedModels].map((value) => ({
-            value,
-            resolvedModel: value === "default" ? "sonnet" : value,
-            displayName: value === "default" ? "Default (recommended)" : `${value[0].toUpperCase()}${value.slice(1)}`,
-          })),
+          models: [
+            ...[...supportedModels].map((value) => ({
+              value,
+              resolvedModel: value === "default" ? "sonnet" : value,
+              displayName: value === "default" ? "Default (recommended)" : `${value[0].toUpperCase()}${value.slice(1)}`,
+            })),
+            {
+              value: "cc-update-required-1",
+              resolvedModel: "cc-update-required-1",
+              displayName: "Fable 5.1 (disabled)",
+              description: "Update Claude Code to use Fable 5.1",
+              disabled: true,
+            },
+          ],
         },
       },
     });

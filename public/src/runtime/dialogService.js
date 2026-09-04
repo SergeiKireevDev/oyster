@@ -10,6 +10,7 @@ export const emptyDialogOptionPicker = Object.freeze({
   query: "",
   active: -1,
   selected: -1,
+  disabled: [],
   variant: "default",
   placeholder: "Filter…",
 });
@@ -107,16 +108,17 @@ export function createDialogService({ createStore = writable } = {}) {
     answerConfirm: (answer) => settleConfirm(Boolean(answer)),
     setConfirmPrompt: (state) => !disposed && confirmPrompt.set(state),
     openOption(title, options, {
-      searchable = false, selected = -1, variant = "default", placeholder = "Filter…",
+      searchable = false, selected = -1, disabled = [], variant = "default", placeholder = "Filter…",
     } = {}) {
       if (disposed) return Promise.resolve(null);
       pendingOption?.(null);
       return new Promise((resolve) => {
         pendingOption = resolve;
+        const disabledOptions = options.map((_, index) => disabled[index] === true);
         const selectedIndex = Number.isInteger(selected) && selected >= 0 && selected < options.length ? selected : -1;
         optionPicker.set({
-          title, options, searchable, query: "", active: selectedIndex,
-          selected: selectedIndex, variant, placeholder,
+          title, options, searchable, query: "", active: disabledOptions[selectedIndex] ? -1 : selectedIndex,
+          selected: selectedIndex, disabled: disabledOptions, variant, placeholder,
         });
         modalShell.open({ title, content: "optionPicker" });
       });
@@ -124,7 +126,10 @@ export function createDialogService({ createStore = writable } = {}) {
     setOptionQuery: (query) => !disposed && optionPicker.update((state) => ({ ...state, query, active: -1 })),
     setOptionActive: (active) => !disposed && optionPicker.update((state) => ({ ...state, active })),
     cancelOption: () => settleOption(null),
-    chooseOption: (index) => settleOption(index),
+    chooseOption: (index) => {
+      if (get(optionPicker).disabled[index]) return;
+      settleOption(index);
+    },
     setOptionPicker: (state) => !disposed && optionPicker.set(state),
     teardown() {
       if (disposed) return;

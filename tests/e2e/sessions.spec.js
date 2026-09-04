@@ -65,7 +65,10 @@ test("Claude Code model selection uses its native control protocol and persists 
   await expect(modelChip(page, false)).toContainText("sonnet", { timeout: 15000 });
   await modelChip(page, false).click();
   await expect(page.locator("#mTitle")).toHaveText("Select model");
-  await page.getByRole("option", { name: "anthropic/opus", exact: true }).click();
+  const unavailable = page.getByRole("option", { name: /Fable 5\.1 \(disabled\), unavailable/ });
+  await expect(unavailable).toBeVisible();
+  await expect(unavailable).toBeDisabled();
+  await page.getByRole("option", { name: "anthropic/opus — Opus", exact: true }).click();
   await expect(modelChip(page, false)).toContainText("opus", { timeout: 15000 });
   await expect.poll(async () => (await page.evaluate(() => window.rpc({ type: "get_state" }))).model?.id).toBe("opus");
 

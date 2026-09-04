@@ -168,10 +168,16 @@ test("option picker preserves searchable state selection cancellation and teardo
   dialogs.setOptionActive(1);
   assert.deepEqual(get(dialogs.optionPicker), {
     title: "Second", options: ["alpha", "beta"], searchable: true, query: "be", active: 1,
-    selected: -1, variant: "default", placeholder: "Filter…",
+    selected: -1, disabled: [false, false], variant: "default", placeholder: "Filter…",
   });
   dialogs.chooseOption(1);
   assert.equal(await selected, 1);
+
+  const enabledChoice = dialogs.openOption("Availability", ["disabled", "enabled"], { selected: 0, disabled: [true, false] });
+  assert.equal(get(dialogs.optionPicker).active, -1);
+  dialogs.chooseOption(0);
+  dialogs.chooseOption(1);
+  assert.equal(await enabledChoice, 1);
 
   const cancelled = dialogs.openOption("Cancel", []);
   dialogs.cancelOption();
