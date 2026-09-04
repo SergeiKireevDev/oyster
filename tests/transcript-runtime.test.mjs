@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { annotateTranscriptEntries, createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptAfterRenderController, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
+import { annotateTranscriptEntries, createAgentCompletionController, createAgentStartController, createAssistantStream, createCanonicalTranscriptController, createPermalinkController, createReplayBufferFlusher, createReplayUiState, createDebouncedTranscriptSyncController, createRenderJobs, createTailFirstTranscriptRenderer, createTranscriptAfterRenderController, createTranscriptEntryFocusController, createTranscriptPermalinkRuntime, createTranscriptStreamEventHandler, createTranscriptSyncScheduler, createToolCardRegistry, createTranscriptScrollAdapter, fetchDurableTranscript, findTranscriptEntryForElement, flashTranscriptElement, focusTranscriptSnippet, filterReplayEvents, isComposerReadyForSend, resolveTranscriptEntryId, loadDurableCanonicalTranscript, mergeClaudeTranscriptMessages, REPLAY_GATED_EVENT_TYPES, reconcileTranscriptReload } from "../public/src/runtime/transcriptRuntime.js";
 import { backfillTranscriptTurns } from "../public/src/lib/transcriptBackfill.js";
 import { splitTurns, takeTailChunk } from "../public/src/lib/transcriptUtils.js";
 
@@ -153,6 +153,55 @@ test("transcript post-render controller refreshes markers and deferred focus", a
   const calls = []; const after = createTranscriptAfterRenderController({ annotate: async () => calls.push("annotate"), refreshCheckpointMarkers: async () => calls.push("markers"), refreshTree: () => calls.push("tree"), takeAfterTranscript: () => () => calls.push("focus") });
   await after();
   assert.deepEqual(calls, ["annotate", "markers", "tree", "focus"]);
+});
+
+test("Claude transcript reconciliation merges a post-restart live tail without duplicating its durable prompt", () => {
+  const old = { role: "assistant", content: [{ type: "text", text: "Earlier history" }], timestamp: 1_000 };
+  const durablePrompt = { role: "user", content: [{ type: "text", text: "resume" }], timestamp: 20_000 };
+  const livePrompt = { role: "user", content: "resume", timestamp: 20_250 };
+  const partial = { role: "assistant", content: [{ type: "text", text: "Working" }], timestamp: 21_000 };
+  assert.deepEqual(
+    mergeClaudeTranscriptMessages([old, durablePrompt], [livePrompt, partial]),
+    [old, durablePrompt, partial],
+  );
+  assert.deepEqual(
+    mergeClaudeTranscriptMessages([old], [livePrompt, partial]),
+    [old, livePrompt, partial],
+  );
+});
+
+test("Claude transcript reconciliation does not collapse a repeated prompt from an older turn", () => {
+  const oldPrompt = { role: "user", content: [{ type: "text", text: "resume" }], timestamp: 1_000 };
+  const oldAnswer = { role: "assistant", content: [{ type: "text", text: "Done" }], timestamp: 2_000 };
+  const newPrompt = { role: "user", content: "resume", timestamp: 30_000 };
+  assert.deepEqual(
+    mergeClaudeTranscriptMessages([oldPrompt, oldAnswer], [newPrompt]),
+    [oldPrompt, oldAnswer, newPrompt],
+  );
+});
+
+test("canonical transcript controller merges durable and live history only for Claude Code", async () => {
+  const rendered = [];
+  const controller = createCanonicalTranscriptController({
+    rpc: async ({ type }) => type === "get_state"
+      ? { sessionId: "cc", isStreaming: true }
+      : { messages: [{ role: "user", content: "resume", timestamp: 10_100 }, { role: "assistant", content: "partial", timestamp: 11_000 }] },
+    applyState: () => {},
+    fetchImpl: async () => ({ ok: true, json: async () => ({ messages: [
+      { role: "user", content: [{ type: "text", text: "older" }], timestamp: 1_000 },
+      { role: "user", content: [{ type: "text", text: "resume" }], timestamp: 10_000 },
+    ] }) }),
+    sessionFileQuery: (identity) => `key=${identity}`,
+    getSessionIdentity: () => "cc-key",
+    getRunnerInfo: () => ({ harness: "claude-code" }),
+    clearPreview: () => {},
+    render: async (messages) => { rendered.push(messages); return true; },
+    setReplaying: () => {}, takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => {},
+  });
+  assert.equal(await controller(), true);
+  assert.deepEqual(rendered[0].map((message) => typeof message.content === "string" ? message.content : message.content[0].text), [
+    "older", "resume", "partial",
+  ]);
 });
 
 test("canonical transcript controller clears previews after durable reload", async () => {

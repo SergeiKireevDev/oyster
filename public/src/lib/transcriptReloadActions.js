@@ -9,6 +9,7 @@ export async function loadCanonicalTranscript({
   onState,
   onMessages,
   onDurableMessages,
+  mergeLiveMessages = (_durable, live) => live,
 }) {
   const state = await getState();
   onState?.(state);
@@ -28,7 +29,12 @@ export async function loadCanonicalTranscript({
   try {
     const live = await getMessages();
     onMessages?.(live);
-    if (Array.isArray(live?.messages)) return { messages: live.messages, state };
+    if (Array.isArray(live?.messages)) {
+      return {
+        messages: durableMessages ? mergeLiveMessages(durableMessages, live.messages) : live.messages,
+        state,
+      };
+    }
   } catch (error) {
     if (!durableMessages) throw error;
   }
