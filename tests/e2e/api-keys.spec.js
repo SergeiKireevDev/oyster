@@ -23,7 +23,7 @@ function installSecuredMockProvider() {
 }
 
 async function openApiKeys(page, { expectActive = false } = {}) {
-  const credentials = page.getByRole("region", { name: "Pi credentials" });
+  const credentials = page.getByRole("region", { name: "Agent credentials" });
   if (!(await credentials.isVisible().catch(() => false))) {
     await page.locator("#menuBtn").click();
     await page.locator('#menu button[data-action="credentials"]').click();

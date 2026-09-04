@@ -31,6 +31,24 @@ test("active-runner restart captures live runners once and leaves inactive runne
   assert.equal(inactive.proc, null);
 });
 
+test("active-runner restart can target one harness without disturbing the other", async () => {
+  const pi = { id: "pi", harness: "pi", proc: {} };
+  const legacyPi = { id: "legacy-pi", proc: {} };
+  const claude = { id: "claude", harness: "claude-code", proc: {} };
+  const calls = [];
+  const restart = createRestartActiveRunners({
+    runners: () => [pi, legacyPi, claude],
+    stopRunner(runner) { calls.push(["stop", runner.id]); runner.proc = null; },
+    startRunner(runner) { calls.push(["start", runner.id]); runner.proc = {}; },
+    delay: async () => {},
+  });
+
+  assert.deepEqual(await restart({ harness: "claude-code" }), { runnerIds: ["claude"], status: "restarted" });
+  assert.deepEqual(calls, [["stop", "claude"], ["start", "claude"]]);
+  assert.ok(pi.proc);
+  assert.ok(legacyPi.proc);
+});
+
 test("active-runner restart reports partial lifecycle failure without restarting other runners twice", async () => {
   const first = { id: "first", proc: {} };
   const failed = { id: "failed", proc: {} };
@@ -143,4 +161,5 @@ test("invalid restart dependencies and collections fail with clear errors", asyn
     delay: async () => {},
   });
   await assert.rejects(restart(), /runners\(\) must return a Map or iterable/);
+  await assert.rejects(restart({ harness: "other" }), /restart harness/);
 });

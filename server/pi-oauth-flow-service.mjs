@@ -8,6 +8,7 @@ const MAX_RESPONSE_LENGTH = 32 * 1024;
 const MAX_OPTIONS = 32;
 const SAFE_FAILURE_CODES = new Set([
   "credential_busy",
+  "invalid_harness",
   "credential_replace_required",
   "credential_type_conflict",
   "oauth_provider_not_found",
@@ -26,6 +27,11 @@ function providerId(value) {
   const normalized = value.trim();
   if (normalized.length > MAX_PROVIDER_LENGTH) throw flowError("invalid_provider", "provider is too long");
   return normalized;
+}
+
+function harnessId(value = "pi") {
+  if (value !== "pi" && value !== "claude-code") throw flowError("invalid_harness", "supported harness is required");
+  return value;
 }
 
 function safeFailureCode(error) {
@@ -116,6 +122,7 @@ export function createPiOAuthFlowService({
     return Object.freeze({
       flowId: flow.flowId,
       provider: flow.provider,
+      ...(flow.harness === "claude-code" ? { harness: flow.harness } : {}),
       status: flow.status,
       phase: flow.phase,
       createdAt: flow.createdAt,
@@ -274,11 +281,12 @@ export function createPiOAuthFlowService({
     return true;
   }
 
-  function start(provider, { replace = false } = {}) {
+  function start(provider, { replace = false, harness = "pi" } = {}) {
     const id = providerId(provider);
+    const targetHarness = harnessId(harness);
     const active = activeFlows();
-    if (active.some((flow) => flow.provider === id)) {
-      throw flowError("credential_busy", `provider ${id} already has an active OAuth flow`);
+    if (active.some((flow) => flow.provider === id && flow.harness === targetHarness)) {
+      throw flowError("credential_busy", `provider ${id} already has an active OAuth flow for ${targetHarness}`);
     }
     if (active.length >= maxActiveFlows) throw flowError("oauth_flow_limit", "too many active OAuth flows");
 
@@ -286,6 +294,7 @@ export function createPiOAuthFlowService({
     const flow = {
       flowId: createRandomId((candidate) => registry.has(candidate)),
       provider: id,
+      harness: targetHarness,
       status: ACTIVE_STATUS,
       phase: "starting",
       createdAt: timestamp,
@@ -297,13 +306,13 @@ export function createPiOAuthFlowService({
     scheduleInactivity(flow);
 
     flow.promise = Promise.resolve()
-      .then(() => credentialService.loginOAuth(id, callbacksFor(flow), { replace: replace === true }))
+      .then(() => credentialService.loginOAuth(id, callbacksFor(flow), { replace: replace === true, harness: targetHarness }))
       .then(async () => {
         if (flow.status !== ACTIVE_STATUS) return;
         flow.credentialPersisted = true;
         update(flow, "restarting");
         try {
-          const restart = await restartActiveRunners();
+          const restart = await restartActiveRunners({ harness: targetHarness });
           if (flow.status !== ACTIVE_STATUS) return;
           flow.restart = safeRestart(restart);
         } catch {

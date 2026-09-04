@@ -12,19 +12,21 @@ test("Credentials modal is owned by the overlay and covers safe provider states"
   for (const label of ["stored API key", "stored OAuth", "environment", "models.json", "not configured"]) {
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
-  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
+  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from \{harnessLabel\(provider\)\}/);
+  assert.match(modal, /pi and Claude Code keep separate OAuth connections/);
+  assert.match(modal, /data-harness=\{provider\.harness \?\? "pi"\}/);
   assert.match(modal, /<button class="chip" type="button" data-modal-cancel onclick=\{close\}>Close<\/button>/);
 });
 
 test("Credentials modal exposes API-key and OAuth actions with revocation and fallback warnings", () => {
-  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?provider\.oauthCapable[\s\S]*?Re-authenticate[\s\S]*?Sign out from pi/);
+  assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?provider\.oauthCapable[\s\S]*?Re-authenticate[\s\S]*?Sign out from \{harnessLabel\(provider\)\}/);
   assert.match(modal, /provider\.credentialType === "api_key"[\s\S]*?Remove from pi and restart/);
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_REMOVE_API_KEY_ACTION, provider\)/);
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_START_OAUTH_ACTION, provider\)/);
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_LOGOUT_OAUTH_ACTION, provider\)/);
-  assert.match(modal, /does not revoke it at the upstream provider/);
-  assert.match(modal, /environment or models\.json fallback remains/);
-  assert.match(modal, /pi may continue to authenticate after removal/);
+  assert.match(modal, /does not revoke access at the upstream provider/);
+  assert.match(modal, /credentials are removed independently/);
+  assert.match(modal, /environment or models\.json fallback may still authenticate pi/);
 });
 
 test("OAuth credential actions use shared controls and semantic palette tokens", () => {
@@ -36,10 +38,10 @@ test("OAuth credential actions use shared controls and semantic palette tokens",
   assert.match(modal, /\.oauth-cancel \{[^}]*color: var\(--red\)/);
 });
 
-test("the status list shows only active providers while the selector includes inactive OAuth providers", () => {
-  assert.match(modal, /activeProviders = \$credentialsState\.providers\.filter\(\(provider\) => provider\.configured\)/);
-  assert.match(modal, /selectableProviders = \$credentialsState\.providers\.filter[\s\S]*?provider\.oauthCapable/);
-  assert.match(modal, /aria-label="Active provider credential status"[\s\S]*?each activeProviders as provider/);
+test("the status list includes Claude Code connection state while the selector remains pi-only", () => {
+  assert.match(modal, /credentialRows = \$credentialsState\.providers\.filter\(\(provider\) => provider\.configured \|\| provider\.harness === "claude-code"\)/);
+  assert.match(modal, /selectableProviders = \$credentialsState\.providers\.filter[\s\S]*?provider\.harness \?\? "pi"[\s\S]*?provider\.oauthCapable/);
+  assert.match(modal, /aria-label="Provider credential status"[\s\S]*?each credentialRows as provider/);
   assert.match(modal, /each selectableProviders as provider/);
 });
 
@@ -57,7 +59,7 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /target="_blank" rel="noopener noreferrer">Open authorization page/);
   assert.match(modal, /Device code[\s\S]*?readonly[\s\S]*?\.select\(\)/);
   assert.match(modal, /copyTextToClipboard\(code\)[\s\S]*?oauth-device-code-entry[\s\S]*?oauth-device-code-copy[\s\S]*?"Copy"/);
-  assert.match(modal, /enter this one-time code[\s\S]*?finish binding pi to your account automatically/);
+  assert.match(modal, /enter this one-time code[\s\S]*?finish binding \{harnessLabel\(\$credentialsState\.flow\)\} to your account automatically/);
   assert.match(modal, /Open verification page/);
   assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
   assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);
@@ -65,7 +67,7 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /disabled=\{oauthOperationPending \|\| !oauthInputReady\[request\.requestId\]\}>Continue/);
   assert.match(modal, /unreachable loopback page[\s\S]*?redirect URL or authorization code/);
   assert.match(modal, /CREDENTIALS_CANCEL_OAUTH_ACTION/);
-  for (const text of ["Sign-in completed", "Sign-in expired", "Sign-in cancelled", "Sign-in failed", "Pi restart:"]) {
+  for (const text of ["Sign-in completed", "Sign-in expired", "Sign-in cancelled", "Sign-in failed", "restart:"]) {
     assert.ok(modal.includes(text), `missing OAuth state: ${text}`);
   }
 });

@@ -2,6 +2,19 @@ function providerName(provider) {
   return provider?.displayName || provider?.provider || "provider";
 }
 
+function oauthTarget(value) {
+  if (typeof value === "string") return { provider: value, harness: "pi" };
+  return { provider: value?.provider, harness: value?.harness === "claude-code" ? "claude-code" : "pi" };
+}
+
+function harnessName(harness) {
+  return harness === "claude-code" ? "Claude Code" : "pi";
+}
+
+function oauthRequestTarget(provider, harness) {
+  return { provider, ...(harness === "claude-code" ? { harness } : {}) };
+}
+
 export function createCredentialsController({
   fetchImpl,
   confirm,
@@ -190,21 +203,23 @@ export function createCredentialsController({
     }
   }
 
-  async function startOAuth(provider) {
+  async function startOAuth(target) {
     if (tornDown) return { ok: false };
-    const row = providers.find((item) => item.provider === provider);
+    const { provider, harness } = oauthTarget(target);
+    const row = providers.find((item) => item.provider === provider && (item.harness ?? "pi") === harness);
     const name = providerName(row ?? { provider });
+    const label = harnessName(harness);
     const replacing = Boolean(row?.credentialType);
     const accepted = await confirm(
-      row?.credentialType === "oauth" ? `Re-authenticate ${name}?` : `Sign in to ${name}?`,
+      row?.credentialType === "oauth" ? `Re-authenticate ${name} for ${label}?` : `Sign in to ${name} for ${label}?`,
       row?.credentialType === "api_key"
         ? "A successful sign-in replaces the stored API key and restarts every active pi process."
-        : `${replacing ? "Replace the stored OAuth credential" : "Store OAuth credentials in pi"} and restart every active pi process after sign-in?`,
+        : `${replacing ? "Replace the stored OAuth credential" : `Store a separate OAuth credential for ${label}`} and restart active ${label} processes after sign-in?`,
     );
     if (!accepted || tornDown) return { ok: false, cancelled: true };
     publish({ loading: true, error: "" });
     try {
-      const data = await jsonPost("/oauth/start", { provider, replace: replacing });
+      const data = await jsonPost("/oauth/start", { ...oauthRequestTarget(provider, harness), replace: replacing });
       pollDelay = 500;
       applyFlow(data.flow);
       publish({ loading: false });
@@ -223,7 +238,8 @@ export function createCredentialsController({
       const data = await jsonPost("/oauth/status", { flowId: flow.flowId });
       applyFlow(data.flow);
       if (data.flow?.status === "succeeded") {
-        notify(data.flow.restart?.status === "restarted" ? "Signed in; pi restarted" : "Signed in; check pi restart status");
+        const label = harnessName(data.flow.harness);
+        notify(data.flow.restart?.status === "restarted" ? `Signed in; ${label} restarted` : `Signed in; check ${label} restart status`);
         await load({ quiet: true });
       } else if (data.flow?.status === "failed") {
         notify("OAuth sign-in failed", "error");
@@ -265,13 +281,15 @@ export function createCredentialsController({
     }
   }
 
-  async function logoutOAuth(provider) {
+  async function logoutOAuth(target) {
     if (tornDown) return { ok: false };
-    const row = providers.find((item) => item.provider === provider);
+    const { provider, harness } = oauthTarget(target);
+    const row = providers.find((item) => item.provider === provider && (item.harness ?? "pi") === harness);
     const name = providerName(row ?? { provider });
+    const label = harnessName(harness);
     const accepted = await confirm(
-      `Sign out ${name} from pi?`,
-      "Remove the OAuth credential from pi and restart every active pi process? This does not revoke access at the provider.",
+      `Sign out ${name} from ${label}?`,
+      `Remove the OAuth credential from ${label} and restart every active ${label} process? This does not revoke access at the provider.`,
     );
     if (!accepted || tornDown) return { ok: false, cancelled: true };
     publish({ loading: true, error: "" });
@@ -279,21 +297,21 @@ export function createCredentialsController({
       const data = await jsonRequest("/oauth", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider, restart: true }),
+        body: JSON.stringify({ ...oauthRequestTarget(provider, harness), restart: true }),
       });
       publish({ loading: false, lastRestart: data.restart ?? null });
-      notify("Signed out from pi; upstream access was not revoked");
-      if (data.source && data.source !== "not_configured") notify(`pi may still authenticate ${name} using ${data.source === "models_json" ? "models.json" : data.source}`);
+      notify(`Signed out from ${label}; upstream access was not revoked`);
+      if (harness === "pi" && data.source && data.source !== "not_configured") notify(`pi may still authenticate ${name} using ${data.source === "models_json" ? "models.json" : data.source}`);
       await load({ quiet: true });
       return { ok: true, restart: data.restart ?? null, source: data.source };
     } catch (error) {
       if (error.name === "AbortError" || tornDown) return { ok: false };
       const removed = Boolean(error.details?.credential);
       publish({ loading: false, error: error.message, lastRestart: error.details?.restart ?? null });
-      if (removed && error.details?.source && error.details.source !== "not_configured") {
+      if (harness === "pi" && removed && error.details?.source && error.details.source !== "not_configured") {
         notify(`pi may still authenticate ${name} using ${error.details.source === "models_json" ? "models.json" : error.details.source}`);
       }
-      notify(removed ? "Signed out from pi, but restart was incomplete" : "OAuth credential was not removed", "error");
+      notify(removed ? `Signed out from ${label}, but restart was incomplete` : "OAuth credential was not removed", "error");
       if (removed) await load({ quiet: true });
       return { ok: false, removed, restart: error.details?.restart ?? null, source: error.details?.source };
     }

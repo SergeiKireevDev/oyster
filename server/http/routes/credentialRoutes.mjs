@@ -117,7 +117,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
       : { provider: input.provider, credentialType: "api_key" };
     let restart;
     try {
-      restart = publicRestartResult(await restartActiveRunners());
+      restart = publicRestartResult(await restartActiveRunners({ harness: "pi" }));
     } catch {
       // Converted to the durable-write failure response below.
     }
