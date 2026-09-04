@@ -61,9 +61,10 @@ test("first-run tour waits for credentials, persists per form factor, and can be
   await expect.poll(() => page.evaluate(() => localStorage.getItem("oyster_tutorial_v1_complete_mobile"))).toBeNull();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await login(page, { keepCredentialSetup: true });
-  await page.getByRole("button", { name: "Close" }).click();
-  await expect(page.locator("#overlay")).not.toHaveClass(/open/);
+  // Closing credential setup is remembered, so it may not reopen on this
+  // second login. Let the shared helper close it only if it is present while
+  // preserving the mobile tutorial that follows.
+  await login(page, { keepTutorial: true });
   await expect(tutorial).toBeVisible();
   await expect(page.locator("#tutorialTitle")).toHaveText("Welcome to Oyster");
 
