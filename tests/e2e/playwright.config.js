@@ -75,7 +75,9 @@ export default defineConfig({
   expect: { timeout: 30 * 1000 },
   globalSetup: "./global-setup.js",
   globalTeardown: "./global-teardown.js",
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: process.env.CI
+    ? [["github"], ["list"], ["html", { open: "never" }]]
+    : [["list"], ["html", { open: "never" }]],
   outputDir: process.env.E2E_VIDEO ? videoOutputDir : undefined,
   use: {
     baseURL: process.env.OYSTER_URL ?? "http://localhost:4000",
