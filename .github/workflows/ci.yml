@@ -49,7 +49,7 @@ jobs:
         run: npm run docs:build
 
   container-e2e:
-    name: Container and representative browser tests
+    name: Container and browser tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -102,9 +102,9 @@ jobs:
         working-directory: tests/e2e
         run: npx playwright install --with-deps chromium
 
-      - name: Run mobile and desktop smoke tests
+      - name: Run complete browser test suite
         working-directory: tests/e2e
-        run: npx playwright test mobile-modals.spec.js sessions.spec.js
+        run: npx playwright test
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
