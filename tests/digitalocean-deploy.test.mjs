@@ -36,6 +36,7 @@ test("CI publishes the browser-tested deployment image to public Docker Hub", { 
   assert.doesNotMatch(workflow, /ghcr\.io|secrets\.GITHUB_TOKEN|packages: write/);
   assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
   assert.doesNotMatch(workflow, /github\.ref == 'refs\/heads\/feature\/digitalocean-app-platform'/);
+  assert.ok(workflow.indexOf("Build Hub frontend") < workflow.indexOf("Run complete browser test suite"));
   assert.ok(workflow.indexOf("Run complete browser test suite") < workflow.indexOf("Publish tested deployment image"));
   assert.match(workflow, /run: npx playwright test\n/);
   assert.doesNotMatch(workflow, /npx playwright test mobile-modals\.spec\.js sessions\.spec\.js/);
