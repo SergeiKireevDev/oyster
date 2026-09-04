@@ -118,6 +118,9 @@ export function createClaudeCodeDriver({
         const pending = runtime.controlRequests.get(control.request_id);
         if (!pending) return [];
         runtime.controlRequests.delete(control.request_id);
+        // The runner manager has already counted this native child-process line
+        // as proof of life. Health probes are deliberately invisible to clients.
+        if (pending.command === "health_probe") return [];
         if (pending.command === "get_available_models") {
           if (control.subtype === "success") {
             events.push(response(pending.id, pending.command, {
@@ -185,9 +188,10 @@ export function createClaudeCodeDriver({
         emit(response(command.id, "get_messages", { messages: [...runtime.messages] }));
         return true;
       }
-      if (command.type === "get_available_models") {
+      if (command.type === "health_probe" || command.type === "get_available_models") {
         if (!child?.stdin?.writable) return false;
-        const requestId = `oyster-models-${command.id}`;
+        const prefix = command.type === "health_probe" ? "oyster-health" : "oyster-models";
+        const requestId = `${prefix}-${command.id}`;
         runtime.controlRequests.set(requestId, { id: command.id, command: command.type });
         child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "list_models" } })}\n`);
         return true;
@@ -232,6 +236,11 @@ export function createClaudeCodeDriver({
     },
 
     stateCommand(id) { return { id, type: "get_state" }; },
+
+    // get_state is synthesized from driver memory and therefore cannot prove
+    // that the Claude child is responsive. list_models is a native, local
+    // control-protocol round trip that produces stdout without invoking a model.
+    healthCommand(id) { return { id, type: "health_probe" }; },
 
     startup({ requestId }) {
       return { commands: [{ id: requestId, type: "get_state" }], resumeResponseId: null };

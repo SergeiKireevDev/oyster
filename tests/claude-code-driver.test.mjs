@@ -146,6 +146,16 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.equal(toolEvents[1].message.toolName, "Bash");
   assert.equal(toolEvents[1].message.content[0].text, "ok");
 
+  assert.deepEqual(driver.healthCommand("health-1"), { id: "health-1", type: "health_probe" });
+  driver.sendCommand(runner, child, driver.healthCommand("health-1"));
+  assert.deepEqual(line(child.stdin), {
+    type: "control_request", request_id: "oyster-health-health-1", request: { subtype: "list_models" },
+  });
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({
+    type: "control_response",
+    response: { subtype: "success", request_id: "oyster-health-health-1", response: { models: [] } },
+  })), []);
+
   driver.sendCommand(runner, child, { id: "models", type: "get_available_models" });
   assert.deepEqual(line(child.stdin), {
     type: "control_request", request_id: "oyster-models-models", request: { subtype: "list_models" },
