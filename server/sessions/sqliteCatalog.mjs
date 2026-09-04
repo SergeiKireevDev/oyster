@@ -133,6 +133,7 @@ export function createSqliteSessionCatalog({
 
   const summarySelect = `SELECT s.id, s.created_at, s.cwd, s.parent_session_id, s.active_leaf_id,
     COALESCE(s.updated_at, s.created_at) AS modified_at, s.first_message, s.all_messages_text,
+    CASE WHEN json_valid(s.metadata) THEN json_extract(s.metadata, '$.harness') END AS harness,
     CASE WHEN json_valid(sm.payload) THEN json_extract(sm.payload, '$.name') END AS session_name,
     CASE WHEN json_valid(sm.payload) THEN json_extract(sm.payload, '$.messageCount') END AS message_count
     FROM sessions s LEFT JOIN session_materialized sm ON sm.session_id = s.id`;
@@ -144,6 +145,7 @@ export function createSqliteSessionCatalog({
       createdAt: row.created_at,
       modifiedAt: row.modified_at,
       name: name || null,
+      harness: typeof row.harness === "string" && row.harness.trim() ? row.harness : "pi",
       cwd: typeof row.cwd === "string" ? row.cwd : null,
       parentSessionId: typeof row.parent_session_id === "string" ? row.parent_session_id : null,
       preview: typeof row.first_message === "string" ? row.first_message.slice(0, 120) : null,
@@ -390,6 +392,7 @@ export function createSqliteSessionCatalog({
             sessionName: session.name,
             sessionPreview: session.preview,
             sessionCwd: session.cwd,
+            harness: session.harness,
             folder: session.cwd,
             folderLabel: session.cwd,
           });

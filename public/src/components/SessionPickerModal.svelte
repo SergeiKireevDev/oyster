@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
   import SearchHitSnippet from "./SearchHitSnippet.svelte";
+  import HarnessPill from "./HarnessPill.svelte";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     SESSION_PICKER_CANCEL_ACTION,
@@ -73,7 +74,7 @@
 
   function runnerFor(session) {
     return runnerByIdentity.get(sessionIdentity(session)) ?? {
-      id: session.runnerId, alive: session.alive, busy: session.busy,
+      id: session.runnerId, alive: session.alive, busy: session.busy, harness: session.harness || "pi",
       attentionStatus: session.attentionStatus, attentionUnread: session.attentionUnread,
     };
   }
@@ -294,6 +295,7 @@
     <button type="button" class="m-option search-hit" title={group.sessionKey} onclick={(event) => openSearchResult(event, group)}>
       <div class="s-title">
         <span class="s-name">{searchResultName(group)}</span>
+        <HarnessPill harness={group.first.harness || "pi"} />
         <span class="s-date">{searchGroupMeta(group)}</span>
       </div>
       {#each group.hits.slice(0, 3) as hit, index (hit.entryId ?? hit)}
@@ -366,6 +368,7 @@
           {#if !timelineStatus}<span class={sessionDotClass(alive, busy)} role="img" aria-label={sessionDotTitle(alive, busy)} title={sessionDotTitle(alive, busy)}></span>{/if}
           {#if runner.attentionStatus}<span class={attentionClass(runner)} role="img" aria-label={attentionTitle(runner)} title={attentionTitle(runner)}>{attentionGlyph(runner.attentionStatus)}</span>{/if}
           <span class="s-name">{sessionName(session)}{#if current} · current{/if}</span>
+          <HarnessPill harness={runner.harness || session.harness || "pi"} />
           <span class="s-date">{sessionDateMeta(session)}</span>
         </div>
         {#if session.name && session.preview}
@@ -397,7 +400,10 @@
           <span class="s-loop-icon" aria-hidden="true">↻</span>
           <span class="s-loop-copy">
             <span class="s-loop-kicker">Sequential loop · {family.forks.length} {plural(family.forks.length, "iteration")}</span>
-            <strong>{sessionName(family.session, "Loop run")}</strong>
+            <span class="s-loop-titleline">
+              <strong>{sessionName(family.session, "Loop run")}</strong>
+              <HarnessPill harness={runnerFor(family.session).harness || family.session.harness || "pi"} />
+            </span>
           </span>
           <span class={`s-loop-status status-${summary.status}`}>{summary.label}</span>
           <span class="s-loop-chevron" aria-hidden="true"></span>
@@ -782,7 +788,8 @@
   }
 
   .s-loop-copy { display: grid; min-width: 0; gap: 1px; }
-  .s-loop-copy strong { overflow: hidden; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .s-loop-titleline { display: flex; min-width: 0; align-items: center; gap: 6px; }
+  .s-loop-copy strong { min-width: 0; overflow: hidden; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
   .s-loop-kicker { color: var(--muted); font-size: 8.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
   .s-loop-status {

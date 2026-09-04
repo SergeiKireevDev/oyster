@@ -111,6 +111,28 @@ if (SKIP_LOCAL) {
   });
 }
 
+test("SQLite catalog exposes a persisted harness in summaries and search hits", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-harness-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  const writer = new DatabaseSync(path);
+  schema(writer);
+  writer.prepare(`INSERT INTO sessions
+    (id, created_at, cwd, metadata, active_leaf_id, updated_at, first_message, all_messages_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run("claude-session", "2026-01-01", "/work", JSON.stringify({ harness: "claude-code" }), "u1", "2026-01-01", "claude durable", "claude durable");
+  writer.prepare(`INSERT INTO session_entries
+    (session_id, id, entry_seq, parent_id, type, timestamp, payload) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run("claude-session", "u1", 1, null, "message", "2026-01-01", JSON.stringify({ message: { role: "user", content: "claude durable" } }));
+  writer.prepare("INSERT INTO session_materialized (session_id, payload) VALUES (?, ?)")
+    .run("claude-session", JSON.stringify({ messageCount: 1 }));
+  writer.close();
+
+  const catalog = createSqliteSessionCatalog({ databasePath: path });
+  assert.equal((await catalog.list())[0].harness, "claude-code");
+  assert.equal((await catalog.search({ q: "claude durable", scope: "all" })).results[0].harness, "claude-code");
+});
+
 test("canonical transcript messages omit persisted binary payloads", () => {
   const entry = {
     type: "message",
@@ -240,6 +262,7 @@ test("SQLite catalog treats database columns as authoritative and tolerates malf
     createdAt: "2026-01-01",
     modifiedAt: "2026-01-01",
     name: null,
+    harness: "pi",
     cwd: "/work",
     parentSessionId: null,
     preview: null,

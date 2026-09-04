@@ -53,6 +53,10 @@ test("new-session harness selector starts a Claude Code runner", async ({ page }
   const runner = await newSession(page, { harness: "claude-code" });
   expect(runner.harness).toBe("claude-code");
   await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
+  await openSessionSidebar(page);
+  const pill = page.locator("#sessions .session-sidebar-entry.current .harness-pill");
+  await expect(pill).toHaveText("Claude Code");
+  await expect(pill).toHaveAttribute("data-harness", "claude-code");
 });
 
 test("Claude Code model selection uses its native control protocol and persists the chosen model", async ({ page }) => {

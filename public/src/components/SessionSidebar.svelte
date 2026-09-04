@@ -1,6 +1,7 @@
 <script>
   import { onDestroy, onMount } from "svelte";
   import SearchHitSnippet from "./SearchHitSnippet.svelte";
+  import HarnessPill from "./HarnessPill.svelte";
   import { appSession } from "../stores/appSession.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -549,6 +550,10 @@
     return runner?.sessionName || session?.name || session?.preview || "Empty session";
   }
 
+  function sessionHarness(session, runner) {
+    return runner?.harness || session?.harness || "pi";
+  }
+
   function snippetBefore(value, limit = 48) {
     const text = String(value ?? "").replace(/^…/, "");
     return text.length > limit ? `…${text.slice(-limit)}` : `${value?.startsWith?.("…") ? "…" : ""}${text}`;
@@ -589,7 +594,10 @@
         <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy} aria-hidden="true"></span>
       {/if}
       <span class="session-sidebar-copy">
-        <span class="session-sidebar-name">{label(session, runner)}</span>
+        <span class="session-sidebar-titleline">
+          <span class="session-sidebar-name">{label(session, runner)}</span>
+          <HarnessPill harness={sessionHarness(session, runner)} />
+        </span>
         {#if meta}
           <span class="session-sidebar-meta">{meta}</span>
         {/if}
@@ -627,7 +635,10 @@
       <span class="session-loop-icon" aria-hidden="true">↻</span>
       <span class="session-loop-copy">
         <span class="session-loop-kicker">Loop · {family.children.length} iteration{family.children.length === 1 ? "" : "s"}</span>
-        <span class="session-sidebar-name">{label(session, runner)}</span>
+        <span class="session-sidebar-titleline">
+          <span class="session-sidebar-name">{label(session, runner)}</span>
+          <HarnessPill harness={sessionHarness(session, runner)} />
+        </span>
       </span>
       <span class={`session-loop-progress status-${summary.status}`}>{summary.label}</span>
       <span class="session-loop-chevron" aria-hidden="true"></span>
@@ -721,6 +732,7 @@
     <section class="session-sidebar-hit-group" title={group.sessionKey}>
       <div class="session-sidebar-hit-heading">
         <span class="session-sidebar-name">{group.first.sessionName || group.first.sessionPreview || "Empty session"}</span>
+        <HarnessPill harness={group.first.harness || "pi"} />
         <span class="session-sidebar-hit-count">{group.hits.length}</span>
       </div>
       <span
@@ -1268,6 +1280,8 @@
   .session-sidebar-placeholder .session-sidebar-name { color: color-mix(in srgb, var(--accent) 32%, var(--text)); }
   .session-sidebar-row { display: flex; min-width: 0; min-height: 54px; flex: 1; align-items: center; gap: 8px; padding: 7px 7px 7px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
   .session-sidebar-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+  .session-sidebar-titleline { display: flex; min-width: 0; align-items: center; gap: 6px; }
+  .session-sidebar-titleline .session-sidebar-name { min-width: 0; flex: 1; }
   .session-sidebar-name,
   .session-sidebar-folder,
   .session-sidebar-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
