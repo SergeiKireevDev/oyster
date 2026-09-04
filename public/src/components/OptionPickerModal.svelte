@@ -5,33 +5,36 @@
   const dialogs = getDialogService();
   const optionPicker = dialogs.optionPicker;
 
-  /** @typedef {{ text: unknown; index: number }} VisibleOption */
+  /** @typedef {{ text: unknown; index: number; disabled: boolean }} VisibleOption */
 
   /**
    * @param {unknown[]} options
    * @param {unknown} searchQuery
+   * @param {boolean[]} disabled
    * @returns {VisibleOption[]}
    */
-  function filterOptions(options, searchQuery) {
+  function filterOptions(options, searchQuery, disabled = []) {
     const normalizedQuery = String(searchQuery ?? "").trim().toLowerCase();
     return options
-      .map((text, index) => ({ text, index }))
+      .map((text, index) => ({ text, index, disabled: disabled[index] === true }))
       .filter(({ text }) => !normalizedQuery || String(text).toLowerCase().includes(normalizedQuery));
   }
 
   /** @param {number} index */
   function setActive(index) {
-    if (index !== $optionPicker.active) dialogs.setOptionActive(index);
+    if ($optionPicker.disabled[index] || index === $optionPicker.active) return;
+    dialogs.setOptionActive(index);
   }
 
   /** @param {number} direction */
   function move(direction) {
-    if (!visibleOptions.length) return;
-    const currentPosition = visibleOptions.findIndex(({ index }) => index === $optionPicker.active);
+    const selectableOptions = visibleOptions.filter((option) => !option.disabled);
+    if (!selectableOptions.length) return;
+    const currentPosition = selectableOptions.findIndex(({ index }) => index === $optionPicker.active);
     const nextPosition = currentPosition < 0
-      ? (direction > 0 ? 0 : visibleOptions.length - 1)
-      : (currentPosition + direction + visibleOptions.length) % visibleOptions.length;
-    setActive(visibleOptions[nextPosition].index);
+      ? (direction > 0 ? 0 : selectableOptions.length - 1)
+      : (currentPosition + direction + selectableOptions.length) % selectableOptions.length;
+    setActive(selectableOptions[nextPosition].index);
   }
 
   /** @param {KeyboardEvent} event */
@@ -60,9 +63,9 @@
     if (event.target instanceof Element && event.target.closest("button")) return;
 
     const activeIndex = $optionPicker.active;
-    const targetIndex = activeIndex >= 0 && visibleOptions.some(({ index }) => index === activeIndex)
+    const targetIndex = activeIndex >= 0 && visibleOptions.some(({ index, disabled }) => index === activeIndex && !disabled)
       ? activeIndex
-      : ($optionPicker.searchable ? visibleOptions[0]?.index : undefined);
+      : ($optionPicker.searchable ? visibleOptions.find((option) => !option.disabled)?.index : undefined);
     if (targetIndex === undefined) return;
 
     event.preventDefault();
@@ -73,13 +76,13 @@
   function updateQuery(event) {
     const nextQuery = event.currentTarget.value;
     dialogs.setOptionQuery(nextQuery);
-    const [firstMatch] = filterOptions($optionPicker.options, nextQuery);
+    const firstMatch = filterOptions($optionPicker.options, nextQuery, $optionPicker.disabled).find((option) => !option.disabled);
     if (firstMatch) setActive(firstMatch.index);
   }
 
   let modelMode = $derived($optionPicker.variant === "model");
   let query = $derived(String($optionPicker.query ?? "").trim().toLowerCase());
-  let visibleOptions = $derived(filterOptions($optionPicker.options, query));
+  let visibleOptions = $derived(filterOptions($optionPicker.options, query, $optionPicker.disabled));
   let searchLabel = $derived(`Search ${$optionPicker.title || (modelMode ? "models" : "options")}`);
 </script>
 
@@ -125,6 +128,7 @@
         {modelMode}
         active={item.index === $optionPicker.active}
         selected={item.index === $optionPicker.selected}
+        disabled={item.disabled}
         onChoose={dialogs.chooseOption}
         onActivate={setActive}
       />

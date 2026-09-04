@@ -13,6 +13,7 @@
    *   modelMode?: boolean;
    *   active?: boolean;
    *   selected?: boolean;
+   *   disabled?: boolean;
    *   onChoose?: (index: number) => void;
    *   onActivate?: (index: number) => void;
    * }}
@@ -24,6 +25,7 @@
     modelMode = false,
     active = false,
     selected = false,
+    disabled = false,
     onChoose = noop,
     onActivate = noop,
   } = $props();
@@ -59,7 +61,7 @@
   let modelText = $derived(separator < 0 ? optionText : optionText.slice(separator + 1));
   let provider = $derived(highlight(providerText, normalizedQuery));
   let model = $derived(highlight(modelText, normalizedQuery));
-  let modelOptionLabel = $derived(selected ? `${optionText}, current model` : optionText);
+  let modelOptionLabel = $derived(disabled ? `${optionText}, unavailable` : selected ? `${optionText}, current model` : optionText);
 </script>
 
 {#if modelMode}
@@ -72,6 +74,7 @@
     role="option"
     aria-selected={selected}
     aria-label={modelOptionLabel}
+    {disabled}
     title={optionText}
     use:scrollIntoViewWhen={active}
     onclick={choose}
@@ -117,7 +120,8 @@
     transition: border-color .15s, background-color .15s;
   }
 
-  .model-autocomplete-option:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: var(--surface-hover); }
+  .model-autocomplete-option:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: var(--surface-hover); }
+  .model-autocomplete-option:disabled { cursor: not-allowed; opacity: .48; }
 
   .model-autocomplete-option.active {
     border-color: var(--selection-border);

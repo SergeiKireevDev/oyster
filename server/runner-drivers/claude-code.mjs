@@ -15,20 +15,26 @@ function response(id, command, data, success = true, error = undefined) {
 function availableModels(records, currentModel = null) {
   const models = [];
   const seen = new Set();
+  const resolved = new Set();
   for (const record of Array.isArray(records) ? records : []) {
-    if (!record || typeof record !== "object" || record.disabled === true) continue;
+    if (!record || typeof record !== "object") continue;
     const id = typeof record.value === "string" ? record.value.trim() : "";
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    const resolvedModel = typeof record.resolvedModel === "string" && record.resolvedModel.trim()
+      ? record.resolvedModel.trim()
+      : null;
+    if (resolvedModel) resolved.add(resolvedModel);
     models.push({
       provider: "anthropic",
       id,
       ...(typeof record.displayName === "string" && record.displayName.trim() ? { name: record.displayName.trim() } : {}),
       ...(typeof record.description === "string" && record.description.trim() ? { description: record.description.trim() } : {}),
-      ...(typeof record.resolvedModel === "string" && record.resolvedModel.trim() ? { resolvedModel: record.resolvedModel.trim() } : {}),
+      ...(resolvedModel ? { resolvedModel } : {}),
+      ...(record.disabled === true ? { disabled: true } : {}),
     });
   }
-  if (typeof currentModel === "string" && currentModel.trim() && !seen.has(currentModel.trim())) {
+  if (typeof currentModel === "string" && currentModel.trim() && !seen.has(currentModel.trim()) && !resolved.has(currentModel.trim())) {
     models.push({ provider: "anthropic", id: currentModel.trim() });
   }
   return models;
