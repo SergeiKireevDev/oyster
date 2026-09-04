@@ -60,17 +60,17 @@ const projectUse = process.env.E2E_VIDEO
 // Specs run in isolated per-test containers. `lib/reset.js` allocates a host
 // port from 4000..4018 for each live test and tears that container down in
 // afterEach, so the suite can run in parallel without workspace/session bleed.
-// SQLite-backed pi containers are memory-intensive. Use three workers by
-// default; set E2E_WORKERS to tune concurrency for the host.
+// SQLite-backed pi containers are memory-intensive. Keep CI serial so its
+// shared runner only hosts one Oyster container plus Chromium at a time; local
+// hosts use three workers by default. E2E_WORKERS overrides either default.
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.js/,
   fullyParallel: true,
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 3,
-  // Container startup and SSE reconnection can transiently race under the full
-  // Docker matrix. Retry once in a fresh per-test container; deterministic
-  // product failures still fail on the second attempt with retained traces.
-  retries: 1,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : process.env.CI ? 1 : 3,
+  // Do not hide flakes or inflate the reported execution count. Each failure
+  // retains diagnostics and must be fixed rather than retried.
+  retries: 0,
   timeout: 60 * 1000, // fail stalled tests quickly; E2E tunnels are deterministic mocks
   expect: { timeout: 30 * 1000 },
   globalSetup: "./global-setup.js",
