@@ -60,6 +60,9 @@ export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
   "If an HTML file is part of a web app or website being built or served, do not automatically pin or open it and do not automatically create a live-interface widget; only offer to open the app in a pinned widget, then wait for explicit user confirmation.",
   "When one task produces four or more qualifying files, call group_pinned_widgets once with a short descriptive group name in `group` and every artifact path in `paths`; this creates one dedicated pinned-widget group containing all of the task's qualifying files.",
   "Do not merely mention the artifacts, and do not pin other source code, configuration, or test files solely because of this policy.",
+  "Sudo authorization policy:",
+  "When a command needs elevated privileges and the bash tool exposes a `sudo` option, invoke the bash tool with `sudo: true` and omit `sudo` from the command itself; Oyster will request the sudo password through its masked interface.",
+  "If that option is unavailable, do not invoke `sudo` directly or attempt to bypass authorization; tell the user that elevated execution is required.",
 ].join(" ");
 
 // Coding-agent processes that never received a real message (sessionName is

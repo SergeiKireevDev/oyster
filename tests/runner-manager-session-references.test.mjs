@@ -73,6 +73,8 @@ test("SQLite runners start and restart by ID with explicit store environment", a
   assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /standalone HTML.*pinned_widget.*Pinned Widgets viewer/);
   assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /HTML file is part of a web app.*do not automatically pin or open.*only offer.*wait for explicit user confirmation/);
   assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /four or more.*group_pinned_widgets.*`group`.*`paths`.*dedicated pinned-widget group/);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /bash tool.*`sudo` option.*`sudo: true`.*omit `sudo`.*masked interface/);
+  assert.match(PINNED_ARTIFACT_SYSTEM_PROMPT, /option is unavailable.*do not invoke `sudo` directly.*elevated execution is required/);
   assert.equal(spawns[0].options.env.PERSISTENT_STORE, "sqlite");
   assert.equal(runner.resumeId, null);
   assert.deepEqual(manager.runnerInfo(runner), {
