@@ -8,6 +8,7 @@ export function runSessionCatalogContract(name, createFixture) {
     const listed = await catalog.list({ cwd });
     assert.equal(listed.length, 2);
     assert.equal(listed.find((session) => session.id === rootId)?.preview, "root prompt");
+    assert.equal(listed.find((session) => session.id === rootId)?.harness, "pi");
     assert.equal((await catalog.findById(rootId)).id, rootId);
     assert.equal((await catalog.summarize(rootIdentity)).messageCount, 2);
   });
@@ -31,5 +32,6 @@ export function runSessionCatalogContract(name, createFixture) {
     const search = await catalog.search({ q: "durable phrase", scope: "session", path: rootIdentity });
     assert.equal(search.results.length, 1);
     assert.equal(search.results[0].sessionId, rootId);
+    assert.equal(search.results[0].harness, "pi");
   });
 }

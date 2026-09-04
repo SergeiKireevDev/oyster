@@ -193,6 +193,7 @@ export function summarizeSessionFile(path) {
     id: header?.id ?? null,
     createdAt: header?.timestamp ?? null,
     name,
+    harness: "pi",
     cwd: header?.cwd ?? null,
     parentSession: header?.parentSession ?? null,
     preview: firstUserText?.slice(0, 120) ?? null,
@@ -300,7 +301,7 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
   activeEntries.reverse();
   const activeIds = new Set(activeEntries.map((entry) => entry.id));
   const searchableEntries = entries.filter((entry) => entry.type === "session_info" || activeIds.has(entry.id));
-  const meta = { id: header?.id ?? null, name, preview: null, cwd: header?.cwd ?? null };
+  const meta = { id: header?.id ?? null, name, preview: null, cwd: header?.cwd ?? null, harness: "pi" };
   const hits = [];
   outer: for (const e of searchableEntries) {
     for (const t of entryTexts(e)) {
@@ -367,6 +368,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
         sessionName: sessionMeta.name,
         sessionPreview: sessionMeta.preview,
         sessionCwd: sessionMeta.cwd,
+        harness: sessionMeta.harness,
         folder: folderName,
         folderLabel: decodeFolderName(folderName),
       });
