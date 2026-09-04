@@ -12,6 +12,28 @@ function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };
 }
 
+function availableModels(records, currentModel = null) {
+  const models = [];
+  const seen = new Set();
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record || typeof record !== "object" || record.disabled === true) continue;
+    const id = typeof record.value === "string" ? record.value.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    models.push({
+      provider: "anthropic",
+      id,
+      ...(typeof record.displayName === "string" && record.displayName.trim() ? { name: record.displayName.trim() } : {}),
+      ...(typeof record.description === "string" && record.description.trim() ? { description: record.description.trim() } : {}),
+      ...(typeof record.resolvedModel === "string" && record.resolvedModel.trim() ? { resolvedModel: record.resolvedModel.trim() } : {}),
+    });
+  }
+  if (typeof currentModel === "string" && currentModel.trim() && !seen.has(currentModel.trim())) {
+    models.push({ provider: "anthropic", id: currentModel.trim() });
+  }
+  return models;
+}
+
 function ensureRuntime(runner) {
   const runtime = runner.driverRuntime ??= {
     sessionId: runner.sessionId ?? null,
@@ -49,12 +71,9 @@ export function createClaudeCodeDriver({
   spawnImpl = spawn,
   permissionMode = "default",
   sqlitePath = null,
-  models = ["default", "sonnet", "opus", "haiku", "fable"],
 } = {}) {
   const executable = nonEmpty(bin, "Claude Code executable");
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError("Claude Code arguments must be strings");
-  if (!Array.isArray(models) || models.some((model) => typeof model !== "string" || !model.trim())) throw new TypeError("Claude Code models must be non-empty strings");
-  const availableModelIds = [...new Set(models.map((model) => model.trim()))];
   if (typeof spawnImpl !== "function") throw new TypeError("Claude Code spawn implementation must be a function");
   return Object.freeze(validateRunnerDriver({
     id: "claude-code",
@@ -93,12 +112,22 @@ export function createClaudeCodeDriver({
         const pending = runtime.controlRequests.get(control.request_id);
         if (!pending) return [];
         runtime.controlRequests.delete(control.request_id);
+        if (pending.command === "get_available_models") {
+          if (control.subtype === "success") {
+            events.push(response(pending.id, pending.command, {
+              models: availableModels(control.response?.models, runtime.model),
+            }));
+          } else {
+            events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models")));
+          }
+          return events;
+        }
         if (control.subtype === "success") {
           runtime.model = pending.model;
           for (const id of runtime.stateRequests.splice(0)) events.push(response(id, "get_state", stateFor(runner, runtime)));
-          events.push(response(pending.id, "set_model", {}));
+          events.push(response(pending.id, pending.command, {}));
         } else {
-          events.push(response(pending.id, "set_model", null, false, String(control.error ?? "Claude Code rejected the model")));
+          events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code rejected the model")));
         }
         return events;
       }
@@ -151,8 +180,10 @@ export function createClaudeCodeDriver({
         return true;
       }
       if (command.type === "get_available_models") {
-        const ids = [...new Set([...availableModelIds, runtime.model].filter(Boolean))];
-        emit(response(command.id, "get_available_models", { models: ids.map((id) => ({ provider: "anthropic", id })) }));
+        if (!child?.stdin?.writable) return false;
+        const requestId = `oyster-models-${command.id}`;
+        runtime.controlRequests.set(requestId, { id: command.id, command: command.type });
+        child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "list_models" } })}\n`);
         return true;
       }
       if (command.type === "set_model") {
@@ -162,7 +193,7 @@ export function createClaudeCodeDriver({
           return true;
         }
         const requestId = `oyster-model-${command.id}`;
-        runtime.controlRequests.set(requestId, { id: command.id, model: command.modelId.trim() });
+        runtime.controlRequests.set(requestId, { id: command.id, command: command.type, model: command.modelId.trim() });
         child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "set_model", model: command.modelId.trim() } })}\n`);
         return true;
       }

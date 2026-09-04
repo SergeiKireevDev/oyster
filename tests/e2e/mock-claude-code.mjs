@@ -35,6 +35,23 @@ const supportedModels = new Set(["default", "sonnet", "opus", "haiku", "fable"])
 for await (const line of createInterface({ input: process.stdin, crlfDelay: Infinity })) {
   let input;
   try { input = JSON.parse(line); } catch { continue; }
+  if (input.type === "control_request" && input.request?.subtype === "list_models") {
+    emit({
+      type: "control_response",
+      response: {
+        subtype: "success",
+        request_id: input.request_id,
+        response: {
+          models: [...supportedModels].map((value) => ({
+            value,
+            resolvedModel: value === "default" ? "sonnet" : value,
+            displayName: value === "default" ? "Default (recommended)" : `${value[0].toUpperCase()}${value.slice(1)}`,
+          })),
+        },
+      },
+    });
+    continue;
+  }
   if (input.type === "control_request" && input.request?.subtype === "set_model") {
     const requested = input.request.model;
     if (typeof requested === "string" && supportedModels.has(requested)) {
