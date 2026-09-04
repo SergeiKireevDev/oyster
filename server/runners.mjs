@@ -25,10 +25,11 @@
  *
  * Watchdog: a live process is not necessarily responsive (wedged protocol
  * loop, full stdin pipe). Every WATCHDOG_INTERVAL_MS we ask the selected
- * driver for a state command for each subscribed runner; any stdout line
- * counts as proof of life. Two consecutive silent probes → restart the
- * runner and tell its clients why. The get_state responses double as a
- * reconciler for a stuck `busy` flag (isStreaming/isCompacting overwrite it).
+ * driver for a health command for each subscribed runner; any stdout line
+ * counts as proof of life. Drivers without a dedicated health command fall
+ * back to their state command, whose response also reconciles a stuck `busy`
+ * flag (isStreaming/isCompacting overwrite it). Two consecutive silent probes
+ * restart the runner and notify its clients.
  */
 
 import { randomUUID } from "node:crypto";
@@ -471,6 +472,14 @@ export async function createRunnerManager(state, {
     sendToRunner(runner, driverFor(runner).stateCommand(srvId()), { autostart: false });
   }
 
+  function requestHealth(runner) {
+    const driver = driverFor(runner);
+    const command = typeof driver.healthCommand === "function"
+      ? driver.healthCommand(srvId())
+      : driver.stateCommand(srvId());
+    sendToRunner(runner, command, { autostart: false });
+  }
+
   /** flush commands that were held back while a session resume was in flight */
   function finishResume(runner) {
     if (!runner.resumeId) return;
@@ -841,7 +850,7 @@ export async function createRunnerManager(state, {
         runner.probeMisses = 0;
       }
       runner.probeSentAt = Date.now();
-      requestState(runner); // any stdout before the next tick counts as alive
+      requestHealth(runner); // any child stdout before the next tick counts as alive
     }
   }
 
