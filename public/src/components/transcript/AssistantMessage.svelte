@@ -6,11 +6,9 @@
 
   let {
     assistantStore,
-    activityBlocks = [],
-    activityKey = "current",
+    displayBlocks = [],
+    currentActivityKey = null,
     role = "assistant",
-    activityActive = false,
-    activityUnsettled = false,
     restores = [],
     onPermalink = () => {},
     onCopy = () => {},
@@ -19,7 +17,6 @@
   } = $props();
   let root = $state(null);
   const data = $derived($assistantStore);
-  const displayBlocks = $derived(arrangeActivity(data.blocks, activityBlocks, activityKey));
   const restore = $derived(restores.find((item) => item.target === root));
   const empty = $derived(displayBlocks.length === 0 && !data.errorMessage);
 
@@ -45,27 +42,6 @@
     };
   }
 
-  function arrangeActivity(blocks = [], activities = [], identity = "current") {
-    const visible = [];
-    if (activities.length) {
-      visible.push({
-        type: "activityStack",
-        renderKey: `activity:${identity}`,
-        blocks: activities,
-      });
-    }
-
-    let textPosition = 0;
-    for (const block of blocks) {
-      if (block.type !== "text") continue;
-      const renderKey = `text:${textPosition}`;
-      textPosition += 1;
-      if (!block.text) continue;
-      visible.push({ ...block, renderKey });
-    }
-    return visible;
-  }
-
   function blockIdentity(block) {
     return block.renderKey;
   }
@@ -78,7 +54,8 @@
       {#if block.type === "text"}
         <SanitizedMarkdown className="md" source={block.text} />
       {:else if block.type === "activityStack"}
-        <ActivityStack blocks={block.blocks} active={activityActive} unsettled={activityUnsettled} {thinkingPreview} />
+        {@const activityCurrent = block.renderKey === currentActivityKey}
+        <ActivityStack blocks={block.blocks} active={activityCurrent} unsettled={activityCurrent} {thinkingPreview} />
       {/if}
       <AssistantPartActions
         target={root}
