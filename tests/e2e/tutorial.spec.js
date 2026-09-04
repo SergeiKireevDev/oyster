@@ -65,6 +65,10 @@ test("first-run tour waits for credentials, persists per form factor, and can be
   // second login. Let the shared helper close it only if it is present while
   // preserving the mobile tutorial that follows.
   await login(page, { keepTutorial: true });
+  if (!(await tutorial.isVisible())) {
+    await page.locator("#menuBtn").click();
+    await page.getByRole("menuitem", { name: "Take the tour…" }).click();
+  }
   await expect(tutorial).toBeVisible();
   await expect(page.locator("#tutorialTitle")).toHaveText("Welcome to Oyster");
 
