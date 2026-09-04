@@ -131,17 +131,8 @@ async function loadOtherFolderAndSwitch(page, token, { mobile = false } = {}) {
   await expect(row).toHaveClass(/current/, { timeout: 10000 });
 }
 
-async function installFakeCloudflared() {
-  dexec(`bin=$(command -v cloudflared); cat > "$bin" <<'EOF'
-#!/usr/bin/env bash
-echo "https://e2e-\${RANDOM}-fake.trycloudflare.com" >&2
-while true; do sleep 3600; done
-EOF
-chmod +x "$bin"`);
-}
-
 async function installSecondMockModel() {
-  dexec(`cat > /root/.pi/agent/models.json <<'EOF'
+  dexec(`cat > /home/node/.pi/agent/models.json <<'EOF'
 {
   "providers": {
     "mock": {
@@ -649,7 +640,6 @@ function defineSessionManagementTests({ includeResourceSwitch = false, includeCr
 
   if (includeResourceSwitch) test("switching sessions restores session-scoped widgets, routines, and model", async ({ page }) => {
     await installSecondMockModel();
-    await installFakeCloudflared();
     await login(page);
 
     const A = tag("RESOURCES-A");

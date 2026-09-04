@@ -11,8 +11,8 @@ async function restartCurrentRunner() {
 
 function writeMockOAuth(present, generation = 1) {
   const script = present
-    ? `const fs=require('fs');const p='/root/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};v.anthropic={type:'oauth',access:'e2e-access-token-${generation}-canary',refresh:'e2e-refresh-token-${generation}-canary',expires:Date.now()+3600000};fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`
-    : `const fs=require('fs');const p='/root/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};delete v.anthropic;fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`;
+    ? `const fs=require('fs');const p='/home/node/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};v.anthropic={type:'oauth',access:'e2e-access-token-${generation}-canary',refresh:'e2e-refresh-token-${generation}-canary',expires:Date.now()+3600000};fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`
+    : `const fs=require('fs');const p='/home/node/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};delete v.anthropic;fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`;
   dexec(`node -e ${JSON.stringify(script)}`);
 }
 
@@ -176,7 +176,7 @@ async function runOAuthFlow(page) {
   await page.getByRole("button", { name: "Yes" }).click();
   await expectAnthropicAvailability(page, false);
   expect(mock.isSignedIn()).toBe(false);
-  expect(dexec("grep -F e2e-access-token- /root/.pi/agent/auth.json >/dev/null; echo $? ")).not.toBe("0");
+  expect(dexec("grep -F e2e-access-token- /home/node/.pi/agent/auth.json >/dev/null; echo $? ")).not.toBe("0");
   const browserStorage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(browserStorage).not.toContain("e2e-access-token-");
 }

@@ -49,8 +49,16 @@ test("both runtime images include hublot, Git server, and Claude Code dependenci
 
 test("both runtime images create PI_DIR before running build-time tests", () => {
   for (const dockerfile of [deployment, local]) {
-    assert.ok(dockerfile.indexOf("RUN mkdir -p /workspace") < dockerfile.indexOf("npm test"));
+    assert.ok(dockerfile.indexOf("/workspace") < dockerfile.indexOf("npm test"));
   }
+});
+
+test("runtime images use an unprivileged user and permission bypass is scoped to E2E", () => {
+  assert.match(deployment, /HOME=\/home\/node[\s\S]*USER node/);
+  assert.match(local, /HOME=\/home\/node[\s\S]*CLAUDE_CODE_PERMISSION_MODE=bypassPermissions[\s\S]*USER node/);
+  assert.doesNotMatch(deployment, /CLAUDE_CODE_PERMISSION_MODE=bypassPermissions/);
+  assert.match(deployment, /RUN test "\$\(id -u\)" -ne 0/);
+  assert.match(local, /RUN test "\$\(id -u\)" -ne 0/);
 });
 
 test("local-source build documentation pins context, revision, and version", () => {

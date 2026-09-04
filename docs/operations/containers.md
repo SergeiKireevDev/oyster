@@ -33,23 +33,23 @@ docker run --rm -p 4000:4000 \
   -e OYSTER_TOKEN='<strong-random-token>' \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v "$HOME/.claude:/root/.claude" \
+  -v "$HOME/.claude:/home/node/.claude" \
   oyster:sqlite
 ```
 
-The `~/.claude` mount must be writable if Claude Code should create and resume sessions. When Claude Code is enabled, authenticate Anthropic separately for pi and Claude Code in Oyster's Credentials modal. pi writes its grant to `/root/.pi/agent/auth.json`; Claude Code writes its independent grant to `/root/.claude/.credentials.json`. Persist both directories to retain both logins across container replacement. While a Claude runner is selected, Oyster polls `/root/.claude/projects` and mirrors its JSONL transcript into `/root/.pi/agent/sessions.sqlite`; persist `/root/.pi/agent` as well if the searchable SQLite catalog should survive container replacement:
+The `~/.claude` mount must be writable if Claude Code should create and resume sessions. When Claude Code is enabled, authenticate Anthropic separately for pi and Claude Code in Oyster's Credentials modal. pi writes its grant to `/home/node/.pi/agent/auth.json`; Claude Code writes its independent grant to `/home/node/.claude/.credentials.json`. Persist both directories to retain both logins across container replacement. While a Claude runner is selected, Oyster polls `/home/node/.claude/projects` and mirrors its JSONL transcript into `/home/node/.pi/agent/sessions.sqlite`; persist `/home/node/.pi/agent` as well if the searchable SQLite catalog should survive container replacement:
 
 ```bash
 docker run --rm -p 4000:4000 \
   -e OYSTER_TOKEN='<strong-random-token>' \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v oyster-pi-agent:/root/.pi/agent \
-  -v "$HOME/.claude:/root/.claude" \
+  -v oyster-pi-agent:/home/node/.pi/agent \
+  -v "$HOME/.claude:/home/node/.claude" \
   oyster:sqlite
 ```
 
-Set `CLAUDE_CONFIG_DIR` if the Claude configuration mount uses another in-container path. Do not bake credentials into an image. Claude Code sessions default to `acceptEdits`; configure `CLAUDE_CODE_PERMISSION_MODE` and `CLAUDE_CODE_ARGS` according to the container's isolation and tool policy.
+Set `CLAUDE_CONFIG_DIR` if the Claude configuration mount uses another in-container path. Do not bake credentials into an image. Both runtime images execute Oyster as the unprivileged `node` user. The production image defaults Claude Code to `acceptEdits`; the local E2E image defaults to `bypassPermissions` inside its isolated test container. Configure `CLAUDE_CODE_PERMISSION_MODE` and `CLAUDE_CODE_ARGS` according to the container's isolation and tool policy.
 
 ## SQLite pi from an explicit source context
 

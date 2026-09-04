@@ -3,8 +3,8 @@
 # Build:  docker build -t oyster .
 # Run:    docker run -d -p 4000:4000 \
 #           -e OYSTER_TOKEN=<token> \
-#           -v ~/.pi/agent/auth.json:/root/.pi/agent/auth.json:ro \
-#           -v ~/.pi/agent/models.json:/root/.pi/agent/models.json:ro \
+#           -v ~/.pi/agent/auth.json:/home/node/.pi/agent/auth.json:ro \
+#           -v ~/.pi/agent/models.json:/home/node/.pi/agent/models.json:ro \
 #           --name oyster oyster
 #
 #         The auth.json/models.json mounts give the pi agent its LLM
@@ -77,8 +77,9 @@ COPY extensions ./extensions
 RUN npm run build
 
 # Register the bundled pi extensions (file-explorer, hublot, loop, routine)
-RUN mkdir -p /root/.pi/agent/extensions \
-    && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
+RUN mkdir -p /home/node/.pi/agent/extensions /home/node/.claude \
+    && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
+    && chown -R node:node /home/node/.pi /home/node/.claude
 
 # Bundle the deterministic mock LLM (OpenAI-compatible) used by the e2e suite,
 # plus the entrypoint that activates it when E2E_MOCK_LLM=1. This keeps the
@@ -97,7 +98,7 @@ ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
 
 # Workspace the pi agent operates in (mount your project here if you like).
 # Create it before tests because server startup validates PI_DIR.
-RUN mkdir -p /workspace
+RUN mkdir -p /workspace && chown node:node /workspace
 
 # Run the test suite at build time — the build fails if the repo is broken,
 # including when that same pi binary cannot persist and restore an RPC session
@@ -107,7 +108,11 @@ RUN PI_SQLITE_TEST_BIN="$PI_BIN" npm test
 ENV PORT=4000 \
     HOST=0.0.0.0 \
     PI_DIR=/workspace \
-    OYSTER_URL=http://127.0.0.1:4000
+    OYSTER_URL=http://127.0.0.1:4000 \
+    HOME=/home/node
+
+USER node
+RUN test "$(id -u)" -ne 0
 
 EXPOSE 4000
 

@@ -23,8 +23,10 @@ esac
 if [ "${E2E_MOCK_LLM:-0}" = "1" ]; then
   MOCK_PORT="${MOCK_PORT:-4010}"
   MODEL_ID="${MOCK_MODEL_ID:-e2e-mock}"
-  mkdir -p /root/.pi/agent
-  cat > /root/.pi/agent/models.json <<EOF
+  HOME_DIR="${HOME:-$(getent passwd "$(id -u)" | cut -d: -f6)}"
+  AGENT_DIR="${PI_CODING_AGENT_DIR:-${HOME_DIR}/.pi/agent}"
+  mkdir -p "$AGENT_DIR"
+  cat > "$AGENT_DIR/models.json" <<EOF
 {
   "providers": {
     "mock": {

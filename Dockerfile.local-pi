@@ -67,8 +67,9 @@ COPY .do ./.do
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build \
-    && mkdir -p /root/.pi/agent/extensions \
-    && ln -sf /app/extensions/*.ts /root/.pi/agent/extensions/
+    && mkdir -p /home/node/.pi/agent/extensions /home/node/.claude /workspace \
+    && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
+    && chown -R node:node /home/node/.pi /home/node/.claude /workspace
 
 COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
 COPY tests/e2e/mock-claude-code.mjs /opt/mock-claude-code.mjs
@@ -82,10 +83,14 @@ ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     PORT=4000 \
     HOST=0.0.0.0 \
     PI_DIR=/workspace \
-    OYSTER_URL=http://127.0.0.1:4000
+    OYSTER_URL=http://127.0.0.1:4000 \
+    HOME=/home/node \
+    CLAUDE_CODE_PERMISSION_MODE=bypassPermissions
 # Server startup validates PI_DIR, including during build-time tests.
-RUN mkdir -p /workspace
 RUN npm test
+
+USER node
+RUN test "$(id -u)" -ne 0
 
 EXPOSE 4000
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

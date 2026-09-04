@@ -5,6 +5,11 @@ import { ensureContainer, replaceContainer, teardownContainer } from "./lib/rese
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => { teardownContainer(); });
 
+test("E2E image runs Oyster as non-root with Claude permission bypass enabled", () => {
+  expect(dexec("test \"$(id -u)\" -ne 0 && test \"$(stat -c %u /proc/1)\" -ne 0 && echo non-root")).toBe("non-root");
+  expect(dexec("printenv CLAUDE_CODE_PERMISSION_MODE")).toBe("bypassPermissions");
+});
+
 test("SQLite conversation survives container replacement", async ({ page }) => {
   const token = `SQLITE-VOLUME-${Date.now()}`;
   await login(page);
@@ -19,8 +24,8 @@ test("SQLite conversation survives container replacement", async ({ page }) => {
   const persisted = before.json.sessions.find((session) => session.id === sessionId);
   expect(persisted).toMatchObject({ id: sessionId, sessionRef: { backend: "sqlite", id: sessionId } });
   expect(persisted.sessionKey).toBeTruthy();
-  expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
-  expect(dexec("test -s /root/.pi/agent/sessions.sqlite && echo present")).toBe("present");
+  expect(dexec("find /home/node/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
+  expect(dexec("test -s /home/node/.pi/agent/sessions.sqlite && echo present")).toBe("present");
   await waitFor(async () => {
     const titled = await api("GET", "/sessions?dir=/workspace");
     return titled.json.sessions.find((session) => session.id === sessionId)?.name === token;
@@ -44,5 +49,5 @@ test("SQLite conversation survives container replacement", async ({ page }) => {
     timeout: 15000,
     label: "resumed SQLite session after search hit",
   });
-  expect(dexec("find /root/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
+  expect(dexec("find /home/node/.pi/agent -type f -name '*.jsonl' -print")).toBe("");
 });
