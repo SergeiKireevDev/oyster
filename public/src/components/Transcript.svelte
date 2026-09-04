@@ -7,63 +7,21 @@
   import { appSession } from "../stores/appSession.js";
   import { checkpointRestores } from "../stores/checkpointRestores.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
+  import { interleaveTranscriptActivity } from "../lib/transcriptActivity.js";
   import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
   import { subscribeStoreGroup } from "../lib/storeGroup.js";
 
-  const isTurnBoundary = (item) => item.kind === "user" || item.kind === "compaction";
-  const isActivityBlock = (block) => block.type === "thinking" || block.type === "toolCall";
-
-  const turnActivityGroups = derived(transcriptItems, (items, set) => {
-    const assistantItems = items.filter((item) => !isTurnBoundary(item) && item.assistantStore);
+  const transcriptActivityLayout = derived(transcriptItems, (items, set) => {
+    const assistantItems = items.filter((item) => item.assistantStore);
     return subscribeStoreGroup(assistantItems.map((item) => item.assistantStore), (messages) => {
       const messageById = new Map(assistantItems.map((item, index) => [item.id, messages[index]]));
-      const groups = new Map();
-      let turnActivities = [];
-      let turnAnchorId = null;
-
-      const commitTurn = () => {
-        if (turnAnchorId && turnActivities.length) groups.set(turnAnchorId, turnActivities);
-        turnActivities = [];
-        turnAnchorId = null;
-      };
-
-      for (const item of items) {
-        if (isTurnBoundary(item)) {
-          commitTurn();
-          continue;
-        }
-        const message = messageById.get(item.id);
-        if (!message) continue;
-        turnAnchorId ??= item.id;
-        turnActivities.push(...(message.blocks ?? []).filter(isActivityBlock));
-      }
-      commitTurn();
-      set(groups);
+      set(interleaveTranscriptActivity(items, messageById));
     });
-  }, new Map());
-
-  const latestTurnActivityId = derived(
-    [transcriptItems, turnActivityGroups],
-    ([items, groups]) => {
-      let boundary = -1;
-      for (let index = items.length - 1; index >= 0; index--) {
-        if (isTurnBoundary(items[index])) {
-          boundary = index;
-          break;
-        }
-      }
-      for (let index = boundary + 1; index < items.length; index++) {
-        if (groups.has(items[index].id)) return items[index].id;
-      }
-      return null;
-    },
-  );
+  }, { blocksById: new Map(), currentActivityKey: null });
 
   let now = Date.now();
   let workPeriod;
   let workClock;
-
-  const isCurrentTurnActivity = (item) => $appSession.busy && item.id === $latestTurnActivityId;
 
   function stopWorkClock() {
     if (workClock === undefined) return;
@@ -108,7 +66,6 @@
     {:else if item.kind === "compaction"}
       <CompactionMarker tokensBefore={item.tokensBefore} />
     {:else}
-      {@const activityCurrent = isCurrentTurnActivity(item)}
       <AssistantMessage
         assistantStore={item.assistantStore}
         role={item.role}
@@ -117,10 +74,8 @@
         onRollback={item.onRollback}
         onRoot={item.setRoot}
         restores={$checkpointRestores}
-        activityActive={activityCurrent}
-        activityUnsettled={activityCurrent}
-        activityBlocks={$turnActivityGroups.get(item.id) ?? []}
-        activityKey={item.id}
+        displayBlocks={$transcriptActivityLayout.blocksById.get(item.id) ?? []}
+        currentActivityKey={$appSession.busy ? $transcriptActivityLayout.currentActivityKey : null}
       />
     {/if}
   {/each}

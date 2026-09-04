@@ -19,22 +19,20 @@ test("AssistantMessage compiles without Svelte or accessibility warnings", () =>
 
 test("AssistantMessage requires caller-owned state and derives empty presentation state", () => {
   assert.doesNotMatch(source, /from ["']svelte\/store["']/);
-  assert.match(source, /let \{\s*assistantStore,/);
+  assert.match(source, /let \{\s*assistantStore,\s*displayBlocks = \[\],\s*currentActivityKey = null,/);
   assert.match(source, /const empty = \$derived\(displayBlocks\.length === 0 && !data\.errorMessage\)/);
   assert.match(source, /class:empty=\{empty\}/);
 });
 
-test("AssistantMessage keeps rendered parts stable across streaming text updates", () => {
-  assert.match(source, /renderKey: `activity:\$\{identity\}`/);
-  assert.match(source, /const renderKey = `text:\$\{textPosition\}`/);
-  assert.match(source, /visible\.push\(\{ \.\.\.block, renderKey \}\)/);
+test("AssistantMessage keeps caller-planned parts stable across streaming updates", () => {
+  assert.match(source, /displayBlocks = \[\]/);
   assert.match(source, /function blockIdentity\(block\) \{\s*return block\.renderKey;/);
-  assert.doesNotMatch(source, /return block\.type === "activityStack" \? block\.key : block/);
+  assert.match(source, /block\.renderKey === currentActivityKey/);
+  assert.doesNotMatch(source, /arrangeActivity|latestActivityIndex|insertionIndex/);
 });
 
-test("AssistantMessage omits non-renderable blocks and exposes atomic errors", () => {
-  assert.match(source, /if \(block\.type !== "text"\) continue;/);
-  assert.match(source, /if \(!block\.text\) continue;/);
+test("AssistantMessage exposes caller-filtered blocks and atomic errors", () => {
+  assert.match(source, /\{#each displayBlocks as block, index \(blockIdentity\(block\)\)\}/);
   assert.match(source, /data-assistant-part="error" role="alert" aria-atomic="true"/);
   assert.match(source, /\.error-msg::before \{[\s\S]*?content: "!";[\s\S]*?border: 1px solid currentColor;/);
 });
