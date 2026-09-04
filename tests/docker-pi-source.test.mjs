@@ -39,10 +39,10 @@ test("clean pi builds hydrate generated AI model data through the package build"
 test("both runtime images include hublot, Git server, and Claude Code dependencies", () => {
   assert.match(deployment, /procps ripgrep lsof python3/);
   assert.match(local, /procps ripgrep lsof python3/);
-  assert.match(deployment, /@anthropic-ai\/claude-code@2\.1\.251/);
-  assert.match(local, /@anthropic-ai\/claude-code@2\.1\.251/);
-  assert.match(deployment, /claude --version \| grep -q '\^2\\\.1\\\.251 '/);
-  assert.match(local, /claude --version \| grep -q '\^2\\\.1\\\.251 '/);
+  assert.match(deployment, /@anthropic-ai\/claude-code@2\.1\.260/);
+  assert.match(local, /@anthropic-ai\/claude-code@2\.1\.260/);
+  assert.match(deployment, /claude --version \| grep -q '\^2\\\.1\\\.260 '/);
+  assert.match(local, /claude --version \| grep -q '\^2\\\.1\\\.260 '/);
   assert.match(deployment, /COPY extensions \.\/extensions/);
   assert.match(local, /COPY extensions \.\/extensions/);
 });
