@@ -11,7 +11,7 @@ export const REPLAY_GATED_EVENT_TYPES = new Set([
 ]);
 
 /** Load state and authoritative durable messages while applying state promptly. */
-export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity = (state) => state.sessionFile, onState, onMessages, onDurableMessages }) {
+export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, sessionFileQuery, getSessionIdentity = (state) => state.sessionFile, onState, onMessages, onDurableMessages, mergeLiveMessages }) {
   return loadCanonicalTranscript({
     getState: () => rpc({ type: "get_state" }),
     getMessages: () => rpc({ type: "get_messages" }),
@@ -21,7 +21,58 @@ export function loadDurableCanonicalTranscript({ rpc, applyState, fetchImpl, ses
     getDurableMessages: (state) => fetchDurableTranscript(fetchImpl, getSessionIdentity(state), sessionFileQuery, { limit: TRANSCRIPT_PAGE_SIZE }),
     shouldGetDurableMessages: (state) => Boolean(getSessionIdentity(state)),
     onDurableMessages,
+    mergeLiveMessages,
   });
+}
+
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+}
+
+function comparableContent(message) {
+  const content = typeof message?.content === "string"
+    ? [{ type: "text", text: message.content }]
+    : Array.isArray(message?.content) ? message.content : [];
+  return JSON.stringify(stableValue(content));
+}
+
+function comparableTimestamp(message) {
+  const raw = message?.timestamp ?? message?.entryTimestamp;
+  const value = typeof raw === "number" ? raw : Date.parse(String(raw ?? ""));
+  return Number.isFinite(value) ? value : null;
+}
+
+function sameClaudeMessage(left, right) {
+  if (!left || !right || left.role !== right.role) return false;
+  if (left.responseId && right.responseId && left.responseId !== right.responseId) return false;
+  if (left.toolCallId && right.toolCallId && left.toolCallId !== right.toolCallId) return false;
+  if (comparableContent(left) !== comparableContent(right)) return false;
+  const leftTimestamp = comparableTimestamp(left);
+  const rightTimestamp = comparableTimestamp(right);
+  return leftTimestamp === null || rightTimestamp === null || Math.abs(leftTimestamp - rightTimestamp) <= 10_000;
+}
+
+/** Append Claude's process-lifetime live tail to durable history without duplicating their overlap. */
+export function mergeClaudeTranscriptMessages(durableMessages, liveMessages) {
+  const durable = Array.isArray(durableMessages) ? durableMessages : [];
+  const live = Array.isArray(liveMessages) ? liveMessages : [];
+  if (!durable.length) return [...live];
+  if (!live.length) return [...durable];
+  const maximum = Math.min(durable.length, live.length);
+  for (let overlap = maximum; overlap > 0; overlap--) {
+    const durableStart = durable.length - overlap;
+    let matches = true;
+    for (let index = 0; index < overlap; index++) {
+      if (!sameClaudeMessage(durable[durableStart + index], live[index])) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return [...durable, ...live.slice(overlap)];
+  }
+  return [...durable, ...live];
 }
 
 /** Flush buffered live events after canonical rendering while suppressing duplicate completions. */
@@ -289,6 +340,9 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
             onDurablePage(result, getSessionIdentity?.());
             log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
           },
+          mergeLiveMessages: getRunnerInfo?.()?.harness === "claude-code"
+            ? mergeClaudeTranscriptMessages
+            : undefined,
         }));
       }
     } catch (error) {
