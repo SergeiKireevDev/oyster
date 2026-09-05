@@ -164,8 +164,8 @@ records known mismatches without transferring ownership to `state`.
 | Open SSE response and its request `close` listener | stable core connection registry | open route adds the response to `state.sseClients` | request `close` removes the listener and response; process shutdown ends remaining responses |
 | Runner child, readline `line`, stderr `data`, child `error`/`exit` listeners, and resume/restart timeouts | stable runner runtime record | runner operations, not candidate activation | runner stop/exit removes listeners and clears timeouts; stable-core process shutdown stops remaining runners |
 | Routine children and stream listeners | stable routine runtime record | routine operations | routine stop/exit removes listeners; stable-core process shutdown stops remaining routines |
-| Hublot service/tunnel children and child `error`/`exit` listeners | stable hublot handle registry | tunnel operations and startup recovery | tunnel close/exit removes listeners; stable-core process shutdown stops pool, supervisor, services, and tunnels |
-| Hublot supervisor interval, startup reconciliation task, and tunnel-pool refill task/queue | stable hublot runtime | stable-core startup/recovery; currently scheduling is reached from `init()` | stable hublot shutdown stops the interval/pool and awaits or invalidates tasks before store shutdown |
+| Hublot service/tunnel children and child `error`/`exit` listeners | stable hublot handle registry | tunnel operations | tunnel close/exit removes listeners; stable-core process shutdown stops the supervisor, services, and tunnels |
+| Hublot supervisor interval and startup reconciliation task | stable hublot runtime | stable-core startup; currently scheduling is reached from `init()` | stable hublot shutdown stops the interval and awaits or invalidates tasks before store shutdown |
 | OAuth registry, flow abort listeners, inactivity timers, and retention timers | stable OAuth runtime | OAuth request operations | flow completion/shutdown removes abort listeners and clears timers; stable-core process shutdown aborts remaining flows |
 | SSE broadcast function and server-event serializer | stable core | process startup or legacy migration | no acquired resource; process lifetime |
 | Application-store SQLite connection and repositories | stable core | process startup | stable-core process shutdown, after candidate and process-facing services stop |
@@ -255,24 +255,19 @@ runner record, and are removed or made unreachable when `stopPi()` terminates
 and clears the runner process resources. Resume/restart timeouts are likewise
 created by runner operations after initialization, not by `init()` itself.
 
-### Supervisor scheduling and tunnel pool
+### Supervisor scheduling
 
 `scheduleHublotStartupReconciliation()` stores
 `state.hublotStartupReconciliationTask`, later updates
 `state.hublotStartupReconciliation` and `state.hublotStartupReconciled`, and
 clears the task field on completion. It calls
 `state.hublotSupervisor.start()`, which idempotently owns one internal interval.
-Reconciliation can update hublot/process records and invoke service or tunnel
-recovery callbacks.
-
-After reconciliation, `ensureHublotTunnelPool()` can update
-`state.hublotTunnelPoolQueue`, `state.hublotTunnelPoolRefillTask`,
-`state.hublotTunnelPoolRefillRequested`, and
-`state.hublotTunnelPoolStopping`. It can update hublot records, spawn
-cloudflared processes, attach process `error`/`exit` subscriptions, and add
-handles to `state.hublotProcessHandles`. `stopTunnels()` stops the pool and the
-supervisor interval, removes process listeners through tunnel shutdown, and
-terminates the hublot processes.
+Reconciliation only verifies persisted process identities and updates
+hublot/process records: a desired-open hublot whose tunnel or service process
+is no longer live is closed, never restarted or re-tunneled. It spawns no
+processes and adds nothing to `state.hublotProcessHandles`. `stopTunnels()`
+stops the supervisor interval, removes process listeners through tunnel
+shutdown, and terminates the hublot processes.
 
 ### OAuth service and timers
 
@@ -298,8 +293,8 @@ shutdown paths:
 - `stopPi()` stops runner processes, clears runner resume timers, and replaces
   each process's exit listener for shutdown reporting; it does not clear the
   runner-manager intervals;
-- `stopTunnels()` stops the tunnel pool and supervisor, then shuts down hublot
-  services and tunnels;
+- `stopTunnels()` stops the supervisor, then shuts down hublot services and
+  tunnels;
 - `stopRoutines()` stops all routine child processes; and
 - `stopOAuth()` aborts OAuth flows and clears their timers.
 

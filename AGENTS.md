@@ -76,7 +76,6 @@ Open `http://<host>:8080/#token=<TOKEN>` in your browser. The URL fragment also 
 | `--pi-args "…"` | `PI_ARGS` | – | extra args appended to `pi --mode rpc` |
 | – | `OYSTER_DB_PATH` | `~/.pi/agent/oyster.sqlite` | separate SQLite database for oyster-owned application data |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | binary for opening tunnels |
-| – | `OYSTER_HUBLOT_TUNNEL_POOL_SIZE` | `2` | warm Quick Tunnels reserved for auto-allocated hublots (`0` disables pooling) |
 
 ### Running as a service
 

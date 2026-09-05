@@ -102,8 +102,6 @@ export function createTunnelRoutes({
   rebindHublot,
   openTunnel,
   closeTunnel,
-  acquireHublotTunnelPoolEntry = null,
-  activateHublotTunnelPoolEntry = null,
   spawnHublotAgent,
   spawnGitServerService,
   ensureSessionOwner = () => null,
@@ -132,24 +130,13 @@ export function createTunnelRoutes({
       const { brief, serviceType, servicePath, options } = parsed;
       let prepared = null;
       let reserved = null;
-      let claimedWarmTunnel = false;
       try {
         const owner = options.sessionId ? await ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
         options.brief = brief;
-        // Auto-allocated hublots claim an already-connected quick tunnel.
-        // Explicit ports cannot use the pool because cloudflared is already
-        // pinned to each reserved pool port.
-        if (options.port === null && acquireHublotTunnelPoolEntry) {
-          reserved = await acquireHublotTunnelPoolEntry(state, options);
-          claimedWarmTunnel = Boolean(reserved);
-        }
-        // Pooling can be disabled; retain direct allocation as the fallback.
-        if (!reserved) {
-          reserved = options.port !== null
-            ? await reserveHublot(state, options)
-            : await allocateHublot(state, options);
-        }
+        reserved = options.port !== null
+          ? await reserveHublot(state, options)
+          : await allocateHublot(state, options);
         pinHublot(reserved);
         const opening = (await listTunnels(state, { id: reserved.id })).find((item) => item.id === reserved.id);
         if (opening) emitServerEvent(state, { type: "tunnel_opening", tunnel: opening });
@@ -162,12 +149,7 @@ export function createTunnelRoutes({
         prepared = serviceType === "git-server"
           ? await spawnGitServerService(state, reservedOptions, servicePath)
           : await spawnHublotAgent(state, reservedOptions, brief);
-        if (claimedWarmTunnel && typeof activateHublotTunnelPoolEntry !== "function") {
-          throw new Error("warm tunnel activation is unavailable");
-        }
-        const tunnel = claimedWarmTunnel
-          ? await activateHublotTunnelPoolEntry(state, reserved.id)
-          : await openTunnel(state, reservedOptions);
+        const tunnel = await openTunnel(state, reservedOptions);
         const persisted = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id) ?? tunnel;
         json(res, 201, {
           tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
@@ -182,9 +164,6 @@ export function createTunnelRoutes({
           }
         } catch { /* Preserve the original failure. */ }
         stopPreparedService(prepared);
-        if (claimedWarmTunnel && reserved) {
-          try { await closeTunnel(state, reserved.id); } catch { /* Best-effort rollback. */ }
-        }
         if (reserved) {
           emitServerEvent(state, {
             type: "hublot_failed",

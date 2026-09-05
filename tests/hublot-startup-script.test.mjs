@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
-  hublotAgentPrompt, invokeHublotStartupScript, materializeHublotStartupScript,
+  hublotAgentPrompt, materializeHublotStartupScript,
   reserveHublot, spawnGitServerService, spawnHublotAgent, validateAndStoreHublotStartupScript,
 } from "../server/tunnels.mjs";
 
@@ -163,7 +163,7 @@ test("validated startup source and SHA-256 become authoritative in SQLite", asyn
   assert.equal(persisted.service_start_script_sha256, sha256);
 });
 
-test("missing and mismatched startup artifacts are atomically restored before invocation", async (t) => {
+test("missing and mismatched startup artifacts are atomically restored on demand", async (t) => {
   const { root, state } = await fixture(t);
   const hublot = await reserve(state);
   const script = "#!/bin/sh\n# oyster: idempotent\nexit 0\n";
@@ -178,16 +178,9 @@ test("missing and mismatched startup artifacts are atomically restored before in
   assert.equal(lstatSync(join(root, "agent", "hublots")).mode & 0o777, 0o700);
 
   writeFileSync(restored.path, "#!/bin/sh\necho tampered\n", { mode: 0o755 });
-  let observedAtInvoke = null;
-  const invoked = await invokeHublotStartupScript(state, hublot.id, {
-    spawnProcess(path) {
-      observedAtInvoke = readFileSync(path, "utf8");
-      return { pid: 1234 };
-    },
-  });
-  assert.equal(invoked.rematerialized, true);
-  assert.equal(observedAtInvoke, script);
-  assert.deepEqual(invoked.proc, { pid: 1234 });
+  const reMaterialized = await materializeHublotStartupScript(state, hublot.id);
+  assert.equal(reMaterialized.rematerialized, true);
+  assert.equal(readFileSync(reMaterialized.path, "utf8"), script);
   assert.equal((await materializeHublotStartupScript(state, hublot.id)).rematerialized, false);
 });
 
@@ -208,17 +201,10 @@ test("a missing startup script is rematerialized from SQLite contents and hash a
 
   store = await openAppStore({ databasePath });
   state = { appStore: store, config: { PI_AGENT_DIR: agentDir }, currentDir: root };
-  let invokedContent = null;
-  const invoked = await invokeHublotStartupScript(state, hublot.id, {
-    spawnProcess(path) {
-      invokedContent = readFileSync(path, "utf8");
-      return { pid: 4321 };
-    },
-  });
+  const materialized = await materializeHublotStartupScript(state, hublot.id);
 
-  assert.equal(invoked.rematerialized, true);
-  assert.equal(invoked.sha256, sha256);
-  assert.equal(invokedContent, script);
+  assert.equal(materialized.rematerialized, true);
+  assert.equal(materialized.sha256, sha256);
   assert.equal(readFileSync(hublot.service_start_script_path, "utf8"), script);
   assert.equal(lstatSync(hublot.service_start_script_path).mode & 0o777, 0o700);
   const persisted = await store.repositories.hublots.find(hublot.id);

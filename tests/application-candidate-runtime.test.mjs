@@ -150,5 +150,4 @@ test("application construction defers candidate resource acquisition until activ
   assert.match(appSource, /setTimer: \(callback, delay\) => setTimeout\(scope\.guard\(callback\), delay\)/);
   assert.match(appSource, /state\.oauthFlows\.set\(generation, oauthRegistry\)/);
   assert.match(appSource, /scope\.defer\(\(\) => state\.oauthFlows\.delete\(generation\)\)/);
-  assert.match(appSource, /\.then\(scope\.guard\(\(\) => ensureHublotTunnelPool\(state\)\)\)/);
 });

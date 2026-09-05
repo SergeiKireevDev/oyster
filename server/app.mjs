@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const moduleVersion = (name) => { const info = statSync(join(__dirname, name), { bigint: true }); return `${info.mtimeNs}-${info.size}`; };
 const bust = (name) => `./${name}?v=${moduleVersion(name)}`;
 export async function buildCandidate(stableState, { generation = Symbol("application-candidate") } = {}) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, recoverAnsweringHublotService, restartHublotService, localPortAnswers, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnGitServerService, ensureHublotTunnelPool, acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry, stopHublotTunnelPool } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnGitServerService } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
@@ -90,7 +90,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     jsonlRoot: SESSIONS_ROOT,
     sqlitePath: config.SQLITE_PATH ?? undefined,
   });
-  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options), recoverTunnel: (hublot) => recoverAnsweringHublotService(state, hublot), checkService: (hublot) => localPortAnswers(hublot.port), restartService: (hublot) => restartHublotService(state, hublot) });
+  state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options) });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
   if (!state.sessionDeletionReconciled) {
     state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, closeSessionHublots: (id) => closeSessionHublots(state, id), deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
@@ -152,7 +152,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
     state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
-    acquireHublotTunnelPoolEntry, activateHublotTunnelPoolEntry,
     spawnHublotAgent, spawnGitServerService, ensureSessionOwner,
     pinHublot: (hublot) => ensurePinnedHublot(state, hublot),
   });
@@ -226,15 +225,10 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
   }
 
-  const hublotReconciliation = scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
-  if (config.HUBLOT_TUNNEL_POOL_SIZE > 0 && !state.hublotTunnelPoolStopping) {
-    void Promise.resolve(hublotReconciliation)
-      .then(scope.guard(() => ensureHublotTunnelPool(state)))
-      .catch((error) => console.error(`[oyster] initial tunnel pool failed: ${error instanceof Error ? error.message : String(error)}`));
-  }
+  scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
   application = {
     handleRequest, startPi, stopPi,
-    stopTunnels: () => { stopHublotTunnelPool(state); state.hublotSupervisor?.stop(); return shutdownHublots(state); },
+    stopTunnels: () => { state.hublotSupervisor?.stop(); return shutdownHublots(state); },
     stopRoutines: () => stopAllRoutines(state), stopOAuth: () => oauthFlowService.shutdown(),
   };
   return application;

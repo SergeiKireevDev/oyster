@@ -21,7 +21,6 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.CLAUDE_CODE_PERMISSION_MODE;
   delete childEnv.CLAUDE_CONFIG_DIR;
   delete childEnv.OYSTER_DB_PATH;
-  delete childEnv.OYSTER_HUBLOT_TUNNEL_POOL_SIZE;
   delete childEnv.OYSTER_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
   Object.assign(childEnv, env);
@@ -42,7 +41,6 @@ test("development configuration selects the local SQLite pi build", { skip: !exi
   assert.equal(config.persistentStore, "sqlite");
   assert.match(config.sqlitePath, /\.pi\/agent\/sessions\.sqlite$/);
   assert.equal(config.appDbPath, join(result.testHome, ".pi", "agent", "oyster.sqlite"));
-  assert.equal(config.hublotTunnelPoolSize, 2);
   assert.ok(Number(config.node.split(".")[0]) >= 22);
 });
 
@@ -120,10 +118,6 @@ test("configuration rejects invalid stores and missing executables", () => {
   result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_UNAUTHENTICATED: "sometimes" } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /OYSTER_UNAUTHENTICATED must be one of/);
-
-  result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_HUBLOT_TUNNEL_POOL_SIZE: "1.5" } });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /OYSTER_HUBLOT_TUNNEL_POOL_SIZE must be an integer/);
 
   for (const port of ["-1", "1.5", "65536", "not-a-port"]) {
     result = checkConfig({ args: ["--pi", process.execPath, "--port", port] });

@@ -45,12 +45,6 @@ export const STABLE_STATE_INVENTORY = inventory({
   sessionDeletionReconciled: entry("ephemeral", "one-process reconciliation guard"),
 
   hublotProcessHandles: entry("ephemeral", "live ChildProcess handles"),
-  hublotTunnelPoolQueue: entry("ephemeral", "serialized warm-tunnel claims"),
-  hublotTunnelPoolRefillTask: entry("ephemeral", "in-flight warm-tunnel replenishment"),
-  hublotTunnelPoolRefillRequested: entry("ephemeral", "follow-up replenishment coalescing flag"),
-  hublotTunnelPoolRetryTimer: entry("ephemeral", "backoff timer for failed warm-tunnel replenishment"),
-  hublotTunnelPoolRetryAttempt: entry("ephemeral", "bounded warm-tunnel refill backoff counter"),
-  hublotTunnelPoolStopping: entry("ephemeral", "shutdown guard for warm-tunnel replenishment"),
   routineRuntime: entry("ephemeral", "live routine process and stream handles"),
   routineRuntimeDir: entry("ephemeral", "disposable artifact directory"),
   runners: entry("rebuildable", "durable descriptors plus live runner handles", "runners"),
@@ -79,12 +73,6 @@ export const STABLE_STATE_INVENTORY = inventory({
 export function createStableEphemeralState() {
   return {
     hublotProcessHandles: new Map(),
-    hublotTunnelPoolQueue: Promise.resolve(),
-    hublotTunnelPoolRefillTask: null,
-    hublotTunnelPoolRefillRequested: false,
-    hublotTunnelPoolRetryTimer: null,
-    hublotTunnelPoolRetryAttempt: 0,
-    hublotTunnelPoolStopping: false,
     hublotStartupReconciliationTask: null,
     sseClients: new Set(),
     authFails: new Map(),
