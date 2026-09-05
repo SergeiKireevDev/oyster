@@ -42,48 +42,7 @@ test("tunnel routes prepare the local service before opening and publishing its 
   assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
 });
 
-test("auto-allocated hublots replace a warm tunnel origin without spawning cloudflared", async () => {
-  const order = [];
-  const warm = {
-    id: "warm-1", port: 4010, status: "opening", public_url: "https://warm.test",
-    service_start_script_path: "/agent/hublots/warm-1/start.sh",
-  };
-  const routes = createTunnelRoutes({
-    state: { serverEvent: () => {} }, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [{ id: warm.id, port: warm.port, status: "open", url: warm.public_url }],
-    acquireHublotTunnelPoolEntry: async (_state, options) => { order.push(["claim", options.label]); return warm; },
-    activateHublotTunnelPoolEntry: async (_state, id) => {
-      order.push(["activate", id]);
-      return { id, port: warm.port, status: "open", url: warm.public_url };
-    },
-    reserveHublot: () => { throw new Error("must not reserve a direct tunnel"); },
-    allocateHublot: () => { throw new Error("must not allocate outside the pool"); },
-    openTunnel: () => { throw new Error("must not spawn cloudflared"); },
-    closeTunnel: () => null,
-    rebindHublot: () => null,
-    spawnHublotAgent: async (_state, options, brief) => {
-      order.push(["service", options.port, brief]);
-      return { servicePid: 321, agentProc: { exitCode: 0 } };
-    },
-  });
-
-  const created = response();
-  await routes["POST /tunnels"]({ body: { label: "preview", brief: "serve preview" } }, created);
-  assert.equal(created.status, 201);
-  assert.deepEqual(order, [
-    ["claim", "preview"],
-    ["service", 4010, "serve preview"],
-    ["activate", "warm-1"],
-  ]);
-  assert.equal(created.body.tunnel.url, "https://warm.test");
-  assert.equal(created.body.tunnel.servicePid, 321);
-});
-
-test("auto-allocated hublots fall back to a direct tunnel when the warm pool is empty", async () => {
+test("auto-allocated hublots reserve a port and open a direct tunnel", async () => {
   const order = [];
   const reserved = {
     id: "direct-1", port: 4020, status: "opening",
@@ -96,7 +55,6 @@ test("auto-allocated hublots fall back to a direct tunnel when the warm pool is 
       readJsonBody: async (req) => req.body,
     },
     listTunnels: () => [],
-    acquireHublotTunnelPoolEntry: async () => { order.push("claim-miss"); return null; },
     allocateHublot: async () => { order.push("allocate"); return reserved; },
     reserveHublot: () => { throw new Error("auto-allocation must not reserve an explicit port"); },
     openTunnel: async (_state, options) => {
@@ -112,7 +70,7 @@ test("auto-allocated hublots fall back to a direct tunnel when the warm pool is 
   await routes["POST /tunnels"]({ body: { label: "preview", brief: "serve preview" } }, created);
 
   assert.equal(created.status, 201);
-  assert.deepEqual(order, ["claim-miss", "allocate", "service", "tunnel"]);
+  assert.deepEqual(order, ["allocate", "service", "tunnel"]);
   assert.equal(created.body.tunnel.url, "https://direct.test");
   assert.equal(created.body.tunnel.servicePid, 654);
 });
@@ -216,7 +174,7 @@ test("tunnel create validates its API boundary before allocating resources", asy
 test("tunnel routes disable caching and preserve the original open failure during rollback", async () => {
   const signals = [];
   const headers = [];
-  const reserved = { id: "warm", port: 4040, status: "opening" };
+  const reserved = { id: "direct-1", port: 4040, status: "opening" };
   const state = {
     appStore: { repositories: { hublots: { find: () => ({ status: "opening" }) } } },
     serverEvent() { throw new Error("subscriber failed"); },
@@ -228,12 +186,10 @@ test("tunnel routes disable caching and preserve the original open failure durin
       readJsonBody: async (req) => req.body,
     },
     listTunnels: () => [reserved],
-    acquireHublotTunnelPoolEntry: async () => reserved,
-    activateHublotTunnelPoolEntry: async () => { throw "activation failed"; },
-    allocateHublot: () => { throw new Error("unused"); },
+    allocateHublot: async () => reserved,
     reserveHublot: () => { throw new Error("unused"); },
+    openTunnel: async () => { throw "activation failed"; },
     recordHublotTransition: () => { throw new Error("transition failed"); },
-    closeTunnel: () => { throw new Error("close failed"); },
     spawnHublotAgent: async () => ({
       servicePid: 123,
       agentProc: { pid: 122, exitCode: null, kill: (signal) => signals.push(signal) },

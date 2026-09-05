@@ -47,7 +47,6 @@ test("hot-reload lifecycle inventory covers delegated side-effect boundaries", (
     "reconcileSessionDeletions",
     "createRunnerManager",
     "scheduleHublotStartupReconciliation",
-    "ensureHublotTunnelPool",
     "createPiProcessLauncher",
     "createSessionOperations",
     "createPiOAuthFlowService",
