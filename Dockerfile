@@ -76,7 +76,8 @@ COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build
 
-# Register the bundled pi extensions (file-explorer, hublot, loop, routine)
+# Register the bundled pi extensions (file-explorer, hublot, loop, routine).
+# Claude Code sessions reach the same tools through the server's /mcp endpoint.
 RUN mkdir -p /home/node/.pi/agent/extensions /home/node/.claude \
     && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
     && chown -R node:node /home/node/.pi /home/node/.claude

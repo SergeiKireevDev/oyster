@@ -31,16 +31,16 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { createPinnedWidgetRoutes, ensurePinnedHublot } = await import(bust("pinned-widgets.mjs"));
   const { createWebPushService } = await import(bust("web-push-service.mjs"));
   const [
-    { createRequestContext }, { createRouteTable },
+    { createRequestContext }, { createRouteTable }, { dispatchRoute },
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
     { createSessionRoutes, setSessionFamilyArchived, stopSessionFamilyRunners }, { createFileRoutes }, { createWorkdirRoutes },
     { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
-    { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes },
+    { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes }, { createMcpRoutes },
   ] = await Promise.all([
-    "http/createRequestContext.mjs", "http/createRouteTable.mjs",
+    "http/createRequestContext.mjs", "http/createRouteTable.mjs", "http/internalDispatch.mjs",
     ...[
       "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
-      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes",
+      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes", "mcpRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
 
@@ -107,7 +107,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), runnerDrivers, guardCallback: scope.guard });
   const {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
+    spawnRunner, startRunner, stopRunner, sendToRunner, requestRunnerUi, observeRunner, acknowledgeRunnerAttention,
     runnerFromReq, openSessionRunner, updateRunnerSessionReference, startPi, stopPi,
   } = runners;
   validateDependencyConstruction({
@@ -139,7 +139,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
   const runnerRoutes = createRunnerRoutes({
     state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
-    sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
+    sendToRunner, requestRunnerUi, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
     runnerHarnesses: () => runnerDrivers.list(),
     syncClaudeTranscript: (options) => { if (!claudeTranscriptSink) throw new Error("Claude transcript sink requires the SQLite session store"); return claudeTranscriptSink.sync(options); },
@@ -176,7 +176,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
       teardownRoutine, releaseRoutine, deleteRoutine, spawnRoutineAgent,
     },
   });
-  const pushRoutes = createPushRoutes({ requestContext, pushService: webPushService });
+  const pushRoutes = createPushRoutes({ requestContext, pushService: webPushService }); const mcpRoutes = createMcpRoutes({ state, requestContext, dispatch: (method, path, body, options) => dispatchRoute(routeTable, method, path, body, options) });
   const sessionRoutes = createSessionRoutes({
     state,
     appStore,
@@ -193,7 +193,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
   const openRouteKeys = new Set(Object.keys(openRoutes)); const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
 
   // ---------------------------------------------------------------- dispatch

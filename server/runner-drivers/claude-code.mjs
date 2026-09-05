@@ -3,6 +3,24 @@ import { randomUUID } from "node:crypto";
 import { validateRunnerDriver } from "./contract.mjs";
 import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs";
 
+/** Every tool of the `oyster` MCP server; the sudo password prompt is the human gate. */
+export const OYSTER_MCP_TOOLS = "mcp__oyster";
+const DEFAULT_UI_URL = "http://127.0.0.1:8080";
+
+/**
+ * Per-launch `--mcp-config` payload pointing at Oyster's own MCP endpoint.
+ * The runner, session, and workspace travel with every request as URL
+ * parameters, so no process-level configuration describes the caller. Claude
+ * Code expands `${OYSTER_TOKEN}` from the inherited environment, which keeps
+ * the bearer token off the world-readable command line.
+ */
+export function oysterMcpConfig({ runnerId = null, sessionId, workdir, uiUrl = DEFAULT_UI_URL }) {
+  const params = new URLSearchParams({ session: nonEmpty(sessionId, "session id"), workdir: nonEmpty(workdir, "workdir") });
+  if (runnerId) params.set("runner", runnerId);
+  const url = `${nonEmpty(uiUrl, "Oyster UI URL").replace(/\/+$/, "")}/mcp?${params}`;
+  return { mcpServers: { oyster: { type: "http", url, headers: { Authorization: "Bearer ${OYSTER_TOKEN}" } } } };
+}
+
 function nonEmpty(value, name) {
   if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
   return value.trim();
@@ -77,10 +95,14 @@ export function createClaudeCodeDriver({
   spawnImpl = spawn,
   permissionMode = "default",
   sqlitePath = null,
+  env = {},
+  uiUrl = env?.OYSTER_URL ?? DEFAULT_UI_URL,
 } = {}) {
   const executable = nonEmpty(bin, "Claude Code executable");
+  const mcpUrl = nonEmpty(uiUrl, "Oyster UI URL");
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError("Claude Code arguments must be strings");
   if (typeof spawnImpl !== "function") throw new TypeError("Claude Code spawn implementation must be a function");
+  if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError("Claude Code environment must be an object");
   return Object.freeze(validateRunnerDriver({
     id: "claude-code",
     label: "Claude Code",
@@ -99,10 +121,15 @@ export function createClaudeCodeDriver({
         "--output-format", "stream-json",
         "--permission-mode", permissionMode,
         ...(runner.sessionRef ? ["--resume", sessionId] : ["--session-id", sessionId]),
+        "--allowedTools", OYSTER_MCP_TOOLS,
+        "--mcp-config", JSON.stringify(oysterMcpConfig({ runnerId: runner.id ?? null, sessionId, workdir: cwd, uiUrl: mcpUrl })),
         ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
         ...extraArgs,
       ];
-      const process = spawnImpl(executable, args, { cwd, stdio: ["pipe", "pipe", "pipe"], env: { ...globalThis.process.env } });
+      // OYSTER_TOKEN must exist for Claude Code's `${OYSTER_TOKEN}` header expansion,
+      // even when the server runs unauthenticated.
+      const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env };
+      const process = spawnImpl(executable, args, { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
       return { process, description: `${executable} ${args.join(" ")}` };
     },
 

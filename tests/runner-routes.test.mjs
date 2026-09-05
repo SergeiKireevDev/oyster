@@ -164,6 +164,50 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   ] });
 });
 
+test("runner UI request route validates prompts, targets an explicit runner, and long-polls the answer", async () => {
+  const { runner, dependencies } = setup();
+  const asked = [];
+  dependencies.requestRunnerUi = async (selected, request, { signal }) => {
+    asked.push({ runner: selected.id, request, signal });
+    return { value: "hunter2" };
+  };
+  const routes = createRunnerRoutes(dependencies);
+  const route = routes["POST /runner/ui-request"];
+  const url = new URL("http://localhost/runner/ui-request?runner=runner-1");
+
+  const badMethod = response();
+  await route({ body: { method: "editor", title: "x" } }, badMethod, url);
+  assert.equal(badMethod.status, 400);
+  assert.match(badMethod.body.error, /input.*confirm/);
+
+  const missingTitle = response();
+  await route({ body: { method: "input" } }, missingTitle, url);
+  assert.equal(missingTitle.status, 400);
+
+  const hugePlaceholder = response();
+  await route({ body: { method: "input", title: "Password", placeholder: "x".repeat(5000) } }, hugePlaceholder, url);
+  assert.equal(hugePlaceholder.status, 400);
+
+  const unknownRunner = response();
+  await route({ body: { method: "input", title: "Password" } }, unknownRunner, new URL("http://localhost/runner/ui-request?runner=nope"));
+  assert.equal(unknownRunner.status, 404);
+  assert.deepEqual(asked, [], "the default runner is never prompted implicitly");
+
+  const answered = response();
+  await route({ body: { method: "input", title: "Sudo password", placeholder: "Password", secret: true, extra: "ignored" } }, answered, url);
+  assert.equal(answered.status, 200);
+  assert.deepEqual(answered.body, { value: "hunter2" });
+  assert.deepEqual(asked[0].request, { method: "input", title: "Sudo password", placeholder: "Password", secret: true });
+  assert.equal(asked[0].runner, runner.id);
+  assert.equal(asked[0].signal.aborted, false);
+  answered.emit("close");
+  assert.equal(asked[0].signal.aborted, true, "a departed client cancels the pending prompt");
+
+  const confirmed = response();
+  await route({ body: { method: "confirm", title: "Proceed?", message: "Really?" } }, confirmed, url);
+  assert.deepEqual(asked[1].request, { method: "confirm", title: "Proceed?", message: "Really?" });
+});
+
 test("Claude transcript sync route adopts the mirrored SQLite reference", async () => {
   const { runner, dependencies } = setup();
   runner.harness = "claude-code";

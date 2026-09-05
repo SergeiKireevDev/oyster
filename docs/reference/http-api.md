@@ -29,6 +29,8 @@ The `token` query parameter is allowed only on `GET` requests. Auth failures are
 | `POST /open-session` | Select a saved runner without reviving it, or start a brand-new session |
 | `POST /restart?runner=…` | Explicitly restart one runner process |
 | `POST /rpc?runner=…` | Forward a pi RPC object; work commands start a stopped process on demand |
+| `POST /runner/ui-request?runner=…` | Ask the runner's browser an `input` (optionally `secret`) or `confirm` question on behalf of a harness tool; long-polls until answered, cancelled, or timed out |
+| `POST /mcp?runner=…&session=…&workdir=…` | MCP endpoint (Streamable HTTP, stateless) exposing `bash` (sudo-capable), `hublot`, `pinned_widget`, `group_pinned_widgets`, and `routine` for the identified runner, session, and workspace |
 | `POST /workdir` | Set the workspace and spawn a runner there |
 
 Runner descriptors and pi processes have separate lifecycles. Opening a saved session, subscribing to its event stream, and reading its durable transcript leave `alive: false` runners stopped. A brand-new session starts pi once so it can establish a durable session identity. The browser reads those transcripts through `GET /session-messages`. Sending a work command such as `prompt` through `POST /rpc` starts the selected runner before forwarding the command. Read-only `get_state` and `get_messages` RPC commands do not autostart a stopped runner and return `503` when no process is available.

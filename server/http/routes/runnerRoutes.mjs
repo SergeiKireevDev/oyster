@@ -5,6 +5,7 @@ import { normalizeLastEventId, sseDataFrame } from "../../sse.mjs";
 const MAX_PROMPT_BYTES = 5 * 1024 * 1024;
 const MAX_PARENT_SESSION_ID_BYTES = 512;
 const MAX_SUBAGENT_NAME_BYTES = 256;
+const MAX_UI_REQUEST_TEXT_BYTES = 4096;
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -26,6 +27,7 @@ export function createRunnerRoutes({
   listRunnerInfo,
   requestContext,
   sendToRunner,
+  requestRunnerUi = async () => { throw new Error("runner UI requests are unavailable"); },
   acknowledgeRunnerAttention,
   stopRunner,
   stopRunnerFamily = stopRunner,
@@ -55,7 +57,7 @@ export function createRunnerRoutes({
     throw new TypeError("requestContext response, JSON body, and safe-path helpers are required");
   }
   const requiredFunctions = {
-    runnerFromReq, startRunner, listRunnerInfo, sendToRunner, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily,
+    runnerFromReq, startRunner, listRunnerInfo, sendToRunner, requestRunnerUi, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily,
     runnerInfo, openSessionRunner, sessionReferenceParam, runnerHarnesses, lookupSessionReference,
     syncClaudeTranscript, updateRunnerSessionReference,
     setIntervalImpl, clearIntervalImpl, setTimeoutImpl,
@@ -172,6 +174,41 @@ export function createRunnerRoutes({
       const runner = await runnerFromReq(url);
       acknowledgeRunnerAttention(runner);
       json(res, 200, { runner: runner.id, attentionStatus: runner.attentionStatus ?? null, attentionUnread: false });
+    },
+
+    // Long-polls until the runner's browser answers, cancels, or the request
+    // times out. Meant for harness-side tools (the Oyster MCP server) that have
+    // no extension UI of their own, such as the masked sudo password prompt.
+    "POST /runner/ui-request": async (req, res, url) => {
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      if (!isJsonObject(body) || (body.method !== "input" && body.method !== "confirm")) {
+        json(res, 400, { error: "method must be 'input' or 'confirm'" });
+        return;
+      }
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      if (!title || Buffer.byteLength(title) > MAX_UI_REQUEST_TEXT_BYTES) {
+        json(res, 400, { error: "title must be a non-empty string no larger than 4 KiB" });
+        return;
+      }
+      for (const field of ["placeholder", "message"]) {
+        if (body[field] !== undefined && (typeof body[field] !== "string" || Buffer.byteLength(body[field]) > MAX_UI_REQUEST_TEXT_BYTES)) {
+          json(res, 400, { error: `${field} must be a string no larger than 4 KiB` });
+          return;
+        }
+      }
+      const runner = state.runners.get(String(url.searchParams.get("runner") ?? ""));
+      if (!runner) {
+        json(res, 404, { error: "no such runner" });
+        return;
+      }
+      const request = body.method === "input"
+        ? { method: "input", title, ...(body.placeholder ? { placeholder: body.placeholder } : {}), secret: body.secret === true }
+        : { method: "confirm", title, message: body.message ?? "" };
+      const controller = new AbortController();
+      res.once?.("close", () => controller.abort());
+      disableCaching(res);
+      json(res, 200, await requestRunnerUi(runner, request, { signal: controller.signal }));
     },
 
     "DELETE /runners": async (_req, res, url) => {

@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { createClaudeCodeDriver } from "../server/runner-drivers/claude-code.mjs";
+import { createClaudeCodeDriver, oysterMcpConfig } from "../server/runner-drivers/claude-code.mjs";
 import { createRunnerDriverRegistry } from "../server/runner-drivers/registry.mjs";
 
 function fakeProcess() {
@@ -46,20 +46,46 @@ test("Claude Code driver launches new and resumed stream-json sessions", () => {
     bin: "/bin/claude",
     extraArgs: ["--model", "sonnet"],
     permissionMode: "acceptEdits",
+    env: { OYSTER_URL: "http://127.0.0.1:9999", OYSTER_TOKEN: "secret" },
     spawnImpl(bin, args, options) { const child = fakeProcess(); launches.push({ bin, args, options, child }); return child; },
   });
-  const fresh = { sessionRef: null, sessionId: null };
+  const fresh = { id: "r-fresh", sessionRef: null, sessionId: null };
   driver.launch({ runner: fresh, cwd: "/work", systemPrompt: "policy" });
   assert.equal(launches[0].bin, "/bin/claude");
   assert.deepEqual(launches[0].args.slice(0, 8), [
     "--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--permission-mode", "acceptEdits",
   ]);
   assert.ok(launches[0].args.includes("--session-id"));
+  assert.deepEqual(launches[0].args.slice(10, 13), ["--allowedTools", "mcp__oyster", "--mcp-config"]);
   assert.deepEqual(launches[0].args.slice(-4), ["--append-system-prompt", "policy", "--model", "sonnet"]);
+  const sessionId = launches[0].args[launches[0].args.indexOf("--session-id") + 1];
+  const mcpConfig = JSON.parse(launches[0].args[13]);
+  assert.deepEqual(mcpConfig, {
+    mcpServers: {
+      oyster: {
+        type: "http",
+        url: `http://127.0.0.1:9999/mcp?session=${sessionId}&workdir=%2Fwork&runner=r-fresh`,
+        headers: { Authorization: "Bearer ${OYSTER_TOKEN}" },
+      },
+    },
+  });
+  assert.equal(launches[0].options.env.OYSTER_URL, "http://127.0.0.1:9999");
+  assert.equal(launches[0].options.env.OYSTER_TOKEN, "secret", "Claude Code expands the header from the environment");
+  assert.equal(launches[0].options.env.PATH, process.env.PATH);
+  assert.ok(!launches[0].args.some((arg) => arg.includes("secret")), "the token never appears on the command line");
 
   const resumed = { sessionRef: { backend: "claude-code", id: "cc-session", storagePath: null }, sessionId: "cc-session" };
   driver.launch({ runner: resumed, cwd: "/work", systemPrompt: "" });
   assert.deepEqual(launches[1].args.slice(8, 10), ["--resume", "cc-session"]);
+  const resumedUrl = new URL(JSON.parse(launches[1].args[launches[1].args.indexOf("--mcp-config") + 1]).mcpServers.oyster.url);
+  assert.deepEqual(Object.fromEntries(resumedUrl.searchParams), { session: "cc-session", workdir: "/work" }, "no runner id is passed before the runner exists");
+  assert.equal(oysterMcpConfig({ sessionId: "s", workdir: "/w", uiUrl: "https://host/oyster/" }).mcpServers.oyster.url,
+    "https://host/oyster/mcp?session=s&workdir=%2Fw");
+  const unauthenticated = createClaudeCodeDriver({ bin: "/bin/claude", spawnImpl(bin, args, options) { launches.push({ bin, args, options }); return fakeProcess(); } });
+  unauthenticated.launch({ runner: { id: "r-open", sessionRef: null, sessionId: null }, cwd: "/work", systemPrompt: "" });
+  assert.equal(launches.at(-1).options.env.OYSTER_TOKEN, "", "the expanded header variable always exists");
+  assert.match(JSON.parse(launches.at(-1).args[launches.at(-1).args.indexOf("--mcp-config") + 1]).mcpServers.oyster.url, /^http:\/\/127\.0\.0\.1:8080\/mcp\?/);
+  assert.throws(() => createClaudeCodeDriver({ bin: "/bin/claude", env: ["x"] }), /environment must be an object/);
   assert.equal(driver.isSessionCompatible(resumed.sessionRef), true);
   assert.equal(driver.isSessionCompatible({ backend: "sqlite" }), false);
 

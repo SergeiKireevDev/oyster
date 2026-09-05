@@ -44,7 +44,7 @@ test("reload manifest covers high-risk candidate boundaries and every route", ()
   for (const module of required) assert.ok(RELOADABLE_SERVER_MODULES.includes(module), module);
 
   const expectedRoutes = [
-    "checkpoint", "credential", "file", "oauth", "open", "routine", "runner",
+    "checkpoint", "credential", "file", "mcp", "oauth", "open", "routine", "runner",
     "session", "static", "tunnel", "workdir",
   ].map((name) => `http/routes/${name}Routes.mjs`);
   assert.deepEqual(RELOADABLE_MODULE_GRAPH.http.filter((module) => module.includes("/routes/")), expectedRoutes);

@@ -192,6 +192,46 @@ test("runner attention distinguishes unread clarification and completed work unt
   assert.equal(manager.runnerInfo(runner).attentionUnread, false);
 });
 
+test("brokered UI requests reach the browser like extension prompts and never touch the runner process", async (t) => {
+  const { manager, spawns, state } = await setup(t);
+  const runner = await manager.spawnRunner({ dir: "/workspace" });
+  const client = { runnerId: runner.id, chunks: [], write(chunk) { this.chunks.push(chunk); } };
+  state.sseClients.add(client);
+  const written = () => String(spawns[0].proc.stdin.read() ?? "");
+
+  const pending = manager.requestRunnerUi(runner, { method: "input", title: "Sudo password", placeholder: "Password", secret: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  const frame = client.chunks.find((chunk) => chunk.includes("extension_ui_request"));
+  const event = JSON.parse(frame.match(/data: (.*)\n/)[1]);
+  assert.match(event.id, /^ui-/);
+  assert.deepEqual({ ...event, id: undefined, _sseId: undefined }, {
+    type: "extension_ui_request", method: "input", title: "Sudo password", placeholder: "Password", secret: true, id: undefined, _sseId: undefined,
+  });
+  assert.equal(manager.runnerInfo(runner).attentionStatus, "clarification");
+  assert.equal(runner.pendingExtensionUiRequestIds.has(event.id), true, "an unanswered prompt stays replayable after a refresh");
+
+  assert.equal(await manager.sendToRunner(runner, { type: "extension_ui_response", id: event.id, value: "hunter2" }), true);
+  assert.deepEqual(await pending, { value: "hunter2" });
+  assert.equal(written().includes("extension_ui_response"), false, "the answer is consumed by the broker instead of the driver");
+  assert.equal(manager.runnerInfo(runner).attentionStatus, null);
+  assert.equal(runner.pendingExtensionUiRequestIds.has(event.id), false);
+
+  const cancelled = manager.requestRunnerUi(runner, { method: "confirm", title: "Proceed?", message: "Really?" });
+  await new Promise((resolve) => setImmediate(resolve));
+  const confirmId = JSON.parse(client.chunks.at(-1).match(/data: (.*)\n/)[1]).id;
+  await manager.sendToRunner(runner, { type: "extension_ui_response", id: confirmId, cancelled: true });
+  assert.deepEqual(await cancelled, { cancelled: true });
+
+  const controller = new AbortController();
+  const aborted = manager.requestRunnerUi(runner, { method: "input", title: "Late" }, { signal: controller.signal });
+  controller.abort();
+  assert.deepEqual(await aborted, { cancelled: true, reason: "aborted" });
+  assert.equal(manager.runnerInfo(runner).attentionStatus, null);
+
+  assert.deepEqual(await manager.requestRunnerUi(runner, { method: "input", title: "Slow" }, { timeoutMs: 1 }), { cancelled: true, reason: "timeout" });
+  assert.throws(() => manager.requestRunnerUi(runner, { method: "editor", title: "x" }), /must be one of input, confirm/);
+});
+
 test("new runners use unique persistence-safe IDs that survive manager reconstruction", async (t) => {
   const { manager, state } = await setup(t);
   const first = await manager.spawnRunner({ dir: "/workspace" });

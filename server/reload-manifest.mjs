@@ -81,9 +81,11 @@ const manifest = createReloadManifest({
   http: [
     "http/createRequestContext.mjs",
     "http/createRouteTable.mjs",
+    "http/internalDispatch.mjs",
     "http/routes/checkpointRoutes.mjs",
     "http/routes/credentialRoutes.mjs",
     "http/routes/fileRoutes.mjs",
+    "http/routes/mcpRoutes.mjs",
     "http/routes/oauthRoutes.mjs",
     "http/routes/openRoutes.mjs",
     "http/routes/routineRoutes.mjs",

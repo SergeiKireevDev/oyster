@@ -25,6 +25,14 @@ ln -sf "$(pwd)"/extensions/*.ts ~/.pi/agent/extensions/   # symlink — edits he
 
 Restart pi afterwards. When developing an extension through Oyster, stop and restart every affected session runner after changing the extension; existing pi RPC sessions keep their originally loaded extension code. Sending `/reload` from Oyster does not reload an RPC session because `/reload` is handled only by pi's interactive mode, and refreshing the browser is also insufficient.
 
+## Built-in MCP endpoint (Claude Code and other MCP harnesses)
+
+pi has no MCP client, so the extensions above stay the pi integration. For MCP-capable harnesses, the Oyster server itself serves the same tools over MCP (Streamable HTTP, stateless) at `POST /mcp` — `hublot`, `pinned_widget`, `group_pinned_widgets`, `routine` — plus a `bash` tool whose `sudo=true` option mirrors `extensions/sudo.ts`: the complete command runs as root after Oyster's masked password dialog, brokered through `POST /runner/ui-request` to the runner's browser. The implementation lives in `server/http/routes/mcpRoutes.mjs`; its tools call the regular route handlers in-process through `server/http/internalDispatch.mjs`, so there is no second copy of the widget, tunnel, or routine logic and no loopback HTTP.
+
+Every request carries its caller: `POST /mcp?runner=<id>&session=<id>&workdir=<abs path>` with the usual bearer token. The Claude Code driver builds that URL per launch and passes it with `--mcp-config` as an `http` server, using the header `Authorization: Bearer ${OYSTER_TOKEN}`, which Claude Code expands from the inherited environment so the token never appears on a command line. It also allows every `mcp__oyster` tool. Nothing has to be registered in Claude Code's settings, and other MCP clients can use the same URL.
+
+Driver modules such as `server/runner-drivers/claude-code.mjs` are reached only through static imports, which the hot reloader does not cache-bust, so restart the Oyster service (not just the runner) after changing them. When changing a tool, update both the pi extension and the MCP endpoint. Verify with `node --test tests/mcp-routes.test.mjs`.
+
 Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. For deterministic hublots, `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
 from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
 `OYSTER_TOKEN` or the project-root `.ui-token` file.

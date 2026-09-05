@@ -51,6 +51,8 @@ const NON_REPLAYABLE_RUNNER_EVENTS = new Set([
 const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 const CLARIFICATION_METHODS = new Set(["select", "confirm", "input", "editor"]);
+const BROKERED_UI_METHODS = new Set(["input", "confirm"]);
+const BROKERED_UI_TIMEOUT_MS = 10 * 60 * 1000;
 
 export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
   "Artifact pinning policy:",
@@ -733,7 +735,50 @@ export async function createRunnerManager(state, {
     if (owner?.archived) await repository.setArchived(owner.id, false);
   }
 
+  /**
+   * Ask this runner's browser clients a clarification on behalf of a harness
+   * without extension UI (for example an MCP tool). The request travels the
+   * same SSE path and dialogs as pi extension UI requests; the answer is
+   * intercepted in sendToRunner instead of being forwarded to the process.
+   */
+  function requestRunnerUi(runner, request, { signal, timeoutMs = BROKERED_UI_TIMEOUT_MS } = {}) {
+    if (!request || !BROKERED_UI_METHODS.has(request.method)) {
+      throw new TypeError(`runner UI request method must be one of ${[...BROKERED_UI_METHODS].join(", ")}`);
+    }
+    const id = `ui-${randomUUID()}`;
+    const event = { type: "extension_ui_request", ...request, id };
+    return new Promise((resolve) => {
+      const pending = runner.brokeredUiRequests ??= new Map();
+      const finish = (result) => {
+        if (!pending.delete(id)) return;
+        clearTimer(timer);
+        signal?.removeEventListener("abort", onAbort);
+        runner.pendingExtensionUiRequestIds.delete(id);
+        if (!pending.size && runner.attentionStatus === "clarification") setRunnerAttention(runner, null, false);
+        resolve(result);
+      };
+      const onAbort = () => finish({ cancelled: true, reason: "aborted" });
+      const timer = setTimer(() => finish({ cancelled: true, reason: "timeout" }), timeoutMs);
+      if (signal?.aborted) { pending.set(id, finish); onAbort(); return; }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      pending.set(id, finish);
+      trackRunner(runner, event).catch((error) => console.error(`[oyster] cannot track runner ${runner.id} UI request: ${error?.message ?? error}`));
+      runnerWrite(runner, JSON.stringify(event));
+    });
+  }
+
+  function brokeredUiResult(obj) {
+    if (obj.cancelled === true) return { cancelled: true };
+    if (typeof obj.confirmed === "boolean") return { confirmed: obj.confirmed };
+    if (typeof obj.value === "string") return { value: obj.value };
+    return { cancelled: true };
+  }
+
   async function sendToRunner(runner, obj, { autostart = true } = {}) {
+    if (obj.type === "extension_ui_response" && runner.brokeredUiRequests?.has(obj.id)) {
+      runner.brokeredUiRequests.get(obj.id)(brokeredUiResult(obj));
+      return true;
+    }
     if (!runner.proc && autostart) await startRunner(runner);
     if (!runner.proc) return false;
     if (runner.resumeId) {
@@ -899,7 +944,7 @@ export async function createRunnerManager(state, {
 
   return {
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
-    spawnRunner, startRunner, stopRunner, sendToRunner, observeRunner, acknowledgeRunnerAttention,
+    spawnRunner, startRunner, stopRunner, sendToRunner, requestRunnerUi, observeRunner, acknowledgeRunnerAttention,
     defaultRunner, runnerFromReq, openSessionRunner, updateRunnerSessionReference,
     startDrivers, stopDrivers, startPi, stopPi,
     runnerDriver: runnerDrivers.get(runnerDrivers.defaultId), runnerDrivers,
