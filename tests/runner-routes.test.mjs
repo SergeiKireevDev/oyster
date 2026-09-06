@@ -58,6 +58,7 @@ function setup() {
     openSessionRunner: ({ harness, sessionRef, dir }) => ({ id: "opened", harness, sessionRef, dir }),
     sessionReferenceParam: ({ sessionKey, sessionPath }) => {
       if (sessionKey === "sqlite-key") return { backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite" };
+      if (sessionKey === "codex-key") return { backend: "codex", id: "codex-id", storagePath: null };
       if (sessionPath === "valid.jsonl") return { backend: "jsonl", id: "jsonl-id", storagePath: "/sessions/valid.jsonl" };
       return null;
     },
@@ -67,7 +68,7 @@ function setup() {
     clearTimeoutImpl: () => {},
     resolvePath: (path) => path,
     isDirectory: (path) => path !== "/allowed/file",
-    runnerHarnesses: () => [{ id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" }],
+    runnerHarnesses: () => [{ id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" }, { id: "codex", label: "Codex" }],
   };
   return { runner, state, intervals, cleared, replayCalls, dependencies };
 }
@@ -160,7 +161,7 @@ test("runner RPC routes preserve validation, queue status, and listing contracts
   const listed = response();
   await routes["GET /runners"]({}, listed);
   assert.deepEqual(listed.body, { runners: [{ id: "runner-1", alive: false }], harnesses: [
-    { id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" },
+    { id: "pi", label: "pi" }, { id: "claude-code", label: "Claude Code" }, { id: "codex", label: "Codex" },
   ] });
 });
 
@@ -424,6 +425,11 @@ test("open-session validates session and directory inputs before opening a runne
   assert.deepEqual(sqlite.body.runner.sessionRef, {
     backend: "sqlite", id: "sqlite-id", storagePath: "/agent/sessions.sqlite",
   });
+
+  const external = response();
+  await route({ body: { sessionKey: "codex-key" } }, external);
+  assert.equal(external.status, 200);
+  assert.deepEqual(external.body.runner.sessionRef, { backend: "codex", id: "codex-id", storagePath: null });
 });
 
 test("open-session starts a new session with the selected harness", async () => {

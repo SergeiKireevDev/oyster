@@ -421,7 +421,7 @@ export function createRunnerRoutes({
         return;
       }
       const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
-      if (sessionRef && sessionRef.backend !== "claude-code" && !persistedSession) {
+      if (sessionRef && sessionRef.storagePath !== null && !persistedSession) {
         json(res, 404, { error: `session not found: ${sessionRef.id}` });
         return;
       }

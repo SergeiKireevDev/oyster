@@ -19,6 +19,14 @@ Flags take precedence over their corresponding environment variables.
 | — | `CLAUDE_CODE_ARGS` | empty | Extra Claude Code headless arguments, split on spaces |
 | — | `CLAUDE_CODE_PERMISSION_MODE` | `acceptEdits` | Claude Code permission mode used for remote sessions |
 | — | `CLAUDE_CONFIG_DIR` | `~/.claude` | Writable Claude root for OAuth projection and project transcripts |
+| `--codex` | `CODEX_BIN` | `codex` on `PATH`, if present | Enable the OpenAI Codex CLI harness |
+| — | `CODEX_ARGS` | empty | Extra `codex exec` arguments, split on spaces |
+| — | `CODEX_SANDBOX` | `workspace-write` | Codex sandbox: `read-only`, `workspace-write`, or `danger-full-access` |
+| `--gemini` | `GEMINI_BIN` | `gemini` on `PATH`, if present | Enable the Google Gemini CLI harness |
+| — | `GEMINI_ARGS` | empty | Extra Gemini CLI headless arguments, split on spaces |
+| — | `GEMINI_APPROVAL_MODE` | `auto_edit` | Gemini approval mode: `default`, `auto_edit`, `yolo`, or `plan` |
+| `--amp` | `AMP_BIN` | `amp` on `PATH`, if present | Enable the Amp harness |
+| — | `AMP_ARGS` | empty | Extra Amp execute-mode arguments, split on spaces |
 | `--tunnel-bin` | `TUNNEL_BIN` | `cloudflared` | Tunnel executable |
 | — | `PERSISTENT_STORE` | `sqlite` | pi session catalog: `sqlite` or `jsonl` |
 | — | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi-owned data directory |
@@ -28,13 +36,17 @@ Environment and workspace selection belong to Oyster Hub. A direct spoke runs in
 
 ## Agent harnesses
 
-The new-session controls include a **Harness** selector. pi is always available. Claude Code appears when `claude` is executable on `PATH`, when `CLAUDE_CODE_BIN` points to an executable, or when `--claude-code` supplies one. The selection is stored per runner, so stopping, restarting, and resuming a session uses the same harness.
+The new-session controls include a **Harness** selector. pi is always available. Claude Code, Codex, Gemini CLI, and Amp appear when their commands are executable on `PATH`, when the corresponding `*_BIN` variable points to an executable, or when `--claude-code`, `--codex`, `--gemini`, or `--amp` supplies one. The selection is stored per runner, so stopping, restarting, and resuming a session uses the same harness.
+
+Codex and Gemini run one structured headless turn at a time behind Oyster's durable process bridge; subsequent turns resume the native Codex thread or Gemini session. Amp uses its long-lived streaming JSON input mode and supports queued or steering messages. All three receive Oyster's HTTP MCP endpoint without writing the bearer token to command-line arguments. They use their normal CLI credentials: Codex's ChatGPT login or `CODEX_API_KEY`, Gemini's Google login or API-key environment variables, and Amp's login or `AMP_API_KEY`. Amp selects its own model. Codex and Gemini model overrides can be supplied through their `*_ARGS` settings; Gemini's reported model also appears in Oyster's model state.
+
+`CODEX_SANDBOX=workspace-write` and `GEMINI_APPROVAL_MODE=auto_edit` allow unattended workspace edits while retaining each CLI's normal safety boundary. Use stricter values for read-only or approval-driven deployments. `danger-full-access` and `yolo` should only be used inside an appropriately isolated environment.
 
 Claude Code runs in headless stream-JSON mode and uses its normal credentials (`~/.claude`, `ANTHROPIC_API_KEY`, or a configured third-party provider). When Claude Code is enabled, one Anthropic login serves both harnesses and the Credentials modal shows it as a single "pi and Claude Code" connection: pi stores the grant in `auth.json`, and Oyster mirrors it into Claude Code's `.credentials.json`. Oyster keeps the grant fresh itself: it rotates the access token about 30 minutes before expiry, inside pi's own file lock and well ahead of either harness's five-minute refresh window, so the single-use refresh token is never contended. It then restarts idle Claude Code runners so they reload the file; pi runners re-read the file under the same lock on their own. A runner that still reports an expired-token error triggers the same recovery immediately. Only a rejected refresh token requires re-authenticating from the Credentials modal. If pi is configured with an Anthropic API key instead, Claude Code keeps a grant of its own, which Oyster still rotates. Other providers and API keys remain pi-only. The model selector exposes Claude Code's `default`, `sonnet`, `opus`, `haiku`, and `fable` aliases and applies changes through Claude's native stream control protocol. The default `acceptEdits` permission mode avoids interactive edit prompts that cannot be answered through the current web protocol; set `CLAUDE_CODE_PERMISSION_MODE=default` for a more restrictive setup or provide explicit tool policy through `CLAUDE_CODE_ARGS`. Only use `bypassPermissions` inside an appropriately isolated sandbox.
 
 Claude Code's project JSONL remains the conversation source of truth. With the default SQLite session store, Oyster polls the selected Claude runner's JSONL every two seconds, reconciles it through pi's SQLite repository, and reloads the transcript only when persisted messages change. Stable Claude record UUIDs make unchanged polls idempotent; an appended JSONL adds entries, while a rewritten transcript rebuilds its mirror. The resulting SQLite mirror enables the normal session catalog and search paths without changing how Claude resumes its own session.
 
-Set `CLAUDE_CONFIG_DIR` when Claude stores configuration somewhere other than `~/.claude`. The configured directory must be visible and writable by Oyster so OAuth projection and Claude JSONL persistence can use it. JSONL session-store rollback mode continues to use only Claude's live stream and does not create the SQLite mirror. Checkpoints and conversation forks remain pi-only capabilities.
+Set `CLAUDE_CONFIG_DIR` when Claude stores configuration somewhere other than `~/.claude`. The configured directory must be visible and writable by Oyster so OAuth projection and Claude JSONL persistence can use it. JSONL session-store rollback mode continues to use only Claude's live stream and does not create the SQLite mirror. Codex, Gemini, and Amp keep their conversation history in their own native stores and are represented by storage-free external session references in Oyster. Checkpoints and conversation forks remain pi-only capabilities.
 
 Check startup configuration without serving HTTP:
 

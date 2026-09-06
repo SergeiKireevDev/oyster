@@ -1,4 +1,7 @@
+import { createAmpDriver } from "./amp.mjs";
 import { createClaudeCodeDriver } from "./claude-code.mjs";
+import { createCodexDriver } from "./codex.mjs";
+import { createGeminiDriver } from "./gemini.mjs";
 import { createPiRpcDriver } from "./pi-rpc.mjs";
 import { createRunnerDriverRegistry } from "./registry.mjs";
 
@@ -26,6 +29,23 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         extraArgs: config.CLAUDE_CODE_ARGS,
         permissionMode: config.CLAUDE_CODE_PERMISSION_MODE,
         sqlitePath: config.SQLITE_PATH,
+        env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
+      })] : []),
+      ...(config.CODEX_BIN ? [createCodexDriver({
+        bin: config.CODEX_BIN,
+        extraArgs: config.CODEX_ARGS,
+        sandbox: config.CODEX_SANDBOX,
+        env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
+      })] : []),
+      ...(config.GEMINI_BIN ? [createGeminiDriver({
+        bin: config.GEMINI_BIN,
+        extraArgs: config.GEMINI_ARGS,
+        approvalMode: config.GEMINI_APPROVAL_MODE,
+        env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
+      })] : []),
+      ...(config.AMP_BIN ? [createAmpDriver({
+        bin: config.AMP_BIN,
+        extraArgs: config.AMP_ARGS,
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
     ],

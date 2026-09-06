@@ -416,9 +416,13 @@ export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = s
         json(res, 400, { error: "workdir must be an absolute path" });
         return;
       }
+      const runnerId = requestParameter(url, "runner");
+      const activeRunner = runnerId && state.runners instanceof Map ? state.runners.get(runnerId) : null;
       const context = {
-        runnerId: requestParameter(url, "runner"),
-        sessionId: requestParameter(url, "session"),
+        runnerId,
+        // Headless harnesses can only learn their native session ID after
+        // launch. Prefer that authoritative identity over the provisional URL.
+        sessionId: activeRunner?.sessionId ?? requestParameter(url, "session"),
         workdir: resolve(workdir ?? state.currentDir ?? state.config?.PI_DIR ?? process.cwd()),
       };
       // Stateless mode: one server and transport per request, torn down with the response.

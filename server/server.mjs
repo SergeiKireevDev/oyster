@@ -166,14 +166,26 @@ function validateConfig(config) {
   if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
     throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
   }
+  if (!new Set(["read-only", "workspace-write", "danger-full-access"]).has(config.CODEX_SANDBOX)) {
+    throw new Error(`Invalid CODEX_SANDBOX value "${config.CODEX_SANDBOX}"`);
+  }
+  if (!new Set(["default", "auto_edit", "yolo", "plan"]).has(config.GEMINI_APPROVAL_MODE)) {
+    throw new Error(`Invalid GEMINI_APPROVAL_MODE value "${config.GEMINI_APPROVAL_MODE}"`);
+  }
   try {
     accessSync(config.PI_BIN, constants.X_OK);
   } catch {
     throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Initialize and build the pi submodule or set PI_BIN/--pi explicitly.`);
   }
-  if (config.CLAUDE_CODE_BIN) {
-    try { accessSync(config.CLAUDE_CODE_BIN, constants.X_OK); }
-    catch { throw new Error(`Claude Code executable is missing or not executable: ${config.CLAUDE_CODE_BIN}`); }
+  for (const [label, executable] of [
+    ["Claude Code", config.CLAUDE_CODE_BIN],
+    ["Codex", config.CODEX_BIN],
+    ["Gemini CLI", config.GEMINI_BIN],
+    ["Amp", config.AMP_BIN],
+  ]) {
+    if (!executable) continue;
+    try { accessSync(executable, constants.X_OK); }
+    catch { throw new Error(`${label} executable is missing or not executable: ${executable}`); }
   }
   if (config.PI_BIN === DEFAULT_LOCAL_PI) {
     const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
@@ -188,6 +200,12 @@ const piExtraArgs = (argValue("--pi-args") ?? process.env.PI_ARGS ?? "").split("
 const requestedClaudeCodeBin = argValue("--claude-code") ?? process.env.CLAUDE_CODE_BIN ?? null;
 const claudeCodeBin = requestedClaudeCodeBin ? resolveExecutable(requestedClaudeCodeBin) : detectExecutable("claude");
 const claudeCodeArgs = (process.env.CLAUDE_CODE_ARGS ?? "").split(" ").filter(Boolean);
+const requestedCodexBin = argValue("--codex") ?? process.env.CODEX_BIN ?? null;
+const codexBin = requestedCodexBin ? resolveExecutable(requestedCodexBin) : detectExecutable("codex");
+const requestedGeminiBin = argValue("--gemini") ?? process.env.GEMINI_BIN ?? null;
+const geminiBin = requestedGeminiBin ? resolveExecutable(requestedGeminiBin) : detectExecutable("gemini");
+const requestedAmpBin = argValue("--amp") ?? process.env.AMP_BIN ?? null;
+const ampBin = requestedAmpBin ? resolveExecutable(requestedAmpBin) : detectExecutable("amp");
 const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
 const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
 const claudeConfigDir = resolve(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"));
@@ -203,6 +221,14 @@ const config = Object.freeze({
   CLAUDE_CODE_PERMISSION_MODE: process.env.CLAUDE_CODE_PERMISSION_MODE ?? "acceptEdits",
   CLAUDE_CONFIG_DIR: claudeConfigDir,
   CLAUDE_CODE_PROJECTS_DIR: resolve(claudeConfigDir, "projects"),
+  CODEX_BIN: codexBin ? resolveExecutable(codexBin) : null,
+  CODEX_ARGS: Object.freeze((process.env.CODEX_ARGS ?? "").split(" ").filter(Boolean)),
+  CODEX_SANDBOX: process.env.CODEX_SANDBOX ?? "workspace-write",
+  GEMINI_BIN: geminiBin ? resolveExecutable(geminiBin) : null,
+  GEMINI_ARGS: Object.freeze((process.env.GEMINI_ARGS ?? "").split(" ").filter(Boolean)),
+  GEMINI_APPROVAL_MODE: process.env.GEMINI_APPROVAL_MODE ?? "auto_edit",
+  AMP_BIN: ampBin ? resolveExecutable(ampBin) : null,
+  AMP_ARGS: Object.freeze((process.env.AMP_ARGS ?? "").split(" ").filter(Boolean)),
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -226,6 +252,9 @@ if (process.argv.includes("--check-config")) {
     claudeCodeBin: config.CLAUDE_CODE_BIN,
     claudeConfigDir: config.CLAUDE_CONFIG_DIR,
     claudeCodeProjectsDir: config.CLAUDE_CODE_PROJECTS_DIR,
+    codexBin: config.CODEX_BIN,
+    geminiBin: config.GEMINI_BIN,
+    ampBin: config.AMP_BIN,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.OYSTER_DB_PATH,
@@ -540,6 +569,9 @@ watchApp();
 server.listen(config.PORT, config.HOST, () => {
   console.log(`[oyster] listening on http://${config.HOST}:${config.PORT}`);
   console.log(`[oyster] pi executable: ${config.PI_BIN}`);
+  for (const [label, executable] of [["Claude Code", config.CLAUDE_CODE_BIN], ["Codex", config.CODEX_BIN], ["Gemini CLI", config.GEMINI_BIN], ["Amp", config.AMP_BIN]]) {
+    if (executable) console.log(`[oyster] ${label} executable: ${executable}`);
+  }
   console.log(`[oyster] session backend: ${config.PERSISTENT_STORE}`);
   if (config.SQLITE_PATH) console.log(`[oyster] SQLite database: ${config.SQLITE_PATH}`);
   console.log(`[oyster] application database: ${state.appStore.path} (schema v${state.appStore.migrationStatus.currentVersion})`);

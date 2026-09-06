@@ -16,6 +16,9 @@ test("session lists render an accessible harness pill for saved, live, loop, and
   assert.match(pill, /data-harness=\{harnessId\}/);
   assert.match(pill, /aria-label=\{`Harness: \$\{label\}`\}/);
   assert.match(pill, /"claude-code": "Claude Code"/);
+  assert.match(pill, /codex: "Codex"/);
+  assert.match(pill, /gemini: "Gemini CLI"/);
+  assert.match(pill, /amp: "Amp"/);
   assert.match(pill, /border-radius: 999px/);
 
   for (const name of ["HarnessPill.svelte", "SessionSidebar.svelte", "SessionPickerModal.svelte"]) {
