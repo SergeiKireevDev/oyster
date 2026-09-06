@@ -96,7 +96,7 @@ function renderMath(expression, displayMode = false) {
   });
 }
 
-function inlineMd(s) {
+function inlineMd(s, resolveImageSource) {
   // s is already HTML-escaped. Protect generated code/math HTML from the
   // emphasis and link replacements that follow.
   const protectedHtml = [];
@@ -105,6 +105,20 @@ function inlineMd(s) {
     .replace(/`([^`]+)`/g, (_, code) => protect(`<code>${code}</code>`))
     .replace(/\\\((.+?)\\\)/g, (_, expression) => protect(renderMath(expression)))
     .replace(/(^|[^$\\])\$([^$\n]+?)\$(?!\$)/g, (_, prefix, expression) => `${prefix}${protect(renderMath(expression))}`)
+    // Match images before links/emphasis so destinations and alt text remain
+    // attributes, not generated markup. Code/math were protected above.
+    .replace(/!\[([^\]\n]*)\]\(\s*(?:&lt;([^\n]*?)&gt;|([^\s()]+(?:\([^()\n]*\)[^\s()]*)*))\s*(?:&quot;([^\n]*?)&quot;|'([^'\n]*)')?\s*\)/g,
+      (match, alt, angleSource, bareSource, doubleTitle, singleTitle) => {
+        if (typeof resolveImageSource !== "function") return match;
+        const src = resolveImageSource(decodeEscapedMath(angleSource ?? bareSource));
+        // Only allow remote images or the authenticated pinned-media endpoint,
+        // even if a caller supplies a faulty resolver. Never accept active URLs.
+        if (typeof src !== "string" || !/^(?:https?:\/\/|\/pinned-widget-media\?)/i.test(src) || /[\x00-\x20\x7f]/.test(src)) {
+          return protect(alt);
+        }
+        const title = doubleTitle ?? singleTitle;
+        return protect(`<img src="${escapeHtml(src)}" alt="${alt}"${title === undefined ? "" : ` title="${title}"`} loading="lazy" referrerpolicy="no-referrer">`);
+      })
     .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
@@ -162,7 +176,7 @@ function extractMermaidDiagrams(source) {
   return diagrams;
 }
 
-function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults = [], showMermaidExplore = false } = {}) {
+function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults = [], showMermaidExplore = false, resolveImageSource } = {}) {
   // Normalize at the renderer boundary so callers can only pass source data;
   // components never prepare or forward an HTML-shaped value.
   const lines = String(source ?? "").split("\n");
@@ -171,7 +185,7 @@ function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults
   let mermaidIndex = 0;
   let para = [];
   const flushPara = () => {
-    if (para.length) { out.push(`<p>${inlineMd(escapeHtml(para.join("\n"))).replace(/\n/g, "<br>")}</p>`); para = []; }
+    if (para.length) { out.push(`<p>${inlineMd(escapeHtml(para.join("\n")), resolveImageSource).replace(/\n/g, "<br>")}</p>`); para = []; }
   };
   while (i < lines.length) {
     const line = lines[i];
@@ -213,13 +227,13 @@ function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults
       }
     }
     const h = line.match(/^(#{1,4})\s+(.*)$/);
-    if (h) { flushPara(); out.push(`<h${h[1].length}>${inlineMd(escapeHtml(h[2]))}</h${h[1].length}>`); i++; continue; }
+    if (h) { flushPara(); out.push(`<h${h[1].length}>${inlineMd(escapeHtml(h[2]), resolveImageSource)}</h${h[1].length}>`); i++; continue; }
     if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flushPara(); out.push("<hr>"); i++; continue; }
     if (/^\s*>/.test(line)) {
       flushPara();
       const buf = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
-      out.push(`<blockquote>${inlineMd(escapeHtml(buf.join("\n"))).replace(/\n/g, "<br>")}</blockquote>`);
+      out.push(`<blockquote>${inlineMd(escapeHtml(buf.join("\n")), resolveImageSource).replace(/\n/g, "<br>")}</blockquote>`);
       continue;
     }
     const ul = line.match(/^(\s*)([-*+])\s+(.*)$/);
@@ -242,14 +256,14 @@ function renderSanitizedMarkdown(source, { enableMermaid = false, mermaidResults
       }
       const tag = ordered ? "ol" : "ul";
       const start = ordered && ol[2] !== "1" ? ` start="${ol[2]}"` : "";
-      out.push(`<${tag}${start}>${items.map((it) => `<li>${inlineMd(escapeHtml(it)).replace(/\n/g, "<br>")}</li>`).join("")}</${tag}>`);
+      out.push(`<${tag}${start}>${items.map((it) => `<li>${inlineMd(escapeHtml(it), resolveImageSource).replace(/\n/g, "<br>")}</li>`).join("")}</${tag}>`);
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       flushPara();
       const rows = [];
       while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
-      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => inlineMd(escapeHtml(c.trim())));
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => inlineMd(escapeHtml(c.trim()), resolveImageSource));
       const head = cells(rows[0]);
       const body = rows.slice(2).map(cells);
       out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`);

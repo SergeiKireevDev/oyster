@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -133,6 +133,72 @@ test("widget routes classify files, render Markdown natively, group, move, and u
   const removed = response();
   await routes["DELETE /pinned-widgets"]({}, removed, new URL(`http://localhost/pinned-widgets?id=${created.body.widget.id}`));
   assert.equal(removed.status, 200);
+});
+
+test("pinned Markdown resolves local images relative to the document, not the server cwd", async (t) => {
+  const { root, routes } = await fixture(t);
+  mkdirSync(join(root, "docs"));
+  mkdirSync(join(root, "images"));
+  writeFileSync(join(root, "docs", "report.md"), "![Photo](../images/a%20%231.png)");
+  const image = Buffer.from([1, 2, 3, 4]);
+  writeFileSync(join(root, "images", "a #1.png"), image);
+  writeFileSync(join(root, "docs", "diagram.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path: join(root, "docs", "report.md"), scope: "workspace" }), created);
+  const id = created.body.widget.id;
+  for (const src of ["../images/a%20%231.png", "../images/a%20%231.png?v=2#preview", join(root, "images", "a%20%231.png")]) {
+    const url = new URL(`http://localhost/pinned-widget-media?${new URLSearchParams({ id, src })}`);
+    const res = streamResponse();
+    const ended = new Promise((resolve) => res.on("end", resolve));
+    await routes["GET /pinned-widget-media"](request({}), res, url);
+    await ended;
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["content-type"], "image/png");
+    assert.equal(res.headers["x-content-type-options"], "nosniff");
+    assert.match(res.headers["cache-control"], /private/);
+    assert.deepEqual(res.body(), image);
+    const head = response();
+    await routes["HEAD /pinned-widget-media"]({}, head, url);
+    assert.equal(head.status, 200);
+    assert.equal(head.headers["content-length"], image.length);
+  }
+  const svg = streamResponse();
+  const ended = new Promise((resolve) => svg.on("end", resolve));
+  await routes["GET /pinned-widget-media"](request({}), svg, new URL(`http://localhost/pinned-widget-media?${new URLSearchParams({ id, src: "./diagram.svg" })}`));
+  await ended;
+  assert.equal(svg.headers["content-type"], "image/svg+xml");
+  assert.match(svg.headers["content-security-policy"], /sandbox/);
+});
+
+test("pinned Markdown image requests enforce path and image-type restrictions", async (t) => {
+  const { root, routes } = await fixture(t);
+  writeFileSync(join(root, "report.md"), "# Report");
+  writeFileSync(join(root, "not-image.html"), "<script>evil</script>");
+  writeFileSync(join(root, "video.mp4"), "video");
+  symlinkSync("/etc/passwd", join(root, "escape.png"));
+  const created = response();
+  await routes["POST /pinned-widgets"](request({ path: join(root, "report.md"), scope: "workspace" }), created);
+  const id = created.body.widget.id;
+  for (const [src, status] of [
+    ["", 400], ["bad%ZZ.png", 400], ["a%00.png", 400], ["https://example.test/a.png", 400],
+    ["//example.test/a.png", 400], ["file:///tmp/a.png", 400],
+    ["/etc/passwd", 403], ["../../etc/passwd", 403], ["escape.png", 403],
+    ["not-image.html", 415], ["video.mp4", 415], ["report.md", 415], [".", 404], ["missing.png", 404],
+  ]) {
+    const res = response();
+    await routes["GET /pinned-widget-media"](request({}), res, new URL(`http://localhost/pinned-widget-media?${new URLSearchParams({ id, src })}`));
+    assert.equal(res.status, status, src);
+  }
+  const missing = response();
+  await routes["GET /pinned-widget-media"](request({}), missing, new URL("http://localhost/pinned-widget-media?id=missing&src=a.png"));
+  assert.equal(missing.status, 404);
+  const noSource = response();
+  await routes["GET /pinned-widget-media"](request({}), noSource, new URL(`http://localhost/pinned-widget-media?id=${id}`));
+  assert.equal(noSource.status, 415);
+  rmSync(join(root, "report.md"));
+  const removed = response();
+  await routes["GET /pinned-widget-media"](request({}), removed, new URL(`http://localhost/pinned-widget-media?id=${id}&src=escape.png`));
+  assert.equal(removed.status, 404);
 });
 
 test("an invalid widget label does not partially apply a requested move", async (t) => {

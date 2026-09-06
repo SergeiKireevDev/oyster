@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const IMAGE_MIME = new Map([
@@ -304,9 +304,10 @@ function statArtifact(target, unavailableMessage) {
   }
 }
 
-async function mediaTarget(state, widgetId, resolveSafePath) {
+async function mediaTarget(state, widgetId, resolveSafePath, imageSource = null) {
   const row = await state.appStore.repositories.pinnedWidgets.find(widgetId);
   if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
+  if (imageSource !== null) return markdownImageTarget(row, imageSource, resolveSafePath);
   if (!INLINE_KINDS.has(row.kind)) throw Object.assign(new Error("widget is not safe inline media"), { statusCode: 415 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!target) throw Object.assign(new Error("pinned media is unavailable"), { statusCode: 404 });
@@ -315,6 +316,32 @@ async function mediaTarget(state, widgetId, resolveSafePath) {
   if (classification.kind !== row.kind || classification.mimeType !== row.mime_type) {
     throw Object.assign(new Error("pinned media type changed; re-pin it before display"), { statusCode: 415 });
   }
+  return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
+}
+
+function markdownImageTarget(row, source, resolveSafePath) {
+  if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a Markdown artifact"), { statusCode: 415 });
+  const document = row.target ? resolveSafePath(resolve(row.target)) : null;
+  if (!document) throw Object.assign(new Error("pinned Markdown is unavailable"), { statusCode: 404 });
+  const documentType = classifyPinnedPath(document, statArtifact(document, "pinned Markdown is unavailable"));
+  if (documentType.kind !== "markdown" || documentType.mimeType !== row.mime_type) {
+    throw Object.assign(new Error("pinned Markdown type changed; re-pin it before display"), { statusCode: 415 });
+  }
+  // Markdown destinations are URL-encoded paths. Strip URL suffixes before
+  // decoding so encoded # and ? characters remain part of the filename.
+  let path;
+  try { path = decodeURIComponent(source.split(/[?#]/, 1)[0]); }
+  catch { throw Object.assign(new Error("invalid image path"), { statusCode: 400 }); }
+  if (!path || /[\x00-\x1f\x7f\\]/.test(path) || /^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith("//")) {
+    throw Object.assign(new Error("invalid image path"), { statusCode: 400 });
+  }
+  // Apply the same canonical-root and denied-path checks as pinned files,
+  // including symlink targets. Never fetch remote URLs on the server.
+  const target = resolveSafePath(resolve(dirname(document), path));
+  if (!target) throw Object.assign(new Error("image path outside the allowed roots"), { statusCode: 403 });
+  const stat = statArtifact(target, "Markdown image is unavailable");
+  const classification = classifyPinnedPath(target, stat);
+  if (classification.kind !== "image") throw Object.assign(new Error("Markdown resource is not an image"), { statusCode: 415 });
   return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
 }
 
@@ -765,7 +792,7 @@ export function createPinnedWidgetRoutes({
 
     "HEAD /pinned-widget-media": async (req, res, url) => {
       try {
-        const { stat, mimeType } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
+        const { stat, mimeType } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath, url.searchParams.get("src")));
         res.writeHead(200, {
           "content-type": mimeType, "content-length": stat.size, "accept-ranges": "bytes",
           "cache-control": "private, no-cache", "x-content-type-options": "nosniff",
@@ -780,7 +807,7 @@ export function createPinnedWidgetRoutes({
 
     "GET /pinned-widget-media": async (req, res, url) => {
       try {
-        const { target, stat, mimeType, displayName } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath));
+        const { target, stat, mimeType, displayName } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath, url.searchParams.get("src")));
         const etag = `W/\"${stat.size}-${Math.trunc(stat.mtimeMs)}\"`;
         if (!req.headers.range && req.headers["if-none-match"] === etag) {
           res.writeHead(304, { etag, "cache-control": "private, no-cache" });

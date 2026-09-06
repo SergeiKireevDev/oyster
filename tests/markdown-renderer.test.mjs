@@ -27,6 +27,52 @@ test("markdown renderer rejects active markup and non-HTTP link protocols", () =
   assert.doesNotMatch(html, /<img|<svg|href="javascript:|<[^>]*\son(?:error|load|mouseover)=/i);
 });
 
+test("Markdown images resolve before links and emphasis without changing code or raw HTML", () => {
+  const sources = [];
+  const resolveImageSource = (src) => {
+    sources.push(src);
+    return `/pinned-widget-media?id=doc&src=${encodeURIComponent(src)}`;
+  };
+  const html = renderSanitizedMarkdown([
+    '![a "quoted" **caption**](images/chart_(1).png "A title")',
+    "![space](<images/a file.png> 'Other title')",
+    '![remote](https://example.test/a_b.png?x=1&y=2)',
+    '![](empty-alt.png)',
+    '`![code](ignored.png)`',
+    '```md\n![fenced](ignored.png)\n```',
+    '<img src="ignored.png">',
+  ].join("\n\n"), { resolveImageSource });
+  assert.deepEqual(sources, ["images/chart_(1).png", "images/a file.png", "https://example.test/a_b.png?x=1&y=2", "empty-alt.png"]);
+  assert.equal((html.match(/<img /g) ?? []).length, 4);
+  assert.match(html, /alt="a &quot;quoted&quot; \*\*caption\*\*" title="A title"/);
+  assert.match(html, /alt="space" title="Other title"/);
+  assert.match(html, /&amp;src=images%2Fchart_\(1\).png/);
+  assert.match(html, /<code>!\[code\]\(ignored.png\)<\/code>/);
+  assert.match(html, /&lt;img src=&quot;ignored.png&quot;&gt;/);
+  assert.doesNotMatch(html, /<a |<strong>/);
+  // Other Markdown contexts retain their existing behavior unless opted in.
+  assert.equal(renderSanitizedMarkdown("![local](a.png)"), "<p>![local](a.png)</p>");
+});
+
+test("Markdown image attributes are escaped and unsafe resolver results are rejected", () => {
+  for (const src of ["javascript:alert(1)", "data:image/svg+xml,evil", "file:///tmp/a.png", "//evil.test/a.png", "/file-save", "https://example.test/\nattack", null]) {
+    assert.equal(renderSanitizedMarkdown("![fallback](a.png)", { resolveImageSource: () => src }), "<p>fallback</p>");
+  }
+  const html = renderSanitizedMarkdown('![<svg>](a.png "&quot; onerror=evil")', {
+    resolveImageSource: () => 'https://example.test/a.png?x="&y=1',
+  });
+  assert.match(html, /src="https:\/\/example.test\/a.png\?x=&quot;&amp;y=1"/);
+  assert.match(html, /alt="&lt;svg&gt;" title="&amp;quot; onerror=evil"/);
+  assert.match(html, /loading="lazy" referrerpolicy="no-referrer"/);
+});
+
+test("Markdown images work in headings, lists, blockquotes, and tables", () => {
+  const html = renderSanitizedMarkdown('# ![heading](a.png)\n\n- ![item](a.png)\n\n> ![quote](a.png)\n\n| Image |\n| --- |\n| ![cell](a.png) |', {
+    resolveImageSource: () => "https://example.test/a.png",
+  });
+  assert.equal((html.match(/<img /g) ?? []).length, 4);
+});
+
 test("markdown renderer owns source normalization as well as sanitization", () => {
   assert.equal(renderSanitizedMarkdown(null), "");
   assert.equal(renderSanitizedMarkdown(undefined), "");
