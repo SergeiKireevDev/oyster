@@ -69,6 +69,53 @@ function optionalTimestamp(value) {
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Exchange a refresh token at Anthropic's token endpoint (the same client id,
+ * scopes, and JSON body pi's login uses). Refresh tokens are single-use: the
+ * returned pair replaces the one passed in. Errors carry `invalidGrant` when
+ * the endpoint rejected the token itself, which means re-authentication.
+ */
+export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fetch, now = Date.now } = {}) {
+  if (typeof refreshToken !== "string" || !refreshToken) throw refreshError("an Anthropic OAuth refresh token is required");
+  let response;
+  try {
+    response = await fetchImpl(ANTHROPIC_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ grant_type: "refresh_token", client_id: ANTHROPIC_CLIENT_ID, refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    throw refreshError(`Anthropic token refresh request failed: ${cause?.message ?? cause}`, { cause });
+  }
+  const text = await response.text();
+  let payload = null;
+  try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+  if (!response.ok) {
+    const code = plainObject(payload) && typeof payload.error === "string" ? payload.error : "";
+    throw refreshError(
+      `Anthropic token refresh was rejected (${response.status}${code ? ` ${code}` : ""})`,
+      { status: response.status, invalidGrant: code === "invalid_grant" },
+    );
+  }
+  if (!plainObject(payload)
+    || typeof payload.access_token !== "string" || !payload.access_token
+    || typeof payload.refresh_token !== "string" || !payload.refresh_token
+    || !Number.isFinite(payload.expires_in)) {
+    throw refreshError("Anthropic token refresh returned an invalid response", { status: response.status });
+  }
+  const issuedAt = now();
+  return Object.freeze({
+    type: "oauth",
+    access: payload.access_token,
+    refresh: payload.refresh_token,
+    expires: issuedAt + payload.expires_in * 1000 - ACCESS_EXPIRY_MARGIN_MS,
+    refreshExpires: Number.isFinite(payload.refresh_token_expires_in)
+      ? issuedAt + payload.refresh_token_expires_in * 1000
+      : null,
+  });
+}
+
 /** Atomically manage Claude Code's independent Anthropic OAuth credential. */
 export function createClaudeOAuthCredentialSink({ configDir } = {}) {
   if (typeof configDir !== "string" || !isAbsolute(configDir) || resolve(configDir) !== configDir) {
@@ -160,44 +207,7 @@ export function createClaudeOAuthCredentialSink({ configDir } = {}) {
   async function refresh({ fetchImpl = fetch, now = Date.now } = {}) {
     const current = read();
     if (!current) throw refreshError("Claude Code has no stored Anthropic OAuth credential to refresh");
-    let response;
-    try {
-      response = await fetchImpl(ANTHROPIC_TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ grant_type: "refresh_token", client_id: ANTHROPIC_CLIENT_ID, refresh_token: current.refresh }),
-        signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
-      });
-    } catch (cause) {
-      throw refreshError(`Anthropic token refresh request failed: ${cause?.message ?? cause}`, { cause });
-    }
-    const text = await response.text();
-    let payload = null;
-    try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
-    if (!response.ok) {
-      const code = plainObject(payload) && typeof payload.error === "string" ? payload.error : "";
-      const invalidGrant = code === "invalid_grant";
-      throw refreshError(
-        `Anthropic token refresh was rejected (${response.status}${code ? ` ${code}` : ""})`,
-        { status: response.status, invalidGrant },
-      );
-    }
-    if (!plainObject(payload)
-      || typeof payload.access_token !== "string" || !payload.access_token
-      || typeof payload.refresh_token !== "string" || !payload.refresh_token
-      || !Number.isFinite(payload.expires_in)) {
-      throw refreshError("Anthropic token refresh returned an invalid response", { status: response.status });
-    }
-    const issuedAt = now();
-    const next = Object.freeze({
-      type: "oauth",
-      access: payload.access_token,
-      refresh: payload.refresh_token,
-      expires: issuedAt + payload.expires_in * 1000 - ACCESS_EXPIRY_MARGIN_MS,
-      refreshExpires: Number.isFinite(payload.refresh_token_expires_in)
-        ? issuedAt + payload.refresh_token_expires_in * 1000
-        : null,
-    });
+    const next = await refreshAnthropicOAuthGrant(current.refresh, { fetchImpl, now });
 
     const { root } = readRoot();
     const stored = hasValidClaudeCredential(root) ? root.claudeAiOauth : null;

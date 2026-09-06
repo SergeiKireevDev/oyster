@@ -376,7 +376,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
   }
 });
 
-test("Anthropic OAuth login and logout keep independent Pi and Claude Code credentials", async () => {
+test("Anthropic OAuth login mirrors one shared grant into the pi and Claude Code stores", async () => {
   const item = fixture({ sdkSource: `
     import { readFileSync, writeFileSync } from "node:fs";
     let generation = 0;
@@ -420,40 +420,46 @@ test("Anthropic OAuth login and logout keep independent Pi and Claude Code crede
     let piStored = JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8"));
     let claudeStored = JSON.parse(readFileSync(claudePath, "utf8"));
     assert.equal(piStored.anthropic.access, "access-1-canary");
-    assert.equal(claudeStored.claudeAiOauth, undefined);
+    assert.equal(claudeStored.claudeAiOauth.accessToken, "access-1-canary", "a pi login is mirrored into Claude Code's store");
+    assert.equal(claudeStored.claudeAiOauth.refreshToken, "refresh-1-canary");
+    assert.equal(claudeStored.claudeAiOauth.expiresAt, 1800000000001);
+    assert.deepEqual(claudeStored.untouched, { value: true });
+    assert.equal(statSync(claudePath).mode & 0o777, 0o600);
 
-    assert.deepEqual(await service.loginOAuth("anthropic", callbacks, { harness: "claude-code" }), {
+    await assert.rejects(service.loginOAuth("anthropic", callbacks, { harness: "claude-code" }), { code: "credential_replace_required" });
+    assert.deepEqual(await service.loginOAuth("anthropic", callbacks, { harness: "claude-code", replace: true }), {
       provider: "anthropic", harness: "claude-code", credentialType: "oauth",
     });
     piStored = JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8"));
     claudeStored = JSON.parse(readFileSync(claudePath, "utf8"));
-    assert.equal(piStored.anthropic.access, "access-1-canary");
-    assert.equal(claudeStored.claudeAiOauth.accessToken, "access-2-canary");
-    assert.equal(claudeStored.claudeAiOauth.refreshToken, "refresh-2-canary");
-    assert.equal(claudeStored.claudeAiOauth.expiresAt, 1800000000002);
-    assert.deepEqual(claudeStored.untouched, { value: true });
-    assert.equal(statSync(claudePath).mode & 0o777, 0o600);
+    assert.equal(piStored.anthropic.access, "access-1-canary", "linking Claude Code reuses pi's grant instead of a second login");
+    assert.equal(claudeStored.claudeAiOauth.accessToken, "access-1-canary");
     const connections = (await service.listProviders()).filter((provider) => provider.provider === "anthropic");
     assert.equal(connections.find((provider) => !provider.harness)?.credentialType, "oauth");
     assert.equal(connections.find((provider) => provider.harness === "claude-code")?.credentialType, "oauth");
 
-    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true });
-    assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic, undefined);
-    assert.equal(JSON.parse(readFileSync(claudePath, "utf8")).claudeAiOauth.accessToken, "access-2-canary");
     assert.deepEqual(await service.logoutOAuth("anthropic", { harness: "claude-code" }), {
       provider: "anthropic", harness: "claude-code", removed: true,
     });
+    assert.equal(JSON.parse(readFileSync(claudePath, "utf8")).claudeAiOauth, undefined, "unlinking Claude Code keeps pi's grant");
+    assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic.access, "access-1-canary");
+    assert.deepEqual(await service.syncClaudeOAuth(), { outcome: "synced", source: "pi", expiresAt: 1800000000001 });
+    assert.equal(JSON.parse(readFileSync(claudePath, "utf8")).claudeAiOauth.accessToken, "access-1-canary");
+
+    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true });
+    assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic, undefined);
     const afterLogout = JSON.parse(readFileSync(claudePath, "utf8"));
-    assert.equal(afterLogout.claudeAiOauth, undefined);
+    assert.equal(afterLogout.claudeAiOauth, undefined, "logging pi out of the shared grant clears Claude Code's mirror");
     assert.deepEqual(afterLogout.untouched, { value: true });
+    await assert.rejects(service.logoutOAuth("anthropic", { harness: "claude-code" }), { code: "credential_not_found" });
   } finally {
     item.cleanup();
   }
 });
 
-test("Claude Code OAuth uses the modern Pi provider flow without writing Pi auth storage", async () => {
+test("Claude Code OAuth login establishes the shared grant through the modern Pi runtime login", async () => {
   const item = fixture({ sdkSource: `
-    import { readFileSync } from "node:fs";
+    import { readFileSync, writeFileSync } from "node:fs";
     const oauth = {
       name: "Anthropic OAuth",
       async login(interaction) {
@@ -463,10 +469,14 @@ test("Claude Code OAuth uses the modern Pi provider flow without writing Pi auth
     };
     const provider = { id: "anthropic", name: "Anthropic", auth: { oauth } };
     export class ModelRuntime {
-      static async create() {
+      static async create({ credentials }) {
         return {
           getProviders: () => [provider], getProvider: () => provider,
           getProviderAuthStatus: () => ({ configured: false }),
+          async login(id, method, interaction) {
+            const credential = await oauth.login(interaction);
+            await credentials.modify(id, async () => credential);
+          },
         };
       }
     }
@@ -478,11 +488,20 @@ test("Claude Code OAuth uses the modern Pi provider flow without writing Pi auth
     const core = join(item.packageRoot, "dist", "core");
     mkdirSync(core);
     writeFileSync(join(core, "auth-storage.js"), `
+      import { readFileSync, writeFileSync } from "node:fs";
       export class AuthStorage {
-        static create() { return new AuthStorage(); }
+        static create(path) { const storage = new AuthStorage(); storage.path = path; return storage; }
         reload() {}
         drainErrors() { return []; }
         async list() { return []; }
+        async modify(id, fn) {
+          const data = JSON.parse(readFileSync(this.path, "utf8"));
+          const next = await fn(data[id]);
+          if (next === undefined) return data[id];
+          data[id] = next;
+          writeFileSync(this.path, JSON.stringify(data), { mode: 0o600 });
+          return next;
+        }
       }
     `);
     writeFileSync(join(item.agentDir, "auth.json"), "{}", { mode: 0o600 });
@@ -498,9 +517,115 @@ test("Claude Code OAuth uses the modern Pi provider flow without writing Pi auth
       provider: "anthropic", harness: "claude-code", credentialType: "oauth",
     });
     assert.equal(events[0].url, "https://auth.invalid/claude");
-    assert.deepEqual(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")), {});
+    assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic.access, "claude-access-canary", "the grant lands in pi's store");
     const claude = JSON.parse(readFileSync(join(claudeConfigDir, ".credentials.json"), "utf8"));
     assert.equal(claude.claudeAiOauth.accessToken, "claude-access-canary");
+    assert.equal(claude.claudeAiOauth.refreshToken, "claude-refresh-canary");
+  } finally {
+    item.cleanup();
+  }
+});
+
+const LOCKED_AUTH_SDK = `
+  import { readFileSync, writeFileSync } from "node:fs";
+  const provider = { id: "anthropic", name: "Anthropic", async login() { throw new Error("no interactive login in this test"); } };
+  export class AuthStorage {
+    static create(path) { return new AuthStorage(path); }
+    constructor(path) { this.path = path; this.reload(); }
+    reload() { try { this.data = JSON.parse(readFileSync(this.path, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; this.data = {}; } }
+    drainErrors() { return []; }
+    list() { return Object.keys(this.data); }
+    get(id) { this.reload(); return this.data[id]; }
+    getOAuthProviders() { return [provider]; }
+    set(id, value) { this.reload(); this.data[id] = value; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+    async modify(id, fn) { this.reload(); const next = await fn(this.data[id]); if (next === undefined) return this.data[id]; this.set(id, next); return next; }
+    remove(id) { this.reload(); delete this.data[id]; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+    logout(id) { this.remove(id); }
+  }
+  export class ModelRegistry { static create() { return {}; } }
+`;
+
+test("shared Anthropic grant rotates inside pi's locked store and mirrors into Claude Code", async () => {
+  const item = fixture({ sdkSource: LOCKED_AUTH_SDK });
+  try {
+    const HOUR = 60 * 60 * 1000;
+    const authPath = join(item.agentDir, "auth.json");
+    const claudeConfigDir = join(item.root, "claude");
+    const sink = createClaudeOAuthCredentialSink({ configDir: claudeConfigDir });
+    const clock = { now: 1_000 * HOUR };
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "oauth", access: "access-old", refresh: "refresh-old", expires: clock.now + 10 * 60 * 1000 } }), { mode: 0o600 });
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir }, claudeOAuthCredentialSink: sink });
+    const exchanges = [];
+    const refreshGrant = async (refresh) => {
+      exchanges.push(refresh);
+      return { type: "oauth", access: `access-from-${refresh}`, refresh: `rotated-${exchanges.length}`, expires: clock.now + 8 * HOUR - 5 * 60 * 1000, refreshExpires: clock.now + 27 * 24 * HOUR };
+    };
+    const options = { now: () => clock.now, refreshGrant };
+
+    const rotated = await service.rotateAnthropicOAuth({ reason: "scheduled", ...options });
+    assert.deepEqual(rotated, { outcome: "refreshed", reason: "scheduled", rotated: true, expiresAt: clock.now + 8 * HOUR - 5 * 60 * 1000, refreshTokenExpiresAt: clock.now + 27 * 24 * HOUR });
+    assert.deepEqual(exchanges, ["refresh-old"]);
+    const pi = JSON.parse(readFileSync(authPath, "utf8")).anthropic;
+    assert.equal(pi.refresh, "rotated-1");
+    assert.equal(pi.refreshExpires, clock.now + 27 * 24 * HOUR);
+    const claude = JSON.parse(readFileSync(join(claudeConfigDir, ".credentials.json"), "utf8")).claudeAiOauth;
+    assert.equal(claude.accessToken, "access-from-refresh-old");
+    assert.equal(claude.refreshToken, "rotated-1");
+    assert.equal(claude.expiresAt, pi.expires);
+    assert.equal(claude.refreshTokenExpiresAt, pi.refreshExpires);
+
+    assert.equal((await service.rotateAnthropicOAuth(options)).outcome, "not_needed", "a fresh grant is left alone");
+    assert.equal((await service.rotateAnthropicOAuth({ ...options, force: true })).rotated, true);
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.refresh, "rotated-2");
+
+    clock.now += 8 * HOUR;
+    const rejected = await service.rotateAnthropicOAuth({ ...options, refreshGrant: async () => { throw Object.assign(new Error("revoked"), { invalidGrant: true }); } });
+    assert.equal(rejected.outcome, "reauth_required");
+    assert.equal((await service.rotateAnthropicOAuth(options)).outcome, "reauth_required", "a dead refresh token is not retried");
+    assert.equal(exchanges.length, 2);
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.refresh, "rotated-2", "rejection leaves both stores untouched");
+
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "oauth", access: "access-login", refresh: "refresh-login", expires: clock.now } }), { mode: 0o600 });
+    assert.equal((await service.rotateAnthropicOAuth(options)).rotated, true, "a new login clears the dead-token memo");
+    assert.equal((await service.rotateAnthropicOAuth({ ...options, refreshGrant: async () => { throw new Error("ECONNRESET"); }, force: true })).outcome, "failed");
+  } finally {
+    item.cleanup();
+  }
+});
+
+test("shared Anthropic grant sync mirrors the fresher store either way and never replaces a pi API key", async () => {
+  const item = fixture({ sdkSource: LOCKED_AUTH_SDK });
+  try {
+    const authPath = join(item.agentDir, "auth.json");
+    const claudeConfigDir = join(item.root, "claude");
+    const sink = createClaudeOAuthCredentialSink({ configDir: claudeConfigDir });
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir }, claudeOAuthCredentialSink: sink });
+
+    writeFileSync(authPath, "{}", { mode: 0o600 });
+    sink.project({ type: "oauth", access: "access-claude", refresh: "refresh-claude", expires: 1_700_000_000_000 });
+    assert.deepEqual(await service.syncClaudeOAuth(), { outcome: "synced", source: "claude", expiresAt: 1_700_000_000_000 });
+    assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")).anthropic, { type: "oauth", access: "access-claude", refresh: "refresh-claude", expires: 1_700_000_000_000 });
+    assert.deepEqual(await service.syncClaudeOAuth(), { outcome: "unchanged", source: null, expiresAt: 1_700_000_000_000 });
+
+    sink.project({ type: "oauth", access: "access-claude-newer", refresh: "refresh-claude-newer", expires: 1_700_000_100_000 });
+    assert.equal((await service.syncClaudeOAuth()).source, "claude", "Claude Code refreshed on its own; pi adopts the newer grant");
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.refresh, "refresh-claude-newer");
+
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "oauth", access: "access-pi", refresh: "refresh-pi", expires: 1_700_000_200_000 } }), { mode: 0o600 });
+    assert.equal((await service.syncClaudeOAuth()).source, "pi");
+    assert.equal(sink.read().refresh, "refresh-pi");
+
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "api_key", key: "sk-ant-api-canary" } }), { mode: 0o600 });
+    assert.deepEqual(await service.syncClaudeOAuth(), { outcome: "skipped", reason: "pi_api_key" });
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.key, "sk-ant-api-canary");
+    const standalone = await service.rotateAnthropicOAuth({ force: true, now: () => 1_700_000_000_000, refreshGrant: async (refresh) => ({ type: "oauth", access: "access-standalone", refresh: `rotated-${refresh}`, expires: 1_700_000_300_000, refreshExpires: null }) });
+    assert.equal(standalone.outcome, "refreshed");
+    assert.equal(sink.read().refresh, "rotated-refresh-pi", "with a pi API key, Claude Code's own grant still rotates");
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.key, "sk-ant-api-canary");
+
+    const bare = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir } });
+    assert.deepEqual(await bare.syncClaudeOAuth(), { outcome: "unavailable" });
+    assert.deepEqual(await bare.rotateAnthropicOAuth({ reason: "scheduled" }), { outcome: "unavailable", reason: "scheduled" });
   } finally {
     item.cleanup();
   }

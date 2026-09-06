@@ -1,12 +1,14 @@
 /**
- * oyster — Claude Code OAuth token upkeep
+ * oyster — Anthropic OAuth token upkeep
  *
- * Headless Claude Code runners load `.credentials.json` once and only refresh
- * the grant themselves within five minutes of expiry. A runner that idles
- * across that window sends its stale token, receives a non-retryable 401, and
- * dies. Oyster therefore owns the lifecycle: it rotates the grant well before
- * Claude's own window (so the two never race over the single-use refresh
- * token), then restarts idle runners so they reload the file. A runner that
+ * pi and Claude Code share one Anthropic grant. Headless Claude Code runners
+ * load `.credentials.json` once and only refresh the grant themselves within
+ * five minutes of expiry; a runner that idles across that window sends its
+ * stale token, receives a non-retryable 401, and dies. Oyster therefore owns
+ * the lifecycle: the credential service rotates the grant well before either
+ * harness's own window (so the single-use refresh token is never contended)
+ * and mirrors it to both stores; this service drives that on a timer, then
+ * restarts idle Claude Code runners so they reload the file. A runner that
  * still reports an OAuth failure triggers the same recovery on demand.
  */
 
@@ -30,23 +32,18 @@ function isoOrNull(timestamp) {
 }
 
 export function createClaudeOAuthRefreshService({
-  sink,
+  rotate,
   restartRunners,
   marginMs = DEFAULT_MARGIN_MS,
   intervalMs = DEFAULT_INTERVAL_MS,
-  now = Date.now,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
-  fetchImpl = undefined,
   logger = console,
 } = {}) {
-  if (!sink || typeof sink !== "object") throw new TypeError("Claude OAuth credential sink is required");
-  requireFunction(sink.read, "sink.read");
-  requireFunction(sink.refresh, "sink.refresh");
+  requireFunction(rotate, "rotate");
   requireFunction(restartRunners, "restartRunners");
   requirePositive(marginMs, "refresh margin");
   requirePositive(intervalMs, "refresh check interval");
-  requireFunction(now, "clock");
   requireFunction(setTimer, "timer scheduler");
   requireFunction(clearTimer, "timer clearer");
   requireFunction(logger?.log, "logger.log");
@@ -55,12 +52,8 @@ export function createClaudeOAuthRefreshService({
 
   let timer = null;
   let inFlight = null;
-  let deadRefreshToken = null;
   let lastOutcome = null;
-
-  function due(credential) {
-    return credential.expires - now() <= marginMs;
-  }
+  let reauthLogged = false;
 
   async function restart(reason) {
     try {
@@ -72,39 +65,30 @@ export function createClaudeOAuthRefreshService({
   }
 
   async function perform({ reason, force }) {
-    const credential = sink.read();
-    if (!credential) return Object.freeze({ outcome: "not_configured", reason });
-    if (!force && !due(credential)) return Object.freeze({ outcome: "not_needed", reason, expiresAt: credential.expires });
-    if (deadRefreshToken !== null && credential.refresh === deadRefreshToken) {
-      return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires });
-    }
-    let refreshed;
+    let result;
     try {
-      refreshed = await sink.refresh(fetchImpl ? { fetchImpl, now } : { now });
+      result = await rotate({ reason, force, marginMs });
     } catch (error) {
-      if (error?.invalidGrant) {
-        deadRefreshToken = credential.refresh;
-        logger.error(`[oyster] Claude Code OAuth refresh rejected (${reason}); re-authenticate Claude Code from the Credentials modal`);
-        return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires, error: errorMessage(error) });
-      }
-      logger.warn(`[oyster] Claude Code OAuth refresh failed (${reason}); will retry: ${errorMessage(error)}`);
-      return Object.freeze({ outcome: "failed", reason, expiresAt: credential.expires, error: errorMessage(error) });
+      logger.warn(`[oyster] Anthropic OAuth upkeep could not run (${reason}); will retry: ${errorMessage(error)}`);
+      return Object.freeze({ outcome: "failed", reason, error: errorMessage(error) });
     }
-    deadRefreshToken = null;
-    logger.log(`[oyster] Claude Code OAuth token ${refreshed.rotated ? "refreshed" : "adopted from a concurrent login"} (${reason}); `
-      + `access expires ${isoOrNull(refreshed.expires)}, refresh token expires ${isoOrNull(refreshed.refreshExpires) ?? "unknown"}`);
-    const restarted = await restart(reason);
-    return Object.freeze({
-      outcome: "refreshed",
-      reason,
-      rotated: refreshed.rotated,
-      expiresAt: refreshed.expires,
-      refreshTokenExpiresAt: refreshed.refreshExpires,
-      restart: restarted,
-    });
+    if (result?.outcome === "reauth_required") {
+      if (!reauthLogged) logger.error(`[oyster] Anthropic OAuth refresh rejected (${reason}); re-authenticate from the Credentials modal`);
+      reauthLogged = true;
+      return result;
+    }
+    reauthLogged = false;
+    if (result?.outcome === "failed") {
+      logger.warn(`[oyster] Anthropic OAuth refresh failed (${reason}); will retry: ${result.error ?? "unknown error"}`);
+      return result;
+    }
+    if (result?.outcome !== "refreshed") return result;
+    logger.log(`[oyster] Anthropic OAuth token ${result.rotated ? "rotated" : "adopted from a concurrent update"} (${reason}); `
+      + `access expires ${isoOrNull(result.expiresAt)}, refresh token expires ${isoOrNull(result.refreshTokenExpiresAt) ?? "unknown"}`);
+    return Object.freeze({ ...result, restart: await restart(reason) });
   }
 
-  /** Refresh when due (or forced). Concurrent callers share one attempt. */
+  /** Rotate when due (or forced). Concurrent callers share one attempt. */
   function refreshNow({ reason = "manual", force = false } = {}) {
     if (inFlight) return inFlight;
     inFlight = perform({ reason, force })
@@ -120,15 +104,13 @@ export function createClaudeOAuthRefreshService({
   async function recover({ reason = "runner_401" } = {}) {
     const result = await refreshNow({ reason });
     if (result.outcome === "refreshed") return result;
-    if (result.outcome === "not_needed") {
-      return Object.freeze({ ...result, restart: await restart(reason) });
-    }
+    if (result.outcome === "not_needed") return Object.freeze({ ...result, restart: await restart(reason) });
     return result;
   }
 
   function tick() {
     refreshNow({ reason: "scheduled" }).catch((error) => {
-      logger.error(`[oyster] Claude Code OAuth upkeep failed: ${errorMessage(error)}`);
+      logger.error(`[oyster] Anthropic OAuth upkeep failed: ${errorMessage(error)}`);
     });
   }
 
