@@ -20,6 +20,14 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.CLAUDE_CODE_ARGS;
   delete childEnv.CLAUDE_CODE_PERMISSION_MODE;
   delete childEnv.CLAUDE_CONFIG_DIR;
+  delete childEnv.CODEX_BIN;
+  delete childEnv.CODEX_ARGS;
+  delete childEnv.CODEX_SANDBOX;
+  delete childEnv.GEMINI_BIN;
+  delete childEnv.GEMINI_ARGS;
+  delete childEnv.GEMINI_APPROVAL_MODE;
+  delete childEnv.AMP_BIN;
+  delete childEnv.AMP_ARGS;
   delete childEnv.OYSTER_DB_PATH;
   delete childEnv.OYSTER_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
@@ -73,6 +81,26 @@ test("configuration enables Claude Code as an optional harness", () => {
   assert.match(missing.stderr, /Claude Code executable is missing or not executable/);
 });
 
+test("configuration enables Codex, Gemini CLI, and Amp as optional harnesses", () => {
+  const result = checkConfig({ args: [
+    "--pi", process.execPath,
+    "--codex", process.execPath,
+    "--gemini", process.execPath,
+    "--amp", process.execPath,
+  ] });
+  assert.equal(result.status, 0, result.stderr);
+  const config = JSON.parse(result.stdout);
+  assert.equal(config.codexBin, process.execPath);
+  assert.equal(config.geminiBin, process.execPath);
+  assert.equal(config.ampBin, process.execPath);
+
+  for (const [variable, label] of [["CODEX_BIN", "Codex"], ["GEMINI_BIN", "Gemini CLI"], ["AMP_BIN", "Amp"]]) {
+    const missing = checkConfig({ args: ["--pi", process.execPath], env: { [variable]: join(tmpdir(), `missing-${variable}`) } });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, new RegExp(`${label} executable is missing or not executable`));
+  }
+});
+
 test("SQLite database follows the configured agent or session directory", () => {
   const agentDir = join(tmpdir(), "custom-pi-agent");
   let result = checkConfig({ args: ["--pi", process.execPath], env: { PI_CODING_AGENT_DIR: agentDir } });
@@ -118,6 +146,14 @@ test("configuration rejects invalid stores and missing executables", () => {
   result = checkConfig({ args: ["--pi", process.execPath], env: { OYSTER_UNAUTHENTICATED: "sometimes" } });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /OYSTER_UNAUTHENTICATED must be one of/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { CODEX_SANDBOX: "unbounded" } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid CODEX_SANDBOX/);
+
+  result = checkConfig({ args: ["--pi", process.execPath], env: { GEMINI_APPROVAL_MODE: "sometimes" } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid GEMINI_APPROVAL_MODE/);
 
   for (const port of ["-1", "1.5", "65536", "not-a-port"]) {
     result = checkConfig({ args: ["--pi", process.execPath, "--port", port] });

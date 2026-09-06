@@ -45,8 +45,15 @@ LABEL org.opencontainers.image.pi-source="local-build-context" \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates procps ripgrep lsof python3 ffmpeg \
-    && npm install --global @anthropic-ai/claude-code@2.1.260 \
+    && npm install --global @anthropic-ai/claude-code@2.1.260 @openai/codex@0.153.4 @google/gemini-cli@0.58.0 \
     && claude --version | grep -q '^2\.1\.260 ' \
+    && codex --version | grep -q '0\.153\.4' \
+    && gemini --version | grep -q '^0\.58\.0' \
+    && curl -fsSL -o /tmp/install-amp.sh https://ampcode.com/install.sh \
+    && AMP_HOME=/opt/amp AMP_VERSION=0.0.1788696031-g14d695 bash /tmp/install-amp.sh \
+    && ln -s /opt/amp/bin/amp /usr/local/bin/amp \
+    && amp --version | grep -q '^0\.0\.1788696031-g14d695 ' \
+    && rm /tmp/install-amp.sh \
     && git config --system user.name "Jane Doe" \
     && git config --system user.email "jane.doe@example.com" \
     && rm -rf /var/lib/apt/lists/* \
@@ -85,6 +92,7 @@ ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
     PI_DIR=/workspace \
     OYSTER_URL=http://127.0.0.1:4000 \
     HOME=/home/node \
+    AMP_SKIP_UPDATE_CHECK=1 \
     CLAUDE_CODE_PERMISSION_MODE=bypassPermissions
 # Server startup validates PI_DIR, including during build-time tests.
 RUN npm test

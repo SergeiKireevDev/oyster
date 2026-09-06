@@ -18,10 +18,10 @@ function workspace(t) {
 }
 
 /** Serve the MCP routes over real HTTP with a scripted in-process dispatch. */
-async function endpoint(t, { reply = () => ({ status: 500, data: { error: "unexpected route" } }), spawnImpl } = {}) {
+async function endpoint(t, { reply = () => ({ status: 500, data: { error: "unexpected route" } }), spawnImpl, state = { currentDir: "/tmp" } } = {}) {
   const calls = [];
   const routes = createMcpRoutes({
-    state: { currentDir: "/tmp" },
+    state,
     requestContext: { json(res, status, value) { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(value)); } },
     dispatch: async (method, path, body) => {
       const url = new URL(path, "http://localhost");
@@ -153,6 +153,21 @@ test("pinned_widget resolves paths against the request workdir and binds to the 
   const invalid = await client.callTool({ name: "pinned_widget", arguments: { action: "pin" } });
   assert.equal(invalid.isError, true);
   assert.match(invalid.content[0].text, /exactly one of path or url/);
+});
+
+test("MCP requests prefer the active runner's native session over a provisional launch identity", async (t) => {
+  const dir = workspace(t);
+  const runner = { id: "r-headless", sessionId: "native-thread", dir };
+  const { port, calls } = await endpoint(t, {
+    state: { currentDir: dir, runners: new Map([[runner.id, runner]]) },
+    reply: ({ method, path }) => method === "POST" && path === "/pinned-widgets"
+      ? { status: 201, data: { widget: { id: "w-native", kind: "file", label: "notes.md" } } }
+      : { status: 500, data: { error: "unexpected route" } },
+  });
+  const client = await connect(t, port, { runner: runner.id, session: "provisional-runner-id", workdir: dir });
+  const pinned = await client.callTool({ name: "pinned_widget", arguments: { action: "pin", path: "notes.md" } });
+  assert.ok(!pinned.isError, pinned.content[0].text);
+  assert.equal(calls[0].body.sessionId, "native-thread");
 });
 
 test("routine and hublot tools relay route errors and session bindings", async (t) => {

@@ -4,7 +4,7 @@
   const configuredHarnesses = Array.isArray(globalThis.__OYSTER_RUNTIME_CONFIG__?.harnesses)
     ? globalThis.__OYSTER_RUNTIME_CONFIG__.harnesses
     : [];
-  const knownLabels = { pi: "pi", "claude-code": "Claude Code" };
+  const knownLabels = { pi: "pi", "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", amp: "Amp" };
 
   function displayLabel(id) {
     const normalized = typeof id === "string" && id.trim() ? id.trim() : "pi";

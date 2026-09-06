@@ -48,8 +48,15 @@ LABEL org.opencontainers.image.pi-source="git-submodule"
 # Tools the pi agent (and the UI's file explorer / routines) rely on
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates procps ripgrep lsof python3 ffmpeg \
-    && npm install --global @anthropic-ai/claude-code@2.1.260 \
+    && npm install --global @anthropic-ai/claude-code@2.1.260 @openai/codex@0.153.4 @google/gemini-cli@0.58.0 \
     && claude --version | grep -q '^2\.1\.260 ' \
+    && codex --version | grep -q '0\.153\.4' \
+    && gemini --version | grep -q '^0\.58\.0' \
+    && curl -fsSL -o /tmp/install-amp.sh https://ampcode.com/install.sh \
+    && AMP_HOME=/opt/amp AMP_VERSION=0.0.1788696031-g14d695 bash /tmp/install-amp.sh \
+    && ln -s /opt/amp/bin/amp /usr/local/bin/amp \
+    && amp --version | grep -q '^0\.0\.1788696031-g14d695 ' \
+    && rm /tmp/install-amp.sh \
     && git config --system user.name "Jane Doe" \
     && git config --system user.email "jane.doe@example.com" \
     && rm -rf /var/lib/apt/lists/*
@@ -77,7 +84,7 @@ COPY extensions ./extensions
 RUN npm run build
 
 # Register the bundled pi extensions (file-explorer, hublot, loop, routine).
-# Claude Code sessions reach the same tools through the server's /mcp endpoint.
+# Other harnesses reach the same tools through the server's /mcp endpoint.
 RUN mkdir -p /home/node/.pi/agent/extensions /home/node/.claude \
     && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
     && chown -R node:node /home/node/.pi /home/node/.claude
@@ -95,7 +102,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/e2e-cloudflared 
 
 # Deployed pi processes use the submodule-built binary and SQLite backend.
 ENV PI_BIN=/opt/pi/node_modules/.bin/pi \
-    PERSISTENT_STORE=sqlite
+    PERSISTENT_STORE=sqlite \
+    AMP_SKIP_UPDATE_CHECK=1
 
 # Workspace the pi agent operates in (mount your project here if you like).
 # Create it before tests because server startup validates PI_DIR.

@@ -45,6 +45,7 @@ const JSONL_COMPATIBILITY_BOUNDARIES = new Set([
   "public/src/runtime/transcriptRuntime.js",
   "server/persistence/claudeTranscriptSink.mjs",
   "server/runner-drivers/claude-code.mjs",
+  "server/runner-drivers/headless-driver.mjs",
   "server/runner-drivers/pi-rpc.mjs",
   "server/runners.mjs",
   "server/session-references.mjs",
