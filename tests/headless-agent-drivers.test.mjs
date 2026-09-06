@@ -34,9 +34,10 @@ test("configured driver registry exposes every installed harness", () => {
   const config = {
     PI_BIN: "/opt/pi", PI_EXTRA_ARGS: [], PERSISTENT_STORE: "sqlite", SQLITE_PATH: "/agent/sessions.sqlite",
     CLAUDE_CODE_BIN: "/opt/claude", CLAUDE_CODE_ARGS: [], CLAUDE_CODE_PERMISSION_MODE: "acceptEdits",
-    CODEX_BIN: "/opt/codex", CODEX_ARGS: [], CODEX_SANDBOX: "workspace-write",
-    GEMINI_BIN: "/opt/gemini", GEMINI_ARGS: [], GEMINI_APPROVAL_MODE: "auto_edit",
-    AMP_BIN: "/opt/amp", AMP_ARGS: [], TOKEN: "secret", PORT: 8080,
+    CODEX_BIN: "/opt/codex", CODEX_ARGS: [], CODEX_SANDBOX: "workspace-write", CODEX_HOME: "/agent/codex",
+    GEMINI_BIN: "/opt/gemini", GEMINI_ARGS: [], GEMINI_APPROVAL_MODE: "auto_edit", GEMINI_OAUTH_PATH: "/agent/gemini-oauth.json",
+    AMP_BIN: "/opt/amp", AMP_ARGS: [], AMP_SETTINGS_PATH: "/agent/amp-settings.json",
+    PI_AGENT_DIR: "/agent", TOKEN: "secret", PORT: 8080,
   };
   const registry = createConfiguredRunnerDrivers({ config, piProcesses: { bin: "/opt/pi", launch: () => fakeProcess() } });
   assert.deepEqual(registry.list(), [
@@ -84,6 +85,7 @@ test("Codex driver translates JSONL turns, tools, messages, state, resume identi
   const answer = driver.decodeLine(runner, JSON.stringify({ type: "item.completed", item: { id: "msg-1", type: "agent_message", text: "done" } }));
   assert.equal(answer[1].message.content[0].text, "done");
   assert.deepEqual(driver.decodeLine(runner, '{"type":"error","message":"Reconnecting... 1/5"}'), [{ type: "pi_error", error: "Reconnecting... 1/5" }]);
+  assert.deepEqual(driver.decodeLine(runner, '{"type":"error","message":"OAuth access token expired (401)"}').at(-1), { type: "harness_auth_failed", reason: "codex_oauth" });
   assert.deepEqual(driver.decodeLine(runner, '{"type":"turn.completed","usage":{"input_tokens":1}}'), [{ type: "agent_end", willRetry: false }, { type: "agent_settled" }]);
 
   driver.sendCommand(runner, launch.child, { id: "model", type: "set_model", provider: "openai", modelId: "gpt-test" });

@@ -5,6 +5,9 @@ import { refreshAnthropicOAuthGrant } from "./claude-oauth-credential-sink.mjs";
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
 const ANTHROPIC = "anthropic";
+const OPENAI_CODEX = "openai-codex";
+const GEMINI_CLI = "google-gemini-cli";
+const AMP = "amp";
 const DEFAULT_ROTATION_MARGIN_MS = 30 * 60 * 1000;
 
 function credentialError(code, message, cause) {
@@ -121,13 +124,38 @@ export function resolveConfiguredPiSdk(piBin) {
  * Load credential primitives only from the installation owning PI_BIN.
  * No package-name import is used, preventing fallback to another global pi.
  */
-export function createPiCredentialService({ config, importSdk = (url) => import(url), claudeOAuthCredentialSink = null } = {}) {
+export function createPiCredentialService({
+  config,
+  importSdk = (url) => import(url),
+  claudeOAuthCredentialSink = null,
+  codexOAuthCredentialSink = null,
+  geminiOAuthCredentialSink = null,
+  ampOAuthCredentialSink = null,
+} = {}) {
   if (!config || typeof config !== "object") throw new TypeError("config is required");
   if (claudeOAuthCredentialSink !== null
     && (typeof claudeOAuthCredentialSink?.status !== "function"
       || typeof claudeOAuthCredentialSink?.project !== "function"
       || typeof claudeOAuthCredentialSink?.remove !== "function")) {
     throw new TypeError("claudeOAuthCredentialSink must expose status, project, and remove functions");
+  }
+  if (codexOAuthCredentialSink !== null
+    && (typeof codexOAuthCredentialSink?.status !== "function"
+      || typeof codexOAuthCredentialSink?.project !== "function"
+      || typeof codexOAuthCredentialSink?.remove !== "function")) {
+    throw new TypeError("codexOAuthCredentialSink must expose status, project, and remove functions");
+  }
+  if (geminiOAuthCredentialSink !== null
+    && (typeof geminiOAuthCredentialSink?.status !== "function"
+      || typeof geminiOAuthCredentialSink?.login !== "function"
+      || typeof geminiOAuthCredentialSink?.remove !== "function")) {
+    throw new TypeError("geminiOAuthCredentialSink must expose status, login, and remove functions");
+  }
+  if (ampOAuthCredentialSink !== null
+    && (typeof ampOAuthCredentialSink?.status !== "function"
+      || typeof ampOAuthCredentialSink?.login !== "function"
+      || typeof ampOAuthCredentialSink?.remove !== "function")) {
+    throw new TypeError("ampOAuthCredentialSink must expose status, login, and remove functions");
   }
   const agentDir = config.PI_AGENT_DIR;
   if (typeof agentDir !== "string" || !isAbsolute(agentDir) || resolve(agentDir) !== agentDir) {
@@ -142,12 +170,12 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
   }
 
   function normalizedHarness(harness = "pi") {
-    if (harness !== "pi" && harness !== "claude-code") {
+    if (!new Set(["pi", "claude-code", "gemini", "amp"]).has(harness)) {
       throw credentialError("invalid_harness", "supported harness is required");
     }
-    if (harness === "claude-code" && !claudeOAuthCredentialSink) {
-      throw credentialError("oauth_provider_not_found", "Claude Code OAuth is not configured");
-    }
+    if (harness === "claude-code" && !claudeOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Claude Code OAuth is not configured");
+    if (harness === "gemini" && !geminiOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Gemini CLI OAuth is not configured");
+    if (harness === "amp" && !ampOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Amp login is not configured");
     return harness;
   }
 
@@ -516,6 +544,58 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     return Object.freeze({ outcome: "refreshed", reason, rotated: true, expiresAt: next.expires, refreshTokenExpiresAt: next.refreshExpires });
   }
 
+  const deadProviderRefreshTokens = new Map();
+
+  /** Rotate a pi-owned OAuth grant for another compatible harness. */
+  async function rotateProviderOAuth(provider, {
+    marginMs = DEFAULT_ROTATION_MARGIN_MS, force = false, reason = "manual", now = Date.now,
+  } = {}) {
+    const providerId = normalizedProvider(provider);
+    return withProviderReservation(providerId, "pi", async () => {
+      const adapter = await load();
+      await prepare(adapter);
+      const credential = storedCredential(adapter, providerId);
+      if (credential?.type !== "oauth") return Object.freeze({ outcome: "not_configured", reason });
+      if (!force && credential.expires - now() > marginMs) {
+        if (providerId === OPENAI_CODEX && codexOAuthCredentialSink) codexOAuthCredentialSink.project(credential);
+        return Object.freeze({ outcome: "not_needed", reason, expiresAt: credential.expires });
+      }
+      if (deadProviderRefreshTokens.get(providerId) === credential.refresh) {
+        return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires });
+      }
+      const oauth = adapter.kind === "runtime"
+        ? adapter.modelRuntime.getProvider(providerId)?.auth?.oauth
+        : adapter.authStorage.getOAuthProviders().find((candidate) => candidate?.id === providerId);
+      if (typeof oauth?.refresh !== "function") return Object.freeze({ outcome: "failed", reason, expiresAt: credential.expires, error: "OAuth refresh is unavailable" });
+      try {
+        if (typeof adapter.authStorage.modify === "function") {
+          await adapter.authStorage.modify(providerId, async (stored) => {
+            if (stored?.type !== "oauth") return undefined;
+            if (!force && stored.expires - now() > marginMs) return undefined;
+            return oauth.refresh(stored);
+          });
+        } else {
+          await writeStoredOAuth(adapter, providerId, await oauth.refresh(credential));
+        }
+      } catch (error) {
+        const message = error?.message ?? String(error);
+        if (/invalid_grant|refresh token.*(?:expired|invalid|revoked|reused)/i.test(message)) {
+          deadProviderRefreshTokens.set(providerId, credential.refresh);
+          return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires });
+        }
+        return Object.freeze({ outcome: "failed", reason, expiresAt: credential.expires, error: message });
+      }
+      deadProviderRefreshTokens.delete(providerId);
+      const latest = storedCredential(adapter, providerId);
+      if (latest?.type !== "oauth") return Object.freeze({ outcome: "not_configured", reason });
+      if (providerId === OPENAI_CODEX && codexOAuthCredentialSink) codexOAuthCredentialSink.project(latest);
+      return Object.freeze({
+        outcome: "refreshed", reason, rotated: latest.refresh !== credential.refresh,
+        expiresAt: latest.expires, refreshTokenExpiresAt: Number.isFinite(latest.refreshExpires) ? latest.refreshExpires : null,
+      });
+    });
+  }
+
   function registeredProviders(adapter) {
     return adapter.kind === "runtime"
       ? safeRegisteredProviders(adapter.modelRuntime.getProviders())
@@ -555,10 +635,12 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const credentials = new Map(entries.map(({ providerId, type }) => [providerId, type]));
     const metadata = providerMetadata(adapter);
     const providers = new Set([...metadata.registered, ...credentials.keys(), ...metadata.oauthProviders.keys()]);
-    // Claude Code shares pi's Anthropic OAuth grant, so one row covers both
-    // harnesses. Only a pi API key leaves Claude Code with a grant of its own.
+    // Native harnesses share compatible pi-owned grants; a pi API key cannot
+    // be projected as a subscription OAuth connection.
     const sharedAnthropic = Boolean(claudeOAuthCredentialSink) && metadata.oauthProviders.has(ANTHROPIC)
       && credentials.get(ANTHROPIC) !== "api_key";
+    const sharedOpenAI = Boolean(codexOAuthCredentialSink) && metadata.oauthProviders.has(OPENAI_CODEX)
+      && credentials.get(OPENAI_CODEX) !== "api_key";
     const result = [...providers]
       .sort((left, right) => left.localeCompare(right))
       .map((provider) => {
@@ -579,12 +661,13 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
           source: safeSource(status, credentialType),
           configured: credentialType !== null || status?.configured === true,
           ...(sharedAnthropic && provider === ANTHROPIC ? { harnesses: Object.freeze(["pi", "claude-code"]) } : {}),
+          ...(sharedOpenAI && provider === OPENAI_CODEX ? { harnesses: Object.freeze(["pi", "codex"]) } : {}),
         });
       });
     if (claudeOAuthCredentialSink && metadata.oauthProviders.has(ANTHROPIC) && !sharedAnthropic) {
       const status = claudeOAuthCredentialSink.status();
       result.push(Object.freeze({
-        provider: "anthropic",
+        provider: ANTHROPIC,
         harness: "claude-code",
         displayName: "Anthropic",
         registered: true,
@@ -593,6 +676,24 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         credentialType: status.configured ? "oauth" : null,
         source: status.configured ? "stored_oauth" : "not_configured",
         configured: status.configured,
+      }));
+    }
+    if (geminiOAuthCredentialSink) {
+      const status = geminiOAuthCredentialSink.status();
+      result.push(Object.freeze({
+        provider: GEMINI_CLI, harness: "gemini", displayName: "Google Gemini CLI",
+        registered: true, oauthCapable: true, oauthDisplayName: "Google account",
+        credentialType: status.configured ? "oauth" : null,
+        source: status.configured ? "stored_oauth" : "not_configured", configured: status.configured,
+      }));
+    }
+    if (ampOAuthCredentialSink) {
+      const status = ampOAuthCredentialSink.status();
+      result.push(Object.freeze({
+        provider: AMP, harness: "amp", displayName: "Amp",
+        registered: true, oauthCapable: true, oauthDisplayName: "Amp account",
+        credentialType: status.configured ? "oauth" : null,
+        source: status.configured ? "stored_oauth" : "not_configured", configured: status.configured,
       }));
     }
     return result;
@@ -646,6 +747,18 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const harnessId = normalizedHarness(harness);
     const safeCallbacks = normalizedOAuthCallbacks(callbacks);
     return withProviderReservation(providerId, harnessId, async () => {
+      if (harnessId === "gemini") {
+        if (providerId !== GEMINI_CLI) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Gemini CLI`);
+        if (geminiOAuthCredentialSink.status().configured && replace !== true) throw credentialError("credential_replace_required", "Gemini CLI already has stored Google OAuth credentials");
+        await geminiOAuthCredentialSink.login(safeCallbacks);
+        return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth", harnesses: Object.freeze(["gemini"]) });
+      }
+      if (harnessId === "amp") {
+        if (providerId !== AMP) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support login for Amp`);
+        if (ampOAuthCredentialSink.status().configured && replace !== true) throw credentialError("credential_replace_required", "Amp already has stored credentials");
+        await ampOAuthCredentialSink.login(safeCallbacks);
+        return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth", harnesses: Object.freeze(["amp"]) });
+      }
       const adapter = await load();
       await prepare(adapter);
       const oauthProviders = adapter.kind === "runtime"
@@ -679,14 +792,14 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
             credential = await oauth.login(safeCallbacks);
           }
           projectToClaude(credential, { fatal: true });
-          return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth" });
+          return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth", harnesses: Object.freeze(["claude-code"]) });
         }
         // Claude Code shares pi's grant: link the stored one, or establish it once for both.
         if (piStored?.type !== "oauth") await piLogin();
         const shared = storedCredential(adapter, providerId);
         if (shared?.type !== "oauth") throw capabilityError("configured pi auth storage did not store the Anthropic OAuth grant");
         projectToClaude(shared, { fatal: true });
-        return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth" });
+        return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth", harnesses: Object.freeze(["pi", "claude-code"]) });
       }
 
       const current = storedCredential(adapter, providerId);
@@ -697,11 +810,19 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
       }
       await piLogin();
-      if (claudeOAuthCredentialSink && providerId === ANTHROPIC) {
-        const shared = storedCredential(adapter, providerId);
-        if (shared?.type === "oauth") projectToClaude(shared);
+      let sharedWithClaude = false;
+      let sharedWithCodex = false;
+      const shared = storedCredential(adapter, providerId);
+      if (claudeOAuthCredentialSink && providerId === ANTHROPIC && shared?.type === "oauth") sharedWithClaude = projectToClaude(shared);
+      if (codexOAuthCredentialSink && providerId === OPENAI_CODEX && shared?.type === "oauth") {
+        codexOAuthCredentialSink.project(shared);
+        sharedWithCodex = true;
       }
-      return Object.freeze({ provider: providerId, credentialType: "oauth" });
+      return Object.freeze({
+        provider: providerId,
+        credentialType: "oauth",
+        harnesses: Object.freeze(sharedWithClaude ? ["pi", "claude-code"] : sharedWithCodex ? ["pi", "codex"] : ["pi"]),
+      });
     });
   }
 
@@ -709,13 +830,25 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const providerId = normalizedProvider(provider);
     const harnessId = normalizedHarness(harness);
     return withProviderReservation(providerId, harnessId, async () => {
+      if (harnessId === "gemini") {
+        if (providerId !== GEMINI_CLI) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Gemini CLI`);
+        if (!geminiOAuthCredentialSink.status().configured) throw credentialError("credential_not_found", "Gemini CLI has no stored Google OAuth credential");
+        geminiOAuthCredentialSink.remove();
+        return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze(["gemini"]) });
+      }
+      if (harnessId === "amp") {
+        if (providerId !== AMP) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support login for Amp`);
+        if (!ampOAuthCredentialSink.status().configured) throw credentialError("credential_not_found", "Amp has no stored credential");
+        await ampOAuthCredentialSink.remove();
+        return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze(["amp"]) });
+      }
       if (harnessId === "claude-code") {
         if (providerId !== "anthropic") throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Claude Code`);
         if (!claudeOAuthCredentialSink.status().configured) {
           throw credentialError("credential_not_found", "Claude Code has no stored Anthropic OAuth credential");
         }
         claudeOAuthCredentialSink.remove();
-        return Object.freeze({ provider: providerId, harness: harnessId, removed: true });
+        return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze(["claude-code"]) });
       }
 
       const adapter = await load();
@@ -735,7 +868,14 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         try { claudeOAuthCredentialSink.remove(); }
         catch (error) { console.warn(`[oyster] Claude Code credential store was not cleared: ${error?.message ?? error}`); }
       }
-      return Object.freeze({ provider: providerId, removed: true });
+      if (codexOAuthCredentialSink && providerId === OPENAI_CODEX) codexOAuthCredentialSink.remove();
+      return Object.freeze({
+        provider: providerId,
+        removed: true,
+        harnesses: Object.freeze(providerId === ANTHROPIC && claudeOAuthCredentialSink
+          ? ["pi", "claude-code"]
+          : providerId === OPENAI_CODEX && codexOAuthCredentialSink ? ["pi", "codex"] : ["pi"]),
+      });
     });
   }
 
@@ -748,5 +888,23 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     }));
   }
 
-  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth, rotateAnthropicOAuth, syncClaudeOAuth });
+  async function syncCodexOAuth() {
+    if (!codexOAuthCredentialSink) return Object.freeze({ outcome: "unavailable" });
+    return withProviderReservation(OPENAI_CODEX, "pi", async () => {
+      const adapter = await load();
+      await prepare(adapter);
+      const credential = storedCredential(adapter, OPENAI_CODEX);
+      if (credential?.type !== "oauth") {
+        codexOAuthCredentialSink.remove();
+        return Object.freeze({ outcome: "not_configured" });
+      }
+      codexOAuthCredentialSink.project(credential);
+      return Object.freeze({ outcome: "synced", expiresAt: credential.expires });
+    });
+  }
+
+  return Object.freeze({
+    load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth,
+    rotateAnthropicOAuth, rotateProviderOAuth, syncClaudeOAuth, syncCodexOAuth,
+  });
 }

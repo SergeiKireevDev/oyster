@@ -2,18 +2,23 @@ function providerName(provider) {
   return provider?.displayName || provider?.provider || "provider";
 }
 
+const HARNESS_NAMES = Object.freeze({ pi: "pi", "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", amp: "Amp" });
+
 function oauthTarget(value) {
   if (typeof value === "string") return { provider: value, harness: "pi" };
-  return { provider: value?.provider, harness: value?.harness === "claude-code" ? "claude-code" : "pi" };
+  const harness = Object.hasOwn(HARNESS_NAMES, value?.harness) ? value.harness : "pi";
+  return { provider: value?.provider, harness };
 }
 
 function harnessName(harness, row = null) {
-  if (Array.isArray(row?.harnesses) && row.harnesses.includes("claude-code")) return "pi and Claude Code";
-  return harness === "claude-code" ? "Claude Code" : "pi";
+  if (Array.isArray(row?.harnesses) && row.harnesses.length > 1) {
+    return row.harnesses.map((candidate) => HARNESS_NAMES[candidate] ?? candidate).join(" and ");
+  }
+  return HARNESS_NAMES[harness] ?? harness;
 }
 
 function oauthRequestTarget(provider, harness) {
-  return { provider, ...(harness === "claude-code" ? { harness } : {}) };
+  return { provider, ...(harness !== "pi" ? { harness } : {}) };
 }
 
 export function createCredentialsController({
@@ -239,7 +244,7 @@ export function createCredentialsController({
       const data = await jsonPost("/oauth/status", { flowId: flow.flowId });
       applyFlow(data.flow);
       if (data.flow?.status === "succeeded") {
-        const label = harnessName(data.flow.harness);
+        const label = harnessName(data.flow.harness ?? "pi", data.flow);
         notify(data.flow.restart?.status === "restarted" ? `Signed in; ${label} restarted` : `Signed in; check ${label} restart status`);
         await load({ quiet: true });
       } else if (data.flow?.status === "failed") {

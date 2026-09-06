@@ -53,9 +53,13 @@
     return provider?.credentialType === "oauth" ? "Re-authenticate" : "Sign in with OAuth";
   }
 
+  const harnessNames = { pi: "pi", "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", amp: "Amp" };
+
   function harnessLabel(provider) {
-    if (Array.isArray(provider?.harnesses) && provider.harnesses.includes("claude-code")) return "pi and Claude Code";
-    return provider?.harness === "claude-code" ? "Claude Code" : "pi";
+    if (Array.isArray(provider?.harnesses) && provider.harnesses.length > 1) {
+      return provider.harnesses.map((harness) => harnessNames[harness] ?? harness).join(" and ");
+    }
+    return harnessNames[provider?.harness ?? "pi"] ?? provider?.harness ?? "pi";
   }
 
   function flowHarnessLabel(flow) {
@@ -77,7 +81,7 @@
     return `${count} ${count === 1 ? "process" : "processes"}`;
   }
 
-  $: credentialRows = $credentialsState.providers.filter((provider) => provider.configured || provider.harness === "claude-code");
+  $: credentialRows = $credentialsState.providers.filter((provider) => provider.configured || provider.harness);
   $: selectableProviders = $credentialsState.providers.filter((provider) =>
     (provider.harness ?? "pi") === "pi" && provider.credentialType !== "oauth"
       && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
@@ -243,9 +247,9 @@
 </script>
 
 <section class="api-keys-modal" aria-label="Agent credentials" aria-busy={$credentialsState.loading || oauthOperationPending}>
-  <p class="api-keys-intro">One Anthropic sign-in serves both pi and Claude Code; Oyster keeps it refreshed for both. Existing credential values are never displayed.</p>
+  <p class="api-keys-intro">Sign in once per provider. Oyster injects and refreshes that connection for every compatible harness. Existing credential values are never displayed.</p>
   {#if $credentialsState.setupMode}
-    <p class="api-keys-state" role="status">Choose a provider below to authenticate pi.</p>
+    <p class="api-keys-state" role="status">Choose a provider below to authenticate an agent harness.</p>
   {/if}
 
   {#if $credentialsState.flow}
@@ -325,7 +329,7 @@
   {:else if $credentialsState.error && !$credentialsState.providers.length}
     <p class="api-keys-state error" role="alert">{$credentialsState.error}</p>
   {:else if !$credentialsState.providers.length}
-    <p class="api-keys-state">No providers are available from the configured pi installation.</p>
+    <p class="api-keys-state">No credential providers are available for the configured harnesses.</p>
   {:else}
     {#if credentialRows.length}
     <div class="api-key-list" role="list" aria-label="Provider credential status">
@@ -376,7 +380,7 @@
   {/if}
 
   <p class="api-key-removal-note">
-    Removing a key or signing out does not revoke access at the upstream provider. Revoke upstream access separately in the provider account. Signing out of the shared Anthropic connection signs out both pi and Claude Code; an environment or models.json fallback may still authenticate pi.
+    Removing a key or signing out does not revoke access at the upstream provider. Revoke upstream access separately in the provider account. Shared provider connections sign out every listed harness; an environment or models.json fallback may still authenticate pi.
   </p>
 
   <form class="api-key-form" onsubmit={saveKey}>

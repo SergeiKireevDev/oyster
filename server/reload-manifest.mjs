@@ -58,7 +58,11 @@ const manifest = createReloadManifest({
   ],
   domain: [
     "checkpoints.mjs",
+    "amp-oauth-credential-sink.mjs",
     "claude-oauth-credential-sink.mjs",
+    "claude-oauth-refresh-service.mjs",
+    "codex-oauth-credential-sink.mjs",
+    "gemini-oauth-credential-sink.mjs",
     "pi-credential-service.mjs",
     "pi-oauth-flow-service.mjs",
     "pi-processes.mjs",

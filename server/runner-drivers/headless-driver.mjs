@@ -74,6 +74,11 @@ function toolResultMessage(runtime, id, name, text, isError, at) {
   return message;
 }
 
+function isAuthenticationFailure(value) {
+  const text = typeof value === "string" ? value : (() => { try { return JSON.stringify(value); } catch { return ""; } })();
+  return /(?:oauth|access token|refresh token|authentication|unauthorized).*(?:expired|invalid|failed|required|401)|(?:expired|invalid|failed).*(?:oauth|access token|refresh token)|\b401\b/i.test(text);
+}
+
 function resultText(value) {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map((item) => typeof item?.text === "string" ? item.text : JSON.stringify(item)).join("\n");
@@ -241,6 +246,7 @@ function decodeAmp(runtime, record) {
 export function createHeadlessDriver({
   id, label, bin, kind = id, provider, extraArgs = [], spawnImpl = spawn, env = {}, uiUrl = env?.OYSTER_URL ?? DEFAULT_UI_URL,
   sandbox = "workspace-write", approvalMode = "auto_edit", generateSessionId = false, defaultModel = null,
+  bridgeOptions = {},
 } = {}) {
   id = nonEmpty(id, "headless driver id");
   const executable = nonEmpty(bin, `${label ?? id} executable`);
@@ -249,6 +255,7 @@ export function createHeadlessDriver({
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError(`${label ?? id} arguments must be strings`);
   if (typeof spawnImpl !== "function") throw new TypeError(`${label ?? id} spawn implementation must be a function`);
   if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError(`${label ?? id} environment must be an object`);
+  if (!bridgeOptions || typeof bridgeOptions !== "object" || Array.isArray(bridgeOptions)) throw new TypeError(`${label ?? id} bridge options must be an object`);
 
   return Object.freeze(validateRunnerDriver({
     id, label: label ?? id,
@@ -258,7 +265,7 @@ export function createHeadlessDriver({
       const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? (generateSessionId ? randomUUID() : runner.id ?? randomUUID());
       const runtime = runtimeFor(runner, { sessionId: generateSessionId ? provisionalId : runner.sessionRef?.id ?? null, model: defaultModel, systemPrompt });
       const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
-      const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode };
+      const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions };
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
       const childProcess = spawnImpl(globalThis.process.execPath, [BRIDGE], { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
       return { process: childProcess, description: `${label ?? id} bridge (${executable})` };
@@ -278,7 +285,11 @@ export function createHeadlessDriver({
         if (!runtime.streaming) return [];
         runtime.streaming = false;
         const error = record.error || (record.code !== 0 ? String(record.stderr || `${label ?? id} exited with code ${record.code}`).trim() : null);
-        return [...(error ? [{ type: "pi_error", error }] : []), { type: "agent_end", willRetry: false }, { type: "agent_settled" }];
+        return [
+          ...(error ? [{ type: "pi_error", error }] : []),
+          ...(error && kind !== "amp" && isAuthenticationFailure(error) ? [{ type: "harness_auth_failed", reason: `${kind}_oauth` }] : []),
+          { type: "agent_end", willRetry: false }, { type: "agent_settled" },
+        ];
       }
       const previousSessionId = runtime.sessionId;
       const previousModel = runtime.model;
@@ -290,6 +301,11 @@ export function createHeadlessDriver({
       // rather than waiting for a possibly long-running first turn to settle.
       if ((!wasInitialized && runtime.initialized) || previousSessionId !== runtime.sessionId || previousModel !== runtime.model) {
         events.push(response(`_driver-${kind}-state`, "get_state", stateFor(runner, runtime, provider)));
+      }
+      const explicitError = record.type === "error" || record.type === "turn.failed" || record.is_error === true
+        ? record.error ?? record.message ?? record.result : null;
+      if (kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
+        events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
       }
       return events;
     },

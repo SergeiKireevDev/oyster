@@ -36,12 +36,16 @@ test("general app settings reject authentication and credential keys", async (t)
 
 test("credential services and routes cannot cross into general settings or browser preferences", () => {
   const serverCredentialSources = [
+    "../server/amp-oauth-credential-sink.mjs",
     "../server/claude-oauth-credential-sink.mjs",
+    "../server/codex-oauth-credential-sink.mjs",
+    "../server/gemini-oauth-credential-sink.mjs",
     "../server/pi-credential-service.mjs",
     "../server/pi-oauth-flow-service.mjs",
     "../server/http/routes/credentialRoutes.mjs",
     "../server/http/routes/oauthRoutes.mjs",
     "../server/runner-restart-service.mjs",
+    "../server/runner-drivers/headless-bridge.mjs",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(serverCredentialSources, /repositories\.settings|appSettings|app_settings/);
 

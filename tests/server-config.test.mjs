@@ -23,11 +23,14 @@ function checkConfig({ args = [], env = {} } = {}) {
   delete childEnv.CODEX_BIN;
   delete childEnv.CODEX_ARGS;
   delete childEnv.CODEX_SANDBOX;
+  delete childEnv.CODEX_HOME;
   delete childEnv.GEMINI_BIN;
   delete childEnv.GEMINI_ARGS;
   delete childEnv.GEMINI_APPROVAL_MODE;
+  delete childEnv.GEMINI_OAUTH_PATH;
   delete childEnv.AMP_BIN;
   delete childEnv.AMP_ARGS;
+  delete childEnv.AMP_SETTINGS_PATH;
   delete childEnv.OYSTER_DB_PATH;
   delete childEnv.OYSTER_UNAUTHENTICATED;
   delete childEnv.PERSISTENT_STORE;
@@ -91,8 +94,11 @@ test("configuration enables Codex, Gemini CLI, and Amp as optional harnesses", (
   assert.equal(result.status, 0, result.stderr);
   const config = JSON.parse(result.stdout);
   assert.equal(config.codexBin, process.execPath);
+  assert.equal(config.codexHome, join(result.testHome, ".codex"));
   assert.equal(config.geminiBin, process.execPath);
+  assert.equal(config.geminiOAuthPath, join(result.testHome, ".pi", "agent", "harnesses", "gemini-oauth.json"));
   assert.equal(config.ampBin, process.execPath);
+  assert.equal(config.ampSettingsPath, join(result.testHome, ".config", "amp", "settings.json"));
 
   for (const [variable, label] of [["CODEX_BIN", "Codex"], ["GEMINI_BIN", "Gemini CLI"], ["AMP_BIN", "Amp"]]) {
     const missing = checkConfig({ args: ["--pi", process.execPath], env: { [variable]: join(tmpdir(), `missing-${variable}`) } });

@@ -209,6 +209,9 @@ const ampBin = requestedAmpBin ? resolveExecutable(requestedAmpBin) : detectExec
 const sessionDirIndex = piExtraArgs.indexOf("--session-dir");
 const agentDir = resolve(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"));
 const claudeConfigDir = resolve(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"));
+const codexHome = resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex"));
+const geminiOAuthPath = resolve(process.env.GEMINI_OAUTH_PATH ?? join(agentDir, "harnesses", "gemini-oauth.json"));
+const ampSettingsPath = resolve(process.env.AMP_SETTINGS_PATH ?? join(homedir(), ".config", "amp", "settings.json"));
 const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
 const config = Object.freeze({
   PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
@@ -224,11 +227,15 @@ const config = Object.freeze({
   CODEX_BIN: codexBin ? resolveExecutable(codexBin) : null,
   CODEX_ARGS: Object.freeze((process.env.CODEX_ARGS ?? "").split(" ").filter(Boolean)),
   CODEX_SANDBOX: process.env.CODEX_SANDBOX ?? "workspace-write",
+  CODEX_HOME: codexHome,
   GEMINI_BIN: geminiBin ? resolveExecutable(geminiBin) : null,
   GEMINI_ARGS: Object.freeze((process.env.GEMINI_ARGS ?? "").split(" ").filter(Boolean)),
   GEMINI_APPROVAL_MODE: process.env.GEMINI_APPROVAL_MODE ?? "auto_edit",
+  GEMINI_OAUTH_PATH: geminiOAuthPath,
   AMP_BIN: ampBin ? resolveExecutable(ampBin) : null,
   AMP_ARGS: Object.freeze((process.env.AMP_ARGS ?? "").split(" ").filter(Boolean)),
+  AMP_SETTINGS_PATH: ampSettingsPath,
+  AMP_AUTH_MARKER_PATH: resolve(agentDir, "harnesses", "amp.connected"),
   PERSISTENT_STORE: persistentStore,
   PI_AGENT_DIR: agentDir,
   OYSTER_DB_PATH: resolve(process.env.OYSTER_DB_PATH ?? join(homedir(), ".pi", "agent", "oyster.sqlite")),
@@ -253,8 +260,11 @@ if (process.argv.includes("--check-config")) {
     claudeConfigDir: config.CLAUDE_CONFIG_DIR,
     claudeCodeProjectsDir: config.CLAUDE_CODE_PROJECTS_DIR,
     codexBin: config.CODEX_BIN,
+    codexHome: config.CODEX_HOME,
     geminiBin: config.GEMINI_BIN,
+    geminiOAuthPath: config.GEMINI_OAUTH_PATH,
     ampBin: config.AMP_BIN,
+    ampSettingsPath: config.AMP_SETTINGS_PATH,
     persistentStore: config.PERSISTENT_STORE,
     sqlitePath: config.SQLITE_PATH,
     appDbPath: config.OYSTER_DB_PATH,
