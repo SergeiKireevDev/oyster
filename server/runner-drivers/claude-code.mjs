@@ -6,6 +6,8 @@ import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs"
 /** Every tool of the `oyster` MCP server; the sudo password prompt is the human gate. */
 export const OYSTER_MCP_TOOLS = "mcp__oyster";
 const DEFAULT_UI_URL = "http://127.0.0.1:8080";
+/** Claude Code's terminal result text when its Anthropic OAuth grant is stale or unusable. */
+const OAUTH_FAILURE_RE = /OAuth (?:access token|session) (?:has )?expired|Failed to authenticate/i;
 
 /**
  * Per-launch `--mcp-config` payload pointing at Oyster's own MCP endpoint.
@@ -197,8 +199,11 @@ export function createClaudeCodeDriver({
         }
       } else if (record.type === "result") {
         runtime.streaming = false;
-        if (record.is_error) events.push({ type: "pi_error", error: String(record.result ?? record.terminal_reason ?? "Claude Code failed") });
+        const error = record.is_error ? String(record.result ?? record.terminal_reason ?? "Claude Code failed") : null;
+        if (error !== null) events.push({ type: "pi_error", error });
         events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+        // Emitted after settlement so recovery sees an idle runner it may restart.
+        if (error !== null && OAUTH_FAILURE_RE.test(error)) events.push({ type: "harness_auth_failed", reason: "oauth_expired", error });
       }
       return events;
     },

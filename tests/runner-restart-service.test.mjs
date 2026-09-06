@@ -163,3 +163,18 @@ test("invalid restart dependencies and collections fail with clear errors", asyn
   await assert.rejects(restart(), /runners\(\) must return a Map or iterable/);
   await assert.rejects(restart({ harness: "other" }), /restart harness/);
 });
+
+test("active-runner restart can skip busy runners so recovery never interrupts a live turn", async () => {
+  const idle = { id: "idle", harness: "claude-code", proc: {}, busy: false };
+  const busy = { id: "busy", harness: "claude-code", proc: {}, busy: true };
+  const calls = [];
+  const restart = createRestartActiveRunners({
+    runners: () => new Map([[idle.id, idle], [busy.id, busy]]),
+    stopRunner(runner) { calls.push(["stop", runner.id]); runner.proc = null; },
+    startRunner(runner) { calls.push(["start", runner.id]); runner.proc = {}; },
+    delay: async () => {},
+  });
+  assert.deepEqual(await restart({ harness: "claude-code", idleOnly: true }), { runnerIds: ["idle"], status: "restarted" });
+  assert.deepEqual(calls, [["stop", "idle"], ["start", "idle"]]);
+  await assert.rejects(restart({ idleOnly: "yes" }), /idleOnly must be a boolean/);
+});

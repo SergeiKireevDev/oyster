@@ -132,6 +132,7 @@ export async function createRunnerManager(state, {
   setTimer = setTimeout,
   clearTimer = clearTimeout,
   notifyRunnerEvent = () => {},
+  onHarnessAuthFailure = null,
   runnerDriver: configuredRunnerDriver = null,
   runnerDrivers: configuredRunnerDrivers = null,
 } = {}) {
@@ -139,6 +140,7 @@ export async function createRunnerManager(state, {
   if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
   if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("runner timer functions are required");
   if (typeof notifyRunnerEvent !== "function") throw new TypeError("runner notification callback is required");
+  if (onHarnessAuthFailure !== null && typeof onHarnessAuthFailure !== "function") throw new TypeError("harness auth failure handler must be a function or null");
   if (appStore === undefined) appStore = state.appStore;
   const { config, serverEvent, sessionReferences } = state;
   if (!config || typeof config !== "object") throw new TypeError("runner config is required");
@@ -432,6 +434,15 @@ export async function createRunnerManager(state, {
     }
     else if (msg.type === "compaction_start") { runner.busy = true; runnersChanged(runner); }
     else if (msg.type === "compaction_end" && msg.reason === "manual") { runner.busy = false; runnersChanged(runner); requestState(runner); }
+    else if (msg.type === "harness_auth_failed" && onHarnessAuthFailure) {
+      // Credential recovery is best-effort background work; a failure here must
+      // not disturb the runner's own lifecycle bookkeeping.
+      try {
+        await onHarnessAuthFailure(runner, msg);
+      } catch (error) {
+        console.error(`[oyster] harness auth recovery for runner ${runner.id} failed: ${error?.message ?? error}`);
+      }
+    }
     else if (msg.type === "response" && msg.id === runner.resumeId) {
       // session resume finished (success or not): deliver held-back commands
       finishResume(runner);

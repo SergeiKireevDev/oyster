@@ -237,3 +237,19 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.deepEqual(localEvents.find((event) => event.id === "state-after-model").data.model, { provider: "anthropic", id: "opus" });
   assert.deepEqual(driver.sessionReference({ sessionId: "cc-1" }), { backend: "claude-code", id: "cc-1", storagePath: null });
 });
+
+test("claude-code driver flags an OAuth failure after the turn settles so recovery sees an idle runner", () => {
+  const driver = createClaudeCodeDriver({ bin: "/bin/claude", spawnImpl: () => fakeProcess() });
+  const runner = {};
+  const expired = driver.decodeLine(runner, JSON.stringify({
+    type: "result", is_error: true, subtype: "success",
+    result: "Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue.",
+  }));
+  assert.deepEqual(expired.map((event) => event.type), ["pi_error", "agent_end", "agent_settled", "harness_auth_failed"]);
+  assert.deepEqual(expired.at(-1), { type: "harness_auth_failed", reason: "oauth_expired", error: expired[0].error });
+
+  const unrelated = driver.decodeLine(runner, JSON.stringify({ type: "result", is_error: true, result: "Request exceeds the maximum size" }));
+  assert.deepEqual(unrelated.map((event) => event.type), ["pi_error", "agent_end", "agent_settled"]);
+  const success = driver.decodeLine(runner, JSON.stringify({ type: "result", is_error: false, result: "done" }));
+  assert.deepEqual(success.map((event) => event.type), ["agent_end", "agent_settled"]);
+});
