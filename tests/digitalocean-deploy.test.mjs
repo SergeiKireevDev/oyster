@@ -34,6 +34,7 @@ test("CI publishes the browser-tested deployment image to public Docker Hub", { 
   assert.match(workflow, /username: \$\{\{ secrets\.DOCKERHUB_USERNAME \}\}/);
   assert.match(workflow, /password: \$\{\{ secrets\.DOCKERHUB_TOKEN \}\}/);
   assert.doesNotMatch(workflow, /ghcr\.io|secrets\.GITHUB_TOKEN|packages: write/);
+  assert.match(workflow, /push:\n\s+branches: \[main\]/, "feature branches should run CI once through pull_request");
   assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
   assert.doesNotMatch(workflow, /github\.ref == 'refs\/heads\/feature\/digitalocean-app-platform'/);
   assert.ok(workflow.indexOf("Build Hub frontend") < workflow.indexOf("Run complete browser test suite"));
