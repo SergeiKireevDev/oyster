@@ -28,7 +28,7 @@ OAuth flows expire after 15 minutes of inactivity and can be cancelled. For a lo
 
 When an OAuth provider supports both browser and device-code login, Oyster selects device-code login automatically instead of presenting a method picker. This includes OpenAI Codex and dynamically configured Radius providers. Copy the one-time code, open the linked verification page, and enter it there. Keep the Credentials modal open while the provider completes authorization. After approval, Oyster stores the credential only for the selected harness and restarts active runners for that harness.
 
-Sign in once for pi and once for Claude Code. The resulting refresh-token chains are independent, so either harness can refresh without revoking the other's credential. Signing out removes only the selected harness's local OAuth credential and does not revoke the upstream grant. Revoke connected-app access with the provider when required.
+Sign in once: pi and Claude Code share the same Anthropic grant, and Oyster keeps it fresh for both by rotating it ahead of expiry inside pi's credential lock. Connecting "Anthropic (Claude Code)" links pi's existing grant (or establishes it once for both) rather than starting a second login. Signing Claude Code out removes only its local mirror; signing pi out removes the shared grant from both stores. Neither revokes the upstream grant. Revoke connected-app access with the provider when required. If a refresh is ever rejected, Oyster reports that re-authentication is needed instead of retrying with a dead token.
 
 ## Tunnel safety
 

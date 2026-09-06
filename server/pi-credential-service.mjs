@@ -1,8 +1,11 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { refreshAnthropicOAuthGrant } from "./claude-oauth-credential-sink.mjs";
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
+const ANTHROPIC = "anthropic";
+const DEFAULT_ROTATION_MARGIN_MS = 30 * 60 * 1000;
 
 function credentialError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -390,6 +393,129 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       : adapter.authStorage.get(provider);
   }
 
+  /** Persist an OAuth credential through pi's own locked store when it offers one. */
+  async function writeStoredOAuth(adapter, provider, credential) {
+    const value = { type: "oauth", access: credential.access, refresh: credential.refresh, expires: credential.expires,
+      ...(Number.isFinite(credential.refreshExpires) ? { refreshExpires: credential.refreshExpires } : {}) };
+    if (typeof adapter.authStorage.modify === "function") {
+      await adapter.authStorage.modify(provider, async () => value);
+    } else if (typeof adapter.authStorage.set === "function") {
+      adapter.authStorage.set(provider, value);
+    } else {
+      throw capabilityError("configured pi auth storage cannot store an OAuth credential");
+    }
+  }
+
+  function projectToClaude(credential, { fatal = false } = {}) {
+    try {
+      claudeOAuthCredentialSink.project({ ...credential, type: "oauth" });
+      return true;
+    } catch (error) {
+      if (fatal) throw error;
+      console.warn(`[oyster] Claude Code credential store was not updated: ${error?.message ?? error}`);
+      return false;
+    }
+  }
+
+  /**
+   * pi's `auth.json` and Claude Code's `.credentials.json` share one Anthropic
+   * grant. Whichever store holds the fresher token wins and is mirrored to the
+   * other; a pi API key is never replaced by an OAuth grant.
+   */
+  async function syncAnthropicOAuth(adapter) {
+    if (!claudeOAuthCredentialSink) return Object.freeze({ outcome: "unavailable" });
+    const pi = storedCredential(adapter, ANTHROPIC);
+    if (pi && pi.type !== "oauth") return Object.freeze({ outcome: "skipped", reason: "pi_api_key" });
+    const claude = claudeOAuthCredentialSink.read();
+    if (!pi && !claude) return Object.freeze({ outcome: "unchanged", source: null });
+    if (pi && claude && pi.refresh === claude.refresh && pi.expires === claude.expires) {
+      return Object.freeze({ outcome: "unchanged", source: null, expiresAt: pi.expires });
+    }
+    if (!pi || (claude && claude.expires > pi.expires)) {
+      await writeStoredOAuth(adapter, ANTHROPIC, claude);
+      return Object.freeze({ outcome: "synced", source: "claude", expiresAt: claude.expires });
+    }
+    if (!projectToClaude(pi)) return Object.freeze({ outcome: "failed", source: "pi", expiresAt: pi.expires });
+    return Object.freeze({ outcome: "synced", source: "pi", expiresAt: pi.expires });
+  }
+
+  let deadRefreshToken = null;
+
+  /**
+   * Rotate the shared Anthropic grant ahead of expiry. The exchange runs inside
+   * pi's `modify()` lock, which re-reads the file first, so pi runners and this
+   * process can never spend the single-use refresh token twice.
+   */
+  async function rotateAnthropicOAuth({
+    marginMs = DEFAULT_ROTATION_MARGIN_MS, force = false, reason = "manual",
+    fetchImpl = undefined, now = Date.now, refreshGrant = refreshAnthropicOAuthGrant,
+  } = {}) {
+    if (!claudeOAuthCredentialSink) return Object.freeze({ outcome: "unavailable", reason });
+    const perform = async () => {
+      const adapter = await load();
+      await prepare(adapter);
+      await syncAnthropicOAuth(adapter);
+      const pi = storedCredential(adapter, ANTHROPIC);
+      if (pi?.type === "api_key") return rotateStandalone({ marginMs, force, reason, fetchImpl, now, refreshGrant });
+      const credential = pi?.type === "oauth" ? pi : null; // sync already mirrored a Claude-only grant into pi
+      if (!credential) return Object.freeze({ outcome: "not_configured", reason });
+      if (!force && credential.expires - now() > marginMs) return Object.freeze({ outcome: "not_needed", reason, expiresAt: credential.expires });
+      if (deadRefreshToken !== null && credential.refresh === deadRefreshToken) {
+        return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires });
+      }
+      const exchange = (stored) => refreshGrant(stored.refresh, fetchImpl ? { fetchImpl, now } : { now });
+      try {
+        if (typeof adapter.authStorage.modify === "function") {
+          await adapter.authStorage.modify(ANTHROPIC, async (stored) => {
+            if (stored?.type !== "oauth") return undefined;
+            if (!force && stored.expires - now() > marginMs) return undefined; // refreshed meanwhile
+            return await exchange(stored);
+          });
+        } else {
+          await writeStoredOAuth(adapter, ANTHROPIC, await exchange(credential));
+        }
+      } catch (error) {
+        const cause = error?.invalidGrant ? error : error?.cause?.invalidGrant ? error.cause : null;
+        if (cause) {
+          deadRefreshToken = credential.refresh;
+          return Object.freeze({ outcome: "reauth_required", reason, expiresAt: credential.expires, error: cause.message });
+        }
+        return Object.freeze({ outcome: "failed", reason, expiresAt: credential.expires, error: error?.message ?? String(error) });
+      }
+      deadRefreshToken = null;
+      const latest = storedCredential(adapter, ANTHROPIC);
+      if (latest?.type !== "oauth") return Object.freeze({ outcome: "not_configured", reason });
+      projectToClaude(latest);
+      return Object.freeze({
+        outcome: "refreshed", reason, rotated: latest.refresh !== credential.refresh,
+        expiresAt: latest.expires, refreshTokenExpiresAt: Number.isFinite(latest.refreshExpires) ? latest.refreshExpires : null,
+      });
+    };
+    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, "claude-code", perform));
+  }
+
+  /** pi keeps an API key, so Claude Code's grant is its own and rotates through the sink. */
+  async function rotateStandalone({ marginMs, force, reason, fetchImpl, now, refreshGrant }) {
+    const claude = claudeOAuthCredentialSink.read();
+    if (!claude) return Object.freeze({ outcome: "not_configured", reason });
+    if (!force && claude.expires - now() > marginMs) return Object.freeze({ outcome: "not_needed", reason, expiresAt: claude.expires });
+    if (deadRefreshToken !== null && claude.refresh === deadRefreshToken) return Object.freeze({ outcome: "reauth_required", reason, expiresAt: claude.expires });
+    let next;
+    try {
+      next = await refreshGrant(claude.refresh, fetchImpl ? { fetchImpl, now } : { now });
+    } catch (error) {
+      if (error?.invalidGrant) { deadRefreshToken = claude.refresh; return Object.freeze({ outcome: "reauth_required", reason, expiresAt: claude.expires, error: error.message }); }
+      return Object.freeze({ outcome: "failed", reason, expiresAt: claude.expires, error: error?.message ?? String(error) });
+    }
+    deadRefreshToken = null;
+    const current = claudeOAuthCredentialSink.read();
+    if (current && current.refresh !== claude.refresh) {
+      return Object.freeze({ outcome: "refreshed", reason, rotated: false, expiresAt: current.expires, refreshTokenExpiresAt: current.refreshExpires });
+    }
+    projectToClaude(next, { fatal: true });
+    return Object.freeze({ outcome: "refreshed", reason, rotated: true, expiresAt: next.expires, refreshTokenExpiresAt: next.refreshExpires });
+  }
+
   function registeredProviders(adapter) {
     return adapter.kind === "runtime"
       ? safeRegisteredProviders(adapter.modelRuntime.getProviders())
@@ -524,22 +650,37 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
         throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for ${harnessId}`);
       }
 
+      const piLogin = async () => {
+        if (adapter.kind === "runtime") await adapter.modelRuntime.login(providerId, "oauth", runtimeOAuthInteraction(safeCallbacks));
+        else await adapter.authStorage.login(providerId, safeCallbacks);
+      };
+
       if (harnessId === "claude-code") {
         const current = claudeOAuthCredentialSink.status();
         if (current.configured && replace !== true) {
           throw credentialError("credential_replace_required", "Claude Code already has stored Anthropic OAuth credentials");
         }
-        let credential;
-        if (adapter.kind === "runtime") {
-          const oauth = adapter.modelRuntime.getProvider(providerId)?.auth?.oauth;
-          if (typeof oauth?.login !== "function") throw capabilityError("configured pi SDK does not expose Anthropic OAuth login");
-          credential = await oauth.login(runtimeOAuthInteraction(safeCallbacks));
-        } else {
-          const oauth = adapter.authStorage.getOAuthProviders().find((candidate) => candidate?.id === providerId);
-          if (typeof oauth?.login !== "function") throw capabilityError("configured pi SDK does not expose Anthropic OAuth login");
-          credential = await oauth.login(safeCallbacks);
+        const piStored = storedCredential(adapter, providerId);
+        if (piStored?.type === "api_key") {
+          // pi keeps its API key; Claude Code gets a grant of its own.
+          let credential;
+          if (adapter.kind === "runtime") {
+            const oauth = adapter.modelRuntime.getProvider(providerId)?.auth?.oauth;
+            if (typeof oauth?.login !== "function") throw capabilityError("configured pi SDK does not expose Anthropic OAuth login");
+            credential = await oauth.login(runtimeOAuthInteraction(safeCallbacks));
+          } else {
+            const oauth = adapter.authStorage.getOAuthProviders().find((candidate) => candidate?.id === providerId);
+            if (typeof oauth?.login !== "function") throw capabilityError("configured pi SDK does not expose Anthropic OAuth login");
+            credential = await oauth.login(safeCallbacks);
+          }
+          projectToClaude(credential, { fatal: true });
+          return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth" });
         }
-        claudeOAuthCredentialSink.project({ ...credential, type: "oauth" });
+        // Claude Code shares pi's grant: link the stored one, or establish it once for both.
+        if (piStored?.type !== "oauth") await piLogin();
+        const shared = storedCredential(adapter, providerId);
+        if (shared?.type !== "oauth") throw capabilityError("configured pi auth storage did not store the Anthropic OAuth grant");
+        projectToClaude(shared, { fatal: true });
         return Object.freeze({ provider: providerId, harness: harnessId, credentialType: "oauth" });
       }
 
@@ -550,10 +691,10 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       if (current && replace !== true) {
         throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
       }
-      if (adapter.kind === "runtime") {
-        await adapter.modelRuntime.login(providerId, "oauth", runtimeOAuthInteraction(safeCallbacks));
-      } else {
-        await adapter.authStorage.login(providerId, safeCallbacks);
+      await piLogin();
+      if (claudeOAuthCredentialSink && providerId === ANTHROPIC) {
+        const shared = storedCredential(adapter, providerId);
+        if (shared?.type === "oauth") projectToClaude(shared);
       }
       return Object.freeze({ provider: providerId, credentialType: "oauth" });
     });
@@ -584,9 +725,23 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
       }
       if (adapter.kind === "runtime") await adapter.modelRuntime.logout(providerId);
       else adapter.authStorage.logout(providerId);
+      if (claudeOAuthCredentialSink && providerId === ANTHROPIC) {
+        // The same grant backed Claude Code; a stale mirror would only fail later.
+        try { claudeOAuthCredentialSink.remove(); }
+        catch (error) { console.warn(`[oyster] Claude Code credential store was not cleared: ${error?.message ?? error}`); }
+      }
       return Object.freeze({ provider: providerId, removed: true });
     });
   }
 
-  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth });
+  async function syncClaudeOAuth() {
+    if (!claudeOAuthCredentialSink) return Object.freeze({ outcome: "unavailable" });
+    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, "claude-code", async () => {
+      const adapter = await load();
+      await prepare(adapter);
+      return syncAnthropicOAuth(adapter);
+    }));
+  }
+
+  return Object.freeze({ load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth, rotateAnthropicOAuth, syncClaudeOAuth });
 }

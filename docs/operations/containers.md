@@ -37,7 +37,7 @@ docker run --rm -p 4000:4000 \
   oyster:sqlite
 ```
 
-The `~/.claude` mount must be writable if Claude Code should create and resume sessions. When Claude Code is enabled, authenticate Anthropic separately for pi and Claude Code in Oyster's Credentials modal. pi writes its grant to `/home/node/.pi/agent/auth.json`; Claude Code writes its independent grant to `/home/node/.claude/.credentials.json`. Persist both directories to retain both logins across container replacement. While a Claude runner is selected, Oyster polls `/home/node/.claude/projects` and mirrors its JSONL transcript into `/home/node/.pi/agent/sessions.sqlite`; persist `/home/node/.pi/agent` as well if the searchable SQLite catalog should survive container replacement:
+The `~/.claude` mount must be writable if Claude Code should create and resume sessions. When Claude Code is enabled, one Anthropic login in Oyster's Credentials modal serves both harnesses: pi stores the grant in `/home/node/.pi/agent/auth.json` and Oyster mirrors it into `/home/node/.claude/.credentials.json`, rotating it before expiry and keeping the two files in sync. Persist both directories to retain the login across container replacement. While a Claude runner is selected, Oyster polls `/home/node/.claude/projects` and mirrors its JSONL transcript into `/home/node/.pi/agent/sessions.sqlite`; persist `/home/node/.pi/agent` as well if the searchable SQLite catalog should survive container replacement:
 
 ```bash
 docker run --rm -p 4000:4000 \

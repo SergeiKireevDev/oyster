@@ -44,7 +44,7 @@ Do not use this mode merely because a reverse proxy provides TLS. The outer laye
 
 ## Credential boundaries
 
-Provider credentials remain in agent-owned files: pi's `auth.json` and, when the Claude Code harness is enabled, Claude Code's `.credentials.json`. Anthropic OAuth grants are established separately for each harness so rotating one refresh token cannot invalidate the other. Authenticated users can manage these credentials and run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
+Provider credentials remain in agent-owned files: pi's `auth.json` and, when the Claude Code harness is enabled, Claude Code's `.credentials.json`. Both harnesses share one Anthropic OAuth grant: pi's store is authoritative and Oyster mirrors it into Claude Code's file. Because refresh tokens are single-use, Oyster alone rotates the grant, thirty minutes before expiry and inside pi's own file lock, so neither harness ever reaches its own refresh window with a stale token. Authenticated users can manage these credentials and run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
 
 Removing a local API key or OAuth credential does not revoke it upstream. Revoke compromised keys and connected-app grants with the provider.
 
