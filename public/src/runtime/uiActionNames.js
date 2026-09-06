@@ -54,6 +54,8 @@ export const ROUTINE_REFRESH_ACTION = "routine.refresh";
 export const ROUTINE_SHOW_GENERATOR_ACTION = "routine.showGenerator";
 export const ROUTINE_GENERATE_ACTION = "routine.generate";
 
+export const LAYOUT_NAVIGATE_ACTION = "layout.navigate";
+export const COMPOSER_PREFILL_ACTION = "composer.prefill";
 export const COMPOSER_INPUT_ACTION = "composer.input";
 export const COMPOSER_KEYDOWN_ACTION = "composer.keydown";
 export const COMPOSER_SEND_ACTION = "composer.send";

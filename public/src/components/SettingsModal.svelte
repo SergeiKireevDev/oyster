@@ -124,8 +124,8 @@
   }
 
   .settings-description {
-    color: var(--muted);
-    font-size: 11.5px;
+    color: var(--text-secondary);
+    font-size: 12px;
     line-height: 1.45;
     overflow-wrap: anywhere;
   }

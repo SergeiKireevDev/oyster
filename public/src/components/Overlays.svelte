@@ -9,6 +9,11 @@
   import { resolveModalContent } from "../runtime/modalContentRegistry.js";
   import { carouselPage } from "../stores/carousel.js";
   import { modalState } from "../stores/modal.js";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { LAYOUT_NAVIGATE_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const navigate = (page) => uiActions.invoke(LAYOUT_NAVIGATE_ACTION, page);
 
   const FOLDER_MODAL_CONTENTS = new Set(["fileExplorer", "filePicker", "folderBrowser"]);
   const MARKDOWN_WIDGET_KINDS = new Set(["markdown", "monitoring"]);
@@ -45,7 +50,7 @@
   });
 </script>
 
-<CarouselIndicator page={$carouselPage} />
+<CarouselIndicator page={$carouselPage} onNavigate={navigate} />
 
 <div
   id="overlay"

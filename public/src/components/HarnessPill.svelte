@@ -33,7 +33,7 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--accent) 9%, transparent);
     color: color-mix(in srgb, var(--accent) 75%, var(--text));
-    font-size: 8.5px;
+    font-size: 11px;
     font-weight: 720;
     letter-spacing: .025em;
     line-height: 1.15;
@@ -44,6 +44,6 @@
   .harness-pill[data-harness="pi"] {
     border-color: color-mix(in srgb, var(--muted) 28%, var(--border));
     background: color-mix(in srgb, var(--muted) 8%, transparent);
-    color: var(--muted);
+    color: var(--text-secondary);
   }
 </style>

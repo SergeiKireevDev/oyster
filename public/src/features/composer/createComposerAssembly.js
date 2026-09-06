@@ -11,6 +11,7 @@ import {
   COMMAND_PALETTE_RUN_ACTION,
   COMPOSER_ABORT_ACTION,
   COMPOSER_INPUT_ACTION,
+  COMPOSER_PREFILL_ACTION,
   COMPOSER_KEYDOWN_ACTION,
   COMPOSER_SEND_ACTION,
   COMPOSER_VOICE_ACTION,
@@ -144,6 +145,9 @@ export function createComposerAssembly(deps) {
 
   const detachUiActions = [
     deps.uiActions.register(COMPOSER_INPUT_ACTION, inputChanged),
+    deps.uiActions.register(COMPOSER_PREFILL_ACTION, (text) => {
+      if (!input.disabled) insertText(text);
+    }),
     deps.uiActions.register(COMPOSER_KEYDOWN_ACTION, keydown),
     deps.uiActions.register(COMPOSER_SEND_ACTION, send),
     deps.uiActions.register(COMPOSER_ABORT_ACTION, abort),

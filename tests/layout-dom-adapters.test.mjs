@@ -12,6 +12,7 @@ test("layout DOM adapters isolate feature element inspection", () => {
   assert.equal(adapters.isTreeOpen(), false);
   assert.equal(adapters.sessions, sessions);
   assert.equal(adapters.hublots, hublots);
-  assert.equal(adapters.isDrawerToggleTarget({ closest: () => ({}) }), false);
+  assert.equal(adapters.isDrawerToggleTarget({ closest: (selector) => selector === "#carouselIndicator, .drawer-close" ? {} : null }), true);
+  assert.equal(adapters.isDrawerToggleTarget({ closest: () => null }), false);
   assert.equal(adapters.isDrawerToggleTarget(null), false);
 });

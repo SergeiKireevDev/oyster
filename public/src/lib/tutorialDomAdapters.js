@@ -1,3 +1,5 @@
+import { modalFocusManagement } from "./modalDomAdapters.js";
+
 const EDGE_GAP = 14;
 const TARGET_GAP = 14;
 const TARGET_PADDING = 6;
@@ -30,6 +32,7 @@ export function tutorialPresentation(node, options) {
   const spotlight = node.querySelector(".tutorial-spotlight");
   const scrim = node.querySelector(".tutorial-scrim");
   const previousFocus = documentTarget.activeElement;
+  const focus = modalFocusManagement(node, { open: true, priority: 200 });
   let current = options;
   let scheduledFrame = null;
   let closeFrame = null;
@@ -199,6 +202,7 @@ export function tutorialPresentation(node, options) {
     },
     destroy() {
       destroyed = true;
+      focus.destroy();
       card.removeEventListener("keydown", handleKeydown);
       node.removeEventListener("touchstart", handleTouchStart);
       node.removeEventListener("touchend", handleTouchEnd);

@@ -1,18 +1,22 @@
 <script>
   import PinnedWidgetGrid from "./PinnedWidgetGrid.svelte";
   import RoutineList from "./RoutineList.svelte";
+  import { blockingSurface } from "../lib/blockingSurface.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     HUBLOT_SHOW_ACTION,
+    LAYOUT_NAVIGATE_ACTION,
     ROUTINE_SHOW_GENERATOR_ACTION,
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
+  const closeDrawer = () => uiActions.invoke(LAYOUT_NAVIGATE_ACTION, 0);
   const showWidgetManager = () => uiActions.invoke(HUBLOT_SHOW_ACTION);
   const showRoutineGenerator = () => uiActions.invoke(ROUTINE_SHOW_GENERATOR_ACTION);
 </script>
 
-<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines">
+<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines" use:blockingSurface={{ drawer: true, media: "(max-width: 1200px)", onClose: closeDrawer }}>
+  <button class="chip drawer-close widgets-close" type="button" onclick={closeDrawer} aria-label="Close widgets">← Back to chat</button>
   <section class="sidebar-section" aria-labelledby="pinned-widgets-heading">
     <h2 id="pinned-widgets-heading" class="side-head">Pinned Widgets</h2>
     <PinnedWidgetGrid />
@@ -21,11 +25,11 @@
         type="button"
         id="hublotAdd"
         class="chip sidebar-create-action"
-        title="Create a custom widget from a prompt"
+        title="Create a live interface with a public, temporary URL"
         onclick={showWidgetManager}
       >
         <span class="sidebar-create-icon" aria-hidden="true">+</span>
-        <span>Add custom from prompt</span>
+        <span>Create public live interface…</span>
       </button>
     </div>
   </section>

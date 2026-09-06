@@ -8,6 +8,6 @@ export function createLayoutDomAdapters({ documentTarget, windowTarget, findElem
     sessions,
     hublots,
     isTreeOpen: () => false,
-    isDrawerToggleTarget: () => false,
+    isDrawerToggleTarget: (target) => !!target?.closest?.("#carouselIndicator, .drawer-close"),
   });
 }

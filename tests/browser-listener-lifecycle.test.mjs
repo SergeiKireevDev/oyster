@@ -22,6 +22,7 @@ test("every imperative browser or element listener module includes a cleanup pat
 
   assert.deepEqual(listenerOwners.map(({ path }) => path), [
     "features/cloud/cloudBrowser.js",
+    "lib/blockingSurface.js",
     "lib/commandController.js",
     "lib/fileExplorerController.js",
     "lib/modalDomAdapters.js",
@@ -44,5 +45,10 @@ test("observers and media-query listeners cannot bypass the owned listener inven
       ? [relative(root.pathname, file.pathname)]
       : [];
   });
-  assert.deepEqual(unmanaged, []);
+  assert.deepEqual(unmanaged, ["lib/blockingSurface.js"]);
+  const boundary = readFileSync(new URL("lib/blockingSurface.js", root), "utf8");
+  assert.match(boundary, /observer\.disconnect\(\)/);
+  assert.match(boundary, /media\?\.removeEventListener\("change", sync\)/);
+  const regressions = readFileSync(new URL("../tests/focus-boundaries.test.mjs", import.meta.url), "utf8");
+  assert.match(regressions, /blocking surfaces disconnect observers and media listeners/);
 });

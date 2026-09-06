@@ -190,7 +190,7 @@ test("carousel controller keeps drawers mounted until reverse swipe animations f
   let nextTimer = 0;
   const controller = createCarouselController({
     documentTarget: { getElementById: (id) => ({ sessions, hublots })[id] },
-    windowTarget: { matchMedia: (query) => ({ matches: query === "(max-width: 760px)" }) },
+    windowTarget: { matchMedia: (query) => ({ matches: ["(max-width: 960px)", "(max-width: 1200px)"].includes(query) }) },
     storage: { getItem: () => "0", setItem() {} },
     setPage() {},
     setTimeoutImpl: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; },

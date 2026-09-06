@@ -23,7 +23,7 @@ test("reusable presentation children do not import global feature stores or acti
 
 test("feature owners adapt global state into focused child props", () => {
   const overlays = component("Overlays.svelte");
-  assert.match(overlays, /<CarouselIndicator page=\{\$carouselPage\} \/>/);
+  assert.match(overlays, /<CarouselIndicator page=\{\$carouselPage\} onNavigate=\{navigate\} \/>/);
 
   const toasts = component("Toasts.svelte");
   assert.match(toasts, /<ToastItem \{toast\} onDismiss=\{removeToast\} \/>/);

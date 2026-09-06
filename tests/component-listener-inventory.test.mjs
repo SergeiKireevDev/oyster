@@ -38,10 +38,12 @@ test("Svelte-managed document and element integrations stay on the approved list
     .map((location) => location.replace(/:\d+:/, ":"));
 
   assert.deepEqual(integrations, [
+    "components/AuthGate.svelte:use:blockingSurface={{ priority: 1000 }}",
     "components/CommandPalette.svelte:use:keepActiveVisible={cmd.active}",
     "components/CredentialsModal.svelte:use:trackOAuthInput",
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
+    'components/HublotSidebar.svelte:<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines" use:blockingSurface={{ drawer: true, media: "(max-width: 1200px)", onClose: closeDrawer }}>',
     "components/Menu.svelte:<svelte:document onclick={close} />",
     "components/Menu.svelte:<button type=\"button\" role=\"menuitem\" tabindex=\"-1\" data-action=\"analytics\" use:focusWhenOpened={$menuOpen} onclick={openAnalytics}>",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
@@ -51,6 +53,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/Overlays.svelte:use:modalFocusManagement={{ open: $modalState.open, identity: $modalState.content }}",
     "components/PinnedWidgetGrid.svelte:<span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden=\"true\" use:monitorPreview={widget}>",
     "components/SessionPickerModal.svelte:use:focusOnMount",
+    'components/SessionSidebar.svelte:<aside id="sessions" aria-label="Sessions" use:blockingSurface={{ drawer: true, media: "(max-width: 960px)", onClose: closeDrawer }}>',
     "components/Tutorial.svelte:use:tutorialPresentation={{",
     "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={empty} data-role={role} bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<details class=\"block tool interface-message\" class:ckpt-frozen={restore !== null} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",

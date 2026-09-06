@@ -1,3 +1,5 @@
+import { registerFocusBoundary } from "./focusBoundaryStack.js";
+
 const optionSelector = "button.m-option:not(:disabled), .session-row > button.s-session-main:not(:disabled), label.m-option";
 const focusableSelector = [
   "button:not([disabled])",
@@ -17,6 +19,7 @@ function visibleFocusableElements(dialog) {
   return [...dialog.querySelectorAll(focusableSelector)].filter((element) => (
     !element.hidden
     && element.getAttribute?.("aria-hidden") !== "true"
+    && !element.closest?.("[inert]")
     && element.getClientRects().length > 0
   ));
 }
@@ -30,16 +33,17 @@ export function modalFocusManagement(dialog, parameters) {
   let identity = null;
   let opener = null;
   let focusGeneration = 0;
+  let boundary = null;
 
   function stateFrom(value) {
     return typeof value === "object" && value !== null
-      ? { open: !!value.open, identity: value.identity ?? null }
-      : { open: !!value, identity: null };
+      ? { open: !!value.open, identity: value.identity ?? null, priority: value.priority ?? 100 }
+      : { open: !!value, identity: null, priority: 100 };
   }
 
   function focusInitial(generation) {
     queueMicrotask(() => {
-      if (!isOpen || generation !== focusGeneration) return;
+      if (!isOpen || !boundary?.isTop() || generation !== focusGeneration) return;
       const preferred = dialog.querySelector("[autofocus], [data-modal-initial-focus]");
       const target = preferred && !preferred.disabled && preferred.getClientRects().length > 0
         ? preferred
@@ -54,14 +58,20 @@ export function modalFocusManagement(dialog, parameters) {
     const replacing = next.open && isOpen && next.identity !== identity;
     if (!opening && !replacing && next.open === isOpen) return;
     focusGeneration += 1;
-    if (opening) opener = dialog.ownerDocument.activeElement;
+    if (opening) {
+      opener = dialog.ownerDocument.activeElement;
+      boundary = registerFocusBoundary(dialog, next.priority);
+    }
     isOpen = next.open;
     identity = next.identity;
     if (isOpen) {
       focusInitial(focusGeneration);
       return;
     }
-    if (opener?.isConnected !== false && typeof opener?.focus === "function") {
+    const restoreFocus = boundary?.isTop();
+    boundary?.release();
+    boundary = null;
+    if (restoreFocus && opener?.isConnected !== false && typeof opener?.focus === "function" && !opener.closest?.("[inert]")) {
       opener.focus({ preventScroll: true });
     }
     opener = null;
@@ -73,7 +83,7 @@ export function modalFocusManagement(dialog, parameters) {
   }
 
   function keydown(event) {
-    if (!isOpen || event.key !== "Tab") return;
+    if (!isOpen || !boundary?.isTop() || event.key !== "Tab") return;
     const focusable = visibleFocusableElements(dialog);
     if (!focusable.length) {
       event.preventDefault();
@@ -90,7 +100,7 @@ export function modalFocusManagement(dialog, parameters) {
   }
 
   function focusin(event) {
-    if (isOpen && !dialog.contains(event.target)) focusInside();
+    if (isOpen && boundary?.isTop() && !dialog.contains(event.target)) focusInside();
   }
 
   dialog.addEventListener("keydown", keydown, true);
@@ -101,11 +111,13 @@ export function modalFocusManagement(dialog, parameters) {
     update,
     destroy() {
       focusGeneration += 1;
-      const restoreTarget = isOpen ? opener : null;
+      const restoreTarget = isOpen && boundary?.isTop() ? opener : null;
       isOpen = false;
+      boundary?.release();
+      boundary = null;
       dialog.removeEventListener("keydown", keydown, true);
       dialog.ownerDocument.removeEventListener("focusin", focusin, true);
-      if (restoreTarget?.isConnected !== false && typeof restoreTarget?.focus === "function") {
+      if (restoreTarget?.isConnected !== false && typeof restoreTarget?.focus === "function" && !restoreTarget.closest?.("[inert]")) {
         restoreTarget.focus({ preventScroll: true });
       }
       opener = null;
