@@ -13,9 +13,9 @@ test("Toasts exposes a named notification region and shared stack role", () => {
 });
 
 test("toast stack stays centered above controls and clear of viewport safe areas", () => {
-  assert.match(styles, /\.toast-stack \{[\s\S]*?right: max\(12px, env\(safe-area-inset-right\)\);[\s\S]*?bottom: calc\(90px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?left: max\(12px, env\(safe-area-inset-left\)\);/);
+  assert.match(styles, /\.toast-stack \{[\s\S]*?right: max\(12px, env\(safe-area-inset-right\)\);[\s\S]*?bottom: calc\(90px \+ var\(--workspace-navigation-height, 0px\) \+ env\(safe-area-inset-bottom\)\);[\s\S]*?left: max\(12px, env\(safe-area-inset-left\)\);/);
   assert.match(styles, /\.toast-stack \{[\s\S]*?max-width: 560px;[\s\S]*?margin-inline: auto;[\s\S]*?align-items: center;[\s\S]*?pointer-events: none;/);
-  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.toast-stack \{[\s\S]*?right: max\(8px, env\(safe-area-inset-right\)\);[\s\S]*?bottom: calc\(78px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?left: max\(8px, env\(safe-area-inset-left\)\);/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*?\.toast-stack \{[\s\S]*?right: max\(8px, env\(safe-area-inset-right\)\);[\s\S]*?bottom: calc\(108px \+ var\(--workspace-navigation-height, 0px\) \+ env\(safe-area-inset-bottom\)\);[\s\S]*?left: max\(8px, env\(safe-area-inset-left\)\);/);
   assert.doesNotMatch(styles, /#toasts\s*\{/);
 });
 

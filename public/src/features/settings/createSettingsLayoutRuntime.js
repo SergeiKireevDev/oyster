@@ -10,6 +10,7 @@ import {
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
   SETTINGS_CHANGED_ACTION,
+  LAYOUT_NAVIGATE_ACTION,
 } from "../../runtime/uiActionNames.js";
 
 export function createSettingsLayoutRuntime(deps) {
@@ -43,7 +44,7 @@ export function createSettingsLayoutRuntime(deps) {
   });
 
   const swipe = createCarouselSwipeController({
-    isDesktop: () => deps.windowTarget.matchMedia("(min-width: 761px)").matches,
+    isDesktop: () => deps.windowTarget.matchMedia("(min-width: 1201px)").matches,
     step: (direction) => carousel.step(direction),
     switchRunner: createAdjacentRunnerController({
       getRunners: deps.getRunners,
@@ -65,7 +66,7 @@ export function createSettingsLayoutRuntime(deps) {
   }));
 
   const header = createCarouselHeaderController({
-    isDesktop: () => deps.windowTarget.matchMedia("(min-width: 761px)").matches,
+    isDesktop: () => deps.windowTarget.matchMedia("(min-width: 1201px)").matches,
     hublots: deps.hublotsEl,
     loadHublots: deps.loadScopedResources,
     carousel,
@@ -91,6 +92,7 @@ export function createSettingsLayoutRuntime(deps) {
     deps.uiActions.register(HEADER_CYCLE_THINKING_ACTION, headerActions.cycleThinking),
     deps.uiActions.register(HEADER_OPEN_CONFIG_ACTION, headerActions.openConfig),
     deps.uiActions.register(SETTINGS_CHANGED_ACTION, settingsChanged),
+    deps.uiActions.register(LAYOUT_NAVIGATE_ACTION, (page) => carousel.set(page)),
   ];
 
   const settingsOperations = Object.freeze({

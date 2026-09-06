@@ -28,8 +28,9 @@ export function createCarouselController({
   if (!Number.isFinite(current)) current = 0;
 
   // -1 is the sessions drawer to the left of chat; 1 is the hublot drawer to its right.
-  const clamp = (page) => Math.max(-1, Math.min(1, Number(page) || 0));
-  const isMobile = () => windowTarget.matchMedia("(max-width: 760px)").matches;
+  const hasSessionsDrawer = () => windowTarget.matchMedia("(max-width: 960px)").matches;
+  const clamp = (page) => Math.max(hasSessionsDrawer() ? -1 : 0, Math.min(1, Number(page) || 0));
+  const isMobile = () => windowTarget.matchMedia("(max-width: 1200px)").matches;
   const prefersReducedMotion = () => windowTarget.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sync = () => setPage(current);
 
@@ -79,7 +80,8 @@ export function createCarouselController({
       return;
     }
     current = clamp(current);
-    setDrawerOpen(sessions, current === -1);
+    if (hasSessionsDrawer()) setDrawerOpen(sessions, current === -1);
+    else hideImmediately(sessions);
     setDrawerOpen(hublots, current === 1);
     sync();
   }
@@ -123,7 +125,7 @@ export function createCarouselController({
  */
 export function createMobileDrawerDismissController({ documentTarget, windowTarget, sessions, hublots, getCarousel, isToggleTarget, isOverlayOpen = () => false }) {
   const onClick = (event) => {
-    if (!windowTarget.matchMedia("(max-width: 760px)").matches
+    if (!windowTarget.matchMedia("(max-width: 1200px)").matches
       || isOverlayOpen()
       || event.target.closest?.("#modal, #cmdPalette, #menu")
       || sessions.contains(event.target)
@@ -198,7 +200,7 @@ export function createCarouselHeaderController({ isDesktop, hublots, loadHublots
 export function createCarouselSwipeController({ isDesktop, now = Date.now, step, switchRunner }) {
   let touchStart = null;
   let handled = false;
-  const ignoredSelector = "textarea, input, select, .toast, .pinned-widget-cell, .tutorial-card, #modal, #cmdPalette, #menu";
+  const ignoredSelector = "textarea, input, select, #gate, #carouselIndicator, .drawer-close, .toast, .pinned-widget-cell, .tutorial-card, #modal, #cmdPalette, #menu";
 
   function scrollableCodeSnippet(target) {
     const snippet = target.closest?.(".md pre");

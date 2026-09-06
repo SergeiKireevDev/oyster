@@ -1,5 +1,6 @@
 <script>
   import oysterIcon from "../assets/oyster.png";
+  import { blockingSurface } from "../lib/blockingSurface.js";
   import { getAuthBrowser } from "../runtime/authBrowserContext.js";
 
   const AUTHENTICATION_FAILED = "Authentication failed. Check the token and try again.";
@@ -50,6 +51,7 @@
 
 <div
   id="gate"
+  use:blockingSurface={{ priority: 1000 }}
   role="dialog"
   aria-modal="true"
   aria-labelledby="gateTitle"
@@ -173,7 +175,7 @@
     border-radius: 10px;
     background: var(--panel-2);
     color: var(--text);
-    font: 12.5px var(--mono);
+    font: 16px var(--mono);
     transition: border-color .15s, box-shadow .15s, background .15s;
   }
 

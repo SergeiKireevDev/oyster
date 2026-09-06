@@ -47,17 +47,18 @@ test("session sidebar labels empty sessions consistently", () => {
 });
 
 test("session sidebar retains explicit state and control semantics", () => {
-  assert.match(source, /<aside id="sessions" aria-label="Sessions">/);
+  assert.match(source, /<aside id="sessions" aria-label="Sessions" use:blockingSurface=/);
   assert.match(source, /type="search"[\s\S]*?aria-label="Search sessions"[\s\S]*?aria-busy=\{\$sessionPicker\.searching\}/);
   assert.match(source, /class="session-sidebar-status" role="status" aria-atomic="true"/);
   assert.match(source, /role="img"[\s\S]*?aria-label=\{`Workspace status:/);
   assert.match(source, /class="session-timeline-marker" role="img" aria-label=\{loopStatusLabel\(timelineStatus\)\}/);
   assert.match(source, /aria-expanded=\{expanded\}/);
   assert.match(source, /disabled=\{managing \|\| !\["online", "paused"\]\.includes\(status\)\}/);
-  assert.match(source, /<div class="session-sidebar-workspace-sessions">\s*\{#if !archived\}[\s\S]*?class="session-sidebar-placeholder"[\s\S]*?aria-label=\{`Add session in \$\{group\.cwd\}`\}/);
+  assert.match(source, /<div class="session-sidebar-workspace-sessions">\s*\{#if !archived && !isCurrentCwd\(group\)\}[\s\S]*?class="session-sidebar-placeholder"[\s\S]*?aria-label=\{`Add session in \$\{group\.cwd\}`\}/);
   assert.match(source, /onclick=\{\(\) => createSessionInGroup\(group\)\}/);
   assert.match(source, /<span class="session-sidebar-name">Add session<\/span>/);
   assert.match(source, /const createSessionInGroup/);
+  assert.match(source, /function isCurrentCwd\(group\)[\s\S]*?group\.environmentId[\s\S]*?currentRunner\.environmentId[\s\S]*?group\.workspaceId[\s\S]*?currentRunner\.workspaceId/, "identical paths in different hub workspaces must retain their creation actions");
   assert.doesNotMatch(source, /session-sidebar-cwd-create/);
 
   const { warnings } = compile(source, {

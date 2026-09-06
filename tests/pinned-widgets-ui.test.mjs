@@ -16,10 +16,10 @@ test("right rail is a compact grouped Pinned Widgets launcher", () => {
   assert.match(grid, /PINNED_WIDGET_MOVE_ACTION/);
   assert.match(grid, /pinned-widget-group-icon/);
   assert.match(grid, /draggable=\{widget\.kind !== "builtin"\}/);
-  assert.match(grid, /title: "Workspace visible"/);
-  assert.match(grid, /description: "All sessions in this workspace"/);
+  assert.match(grid, /title: "Across sessions"/);
+  assert.match(grid, /description: "Available to all sessions in this workspace"/);
   assert.match(grid, /title: "Session only"/);
-  assert.match(grid, /description: "Only this session · default"/);
+  assert.match(grid, /description: "Available in this session · default"/);
   assert.ok(grid.indexOf('scope: "workspace"') < grid.indexOf('scope: "session"'));
   assert.match(grid, /application\/x-oyster-widget-group/);
   assert.match(grid, /PINNED_WIDGET_MOVE_GROUP_ACTION/);
@@ -61,7 +61,7 @@ test("right rail groups its controls under semantic section headings", () => {
 test("pinned widget rail keeps creation compact and nests group destinations under Move to", async () => {
   const sidebar = component("HublotSidebar.svelte");
   assert.doesNotMatch(sidebar, />Group<|>Link</);
-  assert.match(sidebar, /id="hublotAdd"[^>]*class="chip sidebar-create-action"[^>]*>[\s\S]*?Add custom from prompt[\s\S]*?<\/button>/);
+  assert.match(sidebar, /id="hublotAdd"[^>]*class="chip sidebar-create-action"[^>]*>[\s\S]*?Create public live interface…[\s\S]*?<\/button>/);
 
   const prompts = [];
   const requests = [];

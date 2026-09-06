@@ -1,18 +1,5 @@
 :root {
-    --bg: #0f1115;
-    --panel: #171a21;
-    --panel-2: #1e222b;
-    --border: #2a2f3a;
-    --text: #e6e9ef;
-    --muted: #8b93a3;
-    --accent: #7aa2f7;
-    --accent-dim: #3d5285;
     --stopped: #343943;
-    --green: #9ece6a;
-    --red: #f7768e;
-    --yellow: #e0af68;
-    --user-bubble: #26436e;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --icon-control-dense: 30px;
     --icon-control-standard: 34px;
     --icon-control-important: 40px;
@@ -180,9 +167,9 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Shared sidebar empty copy; feature-specific empty cards refine this locally. */
   .r-empty { color: var(--muted); font-size: 12px; flex-shrink: 0; }
-  /* on small screens the sidebar becomes a slide-over drawer, toggled by a
-     header chip that only appears there */
-  @media (max-width: 760px) {
+  /* Collapse the secondary rail before sacrificing the conversation width.
+     Sessions remain inline until 960px; both drawers have explicit navigation. */
+  @media (max-width: 1200px) {
     #sessions, #hublots { display: none; }
     #sessions.open {
       display: flex;
@@ -456,7 +443,7 @@
   #modal .m-body input:focus,
   #modal .m-body textarea:focus { border-color: var(--accent-dim); }
   #modal .m-option {
-    display: block; width: 100%; text-align: left;
+    width: 100%; text-align: left;
     background: color-mix(in srgb, var(--text) 2.5%, transparent);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -466,6 +453,7 @@
     margin-bottom: 6px;
     cursor: pointer;
   }
+  #modal button.m-option { display: block; }
   #modal .m-option:hover {
     border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
     background: color-mix(in srgb, var(--accent) 6%, transparent);
@@ -547,7 +535,7 @@
   .toast-stack {
     position: fixed;
     right: max(12px, env(safe-area-inset-right));
-    bottom: calc(90px + env(safe-area-inset-bottom));
+    bottom: calc(90px + var(--workspace-navigation-height, 0px) + env(safe-area-inset-bottom));
     left: max(12px, env(safe-area-inset-left));
     z-index: 60;
     display: flex;
@@ -575,7 +563,8 @@
   --panel-2: #181c25;
   --border: #252a36;
   --text: #f1f3f8;
-  --muted: #858da0;
+  --muted: #939db2;
+  --text-secondary: #aab2c6;
   --accent: #9da9ff;
   --accent-dim: #30375e;
   --green: #78dba9;
@@ -809,11 +798,29 @@ button.toast.actionable:active { transform: translateY(0); }
 .toast.dismissing { opacity: 0; transition: transform .15s ease-out, opacity .15s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 
-@media (max-width: 1080px) and (min-width: 761px) {
-  :root { --sidebar-width: 238px; --rightbar-width: 280px; }
+.drawer-close { display: none; }
+@media (max-width: 1200px) {
+  :root { --workspace-navigation-height: 57px; }
+  .widgets-close { display: block; }
+  .drawer-close { min-height: 44px; flex-shrink: 0; font-size: 13px; text-align: left; }
+  #hublots.open { padding: 18px 14px; background: var(--panel); }
 }
+@media (min-width: 961px) and (max-width: 1200px) {
+  :root { --sidebar-width: 238px; }
+  #sessions { display: flex; }
+}
+@media (max-width: 960px) {
+  .sessions-close { display: block; }
+  #sessions.open { padding: 18px 14px; background: var(--panel); }
+}
+
 @media (max-width: 760px) {
-  .chip { min-height: 30px; padding-inline: 9px; }
+  :root {
+    --icon-control-dense: 44px;
+    --icon-control-standard: 44px;
+    --icon-control-important: 44px;
+  }
+  .chip { min-height: 40px; padding-inline: 9px; }
   #overlay {
     padding:
       max(8px, env(safe-area-inset-top))
@@ -843,7 +850,7 @@ button.toast.actionable:active { transform: translateY(0); }
   .btn { min-height: 38px; padding-inline: 14px; }
   .toast-stack {
     right: max(8px, env(safe-area-inset-right));
-    bottom: calc(78px + env(safe-area-inset-bottom));
+    bottom: calc(108px + var(--workspace-navigation-height, 0px) + env(safe-area-inset-bottom));
     left: max(8px, env(safe-area-inset-left));
   }
   .toast { min-height: 40px; }
@@ -862,6 +869,7 @@ button.toast.actionable:active { transform: translateY(0); }
   --border: #d5dce8;
   --text: #202534;
   --muted: #667085;
+  --text-secondary: #505c73;
   --accent: #5263d8;
   --accent-dim: #dbe1ff;
   --stopped: #aeb7c6;

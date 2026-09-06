@@ -8,6 +8,7 @@ import {
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
   SETTINGS_CHANGED_ACTION,
+  LAYOUT_NAVIGATE_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
 function mount(listeners, uiActions = createUiActionRegistry()) {
@@ -52,6 +53,7 @@ test("settings/layout runtime registers header and settings-change actions until
     HEADER_CYCLE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
     SETTINGS_CHANGED_ACTION,
+    LAYOUT_NAVIGATE_ACTION,
   ].sort());
 
   runtime.teardown();

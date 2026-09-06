@@ -20,7 +20,7 @@ test("auxiliary sidebar composition preserves the direct flex-child layout", () 
 });
 
 test("auxiliary panels expose one semantic visual contract", () => {
-  assert.match(hublots, /<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines">/);
+  assert.match(hublots, /<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines" use:blockingSurface=/);
   assert.match(globalStyles, /\.workspace-aux-sidebar\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?overflow-y:\s*auto;[\s\S]*?border-left:\s*1px solid var\(--border\);[\s\S]*?scrollbar-gutter:\s*stable;/);
 });
 

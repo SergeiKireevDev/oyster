@@ -25,8 +25,8 @@
   const browserActions = getBrowserActions();
   const uiActions = getUiActionRegistry();
   const SECTION_DEFINITIONS = [
-    { scope: "workspace", title: "Workspace visible", description: "All sessions in this workspace" },
-    { scope: "session", title: "Session only", description: "Only this session · default" },
+    { scope: "workspace", title: "Across sessions", description: "Available to all sessions in this workspace" },
+    { scope: "session", title: "Session only", description: "Available in this session · default" },
   ];
   const TOUCH_DRAG_DELAY_MS = 300;
   const TOUCH_DRAG_MOVE_TOLERANCE_PX = 8;
@@ -225,7 +225,13 @@
 
   function widgetTitle(widget) {
     const availability = widget.availability === "ready" ? "" : ` · ${widget.availability}`;
-    return `${widget.label}${availability}`;
+    return `${widget.label}${availability} · ${accessLabel(widget)}`;
+  }
+
+  function accessLabel(widget) {
+    if (widget.kind === "live_interface") return "Public URL";
+    if (widget.kind === "link") return "External link";
+    return "Private";
   }
 
   function readyMedia(widget, kind) {
@@ -334,6 +340,7 @@
         {#if widget.kind === "live_interface" && widget.availability !== "opening"}<span class={`pinned-widget-status status-${widget.availability}`}></span>{/if}
       </span>
       <span class="pinned-widget-label">{widget.label}</span>
+      <span class="pinned-widget-access">{accessLabel(widget)}</span>
     </button>
     {#if widget.kind !== "builtin"}
       <button
@@ -631,6 +638,8 @@
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--panel-2) 74%, transparent);
   }
   .pinned-widget-glyph { font-size: 18px; font-weight: 700; letter-spacing: -.04em; }
+
+  .pinned-widget-access { color: var(--text-secondary); font-size: 11px; line-height: 1.3; }
 
   .pinned-widget-label {
     display: -webkit-box;

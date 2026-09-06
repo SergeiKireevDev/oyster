@@ -141,7 +141,7 @@ test("AuthGate owns a responsive, theme-token-based visual contract", () => {
 
   assert.match(source, /<style>[\s\S]*#gate\s*\{[\s\S]*var\(--bg\)/);
   assert.match(source, /\.card\s*\{[\s\S]*border: 1px solid var\(--border\);[\s\S]*box-shadow: var\(--shadow-lg\)/);
-  assert.match(source, /input\s*\{[\s\S]*font: 12\.5px var\(--mono\)/);
+  assert.match(source, /input\s*\{[\s\S]*font: 16px var\(--mono\)/);
   assert.match(source, /input\[aria-invalid="true"\][^{]*\{[^}]*var\(--red\)/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*env\(safe-area-inset-bottom\)/);
   assert.match(source, /@media \(max-width: 520px\)/);

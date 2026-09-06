@@ -30,7 +30,7 @@ test("settings modal owns token-based selected, focus, disabled, and responsive 
   assert.match(style, /:has\(\.settings-checkbox:focus-visible\)[\s\S]*?border-color:\s*var\(--accent\)/);
   assert.match(style, /:has\(\.settings-checkbox:disabled\)[\s\S]*?opacity:\s*\.45;[\s\S]*?cursor:\s*not-allowed/);
   assert.match(style, /accent-color:\s*var\(--accent\)/);
-  assert.match(style, /\.settings-description\s*\{[\s\S]*?color:\s*var\(--muted\)/);
+  assert.match(style, /\.settings-description\s*\{[\s\S]*?color:\s*var\(--text-secondary\)/);
   assert.match(style, /@media \(max-width: 760px\)[\s\S]*?min-height:\s*40px/);
   assert.match(style, /@media \(max-width: 520px\)[\s\S]*?flex:\s*1 1 100%/);
   assert.doesNotMatch(style, /(?:color|background|border-color):\s*#[\da-f]{3,8}/i);

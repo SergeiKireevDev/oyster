@@ -4,7 +4,13 @@
   import AssistantMessage from "./transcript/AssistantMessage.svelte";
   import CompactionMarker from "./transcript/CompactionMarker.svelte";
   import UserMessage from "./transcript/UserMessage.svelte";
-  import { appSession } from "../stores/appSession.js";
+  import { appSession, appHeader } from "../stores/appSession.js";
+  import EmptyConversation from "./EmptyConversation.svelte";
+  import { getUiActionRegistry } from "../runtime/uiActionContext.js";
+  import { COMPOSER_PREFILL_ACTION } from "../runtime/uiActionNames.js";
+
+  const uiActions = getUiActionRegistry();
+  const chooseStarter = (prompt) => uiActions.invoke(COMPOSER_PREFILL_ACTION, prompt);
   import { checkpointRestores } from "../stores/checkpointRestores.js";
   import { transcriptItems } from "../stores/transcriptItems.js";
   import { interleaveTranscriptActivity } from "../lib/transcriptActivity.js";
@@ -53,6 +59,9 @@
 </script>
 
 <div id="messages" class="transcript" aria-busy={$appSession.busy || $appSession.compacting}>
+  {#if !$transcriptItems.length && $appSession.connected && !$appSession.replayingTranscript && !$appSession.busy && !$appSession.compacting && $appSession.state?.messageCount === 0}
+    <EmptyConversation workdir={$appSession.workdir} model={$appHeader.modelChip} onChoose={chooseStarter} />
+  {/if}
   {#each $transcriptItems as item (item.id)}
     {#if item.kind === "user"}
       <UserMessage

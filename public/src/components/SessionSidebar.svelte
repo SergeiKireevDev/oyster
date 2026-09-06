@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import SearchHitSnippet from "./SearchHitSnippet.svelte";
   import HarnessPill from "./HarnessPill.svelte";
+  import { blockingSurface } from "../lib/blockingSurface.js";
   import { appSession } from "../stores/appSession.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -29,9 +30,11 @@
     SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION,
     SESSION_SIDEBAR_REFRESH_ACTION,
     SESSION_SWITCH_RUNNER_ACTION,
+    LAYOUT_NAVIGATE_ACTION,
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
+  const closeDrawer = () => uiActions.invoke(LAYOUT_NAVIGATE_ACTION, 0);
   const workspaceService = getWorkspaceService();
   const settingsPreferences = getSettingsPreferences();
   const runtimeConfig = globalThis.__OYSTER_RUNTIME_CONFIG__ ?? {};
@@ -656,7 +659,7 @@
 {#snippet SessionRows({ families, group, archived = false, cwd = "", listKey = cwd })}
   {@const familyPage = collectionPage(families, collectionLimits, `families:${listKey}`)}
   <div class="session-sidebar-workspace-sessions">
-    {#if !archived}
+    {#if !archived && !isCurrentCwd(group)}
       <button
         type="button"
         class="session-sidebar-placeholder"
@@ -819,7 +822,8 @@
   </div>
 {/snippet}
 
-<aside id="sessions" aria-label="Sessions">
+<aside id="sessions" aria-label="Sessions" use:blockingSurface={{ drawer: true, media: "(max-width: 960px)", onClose: closeDrawer }}>
+  <button class="chip drawer-close sessions-close" type="button" onclick={closeDrawer} aria-label="Close sessions">← Back to chat</button>
   <div class="side-head">Sessions</div>
   <form role="search" onsubmit={(event) => {
     event.preventDefault();
@@ -1108,7 +1112,7 @@
   .session-sidebar-create-icon { flex: none; color: var(--accent); font-size: 18px; line-height: 1; }
   .session-sidebar-create-copy { display: grid; min-width: 0; line-height: 1.2; }
   .session-sidebar-create-copy strong { color: color-mix(in srgb, var(--accent) 38%, var(--text)); font-size: 12px; font-weight: 650; }
-  .session-sidebar-create-copy small { overflow: hidden; color: var(--muted); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .session-sidebar-create-copy small { overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-create-chevron { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
 
   .session-sidebar-list { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; }
@@ -1288,7 +1292,7 @@
   .session-sidebar-name { font-size: 12.5px; font-weight: 580; }
   .session-sidebar-entry.current .session-sidebar-name { color: var(--selection-text); }
   .session-sidebar-folder { color: var(--muted); font: 10.5px var(--mono); }
-  .session-sidebar-meta { color: var(--muted); font-size: 9.5px; font-weight: 450; }
+  .session-sidebar-meta { color: var(--text-secondary); font-size: 11px; font-weight: 450; }
   .s-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 3%, transparent); }
 
   .session-sidebar-action,
