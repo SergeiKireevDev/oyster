@@ -277,6 +277,13 @@ requests later add abort callbacks plus inactivity and retention timers to flow
 records. The returned `stopOAuth()` calls the service's `shutdown()`, which
 aborts active flows and clears their timers.
 
+When Claude Code is enabled, `createClaudeOAuthRefreshService()` starts one
+unref'd check timer through `scope.guard`. Each tick may read and rewrite
+Claude Code's `.credentials.json` and restart idle Claude Code runners through
+`restartActiveRunners()`; the runner manager's `onHarnessAuthFailure` callback
+invokes the same recovery on demand. The candidate scope defers `stop()`, which
+clears the timer.
+
 ### Other process-facing services
 
 `createPiProcessLauncher()` and `createSessionOperations()` only construct

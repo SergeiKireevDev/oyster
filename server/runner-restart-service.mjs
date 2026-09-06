@@ -40,12 +40,16 @@ export function createRestartActiveRunners({
     throw new RangeError("restartDelayMs must be a non-negative finite number");
   }
 
-  return async function restartActiveRunners({ harness = null } = {}) {
+  return async function restartActiveRunners({ harness = null, idleOnly = false } = {}) {
     if (harness !== null && harness !== "pi" && harness !== "claude-code") {
       throw new TypeError("restart harness must be pi, claude-code, or null");
     }
+    if (typeof idleOnly !== "boolean") throw new TypeError("idleOnly must be a boolean");
     const captured = runnerValues(runners())
       .filter((runner) => runner?.proc && (harness === null || (runner.harness ?? "pi") === harness))
+      // Busy runners keep a still-valid access token in memory and adopt the
+      // rotated grant from disk on their own; only idle ones must reload it.
+      .filter((runner) => !idleOnly || !runner.busy)
       .map((runner) => ({ runner, queuedResumeWork: [...(runner.resumeQueue ?? [])] }));
     const runnerIds = captured.map(({ runner }) => runner.id);
     const failedRunnerIds = new Set();
