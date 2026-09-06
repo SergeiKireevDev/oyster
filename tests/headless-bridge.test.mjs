@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,7 +40,11 @@ async function bridgeRun(t, kind, run, configOverrides = {}) {
     env: { ...process.env, OYSTER_TOKEN: "secret", OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(config) },
     stdio: ["pipe", "pipe", "pipe"],
   });
-  t.after(() => { if (child.exitCode === null) child.kill("SIGKILL"); });
+  t.after(async () => {
+    if (child.exitCode !== null) return;
+    child.kill("SIGTERM");
+    await once(child, "close");
+  });
   const records = [];
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => { try { records.push(JSON.parse(line)); } catch {} });
@@ -48,7 +53,6 @@ async function bridgeRun(t, kind, run, configOverrides = {}) {
   const expected = kind === "amp" ? 4 : 4;
   const deadline = Date.now() + 5000;
   while (records.length < expected && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-  child.kill("SIGTERM");
   return records;
 }
 
