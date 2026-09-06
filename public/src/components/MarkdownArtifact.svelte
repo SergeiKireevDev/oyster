@@ -3,8 +3,8 @@
   import SanitizedMarkdown from "./SanitizedMarkdown.svelte";
   import { createDiagramGestureController, DEFAULT_TRANSFORM } from "../lib/diagramGestureController.js";
 
-  /** @type {{ source?: string; label?: string; onExploreChange?: ((active: boolean) => void) | null }} */
-  let { source = "", label = "Markdown artifact", onExploreChange = null } = $props();
+  /** @type {{ source?: string; label?: string; resolveImageSource?: (source: string) => string | null; onExploreChange?: ((active: boolean) => void) | null }} */
+  let { source = "", label = "Markdown artifact", resolveImageSource, onExploreChange = null } = $props();
 
   const ZOOM_LEVELS = Object.freeze([50, 75, 100, 125, 150, 200, 300, 400, 600, 800, 1000, 1200]);
   const hasRenderableContent = $derived(source.trim().length > 0);
@@ -105,6 +105,7 @@
       className="pinned-markdown-viewer"
       {source}
       {label}
+      {resolveImageSource}
       enableMermaid={true}
       onMermaidExplore={exploreDiagram}
     />

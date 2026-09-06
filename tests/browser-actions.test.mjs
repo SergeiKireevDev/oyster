@@ -31,6 +31,22 @@ test("browser actions use cookie authentication for encoded file downloads", () 
   assert.equal(actions.pinnedWidgetHtmlSource("page/1"), "/pinned-widget-html?id=page%2F1");
 });
 
+test("pinned Markdown image URLs use cookie authentication and reject active schemes", () => {
+  const actions = createBrowserActions({ windowTarget: { open() {} } });
+  for (const src of ["../images/a%20file.png", "/workspace/photo.png", "./a.png?version=1#preview"]) {
+    const url = new URL(actions.pinnedWidgetMarkdownImageSource("doc + 1", src), "https://oyster.test");
+    assert.equal(url.pathname, "/pinned-widget-media");
+    assert.equal(url.searchParams.get("id"), "doc + 1");
+    assert.equal(url.searchParams.get("src"), src);
+    assert.equal(url.searchParams.has("token"), false);
+  }
+  assert.equal(actions.pinnedWidgetMarkdownImageSource("doc", "https://example.test/a.png?x=1&y=2"), "https://example.test/a.png?x=1&y=2");
+  assert.equal(actions.pinnedWidgetMarkdownImageSource("doc", "//example.test/a.png"), "https://example.test/a.png");
+  for (const src of ["", "#fragment", "?query", "javascript:alert(1)", "DATA:image/png;base64,a", "file:///tmp/a.png", "https://example.test/\nevil"]) {
+    assert.equal(actions.pinnedWidgetMarkdownImageSource("doc", src), null);
+  }
+});
+
 test("pinned widget components use injected browser actions without direct window access", () => {
   const manager = readFileSync(new URL("../public/src/components/HublotManagerModal.svelte", import.meta.url), "utf8");
   const viewer = readFileSync(new URL("../public/src/components/PinnedWidgetViewerModal.svelte", import.meta.url), "utf8");
@@ -41,6 +57,8 @@ test("pinned widget components use injected browser actions without direct windo
   assert.match(viewer, /browserActions\.fileDownload\(/);
   assert.match(viewer, /browserActions\.pinnedWidgetMediaSource\(widget\.id\)/);
   assert.match(viewer, /browserActions\.pinnedWidgetHtmlSource\(widget\.id\)/);
+  assert.match(viewer, /browserActions\.pinnedWidgetMarkdownImageSource\(widget\.id, source\)/);
+  assert.match(viewer, /resolveImageSource=\{resolveMarkdownImage\}/);
   assert.match(grid, /browserActions\.pinnedWidgetMediaSource\(widget\.id\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_OPEN_ACTION, widget\)/);
   assert.match(sidebar, /<button\s+[^>]*type="button"[^>]*id="hublotAdd"[^>]*onclick=\{showWidgetManager\}[^>]*>/);

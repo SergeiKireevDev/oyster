@@ -188,6 +188,50 @@ async function body(page, { mobile = false } = {}) {
   await expect(liveWidget).toHaveClass(/unavailable/);
 }
 
+test("pinned Markdown loads relative, absolute, and remote images privately", async ({ page, browser }) => {
+  await login(page);
+  const sessionId = await waitFor(() => currentSessionId(page), { timeout: 30000, label: "a session id" });
+  const directory = `/workspace/markdown-images-${Date.now()}`;
+  dexec(`mkdir -p '${directory}/docs' '${directory}/images'`);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="red"/></svg>';
+  expect((await api("POST", "/file-save", { path: `${directory}/images/a #1.svg`, content: svg })).status).toBe(200);
+  const remoteUrl = "https://markdown-images.example.test/photo.svg";
+  await page.route(remoteUrl, (route) => route.fulfill({ contentType: "image/svg+xml", body: svg }));
+  const markdown = [
+    "# Images",
+    '![Relative](../images/a%20%231.svg "Relative image")',
+    `![Absolute](${directory}/images/a%20%231.svg)`,
+    `![Remote](${remoteUrl})`,
+    "`![Code](../images/a%20%231.svg)`",
+    "![Unsafe](javascript:alert(1))",
+  ].join("\n\n");
+  expect((await api("POST", "/file-save", { path: `${directory}/docs/report.md`, content: markdown })).status).toBe(200);
+  const created = await api("POST", "/pinned-widgets", { path: `${directory}/docs/report.md`, sessionId });
+  expect(created.status).toBe(201);
+  const widget = page.locator("#hublots .pinned-widget-cell", { hasText: "report.md" }).first();
+  await widget.locator(".pinned-widget-tile").click();
+  const reader = page.locator(".pinned-markdown-viewer");
+  await expect(reader.locator("img")).toHaveCount(3);
+  for (const alt of ["Relative", "Absolute", "Remote"]) {
+    const image = reader.getByRole("img", { name: alt, exact: true });
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((node) => node.complete && node.naturalWidth > 0)).toBe(true);
+    await expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
+  }
+  const localSource = await reader.getByRole("img", { name: "Relative", exact: true }).getAttribute("src");
+  expect(localSource).toContain("/pinned-widget-media?");
+  expect(localSource).not.toContain("token=");
+  const anonymous = await browser.newContext();
+  try {
+    const denied = await anonymous.request.get(new URL(localSource, page.url()).href);
+    expect(denied.status()).toBe(401);
+  } finally { await anonymous.close(); }
+  await expect(reader.locator("code")).toHaveText("![Code](../images/a%20%231.svg)");
+  await page.locator(".pinned-widget-viewer-actions .chip", { hasText: "Close" }).click();
+  await widget.locator(".pinned-widget-tile").click();
+  await expect(reader.locator("img")).toHaveCount(3);
+});
+
 test("pinned Markdown renders Mermaid diagrams", async ({ page }) => {
   await login(page);
   const sessionId = await waitFor(() => currentSessionId(page), {

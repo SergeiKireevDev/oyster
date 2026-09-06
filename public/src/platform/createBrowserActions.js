@@ -29,6 +29,14 @@ export function createBrowserActions({ windowTarget, storage }) {
     pinnedWidgetMediaSource(id) {
       return `/pinned-widget-media?id=${encodeURIComponent(String(id ?? ""))}`;
     },
+    pinnedWidgetMarkdownImageSource(id, source) {
+      const src = String(source ?? "").trim();
+      if (!src || /[\x00-\x1f\x7f]/.test(src)) return null;
+      if (/^https?:\/\//i.test(src)) return src;
+      if (src.startsWith("//")) return `https:${src}`;
+      if (/^[a-z][a-z\d+.-]*:/i.test(src) || src.startsWith("#") || src.startsWith("?")) return null;
+      return `/pinned-widget-media?id=${encodeURIComponent(String(id ?? ""))}&src=${encodeURIComponent(src)}`;
+    },
     pinnedWidgetHtmlSource(id) {
       return `/pinned-widget-html?id=${encodeURIComponent(String(id ?? ""))}`;
     },

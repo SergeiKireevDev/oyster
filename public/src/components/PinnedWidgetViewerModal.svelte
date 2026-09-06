@@ -44,6 +44,10 @@
   const previewLabel = $derived(`${widget.label || "Pinned widget"} preview`);
   const diagramExplorerActive = $derived(diagramExplorerWidgetId === widget.id);
 
+  function resolveMarkdownImage(source) {
+    return browserActions.pinnedWidgetMarkdownImageSource(widget.id, source);
+  }
+
   function setDiagramExplorerActive(active) {
     diagramExplorerWidgetId = active ? widget.id : null;
   }
@@ -122,7 +126,7 @@
       {:else if widget.kind === "video"}
         <VideoArtifact src={source} label={widget.label} autoplay={true} />
       {:else if widget.kind === "markdown"}
-        <MarkdownArtifact source={widget.content ?? ""} label={widget.label} onExploreChange={setDiagramExplorerActive} />
+        <MarkdownArtifact source={widget.content ?? ""} label={widget.label} resolveImageSource={resolveMarkdownImage} onExploreChange={setDiagramExplorerActive} />
       {:else if widget.kind === "monitoring"}
         <MonitoringArtifact content={widget.content ?? ""} format={widget.format ?? "text"} />
       {:else if isHtml}

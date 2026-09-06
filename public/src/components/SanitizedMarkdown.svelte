@@ -3,10 +3,10 @@
   import { createMermaidResultsStore } from "../lib/mermaidRenderer.js";
 
   /** @typedef {"article" | "div"} RootElement */
-  /** @typedef {{ source?: string; element?: RootElement; className?: string; label?: string; enableMermaid?: boolean; onMermaidExplore?: (diagram: { index: number; source: string }) => void }} Props */
+  /** @typedef {{ source?: string; element?: RootElement; className?: string; label?: string; resolveImageSource?: (source: string) => string | null; enableMermaid?: boolean; onMermaidExplore?: (diagram: { index: number; source: string }) => void }} Props */
 
   /** @type {Props} */
-  let { source = "", element = "div", className = "", label, enableMermaid = false, onMermaidExplore } = $props();
+  let { source = "", element = "div", className = "", label, resolveImageSource, enableMermaid = false, onMermaidExplore } = $props();
 
   /** @param {unknown} value */
   function optionalTrimmedString(value) {
@@ -24,6 +24,7 @@
   const mermaidResultsStore = $derived(createMermaidResultsStore(mermaidSources));
   const renderedHtml = $derived(renderSanitizedMarkdown(source, {
     enableMermaid,
+    resolveImageSource,
     mermaidResults: $mermaidResultsStore,
     showMermaidExplore: typeof onMermaidExplore === "function",
   }));
