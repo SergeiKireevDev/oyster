@@ -7,7 +7,8 @@ function oauthTarget(value) {
   return { provider: value?.provider, harness: value?.harness === "claude-code" ? "claude-code" : "pi" };
 }
 
-function harnessName(harness) {
+function harnessName(harness, row = null) {
+  if (Array.isArray(row?.harnesses) && row.harnesses.includes("claude-code")) return "pi and Claude Code";
   return harness === "claude-code" ? "Claude Code" : "pi";
 }
 
@@ -208,7 +209,7 @@ export function createCredentialsController({
     const { provider, harness } = oauthTarget(target);
     const row = providers.find((item) => item.provider === provider && (item.harness ?? "pi") === harness);
     const name = providerName(row ?? { provider });
-    const label = harnessName(harness);
+    const label = harnessName(harness, row);
     const replacing = Boolean(row?.credentialType);
     const accepted = await confirm(
       row?.credentialType === "oauth" ? `Re-authenticate ${name} for ${label}?` : `Sign in to ${name} for ${label}?`,
@@ -286,7 +287,7 @@ export function createCredentialsController({
     const { provider, harness } = oauthTarget(target);
     const row = providers.find((item) => item.provider === provider && (item.harness ?? "pi") === harness);
     const name = providerName(row ?? { provider });
-    const label = harnessName(harness);
+    const label = harnessName(harness, row);
     const accepted = await confirm(
       `Sign out ${name} from ${label}?`,
       `Remove the OAuth credential from ${label} and restart every active ${label} process? This does not revoke access at the provider.`,
