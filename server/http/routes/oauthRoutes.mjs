@@ -36,12 +36,12 @@ function providerInput(body) {
     return { error: "valid provider required" };
   }
   const harness = body.harness ?? "pi";
-  if (harness !== "pi" && harness !== "claude-code") return { error: "valid harness required" };
+  if (!new Set(["pi", "claude-code", "gemini", "amp"]).has(harness)) return { error: "valid harness required" };
   return { provider, harness };
 }
 
 function providerHarness(provider) {
-  return provider?.harness === "claude-code" ? "claude-code" : "pi";
+  return typeof provider?.harness === "string" ? provider.harness : "pi";
 }
 
 function flowInput(body) {
@@ -182,8 +182,9 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         json(res, 503, { error: "OAuth service unavailable" });
         return;
       }
+      let removedCredential;
       try {
-        await credentialService.logoutOAuth(input.provider, { harness: input.harness });
+        removedCredential = await credentialService.logoutOAuth(input.provider, { harness: input.harness });
       } catch (error) {
         operationError(res, error);
         return;
@@ -204,14 +205,23 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       const result = {
         credential: {
           provider: input.provider,
-          ...(input.harness === "claude-code" ? { harness: input.harness } : {}),
+          ...(input.harness !== "pi" ? { harness: input.harness } : {}),
           removed: true,
         },
         source,
         upstreamRevoked: false,
       };
       try {
-        const restart = publicRestartResult(await restartActiveRunners({ harness: input.harness }));
+        const harnesses = Array.isArray(removedCredential?.harnesses) && removedCredential.harnesses.length
+          ? [...new Set(removedCredential.harnesses)] : [input.harness];
+        const rawRestarts = await Promise.all(harnesses.map((harness) => restartActiveRunners({ harness })));
+        const restarts = rawRestarts.map(publicRestartResult);
+        if (restarts.some((item) => !item)) throw new TypeError("invalid runner restart result");
+        const restart = publicRestartResult({
+          status: restarts.some((item) => item.status !== "restarted") ? "partial" : "restarted",
+          runnerIds: restarts.flatMap((item) => item.runnerIds),
+          failedRunnerIds: restarts.flatMap((item) => item.failedRunnerIds ?? []),
+        });
         if (!restart) throw new TypeError("invalid runner restart result");
         if (restart.status === "partial") {
           json(res, 503, {

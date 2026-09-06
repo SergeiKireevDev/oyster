@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync, closeSync, constants, fstatSync, mkdtempSync, openSync,
+  readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { createCodexOAuthCredentialSink } from "../codex-oauth-credential-sink.mjs";
 
 function fail(message) {
   process.stderr.write(`[oyster bridge] ${message}\n`);
@@ -32,6 +36,29 @@ function tomlString(value) {
   return JSON.stringify(String(value));
 }
 
+function readJsonCredential(path) {
+  if (typeof path !== "string" || !path) return null;
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    if (!fstatSync(descriptor).isFile()) return null;
+    return JSON.parse(readFileSync(descriptor, "utf8"));
+  } catch { return null; }
+  finally { if (descriptor !== undefined) closeSync(descriptor); }
+}
+
+function projectCodexOAuth(env) {
+  const credential = readJsonCredential(config.piAuthPath)?.["openai-codex"];
+  if (credential?.type !== "oauth" || typeof credential.access !== "string" || !credential.access || typeof config.codexHome !== "string") return;
+  createCodexOAuthCredentialSink({ configDir: config.codexHome }).project(credential);
+  env.CODEX_HOME = config.codexHome;
+}
+
+function geminiOAuthAccess() {
+  const credential = readJsonCredential(config.geminiOAuthPath);
+  return credential?.type === "oauth" && typeof credential.access === "string" && credential.access ? credential.access : null;
+}
+
 function codexArgs(run) {
   const common = [
     "--json",
@@ -49,12 +76,13 @@ function codexArgs(run) {
   return ["exec", "--sandbox", config.sandbox ?? "workspace-write", ...common, run.prompt];
 }
 
-function ensureGeminiSettings() {
+function ensureGeminiSettings(hasOAuth) {
   if (geminiSettingsDir) return join(geminiSettingsDir, "settings.json");
   geminiSettingsDir = mkdtempSync(join(tmpdir(), "oyster-gemini-"));
   chmodSync(geminiSettingsDir, 0o700);
   const path = join(geminiSettingsDir, "settings.json");
   writeFileSync(path, JSON.stringify({
+    ...(hasOAuth ? { security: { auth: { selectedType: "oauth-personal" } } } : {}),
     mcpServers: {
       oyster: {
         httpUrl: config.mcpUrl,
@@ -86,6 +114,7 @@ function ampArgs(run) {
       url: config.mcpUrl,
       headers: { Authorization: "Bearer ${OYSTER_TOKEN}" },
     } }),
+    ...(typeof config.ampSettingsPath === "string" ? ["--settings-file", config.ampSettingsPath] : []),
     ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
   ];
   return run.resume && run.sessionId
@@ -99,7 +128,15 @@ function spawnChild(run) {
   const args = config.kind === "codex" ? codexArgs(run) : config.kind === "gemini" ? geminiArgs(run) : ampArgs(run);
   const env = { ...process.env };
   delete env.OYSTER_HEADLESS_BRIDGE_CONFIG;
-  if (config.kind === "gemini") env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = ensureGeminiSettings();
+  if (config.kind === "codex") projectCodexOAuth(env);
+  if (config.kind === "gemini") {
+    const access = geminiOAuthAccess();
+    env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = ensureGeminiSettings(Boolean(access));
+    if (access) {
+      env.GOOGLE_GENAI_USE_GCA = "true";
+      env.GOOGLE_CLOUD_ACCESS_TOKEN = access;
+    }
+  }
   output({ type: "oyster.bridge.turn_start" });
   child = spawn(config.bin, args, { cwd: config.cwd, stdio: [config.kind === "amp" ? "pipe" : "ignore", "pipe", "pipe"], env });
   const childOutput = createInterface({ input: child.stdout });

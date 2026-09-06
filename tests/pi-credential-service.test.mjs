@@ -325,7 +325,7 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
       onManualCodeInput: async () => { events.push(["manual"]); return "manual-answer"; },
       signal,
     });
-    assert.deepEqual(credential, { provider: "mock-oauth", credentialType: "oauth" });
+    assert.deepEqual(credential, { provider: "mock-oauth", credentialType: "oauth", harnesses: ["pi"] });
     assert.deepEqual(events.map(([type]) => type), ["auth", "device", "progress", "prompt", "select", "manual"]);
     assert.equal(statSync(authPath).mode & 0o777, 0o600);
 
@@ -364,9 +364,9 @@ test("OAuth adapter forwards Pi callbacks, protects credential types, and preser
     let oauthStored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(oauthStored["mock-oauth"].enterpriseUrl, "https://enterprise.invalid");
     assert.equal(oauthStored["concurrent-refresh"].refresh, "fresh-refresh");
-    assert.deepEqual(await service.logoutOAuth("mock-oauth"), { provider: "mock-oauth", removed: true });
+    assert.deepEqual(await service.logoutOAuth("mock-oauth"), { provider: "mock-oauth", removed: true, harnesses: ["pi"] });
 
-    assert.deepEqual(await service.logoutOAuth("orphan-oauth"), { provider: "orphan-oauth", removed: true });
+    assert.deepEqual(await service.logoutOAuth("orphan-oauth"), { provider: "orphan-oauth", removed: true, harnesses: ["pi"] });
     stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(stored["orphan-oauth"], undefined);
     assert.equal(stored["api-only"].key, "unrelated-replacement-canary");
@@ -416,7 +416,7 @@ test("Anthropic OAuth login mirrors one shared grant into the pi and Claude Code
     });
     const callbacks = { onAuth() {}, onDeviceCode() {}, async onPrompt() {}, async onSelect() {} };
 
-    assert.deepEqual(await service.loginOAuth("anthropic", callbacks), { provider: "anthropic", credentialType: "oauth" });
+    assert.deepEqual(await service.loginOAuth("anthropic", callbacks), { provider: "anthropic", credentialType: "oauth", harnesses: ["pi", "claude-code"] });
     let piStored = JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8"));
     let claudeStored = JSON.parse(readFileSync(claudePath, "utf8"));
     assert.equal(piStored.anthropic.access, "access-1-canary");
@@ -428,7 +428,7 @@ test("Anthropic OAuth login mirrors one shared grant into the pi and Claude Code
 
     await assert.rejects(service.loginOAuth("anthropic", callbacks, { harness: "claude-code" }), { code: "credential_replace_required" });
     assert.deepEqual(await service.loginOAuth("anthropic", callbacks, { harness: "claude-code", replace: true }), {
-      provider: "anthropic", harness: "claude-code", credentialType: "oauth",
+      provider: "anthropic", harness: "claude-code", credentialType: "oauth", harnesses: ["pi", "claude-code"],
     });
     piStored = JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8"));
     claudeStored = JSON.parse(readFileSync(claudePath, "utf8"));
@@ -440,14 +440,14 @@ test("Anthropic OAuth login mirrors one shared grant into the pi and Claude Code
     assert.deepEqual(connections[0].harnesses, ["pi", "claude-code"]);
 
     assert.deepEqual(await service.logoutOAuth("anthropic", { harness: "claude-code" }), {
-      provider: "anthropic", harness: "claude-code", removed: true,
+      provider: "anthropic", harness: "claude-code", removed: true, harnesses: ["claude-code"],
     });
     assert.equal(JSON.parse(readFileSync(claudePath, "utf8")).claudeAiOauth, undefined, "unlinking Claude Code keeps pi's grant");
     assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic.access, "access-1-canary");
     assert.deepEqual(await service.syncClaudeOAuth(), { outcome: "synced", source: "pi", expiresAt: 1800000000001 });
     assert.equal(JSON.parse(readFileSync(claudePath, "utf8")).claudeAiOauth.accessToken, "access-1-canary");
 
-    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true });
+    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true, harnesses: ["pi", "claude-code"] });
     assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic, undefined);
     const afterLogout = JSON.parse(readFileSync(claudePath, "utf8"));
     assert.equal(afterLogout.claudeAiOauth, undefined, "logging pi out of the shared grant clears Claude Code's mirror");
@@ -515,7 +515,7 @@ test("Claude Code OAuth login establishes the shared grant through the modern Pi
     assert.deepEqual(await service.loginOAuth("anthropic", {
       onAuth(value) { events.push(value); }, onDeviceCode() {}, async onPrompt() {}, async onSelect() {},
     }, { harness: "claude-code" }), {
-      provider: "anthropic", harness: "claude-code", credentialType: "oauth",
+      provider: "anthropic", harness: "claude-code", credentialType: "oauth", harnesses: ["pi", "claude-code"],
     });
     assert.equal(events[0].url, "https://auth.invalid/claude");
     assert.equal(JSON.parse(readFileSync(join(item.agentDir, "auth.json"), "utf8")).anthropic.access, "claude-access-canary", "the grant lands in pi's store");
@@ -668,7 +668,7 @@ test("Claude Code credential failures do not mutate Pi OAuth storage", async () 
     const callbacks = { onAuth() {}, onDeviceCode() {}, async onPrompt() {}, async onSelect() {} };
 
     assert.deepEqual(await service.loginOAuth("anthropic", callbacks, { replace: true }), {
-      provider: "anthropic", credentialType: "oauth",
+      provider: "anthropic", credentialType: "oauth", harnesses: ["pi"],
     });
     assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.access, "new-access-canary");
     assert.equal(readFileSync(claudePath, "utf8"), "{malformed");
@@ -677,7 +677,7 @@ test("Claude Code credential failures do not mutate Pi OAuth storage", async () 
       code: "claude_credential_sync_failed",
     });
     assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic.access, "new-access-canary");
-    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true });
+    assert.deepEqual(await service.logoutOAuth("anthropic"), { provider: "anthropic", removed: true, harnesses: ["pi", "claude-code"] });
     assert.equal(JSON.parse(readFileSync(authPath, "utf8")).anthropic, undefined);
     await assert.rejects(service.logoutOAuth("anthropic", { harness: "claude-code" }), {
       code: "claude_credential_sync_failed",
@@ -844,4 +844,76 @@ test("provider listing shows one shared Anthropic connection, or a separate Clau
   } finally {
     item.cleanup();
   }
+});
+
+
+test("credential status exposes one provider login across compatible native harnesses", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-native-credential-status-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const gemini = {
+    configured: false,
+    status() { return { configured: this.configured }; },
+    async login() { this.configured = true; },
+    remove() { this.configured = false; return true; },
+  };
+  const amp = {
+    configured: false,
+    status() { return { configured: this.configured }; },
+    async login() { this.configured = true; },
+    async remove() { this.configured = false; return true; },
+  };
+  const service = createPiCredentialService({
+    config: { PI_BIN: LOCAL_PI, PI_AGENT_DIR: root },
+    codexOAuthCredentialSink: { status: () => ({ configured: false }), project() {}, remove() {} },
+    geminiOAuthCredentialSink: gemini,
+    ampOAuthCredentialSink: amp,
+  });
+  const providers = await service.listProviders();
+  assert.deepEqual(providers.find((item) => item.provider === "openai-codex").harnesses, ["pi", "codex"]);
+  assert.deepEqual(providers.find((item) => item.harness === "gemini"), {
+    provider: "google-gemini-cli", harness: "gemini", displayName: "Google Gemini CLI",
+    registered: true, oauthCapable: true, oauthDisplayName: "Google account",
+    credentialType: null, source: "not_configured", configured: false,
+  });
+  assert.equal(providers.find((item) => item.harness === "amp").provider, "amp");
+
+  const callbacks = { onAuth() {}, onDeviceCode() {}, onPrompt: async () => "", onSelect: async () => "" };
+  assert.deepEqual(await service.loginOAuth("google-gemini-cli", callbacks, { harness: "gemini" }), {
+    provider: "google-gemini-cli", harness: "gemini", credentialType: "oauth", harnesses: ["gemini"],
+  });
+  assert.equal((await service.listProviders()).find((item) => item.harness === "gemini").configured, true);
+  assert.deepEqual(await service.logoutOAuth("google-gemini-cli", { harness: "gemini" }), {
+    provider: "google-gemini-cli", harness: "gemini", removed: true, harnesses: ["gemini"],
+  });
+});
+
+
+test("shared OpenAI Codex OAuth rotates once in pi storage for both pi and Codex", async (t) => {
+  const item = fixture({ sdkSource: `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const provider = { id: "openai-codex", name: "ChatGPT", async refresh(value) { return { type: "oauth", access: "access-new", refresh: "refresh-new", expires: value.expires + 3600000 }; } };
+    export class AuthStorage {
+      static create(path) { return new AuthStorage(path); }
+      constructor(path) { this.path = path; this.reload(); }
+      reload() { this.data = JSON.parse(readFileSync(this.path, "utf8")); }
+      drainErrors() { return []; }
+      get(id) { this.reload(); return this.data[id]; }
+      list() { return Object.keys(this.data); }
+      getOAuthProviders() { return [provider]; }
+      async modify(id, fn) { this.reload(); const next = await fn(this.data[id]); if (next !== undefined) { this.data[id] = next; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); } return this.data[id]; }
+    }
+    export class ModelRegistry { static create() { return {}; } }
+  ` });
+  t.after(item.cleanup);
+  const authPath = join(item.agentDir, "auth.json");
+  writeFileSync(authPath, JSON.stringify({ "openai-codex": { type: "oauth", access: "access-old", refresh: "refresh-old", expires: 1000 } }), { mode: 0o600 });
+  let projected;
+  const service = createPiCredentialService({
+    config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir },
+    codexOAuthCredentialSink: { status: () => ({ configured: true }), project(value) { projected = value; }, remove() {} },
+  });
+  const result = await service.rotateProviderOAuth("openai-codex", { force: true, now: () => 1000, reason: "test" });
+  assert.deepEqual(result, { outcome: "refreshed", reason: "test", rotated: true, expiresAt: 3601000, refreshTokenExpiresAt: null });
+  assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8"))["openai-codex"], { type: "oauth", access: "access-new", refresh: "refresh-new", expires: 3601000 });
+  assert.equal(projected.access, "access-new");
 });

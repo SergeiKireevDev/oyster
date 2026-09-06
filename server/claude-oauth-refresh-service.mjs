@@ -39,6 +39,8 @@ export function createClaudeOAuthRefreshService({
   setTimer = setTimeout,
   clearTimer = clearTimeout,
   logger = console,
+  providerLabel = "Anthropic",
+  runnerLabel = "Claude Code",
 } = {}) {
   requireFunction(rotate, "rotate");
   requireFunction(restartRunners, "restartRunners");
@@ -59,7 +61,7 @@ export function createClaudeOAuthRefreshService({
     try {
       return await restartRunners({ reason });
     } catch (error) {
-      logger.error(`[oyster] Claude Code runner restart after OAuth ${reason} failed: ${errorMessage(error)}`);
+      logger.error(`[oyster] ${runnerLabel} runner restart after OAuth ${reason} failed: ${errorMessage(error)}`);
       return null;
     }
   }
@@ -69,21 +71,21 @@ export function createClaudeOAuthRefreshService({
     try {
       result = await rotate({ reason, force, marginMs });
     } catch (error) {
-      logger.warn(`[oyster] Anthropic OAuth upkeep could not run (${reason}); will retry: ${errorMessage(error)}`);
+      logger.warn(`[oyster] ${providerLabel} OAuth upkeep could not run (${reason}); will retry: ${errorMessage(error)}`);
       return Object.freeze({ outcome: "failed", reason, error: errorMessage(error) });
     }
     if (result?.outcome === "reauth_required") {
-      if (!reauthLogged) logger.error(`[oyster] Anthropic OAuth refresh rejected (${reason}); re-authenticate from the Credentials modal`);
+      if (!reauthLogged) logger.error(`[oyster] ${providerLabel} OAuth refresh rejected (${reason}); re-authenticate from the Credentials modal`);
       reauthLogged = true;
       return result;
     }
     reauthLogged = false;
     if (result?.outcome === "failed") {
-      logger.warn(`[oyster] Anthropic OAuth refresh failed (${reason}); will retry: ${result.error ?? "unknown error"}`);
+      logger.warn(`[oyster] ${providerLabel} OAuth refresh failed (${reason}); will retry: ${result.error ?? "unknown error"}`);
       return result;
     }
     if (result?.outcome !== "refreshed") return result;
-    logger.log(`[oyster] Anthropic OAuth token ${result.rotated ? "rotated" : "adopted from a concurrent update"} (${reason}); `
+    logger.log(`[oyster] ${providerLabel} OAuth token ${result.rotated ? "rotated" : "adopted from a concurrent update"} (${reason}); `
       + `access expires ${isoOrNull(result.expiresAt)}, refresh token expires ${isoOrNull(result.refreshTokenExpiresAt) ?? "unknown"}`);
     return Object.freeze({ ...result, restart: await restart(reason) });
   }
@@ -110,7 +112,7 @@ export function createClaudeOAuthRefreshService({
 
   function tick() {
     refreshNow({ reason: "scheduled" }).catch((error) => {
-      logger.error(`[oyster] Anthropic OAuth upkeep failed: ${errorMessage(error)}`);
+      logger.error(`[oyster] ${providerLabel} OAuth upkeep failed: ${errorMessage(error)}`);
     });
   }
 

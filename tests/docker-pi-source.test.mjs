@@ -48,6 +48,8 @@ test("both runtime images include hublot, Git server, and every bundled agent ha
     assert.match(dockerfile, /codex --version \| grep -q '0\\\.153\\\.4'/);
     assert.match(dockerfile, /gemini --version \| grep -q '\^0\\\.58\\\.0'/);
     assert.match(dockerfile, /COPY extensions \.\/extensions/);
+    assert.match(dockerfile, /mkdir -p[^\n]*\/home\/node\/\.codex[^\n]*\/home\/node\/\.config\/amp/);
+    assert.match(dockerfile, /chown -R node:node[^\n]*\/home\/node\/\.codex[^\n]*\/home\/node\/\.config/);
   }
 });
 

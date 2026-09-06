@@ -79,6 +79,28 @@ test("OAuth flow coordinator carries harness identity through login and targeted
   assert.throws(() => service.start("anthropic", { harness: "other" }), { code: "invalid_harness" });
 });
 
+test("one provider flow restarts every compatible harness without exposing credentials", async () => {
+  const calls = [];
+  const service = createPiOAuthFlowService({
+    registry: new Map(),
+    credentialService: {
+      async loginOAuth() { return { access: "must-not-leak", harnesses: ["pi", "codex"] }; },
+    },
+    async restartActiveRunners({ harness }) {
+      calls.push(harness);
+      return { status: "restarted", runnerIds: [`${harness}-runner`] };
+    },
+    randomBytes: deterministicBytes(),
+  });
+  const started = service.start("openai-codex");
+  await settle();
+  const completed = service.getStatus(started.flowId);
+  assert.deepEqual(calls, ["pi", "codex"]);
+  assert.deepEqual(completed.harnesses, ["pi", "codex"]);
+  assert.deepEqual(completed.restart, { status: "restarted", runnerIds: ["pi-runner", "codex-runner"] });
+  assert.doesNotMatch(JSON.stringify(completed), /must-not-leak/);
+});
+
 test("OAuth flow coordinator adapts interactive callbacks with one-time bounded responses", async () => {
   const registry = new Map();
   const login = deferred();

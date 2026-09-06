@@ -3,13 +3,15 @@
 # Build:  docker build -t oyster .
 # Run:    docker run -d -p 4000:4000 \
 #           -e OYSTER_TOKEN=<token> \
-#           -v ~/.pi/agent/auth.json:/home/node/.pi/agent/auth.json:ro \
-#           -v ~/.pi/agent/models.json:/home/node/.pi/agent/models.json:ro \
+#           -v oyster-pi-agent:/home/node/.pi/agent \
+#           -v oyster-claude:/home/node/.claude \
+#           -v oyster-codex:/home/node/.codex \
+#           -v oyster-amp:/home/node/.config/amp \
 #           --name oyster oyster
 #
-#         The auth.json/models.json mounts give the pi agent its LLM
-#         credentials — without them the chat gets no answers (model shows
-#         as "unknown"). Alternatively pass -e ANTHROPIC_API_KEY=sk-...
+#         Open Credentials in Oyster and sign in once per provider. The
+#         writable volumes retain grants and native sessions. Provider API-key
+#         environment variables remain supported as fallbacks.
 # Token:  docker logs oyster | grep "auth token"
 # Open:   http://localhost:4000/#token=<TOKEN>
 
@@ -85,9 +87,9 @@ RUN npm run build
 
 # Register the bundled pi extensions (file-explorer, hublot, loop, routine).
 # Other harnesses reach the same tools through the server's /mcp endpoint.
-RUN mkdir -p /home/node/.pi/agent/extensions /home/node/.claude \
+RUN mkdir -p /home/node/.pi/agent/extensions /home/node/.pi/agent/harnesses /home/node/.claude /home/node/.codex /home/node/.config/amp \
     && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
-    && chown -R node:node /home/node/.pi /home/node/.claude
+    && chown -R node:node /home/node/.pi /home/node/.claude /home/node/.codex /home/node/.config
 
 # Bundle the deterministic mock LLM (OpenAI-compatible) used by the e2e suite,
 # plus the entrypoint that activates it when E2E_MOCK_LLM=1. This keeps the

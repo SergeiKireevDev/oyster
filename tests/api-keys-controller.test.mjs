@@ -181,6 +181,23 @@ test("credentials controller targets Claude Code OAuth independently from pi", a
   assert.match(signOut.toasts[0].message, /Claude Code/);
 });
 
+test("credentials controller sends native harness identity for Gemini and Amp sign-in", async () => {
+  for (const [provider, harnessId, label] of [["google-gemini-cli", "gemini", "Gemini CLI"], ["amp", "amp", "Amp"]]) {
+    const flowId = harnessId[0].repeat(64);
+    const row = { provider, harness: harnessId, displayName: label, credentialType: null, oauthCapable: true };
+    const item = harness([
+      response(200, { providers: [row] }),
+      response(202, { flow: { flowId, provider, harness: harnessId, status: "pending" } }),
+    ], [true]);
+    item.controller.activate();
+    await item.controller.load();
+    assert.equal((await item.controller.startOAuth(row)).ok, true);
+    assert.deepEqual(JSON.parse(item.calls[1].options.body), { provider, harness: harnessId, replace: false });
+    assert.match(item.confirms[0].title, new RegExp(label));
+    item.controller.teardown();
+  }
+});
+
 test("OAuth providers skip browser selection whenever they offer device-code login", async () => {
   const flowId = "d".repeat(64);
   const requestId = "e".repeat(64);

@@ -57,13 +57,13 @@ Canonical session references are opaque `ps1_…` keys. JSONL path parameters re
 | `GET /api-keys` | Return safe provider, harness, and source status, never key material |
 | `POST /api-keys` | Save or replace an API key |
 | `DELETE /api-keys` | Remove a locally stored API key |
-| `POST /oauth/start` | Begin a transient OAuth flow for pi or Claude Code |
+| `POST /oauth/start` | Begin a transient provider or native-harness OAuth flow |
 | `POST /oauth/status` | Poll a flow's current interaction or terminal state |
 | `POST /oauth/respond` | Answer one pending interaction |
 | `POST /oauth/cancel` | Cancel and abort a flow |
 | `DELETE /oauth` | Remove one harness's local OAuth credential |
 
-`POST /oauth/start` and `DELETE /oauth` accept `harness: "pi" | "claude-code"`; omission remains equivalent to `"pi"`. Claude Code currently offers a separate Anthropic OAuth connection. Credential mutations restart only active runners for the affected harness. Local removal does not revoke provider keys or grants.
+`POST /oauth/start` and `DELETE /oauth` accept `harness: "pi" | "claude-code" | "gemini" | "amp"`; omission remains equivalent to `"pi"`. Shared Anthropic and ChatGPT connections restart every compatible active harness. Gemini and Amp target their native harness only. Local removal does not revoke provider keys or grants.
 
 ## Files
 

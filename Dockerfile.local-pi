@@ -74,9 +74,9 @@ COPY .do ./.do
 COPY tests ./tests
 COPY extensions ./extensions
 RUN npm run build \
-    && mkdir -p /home/node/.pi/agent/extensions /home/node/.claude /workspace \
+    && mkdir -p /home/node/.pi/agent/extensions /home/node/.pi/agent/harnesses /home/node/.claude /home/node/.codex /home/node/.config/amp /workspace \
     && ln -sf /app/extensions/*.ts /home/node/.pi/agent/extensions/ \
-    && chown -R node:node /home/node/.pi /home/node/.claude /workspace
+    && chown -R node:node /home/node/.pi /home/node/.claude /home/node/.codex /home/node/.config /workspace
 
 COPY tests/e2e/mock-llm/server.mjs /opt/mock-llm/server.mjs
 COPY tests/e2e/mock-claude-code.mjs /opt/mock-claude-code.mjs

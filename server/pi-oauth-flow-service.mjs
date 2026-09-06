@@ -29,8 +29,10 @@ function providerId(value) {
   return normalized;
 }
 
+const SUPPORTED_HARNESSES = new Set(["pi", "claude-code", "codex", "gemini", "amp"]);
+
 function harnessId(value = "pi") {
-  if (value !== "pi" && value !== "claude-code") throw flowError("invalid_harness", "supported harness is required");
+  if (!SUPPORTED_HARNESSES.has(value)) throw flowError("invalid_harness", "supported harness is required");
   return value;
 }
 
@@ -122,7 +124,8 @@ export function createPiOAuthFlowService({
     return Object.freeze({
       flowId: flow.flowId,
       provider: flow.provider,
-      ...(flow.harness === "claude-code" ? { harness: flow.harness } : {}),
+      ...(flow.harness !== "pi" ? { harness: flow.harness } : {}),
+      ...(Array.isArray(flow.harnesses) ? { harnesses: Object.freeze([...flow.harnesses]) } : {}),
       status: flow.status,
       phase: flow.phase,
       createdAt: flow.createdAt,
@@ -307,14 +310,25 @@ export function createPiOAuthFlowService({
 
     flow.promise = Promise.resolve()
       .then(() => credentialService.loginOAuth(id, callbacksFor(flow), { replace: replace === true, harness: targetHarness }))
-      .then(async () => {
+      .then(async (credential) => {
         if (flow.status !== ACTIVE_STATUS) return;
         flow.credentialPersisted = true;
         update(flow, "restarting");
         try {
-          const restart = await restartActiveRunners({ harness: targetHarness });
+          const harnesses = Array.isArray(credential?.harnesses)
+            ? [...new Set(credential.harnesses.filter((candidate) => SUPPORTED_HARNESSES.has(candidate)))]
+            : [targetHarness];
+          flow.harnesses = harnesses.length ? harnesses : [targetHarness];
+          const results = await Promise.all(flow.harnesses
+            .map((harness) => restartActiveRunners({ harness })));
           if (flow.status !== ACTIVE_STATUS) return;
-          flow.restart = safeRestart(restart);
+          const runnerIds = results.flatMap((result) => result?.runnerIds ?? []);
+          const failedRunnerIds = results.flatMap((result) => result?.failedRunnerIds ?? []);
+          flow.restart = safeRestart({
+            status: results.some((result) => result?.status !== "restarted") ? "partial" : "restarted",
+            runnerIds,
+            ...(failedRunnerIds.length ? { failedRunnerIds } : {}),
+          });
         } catch {
           if (flow.status !== ACTIVE_STATUS) return;
           flow.restart = Object.freeze({ status: "failed", runnerIds: Object.freeze([]) });

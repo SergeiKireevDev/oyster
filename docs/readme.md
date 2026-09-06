@@ -30,7 +30,7 @@ browser ── HTTP/SSE ──> Oyster ── RPC over stdio ──> pi --mode r
 
 - Live markdown transcripts, thinking blocks, and tool-call output
 - Multiple saved sessions with SQLite or JSONL-backed pi catalogs
-- Browser-managed pi credentials and OAuth flows
+- Browser-managed provider credentials shared across compatible harnesses
 - Workspace file browsing, routines, and public hublots
 - Responsive desktop and mobile layouts
 
@@ -38,6 +38,6 @@ browser ── HTTP/SSE ──> Oyster ── RPC over stdio ──> pi --mode r
 
 > **Use HTTPS with valid TLS for every remote connection.** Plain HTTP is acceptable only on loopback for local development.
 
-The bearer token authenticates requests but does not encrypt them. Without TLS, an observer can capture the token, prompts, transcripts, file contents, and OAuth interactions. The static page contains no secret; local credentials remain in agent-owned stores (pi's `auth.json` and Claude Code's `.credentials.json`, with separate Anthropic OAuth grants), but an authenticated Oyster client has powerful access to the agent and workspace. Oyster spokes may use `--unauthenticated` only when an authenticated outer proxy such as llmbox is the exclusive access path.
+The bearer token authenticates requests but does not encrypt them. Without TLS, an observer can capture the token, prompts, transcripts, file contents, and OAuth interactions. The static page contains no secret; local credentials remain in restricted provider and harness stores, but an authenticated Oyster client has powerful access to the agent and workspace. Oyster spokes may use `--unauthenticated` only when an authenticated outer proxy such as llmbox is the exclusive access path.
 
 A public tunnel makes the application internet-accessible. Treat the token and any URL containing it like a password, and follow the complete [security guide](/getting-started/security/).

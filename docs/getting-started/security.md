@@ -44,7 +44,7 @@ Do not use this mode merely because a reverse proxy provides TLS. The outer laye
 
 ## Credential boundaries
 
-Provider credentials remain in agent-owned files: pi's `auth.json` and, when the Claude Code harness is enabled, Claude Code's `.credentials.json`. Both harnesses share one Anthropic OAuth grant: pi's store is authoritative and Oyster mirrors it into Claude Code's file. Because refresh tokens are single-use, Oyster alone rotates the grant, thirty minutes before expiry and inside pi's own file lock, so neither harness ever reaches its own refresh window with a stale token. Authenticated users can manage these credentials and run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
+Provider credentials remain in restricted agent-owned files: pi's `auth.json`, Claude Code's `.credentials.json`, Oyster's Gemini grant under `PI_CODING_AGENT_DIR/harnesses`, and Amp's native settings. One Anthropic grant serves pi and Claude Code; one ChatGPT grant serves pi and Codex. Oyster rotates shared grants before native refresh windows and never gives Codex the rotating refresh token. Gemini subprocesses receive only the current Google access token, while Amp reads its API key from its own settings. Authenticated users can manage these credentials and run agents that use them. OAuth authorization data is transient, yet it still travels through the browser and server during an active flow. TLS protects that data in transit.
 
 Removing a local API key or OAuth credential does not revoke it upstream. Revoke compromised keys and connected-app grants with the provider.
 
@@ -53,7 +53,7 @@ Removing a local API key or OAuth credential does not revoke it upstream. Revoke
 1. Expose only an HTTPS URL with valid TLS.
 2. Keep the Node listener on loopback or a trusted private interface.
 3. Use a unique, high-entropy UI token.
-4. Protect `.ui-token`, `auth.json`, `.credentials.json`, SQLite files, and backups with host permissions.
+4. Protect `.ui-token`, provider credential files and settings, SQLite files, and backups with host permissions.
 5. Keep Oyster, pi, Node.js, the TLS proxy, and `cloudflared` updated.
 6. Review tunnel and service logs without recording secrets.
 7. Close tunnels when remote access is no longer needed.
