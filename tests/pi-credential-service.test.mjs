@@ -435,8 +435,9 @@ test("Anthropic OAuth login mirrors one shared grant into the pi and Claude Code
     assert.equal(piStored.anthropic.access, "access-1-canary", "linking Claude Code reuses pi's grant instead of a second login");
     assert.equal(claudeStored.claudeAiOauth.accessToken, "access-1-canary");
     const connections = (await service.listProviders()).filter((provider) => provider.provider === "anthropic");
-    assert.equal(connections.find((provider) => !provider.harness)?.credentialType, "oauth");
-    assert.equal(connections.find((provider) => provider.harness === "claude-code")?.credentialType, "oauth");
+    assert.equal(connections.length, 1, "the shared grant is one connection covering both harnesses");
+    assert.equal(connections[0].credentialType, "oauth");
+    assert.deepEqual(connections[0].harnesses, ["pi", "claude-code"]);
 
     assert.deepEqual(await service.logoutOAuth("anthropic", { harness: "claude-code" }), {
       provider: "anthropic", harness: "claude-code", removed: true,
@@ -788,4 +789,59 @@ test("credential service requires the validated absolute PI_AGENT_DIR", () => {
     () => createPiCredentialService({ config: { PI_BIN: process.execPath, PI_AGENT_DIR: resolve("agent", "..", "agent") + "/.." } }),
     { code: "credential_service_unavailable" },
   );
+});
+
+test("provider listing shows one shared Anthropic connection, or a separate Claude Code one beside a pi API key", async () => {
+  const item = fixture({ sdkSource: `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const provider = { id: "anthropic", name: "Anthropic", async login() { throw new Error("unused"); } };
+    export class AuthStorage {
+      static create(path) { return new AuthStorage(path); }
+      constructor(path) { this.path = path; this.reload(); }
+      reload() { try { this.data = JSON.parse(readFileSync(this.path, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; this.data = {}; } }
+      drainErrors() { return []; }
+      list() { return Object.keys(this.data); }
+      get(id) { return this.data[id]; }
+      getOAuthProviders() { return [provider]; }
+      set(id, value) { this.reload(); this.data[id] = value; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+      remove(id) { this.reload(); delete this.data[id]; writeFileSync(this.path, JSON.stringify(this.data), { mode: 0o600 }); }
+    }
+    export class ModelRegistry {
+      static create() { return new ModelRegistry(); }
+      refresh() {}
+      getAll() { return [{ provider: "anthropic" }]; }
+      getProviderAuthStatus() { return { configured: true, source: "stored" }; }
+      getProviderDisplayName() { return "Anthropic"; }
+    }
+  ` });
+  try {
+    const authPath = join(item.agentDir, "auth.json");
+    const claudeConfigDir = join(item.root, "claude");
+    const sink = createClaudeOAuthCredentialSink({ configDir: claudeConfigDir });
+    const service = createPiCredentialService({ config: { PI_BIN: item.cli, PI_AGENT_DIR: item.agentDir }, claudeOAuthCredentialSink: sink });
+    const anthropic = async () => (await service.listProviders()).filter((provider) => provider.provider === "anthropic");
+
+    writeFileSync(authPath, "{}", { mode: 0o600 });
+    let rows = await anthropic();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].credentialType, null);
+    assert.deepEqual(rows[0].harnesses, ["pi", "claude-code"], "an unconfigured shared connection is still one row");
+
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "oauth", access: "a", refresh: "r", expires: 1_800_000_000_000 } }), { mode: 0o600 });
+    rows = await anthropic();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].credentialType, "oauth");
+    assert.deepEqual(rows[0].harnesses, ["pi", "claude-code"]);
+
+    writeFileSync(authPath, JSON.stringify({ anthropic: { type: "api_key", key: "sk-ant-api-canary" } }), { mode: 0o600 });
+    rows = await anthropic();
+    assert.equal(rows.length, 2, "a pi API key cannot serve Claude Code, so Claude Code gets its own row");
+    assert.equal(rows[0].credentialType, "api_key");
+    assert.equal(rows[0].harnesses, undefined);
+    assert.deepEqual({ harness: rows[1].harness, configured: rows[1].configured, oauthDisplayName: rows[1].oauthDisplayName }, { harness: "claude-code", configured: false, oauthDisplayName: "Anthropic (Claude Code)" });
+    sink.project({ type: "oauth", access: "claude", refresh: "claude-refresh", expires: 1_800_000_000_000 });
+    assert.equal((await anthropic())[1].configured, true);
+  } finally {
+    item.cleanup();
+  }
 });

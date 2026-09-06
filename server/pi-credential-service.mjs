@@ -555,6 +555,10 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
     const credentials = new Map(entries.map(({ providerId, type }) => [providerId, type]));
     const metadata = providerMetadata(adapter);
     const providers = new Set([...metadata.registered, ...credentials.keys(), ...metadata.oauthProviders.keys()]);
+    // Claude Code shares pi's Anthropic OAuth grant, so one row covers both
+    // harnesses. Only a pi API key leaves Claude Code with a grant of its own.
+    const sharedAnthropic = Boolean(claudeOAuthCredentialSink) && metadata.oauthProviders.has(ANTHROPIC)
+      && credentials.get(ANTHROPIC) !== "api_key";
     const result = [...providers]
       .sort((left, right) => left.localeCompare(right))
       .map((provider) => {
@@ -574,9 +578,10 @@ export function createPiCredentialService({ config, importSdk = (url) => import(
           credentialType,
           source: safeSource(status, credentialType),
           configured: credentialType !== null || status?.configured === true,
+          ...(sharedAnthropic && provider === ANTHROPIC ? { harnesses: Object.freeze(["pi", "claude-code"]) } : {}),
         });
       });
-    if (claudeOAuthCredentialSink && metadata.oauthProviders.has("anthropic")) {
+    if (claudeOAuthCredentialSink && metadata.oauthProviders.has(ANTHROPIC) && !sharedAnthropic) {
       const status = claudeOAuthCredentialSink.status();
       result.push(Object.freeze({
         provider: "anthropic",

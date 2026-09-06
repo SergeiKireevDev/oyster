@@ -13,7 +13,7 @@ test("Credentials modal is owned by the overlay and covers safe provider states"
     assert.ok(modal.includes(label), `missing source label: ${label}`);
   }
   assert.match(modal, /provider\.credentialType === "oauth"[\s\S]*?Re-authenticate[\s\S]*?Sign out from \{harnessLabel\(provider\)\}/);
-  assert.match(modal, /pi and Claude Code keep separate OAuth connections/);
+  assert.match(modal, /One Anthropic sign-in serves both pi and Claude Code/);
   assert.match(modal, /data-harness=\{provider\.harness \?\? "pi"\}/);
   assert.match(modal, /<button class="chip" type="button" data-modal-cancel onclick=\{close\}>Close<\/button>/);
 });
@@ -25,7 +25,7 @@ test("Credentials modal exposes API-key and OAuth actions with revocation and fa
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_START_OAUTH_ACTION, provider\)/);
   assert.match(modal, /uiActions\.invoke\(CREDENTIALS_LOGOUT_OAUTH_ACTION, provider\)/);
   assert.match(modal, /does not revoke access at the upstream provider/);
-  assert.match(modal, /credentials are removed independently/);
+  assert.match(modal, /Signing out of the shared Anthropic connection signs out both pi and Claude Code/);
   assert.match(modal, /environment or models\.json fallback may still authenticate pi/);
 });
 
@@ -59,7 +59,8 @@ test("Credentials modal renders accessible browser, device, prompt, selection, c
   assert.match(modal, /target="_blank" rel="noopener noreferrer">Open authorization page/);
   assert.match(modal, /Device code[\s\S]*?readonly[\s\S]*?\.select\(\)/);
   assert.match(modal, /copyTextToClipboard\(code\)[\s\S]*?oauth-device-code-entry[\s\S]*?oauth-device-code-copy[\s\S]*?"Copy"/);
-  assert.match(modal, /enter this one-time code[\s\S]*?finish binding \{harnessLabel\(\$credentialsState\.flow\)\} to your account automatically/);
+  assert.match(modal, /enter this one-time code[\s\S]*?finish binding \{flowHarnessLabel\(\$credentialsState\.flow\)\} to your account automatically/);
+  assert.match(modal, /function harnessLabel\(provider\)[\s\S]*?harnesses\.includes\("claude-code"\)[\s\S]*?"pi and Claude Code"/);
   assert.match(modal, /Open verification page/);
   assert.match(modal, /request\.kind === "select"[\s\S]*?chooseOAuth\(request, option\.id\)/);
   assert.match(modal, /name="oauthResponse"[\s\S]*?autocomplete="off"/);

@@ -54,7 +54,14 @@
   }
 
   function harnessLabel(provider) {
+    if (Array.isArray(provider?.harnesses) && provider.harnesses.includes("claude-code")) return "pi and Claude Code";
     return provider?.harness === "claude-code" ? "Claude Code" : "pi";
+  }
+
+  function flowHarnessLabel(flow) {
+    const row = $credentialsState.providers.find((provider) =>
+      provider.provider === flow?.provider && (provider.harness ?? "pi") === (flow?.harness ?? "pi"));
+    return harnessLabel(row ?? flow);
   }
 
   function apiKeyActionLabel(provider) {
@@ -236,7 +243,7 @@
 </script>
 
 <section class="api-keys-modal" aria-label="Agent credentials" aria-busy={$credentialsState.loading || oauthOperationPending}>
-  <p class="api-keys-intro">pi and Claude Code keep separate OAuth connections so either harness can refresh without invalidating the other. Existing credential values are never displayed.</p>
+  <p class="api-keys-intro">One Anthropic sign-in serves both pi and Claude Code; Oyster keeps it refreshed for both. Existing credential values are never displayed.</p>
   {#if $credentialsState.setupMode}
     <p class="api-keys-state" role="status">Choose a provider below to authenticate pi.</p>
   {/if}
@@ -244,14 +251,14 @@
   {#if $credentialsState.flow}
     <section class="oauth-flow" aria-label="OAuth sign-in" aria-live="polite">
       {#if $credentialsState.flow.status === "pending"}
-        <h3>Sign in to {$credentialsState.flow.provider} for {harnessLabel($credentialsState.flow)}</h3>
+        <h3>Sign in to {$credentialsState.flow.provider} for {flowHarnessLabel($credentialsState.flow)}</h3>
         {#if $credentialsState.flow.authorization}
           {#if $credentialsState.flow.authorization.instructions}<p>{$credentialsState.flow.authorization.instructions}</p>{/if}
           <a class="btn oauth-auth-link" href={$credentialsState.flow.authorization.url} target="_blank" rel="noopener noreferrer">Open authorization page</a>
         {/if}
         {#if $credentialsState.flow.deviceCode}
           <div class="oauth-device-code">
-            <p>Open the verification page and enter this one-time code. Oyster will finish binding {harnessLabel($credentialsState.flow)} to your account automatically.</p>
+            <p>Open the verification page and enter this one-time code. Oyster will finish binding {flowHarnessLabel($credentialsState.flow)} to your account automatically.</p>
             <div class="oauth-device-code-entry">
               <label>
                 <span>Device code</span>
@@ -369,7 +376,7 @@
   {/if}
 
   <p class="api-key-removal-note">
-    Removing a key or signing out does not revoke access at the upstream provider. Revoke upstream access separately in the provider account. pi and Claude Code credentials are removed independently; an environment or models.json fallback may still authenticate pi.
+    Removing a key or signing out does not revoke access at the upstream provider. Revoke upstream access separately in the provider account. Signing out of the shared Anthropic connection signs out both pi and Claude Code; an environment or models.json fallback may still authenticate pi.
   </p>
 
   <form class="api-key-form" onsubmit={saveKey}>

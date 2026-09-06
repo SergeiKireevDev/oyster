@@ -8,7 +8,7 @@ Open **Credentials…** from the application menu. The modal reads and writes cr
 
 ## Credential ownership
 
-pi credentials remain in `PI_CODING_AGENT_DIR/auth.json`, normally `~/.pi/agent/auth.json`, with mode `0600`. If the Claude Code harness is enabled, its independent Anthropic OAuth connection remains in `CLAUDE_CONFIG_DIR/.credentials.json`. The Credentials modal labels each connection by harness and signs them in or out independently. Oyster does not copy key or token material into its SQLite database, browser storage, logs, runner state, or event stream.
+pi credentials remain in `PI_CODING_AGENT_DIR/auth.json`, normally `~/.pi/agent/auth.json`, with mode `0600`. If the Claude Code harness is enabled, Oyster mirrors pi's Anthropic OAuth grant into `CLAUDE_CONFIG_DIR/.credentials.json`, so the Credentials modal shows one "pi and Claude Code" connection that signs both harnesses in or out together. Oyster does not copy key or token material into its SQLite database, browser storage, logs, runner state, or event stream.
 
 A stored `auth.json` credential takes precedence over environment variables and `models.json`. Removing a stored credential may reveal one of those fallback sources, so removal does not necessarily make a provider unauthenticated.
 
@@ -28,7 +28,7 @@ OAuth flows expire after 15 minutes of inactivity and can be cancelled. For a lo
 
 When an OAuth provider supports both browser and device-code login, Oyster selects device-code login automatically instead of presenting a method picker. This includes OpenAI Codex and dynamically configured Radius providers. Copy the one-time code, open the linked verification page, and enter it there. Keep the Credentials modal open while the provider completes authorization. After approval, Oyster stores the credential only for the selected harness and restarts active runners for that harness.
 
-Sign in once: pi and Claude Code share the same Anthropic grant, and Oyster keeps it fresh for both by rotating it ahead of expiry inside pi's credential lock. Connecting "Anthropic (Claude Code)" links pi's existing grant (or establishes it once for both) rather than starting a second login. Signing Claude Code out removes only its local mirror; signing pi out removes the shared grant from both stores. Neither revokes the upstream grant. Revoke connected-app access with the provider when required. If a refresh is ever rejected, Oyster reports that re-authentication is needed instead of retrying with a dead token.
+Sign in once: pi and Claude Code share the same Anthropic grant, shown as a single "pi and Claude Code" connection, and Oyster keeps it fresh for both by rotating it ahead of expiry inside pi's credential lock. Signing out of that connection signs out both harnesses. A separate "Anthropic (Claude Code)" connection appears only when pi is configured with an Anthropic API key, which Claude Code cannot use; that connection has a grant of its own. Signing out removes only the local credential and does not revoke the upstream grant. Revoke connected-app access with the provider when required. If a refresh is ever rejected, Oyster reports that re-authentication is needed instead of retrying with a dead token.
 
 ## Tunnel safety
 
