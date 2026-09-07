@@ -49,6 +49,8 @@ import { createPinnedWidgetRuntime } from "../features/pinned-widgets/createPinn
 import { createResourceAssembly } from "../features/resources/createResourceAssembly.js";
 import { generateRoutine, listRoutines, routineVisible as isRoutineVisible, runRoutine } from "../lib/routineActions.js";
 import { createSettingsLayoutRuntime } from "../features/settings/createSettingsLayoutRuntime.js";
+import { createNewHarnessAuthenticationCheck } from "../lib/newHarnessAuthentication.js";
+import { CREDENTIALS_OPEN_ACTION } from "./uiActionNames.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
 import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
 import { copyTextToClipboard } from "../lib/clipboardController.js";
@@ -268,6 +270,11 @@ const sessionAssembly = createSessionAssembly({
     isRunnerAlive: (id) => Boolean(getRunners().find((runner) => runner.id === id)?.alive),
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
+    onNewSession: createNewHarnessAuthenticationCheck({
+      rpc, getCurrentRunner,
+      openCredentials: (target) => uiActions.invoke(CREDENTIALS_OPEN_ACTION, target),
+      toast: addToast,
+    }),
     stopSession: (id) => stopSessionRunner(fetch, id),
     openSearchHit: (...args) => searchHitSessionController(...args),
     log: (details) => lifecycleLog("switchToRunner:start", details),

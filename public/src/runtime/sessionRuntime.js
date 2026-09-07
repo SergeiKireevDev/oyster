@@ -356,7 +356,7 @@ export function switchSessionRunner({ id, currentRunner, isRunnerAlive = () => t
 export function createSessionRuntime({
   getCurrentRunner, isRunnerAlive = () => true, switchSessionRunner, openSession, stopSession, openSearchHit, log, resetPreview, refreshState,
   setRunner, clearTranscript, resetSessionUi, renderPreview, resetCommands, switchComposerDraft, setBusy,
-  connect,
+  connect, onNewSession = () => {},
 }) {
   const switchRunner = (id) => switchSessionRunner({
     id,
@@ -382,13 +382,19 @@ export function createSessionRuntime({
     stopSession(id) { return stopSession(id); },
     async openInitialSession(options) {
       const runner = await openSession(options);
-      if (runner?.id) setRunner(runner.id);
+      if (runner?.id) {
+        setRunner(runner.id);
+        if (!options?.sessionKey && !options?.sessionPath) void onNewSession(runner);
+      }
       return runner;
     },
     async openAndSwitchSession(options, { onOpened = () => {} } = {}) {
       const runner = await openSession(options);
       onOpened(runner);
-      if (runner?.id) switchRunner(runner.id);
+      if (runner?.id) {
+        switchRunner(runner.id);
+        if (!options?.sessionKey && !options?.sessionPath) void onNewSession(runner);
+      }
       return runner;
     },
     openSessionAtSearchHit(...args) { return openSearchHit(...args); },
