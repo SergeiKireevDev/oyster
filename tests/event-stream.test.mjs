@@ -49,7 +49,7 @@ test("runner unhealthy controller clears busy state", () => {
 test("Pi error controller reports only live failures", () => {
   const calls = []; const error = createPiErrorController({ isReplaying: () => false, toast: (...args) => calls.push(args) });
   assert.equal(error({ error: "spawn failed" }), true);
-  assert.deepEqual(calls, [["pi spawn error: spawn failed", "error"]]);
+  assert.deepEqual(calls, [["Agent spawn error: spawn failed", "error"]]);
 });
 
 test("Pi started controller refreshes state when a dormant runner is revived", () => {
@@ -79,7 +79,7 @@ test("Pi started controller ignores replay and refreshes state on restarts", asy
   replaying = false;
   assert.equal(started({ startCount: 2 }), true);
   await Promise.resolve();
-  assert.deepEqual(calls, ["state", ["toast", "pi process restarted"], "transcript"]);
+  assert.deepEqual(calls, ["state", ["toast", "Agent process restarted"], "transcript"]);
 });
 
 test("runner exit controller ignores replayed exits", () => {

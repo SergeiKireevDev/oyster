@@ -31,20 +31,20 @@ export function commandTrigger(target) {
   return match ? { text: value, query: match[1] } : null;
 }
 
-/** Create palette state for supported pi slash commands. */
+/** Create palette state for supported agent slash commands. */
 export function commandPaletteView(items, trigger, active) {
   return {
     open: true,
     mode: "command",
     match: trigger.text,
-    emptyText: items.length ? "" : `no pi commands match "${trigger.text}"`,
+    emptyText: items.length ? "" : `No Agent commands match "${trigger.text}"`,
     items: items.map((item, index) => {
       const name = item.name ?? "";
       const highlighted = name.toLowerCase().startsWith(trigger.query.toLowerCase()) ? trigger.query.length : 0;
       return {
         key: `command:${name}`,
         icon: item.icon ?? "›",
-        desc: item.description ?? item.desc ?? "pi command",
+        desc: item.description ?? item.desc ?? "Agent command",
         prefix: "/",
         highlight: name.slice(0, highlighted),
         rest: name.slice(highlighted),

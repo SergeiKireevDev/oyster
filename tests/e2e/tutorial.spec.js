@@ -86,7 +86,7 @@ test("first-run tour waits for credentials, persists per form factor, and can be
 
   await swipeTutorial(page, "left");
   await expect(page.locator("#sessions")).toBeHidden();
-  await expect(page.locator("#tutorialTitle")).toHaveText("Tell pi what to build");
+  await expect(page.locator("#tutorialTitle")).toHaveText("Tell your Agent what to build");
   await expect(page.locator(".tutorial-card")).toBeVisible();
 
   await page.getByRole("button", { name: "Next" }).click();

@@ -22,6 +22,7 @@ preview-gallery/
 preview-videos/
 test-results/
 playwright-report/
+output/
 
 # playwright e2e
 tests/e2e/node_modules/
