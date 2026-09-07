@@ -1,7 +1,7 @@
 export const TUTORIAL_STEPS = Object.freeze([
   Object.freeze({
     title: "Welcome to Oyster",
-    description: "Oyster is your workspace for collaborating with pi from any browser. Here is a quick tour of the essentials.",
+    description: "Oyster is your workspace for collaborating with coding agents from any browser. Here is a quick tour of the essentials.",
     targets: [],
   }),
   Object.freeze({
@@ -17,12 +17,12 @@ export const TUTORIAL_STEPS = Object.freeze([
     mobileDrawerTarget: "#sessions",
   }),
   Object.freeze({
-    title: "Tell pi what to build",
+    title: "Tell your Agent what to build",
     description: "Use the composer for prompts, code, and file paths. Press Enter to send; use Shift+Enter when you need another line.",
     targets: ["#composer .inner"],
   }),
   Object.freeze({
-    title: "Choose how pi thinks",
+    title: "Choose how your Agent thinks",
     description: "The header controls let you switch models and adjust the thinking level for the current session.",
     targets: [".header-actions"],
   }),

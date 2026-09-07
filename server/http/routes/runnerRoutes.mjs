@@ -136,12 +136,12 @@ export function createRunnerRoutes({
       }
       const runner = await runnerFromReq(url);
       // State refreshes happen while opening a transcript and must not turn a
-      // read-only visit into a live pi process. User commands still autostart.
+      // read-only visit into a live agent process. User commands still autostart.
       const readOnly = command.type === "get_state" || command.type === "get_messages";
       const queued = await sendToRunner(runner, command, { autostart: !readOnly });
       json(res, queued ? 202 : 503, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
-        : { error: "pi process unavailable" });
+        : { error: "Agent process unavailable" });
     },
 
     "POST /runner/transcript/sync": async (_req, res, url) => {

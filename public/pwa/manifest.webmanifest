@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Oyster",
   "short_name": "Oyster",
-  "description": "A responsive workspace for the pi coding agent.",
+  "description": "A responsive workspace for coding agents.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,6 +1,6 @@
 import { getActiveWorkspace, isHubRuntime } from "./workspaceScope.js";
 
-/** Create the authenticated EventSource used by the live Pi event stream. */
+/** Create the authenticated EventSource used by the live agent event stream. */
 /** Decide whether a replay-gated transcript event should be buffered or dispatched. */
 const LIFECYCLE_LOGGED_EVENT_TYPES = new Set(["replay_done", "agent_start", "agent_end", "agent_settled", "compaction_start", "compaction_end", "message_start", "message_end", "response", "runner_unhealthy", "pi_started", "pi_exit"]);
 
@@ -17,7 +17,7 @@ export function stateRefreshRequired(command) {
 }
 
 /** Handle live runner exit without surfacing replayed historical exits. */
-/** Surface a live Pi spawn failure while ignoring replayed history. */
+/** Surface a live agent spawn failure while ignoring replayed history. */
 export function createResponseEventController({ handleResponse, refreshRequired, refreshState }) {
   return (message) => {
     handleResponse(message);
@@ -43,7 +43,7 @@ export function createPiStartedController({ isReplaying, toast, reloadTranscript
     // refresh can safely fetch authoritative model and conversation details.
     refreshState();
     if (message.startCount > 1) {
-      toast("pi process restarted");
+      toast("Agent process restarted");
       reloadTranscript().catch((error) => toast(`session reload failed: ${error.message}`, "error"));
     }
     return true;
@@ -53,7 +53,7 @@ export function createPiStartedController({ isReplaying, toast, reloadTranscript
 export function createRunnerUnhealthyController({ isReplaying, toast, setBusy }) {
   return (message) => {
     if (isReplaying()) return false;
-    toast(`pi was unresponsive — restarting it (${message.reason ?? "health probes failed"})`, "warning");
+    toast(`Agent was unresponsive — restarting it (${message.reason ?? "health probes failed"})`, "warning");
     setBusy(false);
     return true;
   };
@@ -62,7 +62,7 @@ export function createRunnerUnhealthyController({ isReplaying, toast, setBusy })
 export function createPiErrorController({ isReplaying, toast }) {
   return (message) => {
     if (isReplaying()) return false;
-    toast(`pi spawn error: ${message.error}`, "error");
+    toast(`Agent spawn error: ${message.error}`, "error");
     return true;
   };
 }
@@ -70,7 +70,7 @@ export function createPiErrorController({ isReplaying, toast }) {
 export function createRunnerExitController({ isReplaying, toast, setBusy }) {
   return () => {
     if (isReplaying()) return false;
-    toast("pi process exited — it will restart on next message", "warning");
+    toast("Agent process exited — it will restart on next message", "warning");
     setBusy(false);
     return true;
   };
