@@ -71,6 +71,7 @@ function geminiOAuthAccess() {
 
 function codexArgs(run) {
   const common = [
+    "--dangerously-bypass-approvals-and-sandbox",
     "--json",
     "--skip-git-repo-check",
     "-c", `mcp_servers.oyster.url=${tomlString(config.mcpUrl)}`,
@@ -84,7 +85,7 @@ function codexArgs(run) {
   if (run.resume && run.sessionId) {
     return ["exec", "resume", ...common, run.sessionId, run.prompt];
   }
-  return ["exec", "--sandbox", config.sandbox ?? "workspace-write", ...common, run.prompt];
+  return ["exec", ...common, run.prompt];
 }
 
 function ensureGeminiSettings(hasOAuth) {

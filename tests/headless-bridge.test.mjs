@@ -59,7 +59,8 @@ async function bridgeRun(t, kind, run, configOverrides = {}) {
 test("Codex bridge builds new and resumed exec commands without putting the Oyster token in argv", async (t) => {
   let records = await bridgeRun(t, "codex", { prompt: "do it", sessionId: null, resume: false, model: "gpt-test" });
   let argv = records.find((record) => record.type === "fake.argv").argv;
-  assert.deepEqual(argv.slice(0, 3), ["exec", "--sandbox", "workspace-write"]);
+  assert.deepEqual(argv.slice(0, 2), ["exec", "--dangerously-bypass-approvals-and-sandbox"]);
+  assert.equal(argv.includes("--sandbox"), false);
   assert.ok(argv.includes("--json"));
   assert.ok(argv.includes("developer_instructions=\"policy\""));
   assert.ok(argv.includes("mcp_servers.oyster.bearer_token_env_var=\"OYSTER_TOKEN\""));
@@ -85,6 +86,8 @@ test("Codex bridge builds new and resumed exec commands without putting the Oyst
   records = await bridgeRun(t, "codex", { prompt: "continue", sessionId: "thread-1", resume: true });
   argv = records.find((record) => record.type === "fake.argv").argv;
   assert.deepEqual(argv.slice(0, 2), ["exec", "resume"]);
+  assert.ok(argv.includes("--dangerously-bypass-approvals-and-sandbox"));
+  assert.equal(argv.includes("--sandbox"), false);
   assert.ok(argv.includes("thread-1"));
 });
 
