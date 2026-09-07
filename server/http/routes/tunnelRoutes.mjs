@@ -102,6 +102,7 @@ export function createTunnelRoutes({
   rebindHublot,
   openTunnel,
   closeTunnel,
+  reopenHublot,
   spawnHublotAgent,
   spawnGitServerService,
   ensureSessionOwner = () => null,
@@ -179,6 +180,22 @@ export function createTunnelRoutes({
           });
         }
         json(res, 502, { error: message });
+      }
+    },
+
+    "POST /tunnels/reopen": async (req, res) => {
+      disableCaching(res);
+      const body = await readJsonBody(req, res);
+      if (body === undefined) return;
+      if (!body || typeof body.id !== "string" || !body.id.trim()) {
+        json(res, 400, { error: "id must be a non-empty string" });
+        return;
+      }
+      try {
+        const tunnel = await reopenHublot(state, body.id);
+        json(res, 200, { tunnel });
+      } catch (error) {
+        json(res, error.statusCode ?? 502, { error: errorMessage(error) });
       }
     },
 

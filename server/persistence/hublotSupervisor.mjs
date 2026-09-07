@@ -109,7 +109,7 @@ export function createHublotSupervisor({
         // Async transaction work yields to operator actions; do not act on a
         // hublot that a concurrent request already closed or reopened.
         const current = await repository.find(hublot.id);
-        if (!current || current.desired_state !== "open" || ["closing", "closed"].includes(current.status)) continue;
+        if (!current || current.status !== hublot.status || current.updated_at !== hublot.updated_at || current.desired_state !== "open" || ["closing", "closed"].includes(current.status)) continue;
 
         const serviceRows = processes.filter((process) => process.role === "service");
         const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);

@@ -16,7 +16,9 @@ test("message action business rules are named outside AssistantMessage markup", 
 test("pinned widget markup delegates compound display rules to named helpers", () => {
   const source = component("PinnedWidgetGrid.svelte");
   assert.match(source, /title=\{widgetTitle\(widget\)\}/);
-  assert.match(source, /\{#if readyMedia\(widget, "image"\)\}/);
+  assert.match(source, /\{#if isRevivableHublot\(widget\)\}/);
+  assert.match(source, /\{:else if readyMedia\(widget, "image"\)\}/);
+  assert.match(source, /aria-label=\{widgetAccessibleLabel\(widget\)\}/);
   assert.match(source, /class:touch-drop-target=\{isSectionTouchTarget\(section\)\}/);
   assert.doesNotMatch(source, /title=\{`\$\{widget\.label\}\$\{widget\.availability/);
   assert.doesNotMatch(source, /class:touch-drop-target=\{touchDestination\?\.scope === section\.scope/);

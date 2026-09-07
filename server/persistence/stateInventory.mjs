@@ -45,6 +45,7 @@ export const STABLE_STATE_INVENTORY = inventory({
   sessionDeletionReconciled: entry("ephemeral", "one-process reconciliation guard"),
 
   hublotProcessHandles: entry("ephemeral", "live ChildProcess handles"),
+  hublotReopens: entry("ephemeral", "in-flight operator-requested hublot reopen guards"),
   routineRuntime: entry("ephemeral", "live routine process and stream handles"),
   routineRuntimeDir: entry("ephemeral", "disposable artifact directory"),
   runners: entry("rebuildable", "durable descriptors plus live runner handles", "runners"),
