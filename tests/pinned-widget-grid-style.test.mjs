@@ -17,6 +17,12 @@ test("pinned widget grid owns its launcher presentation and uses semantic theme 
   assert.doesNotMatch(component, /html\[data-theme="light"\]/);
 });
 
+test("widget access metadata stays in tooltips rather than visible card labels", () => {
+  assert.doesNotMatch(component, /class="pinned-widget-access"/);
+  assert.match(component, /title=\{widgetTitle\(widget\)\}/);
+  assert.match(component, /return `\$\{widget.label\}\$\{availability\} · \$\{accessLabel\(widget\)\}`/);
+});
+
 test("pinned widget grid exposes accessible asynchronous and management states", () => {
   assert.match(component, /class="pinned-widget-collection" aria-busy=\{\$pinnedWidgetsLoading\}/);
   assert.match(component, /role="status" aria-atomic="true"><span class="spin" aria-hidden="true"><\/span> Loading widgets…/);

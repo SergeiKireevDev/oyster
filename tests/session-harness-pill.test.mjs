@@ -20,6 +20,14 @@ test("session lists render an accessible harness pill for saved, live, loop, and
   assert.match(pill, /gemini: "Gemini CLI"/);
   assert.match(pill, /amp: "Amp"/);
   assert.match(pill, /border-radius: 999px/);
+  assert.match(pill, /title=\{`Harness: \$\{label\}`\}/);
+  assert.match(pill, /<svg[^>]*aria-hidden="true"/);
+  for (const id of ["pi", "claude-code", "codex", "gemini", "amp"]) {
+    assert.ok(pill.includes(`harnessId === "${id}"`), `${id} has a distinct monochrome mark`);
+  }
+  assert.match(pill, /class="harness-name">\{label\}/);
+  assert.match(pill, /label\.slice\(0, 1\)\.toUpperCase\(\)/);
+  assert.doesNotMatch(pill, /var\(--accent\)/);
 
   for (const name of ["HarnessPill.svelte", "SessionSidebar.svelte", "SessionPickerModal.svelte"]) {
     const { warnings } = compile(component(name), { filename: name, generate: false });

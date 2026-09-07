@@ -340,7 +340,6 @@
         {#if widget.kind === "live_interface" && widget.availability !== "opening"}<span class={`pinned-widget-status status-${widget.availability}`}></span>{/if}
       </span>
       <span class="pinned-widget-label">{widget.label}</span>
-      <span class="pinned-widget-access">{accessLabel(widget)}</span>
     </button>
     {#if widget.kind !== "builtin"}
       <button
@@ -639,7 +638,6 @@
   }
   .pinned-widget-glyph { font-size: 18px; font-weight: 700; letter-spacing: -.04em; }
 
-  .pinned-widget-access { color: var(--text-secondary); font-size: 11px; line-height: 1.3; }
 
   .pinned-widget-label {
     display: -webkit-box;

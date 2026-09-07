@@ -145,7 +145,8 @@ test("compact navigation does not push notification toasts over the composer", a
 test("widget scope is separate from public exposure at the initiating action", async ({ page }) => {
   await login(page);
   await expect(page.locator("#hublots")).toContainText("Across sessions");
-  await expect(page.locator("#hublots .pinned-widget-access").first()).toHaveText("Private");
+  await expect(page.locator("#hublots .pinned-widget-access")).toHaveCount(0);
+  await expect(page.locator('#hublots .pinned-widget-tile[title$=" · Private"]').first()).toBeVisible();
   await page.getByRole("button", { name: "Create public live interface…", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "New live interface widget" })).toContainText("public, temporary URL");
 });
