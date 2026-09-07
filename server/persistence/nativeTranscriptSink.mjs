@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { defaultRepositoryFactory } from "./claudeTranscriptSink.mjs";
 
-const HARNESSES = new Set(["codex", "gemini", "amp"]);
+const HARNESSES = new Set(["codex", "gemini", "amp", "antigravity"]);
 
 /** Append canonical native-driver messages through Pi's SQLite repository.
  * Entry IDs are allocated by the driver before queuing, making retries idempotent.

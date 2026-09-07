@@ -4,7 +4,7 @@
   const configuredHarnesses = Array.isArray(globalThis.__OYSTER_RUNTIME_CONFIG__?.harnesses)
     ? globalThis.__OYSTER_RUNTIME_CONFIG__.harnesses
     : [];
-  const knownLabels = { pi: "pi", "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", amp: "Amp" };
+  const knownLabels = { pi: "pi", "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", amp: "Amp", antigravity: "Antigravity CLI" };
 
   function displayLabel(id) {
     const normalized = typeof id === "string" && id.trim() ? id.trim() : "pi";
@@ -28,6 +28,8 @@
       <path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-14-2 16" />
     {:else if harnessId === "gemini"}
       <path d="M12 2c0 6-4 10-10 10 6 0 10 4 10 10 0-6 4-10 10-10-6 0-10-4-10-10Z" />
+    {:else if harnessId === "antigravity"}
+      <path d="m3 19 9-15 9 15M7 14h10M10 20h4" />
     {:else if harnessId === "amp"}
       <path d="m14 2-10 12h7l-1 8 10-12h-7Z" />
     {:else}

@@ -1,7 +1,7 @@
 import { unlinkSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
-const NATIVE_SESSION_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp"]);
+const NATIVE_SESSION_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp", "antigravity"]);
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);

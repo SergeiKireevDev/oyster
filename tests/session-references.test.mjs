@@ -15,7 +15,7 @@ const jsonl = {
 };
 const sqlite = { backend: "sqlite", id: "session-sqlite", storagePath: sqlitePath };
 const claude = { backend: "claude-code", id: "session-claude", storagePath: null };
-const external = [claude, ...["codex", "gemini", "amp"].map((backend) => ({ backend, id: `session-${backend}`, storagePath: null }))];
+const external = [claude, ...["codex", "gemini", "amp", "antigravity"].map((backend) => ({ backend, id: `session-${backend}`, storagePath: null }))];
 
 test("session references round-trip through canonical URL-safe opaque keys", () => {
   for (const reference of [jsonl, sqlite, ...external]) {

@@ -1,7 +1,7 @@
 import { resolve, relative, isAbsolute } from "node:path";
 
 const KEY_PREFIX = "ps1_";
-const EXTERNAL_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp"]);
+const EXTERNAL_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp", "antigravity"]);
 const BACKENDS = new Set(["jsonl", "sqlite", ...EXTERNAL_BACKENDS]);
 
 function requirePathOption(value, name, { optional = false } = {}) {
