@@ -1,6 +1,8 @@
 import { unlinkSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
+const NATIVE_SESSION_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp"]);
+
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -17,6 +19,10 @@ function isWithin(path, root) {
 
 /** Resolve a root session and every transitive child across catalog folders. */
 export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
+  if (NATIVE_SESSION_BACKENDS.has(rootReference.backend)) {
+    // Native harnesses own their session trees; never query Pi's catalog by a native ID.
+    return [sessionReferences.validate(rootReference)];
+  }
   const sqlite = catalog.backend === "sqlite";
   const validateReference = sessionReferences?.validate;
   if (typeof validateReference !== "function" && (sqlite || typeof sessionReferenceFor !== "function")) {
@@ -166,6 +172,7 @@ export function createSessionRoutes({
   const sqlite = catalog.backend === "sqlite";
 
   function referenceFor(session) {
+    if (NATIVE_SESSION_BACKENDS.has(session.sessionRef?.backend)) return state.sessionReferences.validate(session.sessionRef);
     return sqlite
       ? state.sessionReferences.validate({ backend: "sqlite", id: session.id, storagePath: catalog.storagePath })
       : sessionReferenceFor(session);
@@ -187,6 +194,7 @@ export function createSessionRoutes({
     });
     return {
       ...session,
+      ...(!session.createdAt && owner?.created_at ? { createdAt: owner.created_at } : {}),
       archived: Boolean(owner?.archived),
       path: sqlite ? null : session.path,
       parentSession: sqlite ? null : (session.parentSession ?? null),
@@ -249,8 +257,17 @@ export function createSessionRoutes({
       else cwd = state.currentDir;
 
       try {
-        const summaries = await catalog.list({ cwd, location });
-        if (!Array.isArray(summaries)) throw new TypeError("session catalog returned an invalid list");
+        const catalogSummaries = await catalog.list({ cwd, location });
+        if (!Array.isArray(catalogSummaries)) throw new TypeError("session catalog returned an invalid list");
+        const summaries = [...catalogSummaries];
+        const seenNative = new Set();
+        for (const runner of state.runners.values()) {
+          if (!NATIVE_SESSION_BACKENDS.has(runner.sessionRef?.backend) || (cwd && runner.dir !== cwd)) continue;
+          const key = state.sessionReferences.serialize(runner.sessionRef);
+          if (seenNative.has(key)) continue;
+          seenNative.add(key);
+          summaries.push({ id: runner.sessionRef.id, sessionRef: runner.sessionRef, name: runner.sessionName, cwd: runner.dir, harness: runner.harness });
+        }
         const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
         const live = [...state.runners.values()];
         const result = await Promise.all(summaries.map(async (summary) => {
@@ -283,7 +300,7 @@ export function createSessionRoutes({
         json(res, 400, { error: "invalid session reference" });
         return;
       }
-      if (reference.backend !== catalog.backend) {
+      if (reference.backend !== catalog.backend && !NATIVE_SESSION_BACKENDS.has(reference.backend)) {
         json(res, 400, { error: "session backend does not match the configured store" });
         return;
       }
