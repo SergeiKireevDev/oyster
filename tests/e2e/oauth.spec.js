@@ -10,10 +10,28 @@ async function restartCurrentRunner() {
 }
 
 function writeMockOAuth(present, generation = 1) {
-  const script = present
-    ? `const fs=require('fs');const p='/home/node/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};v.anthropic={type:'oauth',access:'e2e-access-token-${generation}-canary',refresh:'e2e-refresh-token-${generation}-canary',expires:Date.now()+3600000};fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`
-    : `const fs=require('fs');const p='/home/node/.pi/agent/auth.json';let v={};try{v=JSON.parse(fs.readFileSync(p,'utf8'))}catch{};delete v.anthropic;fs.writeFileSync(p,JSON.stringify(v),{mode:0o600})`;
-  dexec(`node -e ${JSON.stringify(script)}`);
+  // Real Anthropic login stores one grant for both harnesses. Seed both
+  // copies immediately, rather than depending on the 60-second upkeep timer.
+  const script = `
+    import fs from 'node:fs';
+    import { createClaudeOAuthCredentialSink } from '/app/server/claude-oauth-credential-sink.mjs';
+    const sink = createClaudeOAuthCredentialSink({ configDir: '/home/node/.claude' });
+    const path = '/home/node/.pi/agent/auth.json';
+    let credentials = {};
+    try { credentials = JSON.parse(fs.readFileSync(path, 'utf8')); } catch {}
+    if (${present}) {
+      credentials.anthropic = {
+        type: 'oauth', access: 'e2e-access-token-${generation}-canary',
+        refresh: 'e2e-refresh-token-${generation}-canary', expires: Date.now() + 3600000,
+      };
+      sink.project(credentials.anthropic);
+    } else {
+      delete credentials.anthropic;
+      sink.remove();
+    }
+    fs.writeFileSync(path, JSON.stringify(credentials), { mode: 0o600 });
+  `;
+  dexec(`node --input-type=module -e ${JSON.stringify(script.replace(/\n/g, " "))}`);
 }
 
 async function expectAnthropicAvailability(page, expected) {
@@ -89,6 +107,9 @@ async function installMockOAuthRoutes(page) {
     generation += 1;
     writeMockOAuth(true, generation);
     await restartCurrentRunner();
+    // /restart is only an acknowledgement. Do not advertise completion while
+    // its delayed replacement can still overlap the next re-auth or logout.
+    await expectAnthropicAvailability(page, true);
     flow = {
       ...flow, status: "succeeded", phase: "complete", updatedAt: flow.updatedAt + 1,
       deviceCode: undefined,
@@ -102,13 +123,14 @@ async function installMockOAuthRoutes(page) {
   });
   await page.route("**/oauth", async (route) => {
     if (route.request().method() !== "DELETE") return route.continue();
+    // Only provider authorization is mocked. Exercise real logout so both
+    // stores are cleared under the credential lock before runners restart.
+    // Deleting auth.json alone lets upkeep restore pi's grant from Claude.
+    const response = await route.fetch();
+    const body = await response.json();
+    expect(response.status(), body.error).toBe(200);
     signedIn = false;
-    writeMockOAuth(false);
-    await restartCurrentRunner();
-    return fulfill(route, {
-      credential: { provider: PROVIDER, removed: true }, source: "not_configured", upstreamRevoked: false,
-      restart: { status: "restarted", runnerIds: ["mock-runner"] },
-    });
+    return fulfill(route, body);
   });
   return {
     responseBodies,
@@ -176,7 +198,13 @@ async function runOAuthFlow(page) {
   await page.getByRole("button", { name: "Yes" }).click();
   await expectAnthropicAvailability(page, false);
   expect(mock.isSignedIn()).toBe(false);
-  expect(dexec("grep -F e2e-access-token- /home/node/.pi/agent/auth.json >/dev/null; echo $? ")).not.toBe("0");
+  const storedGrant = dexec(`node -e ${JSON.stringify(`
+    const fs = require('fs');
+    const pi = JSON.parse(fs.readFileSync('/home/node/.pi/agent/auth.json', 'utf8'));
+    const claude = JSON.parse(fs.readFileSync('/home/node/.claude/.credentials.json', 'utf8'));
+    console.log(Boolean(pi.anthropic || claude.claudeAiOauth));
+  `.replace(/\n/g, " "))}`);
+  expect(storedGrant, "sign-out must clear both copies so upkeep cannot restore the grant").toBe("false");
   const browserStorage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(browserStorage).not.toContain("e2e-access-token-");
 }

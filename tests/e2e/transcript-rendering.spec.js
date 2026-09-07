@@ -75,8 +75,12 @@ test("historical SQLite tool results do not return as waiting after reload", asy
     await sendPrompt(page, `SQLite transcript filler ${index}`);
   }
 
+  // This tests durable transcript replay, not selection of a default runner.
+  // Stop the old page reconnecting during replacement, then reopen the exact
+  // session by permalink instead of navigating to / and hoping it is selected.
+  await page.goto("about:blank");
   await replaceContainer();
-  await login(page);
+  await login(page, { sessionId });
   await waitFor(async () => (await currentSessionId(page)) === sessionId, {
     timeout: 30000,
     label: "reloaded SQLite tool session",
