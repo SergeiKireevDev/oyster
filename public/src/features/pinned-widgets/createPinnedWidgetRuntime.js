@@ -1,3 +1,4 @@
+import { isRevivableHublot } from "./pinnedWidgetViewModel.js";
 import {
   createPinnedWidgetGroup,
   deletePinnedWidgetGroup,
@@ -23,7 +24,24 @@ export function createPinnedWidgetRuntime(deps) {
     } catch (error) { deps.toast(error.message, "error"); }
   }
 
+  const reopening = new Set();
   async function open(widget) {
+    if (isRevivableHublot(widget)) {
+      if (reopening.has(widget.hublotId)) return;
+      reopening.add(widget.hublotId);
+      try {
+        if (!await deps.dialogs.openConfirm("reopen hublot?", `Restart ${widget.label} and reopen its public tunnel?`)) return;
+        const res = await deps.fetchImpl("/tunnels/reopen", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: widget.hublotId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Unable to reopen hublot");
+        deps.toast("hublot reopened");
+      } catch (error) { deps.toast(`reopen hublot failed: ${error.message}`, "error"); }
+      finally { reopening.delete(widget.hublotId); await refresh(); }
+      return;
+    }
     if (widget.availability !== "ready") {
       deps.toast(`${widget.label} is ${widget.availability}`, widget.availability === "opening" ? "warning" : "error");
       return;

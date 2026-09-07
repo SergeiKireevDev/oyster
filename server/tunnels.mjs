@@ -460,7 +460,9 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
         return;
       }
       const current = await hublotRepository(state).find(tunnel.id);
-      if (current && current.status !== "failed" && current.status !== "closed") {
+      const latestTunnel = (await hublotRepository(state).listProcesses(tunnel.id))
+        .filter((row) => row.role === "tunnel").at(-1);
+      if (current && !state.hublotReopens?.has(tunnel.id) && latestTunnel?.id === tunnelProcess?.id && current.status !== "failed" && current.status !== "closed") {
         const manuallyClosed = current.desired_state === "closed";
         const closedAt = new Date().toISOString();
         await recordHublotTransition(state, tunnel.id, manuallyClosed ? "closed" : "interrupted", {
@@ -475,6 +477,83 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
       }
     });
   });
+}
+
+/** Reopen the existing record and its authoritative service startup artifact. */
+export async function reopenHublot(state, id, {
+  spawnProcess = spawn,
+  waitForPort = waitForLocalPort,
+  open = openTunnel,
+  materialize = materializeHublotStartupScript,
+} = {}) {
+  const pending = state.hublotReopens ??= new Set();
+  if (pending.has(id)) throw Object.assign(new Error("hublot is already reopening"), { statusCode: 409 });
+  pending.add(id);
+  let serviceProc;
+  let started = false;
+  try {
+    const row = await hublotRepository(state).find(id);
+    if (!row) throw Object.assign(new Error("no such hublot"), { statusCode: 404 });
+    if (["opening", "recovering", "closing"].includes(row.status)
+      || (row.status === "open" && await currentHublotTunnelProcessIsHealthy(state, id))) {
+      throw Object.assign(new Error("hublot is already active"), { statusCode: 409 });
+    }
+    const conflict = (await hublotRepository(state).list({ port: row.port }))
+      .some((other) => other.id !== id && other.status !== "closed");
+    if (conflict) throw Object.assign(new Error("hublot port is reserved by another hublot"), { statusCode: 409 });
+    const priorProcesses = await hublotRepository(state).listProcesses(id);
+    if (await localPortAnswers(row.port) && !priorProcesses.some((processRow) =>
+      processRow.role === "service" && verifyPersistedProcessIdentity(processRow))) {
+      throw Object.assign(new Error("hublot port is occupied by an unrelated service"), { statusCode: 409 });
+    }
+    const artifact = await materialize(state, id);
+    // Retire old tunnel identities before launching a replacement. Service
+    // startup scripts are idempotent and can reuse their surviving service.
+    for (const processRow of await hublotRepository(state).listProcesses(id)) {
+      if (processRow.role !== "tunnel" || processRow.ended_at) continue;
+      if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid);
+      await finishPersistedProcess(state, processRow);
+    }
+    await recordHublotTransition(state, id, "opening", {
+      desiredState: "open", publicUrl: null, lastError: null, closedAt: null,
+    });
+    started = true;
+    state.serverEvent?.({ type: "tunnel_opening", tunnel: await persistedTunnelInfo(state, await hublotRepository(state).find(id)) });
+    serviceProc = spawnProcess(artifact.path, [], { cwd: row.workdir, stdio: "ignore", detached: true });
+    let startupError = null;
+    serviceProc.on("error", (error) => { startupError = error; });
+    serviceProc.on("exit", (code) => {
+      if (code !== 0) startupError = new Error(`startup script exited (code=${code})`);
+    });
+    await waitForPort(row.port, { check: async (port) => {
+      if (startupError) throw startupError;
+      return localPortAnswers(port);
+    } });
+    if (startupError) throw startupError;
+    const servicePid = pidsOnPort(row.port)[0] ?? (serviceProc.exitCode === null ? serviceProc.pid : null);
+    if (!servicePid) throw new Error("could not identify the restarted service");
+    const processRow = await persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: servicePid });
+    if (servicePid === serviceProc.pid) {
+      registerHublotProcessHandle(state, processRow, serviceProc);
+      serviceProc.once("exit", (exitCode, signal) => {
+        removeHublotProcessHandle(state, processRow, serviceProc);
+        finishPersistedProcess(state, processRow, { exitCode, signal }).catch(() => {});
+      });
+    }
+    serviceProc.unref();
+    const current = await hublotRepository(state).find(id);
+    if (current.status !== "opening" || current.desired_state !== "open") throw new Error("hublot reopening was cancelled");
+    return await open(state, { id, port: row.port, label: row.label, sessionId: row.session_id });
+  } catch (error) {
+    if (serviceProc?.exitCode === null) serviceProc.kill("SIGTERM");
+    if (started) {
+      await failOpeningHublot(state, id, error);
+      state.serverEvent?.({ type: "hublot_failed", tunnel: { id, status: "failed", url: null }, error: error.message });
+    }
+    throw error;
+  } finally {
+    pending.delete(id);
+  }
 }
 
 /** Close one tunnel by id: kills the cloudflared process, the background

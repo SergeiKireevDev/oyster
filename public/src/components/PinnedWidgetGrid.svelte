@@ -12,7 +12,7 @@
     pinnedWidgetsLoading,
   } from "../stores/pinnedWidgets.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
-  import { buildPinnedWidgetViewModel } from "../features/pinned-widgets/pinnedWidgetViewModel.js";
+  import { buildPinnedWidgetViewModel, isRevivableHublot } from "../features/pinned-widgets/pinnedWidgetViewModel.js";
   import {
     PINNED_WIDGET_MANAGE_ACTION,
     PINNED_WIDGET_MOVE_ACTION,
@@ -223,6 +223,10 @@
 
   onDestroy(clearTouchDrag);
 
+  function widgetAccessibleLabel(widget) {
+    return isRevivableHublot(widget) ? `Reopen ${widget.label}` : widgetTitle(widget);
+  }
+
   function widgetTitle(widget) {
     const availability = widget.availability === "ready" ? "" : ` · ${widget.availability}`;
     return `${widget.label}${availability} · ${accessLabel(widget)}`;
@@ -308,11 +312,15 @@
       type="button"
       class="pinned-widget-tile"
       onclick={(event) => openWidget(event, widget)}
-      aria-label={widgetTitle(widget)}
+      aria-label={widgetAccessibleLabel(widget)}
       title={widgetTitle(widget)}
     >
       <span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden="true" use:monitorPreview={widget}>
-        {#if readyMedia(widget, "image")}
+        {#if isRevivableHublot(widget)}
+          <svg class="pinned-widget-reopen" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5" />
+          </svg>
+        {:else if readyMedia(widget, "image")}
           <img
             src={browserActions.pinnedWidgetMediaSource(widget.id)}
             alt=""

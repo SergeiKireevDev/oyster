@@ -73,3 +73,8 @@ export function buildPinnedWidgetViewModel(widgets, groups, scopes) {
   for (const group of groups) groupWidgets.set(group.id, childrenByGroup.get(group.id) ?? []);
   return { sections, groupWidgets };
 }
+
+export function isRevivableHublot(widget) {
+  return widget.kind === "live_interface" && !!widget.hublotId
+    && ["closed", "error"].includes(widget.availability) && widget.status !== "closing";
+}

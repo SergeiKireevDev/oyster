@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const moduleVersion = (name) => { const info = statSync(join(__dirname, name), { bigint: true }); return `${info.mtimeNs}-${info.size}`; };
 const bust = (name) => `./${name}?v=${moduleVersion(name)}`;
 export async function buildCandidate(stableState, { generation = Symbol("application-candidate") } = {}) {
-  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnGitServerService } =
+  const { listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, reopenHublot, closeSessionHublots, shutdownHublots, spawnHublotAgent, spawnGitServerService } =
     await import(bust("tunnels.mjs"));
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
@@ -152,7 +152,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const fileRoutes = createFileRoutes({ state, requestContext });
   const workdirRoutes = createWorkdirRoutes({ state, appStore, requestContext, spawnRunner, runnerInfo });
   const tunnelRoutes = createTunnelRoutes({
-    state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel,
+    state, appStore, config, requestContext, listTunnels, allocateHublot, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, reopenHublot,
     spawnHublotAgent, spawnGitServerService, ensureSessionOwner,
     pinHublot: (hublot) => ensurePinnedHublot(state, hublot),
   });
