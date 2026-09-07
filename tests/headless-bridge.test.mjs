@@ -105,9 +105,11 @@ test("Gemini bridge creates a private MCP settings file and injects Oyster-manag
 });
 
 test("Amp bridge uses the browser-managed settings and environment-expanded MCP headers", async (t) => {
-  const records = await bridgeRun(t, "amp", { prompt: "work", sessionId: null, resume: false, steer: false }, { ampSettingsPath: "/private/amp/settings.json" });
+  const records = await bridgeRun(t, "amp", { prompt: "work", sessionId: null, resume: false, steer: false, model: "high" }, { ampSettingsPath: "/private/amp/settings.json" });
   const invocation = records.find((record) => record.type === "fake.argv");
   assert.ok(invocation.argv.includes("--stream-json-input"));
+  assert.equal(invocation.argv[invocation.argv.indexOf("--mode") + 1], "high");
+  assert.equal(invocation.argv.includes("--model"), false);
   assert.equal(invocation.argv[invocation.argv.indexOf("--settings-file") + 1], "/private/amp/settings.json");
   const config = JSON.parse(invocation.argv[invocation.argv.indexOf("--mcp-config") + 1]);
   assert.equal(config.oyster.headers.Authorization, "Bearer ${OYSTER_TOKEN}");

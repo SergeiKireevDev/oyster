@@ -6,25 +6,33 @@ function modelPickerLabel(model) {
   return details.length ? `${identity} — ${details.join(" · ")}` : identity;
 }
 
-export function createSettingsController({ rpc, pickOption, refreshState, toast, getState }) {
+export function createSettingsController({ rpc, pickOption, refreshState, toast, getState, openCredentials, getHarness = () => "pi", getRunnerId = () => null }) {
   async function chooseModel() {
     try {
-      const { models } = await rpc({ type: "get_available_models" });
+      const runnerId = getRunnerId();
+      const harness = getHarness();
+      const { models = [], selectionLabel = "model" } = await rpc({ type: "get_available_models" });
+      if (runnerId !== getRunnerId()) return;
+      if (!models.length) {
+        await openCredentials?.({ harness });
+        return;
+      }
       const labels = models.map(modelPickerLabel);
       const current = getState?.()?.model;
       const selected = models.findIndex((model) => model.provider === current?.provider
         && (model.id === current?.id || model.resolvedModel === current?.id));
-      const choice = await pickOption("Select model", labels, {
+      const choice = await pickOption(`Select ${selectionLabel}`, labels, {
         searchable: true,
         selected,
         disabled: models.map((model) => model.disabled === true),
         variant: "model",
         placeholder: "Search providers and models…",
       });
-      if (choice == null) return;
+      if (choice == null || runnerId !== getRunnerId()) return;
       const model = models[choice];
       await rpc({ type: "set_model", provider: model.provider, modelId: model.id });
-      toast(`model: ${model.id}`);
+      toast(`${selectionLabel}: ${model.id}`);
+      await refreshState();
     } catch (error) { toast(error.message, "error"); }
   }
   async function cycleThinking() {

@@ -25,9 +25,9 @@ export function createCredentialsAssembly({
   let setupModalOpen = false;
   const controller = createController({ fetchImpl, confirm, toast, setState });
 
-  const open = () => {
+  const open = ({ harness = null } = {}) => {
     if (tornDown) return;
-    setState({ setupMode: false });
+    setState({ setupMode: false, targetHarness: harness });
     controller.activate();
     openModal({ title: "Credentials", wide: true, content: "credentials" });
     return controller.load();

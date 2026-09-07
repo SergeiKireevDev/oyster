@@ -88,6 +88,9 @@ test("Codex driver translates JSONL turns, tools, messages, state, resume identi
   assert.deepEqual(driver.decodeLine(runner, '{"type":"error","message":"OAuth access token expired (401)"}').at(-1), { type: "harness_auth_failed", reason: "codex_oauth" });
   assert.deepEqual(driver.decodeLine(runner, '{"type":"turn.completed","usage":{"input_tokens":1}}'), [{ type: "agent_end", willRetry: false }, { type: "agent_settled" }]);
 
+  driver.sendCommand(runner, launch.child, { id: "models", type: "get_available_models" });
+  assert.deepEqual(line(launch.child.stdin), { type: "models", id: "models" });
+  driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.models", id: "models", models: [{ provider: "openai", id: "gpt-test" }] }));
   driver.sendCommand(runner, launch.child, { id: "model", type: "set_model", provider: "openai", modelId: "gpt-test" });
   driver.sendCommand(runner, launch.child, { id: "state", type: "get_state" });
   await tick();
@@ -121,7 +124,7 @@ test("Gemini CLI driver accumulates stream deltas and translates tool results", 
   assert.deepEqual(driver.sessionReference({ sessionId: run.sessionId }), { backend: "gemini", id: run.sessionId, storagePath: null });
 });
 
-test("Amp driver handles its Claude-compatible stream and rejects manual model selection", async () => {
+test("Amp driver handles its Claude-compatible stream and selects modes rather than arbitrary models", async () => {
   const { driver, runner, launch } = launchDriver(createAmpDriver, { kind: "amp" });
   const emitted = [];
   runner.driverEmit = (event) => emitted.push(event);
@@ -138,7 +141,13 @@ test("Amp driver handles its Claude-compatible stream and rejects manual model s
   assert.deepEqual(answer.map((event) => event.type), ["message_start", "message_end", "agent_end", "agent_settled"]);
   driver.sendCommand(runner, launch.child, { id: "model", type: "set_model", provider: "amp", modelId: "anything" });
   await tick();
-  assert.match(emitted.find((event) => event.id === "model").error, /selects its model automatically/);
+  assert.equal(emitted.find((event) => event.id === "model").success, false);
+  driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.models", id: "models", models: [{ provider: "amp", id: "high" }] }));
+  driver.sendCommand(runner, launch.child, { id: "mode", type: "set_model", provider: "amp", modelId: "high" });
+  driver.sendCommand(runner, launch.child, { id: "next", type: "prompt", message: "continue" });
+  await tick();
+  assert.equal(emitted.find((event) => event.id === "mode").success, true);
+  assert.equal(line(launch.child.stdin).model, "high");
   assert.deepEqual(driver.sessionReference({ sessionId: "T-amp" }), { backend: "amp", id: "T-amp", storagePath: null });
 });
 

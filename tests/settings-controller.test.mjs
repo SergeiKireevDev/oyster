@@ -22,3 +22,30 @@ test("settings controller selects and applies a model", async () => {
   }]);
   assert.deepEqual(toasts, [["model: alias"]]);
 });
+
+test("empty model lists open compatible harness credentials instead of an empty picker", async () => {
+  for (const harness of ["pi", "claude-code", "codex", "gemini", "amp"]) {
+    const targets = [];
+    const controller = createSettingsController({
+      rpc: async () => ({ models: [] }),
+      pickOption: () => assert.fail("empty picker"),
+      toast: () => assert.fail("unexpected error"),
+      getHarness: () => harness,
+      openCredentials: (target) => targets.push(target),
+    });
+    await controller.chooseModel();
+    assert.deepEqual(targets, [{ harness }]);
+  }
+});
+
+test("Amp picker labels mode selection and refreshes state after selecting", async () => {
+  let title; let refreshed = false;
+  const controller = createSettingsController({
+    rpc: async () => ({ models: [{ provider: "amp", id: "high" }], selectionLabel: "mode" }),
+    pickOption: async (value) => { title = value; return 0; },
+    toast() {}, refreshState: () => { refreshed = true; },
+  });
+  await controller.chooseModel();
+  assert.equal(title, "Select mode");
+  assert.equal(refreshed, true);
+});

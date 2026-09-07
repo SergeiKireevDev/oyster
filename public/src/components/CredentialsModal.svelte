@@ -83,7 +83,9 @@
 
   $: credentialRows = $credentialsState.providers.filter((provider) => provider.configured || provider.harness);
   $: selectableProviders = $credentialsState.providers.filter((provider) =>
-    (provider.harness ?? "pi") === "pi" && provider.credentialType !== "oauth"
+    ($credentialsState.targetHarness && $credentialsState.targetHarness !== "pi"
+      ? provider.oauthCapable && (provider.harness === $credentialsState.targetHarness || provider.harnesses?.includes($credentialsState.targetHarness))
+      : (provider.harness ?? "pi") === "pi" && provider.credentialType !== "oauth")
       && (provider.registered || provider.oauthCapable || provider.credentialType === "api_key"));
   $: if (!selectableProviders.some((provider) => provider.provider === selectedProvider)) {
     selectedProvider = selectableProviders[0]?.provider ?? "";
@@ -401,13 +403,15 @@
         class="btn"
         type="button"
         disabled={$credentialsState.loading || oauthOperationPending || !selectedProvider}
-        onclick={() => startOAuth(selectedProvider)}
+        onclick={() => startOAuth(selected)}
       >
         {oauthActionLabel(selected)}
       </button>
-      <button class="api-key-method-toggle" type="button" disabled={oauthOperationPending} onclick={useApiKey}>
-        Use an API key instead
-      </button>
+      {#if !$credentialsState.targetHarness || $credentialsState.targetHarness === "pi"}
+        <button class="api-key-method-toggle" type="button" disabled={oauthOperationPending} onclick={useApiKey}>
+          Use an API key instead
+        </button>
+      {/if}
     {:else}
       <label>
         <span>API key</span>

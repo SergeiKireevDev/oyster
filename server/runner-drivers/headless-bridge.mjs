@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { discoverCodexModels } from "./codex.mjs";
+import { discoverGeminiModels } from "./gemini.mjs";
+import { ampModels } from "./amp.mjs";
+import { createAmpOAuthCredentialSink } from "../amp-oauth-credential-sink.mjs";
 import {
   chmodSync, closeSync, constants, fstatSync, mkdtempSync, openSync,
   readFileSync, rmSync, writeFileSync,
@@ -23,6 +27,10 @@ if (!config || !["codex", "gemini", "amp"].includes(config.kind) || typeof confi
 
 let child = null;
 let childKind = null;
+let childMode = null;
+let changingMode = false;
+const discoveryAbort = new AbortController();
+let discovery = null;
 let childStderr = "";
 let stopping = false;
 const queue = [];
@@ -114,6 +122,7 @@ function ampArgs(run) {
       url: config.mcpUrl,
       headers: { Authorization: "Bearer ${OYSTER_TOKEN}" },
     } }),
+    ...(run.model ? ["--mode", run.model] : []),
     ...(typeof config.ampSettingsPath === "string" ? ["--settings-file", config.ampSettingsPath] : []),
     ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
   ];
@@ -122,10 +131,7 @@ function ampArgs(run) {
     : execution;
 }
 
-function spawnChild(run) {
-  childKind = config.kind;
-  childStderr = "";
-  const args = config.kind === "codex" ? codexArgs(run) : config.kind === "gemini" ? geminiArgs(run) : ampArgs(run);
+function nativeEnvironment() {
   const env = { ...process.env };
   delete env.OYSTER_HEADLESS_BRIDGE_CONFIG;
   if (config.kind === "codex") projectCodexOAuth(env);
@@ -137,6 +143,30 @@ function spawnChild(run) {
       env.GOOGLE_CLOUD_ACCESS_TOKEN = access;
     }
   }
+  return env;
+}
+
+async function listModels(message) {
+  try {
+    discovery ??= (async () => {
+      const options = { bin: config.bin, cwd: config.cwd, env: nativeEnvironment(), signal: discoveryAbort.signal };
+      if (config.kind === "codex") return discoverCodexModels(options);
+      if (config.kind === "gemini") return discoverGeminiModels(options);
+      const authenticated = options.env.AMP_API_KEY || (config.ampMarkerPath && createAmpOAuthCredentialSink({ bin: config.bin, settingsPath: config.ampSettingsPath, markerPath: config.ampMarkerPath }).status().configured);
+      return authenticated ? ampModels() : [];
+    })();
+    output({ type: "oyster.bridge.models", id: message.id, models: await discovery });
+  } catch (error) {
+    output({ type: "oyster.bridge.models", id: message.id, error: error.message });
+  } finally { discovery = null; }
+}
+
+function spawnChild(run) {
+  childKind = config.kind;
+  childMode = run.model;
+  childStderr = "";
+  const args = config.kind === "codex" ? codexArgs(run) : config.kind === "gemini" ? geminiArgs(run) : ampArgs(run);
+  const env = nativeEnvironment();
   output({ type: "oyster.bridge.turn_start" });
   child = spawn(config.bin, args, { cwd: config.cwd, stdio: [config.kind === "amp" ? "pipe" : "ignore", "pipe", "pipe"], env });
   const childOutput = createInterface({ input: child.stdout });
@@ -154,7 +184,8 @@ function spawnChild(run) {
     const wasAmp = childKind === "amp";
     child = null;
     childKind = null;
-    output({ type: "oyster.bridge.turn_exit", code, signal, ...(spawnError ? { error: spawnError.message } : {}), stderr: childStderr });
+    if (!changingMode) output({ type: "oyster.bridge.turn_exit", code, signal, ...(spawnError ? { error: spawnError.message } : {}), stderr: childStderr });
+    changingMode = false;
     if (!stopping && (!wasAmp || queue.length)) runNext();
   });
   if (config.kind === "amp") {
@@ -176,6 +207,17 @@ function runPrompt(message) {
     steer: message.steer === true,
     model: typeof message.model === "string" && message.model ? message.model : null,
   };
+  if (config.kind === "amp" && child?.stdin?.writable && childMode !== run.model) {
+    queue.push(run);
+    changingMode = true;
+    const previous = child;
+    previous.stdin.end();
+    previous.kill("SIGTERM");
+    const forceStop = setTimeout(() => previous.kill("SIGKILL"), 1000);
+    forceStop.unref();
+    previous.once("close", () => clearTimeout(forceStop));
+    return;
+  }
   if (config.kind === "amp" && child?.stdin?.writable) {
     output({ type: "oyster.bridge.turn_start" });
     const prompt = config.systemPrompt && !run.resume ? `${config.systemPrompt}\n\n${run.prompt}` : run.prompt;
@@ -197,6 +239,7 @@ input.on("line", (line) => {
   try { message = JSON.parse(line); } catch { return; }
   if (message?.type === "run") runPrompt(message);
   else if (message?.type === "abort") abortTurn();
+  else if (message?.type === "models") void listModels(message);
   else if (message?.type === "health") output({ type: "oyster.bridge.pong", id: message.id ?? null });
 });
 input.on("close", () => shutdown("SIGTERM"));
@@ -204,8 +247,10 @@ input.on("close", () => shutdown("SIGTERM"));
 function shutdown(signal) {
   if (stopping) return;
   stopping = true;
+  discoveryAbort.abort();
   queue.length = 0;
   if (child) child.kill(signal);
+  else if (discovery) void discovery.catch(() => {}).finally(() => process.exit(0));
   else process.exit(0);
   setTimeout(() => process.exit(0), 1000).unref();
 }

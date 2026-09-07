@@ -56,7 +56,7 @@ function stateFor(runner, runtime, provider) {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
     sessionName: runtime.sessionName ?? runner.sessionName ?? null,
     sessionFile: null,
-    model: runtime.model ? { provider, id: runtime.model } : null,
+    model: (runtime.selectedModel ?? runtime.model) ? { provider, id: runtime.selectedModel ?? runtime.model } : null,
     thinkingLevel: "off",
     messageCount: runtime.messages.length,
     pendingMessageCount: 0,
@@ -277,6 +277,11 @@ export function createHeadlessDriver({
       if (!record || typeof record !== "object" || Array.isArray(record)) return [];
       const runtime = runtimeFor(runner, { model: defaultModel });
       if (record.type === "oyster.bridge.pong") return [];
+      if (record.type === "oyster.bridge.models") {
+        if (record.error) return [response(record.id, "get_available_models", null, false, record.error)];
+        runtime.availableModels = Array.isArray(record.models) ? record.models : [];
+        return [response(record.id, "get_available_models", { models: runtime.availableModels, selectionLabel: kind === "amp" ? "mode" : "model" })];
+      }
       if (record.type === "oyster.bridge.turn_start") {
         runtime.streaming = true;
         return [{ type: "agent_start" }];
@@ -321,16 +326,17 @@ export function createHeadlessDriver({
         return true;
       }
       if (command.type === "get_available_models") {
-        const models = runtime.model ? [{ provider, id: runtime.model }] : [];
-        emit(response(command.id, "get_available_models", { models }));
+        if (!child?.stdin?.writable) return false;
+        child.stdin.write(`${JSON.stringify({ type: "models", id: command.id })}\n`);
         return true;
       }
       if (command.type === "set_model") {
-        if (kind === "amp") { emit(response(command.id, "set_model", null, false, "Amp selects its model automatically")); return true; }
-        if (command.provider !== provider || typeof command.modelId !== "string" || !command.modelId.trim()) {
+        if (runtime.streaming) { emit(response(command.id, "set_model", null, false, "Wait for the current turn before changing models")); return true; }
+        if (command.provider !== provider || typeof command.modelId !== "string" || !runtime.availableModels?.some((model) => model.provider === provider && model.id === command.modelId && !model.disabled)) {
           emit(response(command.id, "set_model", null, false, `${label ?? id} requires a ${provider} model`)); return true;
         }
-        runtime.model = command.modelId.trim();
+        runtime.selectedModel = command.modelId;
+        runtime.model = command.modelId;
         emit(response(command.id, "set_model", {}));
         return true;
       }
@@ -343,7 +349,7 @@ export function createHeadlessDriver({
         const steer = runtime.streaming;
         runtime.streaming = true;
         emit({ type: "message_start", message });
-        child.stdin.write(`${JSON.stringify({ type: "run", prompt: text, sessionId: runtime.sessionId, resume: runtime.initialized, steer, model: runtime.model })}\n`);
+        child.stdin.write(`${JSON.stringify({ type: "run", prompt: text, sessionId: runtime.sessionId, resume: runtime.initialized, steer, model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model })}\n`);
         emit(response(command.id, "prompt", {}));
         return true;
       }

@@ -6,6 +6,7 @@ import { createCarouselEventDependencies } from "../../runtime/carouselEventDepe
 import { createLayoutFeature } from "../layout/createLayoutFeature.js";
 import { createSettingsFeature } from "./createSettingsFeature.js";
 import {
+  CREDENTIALS_OPEN_ACTION,
   HEADER_CHOOSE_MODEL_ACTION,
   HEADER_CYCLE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
@@ -22,6 +23,9 @@ export function createSettingsLayoutRuntime(deps) {
       refreshState: deps.refreshState,
       toast: deps.toast,
       getState: deps.getState,
+      getRunnerId: deps.getCurrentRunner,
+      getHarness: () => deps.getRunners?.().find((runner) => runner.id === deps.getCurrentRunner?.())?.harness ?? "pi",
+      openCredentials: (target) => deps.uiActions.invoke(CREDENTIALS_OPEN_ACTION, target),
     },
   });
 

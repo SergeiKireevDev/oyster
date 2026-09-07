@@ -49,7 +49,7 @@ test("selecting an OAuth-capable provider defaults to OAuth instead of requestin
   assert.match(modal, /selectedProvider !== methodProvider[\s\S]*?authenticationMethod = selected\?\.oauthCapable \? "oauth" : "api_key"/);
   assert.match(modal, /selected\?\.oauthCapable && authenticationMethod === "oauth"[\s\S]*?oauthActionLabel\(selected\)/);
   assert.match(modal, /function oauthActionLabel\(provider\)[\s\S]*?"Sign in with OAuth"/);
-  assert.match(modal, /onclick=\{\(\) => startOAuth\(selectedProvider\)\}/);
+  assert.match(modal, /onclick=\{\(\) => startOAuth\(selected\)\}/);
   assert.match(modal, /Use an API key instead/);
   assert.match(modal, /Use OAuth instead/);
 });

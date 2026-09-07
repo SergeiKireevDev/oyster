@@ -4,6 +4,7 @@ export const emptyCredentialsState = Object.freeze({
   providers: [],
   flow: null,
   setupMode: false,
+  targetHarness: null,
   loading: false,
   error: "",
   lastRestart: null,

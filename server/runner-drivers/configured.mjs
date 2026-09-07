@@ -48,7 +48,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
       ...(config.AMP_BIN ? [createAmpDriver({
         bin: config.AMP_BIN,
         extraArgs: config.AMP_ARGS,
-        bridgeOptions: { ampSettingsPath: config.AMP_SETTINGS_PATH },
+        bridgeOptions: { ampSettingsPath: config.AMP_SETTINGS_PATH, ampMarkerPath: config.AMP_AUTH_MARKER_PATH },
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
     ],

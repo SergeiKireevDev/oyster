@@ -78,6 +78,7 @@ const manifest = createReloadManifest({
     "runner-drivers/gemini.mjs",
     "runner-drivers/headless-bridge.mjs",
     "runner-drivers/headless-driver.mjs",
+    "runner-drivers/native-models.mjs",
     "runner-drivers/pi-rpc.mjs",
     "runner-drivers/registry.mjs",
     "runners.mjs",
