@@ -6,15 +6,14 @@ function modelPickerLabel(model) {
   return details.length ? `${identity} — ${details.join(" · ")}` : identity;
 }
 
-export function createSettingsController({ rpc, pickOption, refreshState, toast, getState, openCredentials, getHarness = () => "pi", getRunnerId = () => null }) {
+export function createSettingsController({ rpc, pickOption, refreshState, toast, getState, getRunnerId = () => null }) {
   async function chooseModel() {
     try {
       const runnerId = getRunnerId();
-      const harness = getHarness();
       const { models = [], selectionLabel = "model" } = await rpc({ type: "get_available_models" });
       if (runnerId !== getRunnerId()) return;
       if (!models.length) {
-        await openCredentials?.({ harness });
+        toast("No models are currently available for this harness.");
         return;
       }
       const labels = models.map(modelPickerLabel);
