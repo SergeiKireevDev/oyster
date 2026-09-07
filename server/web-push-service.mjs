@@ -7,7 +7,22 @@ function notificationUrl(runner) {
   return runner.sessionId ? `/s/${encodeURIComponent(runner.sessionId)}` : "/";
 }
 
-/** Durable Web Push delivery with content-minimal payloads. */
+const notificationSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function compactNotificationText(value, limit, keepEnd = false) {
+  const text = typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
+  const characters = Array.from(notificationSegmenter.segment(text), ({ segment }) => segment);
+  if (characters.length <= limit) return text;
+  return keepEnd ? `…${characters.slice(-(limit - 1)).join("")}` : `${characters.slice(0, limit - 1).join("")}…`;
+}
+
+function notificationBody(runner) {
+  const name = compactNotificationText(runner.sessionName, 60) || "Untitled session";
+  const workdir = compactNotificationText(runner.dir, 100, true);
+  return workdir ? `${name}\n${workdir}` : name;
+}
+
+/** Durable Web Push delivery with session identity and status. */
 export async function createWebPushService({
   repository,
   subject = process.env.OYSTER_VAPID_SUBJECT || "mailto:oyster@localhost",
@@ -57,7 +72,7 @@ export async function createWebPushService({
       if (Number.isFinite(startedAt) && now() - startedAt >= longRunMs) {
         void send({
           title: "Oyster task finished",
-          body: "A long-running agent result is ready to review.",
+          body: notificationBody(runner),
           url: notificationUrl(runner),
           tag: `agent-finished:${runner.id}`,
         });
@@ -67,7 +82,7 @@ export async function createWebPushService({
     if (event.type === "extension_ui_request" && CLARIFICATION_METHODS.has(event.method)) {
       void send({
         title: "Oyster needs your input",
-        body: "An agent is waiting for clarification.",
+        body: notificationBody(runner),
         url: notificationUrl(runner),
         tag: `clarification:${runner.id}:${event.id}`,
       });

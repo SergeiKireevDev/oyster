@@ -25,12 +25,12 @@ function fixture({ sendNotification = async () => ({}) } = {}) {
 
 const drain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("web push sends generic clarification and long-run completion deep links", async () => {
+test("web push identifies the session and workdir for clarification and completion", async () => {
   const payloads = [];
   const state = fixture({ sendNotification: async (_subscription, payload) => payloads.push(JSON.parse(payload)) });
   let clock = 1_000;
   const service = await createWebPushService({ ...state, now: () => clock, longRunMs: 60_000 });
-  const runner = { id: "runner-1", sessionId: "session 1" };
+  const runner = { id: "runner-1", sessionId: "session 1", sessionName: "Improve notifications", dir: "/home/ubuntu/oyster" };
 
   service.handleRunnerEvent(runner, { type: "extension_ui_request", id: "question-1", method: "input", title: "SECRET PROMPT" });
   service.handleRunnerEvent(runner, { type: "agent_start" });
@@ -47,7 +47,32 @@ test("web push sends generic clarification and long-run completion deep links", 
     { title: "Oyster task finished", url: "/s/session%201" },
   ]);
   assert.doesNotMatch(JSON.stringify(payloads), /SECRET PROMPT/);
+  assert.deepEqual(payloads.map(({ body }) => body), [
+    "Improve notifications\n/home/ubuntu/oyster",
+    "Improve notifications\n/home/ubuntu/oyster",
+  ]);
   assert.equal(state.delivered.length, 2);
+});
+
+test("web push shortens long identity fields without splitting emoji and handles unnamed sessions", async () => {
+  const payloads = [];
+  const state = fixture({ sendNotification: async (_subscription, payload) => payloads.push(JSON.parse(payload)) });
+  const service = await createWebPushService(state);
+  const notify = (runner) => service.handleRunnerEvent(runner, { type: "extension_ui_request", method: "input", id: "question" });
+  notify({ id: "long", sessionName: "👩‍💻".repeat(61), dir: `/${"parent/".repeat(20)}oyster` });
+  notify({ id: "unnamed", sessionName: "  ", dir: "/work/project" });
+  notify({ id: "missing" });
+  notify({ id: "whitespace", sessionName: "  Fix\n mobile\t alerts  ", dir: "/work/project" });
+  await drain();
+  const [name, workdir] = payloads[0].body.split("\n");
+  assert.equal(name, `${"👩‍💻".repeat(59)}…`);
+  assert.equal(workdir.length, 100);
+  assert.ok(workdir.startsWith("…"));
+  assert.ok(workdir.endsWith("/oyster"));
+  assert.equal(payloads[1].body, "Untitled session\n/work/project");
+  assert.equal(payloads[2].body, "Untitled session");
+  assert.equal(payloads[2].url, "/");
+  assert.equal(payloads[3].body, "Fix mobile alerts\n/work/project");
 });
 
 test("web push ignores fire-and-forget extension UI events and removes expired endpoints", async () => {
