@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { redactChildOutput } from "./secret-output.mjs";
 import { randomUUID } from "node:crypto";
 import { validateRunnerDriver } from "./contract.mjs";
 import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs";
@@ -32,7 +33,7 @@ function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };
 }
 
-function availableModels(records, currentModel = null) {
+function availableModels(records, currentModel = null, provider = "anthropic") {
   const models = [];
   const seen = new Set();
   const resolved = new Set();
@@ -46,7 +47,7 @@ function availableModels(records, currentModel = null) {
       : null;
     if (resolvedModel) resolved.add(resolvedModel);
     models.push({
-      provider: "anthropic",
+      provider,
       id,
       ...(typeof record.displayName === "string" && record.displayName.trim() ? { name: record.displayName.trim() } : {}),
       ...(typeof record.description === "string" && record.description.trim() ? { description: record.description.trim() } : {}),
@@ -55,7 +56,7 @@ function availableModels(records, currentModel = null) {
     });
   }
   if (typeof currentModel === "string" && currentModel.trim() && !seen.has(currentModel.trim()) && !resolved.has(currentModel.trim())) {
-    models.push({ provider: "anthropic", id: currentModel.trim() });
+    models.push({ provider, id: currentModel.trim() });
   }
   return models;
 }
@@ -81,7 +82,7 @@ function stateFor(runner, runtime) {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
     sessionName: runtime.sessionName ?? runner.sessionName ?? null,
     sessionFile: null,
-    model: runtime.model ? { provider: "anthropic", id: runtime.model } : null,
+    model: runtime.model ? { provider: runtime.provider ?? "anthropic", id: runtime.model } : null,
     thinkingLevel: "off",
     messageCount: runtime.messages.length,
     pendingMessageCount: 0,
@@ -98,6 +99,7 @@ export function createClaudeCodeDriver({
   permissionMode = "default",
   sqlitePath = null,
   env = {},
+  resolveRoute = () => null,
   uiUrl = env?.OYSTER_URL ?? DEFAULT_UI_URL,
 } = {}) {
   const executable = nonEmpty(bin, "Claude Code executable");
@@ -130,8 +132,11 @@ export function createClaudeCodeDriver({
       ];
       // OYSTER_TOKEN must exist for Claude Code's `${OYSTER_TOKEN}` header expansion,
       // even when the server runs unauthenticated.
-      const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env };
+      const route = resolveRoute();
+      runtime.provider = route?.provider ?? "anthropic";
+      const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env };
       const process = spawnImpl(executable, args, { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
+      redactChildOutput(process, [route?.env?.ANTHROPIC_AUTH_TOKEN]);
       return { process, description: `${executable} ${args.join(" ")}` };
     },
 
@@ -153,7 +158,7 @@ export function createClaudeCodeDriver({
         if (pending.command === "get_available_models") {
           if (control.subtype === "success") {
             events.push(response(pending.id, pending.command, {
-              models: availableModels(control.response?.models, runtime.model),
+              models: availableModels(control.response?.models, runtime.model, runtime.provider),
             }));
           } else {
             events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models")));
@@ -203,7 +208,7 @@ export function createClaudeCodeDriver({
         if (error !== null) events.push({ type: "pi_error", error });
         events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
         // Emitted after settlement so recovery sees an idle runner it may restart.
-        if (error !== null && OAUTH_FAILURE_RE.test(error)) events.push({ type: "harness_auth_failed", reason: "oauth_expired", error });
+        if (runtime.provider !== "openrouter" && error !== null && OAUTH_FAILURE_RE.test(error)) events.push({ type: "harness_auth_failed", reason: "oauth_expired", error });
       }
       return events;
     },
@@ -230,8 +235,8 @@ export function createClaudeCodeDriver({
       }
       if (command.type === "set_model") {
         if (!child?.stdin?.writable) return false;
-        if (command.provider !== "anthropic" || typeof command.modelId !== "string" || !command.modelId.trim()) {
-          emit(response(command.id, "set_model", null, false, "Claude Code requires an anthropic model"));
+        if (command.provider !== (runtime.provider ?? "anthropic") || typeof command.modelId !== "string" || !command.modelId.trim()) {
+          emit(response(command.id, "set_model", null, false, "Claude Code requires a model from its selected provider"));
           return true;
         }
         const requestId = `oyster-model-${command.id}`;

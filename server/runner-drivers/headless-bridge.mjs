@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { CODEX_OPENROUTER_ARGS } from "../openrouter-routing.mjs";
 import { discoverCodexModels } from "./codex.mjs";
 import { discoverGeminiModels } from "./gemini.mjs";
 import { discoverAntigravityModels } from "./antigravity.mjs";
@@ -76,8 +77,9 @@ function codexArgs(run) {
     "-c", "mcp_servers.oyster.bearer_token_env_var=\"OYSTER_TOKEN\"",
     "-c", "mcp_servers.oyster.default_tools_approval_mode=\"auto\"",
     ...(config.systemPrompt ? ["-c", `developer_instructions=${tomlString(config.systemPrompt)}`] : []),
-    ...(run.model ? ["--model", run.model] : []),
+    ...(run.model ? ["--model", run.model] : config.provider === "openrouter" ? ["--model", "openai/gpt-5.4"] : []),
     ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
+    ...(config.provider === "openrouter" ? CODEX_OPENROUTER_ARGS : []),
   ];
   if (run.resume && run.sessionId) {
     return ["exec", "resume", ...common, run.sessionId, run.prompt];
@@ -146,7 +148,7 @@ function nativeEnvironment() {
   const env = { ...process.env };
   delete env.OYSTER_HEADLESS_BRIDGE_CONFIG;
   if (config.kind === "antigravity") env.OYSTER_MCP_URL = config.mcpUrl;
-  if (config.kind === "codex") projectCodexOAuth(env);
+  if (config.kind === "codex" && config.provider !== "openrouter") projectCodexOAuth(env);
   if (config.kind === "gemini") {
     const access = geminiOAuthAccess();
     env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = ensureGeminiSettings(Boolean(access));
@@ -162,7 +164,7 @@ async function listModels(message) {
   try {
     discovery ??= (async () => {
       const options = { bin: config.bin, cwd: config.cwd, env: nativeEnvironment(), signal: discoveryAbort.signal };
-      if (config.kind === "codex") return discoverCodexModels(options);
+      if (config.kind === "codex") return discoverCodexModels({ ...options, provider: config.provider });
       if (config.kind === "gemini") return discoverGeminiModels(options);
       if (config.kind === "antigravity") return discoverAntigravityModels(options);
       const authenticated = options.env.AMP_API_KEY || (config.ampMarkerPath && createAmpOAuthCredentialSink({ bin: config.bin, settingsPath: config.ampSettingsPath, markerPath: config.ampMarkerPath }).status().configured);

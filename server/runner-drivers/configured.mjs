@@ -18,7 +18,7 @@ function effectiveUiUrl(config) {
 }
 
 /** Build the harnesses enabled by validated server configuration. */
-export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
+export function createConfiguredRunnerDrivers({ config, piProcesses, openRouterRouting } = {}) {
   if (!config || typeof config !== "object") throw new TypeError("runner driver config is required");
   const pi = createPiRpcDriver({ config, processLauncher: piProcesses });
   const nativePersistence = config.SQLITE_PATH ? {
@@ -32,6 +32,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
       pi,
       ...(config.CLAUDE_CODE_BIN ? [createClaudeCodeDriver({
         bin: config.CLAUDE_CODE_BIN,
+        resolveRoute: () => openRouterRouting?.launch("claude-code"),
         extraArgs: config.CLAUDE_CODE_ARGS,
         permissionMode: config.CLAUDE_CODE_PERMISSION_MODE,
         sqlitePath: config.SQLITE_PATH,
@@ -40,6 +41,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
       ...(config.CODEX_BIN ? [createCodexDriver({
         ...nativePersistence,
         bin: config.CODEX_BIN,
+        resolveRoute: () => openRouterRouting?.launch("codex"),
         extraArgs: config.CODEX_ARGS,
         sandbox: config.CODEX_SANDBOX,
         bridgeOptions: { piAuthPath: `${config.PI_AGENT_DIR}/auth.json`, codexHome: config.CODEX_HOME },

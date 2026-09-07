@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { CODEX_OPENROUTER_ARGS } from "../openrouter-routing.mjs";
 import { createInterface } from "node:readline";
 
 /** Short-lived native protocol connection. Never sends a prompt or logs credentials. */
@@ -51,11 +52,13 @@ export async function withNativeRpc({ bin, args, cwd, env, signal, timeout = 200
 }
 
 export function discoverCodexModels(options) {
-  return withNativeRpc({ ...options, args: ["app-server", "--stdio"] }, async (rpc, notify) => {
+  return withNativeRpc({ ...options, args: ["app-server", "--stdio", ...(options.provider === "openrouter" ? CODEX_OPENROUTER_ARGS : [])] }, async (rpc, notify) => {
     await rpc("initialize", { clientInfo: { name: "oyster", version: "1.0.0" } });
     notify("initialized");
-    const { account } = await rpc("account/read", { refreshToken: false });
-    if (!account) return [];
+    if (options.provider !== "openrouter") {
+      const { account } = await rpc("account/read", { refreshToken: false });
+      if (!account) return [];
+    }
     const models = [];
     let cursor = null;
     const cursors = new Set();
@@ -63,7 +66,7 @@ export function discoverCodexModels(options) {
       const page = await rpc("model/list", { cursor, limit: 100 });
       for (const model of page.data ?? []) {
         if (model.hidden || !model.model || models.some((item) => item.id === model.model)) continue;
-        models.push({ provider: "openai", id: model.model, name: model.displayName ?? model.model });
+        models.push({ provider: options.provider === "openrouter" ? "openrouter" : "openai", id: model.model, name: model.displayName ?? model.model });
       }
       cursor = page.nextCursor ?? null;
       if (cursor && cursors.has(cursor)) throw new Error("Codex model catalog repeated a page");

@@ -151,7 +151,7 @@ export function createCredentialsController({
     const replacing = row?.credentialType === "api_key";
     const accepted = await confirm(
       replacing ? `Replace API key for ${name}?` : `Save API key for ${name}?`,
-      `${replacing ? "Replace the stored key" : "Save this key"} and restart every active pi process?`,
+      `${replacing ? "Replace the stored key" : "Save this key"} and restart every active pi process?${provider === "openrouter" ? " This also restarts every OpenRouter-routed Codex and Claude Code runner. Amp's uploaded account key is not changed." : ""}`,
     );
     if (!accepted || tornDown) return { ok: false, cancelled: true };
 
@@ -182,7 +182,7 @@ export function createCredentialsController({
     const name = providerName(row ?? { provider });
     const accepted = await confirm(
       `Remove API key for ${name}?`,
-      "Remove it from pi and restart every active pi process? This does not revoke the key at the provider.",
+      "Remove it from pi and restart every active pi process? This does not revoke the key at the provider." + (provider === "openrouter" ? " This also restarts every OpenRouter-routed Codex and Claude Code runner. The server environment key remains a fallback; Amp's uploaded key must be removed separately." : ""),
     );
     if (!accepted || tornDown) return { ok: false, cancelled: true };
 

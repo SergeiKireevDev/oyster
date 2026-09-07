@@ -137,7 +137,8 @@ test("application construction defers candidate resource acquisition until activ
   for (const acquisition of [
     "createSqliteSessionCatalog",
     "createPiProcessLauncher({ config })",
-    "createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses })",
+    "createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses, openRouterRouting })",
+    "createOpenRouterRouting({ repository: appStore.repositories.settings, config })",
     "createRunnerManager(state",
     "scheduleHublotStartupReconciliation({ state",
   ]) {

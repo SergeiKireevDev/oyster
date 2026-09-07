@@ -152,7 +152,7 @@ async function runOAuthFlow(page) {
   await expect(page.locator("#mTitle")).toHaveText("Set up credentials");
   const row = page.locator(`.api-key-row[data-provider="${PROVIDER}"]`);
   await expect(row).toHaveCount(0);
-  await page.getByLabel("Provider").selectOption(PROVIDER);
+  await page.getByRole("combobox", { name: "Provider", exact: true }).selectOption(PROVIDER);
   await page.getByRole("button", { name: "Sign in with OAuth" }).click();
   await expect(page.locator("#mTitle")).toContainText("Sign in to Anthropic");
   await page.getByRole("button", { name: "Yes" }).click();

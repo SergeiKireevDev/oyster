@@ -40,7 +40,7 @@ function mutationInput(body, { keyRequired = false } = {}) {
 }
 
 /** Authenticated API-key routes; authentication remains owned by app dispatch. */
-export function createCredentialRoutes({ requestContext, credentialService, restartActiveRunners, logger = console } = {}) {
+export function createCredentialRoutes({ requestContext, credentialService, restartActiveRunners, openRouterRouting, getAmpAuthStatus = () => false, logger = console } = {}) {
   if (typeof requestContext?.json !== "function" || typeof requestContext?.readBody !== "function") {
     throw new TypeError("requestContext is required");
   }
@@ -117,7 +117,18 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
       : { provider: input.provider, credentialType: "api_key" };
     let restart;
     try {
-      restart = publicRestartResult(await restartActiveRunners({ harness: "pi" }));
+      const harnesses = ["pi", ...(input.provider === "openrouter"
+        ? Object.entries(openRouterRouting?.status().routes ?? {}).filter(([, provider]) => provider === "openrouter").map(([id]) => id) : [])];
+      const results = [];
+      for (const harness of harnesses) {
+        try { results.push(publicRestartResult(await restartActiveRunners({ harness }))); }
+        catch { results.push(null); }
+      }
+      if (results.every(Boolean)) restart = {
+        status: results.some((result) => result.status === "partial") ? "partial" : "restarted",
+        runnerIds: results.flatMap((result) => result.runnerIds),
+        ...(results.some((result) => result.status === "partial") ? { failedRunnerIds: results.flatMap((result) => result.failedRunnerIds ?? []) } : {}),
+      };
     } catch {
       // Converted to the durable-write failure response below.
     }
@@ -127,7 +138,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
         provider: input.provider,
       });
       json(res, 503, {
-        error: "credential saved but pi runners could not be restarted",
+        error: "credential saved but affected runners could not be restarted",
         code: "runner_restart_failed",
         credential,
         restart: { status: "failed", runnerIds: [] },
@@ -142,7 +153,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
     });
     if (restart.status === "partial") {
       json(res, 503, {
-        error: "credential saved but some pi runners failed to restart",
+        error: "credential saved but some affected runners failed to restart",
         code: "runner_restart_partial",
         credential,
         restart,
@@ -153,6 +164,32 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
   }
 
   return {
+    ...(openRouterRouting ? {
+    "GET /harness-providers": async (_req, res) => {
+      if (!openRouterRouting) return json(res, 503, { error: "Harness routing unavailable" });
+      try {
+        json(res, 200, { ...openRouterRouting.status(), ampAuthenticated: getAmpAuthStatus() === true });
+      } catch { json(res, 503, { error: "Harness credential status unavailable" }); }
+    },
+    "POST /harness-providers": async (req, res, url) => {
+      if (!openRouterRouting) return json(res, 503, { error: "Harness routing unavailable" });
+      if (url?.search) return json(res, 400, { error: "JSON body required" });
+      const body = await credentialJsonBody(req, res);
+      if (body === undefined) return;
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "JSON object required" });
+      if (typeof restartActiveRunners !== "function") return json(res, 503, { error: "Harness restart service unavailable" });
+      if (body.confirm !== true || !["codex", "claude-code"].includes(body.harness) || !["native", "openrouter"].includes(body.provider)) {
+        return json(res, 400, { error: "Confirm a supported global harness provider change" });
+      }
+      try { await openRouterRouting.select(body.harness, body.provider); }
+      catch { return json(res, 400, { error: "Provider unavailable; save a valid OpenRouter key first" }); }
+      try {
+        const restart = publicRestartResult(await restartActiveRunners({ harness: body.harness }));
+        if (!restart || restart.status === "partial") return json(res, 503, { error: "Provider saved; runner restart incomplete" });
+        json(res, 200, { ...openRouterRouting.status(), restart });
+      } catch { json(res, 503, { error: "Provider saved; runner restart failed" }); }
+    },
+    } : {}),
     "GET /api-keys": async (_req, res) => {
       let providers;
       try {
@@ -165,7 +202,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
         });
         return;
       }
-      json(res, 200, { providers });
+      json(res, 200, { providers: openRouterRouting ? openRouterRouting.decorate(providers) : providers });
     },
     "POST /api-keys": (req, res, url) => mutate(req, res, url),
     "DELETE /api-keys": (req, res, url) => mutate(req, res, url, { remove: true }),
