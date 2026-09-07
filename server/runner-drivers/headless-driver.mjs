@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { antigravityEvents } from "./antigravity-events.mjs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { validateRunnerDriver } from "./contract.mjs";
@@ -166,7 +167,7 @@ function decodeCodex(runtime, record) {
   return events;
 }
 
-function decodeGemini(runtime, record) {
+function decodeGemini(runtime, record, provider = "google", api = "gemini-cli") {
   const events = [];
   if (record.type === "init") {
     runtime.sessionId = record.session_id ?? runtime.sessionId;
@@ -175,13 +176,13 @@ function decodeGemini(runtime, record) {
   } else if (record.type === "message" && record.role === "assistant") {
     const delta = String(record.content ?? "");
     if (!runtime.currentMessage) {
-      runtime.currentMessage = assistant(runtime, { provider: "google", api: "gemini-cli", model: runtime.model, at: record.timestamp, content: [{ type: "text", text: "" }] });
+      runtime.currentMessage = assistant(runtime, { provider, api, model: runtime.model, at: record.timestamp, content: [{ type: "text", text: "" }] });
       events.push({ type: "message_start", message: runtime.currentMessage });
     }
     runtime.currentMessage.content[0].text += delta;
     events.push({ type: "message_update", message: runtime.currentMessage, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta, partial: runtime.currentMessage } });
   } else if (record.type === "tool_use") {
-    startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider: "google", api: "gemini-cli", model: runtime.model, at: record.timestamp });
+    startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider, api, model: runtime.model, at: record.timestamp });
   } else if (record.type === "tool_result") {
     endTool(runtime, events, { id: String(record.tool_id ?? "tool"), text: record.output ?? record.error?.message, isError: record.status === "error", at: record.timestamp });
   } else if (record.type === "error") {
@@ -251,7 +252,7 @@ export function createHeadlessDriver({
   id = nonEmpty(id, "headless driver id");
   const executable = nonEmpty(bin, `${label ?? id} executable`);
   provider = nonEmpty(provider, `${label ?? id} provider`);
-  if (!["codex", "gemini", "amp"].includes(kind)) throw new TypeError(`unsupported headless bridge kind: ${kind}`);
+  if (!["codex", "gemini", "amp", "antigravity"].includes(kind)) throw new TypeError(`unsupported headless bridge kind: ${kind}`);
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError(`${label ?? id} arguments must be strings`);
   if (typeof spawnImpl !== "function") throw new TypeError(`${label ?? id} spawn implementation must be a function`);
   if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError(`${label ?? id} environment must be an object`);
@@ -315,10 +316,14 @@ export function createHeadlessDriver({
         return [response(record.id, "get_available_models", { models: runtime.availableModels, selectionLabel: kind === "amp" ? "mode" : "model" })];
       }
       if (record.type === "oyster.bridge.turn_start") {
+        runtime.bridgeTurnCompleted = false;
         runtime.streaming = true;
         return [{ type: "agent_start" }];
       }
       if (record.type === "oyster.bridge.turn_exit") {
+        // A new prompt may already be queued while the previous native process
+        // drains after its result. Its exit must not settle that next prompt.
+        if (runtime.bridgeTurnCompleted) { runtime.bridgeTurnCompleted = false; return []; }
         if (!runtime.streaming) return [];
         runtime.streaming = false;
         const error = record.error || (record.code !== 0 ? String(record.stderr || `${label ?? id} exited with code ${record.code}`).trim() : null);
@@ -337,7 +342,9 @@ export function createHeadlessDriver({
       const wasInitialized = runtime.initialized;
       const events = kind === "codex" ? decodeCodex(runtime, record)
         : kind === "gemini" ? decodeGemini(runtime, record)
-          : decodeAmp(runtime, record);
+          : kind === "antigravity" ? antigravityEvents(runtime, record).flatMap((event) => decodeGemini(runtime, event, "antigravity", "antigravity-cli"))
+            : decodeAmp(runtime, record);
+      if (events.some((event) => event.type === "agent_settled")) runtime.bridgeTurnCompleted = true;
       // Persist a native session identity as soon as the CLI announces it,
       // rather than waiting for a possibly long-running first turn to settle.
       if ((!wasInitialized && runtime.initialized) || previousSessionId !== runtime.sessionId || previousModel !== runtime.model) {
@@ -400,6 +407,7 @@ export function createHeadlessDriver({
           for (const event of completed) emit(event);
           persistTranscript(runner, runtime);
           runtime.streaming = false;
+          runtime.bridgeTurnCompleted = true;
           emit({ type: "agent_end", willRetry: false }); emit({ type: "agent_settled" });
         }
         emit(response(command.id, "abort", {}));

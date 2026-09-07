@@ -181,6 +181,7 @@ function validateConfig(config) {
     ["Claude Code", config.CLAUDE_CODE_BIN],
     ["Codex", config.CODEX_BIN],
     ["Gemini CLI", config.GEMINI_BIN],
+    ["Antigravity CLI", config.ANTIGRAVITY_BIN],
     ["Amp", config.AMP_BIN],
   ]) {
     if (!executable) continue;
@@ -202,6 +203,8 @@ const claudeCodeBin = requestedClaudeCodeBin ? resolveExecutable(requestedClaude
 const claudeCodeArgs = (process.env.CLAUDE_CODE_ARGS ?? "").split(" ").filter(Boolean);
 const requestedCodexBin = argValue("--codex") ?? process.env.CODEX_BIN ?? null;
 const codexBin = requestedCodexBin ? resolveExecutable(requestedCodexBin) : detectExecutable("codex");
+// Opt in: Antigravity owns its native sign-in and requires MCP setup first.
+const antigravityBin = argValue("--antigravity") ?? process.env.ANTIGRAVITY_BIN ?? null;
 const requestedGeminiBin = argValue("--gemini") ?? process.env.GEMINI_BIN ?? null;
 const geminiBin = requestedGeminiBin ? resolveExecutable(requestedGeminiBin) : detectExecutable("gemini");
 const requestedAmpBin = argValue("--amp") ?? process.env.AMP_BIN ?? null;
@@ -228,6 +231,8 @@ const config = Object.freeze({
   CODEX_ARGS: Object.freeze((process.env.CODEX_ARGS ?? "").split(" ").filter(Boolean)),
   CODEX_SANDBOX: process.env.CODEX_SANDBOX ?? "workspace-write",
   CODEX_HOME: codexHome,
+  ANTIGRAVITY_BIN: antigravityBin ? resolveExecutable(antigravityBin) : null,
+  ANTIGRAVITY_ARGS: Object.freeze((process.env.ANTIGRAVITY_ARGS ?? "").split(" ").filter(Boolean)),
   GEMINI_BIN: geminiBin ? resolveExecutable(geminiBin) : null,
   GEMINI_ARGS: Object.freeze((process.env.GEMINI_ARGS ?? "").split(" ").filter(Boolean)),
   GEMINI_APPROVAL_MODE: process.env.GEMINI_APPROVAL_MODE ?? "auto_edit",
@@ -579,7 +584,7 @@ watchApp();
 server.listen(config.PORT, config.HOST, () => {
   console.log(`[oyster] listening on http://${config.HOST}:${config.PORT}`);
   console.log(`[oyster] pi executable: ${config.PI_BIN}`);
-  for (const [label, executable] of [["Claude Code", config.CLAUDE_CODE_BIN], ["Codex", config.CODEX_BIN], ["Gemini CLI", config.GEMINI_BIN], ["Amp", config.AMP_BIN]]) {
+  for (const [label, executable] of [["Claude Code", config.CLAUDE_CODE_BIN], ["Codex", config.CODEX_BIN], ["Gemini CLI", config.GEMINI_BIN], ["Antigravity CLI", config.ANTIGRAVITY_BIN], ["Amp", config.AMP_BIN]]) {
     if (executable) console.log(`[oyster] ${label} executable: ${executable}`);
   }
   console.log(`[oyster] session backend: ${config.PERSISTENT_STORE}`);

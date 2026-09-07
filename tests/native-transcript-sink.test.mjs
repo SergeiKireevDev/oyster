@@ -10,6 +10,7 @@ import { createSqliteSessionCatalog } from "../server/sessions/sqliteCatalog.mjs
 import { createCodexDriver } from "../server/runner-drivers/codex.mjs";
 import { createGeminiDriver } from "../server/runner-drivers/gemini.mjs";
 import { createAmpDriver } from "../server/runner-drivers/amp.mjs";
+import { createAntigravityDriver } from "../server/runner-drivers/antigravity.mjs";
 
 const PI_BIN = process.env.PI_BIN ?? new URL("../pi/packages/coding-agent/dist/cli.js", import.meta.url).pathname;
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -32,7 +33,7 @@ function launch(factory, { sqlitePath, sink }, sessionRef = null) {
   return { driver, runner, child, decode: (record) => driver.decodeLine(runner, JSON.stringify(record)) };
 }
 
-for (const [harness, factory] of [["codex", createCodexDriver], ["gemini", createGeminiDriver], ["amp", createAmpDriver]]) {
+for (const [harness, factory] of [["codex", createCodexDriver], ["gemini", createGeminiDriver], ["amp", createAmpDriver], ["antigravity", createAntigravityDriver]]) {
   test(`${harness} writes SQLite history without a browser and appends after runner recreation`, async (t) => {
     const f = await fixture(t);
     let live = launch(factory, f);
@@ -44,6 +45,10 @@ for (const [harness, factory] of [["codex", createCodexDriver], ["gemini", creat
       live.decode({ type: "item.completed", item: { id: "tool", type: "command_execution", command: "pwd", status: "completed", aggregated_output: "/work" } });
       live.decode({ type: "item.completed", item: { id: "answer", type: "agent_message", text: "done" } });
       live.decode({ type: "turn.completed" });
+    } else if (harness === "antigravity") {
+      live.decode({ event: "init", conversation_id: id });
+      live.decode({ event: "step_update", step_update: { step_type: "agent_response", text_delta: "done" } });
+      live.decode({ event: "result", result: { status: "SUCCESS", response: "done" } });
     } else if (harness === "gemini") {
       live.decode({ type: "init", session_id: id, model: "gemini-test" });
       live.decode({ type: "message", role: "assistant", content: "do", delta: true });

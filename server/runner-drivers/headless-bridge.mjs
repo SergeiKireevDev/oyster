@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { discoverCodexModels } from "./codex.mjs";
 import { discoverGeminiModels } from "./gemini.mjs";
+import { discoverAntigravityModels } from "./antigravity.mjs";
 import { ampModels } from "./amp.mjs";
 import { createAmpOAuthCredentialSink } from "../amp-oauth-credential-sink.mjs";
 import {
@@ -21,7 +22,7 @@ function fail(message) {
 let config;
 try { config = JSON.parse(process.env.OYSTER_HEADLESS_BRIDGE_CONFIG ?? ""); }
 catch { fail("invalid OYSTER_HEADLESS_BRIDGE_CONFIG"); }
-if (!config || !["codex", "gemini", "amp"].includes(config.kind) || typeof config.bin !== "string" || !config.bin) {
+if (!config || !["codex", "gemini", "amp", "antigravity"].includes(config.kind) || typeof config.bin !== "string" || !config.bin) {
   fail("bridge configuration requires a supported kind and executable");
 }
 
@@ -115,6 +116,16 @@ function geminiArgs(run) {
   ];
 }
 
+function antigravityArgs(run) {
+  return [
+    ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
+    "--output-format", "stream-json", "--disable-slash-commands",
+    ...(run.model ? ["--model", run.model] : []),
+    ...(run.resume && run.sessionId ? ["--conversation", run.sessionId] : []),
+    "--print", config.systemPrompt && !run.resume ? `${config.systemPrompt}\n\n${run.prompt}` : run.prompt,
+  ];
+}
+
 function ampArgs(run) {
   const execution = [
     "--execute", "--stream-json", "--stream-json-input", "--stream-json-thinking", "--no-archive-after-execute",
@@ -134,6 +145,7 @@ function ampArgs(run) {
 function nativeEnvironment() {
   const env = { ...process.env };
   delete env.OYSTER_HEADLESS_BRIDGE_CONFIG;
+  if (config.kind === "antigravity") env.OYSTER_MCP_URL = config.mcpUrl;
   if (config.kind === "codex") projectCodexOAuth(env);
   if (config.kind === "gemini") {
     const access = geminiOAuthAccess();
@@ -152,6 +164,7 @@ async function listModels(message) {
       const options = { bin: config.bin, cwd: config.cwd, env: nativeEnvironment(), signal: discoveryAbort.signal };
       if (config.kind === "codex") return discoverCodexModels(options);
       if (config.kind === "gemini") return discoverGeminiModels(options);
+      if (config.kind === "antigravity") return discoverAntigravityModels(options);
       const authenticated = options.env.AMP_API_KEY || (config.ampMarkerPath && createAmpOAuthCredentialSink({ bin: config.bin, settingsPath: config.ampSettingsPath, markerPath: config.ampMarkerPath }).status().configured);
       return authenticated ? ampModels() : [];
     })();
@@ -165,7 +178,7 @@ function spawnChild(run) {
   childKind = config.kind;
   childMode = run.model;
   childStderr = "";
-  const args = config.kind === "codex" ? codexArgs(run) : config.kind === "gemini" ? geminiArgs(run) : ampArgs(run);
+  const args = config.kind === "codex" ? codexArgs(run) : config.kind === "gemini" ? geminiArgs(run) : config.kind === "antigravity" ? antigravityArgs(run) : ampArgs(run);
   const env = nativeEnvironment();
   output({ type: "oyster.bridge.turn_start" });
   child = spawn(config.bin, args, { cwd: config.cwd, stdio: [config.kind === "amp" ? "pipe" : "ignore", "pipe", "pipe"], env });

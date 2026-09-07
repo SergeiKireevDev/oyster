@@ -41,7 +41,7 @@ export function createRestartActiveRunners({
   }
 
   return async function restartActiveRunners({ harness = null, idleOnly = false } = {}) {
-    if (harness !== null && !new Set(["pi", "claude-code", "codex", "gemini", "amp"]).has(harness)) {
+    if (harness !== null && !new Set(["pi", "claude-code", "codex", "gemini", "amp", "antigravity"]).has(harness)) {
       throw new TypeError("restart harness must be a registered harness id or null");
     }
     if (typeof idleOnly !== "boolean") throw new TypeError("idleOnly must be a boolean");

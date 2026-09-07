@@ -1,5 +1,6 @@
 import { createNativeTranscriptSink } from "../persistence/nativeTranscriptSink.mjs";
 import { createAmpDriver } from "./amp.mjs";
+import { createAntigravityDriver } from "./antigravity.mjs";
 import { createClaudeCodeDriver } from "./claude-code.mjs";
 import { createCodexDriver } from "./codex.mjs";
 import { createGeminiDriver } from "./gemini.mjs";
@@ -50,6 +51,12 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         extraArgs: config.GEMINI_ARGS,
         approvalMode: config.GEMINI_APPROVAL_MODE,
         bridgeOptions: { geminiOAuthPath: config.GEMINI_OAUTH_PATH },
+        env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
+      })] : []),
+      ...(config.ANTIGRAVITY_BIN ? [createAntigravityDriver({
+        ...nativePersistence,
+        bin: config.ANTIGRAVITY_BIN,
+        extraArgs: config.ANTIGRAVITY_ARGS,
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
       ...(config.AMP_BIN ? [createAmpDriver({

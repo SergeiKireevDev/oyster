@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createRouteTable } from "../server/http/createRouteTable.mjs";
 import { dispatchRoute } from "../server/http/internalDispatch.mjs";
 import { createMcpRoutes } from "../server/http/routes/mcpRoutes.mjs";
@@ -60,6 +61,21 @@ test("MCP endpoint exposes the bundled Oyster tools with a sudo-capable bash", a
   const bash = tools.find((tool) => tool.name === "bash");
   assert.deepEqual(Object.keys(bash.inputSchema.properties).sort(), ["command", "sudo", "timeout"]);
   assert.match(bash.description, /sudo=true/);
+});
+
+test("Antigravity stdio relay keeps concurrent session identities separate", async (t) => {
+  const { port, calls } = await endpoint(t, { reply: () => ({ status: 200, data: { widgets: [] } }) });
+  await Promise.all(["agy-one", "agy-two"].map(async (session) => {
+    const client = new Client({ name: session, version: "0" });
+    await client.connect(new StdioClientTransport({ command: process.execPath,
+      args: [new URL("../server/runner-drivers/antigravity-mcp.mjs", import.meta.url).pathname],
+      env: { OYSTER_MCP_URL: `http://127.0.0.1:${port}/mcp?session=${session}&workdir=/tmp`, OYSTER_TOKEN: "test-secret" },
+    }));
+    t.after(() => client.close());
+    assert.ok((await client.listTools()).tools.some(tool => tool.name === "pinned_widget"));
+    await client.callTool({ name: "pinned_widget", arguments: { action: "list" } });
+  }));
+  assert.deepEqual(calls.filter(call => call.path === "/pinned-widgets").map(call => call.query.sessionId).sort(), ["agy-one", "agy-two"]);
 });
 
 test("MCP endpoint rejects a relative workdir", async (t) => {

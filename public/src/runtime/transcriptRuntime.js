@@ -340,7 +340,7 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
             onDurablePage(result, getSessionIdentity?.());
             log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
           },
-          mergeLiveMessages: ["claude-code", "codex", "gemini", "amp"].includes(getRunnerInfo?.()?.harness)
+          mergeLiveMessages: ["claude-code", "codex", "gemini", "amp", "antigravity"].includes(getRunnerInfo?.()?.harness)
             ? mergeClaudeTranscriptMessages
             : undefined,
         }));
