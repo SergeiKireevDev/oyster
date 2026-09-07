@@ -109,8 +109,9 @@ export async function waitFor(fn, { timeout = 30000, interval = 500, label = "co
  * Load the UI with the token in the fragment and wait until the SSE stream is
  * connected (green dot). Returns once the composer is ready.
  */
-export async function login(page, { keepCredentialSetup = false, keepTutorial = false } = {}) {
-  await page.goto(`${baseUrl()}/#token=${authToken()}`);
+export async function login(page, { keepCredentialSetup = false, keepTutorial = false, sessionId = null } = {}) {
+  const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
+  await page.goto(`${baseUrl()}${path}#token=${authToken()}`);
   await page.waitForSelector("#connDot.ok", { timeout: 30000 });
   await page.waitForSelector("#input", { state: "visible" });
   if (!keepCredentialSetup) {
