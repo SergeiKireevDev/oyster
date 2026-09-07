@@ -271,7 +271,7 @@ const sessionAssembly = createSessionAssembly({
     switchSessionRunner,
     openSession: (options) => sessionOpenController(options),
     onNewSession: createNewHarnessAuthenticationCheck({
-      rpc, getCurrentRunner,
+      fetchImpl: fetch, getCurrentRunner,
       openCredentials: (target) => uiActions.invoke(CREDENTIALS_OPEN_ACTION, target),
       toast: addToast,
     }),

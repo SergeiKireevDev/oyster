@@ -43,6 +43,15 @@ async function newSession(page, { harness = null } = {}) {
   expect(new URL(eventRequest.url()).searchParams.get("runner")).toBe(runner.id);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pi_runner"))).toBe(runner.id);
   if (mobile) await page.evaluate(() => document.getElementById("sessions")?.classList.remove("open"));
+  if (harness === "claude-code") {
+    // This container has a Pi API key, not a compatible Claude OAuth grant.
+    // Assert the credential prompt, then dismiss it: the mock CLI itself needs no login.
+    await expect(page.locator("#mTitle")).toHaveText("Credentials");
+    await expect(page.getByRole("combobox", { name: "Provider", exact: true })).toHaveValue("anthropic");
+    await expect(page.getByRole("button", { name: "Sign in with OAuth", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Use an API key instead", exact: true })).toHaveCount(0);
+    await page.locator("#mActions").getByRole("button", { name: "Close", exact: true }).click();
+  }
   return runner;
 }
 
