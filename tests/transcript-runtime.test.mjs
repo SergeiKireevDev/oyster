@@ -180,7 +180,7 @@ test("Claude transcript reconciliation does not collapse a repeated prompt from 
   );
 });
 
-test("canonical transcript controller merges durable and live history only for Claude Code", async () => {
+for (const harness of ["claude-code", "codex", "gemini", "amp"]) test(`canonical transcript controller merges durable and live ${harness} history`, async () => {
   const rendered = [];
   const controller = createCanonicalTranscriptController({
     rpc: async ({ type }) => type === "get_state"
@@ -193,7 +193,7 @@ test("canonical transcript controller merges durable and live history only for C
     ] }) }),
     sessionFileQuery: (identity) => `key=${identity}`,
     getSessionIdentity: () => "cc-key",
-    getRunnerInfo: () => ({ harness: "claude-code" }),
+    getRunnerInfo: () => ({ harness }),
     clearPreview: () => {},
     render: async (messages) => { rendered.push(messages); return true; },
     setReplaying: () => {}, takeBufferedEvents: () => [], flushBufferedEvents: () => {}, afterRender: () => {},

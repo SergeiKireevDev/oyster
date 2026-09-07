@@ -87,7 +87,7 @@ test("runner manager selects and persists a harness per runner", async (t) => {
     startup: ({ requestId }) => ({ commands: [{ id: requestId, type: "get_state" }], resumeResponseId: null }),
     sessionReference(state, current) { return state.sessionId ? { backend, id: state.sessionId, storagePath: backend === "claude-code" ? null : "/agent/sessions.sqlite" } : current; },
   });
-  const registry = createRunnerDriverRegistry({ drivers: [makeDriver("pi", "sqlite"), makeDriver("claude-code", "claude-code")], defaultId: "pi" });
+  const registry = createRunnerDriverRegistry({ drivers: [makeDriver("pi", "sqlite"), makeDriver("claude-code", "claude-code"), ...["codex", "gemini", "amp"].map((id) => makeDriver(id, "sqlite"))], defaultId: "pi" });
   const state = {
     config: {}, currentDir: "/work", runners: new Map(), sseClients: new Set(), serverEvent() {},
     sessionReferences: createSessionReferenceCodec({ agentDir: "/agent", jsonlRoot: "/agent/sessions", sqlitePath: "/agent/sessions.sqlite" }),
@@ -108,6 +108,14 @@ test("runner manager selects and persists a harness per runner", async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(runner.sessionRef, { backend: "claude-code", id: "cc-1", storagePath: null });
   assert.equal(events.some((change) => change.session_backend === "claude-code"), true);
+  state.sessionCatalog = { backend: "sqlite", findById: async (id) => ({ id, harness: id.split("-")[0] }) };
+  for (const harness of ["codex", "gemini", "amp"]) {
+    const saved = await manager.openSessionRunner({ sessionRef: { backend: "sqlite", id: `${harness}-saved`, storagePath: "/agent/sessions.sqlite" } });
+    assert.equal(saved.harness, harness, "saved metadata must override Pi's broad SQLite compatibility");
+    assert.equal(saved.proc, null, "opening history stays read-only");
+    await manager.startRunner(saved);
+    assert.equal(launches.at(-1).id, harness);
+  }
 });
 
 test("runner manager is driven by a non-pi process and protocol adapter", async (t) => {

@@ -1,3 +1,4 @@
+import { createNativeTranscriptSink } from "../persistence/nativeTranscriptSink.mjs";
 import { createAmpDriver } from "./amp.mjs";
 import { createClaudeCodeDriver } from "./claude-code.mjs";
 import { createCodexDriver } from "./codex.mjs";
@@ -19,6 +20,10 @@ function effectiveUiUrl(config) {
 export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
   if (!config || typeof config !== "object") throw new TypeError("runner driver config is required");
   const pi = createPiRpcDriver({ config, processLauncher: piProcesses });
+  const nativePersistence = config.SQLITE_PATH ? {
+    sqlitePath: config.SQLITE_PATH,
+    transcriptSink: createNativeTranscriptSink({ sqlitePath: config.SQLITE_PATH, piBin: config.PI_BIN }),
+  } : {};
   const token = config.TOKEN == null || config.TOKEN === "" ? null : String(config.TOKEN);
   return createRunnerDriverRegistry({
     defaultId: "pi",
@@ -32,6 +37,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
       ...(config.CODEX_BIN ? [createCodexDriver({
+        ...nativePersistence,
         bin: config.CODEX_BIN,
         extraArgs: config.CODEX_ARGS,
         sandbox: config.CODEX_SANDBOX,
@@ -39,6 +45,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
       ...(config.GEMINI_BIN ? [createGeminiDriver({
+        ...nativePersistence,
         bin: config.GEMINI_BIN,
         extraArgs: config.GEMINI_ARGS,
         approvalMode: config.GEMINI_APPROVAL_MODE,
@@ -46,6 +53,7 @@ export function createConfiguredRunnerDrivers({ config, piProcesses } = {}) {
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
       ...(config.AMP_BIN ? [createAmpDriver({
+        ...nativePersistence,
         bin: config.AMP_BIN,
         extraArgs: config.AMP_ARGS,
         bridgeOptions: { ampSettingsPath: config.AMP_SETTINGS_PATH, ampMarkerPath: config.AMP_AUTH_MARKER_PATH },

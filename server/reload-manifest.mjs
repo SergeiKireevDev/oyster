@@ -108,6 +108,7 @@ const manifest = createReloadManifest({
   persistence: [
     "persistence/checkpointRollbackJournal.mjs",
     "persistence/claudeTranscriptSink.mjs",
+    "persistence/nativeTranscriptSink.mjs",
     "persistence/hublotScriptMaterializer.mjs",
     "persistence/hublotSupervisor.mjs",
     "persistence/processIdentity.mjs",

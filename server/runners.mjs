@@ -698,7 +698,10 @@ export async function createRunnerManager(state, {
     runner.titleProcess = null;
     clearTimer(runner.startTimer);
     runner.startTimer = null;
-    if (!proc) return;
+    if (!proc) {
+      await driverFor(runner).flushTranscript?.(runner);
+      return;
+    }
     runner.proc = null;
     runner.driverEmit = null;
     runner.busy = false;
@@ -729,6 +732,7 @@ export async function createRunnerManager(state, {
     }), 3000);
     killTimer.unref?.();
     runnersChanged(runner);
+    await driverFor(runner).flushTranscript?.(runner);
   }
 
   async function unarchivePromptedSession(runner) {
@@ -857,7 +861,9 @@ export async function createRunnerManager(state, {
       ? { backend: "jsonl", id: sessionId, storagePath: sessionPath }
       : null);
     const reference = inputReference ? sessionReferences.validate(inputReference) : null;
-    const selectedHarness = harness ?? (reference ? runnerDrivers.compatible(reference)?.id : runnerDrivers.defaultId);
+    const savedSession = !harness && reference?.backend === state.sessionCatalog?.backend
+      ? await state.sessionCatalog.findById(reference.id) : null;
+    const selectedHarness = harness ?? savedSession?.harness ?? (reference ? runnerDrivers.compatible(reference)?.id : runnerDrivers.defaultId);
     if (!selectedHarness) throw new Error(`no harness can open session ${reference?.id ?? "unknown"}`);
     if (reference) {
       for (const r of state.runners.values()) {

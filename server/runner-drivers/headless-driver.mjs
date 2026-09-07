@@ -246,7 +246,7 @@ function decodeAmp(runtime, record) {
 export function createHeadlessDriver({
   id, label, bin, kind = id, provider, extraArgs = [], spawnImpl = spawn, env = {}, uiUrl = env?.OYSTER_URL ?? DEFAULT_UI_URL,
   sandbox = "workspace-write", approvalMode = "auto_edit", generateSessionId = false, defaultModel = null,
-  bridgeOptions = {},
+  bridgeOptions = {}, sqlitePath = null, transcriptSink = null,
 } = {}) {
   id = nonEmpty(id, "headless driver id");
   const executable = nonEmpty(bin, `${label ?? id} executable`);
@@ -257,13 +257,45 @@ export function createHeadlessDriver({
   if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError(`${label ?? id} environment must be an object`);
   if (!bridgeOptions || typeof bridgeOptions !== "object" || Array.isArray(bridgeOptions)) throw new TypeError(`${label ?? id} bridge options must be an object`);
 
+  function persistTranscript(runner, runtime) {
+    if (!transcriptSink || !runtime.sessionId) return;
+    runtime.transcriptIds ??= new WeakMap();
+    runtime.transcriptQueued ??= new Set();
+    runtime.transcriptBatches ??= [];
+    const completed = runtime.messages.filter((message) => message !== runtime.currentMessage && !runtime.transcriptQueued.has(message));
+    if (completed.length || runtime.transcriptName !== runtime.sessionName) {
+      const entries = completed.map((message) => {
+        if (!runtime.transcriptIds.has(message)) runtime.transcriptIds.set(message, randomUUID());
+        runtime.transcriptQueued.add(message);
+        return { id: runtime.transcriptIds.get(message), message };
+      });
+      runtime.transcriptName = runtime.sessionName;
+      runtime.transcriptBatches.push(structuredClone({ harness: id, sessionId: runtime.sessionId, cwd: runtime.cwd ?? runner.dir,
+        name: runtime.sessionName, entries }));
+    }
+    if (runtime.transcriptPending || !runtime.transcriptBatches.length) return;
+    runtime.transcriptPending = (async () => {
+      // A failed batch stays at the head: later events retry it before appending newer messages.
+      while (runtime.transcriptBatches.length) {
+        await transcriptSink.append(runtime.transcriptBatches[0]);
+        runtime.transcriptBatches.shift();
+      }
+      if (runner.driverRuntime === runtime) runner.driverEmit?.(response(`_driver-${kind}-saved`, "get_state", stateFor(runner, runtime, provider)));
+    })().catch((error) => {
+      const message = `Could not persist ${label ?? id} transcript: ${error.message}`;
+      if (runner.driverEmit) runner.driverEmit({ type: "pi_error", error: message });
+      else console.error(`[oyster] ${message}`);
+    }).finally(() => { runtime.transcriptPending = null; });
+  }
+
   return Object.freeze(validateRunnerDriver({
     id, label: label ?? id,
-    isSessionCompatible(reference) { return !reference || reference.backend === id; },
+    isSessionCompatible(reference) { return !reference || reference.backend === id || (Boolean(sqlitePath) && reference.backend === "sqlite"); },
 
     launch({ runner, cwd, systemPrompt }) {
       const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? (generateSessionId ? randomUUID() : runner.id ?? randomUUID());
       const runtime = runtimeFor(runner, { sessionId: generateSessionId ? provisionalId : runner.sessionRef?.id ?? null, model: defaultModel, systemPrompt });
+      runtime.cwd = cwd;
       const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
       const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions };
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
@@ -290,7 +322,11 @@ export function createHeadlessDriver({
         if (!runtime.streaming) return [];
         runtime.streaming = false;
         const error = record.error || (record.code !== 0 ? String(record.stderr || `${label ?? id} exited with code ${record.code}`).trim() : null);
+        const events = [];
+        finishStreamingMessage(runtime, events, error ? "error" : "stop");
+        persistTranscript(runner, runtime);
         return [
+          ...events,
           ...(error ? [{ type: "pi_error", error }] : []),
           ...(error && kind !== "amp" && isAuthenticationFailure(error) ? [{ type: "harness_auth_failed", reason: `${kind}_oauth` }] : []),
           { type: "agent_end", willRetry: false }, { type: "agent_settled" },
@@ -312,6 +348,7 @@ export function createHeadlessDriver({
       if (kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
         events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
       }
+      persistTranscript(runner, runtime);
       return events;
     },
 
@@ -346,6 +383,7 @@ export function createHeadlessDriver({
         const message = { role: "user", content: text, timestamp: Date.now() };
         if (!runtime.sessionName) runtime.sessionName = text.trim().split("\n")[0].slice(0, 80) || `${label ?? id} session`;
         runtime.messages.push(message);
+        persistTranscript(runner, runtime);
         const steer = runtime.streaming;
         runtime.streaming = true;
         emit({ type: "message_start", message });
@@ -357,15 +395,29 @@ export function createHeadlessDriver({
         if (!child?.stdin?.writable) return false;
         child.stdin.write(`${JSON.stringify({ type: "abort" })}\n`);
         if (runtime.streaming) {
+          const completed = [];
+          finishStreamingMessage(runtime, completed, "aborted");
+          for (const event of completed) emit(event);
+          persistTranscript(runner, runtime);
           runtime.streaming = false;
           emit({ type: "agent_end", willRetry: false }); emit({ type: "agent_settled" });
         }
         emit(response(command.id, "abort", {}));
         return true;
       }
-      if (command.type === "set_session_name") { runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName; emit(response(command.id, "set_session_name", {})); return true; }
+      if (command.type === "set_session_name") { runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName; persistTranscript(runner, runtime); emit(response(command.id, "set_session_name", {})); return true; }
       emit(response(command.id, command.type, null, false, `${command.type} is not supported by ${label ?? id}`));
       return true;
+    },
+
+    async flushTranscript(runner) {
+      const runtime = runner.driverRuntime;
+      if (!runtime || !transcriptSink) return;
+      finishStreamingMessage(runtime, [], "aborted");
+      runtime.streaming = false;
+      persistTranscript(runner, runtime);
+      await runtime.transcriptPending;
+      if (runtime.transcriptBatches?.length) throw new Error("Native transcript still has unpersisted messages");
     },
 
     stateCommand(id) { return { id, type: "get_state" }; },
@@ -373,7 +425,9 @@ export function createHeadlessDriver({
     startup({ requestId }) { return { commands: [{ id: requestId, type: "get_state" }], resumeResponseId: null }; },
     sessionReference(state, currentReference) {
       const sessionId = state?.sessionId ?? currentReference?.id;
-      return sessionId ? { backend: id, id: sessionId, storagePath: null } : null;
+      return sessionId ? (sqlitePath
+        ? { backend: "sqlite", id: sessionId, storagePath: sqlitePath }
+        : { backend: id, id: sessionId, storagePath: null }) : null;
     },
   }));
 }

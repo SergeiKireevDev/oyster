@@ -156,4 +156,4 @@ export function createClaudeTranscriptSink({
   });
 }
 
-export { findNamedFile, repositoryModuleCandidates };
+export { findNamedFile, repositoryModuleCandidates, defaultRepositoryFactory };
