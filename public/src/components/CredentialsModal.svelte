@@ -1,5 +1,6 @@
 <script>
   import { onDestroy } from "svelte";
+  import HarnessProviderSettings from "./HarnessProviderSettings.svelte";
   import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { credentialsState } from "../stores/credentials.js";
   import { closeModalState } from "../stores/modal.js";
@@ -249,6 +250,7 @@
 </script>
 
 <section class="api-keys-modal" aria-label="Agent credentials" aria-busy={$credentialsState.loading || oauthOperationPending}>
+  <HarnessProviderSettings harness={$credentialsState.targetHarness ?? null} />
   <p class="api-keys-intro">Sign in once per provider. Oyster injects and refreshes that connection for every compatible harness. Existing credential values are never displayed.</p>
   {#if $credentialsState.setupMode}
     <p class="api-keys-state" role="status">Choose a provider below to authenticate an agent harness.</p>

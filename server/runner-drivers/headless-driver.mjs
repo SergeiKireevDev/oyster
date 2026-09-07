@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { antigravityEvents } from "./antigravity-events.mjs";
+import { redactChildOutput } from "./secret-output.mjs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { validateRunnerDriver } from "./contract.mjs";
@@ -57,7 +58,7 @@ function stateFor(runner, runtime, provider) {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
     sessionName: runtime.sessionName ?? runner.sessionName ?? null,
     sessionFile: null,
-    model: (runtime.selectedModel ?? runtime.model) ? { provider, id: runtime.selectedModel ?? runtime.model } : null,
+    model: (runtime.selectedModel ?? runtime.model) ? { provider: runtime.provider ?? provider, id: runtime.selectedModel ?? runtime.model } : null,
     thinkingLevel: "off",
     messageCount: runtime.messages.length,
     pendingMessageCount: 0,
@@ -247,7 +248,7 @@ function decodeAmp(runtime, record) {
 export function createHeadlessDriver({
   id, label, bin, kind = id, provider, extraArgs = [], spawnImpl = spawn, env = {}, uiUrl = env?.OYSTER_URL ?? DEFAULT_UI_URL,
   sandbox = "workspace-write", approvalMode = "auto_edit", generateSessionId = false, defaultModel = null,
-  bridgeOptions = {}, sqlitePath = null, transcriptSink = null,
+  bridgeOptions = {}, sqlitePath = null, transcriptSink = null, resolveRoute = () => null,
 } = {}) {
   id = nonEmpty(id, "headless driver id");
   const executable = nonEmpty(bin, `${label ?? id} executable`);
@@ -298,9 +299,18 @@ export function createHeadlessDriver({
       const runtime = runtimeFor(runner, { sessionId: generateSessionId ? provisionalId : runner.sessionRef?.id ?? null, model: defaultModel, systemPrompt });
       runtime.cwd = cwd;
       const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
-      const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions };
-      const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
+      const route = resolveRoute();
+      const nextProvider = route?.provider ?? provider;
+      if ((runtime.provider ?? provider) !== nextProvider) {
+        runtime.selectedModel = null;
+        runtime.model = null;
+        runtime.availableModels = [];
+      }
+      runtime.provider = nextProvider;
+      const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions, ...(route ? { provider: route.provider } : {}) };
+      const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
       const childProcess = spawnImpl(globalThis.process.execPath, [BRIDGE], { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
+      redactChildOutput(childProcess, [route?.env?.OPENROUTER_API_KEY]);
       return { process: childProcess, description: `${label ?? id} bridge (${executable})` };
     },
 
@@ -333,7 +343,7 @@ export function createHeadlessDriver({
         return [
           ...events,
           ...(error ? [{ type: "pi_error", error }] : []),
-          ...(error && kind !== "amp" && isAuthenticationFailure(error) ? [{ type: "harness_auth_failed", reason: `${kind}_oauth` }] : []),
+          ...(error && runtime.provider !== "openrouter" && kind !== "amp" && isAuthenticationFailure(error) ? [{ type: "harness_auth_failed", reason: `${kind}_oauth` }] : []),
           { type: "agent_end", willRetry: false }, { type: "agent_settled" },
         ];
       }
@@ -352,7 +362,7 @@ export function createHeadlessDriver({
       }
       const explicitError = record.type === "error" || record.type === "turn.failed" || record.is_error === true
         ? record.error ?? record.message ?? record.result : null;
-      if (kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
+      if (runtime.provider !== "openrouter" && kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
         events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
       }
       persistTranscript(runner, runtime);
@@ -376,7 +386,7 @@ export function createHeadlessDriver({
       }
       if (command.type === "set_model") {
         if (runtime.streaming) { emit(response(command.id, "set_model", null, false, "Wait for the current turn before changing models")); return true; }
-        if (command.provider !== provider || typeof command.modelId !== "string" || !runtime.availableModels?.some((model) => model.provider === provider && model.id === command.modelId && !model.disabled)) {
+        if (command.provider !== (runtime.provider ?? provider) || typeof command.modelId !== "string" || !runtime.availableModels?.some((model) => model.provider === (runtime.provider ?? provider) && model.id === command.modelId && !model.disabled)) {
           emit(response(command.id, "set_model", null, false, `${label ?? id} requires a ${provider} model`)); return true;
         }
         runtime.selectedModel = command.modelId;
