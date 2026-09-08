@@ -33,7 +33,7 @@ Every request carries its caller: `POST /mcp?runner=<id>&session=<id>&workdir=<a
 
 Driver modules such as `server/runner-drivers/claude-code.mjs` are reached only through static imports, which the hot reloader does not cache-bust, so restart the Oyster service (not just the runner) after changing them. When changing a tool, update both the pi extension and the MCP endpoint. Verify with `node --test tests/mcp-routes.test.mjs`.
 
-Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. Opening a hublot requires a local `port` (1–65535), with an optional `description` label. Provision the service separately: hublot starts only cloudflared and persists its SQLite entry; closing the tunnel leaves the local service running. The `hublot` and `routine` tools discover the UI server
+Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. Opening a hublot requires a local `port` (1–65535); no prompt or description argument is accepted. Provision the service separately: hublot starts only cloudflared and persists its SQLite entry; closing the tunnel leaves the local service running. The `hublot` and `routine` tools discover the UI server
 from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
 `OYSTER_TOKEN` or the project-root `.ui-token` file.
 

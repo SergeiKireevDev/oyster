@@ -275,6 +275,8 @@ test("hublot open requires a valid port and forwards no provisioning arguments",
   const schema = (await client.listTools()).tools.find((tool) => tool.name === "hublot").inputSchema;
   assert.equal(schema.properties.type, undefined);
   assert.equal(schema.properties.path, undefined);
+  assert.equal(schema.properties.description, undefined);
+  assert.equal(schema.properties.prompt, undefined);
   for (const value of [undefined, 0, 65536, 1.5, "5173"]) {
     const result = await client.callTool({ name: "hublot", arguments: { action: "open", ...(value === undefined ? {} : { port: value }) } });
     assert.equal(result.isError, true);
@@ -284,6 +286,6 @@ test("hublot open requires a valid port and forwards no provisioning arguments",
   assert.ok(!opened.isError, opened.content[0].text);
   assert.deepEqual(calls[0].body, { port: 5173, sessionId: "s-port" });
   assert.match(opened.content[0].text, /localhost:5173/);
-  await client.callTool({ name: "hublot", arguments: { action: "open", port: 5173, description: "Preview", session_id: "override" } });
-  assert.deepEqual(calls[1].body, { port: 5173, label: "Preview", sessionId: "override" });
+  await client.callTool({ name: "hublot", arguments: { action: "open", port: 5173, session_id: "override" } });
+  assert.deepEqual(calls[1].body, { port: 5173, sessionId: "override" });
 });

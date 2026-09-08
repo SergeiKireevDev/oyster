@@ -147,11 +147,10 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
     description:
       "Open, close, or list public Cloudflare tunnels for this session. " +
       "'open' requires a port (1–65535) of a service provisioned separately; it starts only the tunnel and persists its entry in SQLite. " +
-      "Provide an optional description as its label. 'close' stops the tunnel by id or port; the local service remains running. " +
+      "'close' stops the tunnel by id or port; the local service remains running. " +
       "Use only when public access is required. Quick-tunnel URLs are ephemeral.",
     inputSchema: {
       action: z.enum(["open", "close", "list"]),
-      description: z.string().optional().describe("For 'open': optional hublot label"),
       session_id: z.string().optional().describe("For 'open': bind the hublot to this session id instead of the current one"),
       id: z.string().optional().describe("For 'close': hublot id"),
       port: z.number().int().min(1).max(65535).optional().describe("Required for open: existing local service port; for close: tunnel port"),
@@ -160,7 +159,6 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
     if (params.action === "open") {
       if (params.port === undefined) throw new Error("'open' requires a port between 1 and 65535");
       const data = await api("POST", "/tunnels", {
-        label: params.description?.slice(0, 200),
         port: params.port,
         sessionId: params.session_id ?? requireSession(),
       });
