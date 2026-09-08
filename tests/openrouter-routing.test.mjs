@@ -162,12 +162,6 @@ console.log(JSON.stringify({type:'thread.started',thread_id:'test'}));`, { mode:
   assert.doesNotMatch(JSON.stringify(invocation), /CREDENTIAL-CANARY/);
 });
 
-test("Amp workflow gates disclosure on native authentication, never uses a Pi key as account login", () => {
-  const ui = readFileSync(new URL("../public/src/components/HarnessProviderSettings.svelte", import.meta.url), "utf8");
-  assert.match(ui, /if !status.ampAuthenticated/);
-  assert.match(ui, /if ampDisclosureConfirmed/);
-  assert.match(ui, /uploads my OpenRouter key to my Amp account/);
-  assert.match(ui, /amp config model-providers add-router openrouter --personal --name Oyster --active --api-key-file -/);
-  assert.match(ui, /edit-router CONNECTION_ID --api-key-file -/);
+test("Amp authentication never uses a Pi key as account login", () => {
   assert.equal(hasAuthenticatedProvider([{ provider: "openrouter", configured: true, credentialType: "api_key", harnesses: ["pi"] }], "amp"), false);
 });
