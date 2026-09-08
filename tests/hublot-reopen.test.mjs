@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,32 +15,26 @@ async function fixture(t) {
   const state = { appStore: store, currentDir: root, config: { PI_AGENT_DIR: root }, serverEvent: (e) => events.push(e) };
   t.after(async () => { await store.close(); rmSync(root, { recursive: true, force: true }); });
   const row = await reserveHublot(state, { port: 49761, brief: "preview" });
-  const source = "#!/bin/sh\nexit 0\n";
-  await store.repositories.hublots.update(row.id, { service_start_script: source, service_start_script_sha256: createHash("sha256").update(source).digest("hex") });
   await recordHublotTransition(state, row.id, "closed", { desiredState: "closed" });
   return { state, row, events, store };
 }
 
-test("reopen restores the same hublot and starts its service before the tunnel", async (t) => {
+test("reopen preserves identity and starts only the tunnel", async (t) => {
   const { state, row, events, store } = await fixture(t);
   const order = [];
-  const proc = Object.assign(new EventEmitter(), { pid: process.pid, exitCode: null, unref() {}, kill() {} });
   const result = await reopenHublot(state, row.id, {
-    spawnProcess(path, args, options) { order.push("service"); assert.equal(path, row.service_start_script_path); assert.equal(options.cwd, row.workdir); return proc; },
-    waitForPort: async (port) => { order.push("ready"); assert.equal(port, row.port); },
     open: async (_state, options) => { order.push("tunnel"); assert.equal(options.id, row.id); return { id: row.id, url: "https://new.test" }; },
   });
-  assert.deepEqual(order, ["service", "ready", "tunnel"]);
+  assert.deepEqual(order, ["tunnel"]);
   assert.equal(result.id, row.id);
   assert.equal(events[0].type, "tunnel_opening");
   assert.equal((await store.repositories.hublots.find(row.id)).desired_state, "open");
 });
 
-test("failed service startup leaves the hublot retryable and never opens a tunnel", async (t) => {
+test("failed tunnel startup leaves the hublot retryable", async (t) => {
   const { state, row, store, events } = await fixture(t);
   await assert.rejects(reopenHublot(state, row.id, {
-    spawnProcess() { throw new Error("startup failed"); },
-    open() { assert.fail("must not open"); },
+    open() { throw new Error("startup failed"); },
   }), /startup failed/);
   assert.equal((await store.repositories.hublots.find(row.id)).status, "failed");
   assert.equal(state.hublotReopens.size, 0);
@@ -79,10 +71,10 @@ for (const confirmed of [false, true]) test(`dead widget confirmation: ${confirm
 });
 
 
-test("self-served hublots reopen only the tunnel without a startup script", async (t) => {
+for (const kind of ["self_served", "agent_managed"]) test(`${kind} records reopen only the tunnel without running stored scripts`, async (t) => {
   const { state, row, store } = await fixture(t);
   await store.repositories.hublots.update(row.id, {
-    service_kind: "self_served", service_start_script: null, service_start_script_path: null, service_start_script_sha256: null,
+    service_kind: kind, service_start_script: "#!/bin/sh\nexit 1", service_start_script_path: "/missing/legacy.sh", service_start_script_sha256: "legacy",
   });
   const result = await reopenHublot(state, row.id, {
     materialize: () => assert.fail("must not materialize a script"),

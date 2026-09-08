@@ -53,7 +53,7 @@ export function scheduleHublotStartupReconciliation({ state, supervisor, logger 
 
 /**
  * Periodically verify desired-open hublots against persisted OS process
- * identities. A hublot whose tunnel or service process is no longer live is
+ * identities. A hublot whose tunnel process is no longer live is
  * closed rather than automatically restarted or re-tunneled.
  */
 export function createHublotSupervisor({
@@ -95,7 +95,7 @@ export function createHublotSupervisor({
       for (const hublot of desired) {
         checked++;
         const processes = await repository.listProcesses(hublot.id);
-        const active = processes.filter((process) => !process.ended_at && ["running", "starting"].includes(process.status));
+        const active = processes.filter((process) => process.role === "tunnel" && !process.ended_at && ["running", "starting"].includes(process.status));
         const observations = active.map((process) => ({ process, matches: verifyIdentity(process) }));
         const observedAt = now();
         await appStore.transaction(async (repositories) => {
@@ -111,10 +111,8 @@ export function createHublotSupervisor({
         const current = await repository.find(hublot.id);
         if (!current || current.status !== hublot.status || current.updated_at !== hublot.updated_at || current.desired_state !== "open" || ["closing", "closed"].includes(current.status)) continue;
 
-        const serviceRows = processes.filter((process) => process.role === "service");
-        const tunnelHealthy = observations.some(({ process, matches }) => process.role === "tunnel" && matches);
-        const serviceHealthy = observations.some(({ process, matches }) => process.role === "service" && matches);
-        const criticalIdentityMissing = !tunnelHealthy || (serviceRows.length > 0 && !serviceHealthy);
+        const tunnelHealthy = observations.some(({ matches }) => matches);
+        const criticalIdentityMissing = !tunnelHealthy;
         if (criticalIdentityMissing) {
           const closedAt = observedAt;
           await recordTransition(hublot.id, "closed", {

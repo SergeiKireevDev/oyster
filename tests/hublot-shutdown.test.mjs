@@ -35,6 +35,7 @@ async function fixture(t) {
 test("graceful hublot shutdown awaits bounded escalation and retires ephemeral quick tunnels", async (t) => {
   const { store, state, child } = await fixture(t);
   const managed = await reserveHublot(state, { port: 4240, brief: "managed preview" });
+  await store.repositories.hublots.update(managed.id, { service_kind: "agent_managed" });
   const selfServed = await reserveHublot(state, { port: 4241, serviceKind: "self_served" });
   await recordHublotTransition(state, managed.id, "open", { publicUrl: "https://managed.trycloudflare.com" });
   await recordHublotTransition(state, selfServed.id, "open", { publicUrl: "https://self.trycloudflare.com" });
@@ -59,13 +60,13 @@ test("graceful hublot shutdown awaits bounded escalation and retires ephemeral q
     signalProcess(pid, signal) {
       const row = processByPid.get(pid);
       signals.push(`${row.id}:${signal}`);
-      if (signal === "SIGKILL" || row.role === "tunnel") alive.delete(row.id);
+      if (signal === "SIGKILL" || row.id === selfTunnel.id) alive.delete(row.id);
     },
   });
 
-  assert.deepEqual(result, { targeted: 3, escalated: 1, remaining: 0 });
-  assert.equal(signals.filter((value) => value.endsWith(":SIGTERM")).length, 3);
-  assert.deepEqual(signals.filter((value) => value.endsWith(":SIGKILL")), [`${managedService.id}:SIGKILL`]);
+  assert.deepEqual(result, { targeted: 2, escalated: 1, remaining: 0 });
+  assert.equal(signals.filter((value) => value.endsWith(":SIGTERM")).length, 2);
+  assert.deepEqual(signals.filter((value) => value.endsWith(":SIGKILL")), [`${managedTunnel.id}:SIGKILL`]);
   for (const id of [managed.id, selfServed.id]) {
     const row = await store.repositories.hublots.find(id);
     assert.equal(row.status, "closed");
@@ -74,7 +75,7 @@ test("graceful hublot shutdown awaits bounded escalation and retires ephemeral q
     assert.match(row.last_error, /ephemeral cloudflared tunnels are not recreated/);
   }
   assert.equal((await store.repositories.hublots.findProcess(managedTunnel.id)).status, "ended");
-  assert.equal((await store.repositories.hublots.findProcess(managedService.id)).status, "ended");
+  assert.equal((await store.repositories.hublots.findProcess(managedService.id)).status, "running");
   assert.equal((await store.repositories.hublots.findProcess(selfTunnel.id)).status, "ended");
   assert.equal((await store.repositories.hublots.findProcess(selfService.id)).status, "running", "self-served services are not app-managed");
 

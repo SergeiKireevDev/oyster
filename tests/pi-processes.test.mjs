@@ -98,7 +98,7 @@ test("runner drivers, checkpoints, and hublots preserve centralized process boun
   assert.doesNotMatch(runners, /piProcesses\.launch/);
   assert.match(piDriver, /processLauncher\.launch/);
   assert.match(readFileSync(new URL("../server/checkpoints.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
-  assert.match(readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8"), /piProcesses\.ephemeral/);
+  assert.doesNotMatch(readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8"), /piProcesses/);
 });
 
 test("local pi --no-session RPC startup creates no SQLite rows or database", {
