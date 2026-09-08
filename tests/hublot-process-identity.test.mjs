@@ -167,9 +167,9 @@ test("session rebinding and process metadata updates commit transactionally", as
   await exited;
 });
 
-test("tunnel manager records every spawned or discovered process role", () => {
+test("tunnel manager records only its tunnel process", () => {
   const source = readFileSync(new URL("../server/tunnels.mjs", import.meta.url), "utf8");
-  for (const role of ["tunnel", "setup_agent", "service"]) {
+  for (const role of ["tunnel"]) {
     assert.match(source, new RegExp(`persistHublotProcessIdentity\\(state, \\{[^}]*role: ["']${role}["']`, "s"));
   }
 });

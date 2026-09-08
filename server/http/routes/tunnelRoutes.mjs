@@ -86,7 +86,7 @@ export function createTunnelRoutes({
       try {
         const owner = options.sessionId ? await ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
-        reserved = await reserveHublot(state, { ...options, serviceKind: "self_served" });
+        reserved = await reserveHublot(state, options);
         await pinHublot(reserved);
         const opening = (await listTunnels(state, { id: reserved.id })).find((item) => item.id === reserved.id);
         if (opening) emitServerEvent(state, { type: "tunnel_opening", tunnel: opening });

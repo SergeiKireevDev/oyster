@@ -14,16 +14,13 @@ test("opening persists a self-served hublot and starts only its tunnel", async (
     state: { serverEvent: (event) => events.push(event) }, config: {}, requestContext,
     ensureSessionOwner: async (id) => { assert.equal(id, "s1"); return { id: "owner" }; },
     reserveHublot: async (_state, options) => {
-      assert.deepEqual(options, { port: 5173, label: "preview", sessionId: "s1", ownerId: "owner", serviceKind: "self_served" });
+      assert.deepEqual(options, { port: 5173, label: "preview", sessionId: "s1", ownerId: "owner" });
       order.push("reserve");
       return { id: "t1", ...options };
     },
     pinHublot: () => order.push("pin"),
     listTunnels: () => [{ id: "t1", port: 5173 }],
     openTunnel: async (_state, options) => { order.push("tunnel"); assert.equal(options.port, 5173); assert.equal(options.id, "t1"); return { id: "t1" }; },
-    allocateHublot: () => assert.fail("must not allocate ports"),
-    spawnHublotAgent: () => assert.fail("must not launch agents"),
-    spawnGitServerService: () => assert.fail("must not provision services"),
   });
   const res = response();
   await routes["POST /tunnels"]({ body: { port: 5173, label: "preview", sessionId: "s1" } }, res);

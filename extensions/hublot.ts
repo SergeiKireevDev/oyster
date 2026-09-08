@@ -57,10 +57,11 @@ export default function hublotExtension(pi: ExtensionAPI) {
     description:
       "Open, close, or list public Cloudflare tunnels for this session. " +
       "'open' requires a port (1–65535) of a service provisioned separately; it starts only the tunnel and persists its entry in SQLite. " +
-      "'close' stops the tunnel by id or port; the local service remains running. " +
+      "Provide an optional description as its label. 'close' stops the tunnel by id or port; the local service remains running. " +
       "Use only when public access is required. Quick-tunnel URLs are ephemeral.",
     parameters: Type.Object({
       action: StringEnum(["open", "close", "list"] as const),
+      description: Type.Optional(Type.String({ description: "For 'open': optional hublot label" })),
       session_id: Type.Optional(
         Type.String({
           description:
@@ -79,6 +80,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
         if (!Number.isInteger(params.port) || params.port! < 1 || params.port! > 65535) throw new Error("'open' requires a port between 1 and 65535");
         onUpdate?.({ content: [{ type: "text", text: "Starting Cloudflare tunnel…" }] });
         const data = await api("POST", "/tunnels", {
+          label: params.description?.slice(0, 200),
           port: params.port,
           sessionId: params.session_id ?? sessionId,
         });

@@ -50,13 +50,11 @@ test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable a
       async readJsonBody(req) { return req.body; },
     },
     listTunnels,
-    allocateHublot: () => { throw new Error("unused"); },
     reserveHublot: () => { throw new Error("unused"); },
     recordHublotTransition,
     rebindHublot,
     openTunnel: () => { throw new Error("unused"); },
     closeTunnel: () => { throw new Error("unused"); },
-    spawnHublotAgent: () => { throw new Error("unused"); },
     ensureSessionOwner: () => owner,
   });
   const listed = response();
@@ -77,5 +75,5 @@ test("route payloads, SSE events, tool endpoints, and hublot IDs remain stable a
   assert.match(toolSource, /api\("GET", "\/tunnels"/);
   assert.match(toolSource, /api\("DELETE", `\/tunnels\?id=/);
   assert.match(toolSource, /port: params.port/);
-  assert.doesNotMatch(toolSource, /git-server|brief:|params.description|Do not serve the port yourself/);
+  assert.doesNotMatch(toolSource, /git-server|brief:|Do not serve the port yourself/);
 });

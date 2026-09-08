@@ -30,7 +30,8 @@ test("supervisor closes every desired-open hublot whose process identity is not 
   const healthy = await reserveHublot(state, { port: 4200 });
   await recordHublotTransition(state, healthy.id, "open", { publicUrl: "https://healthy.test" });
   await processRow(store, healthy.id, "healthy-tunnel", "tunnel");
-  await processRow(store, healthy.id, "healthy-service", "service");
+  await store.repositories.hublots.update(healthy.id, { service_kind: "agent_managed" });
+  await processRow(store, healthy.id, "lost-legacy-service", "service");
 
   const stale = await reserveHublot(state, { port: 4201 });
   await recordHublotTransition(state, stale.id, "open", { publicUrl: "https://stale.test" });
@@ -50,7 +51,8 @@ test("supervisor closes every desired-open hublot whose process identity is not 
   const result = await supervisor.reconcile();
 
   assert.deepEqual(result, { skipped: false, checked: 2, interrupted: 1 });
-  assert.equal((await store.repositories.hublots.find(healthy.id)).status, "open");
+  assert.equal((await store.repositories.hublots.find(healthy.id)).status, "open", "a missing legacy service must not close a healthy tunnel");
+  assert.equal((await store.repositories.hublots.findProcess("lost-legacy-service")).status, "running", "legacy service records are no longer monitored");
   assert.equal((await store.repositories.hublots.find(healthy.id)).public_url, "https://healthy.test");
   assert.equal((await store.repositories.hublots.findProcess("healthy-tunnel")).observed_at, "observed");
   assert.equal((await store.repositories.hublots.find(stale.id)).status, "closed");

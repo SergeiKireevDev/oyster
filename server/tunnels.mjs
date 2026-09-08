@@ -10,14 +10,8 @@
  * persistent hublot_processes.id, so hot reloads retain runtime control.
  */
 
-import { spawn, execFileSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
-import { accessSync, closeSync, constants, fstatSync, openSync, readFileSync, statSync, unlinkSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createConnection, createServer } from "node:net";
-import { materializeHublotStartupScriptRecord } from "./persistence/hublotScriptMaterializer.mjs";
+import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { readProcessIdentity, verifyPersistedProcessIdentity } from "./persistence/processIdentity.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
@@ -31,36 +25,8 @@ export function tunnelInfo(t) {
   return info;
 }
 
-/** PIDs listening on a local TCP port (excluding this server). */
-export function pidsOnPort(port) {
-  try {
-    const out = execFileSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
-    return out.split("\n")
-      .map((s) => Number(s.trim()))
-      .filter((p) => Number.isInteger(p) && p > 1 && p !== process.pid);
-  } catch {
-    return []; // lsof exits 1 when nothing listens
-  }
-}
-
 function killPid(pid, signal = "SIGTERM") {
   try { process.kill(pid, signal); return true; } catch { return false; }
-}
-
-/** When a process started, from /proc (Linux). Null if unknown. */
-function pidStartedAt(pid) {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    // fields after the parenthesized comm (which can contain spaces):
-    // index 19 here = starttime (22nd field overall), in clock ticks since boot
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    const startTicks = Number(fields[19]);
-    const btime = Number((readFileSync("/proc/stat", "utf8").match(/^btime (\d+)$/m) ?? [])[1]);
-    if (!btime || !Number.isFinite(startTicks)) return null;
-    return new Date((btime + startTicks / 100) * 1000); // USER_HZ = 100
-  } catch {
-    return null;
-  }
 }
 
 function hublotProcessHandles(state) {
@@ -181,7 +147,6 @@ export async function currentHublotTunnelProcessIsHealthy(state, id, { verifyIde
 }
 
 async function persistedTunnelInfo(state, row) {
-  const service = (await hublotRepository(state).listProcesses(row.id)).find((process) => process.role === "service" && process.status === "running");
   const publishUrl = row.status === "open" && await currentHublotTunnelProcessIsHealthy(state, row.id);
   return {
     id: row.id,
@@ -192,7 +157,6 @@ async function persistedTunnelInfo(state, row) {
     url: publishUrl ? row.public_url : null,
     workdir: row.workdir,
     createdAt: row.created_at,
-    ...(service ? { servicePid: service.pid } : {}),
   };
 }
 
@@ -208,42 +172,9 @@ export async function listTunnels(state, filters = {}) {
   return tunnels.filter((tunnel) => tunnel.url || ["opening", "recovering"].includes(tunnel.status));
 }
 
-export function isLocalPortAvailable(port, host = "127.0.0.1") {
-  return new Promise((resolvePromise) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", () => resolvePromise(false));
-    server.listen({ port, host, exclusive: true }, () => server.close(() => resolvePromise(true)));
-  });
-}
-
-/** Allocate a free port without process-local counters, then reserve it transactionally. */
-export async function allocateHublot(state, options = {}, {
-  startPort = 3000,
-  checkPort = isLocalPortAvailable,
-} = {}) {
-  startPort = Number(startPort);
-  if (!Number.isInteger(startPort) || startPort < 1 || startPort > 65535) {
-    throw new Error(`invalid starting port: ${startPort}`);
-  }
-  if (typeof checkPort !== "function") throw new TypeError("port availability check must be a function");
-  for (let port = startPort; port <= 65535; port++) {
-    const inUse = (await hublotRepository(state).list({ port, excludeStatus: "closed" }))
-      .some((row) => row.port === port && row.status !== "closed");
-    if (inUse || !(await checkPort(port))) continue;
-    try { return await reserveHublot(state, { ...options, port }); }
-    catch (error) {
-      if (/unique constraint|already tunneled/i.test(error.message)) continue;
-      throw error;
-    }
-  }
-  throw new Error(`no free hublot port available from ${startPort}`);
-}
-
 /** Allocate durable identity and recovery configuration before any process starts. */
 export async function reserveHublot(state, {
-  port, label = null, sessionId = null, ownerId = null, brief = null,
-  serviceKind = "agent_managed",
+  port, label = null, sessionId = null, ownerId = null,
 } = {}) {
   port = Number(port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
@@ -252,14 +183,9 @@ export async function reserveHublot(state, {
   }
   const id = randomBytes(6).toString("hex");
   const createdAt = new Date().toISOString();
-  const scriptRoot = state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-  const serviceStartScriptPath = serviceKind === "agent_managed"
-    ? join(scriptRoot, "hublots", id, "start.sh")
-    : null;
   return state.appStore.transaction(async (repositories) => {
     await repositories.hublots.create({
-      id, ownerId, port, label, brief, workdir: state.currentDir, serviceKind,
-      serviceStartScriptPath, status: "opening", desiredState: "open", createdAt,
+      id, ownerId, port, label, workdir: state.currentDir, serviceKind: "self_served", status: "opening", desiredState: "open", createdAt,
     });
     await repositories.hublots.appendLifecycleEvent({
       hublotId: id, status: "opening", desiredState: "open", createdAt,
@@ -339,9 +265,6 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
       reject(new Error("hublot must be durably reserved or recovering before opening its tunnel"));
       return;
     }
-
-    const servicePid = reservation.service_kind === "agent_managed" ? pidsOnPort(port)[0] ?? null : null;
-    if (servicePid) await persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: servicePid });
 
     const bin = state.config.TUNNEL_BIN;
     // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
@@ -479,17 +402,13 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
   });
 }
 
-/** Reopen a tunnel; legacy managed records also restore their service artifact. */
+/** Reopen the tunnel to its existing port without provisioning a service. */
 export async function reopenHublot(state, id, {
-  spawnProcess = spawn,
-  waitForPort = waitForLocalPort,
   open = openTunnel,
-  materialize = materializeHublotStartupScript,
 } = {}) {
   const pending = state.hublotReopens ??= new Set();
   if (pending.has(id)) throw Object.assign(new Error("hublot is already reopening"), { statusCode: 409 });
   pending.add(id);
-  let serviceProc;
   let started = false;
   try {
     const row = await hublotRepository(state).find(id);
@@ -501,26 +420,7 @@ export async function reopenHublot(state, id, {
     const conflict = (await hublotRepository(state).list({ port: row.port }))
       .some((other) => other.id !== id && other.status !== "closed");
     if (conflict) throw Object.assign(new Error("hublot port is reserved by another hublot"), { statusCode: 409 });
-    if (row.service_kind === "self_served") {
-      for (const processRow of await hublotRepository(state).listProcesses(id)) {
-        if (processRow.role !== "tunnel" || processRow.ended_at) continue;
-        if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid);
-        await finishPersistedProcess(state, processRow);
-      }
-      await recordHublotTransition(state, id, "opening", {
-        desiredState: "open", publicUrl: null, lastError: null, closedAt: null,
-      });
-      started = true;
-      return await open(state, { id, port: row.port, label: row.label, sessionId: row.session_id });
-    }
-    const priorProcesses = await hublotRepository(state).listProcesses(id);
-    if (await localPortAnswers(row.port) && !priorProcesses.some((processRow) =>
-      processRow.role === "service" && verifyPersistedProcessIdentity(processRow))) {
-      throw Object.assign(new Error("hublot port is occupied by an unrelated service"), { statusCode: 409 });
-    }
-    const artifact = await materialize(state, id);
-    // Retire old tunnel identities before launching a replacement. Service
-    // startup scripts are idempotent and can reuse their surviving service.
+    // Retire old tunnel identities before launching a replacement.
     for (const processRow of await hublotRepository(state).listProcesses(id)) {
       if (processRow.role !== "tunnel" || processRow.ended_at) continue;
       if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid);
@@ -531,33 +431,10 @@ export async function reopenHublot(state, id, {
     });
     started = true;
     state.serverEvent?.({ type: "tunnel_opening", tunnel: await persistedTunnelInfo(state, await hublotRepository(state).find(id)) });
-    serviceProc = spawnProcess(artifact.path, [], { cwd: row.workdir, stdio: "ignore", detached: true });
-    let startupError = null;
-    serviceProc.on("error", (error) => { startupError = error; });
-    serviceProc.on("exit", (code) => {
-      if (code !== 0) startupError = new Error(`startup script exited (code=${code})`);
-    });
-    await waitForPort(row.port, { check: async (port) => {
-      if (startupError) throw startupError;
-      return localPortAnswers(port);
-    } });
-    if (startupError) throw startupError;
-    const servicePid = pidsOnPort(row.port)[0] ?? (serviceProc.exitCode === null ? serviceProc.pid : null);
-    if (!servicePid) throw new Error("could not identify the restarted service");
-    const processRow = await persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: servicePid });
-    if (servicePid === serviceProc.pid) {
-      registerHublotProcessHandle(state, processRow, serviceProc);
-      serviceProc.once("exit", (exitCode, signal) => {
-        removeHublotProcessHandle(state, processRow, serviceProc);
-        finishPersistedProcess(state, processRow, { exitCode, signal }).catch(() => {});
-      });
-    }
-    serviceProc.unref();
     const current = await hublotRepository(state).find(id);
     if (current.status !== "opening" || current.desired_state !== "open") throw new Error("hublot reopening was cancelled");
     return await open(state, { id, port: row.port, label: row.label, sessionId: row.session_id });
   } catch (error) {
-    if (serviceProc?.exitCode === null) serviceProc.kill("SIGTERM");
     if (started) {
       await failOpeningHublot(state, id, error);
       state.serverEvent?.({ type: "hublot_failed", tunnel: { id, status: "failed", url: null }, error: error.message });
@@ -568,8 +445,7 @@ export async function reopenHublot(state, id, {
   }
 }
 
-/** Close a tunnel by id, leaving externally provisioned services alone.
- * Legacy agent-managed records also stop their owned services and agents. */
+/** Close a tunnel by id, leaving the local service alone. */
 export async function closeTunnel(state, id) {
   const row = await hublotRepository(state).find(id);
   if (!row || row.status === "closed") return null;
@@ -578,55 +454,6 @@ export async function closeTunnel(state, id) {
   const processes = await hublotRepository(state).listProcesses(id);
   const handles = hublotProcessHandles(state);
 
-  // 1. the service on the port: a discovered replacement is killed only when
-  // it started after this hublot, preserving the legacy unrelated-listener guard.
-  const trackedServicePids = processes.filter((process) => process.role === "service" && !process.ended_at).map((process) => process.pid);
-  const createdAt = new Date(row.created_at).getTime() - 5000;
-  for (const pid of new Set(row.service_kind === "agent_managed" ? [...trackedServicePids, ...pidsOnPort(row.port)] : [])) {
-    const tracked = processes.find((process) => process.role === "service" && !process.ended_at && process.pid === pid);
-    if (tracked && !verifyPersistedProcessIdentity(tracked)) {
-      console.log(`[oyster] NOT killing stale tracked service pid ${pid} (identity changed)`);
-      continue;
-    }
-    let observed = tracked;
-    if (!observed) {
-      const started = pidStartedAt(pid);
-      if (!started || started.getTime() < createdAt) {
-        console.log(`[oyster] NOT killing pid ${pid} on port ${row.port} (predates the hublot)`);
-        continue;
-      }
-      try {
-        const identity = readProcessIdentity(pid);
-        observed = {
-          pid,
-          process_group_id: identity.processGroupId,
-          boot_id: identity.bootId,
-          proc_start_ticks: identity.procStartTicks,
-          executable: identity.executable,
-          command_sha256: identity.commandSha256,
-        };
-      } catch {
-        continue;
-      }
-    }
-    if (killPid(pid)) console.log(`[oyster] killed hublot service pid ${pid} (port ${row.port})`);
-    const escalation = setTimeout(() => {
-      // Revalidate immediately before escalation so a reused PID is never killed.
-      if (verifyPersistedProcessIdentity(observed)) killPid(pid, "SIGKILL");
-    }, 3000);
-    escalation.unref();
-  }
-
-  // 2. stop setup agents by their persistent process ids.
-  for (const processRow of processes.filter((process) => process.role === "setup_agent")) {
-    const agent = handles.get(processRow.id);
-    if (!agent || agent.exitCode !== null) continue;
-    agent.kill("SIGTERM");
-    // ChildProcess.killed only means a signal was sent, not that the child exited.
-    setTimeout(() => { if (agent.exitCode === null) agent.kill("SIGKILL"); }, 3000).unref();
-  }
-
-  // 3. stop cloudflared handles; their exit callbacks finalize the row.
   let hasTunnelHandle = false;
   for (const processRow of processes.filter((process) => process.role === "tunnel")) {
     const tunnel = handles.get(processRow.id);
@@ -668,7 +495,7 @@ export async function shutdownHublots(state, {
     }
     for (const processRow of await repository.listProcesses(row.id)) {
       if (processRow.ended_at || !["running", "starting"].includes(processRow.status)) continue;
-      if (processRow.role === "service" && row.service_kind !== "agent_managed") continue;
+      if (processRow.role !== "tunnel") continue;
       if (!verifyIdentity(processRow)) continue;
       targets.push(processRow);
     }
@@ -712,16 +539,13 @@ export async function shutdownHublots(state, {
   return Object.freeze({ targeted: targets.length, escalated, remaining: remaining.length });
 }
 
-// ---------------------------------------------------------------- hublot agents
-
-/** Stop every process owned by a session's hublots before their owner row cascades. */
+/** Stop a session's tunnels before their owner row cascades. */
 export async function closeSessionHublots(state, sessionId, {
   termTimeoutMs = 3_000,
   killTimeoutMs = 1_000,
   pollIntervalMs = 25,
   verifyIdentity = verifyPersistedProcessIdentity,
   signalProcess = (pid, signal) => process.kill(pid, signal),
-  removeFile = unlinkSync,
   clock = () => Date.now(),
   sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
 } = {}) {
@@ -731,7 +555,7 @@ export async function closeSessionHublots(state, sessionId, {
   for (const row of rows) {
     if (row.status !== "closed") await recordHublotTransition(state, row.id, "closing", { desiredState: "closed", publicUrl: null, lastError: null });
     for (const processRow of await repository.listProcesses(row.id)) {
-      if (!processRow.ended_at && ["running", "starting"].includes(processRow.status) && verifyIdentity(processRow)) targets.push(processRow);
+      if (processRow.role === "tunnel" && !processRow.ended_at && ["running", "starting"].includes(processRow.status) && verifyIdentity(processRow)) targets.push(processRow);
     }
   }
   const live = () => targets.filter((processRow) => verifyIdentity(processRow));
@@ -760,298 +584,6 @@ export async function closeSessionHublots(state, sessionId, {
     if ((await repository.find(row.id))?.status !== "closed") await recordHublotTransition(state, row.id, "closed", {
       desiredState: "closed", publicUrl: null, lastError: null, closedAt: stoppedAt, at: stoppedAt,
     });
-    if (row.service_start_script_path) {
-      const scriptRoot = resolve(state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "hublots");
-      const scriptPath = resolve(row.service_start_script_path);
-      if (!scriptPath.startsWith(`${scriptRoot}${sep}`)) throw new Error(`refusing to remove hublot startup script outside ${scriptRoot}`);
-      try { removeFile(scriptPath); } catch (error) { if (error?.code !== "ENOENT") throw error; }
-    }
   }
   return rows.map((row) => row.port);
-}
-
-/** Restore the authoritative startup artifact before any app-owned invocation. */
-export async function materializeHublotStartupScript(state, id) {
-  const record = await hublotRepository(state).find(id);
-  if (!record) throw new Error(`no such hublot: ${id}`);
-  const agentDir = state.config.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-  return materializeHublotStartupScriptRecord(record, { agentDir });
-}
-
-export function localPortAnswers(port, timeoutMs = 1500) {
-  return new Promise((resolvePromise) => {
-    const socket = createConnection({ host: "127.0.0.1", port, timeout: timeoutMs });
-    let settled = false;
-    const finish = (answering) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolvePromise(answering);
-    };
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-    socket.once("timeout", () => finish(false));
-  });
-}
-
-export async function waitForLocalPort(port, {
-  timeoutMs = 20_000,
-  intervalMs = 250,
-  check = localPortAnswers,
-  clock = () => Date.now(),
-  sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
-} = {}) {
-  const deadline = clock() + timeoutMs;
-  do {
-    if (await check(port)) return true;
-    const remaining = deadline - clock();
-    if (remaining <= 0) break;
-    await sleep(Math.min(intervalMs, remaining));
-  } while (clock() < deadline);
-  throw new Error(`service did not answer on port ${port} within ${timeoutMs / 1000}s`);
-}
-
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
-}
-
-export function gitSmartHttpServerScriptPath() {
-  return resolve(process.env.GIT_SMART_HTTP_SERVER_SCRIPT
-    ?? join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "serve-git-smart-http.sh"));
-}
-
-function gitServerStartupScript({ serverPath, worktreePath, stateDir, port }) {
-  return `#!/bin/sh\n# oyster: idempotent\n` +
-    `if python3 - ${port} <<'PY'\n` +
-    `import socket, sys\n` +
-    `try:\n` +
-    `    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1): pass\n` +
-    `except OSError:\n` +
-    `    raise SystemExit(1)\n` +
-    `PY\nthen\n  exit 0\nfi\n` +
-    `exec ${shellQuote(serverPath)} --host 127.0.0.1 --port ${port} --state-dir ${shellQuote(stateDir)} ${shellQuote(worktreePath)}\n`;
-}
-
-/** Start the fixed read-only Git Smart HTTP server without a setup agent. */
-export async function spawnGitServerService(state, hublot, worktreePath, {
-  serverPath = gitSmartHttpServerScriptPath(),
-  spawnProcess = spawn,
-  waitForPort = waitForLocalPort,
-} = {}) {
-  if (!isAbsolute(worktreePath)) throw new Error("Git worktree path must be absolute");
-  const worktree = statSync(worktreePath);
-  if (!worktree.isDirectory()) throw new Error(`Git worktree path is not a directory: ${worktreePath}`);
-  try { execFileSync("git", ["-C", worktreePath, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore" }); }
-  catch { throw new Error(`Git worktree path is not a Git worktree: ${worktreePath}`); }
-  const server = statSync(serverPath);
-  if (!server.isFile()) throw new Error(`Git Smart HTTP server is not a file: ${serverPath}`);
-  accessSync(serverPath, constants.X_OK);
-
-  const row = await hublotRepository(state).find(hublot.id);
-  if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
-  const stateDir = join(dirname(row.service_start_script_path), "git-server-state");
-  const startupSource = gitServerStartupScript({ serverPath, worktreePath, stateDir, port: hublot.port });
-  const startupSha256 = createHash("sha256").update(startupSource).digest("hex");
-  await hublotRepository(state).update(row.id, {
-    service_start_script: startupSource,
-    service_start_script_sha256: startupSha256,
-  });
-  materializeHublotStartupScript(state, row.id);
-
-  console.log(`[oyster] starting read-only Git Smart HTTP server for ${worktreePath} on :${hublot.port}`);
-  const serviceProc = spawnProcess(serverPath, ["--host", "127.0.0.1", "--port", String(hublot.port), "--state-dir", stateDir, worktreePath], {
-    cwd: worktreePath,
-    stdio: "ignore",
-    detached: true,
-  });
-  let serviceProcess = null;
-  let ready = false;
-  const stopped = new Promise((_, reject) => {
-    serviceProc.once("error", async (error) => {
-      removeHublotProcessHandle(state, serviceProcess, serviceProc);
-      await finishPersistedProcess(state, serviceProcess, { status: "failed" });
-      if (!ready) reject(new Error(`failed to start Git Smart HTTP server: ${error.message}`));
-    });
-    serviceProc.once("exit", async (exitCode, signal) => {
-      removeHublotProcessHandle(state, serviceProcess, serviceProc);
-      await finishPersistedProcess(state, serviceProcess, { exitCode, signal });
-      if (!ready) reject(new Error(`Git Smart HTTP server exited before serving port ${hublot.port} (code=${exitCode})`));
-    });
-  });
-
-  try {
-    await Promise.race([waitForPort(hublot.port), stopped]);
-    if (serviceProc.exitCode !== null) throw new Error(`Git Smart HTTP server exited before serving port ${hublot.port} (code=${serviceProc.exitCode})`);
-    serviceProcess = await persistHublotProcessIdentity(state, {
-      hublotId: hublot.id, role: "service", pid: serviceProc.pid, status: "running",
-    });
-    if (!serviceProcess) throw new Error("Git Smart HTTP server started without a persistent process identity");
-    registerHublotProcessHandle(state, serviceProcess, serviceProc);
-    ready = true;
-    serviceProc.unref();
-    return { servicePid: serviceProc.pid, serviceProc, serviceProcess };
-  } catch (error) {
-    if (serviceProc.exitCode === null) serviceProc.kill("SIGTERM");
-    throw error;
-  }
-}
-
-const START_SCRIPT_MAX_BYTES = 256 * 1024;
-
-export function hublotAgentPrompt(hublot, brief) {
-  return `Prepare the following service on local port ${hublot.port}:\n${brief}\n\n` +
-    `Create an idempotent executable startup script at exactly ${hublot.serviceStartScriptPath}. ` +
-    `It must start with a shebang and the line "# oyster: idempotent", safely do nothing ` +
-    `when the service is already healthy, and recreate the service after a restart. ` +
-    `Invoke that exact script to start the service; do not start the service by any other command. ` +
-    `Do not open a public tunnel. Whatever serves it must keep running after you exit. ` +
-    `Verify it responds on port ${hublot.port} before finishing.`;
-}
-
-/** Validate the setup-agent artifact and atomically persist its recovery source. */
-export async function validateAndStoreHublotStartupScript(state, hublot) {
-  const row = await hublotRepository(state).find(hublot.id);
-  const path = hublot.serviceStartScriptPath;
-  if (!row || row.service_kind !== "agent_managed") throw new Error("agent-managed hublot reservation is required");
-  if (!path || path !== row.service_start_script_path) throw new Error("setup agent did not use the allocated startup-script path");
-  let descriptor = null;
-  try {
-    descriptor = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
-    const metadata = fstatSync(descriptor);
-    if (!metadata.isFile()) throw new Error("startup script is not a regular file");
-    if (!(metadata.mode & 0o111)) throw new Error("startup script is not executable");
-    if (metadata.size < 1 || metadata.size > START_SCRIPT_MAX_BYTES) throw new Error(`startup script must be 1-${START_SCRIPT_MAX_BYTES} bytes`);
-    const content = readFileSync(descriptor, "utf8");
-    if (!content.startsWith("#!")) throw new Error("startup script must start with a shebang");
-    if (!/^# oyster: idempotent$/m.test(content)) throw new Error("startup script must declare the idempotent hublot protocol");
-    if (content.includes("\0")) throw new Error("startup script must be text");
-    const sha256 = createHash("sha256").update(content).digest("hex");
-    await hublotRepository(state).update(row.id, {
-      service_start_script: content,
-      service_start_script_sha256: sha256,
-    });
-    return Object.freeze({ path, content, sha256 });
-  } catch (error) {
-    throw new Error(`invalid hublot startup script at ${path}: ${error.message}`, { cause: error });
-  } finally {
-    if (descriptor !== null) closeSync(descriptor);
-  }
-}
-
-/** Spawn a one-shot background pi agent (`pi -p`) and resolve only after
- *  its local service answers and its restart artifact validates. The caller
- *  publishes the tunnel afterwards, so users never see an incomplete hublot. */
-export function spawnHublotAgent(state, hublot, brief, {
-  checkPort: checkPortOverride = null,
-  validateStartupScript = validateAndStoreHublotStartupScript,
-  discoverPids = pidsOnPort,
-  pollIntervalMs = 2_000,
-  timeoutMs = 5 * 60 * 1_000,
-} = {}) {
-  return new Promise(async (resolvePromise, reject) => {
-    const prompt = hublotAgentPrompt(hublot, brief);
-    console.log(`[oyster] preparing local service for hublot :${hublot.port}`);
-    // --no-session: these one-shot setup runs must not leave session files
-    // behind (they would clutter the sessions list)
-    const proc = state.piProcesses.ephemeral(["-p", prompt], {
-      cwd: state.currentDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    const agentProcess = await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "setup_agent", pid: proc.pid });
-    registerHublotProcessHandle(state, agentProcess, proc);
-    let tail = "";
-    const onOut = (chunk) => { tail = (tail + String(chunk)).slice(-1500); };
-    proc.stdout.on("data", onOut);
-    proc.stderr.on("data", onOut);
-
-    let done = false;
-    let agentExited = false;
-    let agentExitAt = 0;
-    const createdAt = new Date().toISOString();
-    const started = Date.now();
-    let startupValidationError = null;
-
-    const checkPort = checkPortOverride ?? (() => new Promise((resolveCheck) => {
-      const socket = createConnection({ host: "127.0.0.1", port: hublot.port, timeout: 1500 });
-      socket.on("connect", () => { socket.destroy(); resolveCheck(true); });
-      socket.on("error", () => resolveCheck(false));
-      socket.on("timeout", () => { socket.destroy(); resolveCheck(false); });
-    }));
-
-    const finish = async (error = null) => {
-      if (done) return;
-      done = true;
-      clearInterval(poll);
-      if (error) {
-        if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
-        reject(error instanceof Error ? error : new Error(String(error)));
-        return;
-      }
-      try {
-        const servicePid = discoverPids(hublot.port)[0] ?? null;
-        const serviceProcess = servicePid
-          ? await persistHublotProcessIdentity(state, { hublotId: hublot.id, role: "service", pid: servicePid, startedAt: createdAt })
-          : null;
-        if (servicePid && !serviceProcess) throw new Error("hublot service started without a persistent process identity");
-        if (servicePid) console.log(`[oyster] hublot :${hublot.port} served by pid ${servicePid}`);
-        resolvePromise({ agentProc: proc, agentProcess, servicePid, serviceProcess, createdAt });
-      } catch (finishError) {
-        if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
-        reject(finishError);
-      }
-    };
-
-    let checking = false;
-    const poll = setInterval(async () => {
-      if (done || checking) return;
-      checking = true;
-      let ready = false;
-      try {
-        ready = await checkPort();
-        if (ready) {
-          try {
-            await validateStartupScript(state, hublot);
-            startupValidationError = null;
-            await finish();
-            return;
-          } catch (error) {
-            // A port may already answer before the setup agent has created its
-            // required restart artifact. Keep the agent alive and poll until
-            // both readiness conditions hold instead of failing this race.
-            startupValidationError = error;
-          }
-        } else {
-          startupValidationError = null;
-        }
-      } catch (error) {
-        startupValidationError = error;
-      } finally {
-        checking = false;
-      }
-      // Give a just-exited agent a short grace period: detached services and
-      // their startup artifacts can take a moment to become ready.
-      if (agentExited && Date.now() - agentExitAt > 10_000) {
-        await finish(ready && startupValidationError
-          ? startupValidationError
-          : new Error(`agent finished but nothing answers on port ${hublot.port}: ${tail.trim().split("\n").pop() ?? ""}`));
-      } else if (Date.now() - started > timeoutMs) {
-        await finish(startupValidationError ?? new Error("timed out waiting for the local hublot service to come up"));
-      }
-    }, pollIntervalMs);
-
-    proc.on("exit", async (code, signal) => {
-      removeHublotProcessHandle(state, agentProcess, proc);
-      await finishPersistedProcess(state, agentProcess, { exitCode: code, signal });
-      agentExited = true;
-      agentExitAt = Date.now();
-      console.log(`[oyster] hublot service agent for :${hublot.port} exited (code=${code})`);
-    });
-    proc.on("error", async (error) => {
-      removeHublotProcessHandle(state, agentProcess, proc);
-      await finishPersistedProcess(state, agentProcess, { status: "failed" });
-      await finish(`failed to spawn background agent: ${error.message}`);
-    });
-    proc.unref();
-  });
 }
