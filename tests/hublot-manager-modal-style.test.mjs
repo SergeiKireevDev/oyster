@@ -8,13 +8,13 @@ const source = readFileSync(
   "utf8",
 );
 
-test("hublot manager presents a labelled, described public-interface brief", () => {
-  assert.match(source, /<label for="hublotDescription">[\s\S]*?<span class="hublot-field">[\s\S]*?<span>Interface brief<\/span>/);
+test("hublot manager presents a labelled, described public-interface label and port", () => {
+  assert.match(source, /<label for="hublotDescription">[\s\S]*?<span class="hublot-field">[\s\S]*?<span>Label \(optional\)<\/span>/);
   assert.match(source, /id="hublotDescriptionHint"/);
   assert.match(source, /aria-describedby="hublotDescriptionHint hublotVisibilityNote"/);
   assert.match(source, /class="hublot-visibility-note" id="hublotVisibilityNote"/);
   assert.match(source, /public, temporary URL/);
-  assert.match(source, /Do not include secrets/);
+  assert.match(source, /id="hublotPort" type="number" min="1" max="65535"/);
 });
 
 test("hublot manager retains shared modal actions and explicit loading semantics", () => {

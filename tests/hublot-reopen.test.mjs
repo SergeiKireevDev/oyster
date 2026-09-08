@@ -77,3 +77,22 @@ for (const confirmed of [false, true]) test(`dead widget confirmation: ${confirm
   await runtime.actions.open({ kind: "live_interface", hublotId: "h1", label: "Preview", availability: "closed" });
   assert.deepEqual(calls, confirmed ? [["/tunnels/reopen", { id: "h1" }]] : []);
 });
+
+
+test("self-served hublots reopen only the tunnel without a startup script", async (t) => {
+  const { state, row, store } = await fixture(t);
+  await store.repositories.hublots.update(row.id, {
+    service_kind: "self_served", service_start_script: null, service_start_script_path: null, service_start_script_sha256: null,
+  });
+  const result = await reopenHublot(state, row.id, {
+    materialize: () => assert.fail("must not materialize a script"),
+    spawnProcess: () => assert.fail("must not start a service"),
+    waitForPort: () => assert.fail("must not provision a port"),
+    open: async (_state, options) => {
+      assert.equal(options.port, row.port);
+      assert.equal((await store.repositories.hublots.find(row.id)).status, "opening");
+      return { id: row.id, url: "https://fresh.test" };
+    },
+  });
+  assert.equal(result.id, row.id);
+});

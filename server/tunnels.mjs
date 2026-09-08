@@ -340,7 +340,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
       return;
     }
 
-    const servicePid = pidsOnPort(port)[0] ?? null;
+    const servicePid = reservation.service_kind === "agent_managed" ? pidsOnPort(port)[0] ?? null : null;
     if (servicePid) await persistHublotProcessIdentity(state, { hublotId: id, role: "service", pid: servicePid });
 
     const bin = state.config.TUNNEL_BIN;
@@ -479,7 +479,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
   });
 }
 
-/** Reopen the existing record and its authoritative service startup artifact. */
+/** Reopen a tunnel; legacy managed records also restore their service artifact. */
 export async function reopenHublot(state, id, {
   spawnProcess = spawn,
   waitForPort = waitForLocalPort,
@@ -501,6 +501,18 @@ export async function reopenHublot(state, id, {
     const conflict = (await hublotRepository(state).list({ port: row.port }))
       .some((other) => other.id !== id && other.status !== "closed");
     if (conflict) throw Object.assign(new Error("hublot port is reserved by another hublot"), { statusCode: 409 });
+    if (row.service_kind === "self_served") {
+      for (const processRow of await hublotRepository(state).listProcesses(id)) {
+        if (processRow.role !== "tunnel" || processRow.ended_at) continue;
+        if (verifyPersistedProcessIdentity(processRow)) killPid(processRow.pid);
+        await finishPersistedProcess(state, processRow);
+      }
+      await recordHublotTransition(state, id, "opening", {
+        desiredState: "open", publicUrl: null, lastError: null, closedAt: null,
+      });
+      started = true;
+      return await open(state, { id, port: row.port, label: row.label, sessionId: row.session_id });
+    }
     const priorProcesses = await hublotRepository(state).listProcesses(id);
     if (await localPortAnswers(row.port) && !priorProcesses.some((processRow) =>
       processRow.role === "service" && verifyPersistedProcessIdentity(processRow))) {
@@ -556,9 +568,8 @@ export async function reopenHublot(state, id, {
   }
 }
 
-/** Close one tunnel by id: kills the cloudflared process, the background
- *  agent (if still running), and whatever is serving the port. Returns its
- *  info, or null if unknown. */
+/** Close a tunnel by id, leaving externally provisioned services alone.
+ * Legacy agent-managed records also stop their owned services and agents. */
 export async function closeTunnel(state, id) {
   const row = await hublotRepository(state).find(id);
   if (!row || row.status === "closed") return null;
@@ -571,7 +582,7 @@ export async function closeTunnel(state, id) {
   // it started after this hublot, preserving the legacy unrelated-listener guard.
   const trackedServicePids = processes.filter((process) => process.role === "service" && !process.ended_at).map((process) => process.pid);
   const createdAt = new Date(row.created_at).getTime() - 5000;
-  for (const pid of new Set([...trackedServicePids, ...pidsOnPort(row.port)])) {
+  for (const pid of new Set(row.service_kind === "agent_managed" ? [...trackedServicePids, ...pidsOnPort(row.port)] : [])) {
     const tracked = processes.find((process) => process.role === "service" && !process.ended_at && process.pid === pid);
     if (tracked && !verifyPersistedProcessIdentity(tracked)) {
       console.log(`[oyster] NOT killing stale tracked service pid ${pid} (identity changed)`);

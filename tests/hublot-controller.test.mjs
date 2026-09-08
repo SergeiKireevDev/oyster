@@ -15,8 +15,8 @@ test("hublot listing requests the Hub-wide collection before applying session vi
 test("hublot controller binds creation to current session", async () => {
   let request; const states = [];
   const controller = createHublotController({ createHublot: async (value) => { request = value; return { tunnel: { url: "https://x" } }; }, getSessionId: () => "session", setDescription: (value) => states.push(value), setCreating: () => {}, close: () => {}, toast: () => {} });
-  await controller.create(" demo ");
-  assert.deepEqual(request, { label: "demo", sessionId: "session", brief: "demo" });
+  await controller.create(" demo ", 5173);
+  assert.deepEqual(request, { label: "demo", sessionId: "session", port: 5173 });
   assert.deepEqual(states, [" demo ", ""]);
 });
 test("hublot controller refreshes the sidebar best-effort when authenticated", async () => {

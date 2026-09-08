@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openAppStore } from "../server/persistence/appStore.mjs";
 import {
-  listTunnels, openTunnel, publicHublotAnswers, reserveHublot, waitForPublicHublot,
+  closeTunnel, listTunnels, openTunnel, publicHublotAnswers, reserveHublot, waitForPublicHublot,
 } from "../server/tunnels.mjs";
 
 async function fixture(t) {
@@ -143,4 +145,32 @@ test("public health checks accept successful origin responses and reject Cloudfl
   assert.equal(requests[0].options.method, "GET");
   assert.equal(requests[0].options.redirect, "manual");
   assert.match(requests[0].url.search, /__oyster_hublot_health=/);
+});
+
+
+test("opening and closing a self-served hublot never adopts or stops its listener", async (t) => {
+  const { store, state } = await fixture(t);
+  const service = spawn(process.execPath, ["-e",
+    'const s = require("http").createServer((_, res) => res.end("alive")); s.listen(0, "127.0.0.1", () => console.log(s.address().port));',
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+  t.after(() => service.kill());
+  const [output] = await once(service.stdout, "data");
+  const port = Number(output.toString().trim());
+  const row = await reserveHublot(state, { port, serviceKind: "self_served" });
+  assert.equal(row.service_start_script_path, null);
+  const proc = new FakeTunnelProcess();
+  const opening = openTunnel(state, { id: row.id, port }, {
+    spawnProcess: (_bin, args) => {
+      assert.ok(args.includes(`http://127.0.0.1:${port}`));
+      return proc;
+    },
+    waitForPublic: async () => {},
+  });
+  while (!proc.stderr.listenerCount("data")) await new Promise((resolve) => setImmediate(resolve));
+  proc.stderr.emit("data", "URL https://external.trycloudflare.com assigned");
+  await opening;
+  assert.deepEqual((await store.repositories.hublots.listProcesses(row.id)).map((p) => p.role), ["tunnel"]);
+  await closeTunnel(state, row.id);
+  assert.equal(proc.killed, true);
+  assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), "alive");
 });

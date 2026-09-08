@@ -25,8 +25,8 @@ export async function refreshHublotScope({ scopeAll, setScope, updateTitle, refr
   return nextScope;
 }
 
-export async function createHublot(fetchImpl, { label, sessionId, brief }) {
-  const res = await fetchImpl("/tunnels", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label, sessionId, brief }) });
+export async function createHublot(fetchImpl, { label, sessionId, port }) {
+  const res = await fetchImpl("/tunnels", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label, sessionId, port }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `tunnel create failed (${res.status})`);
   return data;

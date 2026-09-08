@@ -4,15 +4,8 @@
  *
  * A "hublot" (French for porthole) is a public web interface: a cloudflared
  * tunnel to a local port, managed by the Oyster server (`server/server.mjs`).
- * Opening one through this tool:
- *   - lets the server allocate the next free port (3000+)
- *   - claims an already-connected tunnel from the rolling warm pool, replaces
- *     its waiting-page service with the requested local service, then binds
- *     the interface to the CURRENT session so it appears ready in the UI, and
- *     is torn down (service + agent + tunnel) when closed or when the
- *     session is deleted. Quick-tunnel URLs are ephemeral: a verified tunnel
- *     that survived a UI restart is retained, but a stale one is never
- *     recreated automatically.
+ * Opening starts a Cloudflare tunnel to a caller-provided port and persists
+ * its entry in SQLite. The caller provisions and manages the local service.
  *
  * Config: the UI server is found at OYSTER_URL (default http://127.0.0.1:8080)
  * and authenticated with OYSTER_TOKEN or the .ui-token file at the project
@@ -20,7 +13,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -62,48 +55,13 @@ export default function hublotExtension(pi: ExtensionAPI) {
     name: "hublot",
     label: "Live Interface",
     description:
-      "Manage live-interface widgets (legacy name: hublots) — public web interfaces (cloudflared tunnels to local ports) for this " +
-      "session. When the user asks to 'create/open a hublot', use this tool. " +
-      "Actions: 'open' creates a hublot — the server allocates a free local port and returns " +
-      "the public URL. Normally a background agent serves `description`; the deterministic " +
-      "type='git-server' bypasses the agent and serves an absolute Git worktree path through " +
-      "the bundled read-only Smart HTTP server. 'close' tears one " +
-      "down (service process, background agent and tunnel) by id or port. 'list' shows the " +
-      "session's hublots. Opened hublots appear automatically in the Oyster. " +
-      "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, stale tunnels " +
-      "are closed instead of recreated; use 'open' afterwards to obtain a fresh URL.",
-    promptSnippet: "Open/close/list public live-interface widgets (hublot tunnels) for this session",
-    promptGuidelines: [
-      "A 'hublot' is a public live-interface widget. Use hublot with action=open only when public access is required, and provide a clear " +
-        "description of what should be served. For ordinary hublots, the background agent " +
-        "will create and persist an idempotent startup script before the tunnel opens.",
-      "To expose a Git worktree for clone, fetch, or pull, use hublot with action=open, " +
-        "type=git-server, and the absolute worktree path. The deterministic read-only Smart " +
-        "HTTP server starts directly; pushes are denied.",
-      "Use hublot with action=close (id or port) instead of killing cloudflared processes manually.",
-      "Do not start or serve the hublot port yourself; hublots are always agent-managed.",
-      "Cloudflared quick-tunnel URLs are not restartable. If a hublot is no longer listed " +
-        "after a UI server restart, open a new one for a fresh URL instead of reusing the old URL.",
-    ],
+      "Open, close, or list public Cloudflare tunnels for this session. " +
+      "'open' requires a port (1–65535) of a service provisioned separately; it starts only the tunnel and persists its entry in SQLite. " +
+      "Provide an optional description as its label. 'close' stops the tunnel by id or port; the local service remains running. " +
+      "Use only when public access is required. Quick-tunnel URLs are ephemeral.",
     parameters: Type.Object({
       action: StringEnum(["open", "close", "list"] as const),
-      description: Type.Optional(
-        Type.String({
-          description:
-            "For 'open': what the hublot should expose (becomes the label and, for an " +
-            "ordinary hublot, the brief given to the background agent that sets it up)",
-        }),
-      ),
-      type: Type.Optional(
-        StringEnum(["git-server"] as const, {
-          description: "For 'open': use 'git-server' for a read-only Git worktree",
-        }),
-      ),
-      path: Type.Optional(
-        Type.String({
-          description: "For type='git-server': absolute path to the Git worktree",
-        }),
-      ),
+      description: Type.Optional(Type.String({ description: "For 'open': optional hublot label" })),
       session_id: Type.Optional(
         Type.String({
           description:
@@ -112,41 +70,22 @@ export default function hublotExtension(pi: ExtensionAPI) {
         }),
       ),
       id: Type.Optional(Type.String({ description: "For 'close': hublot id" })),
-      port: Type.Optional(Type.Number({ description: "For 'close': local port of the hublot" })),
+      port: Type.Optional(Type.Integer({ minimum: 1, maximum: 65535, description: "Required for open: existing local service port; for close: tunnel port" })),
     }),
 
     async execute(_toolCallId, params, _signal, onUpdate, ctx) {
       const sessionId = ctx.sessionManager.getSessionId();
 
       if (params.action === "open") {
-        if (!params.description) throw new Error("'open' requires a description");
-        if (params.type === "git-server") {
-          if (!params.path) throw new Error(`type='${params.type}' requires a path`);
-          if (!isAbsolute(params.path)) throw new Error(`type='${params.type}' requires an absolute path`);
-        } else if (params.path) {
-          throw new Error("'path' is only valid with type='git-server'");
-        }
-        onUpdate?.({
-          content: [{
-            type: "text",
-            text: params.type === "git-server"
-              ? "Starting read-only Git Smart HTTP server on a reserved public tunnel…"
-              : "Preparing local service on a reserved public tunnel…",
-          }],
-        });
+        if (!Number.isInteger(params.port) || params.port! < 1 || params.port! > 65535) throw new Error("'open' requires a port between 1 and 65535");
+        onUpdate?.({ content: [{ type: "text", text: "Starting Cloudflare tunnel…" }] });
         const data = await api("POST", "/tunnels", {
-          label: params.description.slice(0, 200),
-          brief: params.description,
+          label: params.description?.slice(0, 200),
+          port: params.port,
           sessionId: params.session_id ?? sessionId,
-          ...(params.type === "git-server" ? { type: params.type, path: params.path } : {}),
         });
         const t = data.tunnel;
-        const serviceText = params.type === "git-server"
-          ? `The read-only Git Smart HTTP server is serving ${params.path}; clone, fetch, and pull are supported, while push is denied.`
-          : "The background agent brought the local service up before the tunnel was opened.";
-        const text = `Hublot ready: ${t.url} → http://localhost:${t.port}\n` +
-          `${serviceText} Do not serve the port yourself.`;
-        return { content: [{ type: "text", text }], details: t };
+        return { content: [{ type: "text", text: `Hublot ready: ${t.url} → http://localhost:${t.port}` }], details: t };
       }
 
       if (params.action === "close") {
@@ -160,7 +99,7 @@ export default function hublotExtension(pi: ExtensionAPI) {
         }
         const data = await api("DELETE", `/tunnels?id=${encodeURIComponent(id!)}`);
         return {
-          content: [{ type: "text", text: `Hublot closed: ${data.closed.url} (port ${data.closed.port}). Service, agent and tunnel were terminated.` }],
+          content: [{ type: "text", text: `Hublot closed: ${data.closed.url} (port ${data.closed.port}). Tunnel stopped. The local service remains running.` }],
           details: data.closed,
         };
       }

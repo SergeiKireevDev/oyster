@@ -57,8 +57,8 @@ test("hublot scope action refreshes scoped stores", async () => {
 
 test("hublot create action preserves session payload", async () => {
   let body;
-  await createHublot(async (_url, options) => { body = options.body; return { ok: true, status: 200, json: async () => ({ tunnel: {} }) }; }, { label: "demo", sessionId: "s", brief: "demo" });
-  assert.deepEqual(JSON.parse(body), { label: "demo", sessionId: "s", brief: "demo" });
+  await createHublot(async (_url, options) => { body = options.body; return { ok: true, status: 200, json: async () => ({ tunnel: {} }) }; }, { label: "demo", sessionId: "s", port: 5173 });
+  assert.deepEqual(JSON.parse(body), { label: "demo", sessionId: "s", port: 5173 });
 });
 
 test("routine generation sends the brief and target session", async () => {

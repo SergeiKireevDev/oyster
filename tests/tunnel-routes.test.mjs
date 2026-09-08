@@ -3,206 +3,68 @@ import assert from "node:assert/strict";
 import { createTunnelRoutes } from "../server/http/routes/tunnelRoutes.mjs";
 
 const response = () => ({});
+const requestContext = {
+  json: (res, status, body) => Object.assign(res, { status, body }),
+  readJsonBody: async (req) => req.body,
+};
 
-test("tunnel routes prepare the local service before opening and publishing its tunnel", async () => {
-  const events = [], agents = [], closed = [], owners = [], pins = [], order = [];
-  const state = { tunnels: new Map(), serverEvent: (event) => events.push(event) };
-  const listTunnels = () => [...state.tunnels.values()].map(({ proc, ...t }) => t);
+test("opening persists a self-served hublot and starts only its tunnel", async () => {
+  const order = [], events = [];
   const routes = createTunnelRoutes({
-    state, config: { TUNNEL_BIN: "cloudflared" },
-    ensureSessionOwner: (sessionId) => { owners.push(sessionId); order.push(`owner:${sessionId}`); },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
+    state: { serverEvent: (event) => events.push(event) }, config: {}, requestContext,
+    ensureSessionOwner: async (id) => { assert.equal(id, "s1"); return { id: "owner" }; },
+    reserveHublot: async (_state, options) => {
+      assert.deepEqual(options, { port: 5173, label: "preview", sessionId: "s1", ownerId: "owner", serviceKind: "self_served" });
+      order.push("reserve");
+      return { id: "t1", ...options };
     },
-    listTunnels,
-    pinHublot: (hublot) => { pins.push(hublot.id); order.push(`pin:${hublot.id}`); },
-    reserveHublot: (_state, options) => {
-      order.push("reserved");
-      const reserved = { id: "t1", status: "opening", url: null, service_start_script_path: "/agent/hublots/t1/start.sh", ...options };
-      state.tunnels.set(reserved.id, reserved);
-      return reserved;
-    },
-    rebindHublot: (_state, id, _ownerId) => { const item = state.tunnels.get(id); if (item) item.sessionId = "s2"; return { id, session_id: "s2" }; },
-    openTunnel: async (_state, options) => { order.push("tunnel"); const t = { id: "t1", url: "https://ready.test", ...options, proc: {} }; state.tunnels.set(t.id, t); return t; },
-    closeTunnel: (_state, id) => { if (!state.tunnels.has(id)) return null; state.tunnels.delete(id); closed.push(id); return id; },
-    spawnHublotAgent: async (_state, options, brief) => { order.push("service"); agents.push([options.port, brief, options.serviceStartScriptPath]); return { servicePid: 123, agentProc: { exitCode: 0 }, createdAt: "2026-01-01T00:00:00.000Z" }; },
-  });
-  const created = response(); await routes["POST /tunnels"]({ body: { port: 4000, sessionId: "s1", brief: "serve" } }, created);
-  assert.equal(created.status, 201);
-  assert.deepEqual(order, ["owner:s1", "reserved", "pin:t1", "service", "tunnel"]);
-  assert.deepEqual(agents, [[4000, "serve", "/agent/hublots/t1/start.sh"]]);
-  assert.equal(created.body.tunnel.servicePid, 123);
-  const rebound = response(); await routes["PATCH /tunnels"]({ body: { id: "t1", sessionId: "s2" } }, rebound);
-  assert.equal(events[0].type, "tunnel_opening");
-  assert.equal(rebound.body.tunnel.sessionId, "s2"); assert.equal(events[1].type, "tunnel_opened");
-  assert.deepEqual(owners, ["s1", "s2"]);
-  assert.deepEqual(pins, ["t1", "t1"]);
-  const removed = response(); await routes["DELETE /tunnels"]({}, removed, new URL("http://localhost/tunnels?id=t1"));
-  assert.equal(removed.status, 200); assert.deepEqual(closed, ["t1"]);
-});
-
-test("auto-allocated hublots reserve a port and open a direct tunnel", async () => {
-  const order = [];
-  const reserved = {
-    id: "direct-1", port: 4020, status: "opening",
-    service_start_script_path: "/agent/hublots/direct-1/start.sh",
-  };
-  const routes = createTunnelRoutes({
-    state: { serverEvent: () => {} }, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [],
-    allocateHublot: async () => { order.push("allocate"); return reserved; },
-    reserveHublot: () => { throw new Error("auto-allocation must not reserve an explicit port"); },
-    openTunnel: async (_state, options) => {
-      order.push("tunnel");
-      return { id: options.id, port: options.port, status: "open", url: "https://direct.test" };
-    },
-    closeTunnel: () => null,
-    rebindHublot: () => null,
-    spawnHublotAgent: async () => { order.push("service"); return { servicePid: 654, agentProc: { exitCode: 0 } }; },
-  });
-
-  const created = response();
-  await routes["POST /tunnels"]({ body: { label: "preview", brief: "serve preview" } }, created);
-
-  assert.equal(created.status, 201);
-  assert.deepEqual(order, ["allocate", "service", "tunnel"]);
-  assert.equal(created.body.tunnel.url, "https://direct.test");
-  assert.equal(created.body.tunnel.servicePid, 654);
-});
-
-test("tunnel routes reject opens without an agent brief", async () => {
-  let reserved = false;
-  const routes = createTunnelRoutes({
-    state: {}, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [],
-    reserveHublot: () => { reserved = true; },
-    rebindHublot: () => null,
-    openTunnel: async () => null,
-    closeTunnel: () => null,
-    spawnHublotAgent: async () => null,
+    pinHublot: () => order.push("pin"),
+    listTunnels: () => [{ id: "t1", port: 5173 }],
+    openTunnel: async (_state, options) => { order.push("tunnel"); assert.equal(options.port, 5173); assert.equal(options.id, "t1"); return { id: "t1" }; },
+    allocateHublot: () => assert.fail("must not allocate ports"),
+    spawnHublotAgent: () => assert.fail("must not launch agents"),
+    spawnGitServerService: () => assert.fail("must not provision services"),
   });
   const res = response();
-  await routes["POST /tunnels"]({ body: { port: 4000, label: "bare" } }, res);
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /managed hublots require a non-empty brief/);
-  assert.equal(reserved, false);
+  await routes["POST /tunnels"]({ body: { port: 5173, label: "preview", sessionId: "s1" } }, res);
+  assert.equal(res.status, 201);
+  assert.deepEqual(order, ["reserve", "pin", "tunnel"]);
+  assert.equal(events[0].type, "tunnel_opening");
+  assert.equal(res.body.tunnel.id, "t1");
 });
 
-test("git-server hublots deterministically serve an absolute worktree without a setup agent", async () => {
-  const order = [];
+test("tunnel create validates arguments before allocating resources", async () => {
   const routes = createTunnelRoutes({
-    state: {}, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [],
-    reserveHublot: (_state, options) => {
-      order.push(["reserve", options.port]);
-      return { id: "git-1", port: options.port, service_start_script_path: "/agent/hublots/git-1/start.sh" };
-    },
-    rebindHublot: () => null,
-    openTunnel: async (_state, options) => {
-      order.push(["tunnel", options.port]);
-      return { id: options.id, port: options.port, url: "https://git.test" };
-    },
-    closeTunnel: () => null,
-    spawnHublotAgent: async () => { throw new Error("setup agent must not run for git-server"); },
-    spawnGitServerService: async (_state, options, path) => {
-      order.push(["git-server", options.port, path]);
-      return { servicePid: 789 };
-    },
+    state: {}, config: {}, requestContext,
+    reserveHublot: () => assert.fail("invalid requests must not reserve"),
   });
-
-  const created = response();
-  await routes["POST /tunnels"]({
-    body: { port: 4002, brief: "serve source", type: "git-server", path: "/workspace/oyster" },
-  }, created);
-
-  assert.equal(created.status, 201);
-  assert.deepEqual(order, [
-    ["reserve", 4002],
-    ["git-server", 4002, "/workspace/oyster"],
-    ["tunnel", 4002],
-  ]);
-  assert.equal(created.body.agent, false);
-  assert.equal(created.body.type, "git-server");
-  assert.equal(created.body.tunnel.servicePid, 789);
-});
-
-test("tunnel create validates its API boundary before allocating resources", async () => {
-  let allocations = 0;
-  const routes = createTunnelRoutes({
-    state: {}, config: {},
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    allocateHublot: () => { allocations++; },
-    reserveHublot: () => { allocations++; },
-  });
-
-  for (const body of [
-    null,
-    [],
-    "not an object",
-    { brief: "   " },
-    { brief: "x".repeat(20_001) },
-    { brief: "serve", port: "4000" },
-    { brief: "serve", port: 0 },
-    { brief: "serve", port: 65_536 },
-    { brief: "serve", label: {} },
-    { brief: "serve", sessionId: 42 },
-    { brief: "serve", path: "/workspace/README.md" },
-  ]) {
+  for (const body of [null, [], "bad", {}, { port: null }, { port: "4000" }, { port: 0 }, { port: 65536 }, { port: 1.5 },
+    { port: 4000, label: {} }, { port: 4000, sessionId: 42 },
+    { port: 4000, brief: "serve" }, { port: 4000, type: "git-server", path: "/workspace" }]) {
     const res = response();
     await routes["POST /tunnels"]({ body }, res);
     assert.equal(res.status, 400, JSON.stringify(body));
   }
-  assert.equal(allocations, 0);
 });
 
-test("tunnel routes disable caching and preserve the original open failure during rollback", async () => {
-  const signals = [];
-  const headers = [];
-  const reserved = { id: "direct-1", port: 4040, status: "opening" };
-  const state = {
-    appStore: { repositories: { hublots: { find: () => ({ status: "opening" }) } } },
-    serverEvent() { throw new Error("subscriber failed"); },
-  };
+test("tunnel open failure is persisted and keeps its original error", async () => {
+  const transitions = [], events = [], headers = [];
   const routes = createTunnelRoutes({
-    state, config: { TUNNEL_BIN: "cloudflared" },
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    listTunnels: () => [reserved],
-    allocateHublot: async () => reserved,
-    reserveHublot: () => { throw new Error("unused"); },
-    openTunnel: async () => { throw "activation failed"; },
-    recordHublotTransition: () => { throw new Error("transition failed"); },
-    spawnHublotAgent: async () => ({
-      servicePid: 123,
-      agentProc: { pid: 122, exitCode: null, kill: (signal) => signals.push(signal) },
-      serviceProc: { pid: 123, exitCode: null, kill: (signal) => signals.push(signal) },
-    }),
+    state: {
+      appStore: { repositories: { hublots: { find: async () => ({ status: "opening" }) } } },
+      serverEvent: (event) => events.push(event),
+    }, config: {}, requestContext,
+    reserveHublot: async () => ({ id: "t1", port: 4040 }),
+    listTunnels: () => [],
+    openTunnel: async () => { throw new Error("activation failed"); },
+    recordHublotTransition: async (...args) => { transitions.push(args.slice(1)); throw new Error("transition failed"); },
   });
-
   const res = { setHeader: (...args) => headers.push(args) };
-  await routes["POST /tunnels"]({ body: { brief: "serve" } }, res);
-
+  await routes["POST /tunnels"]({ body: { port: 4040 } }, res);
   assert.equal(res.status, 502);
   assert.equal(res.body.error, "activation failed");
-  assert.deepEqual(signals, ["SIGTERM", "SIGTERM"]);
+  assert.equal(transitions[0][1], "failed");
+  assert.equal(events[0].type, "hublot_failed");
   assert.deepEqual(headers, [["cache-control", "no-store"]]);
 });
 
@@ -225,27 +87,4 @@ test("tunnel patch validates input and reports ownership failures", async () => 
   const ownershipFailure = response();
   await routes["PATCH /tunnels"]({ body: { id: "t1", sessionId: "missing" } }, ownershipFailure);
   assert.deepEqual(ownershipFailure, { status: 400, body: { error: "no such session" } });
-});
-
-test("deterministic Git hublots reject missing, relative, and unsupported service arguments", async () => {
-  let reserved = false;
-  const routes = createTunnelRoutes({
-    state: {}, config: {},
-    requestContext: {
-      json(res, status, body) { res.status = status; res.body = body; },
-      readJsonBody: async (req) => req.body,
-    },
-    reserveHublot: () => { reserved = true; },
-  });
-
-  for (const body of [
-    { brief: "source", type: "git-server" },
-    { brief: "source", type: "git-server", path: "workspace" },
-    { brief: "docs", type: "pdf", path: "/workspace/file.pdf" },
-  ]) {
-    const res = response();
-    await routes["POST /tunnels"]({ body }, res);
-    assert.equal(res.status, 400);
-  }
-  assert.equal(reserved, false);
 });

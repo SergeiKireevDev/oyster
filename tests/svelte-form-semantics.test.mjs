@@ -35,7 +35,7 @@ test("message, widget, and routine entry expose labels and native submit control
 
   const hublot = component("HublotManagerModal.svelte");
   assert.match(hublot, /<label for="hublotDescription">/);
-  assert.match(hublot, /id="hublotDescription"[\s\S]*required/);
+  assert.match(hublot, /id="hublotPort"[\s\S]*required/);
   assert.match(hublot, /<button class="btn" type="submit"/);
 
   const routine = component("RoutineManagerModal.svelte");

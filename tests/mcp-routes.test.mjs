@@ -265,3 +265,25 @@ test("dispatchRoute drives the real brokered ui-request route in-process", async
   assert.deepEqual(prompts, [{ runner: "runner-1", request: { method: "input", title: "Sudo password required for: id -u", placeholder: "Password", secret: true }, aborted: false }]);
   assert.deepEqual(await dispatchRoute(table, "POST", "/runner/ui-request?runner=missing", { method: "input", title: "x" }), { status: 404, data: { error: "no such runner" } });
 });
+
+
+test("hublot open requires a valid port and forwards no provisioning arguments", async (t) => {
+  const { port, calls } = await endpoint(t, {
+    reply: () => ({ status: 201, data: { tunnel: { id: "t-port", port: 5173, url: "https://preview.test" } } }),
+  });
+  const client = await connect(t, port, { session: "s-port", workdir: workspace(t) });
+  const schema = (await client.listTools()).tools.find((tool) => tool.name === "hublot").inputSchema;
+  assert.equal(schema.properties.type, undefined);
+  assert.equal(schema.properties.path, undefined);
+  for (const value of [undefined, 0, 65536, 1.5, "5173"]) {
+    const result = await client.callTool({ name: "hublot", arguments: { action: "open", ...(value === undefined ? {} : { port: value }) } });
+    assert.equal(result.isError, true);
+  }
+  assert.equal(calls.length, 0);
+  const opened = await client.callTool({ name: "hublot", arguments: { action: "open", port: 5173 } });
+  assert.ok(!opened.isError, opened.content[0].text);
+  assert.deepEqual(calls[0].body, { port: 5173, sessionId: "s-port" });
+  assert.match(opened.content[0].text, /localhost:5173/);
+  await client.callTool({ name: "hublot", arguments: { action: "open", port: 5173, description: "Preview", session_id: "override" } });
+  assert.deepEqual(calls[1].body, { port: 5173, label: "Preview", sessionId: "override" });
+});

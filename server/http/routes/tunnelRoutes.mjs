@@ -1,7 +1,3 @@
-import { isAbsolute } from "node:path";
-
-const SERVICE_TYPES = new Set(["git-server"]);
-const MAX_BRIEF_BYTES = 20_000;
 const MAX_LABEL_LENGTH = 200;
 const MAX_SESSION_ID_LENGTH = 100;
 
@@ -26,35 +22,12 @@ function parseCreateBody(body) {
     throw new TypeError("request body must be a JSON object");
   }
 
-  const brief = typeof body.brief === "string" ? body.brief.trim() : "";
-  if (!brief || Buffer.byteLength(brief) > MAX_BRIEF_BYTES) {
-    throw new TypeError("managed hublots require a non-empty brief (max 20KB)");
+  if (body.type !== undefined || body.path !== undefined || body.brief !== undefined) {
+    throw new TypeError("service provisioning is not supported; provide the port of an existing service");
   }
-
-  const serviceType = body.type === undefined || body.type === null || body.type === ""
-    ? null
-    : body.type;
-  if (serviceType !== null && (typeof serviceType !== "string" || !SERVICE_TYPES.has(serviceType))) {
-    throw new TypeError(`unsupported hublot type: ${String(serviceType)}`);
-  }
-
-  const servicePath = body.path === undefined || body.path === null || body.path === ""
-    ? null
-    : body.path;
-  if (serviceType) {
-    if (typeof servicePath !== "string" || !isAbsolute(servicePath)) {
-      throw new TypeError(`type='${serviceType}' requires an absolute path`);
-    }
-  } else if (servicePath !== null) {
-    throw new TypeError("path is only valid with type='git-server'");
-  }
-
-  let port = null;
-  if (body.port !== undefined && body.port !== null && body.port !== "") {
-    if (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535) {
-      throw new TypeError("port must be an integer between 1 and 65535");
-    }
-    port = body.port;
+  const port = body.port;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new TypeError("port must be an integer between 1 and 65535");
   }
 
   if (body.label !== undefined && body.label !== null && typeof body.label !== "string") {
@@ -65,9 +38,6 @@ function parseCreateBody(body) {
   }
 
   return {
-    brief,
-    serviceType,
-    servicePath,
     options: {
       port,
       label: body.label ? body.label.slice(0, MAX_LABEL_LENGTH) : null,
@@ -76,35 +46,18 @@ function parseCreateBody(body) {
   };
 }
 
-function stopPreparedService(prepared) {
-  const childPids = new Set();
-  for (const processHandle of [prepared?.agentProc, prepared?.serviceProc]) {
-    if (!processHandle) continue;
-    if (Number.isInteger(processHandle.pid)) childPids.add(processHandle.pid);
-    if (processHandle.exitCode === null) {
-      try { processHandle.kill("SIGTERM"); } catch { /* Best-effort rollback. */ }
-    }
-  }
-  if (Number.isInteger(prepared?.servicePid) && !childPids.has(prepared.servicePid)) {
-    try { process.kill(prepared.servicePid, "SIGTERM"); } catch { /* It may already have exited. */ }
-  }
-}
-
 /** Build the managed public-tunnel lifecycle routes. */
 export function createTunnelRoutes({
   state,
   config,
   requestContext,
   listTunnels,
-  allocateHublot,
   reserveHublot,
   recordHublotTransition,
   rebindHublot,
   openTunnel,
   closeTunnel,
   reopenHublot,
-  spawnHublotAgent,
-  spawnGitServerService,
   ensureSessionOwner = () => null,
   pinHublot = () => null,
 }) {
@@ -128,43 +81,30 @@ export function createTunnelRoutes({
         return;
       }
 
-      const { brief, serviceType, servicePath, options } = parsed;
-      let prepared = null;
+      const { options } = parsed;
       let reserved = null;
       try {
         const owner = options.sessionId ? await ensureSessionOwner(options.sessionId) : null;
         options.ownerId = owner?.id ?? null;
-        options.brief = brief;
-        reserved = options.port !== null
-          ? await reserveHublot(state, options)
-          : await allocateHublot(state, options);
-        pinHublot(reserved);
+        reserved = await reserveHublot(state, { ...options, serviceKind: "self_served" });
+        await pinHublot(reserved);
         const opening = (await listTunnels(state, { id: reserved.id })).find((item) => item.id === reserved.id);
         if (opening) emitServerEvent(state, { type: "tunnel_opening", tunnel: opening });
         const reservedOptions = {
           ...options,
           id: reserved.id,
           port: reserved.port,
-          serviceStartScriptPath: reserved.service_start_script_path,
         };
-        prepared = serviceType === "git-server"
-          ? await spawnGitServerService(state, reservedOptions, servicePath)
-          : await spawnHublotAgent(state, reservedOptions, brief);
         const tunnel = await openTunnel(state, reservedOptions);
         const persisted = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id) ?? tunnel;
-        json(res, 201, {
-          tunnel: prepared?.servicePid ? { ...persisted, servicePid: prepared.servicePid } : persisted,
-          agent: !serviceType,
-          type: serviceType,
-        });
+        json(res, 201, { tunnel: persisted });
       } catch (error) {
         const message = errorMessage(error);
         try {
-          if (reserved && state.appStore?.repositories?.hublots?.find(reserved.id)?.status === "opening") {
-            recordHublotTransition(state, reserved.id, "failed", { publicUrl: null, lastError: message });
+          if (reserved && (await state.appStore?.repositories?.hublots?.find(reserved.id))?.status === "opening") {
+            await recordHublotTransition(state, reserved.id, "failed", { publicUrl: null, lastError: message });
           }
         } catch { /* Preserve the original failure. */ }
-        stopPreparedService(prepared);
         if (reserved) {
           emitServerEvent(state, {
             type: "hublot_failed",
@@ -227,7 +167,7 @@ export function createTunnelRoutes({
       try {
         const owner = sessionId ? await ensureSessionOwner(sessionId) : null;
         const rebound = await rebindHublot(state, tunnel.id, owner?.id ?? null);
-        pinHublot(rebound);
+        await pinHublot(rebound);
         const current = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id);
         emitServerEvent(state, { type: "tunnel_opened", tunnel: current });
         json(res, 200, { tunnel: current });

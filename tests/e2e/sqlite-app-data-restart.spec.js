@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { api, login } from "./lib/harness.js";
+import { api, login, dexec } from "./lib/harness.js";
 import { ensureContainer, restartServerProcess, teardownContainer } from "./lib/reset.js";
 
 const ROUTINE_SCRIPT = `#!/bin/bash
@@ -28,12 +28,13 @@ test("routines and pinned live-interface records persist while ephemeral tunnel 
   });
   expect(routine.status).toBe(201);
 
+  dexec(`nohup node -e 'require("http").createServer((_,res)=>res.end("preview")).listen(46101,"127.0.0.1")' >/tmp/restart-preview.log 2>&1 &`);
   const hublot = await api("POST", "/tunnels", {
     label: hublotLabel,
-    brief: `Create a minimal static page titled "${hublotLabel}" and keep its local server running.`,
+    port: 46101,
   });
   expect(hublot.status).toBe(201);
-  expect(hublot.json.agent).toBe(true);
+  expect(hublot.json.agent).toBeUndefined();
   expect(hublot.json.tunnel?.id).toBeTruthy();
   expect(hublot.json.tunnel?.url).toMatch(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
 
@@ -50,7 +51,7 @@ test("routines and pinned live-interface records persist while ephemeral tunnel 
 
   const reopened = await api("POST", "/tunnels", {
     label: `${hublotLabel}-fresh`,
-    brief: `Create a minimal static page titled "${hublotLabel}" and keep its local server running.`,
+    port: 46101,
   });
   expect(reopened.status).toBe(201);
   expect(reopened.json.tunnel?.url).toMatch(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com/);

@@ -1,12 +1,12 @@
 export function createHublotController({ createHublot, getSessionId, setDescription, setCreating, close, toast, listHublots, listSidebarHublots, isAuthenticated, setSidebarLoading, setSidebarTunnels, setSidebarCollection, setSidebarError = () => {}, isVisible, updateManager, getScopeAll, getDescription }) {
   let sidebarRefreshGeneration = 0;
 
-  async function create(description) {
+  async function create(description, port) {
     const text = (description ?? "").trim();
     setDescription(description ?? "");
-    if (!text) { toast("describe what the live interface should expose", "warning"); return; }
+    if (!Number.isInteger(port) || port < 1 || port > 65535) { toast("enter a port between 1 and 65535", "warning"); return; }
     setCreating(true);
-    try { const data = await createHublot({ label: text, sessionId: getSessionId(), brief: text }); setDescription(""); close(); toast(`live interface ready at ${data.tunnel.url}`); }
+    try { const data = await createHublot({ label: text, sessionId: getSessionId(), port }); setDescription(""); close(); toast(`live interface ready at ${data.tunnel.url}`); }
     catch (error) { toast(`live interface failed: ${error.message}`, "error"); } finally { setCreating(false); }
   }
   async function refresh({ loading = false } = {}) {
