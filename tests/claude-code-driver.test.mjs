@@ -143,7 +143,7 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.deepEqual(localEvents[0], {
     type: "response", id: "state-before", command: "get_state", success: true,
     data: {
-      sessionId: runner.driverRuntime.sessionId, sessionName: null, sessionFile: null,
+      sessionId: runner.driverRuntime.sessionId, sessionName: null, sessionFile: null, sessionInitialized: false,
       model: null, thinkingLevel: "off", messageCount: 0, pendingMessageCount: 0,
       isStreaming: false, isCompacting: false,
     },
@@ -154,7 +154,7 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "system", subtype: "init", session_id: "cc-1", model: "claude-sonnet-4-5" })), [{
     type: "response", id: "_driver-claude-init", command: "get_state", success: true,
     data: {
-      sessionId: "cc-1", sessionName: null, sessionFile: null,
+      sessionId: "cc-1", sessionName: null, sessionFile: null, sessionInitialized: true,
       model: { provider: "anthropic", id: "claude-sonnet-4-5" }, thinkingLevel: "off",
       messageCount: 0, pendingMessageCount: 0, isStreaming: false, isCompacting: false,
     },
