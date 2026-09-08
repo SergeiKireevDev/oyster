@@ -5,19 +5,33 @@ import { ensureContainer, teardownContainer } from "./lib/reset.js";
 test.beforeEach(async () => { await ensureContainer(); });
 test.afterEach(() => teardownContainer());
 
-test("credentials adds, replaces and removes an MCP server without returning secrets", async ({ page }) => {
+for (const width of [1400, 390]) test(`credentials validates, adds, replaces and removes MCP servers at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
   await login(page);
   await page.locator("#menuBtn").click();
   await page.locator('#menu button[data-action="credentials"]').click();
   const section = page.getByRole("region", { name: "MCP servers", exact: true });
   await expect(section.getByText("No MCP servers added.")).toBeVisible();
+  await section.getByRole("button", { name: "Save MCP server" }).click();
+  await expect(section.getByRole("alert")).toContainText("Enter a server name");
+  await expect(section.getByRole("alert")).toBeFocused();
   await section.getByLabel("Name", { exact: true }).fill("example");
+  await section.getByRole("button", { name: "Save MCP server" }).click();
+  await expect(section.getByRole("alert")).toContainText("complete HTTP or HTTPS server URL");
   await section.getByLabel("Server URL").fill("https://example.com/mcp");
-  await section.getByLabel("Headers (optional JSON object)").fill('{"Authorization":"Bearer test-mcp-secret"}');
+  await section.getByLabel("Header name", { exact: true }).fill("Authorization");
+  await section.getByRole("button", { name: "Save MCP server" }).click();
+  await expect(section.getByRole("alert")).toContainText("Enter a value for header Authorization");
+  await section.getByLabel("Header value", { exact: true }).fill("Bearer test-mcp-secret");
+  await section.getByRole("button", { name: "Add header", exact: true }).click();
+  await section.getByLabel("Header name", { exact: true }).nth(1).fill("X-Workspace");
+  await section.getByLabel("Header value", { exact: true }).nth(1).fill("test-workspace");
+  const savedRequest = page.waitForRequest((request) => request.url().endsWith("/mcp-servers") && request.method() === "POST");
   await section.getByRole("button", { name: "Save MCP server" }).click();
   await expect(section.getByRole("status")).toContainText("MCP server saved");
+  expect((await savedRequest).postDataJSON().config.headers).toEqual({ Authorization: "Bearer test-mcp-secret", "X-Workspace": "test-workspace" });
   expect((await api("GET", "/mcp-servers")).json).toEqual({ servers: [{ name: "example", type: "http" }] });
-  await expect(section.getByLabel("Headers (optional JSON object)")).toHaveValue("");
+  await expect(section.getByLabel("Header value", { exact: true })).toHaveValue("");
   await section.getByLabel("Name", { exact: true }).fill("example");
   await section.getByLabel("Transport").selectOption("stdio");
   await section.getByLabel("Command", { exact: true }).fill("node");
