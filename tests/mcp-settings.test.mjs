@@ -98,3 +98,35 @@ test("pi loads configured stdio MCP tools and forwards arguments with the config
   assert.deepEqual(JSON.parse(result.content[0].text), { value: "hello", cwd: process.cwd(), configured: "configured" });
   assert.equal(process.env.OYSTER_MCP_SERVERS, undefined);
 });
+
+test("MCP live scan validates unsaved credentials without persisting them", async (t) => {
+  const { settings } = setup(t);
+  let result, calls = 0;
+  const routes = createMcpSettingsRoutes({ settings, scan: async (config) => {
+    calls++;
+    assert.deepEqual(config, entry.config);
+    return { tools: ["echo"], truncated: false };
+  }, requestContext: { json: (_res, status, data) => { result = { status, data }; }, readBody: async (req) => req.body } });
+  await routes["POST /mcp-servers/test"]({ body: JSON.stringify(entry) });
+  assert.deepEqual(result, { status: 200, data: { tools: ["echo"], truncated: false } });
+  assert.deepEqual(settings.snapshot(), []);
+  for (const body of ["{", "{}", JSON.stringify({ ...entry, config: { type: "http", url: "file:///tmp" } })]) {
+    await routes["POST /mcp-servers/test"]({ body });
+    assert.equal(result.status, 400);
+  }
+  assert.equal(calls, 1);
+});
+
+test("live scan lists actual MCP tools and closes the stdio client", async () => {
+  const { scanMcpTools } = await import("../server/mcp-connections.mjs");
+  assert.deepEqual(await scanMcpTools({ type: "stdio", command: process.execPath, args: [new URL("./helpers/mcp-fixture.mjs", import.meta.url).pathname], env: {} }), { tools: ["echo"], truncated: false });
+});
+
+test("live scan identifies authentication rejection without leaking upstream text", async (t) => {
+  const { createServer } = await import("node:http");
+  const { scanMcpTools } = await import("../server/mcp-connections.mjs");
+  const server = createServer((_req, res) => { res.writeHead(401); res.end("secret-upstream-body"); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  await assert.rejects(scanMcpTools({ type: "http", url: `http://127.0.0.1:${server.address().port}/mcp`, headers: { Authorization: "Bearer secret" } }), { message: "Authentication rejected. Check the credentials and access permissions." });
+});

@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { createMcpSettingsService, mcpServerInput } from "../features/credentials/mcpSettingsService.js";
   const service = createMcpSettingsService();
   let servers = [];
@@ -14,6 +14,45 @@
   let busy = true;
   let error = "";
   let message = "";
+
+  let scanMessage = "";
+  let scanTools = [];
+  let scanFailed = false;
+  let stopScan = () => {};
+  $: scheduleScan({ name, type, url, command, args, secrets, headers }, busy);
+  onDestroy(() => stopScan());
+
+  function scheduleScan(fields, paused) {
+    stopScan();
+    scanMessage = "";
+    scanTools = [];
+    scanFailed = false;
+    if (paused) return;
+    let input;
+    try { input = mcpServerInput(fields); } catch { return; }
+    const controller = new AbortController();
+    let timer;
+    stopScan = () => { clearTimeout(timer); controller.abort(); };
+    scanMessage = "Waiting to check connection…";
+    async function check() {
+      if (controller.signal.aborted) return;
+      if (!scanTools.length && !scanFailed) scanMessage = "Connecting and scanning tools…";
+      try {
+        const result = await service.scan(input, controller.signal);
+        if (controller.signal.aborted) return;
+        scanTools = [...new Set(result.tools)];
+        scanFailed = false;
+        scanMessage = `Connected · ${result.tools.length}${result.truncated ? "+" : ""} tools available. Credentials accepted for tool discovery.`;
+      } catch (cause) {
+        if (controller.signal.aborted) return;
+        scanTools = [];
+        scanFailed = true;
+        scanMessage = cause.message;
+      }
+      timer = setTimeout(check, 1000);
+    }
+    timer = setTimeout(check, 1000);
+  }
 
   function newHeader() { return { id: nextHeaderId++, name: "", value: "" }; }
   function addHeader() { headers = [...headers, newHeader()]; }
@@ -83,6 +122,15 @@
         <button type="button" class="chip" onclick={addHeader}>Add header</button>
       </fieldset>
     {/if}
+    <p>Complete the connection fields to check access and scan tools automatically every second.</p>
+    {#if scanMessage}
+      <div class="scan-result" class:scan-failed={scanFailed}>
+        <p role="status">{scanMessage}</p>
+        {#if scanTools.length}
+          <details><summary>Available tools ({scanTools.length})</summary><ul>{#each scanTools as tool (tool)}<li>{tool}</li>{/each}</ul></details>
+        {/if}
+      </div>
+    {/if}
     <p>Use an existing name to replace its full configuration.</p>
     {#if error}
       <p class="mcp-error" role="alert" tabindex="-1"
@@ -106,6 +154,9 @@
   fieldset { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
   legend { font-size: 12px; }
   .header-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; margin-bottom: 10px; }
+  .scan-result { font-size: 12px; overflow-wrap: anywhere; }
+  .scan-result ul { max-height: 200px; overflow: auto; }
+  .scan-failed p { color: var(--danger, #e66); }
   .mcp-error { margin: 0; }
   @media (max-width: 600px) { .header-row { grid-template-columns: minmax(0, 1fr); } }
   [role="alert"] { color: var(--danger, #e66); }

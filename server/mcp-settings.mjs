@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from "node
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { scanMcpTools } from "./mcp-connections.mjs";
 
 const strings = z.record(z.string(), z.string().max(16384)).default({});
 const serverSchema = z.object({
@@ -40,7 +41,7 @@ export function createMcpSettings(path) {
   };
 }
 
-export function createMcpSettingsRoutes({ settings, requestContext: { json, readBody } }) {
+export function createMcpSettingsRoutes({ settings, scan = scanMcpTools, requestContext: { json, readBody } }) {
   const mutate = (remove) => async (req, res) => {
     try {
       let input;
@@ -51,6 +52,18 @@ export function createMcpSettingsRoutes({ settings, requestContext: { json, read
     } catch (error) { json(res, error.statusCode ?? 500, { error: error.statusCode === 400 ? error.message : "Could not save MCP settings" }); }
   };
   return {
+    "POST /mcp-servers/test": async (req, res) => {
+      let input;
+      try { input = serverSchema.safeParse(JSON.parse(await readBody(req, 128 * 1024))); }
+      catch { json(res, 400, { error: "Invalid or oversized MCP configuration" }); return; }
+      if (!input.success) { json(res, 400, { error: "Provide a valid MCP name and connection configuration" }); return; }
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      res?.once?.("close", cancel);
+      try { json(res, 200, await scan(input.data.config, { signal: controller.signal })); }
+      catch (error) { if (!controller.signal.aborted) json(res, 200, { error: error.message }); }
+      finally { res?.removeListener?.("close", cancel); }
+    },
     "GET /mcp-servers": (_req, res) => { try { json(res, 200, { servers: settings.list() }); } catch { json(res, 500, { error: "Could not read MCP settings" }); } },
     "POST /mcp-servers": mutate(false),
     "DELETE /mcp-servers": mutate(true),
