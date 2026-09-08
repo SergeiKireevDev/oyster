@@ -34,6 +34,13 @@ export function mcpServerInput({ name, type, url, command, args, secrets, header
 /** MCP secrets are write-only; list responses contain name and transport only. */
 export function createMcpSettingsService({ fetchImpl = (...args) => fetch(...args) } = {}) {
   return {
+    async scan(input, signal) {
+      const response = await fetchImpl("/mcp-servers/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) throw new Error(data.error || `Connection check failed (${response.status}).`);
+      if (!Array.isArray(data.tools) || data.tools.some((tool) => typeof tool !== "string")) throw new Error("Invalid tool list returned by connection check.");
+      return data;
+    },
     async request(method = "GET", body) {
       const response = await fetchImpl("/mcp-servers", { method, ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
       const data = await response.json().catch(() => ({}));

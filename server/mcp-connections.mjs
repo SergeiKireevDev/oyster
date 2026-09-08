@@ -5,6 +5,42 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 export const RUNNER_MCP = Symbol.for("oyster.runner.mcp");
 
+/** Probe unsaved settings without invoking tools or retaining a connection. */
+export async function scanMcpTools(config, { signal, cwd = process.cwd() } = {}) {
+  const client = new Client({ name: "oyster-credentials", version: "1.0.0" });
+  const deadline = AbortSignal.timeout(10000);
+  const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  const close = () => { void client.close().catch(() => {}); };
+  combined.addEventListener("abort", close, { once: true });
+  try {
+    combined.throwIfAborted();
+    const transport = config.type === "stdio"
+      ? new StdioClientTransport({ command: config.command, args: config.args, env: { ...process.env, ...config.env }, cwd, stderr: "ignore" })
+      : new (config.type === "sse" ? SSEClientTransport : StreamableHTTPClientTransport)(new URL(config.url), { requestInit: { headers: config.headers } });
+    await client.connect(transport, { signal: combined, timeout: 10000 });
+    const tools = [];
+    let cursor;
+    do {
+      const page = await client.listTools({ cursor }, { signal: combined, timeout: 10000 });
+      tools.push(...page.tools.map(({ name }) => name));
+      cursor = page.nextCursor;
+    } while (cursor && tools.length < 1000);
+    return { tools: tools.slice(0, 1000), truncated: Boolean(cursor) };
+  } catch (error) {
+    // Never echo remote error bodies, URLs, headers, or process environment.
+    const code = error.code ?? error.cause?.code;
+    const message = String(error.message);
+    if (code === 401 || code === 403 || /\b(401|403|unauthorized|forbidden)\b/i.test(message)) {
+      throw new Error("Authentication rejected. Check the credentials and access permissions.");
+    }
+    if (deadline.aborted || code === -32001) throw new Error("Connection check timed out after 10 seconds.");
+    throw new Error("Could not connect and list tools. Check the address, transport, and server availability.");
+  } finally {
+    combined.removeEventListener("abort", close);
+    await client.close().catch(() => {});
+  }
+}
+
 /** One connection set per agent process; credentials never enter public runner metadata. */
 export function createMcpConnections(servers, cwd) {
   const clients = new Set();

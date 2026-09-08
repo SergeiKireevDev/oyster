@@ -45,3 +45,37 @@ for (const width of [1400, 390]) test(`credentials validates, adds, replaces and
   await section.getByRole("button", { name: "Remove MCP server example" }).click();
   await expect(section.getByText("No MCP servers added.")).toBeVisible();
 });
+
+test("MCP credentials scan automatically, retry, and discard results after edits", async ({ page }) => {
+  await login(page);
+  await page.locator("#menuBtn").click();
+  await page.locator('#menu button[data-action="credentials"]').click();
+  const section = page.getByRole("region", { name: "MCP servers", exact: true });
+  let scans = 0;
+  await page.route("**/mcp-servers/test", async (route) => {
+    scans++;
+    const input = route.request().postDataJSON();
+    await route.fulfill({ json: input.config.headers.Authorization === "Bearer good"
+      ? { tools: ["example_search", "example_read"], truncated: false }
+      : { error: "Authentication rejected. Check the credentials and access permissions." } });
+  });
+  await section.getByLabel("Name", { exact: true }).fill("scan-test");
+  await section.getByLabel("Header name", { exact: true }).fill("Authorization");
+  await section.getByLabel("Server URL").fill("https://example.com/mcp");
+  await page.waitForTimeout(1200);
+  expect(scans).toBe(0);
+  await section.getByLabel("Header value", { exact: true }).fill("Bearer bad");
+  await expect(section.getByRole("status")).toContainText("Authentication rejected");
+  const initialScans = scans;
+  await expect.poll(() => scans).toBeGreaterThan(initialScans);
+  await section.getByLabel("Header value", { exact: true }).fill("Bearer good");
+  await expect(section.getByRole("status")).toContainText("2 tools available");
+  await section.locator("summary").click();
+  await expect(section.getByText("example_search", { exact: true })).toBeVisible();
+  await section.getByLabel("Server URL").fill("");
+  await expect(section.getByText("example_search", { exact: true })).toHaveCount(0);
+  const stoppedScans = scans;
+  await page.waitForTimeout(1200);
+  expect(scans).toBe(stoppedScans);
+  expect((await api("GET", "/mcp-servers")).json.servers).toEqual([]);
+});
