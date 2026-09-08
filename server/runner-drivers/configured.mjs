@@ -1,3 +1,4 @@
+import { createMcpConnections, RUNNER_MCP } from "../mcp-connections.mjs";
 import { createNativeTranscriptSink } from "../persistence/nativeTranscriptSink.mjs";
 import { createAmpDriver } from "./amp.mjs";
 import { createAntigravityDriver } from "./antigravity.mjs";
@@ -18,7 +19,7 @@ function effectiveUiUrl(config) {
 }
 
 /** Build the harnesses enabled by validated server configuration. */
-export function createConfiguredRunnerDrivers({ config, piProcesses, openRouterRouting } = {}) {
+export function createConfiguredRunnerDrivers({ config, piProcesses, openRouterRouting, mcpSettings } = {}) {
   if (!config || typeof config !== "object") throw new TypeError("runner driver config is required");
   const pi = createPiRpcDriver({ config, processLauncher: piProcesses });
   const nativePersistence = config.SQLITE_PATH ? {
@@ -68,6 +69,18 @@ export function createConfiguredRunnerDrivers({ config, piProcesses, openRouterR
         bridgeOptions: { ampSettingsPath: config.AMP_SETTINGS_PATH, ampMarkerPath: config.AMP_AUTH_MARKER_PATH },
         env: { OYSTER_URL: effectiveUiUrl(config), ...(token ? { OYSTER_TOKEN: token } : {}) },
       })] : []),
-    ],
+    ].map((driver) => !mcpSettings ? driver : Object.freeze({
+      ...driver,
+      launch(options) {
+        const servers = mcpSettings.snapshot();
+        const connections = createMcpConnections(servers, options.cwd);
+        Object.defineProperty(options.runner, RUNNER_MCP, { value: connections, configurable: true });
+        try {
+          const launched = driver.launch({ ...options, mcpServers: servers });
+          launched.process.once("close", () => { void connections.close(); });
+          return launched;
+        } catch (error) { void connections.close(); throw error; }
+      },
+    })),
   });
 }

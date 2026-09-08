@@ -1,5 +1,6 @@
 <script>
   import { onDestroy } from "svelte";
+  import McpSettings from "./McpSettings.svelte";
   import HarnessProviderSettings from "./HarnessProviderSettings.svelte";
   import { copyTextToClipboard } from "../lib/clipboardController.js";
   import { credentialsState } from "../stores/credentials.js";
@@ -440,6 +441,7 @@
       {/if}
     {/if}
   </form>
+  <McpSettings />
 </section>
 
 <div class="m-actions" id="mActions">

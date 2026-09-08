@@ -287,3 +287,35 @@ test("hublot open requires a valid port and forwards no provisioning arguments",
   await client.callTool({ name: "hublot", arguments: { action: "open", port: 5173, description: "Preview", session_id: "override" } });
   assert.deepEqual(calls[1].body, { port: 5173, label: "Preview", sessionId: "override" });
 });
+
+test("saved MCP tools are discovered and forwarded through the native endpoint", async (t) => {
+  const { createMcpConnections, RUNNER_MCP } = await import("../server/mcp-connections.mjs");
+  const upstream = await endpoint(t, { reply: () => ({ status: 200, data: { widgets: [{ id: "forwarded" }] } }) });
+  const connections = createMcpConnections([{ name: "remote", config: { type: "http", url: `http://127.0.0.1:${upstream.port}/mcp?session=upstream`, headers: {} } }], workspace(t));
+  t.after(() => connections.close());
+  const runner = { sessionId: "caller", [RUNNER_MCP]: connections };
+  const downstream = await endpoint(t, { state: { runners: new Map([["r", runner]]) } });
+  const client = await connect(t, downstream.port, { runner: "r" });
+  const listed = (await client.listTools()).tools;
+  const tool = listed.find((tool) => tool.name.startsWith("mcp_remote_") && tool.name.endsWith("pinned_widget"));
+  assert.ok(tool);
+  assert.ok(tool.inputSchema.properties.action);
+  const result = await client.callTool({ name: tool.name, arguments: { action: "list" } });
+  assert.equal(result.isError, undefined);
+  assert.match(JSON.stringify(result), /forwarded/);
+  assert.ok(listed.some((tool) => tool.name === "bash"));
+});
+
+test("MCP proxy preserves conditional JSON schemas and forwards all arguments", async (t) => {
+  const { RUNNER_MCP } = await import("../server/mcp-connections.mjs");
+  const inputSchema = { type: "object", properties: { mode: { type: "string" }, value: { type: "string" } }, if: { properties: { mode: { const: "required" } } }, then: { required: ["value"] } };
+  let received;
+  const runner = { [RUNNER_MCP]: { tools: async () => [{ name: "mcp_conditional", inputSchema, call: async (args) => { received = args; return { content: [{ type: "text", text: "ok" }] }; } }] } };
+  const { port } = await endpoint(t, { state: { runners: new Map([["r", runner]]) } });
+  const client = await connect(t, port, { runner: "r" });
+  const tools = (await client.listTools()).tools;
+  assert.deepEqual(tools.find((tool) => tool.name === "mcp_conditional").inputSchema.then, inputSchema.then);
+  assert.ok(tools.some((tool) => tool.name === "bash"));
+  await client.callTool({ name: "mcp_conditional", arguments: { mode: "required", value: "kept", extra: 42 } });
+  assert.deepEqual(received, { mode: "required", value: "kept", extra: 42 });
+});
