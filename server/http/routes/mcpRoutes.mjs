@@ -145,42 +145,27 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
   server.registerTool("hublot", {
     title: "Live Interface",
     description:
-      "Manage live-interface widgets (legacy name: hublots) — public web interfaces (cloudflared tunnels to local ports) for this " +
-      "session. When the user asks to 'create/open a hublot', use this tool. 'open' creates a hublot — the server allocates " +
-      "a free local port and returns the public URL. Normally a background agent serves `description`; the deterministic " +
-      "type='git-server' bypasses the agent and serves an absolute Git worktree path through the bundled read-only Smart HTTP " +
-      "server. 'close' tears one down (service process, background agent and tunnel) by id or port. 'list' shows the session's " +
-      "hublots. Use hublot only when public access is required; never serve the hublot port yourself or kill cloudflared manually. " +
-      "Cloudflared quick-tunnel URLs are ephemeral: after a UI server restart, open a new one for a fresh URL.",
+      "Open, close, or list public Cloudflare tunnels for this session. " +
+      "'open' requires a port (1–65535) of a service provisioned separately; it starts only the tunnel and persists its entry in SQLite. " +
+      "Provide an optional description as its label. 'close' stops the tunnel by id or port; the local service remains running. " +
+      "Use only when public access is required. Quick-tunnel URLs are ephemeral.",
     inputSchema: {
       action: z.enum(["open", "close", "list"]),
-      description: z.string().optional().describe("For 'open': what the hublot should expose (label and, for an ordinary hublot, the brief given to the background agent)"),
-      type: z.enum(["git-server"]).optional().describe("For 'open': use 'git-server' for a read-only Git worktree"),
-      path: z.string().optional().describe("For type='git-server': absolute path to the Git worktree"),
+      description: z.string().optional().describe("For 'open': optional hublot label"),
       session_id: z.string().optional().describe("For 'open': bind the hublot to this session id instead of the current one"),
       id: z.string().optional().describe("For 'close': hublot id"),
-      port: z.number().int().optional().describe("For 'close': local port of the hublot"),
+      port: z.number().int().min(1).max(65535).optional().describe("Required for open: existing local service port; for close: tunnel port"),
     },
   }, async (params) => {
     if (params.action === "open") {
-      if (!params.description) throw new Error("'open' requires a description");
-      if (params.type === "git-server") {
-        if (!params.path) throw new Error("type='git-server' requires a path");
-        if (!isAbsolute(params.path)) throw new Error("type='git-server' requires an absolute path");
-      } else if (params.path) {
-        throw new Error("'path' is only valid with type='git-server'");
-      }
+      if (params.port === undefined) throw new Error("'open' requires a port between 1 and 65535");
       const data = await api("POST", "/tunnels", {
-        label: params.description.slice(0, 200),
-        brief: params.description,
+        label: params.description?.slice(0, 200),
+        port: params.port,
         sessionId: params.session_id ?? requireSession(),
-        ...(params.type === "git-server" ? { type: params.type, path: params.path } : {}),
       });
       const t = data.tunnel;
-      const serviceText = params.type === "git-server"
-        ? `The read-only Git Smart HTTP server is serving ${params.path}; clone, fetch, and pull are supported, while push is denied.`
-        : "The background agent brought the local service up before the tunnel was opened.";
-      return text(`Hublot ready: ${t.url} → http://localhost:${t.port}\n${serviceText} Do not serve the port yourself.`, t);
+      return text(`Hublot ready: ${t.url} → http://localhost:${t.port}`, t);
     }
     if (params.action === "close") {
       let id = params.id ?? null;
@@ -192,7 +177,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
         id = t.id;
       }
       const data = await api("DELETE", `/tunnels?id=${encodeURIComponent(id)}`);
-      return text(`Hublot closed: ${data.closed.url} (port ${data.closed.port}). Service, agent and tunnel were terminated.`, data.closed);
+      return text(`Hublot closed: ${data.closed.url} (port ${data.closed.port}). Tunnel stopped. The local service remains running.`, data.closed);
     }
     const { tunnels } = await api("GET", "/tunnels");
     const mine = tunnels.filter((t) => !t.sessionId || t.sessionId === sessionId);

@@ -62,7 +62,7 @@ test("process-local next-port state is absent from the server and route", () => 
   const source = ["../server/server.mjs", "../server/http/routes/tunnelRoutes.mjs"]
     .map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.doesNotMatch(source, /nextHublotPort/);
-  assert.match(source, /allocateHublot/);
+  assert.doesNotMatch(source, /allocateHublot/);
 });
 
 test("active-port uniqueness is enforced by SQLite and closed ports are reusable", async (t) => {

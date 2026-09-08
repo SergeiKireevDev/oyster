@@ -7,7 +7,7 @@ This repo ships the pi extensions that power its features in `extensions/`:
 | File | Tool / command | What it does |
 |---|---|---|
 | `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
-| `extensions/hublot.ts` | `hublot` tool | Open/close/list public live-interface widgets, including deterministic Markdown and read-only Git servers. |
+| `extensions/hublot.ts` | `hublot` tool | Open/close/list public Cloudflare tunnels to caller-provided local ports. |
 | `extensions/loop.ts` | `/loop` command + `loop` tool | Execute Markdown checklist items sequentially in isolated subagents, advancing only after an executable validation script passes. |
 | `extensions/pinned-widget.ts` | `pinned_widget` tool | Pin/list/group private files, media, Markdown, directories, and HTTPS links in the right sidebar. |
 | `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
@@ -33,7 +33,7 @@ Every request carries its caller: `POST /mcp?runner=<id>&session=<id>&workdir=<a
 
 Driver modules such as `server/runner-drivers/claude-code.mjs` are reached only through static imports, which the hot reloader does not cache-bust, so restart the Oyster service (not just the runner) after changing them. When changing a tool, update both the pi extension and the MCP endpoint. Verify with `node --test tests/mcp-routes.test.mjs`.
 
-Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. For deterministic hublots, `type="git-server"` takes an absolute Git worktree path and serves it through the bundled read-only Smart HTTP server (`git clone`, fetch, and pull are allowed; push is denied). The `hublot` and `routine` tools discover the UI server
+Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. Opening a hublot requires a local `port` (1–65535), with an optional `description` label. Provision the service separately: hublot starts only cloudflared and persists its SQLite entry; closing the tunnel leaves the local service running. The `hublot` and `routine` tools discover the UI server
 from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
 `OYSTER_TOKEN` or the project-root `.ui-token` file.
 

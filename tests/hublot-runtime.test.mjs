@@ -69,7 +69,7 @@ test("live-interface widgets route workflows through scoped actions without eage
 
   assert.match(sidebar, /uiActions\.invoke\(HUBLOT_SHOW_ACTION\)/);
   assert.match(grid, /uiActions\.invoke\(PINNED_WIDGET_MANAGE_ACTION, widget\)/);
-  assert.match(manager, /uiActions\.invoke\(HUBLOT_CREATE_ACTION, description\)/);
+  assert.match(manager, /uiActions\.invoke\(HUBLOT_CREATE_ACTION, description, port\)/);
   assert.match(manager, /uiActions\.invoke\(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node\)/);
   assert.doesNotMatch(manager, /HUBLOT_TOGGLE_SCOPE_ACTION|HUBLOT_REMOVE_ACTION|hublot-grid/);
   assert.doesNotMatch(grid, /<iframe/);
@@ -85,9 +85,9 @@ test("hublot manager prevents duplicate submissions and cleans up its command pa
   const styles = readFileSync(new URL("../public/src/style.css", import.meta.url), "utf8");
 
   assert.match(manager, /function submitHublot\(event\)/);
-  assert.match(manager, /if \(\$hublotManager\.creating \|\| !\$hublotManager\.desc\.trim\(\)\) return/);
+  assert.match(manager, /if \(\$hublotManager\.creating \|\| !validPort\) return/);
   assert.match(manager, /aria-busy=\{\$hublotManager\.creating\}/);
-  assert.match(manager, /disabled=\{\$hublotManager\.creating \|\| !\$hublotManager\.desc\.trim\(\)\}/);
+  assert.match(manager, /disabled=\{\$hublotManager\.creating \|\| !validPort\}/);
   assert.match(manager, /controller\?\.detach\?\.\(\)/);
   assert.match(manager, /<span class="spin" aria-hidden="true"><\/span>/);
   assert.match(manager, /<span role="status">Waiting for Cloudflare…<\/span>/);

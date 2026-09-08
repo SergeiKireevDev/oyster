@@ -8,7 +8,9 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
-  const createManagedHublot = (description) => uiActions.invoke(HUBLOT_CREATE_ACTION, description);
+  let port = $state("");
+  const validPort = $derived(Number.isInteger(Number(port)) && Number(port) >= 1 && Number(port) <= 65535);
+  const createHublot = (description, port) => uiActions.invoke(HUBLOT_CREATE_ACTION, description, port);
 
   function commandPalette(node) {
     const controller = uiActions.invoke(HUBLOT_OPEN_COMMAND_PALETTE_ACTION, node);
@@ -25,17 +27,22 @@
 
   function submitHublot(event) {
     event.preventDefault();
-    if ($hublotManager.creating || !$hublotManager.desc.trim()) return;
-    createManagedHublot($hublotManager.desc);
+    if ($hublotManager.creating || !validPort) return;
+    createHublot($hublotManager.desc, Number(port));
   }
 </script>
 
 <form class="hublot-create-form" aria-busy={$hublotManager.creating} onsubmit={submitHublot}>
+  <label for="hublotPort" class="hublot-field">
+    <span>Local port</span>
+    <small>Start your service separately, then enter its port.</small>
+  </label>
+  <input id="hublotPort" type="number" min="1" max="65535" step="1" required bind:value={port} disabled={$hublotManager.creating} placeholder="e.g. 5173" />
   <label for="hublotDescription">
     <span class="hublot-field">
-      <span>Interface brief</span>
+      <span>Label (optional)</span>
       <small id="hublotDescriptionHint">
-        Describe the app, preview, or local service the agent should prepare and expose.
+        A short name for this live interface.
       </small>
     </span>
   </label>
@@ -49,17 +56,16 @@
     value={$hublotManager.desc}
     disabled={$hublotManager.creating}
     oninput={updateDescription}
-    required
   ></textarea>
 
   <p class="hublot-visibility-note" id="hublotVisibilityNote">
     <span aria-hidden="true">!</span>
-    <span>The finished interface receives a public, temporary URL. Do not include secrets in this brief.</span>
+    <span>The service on this port receives a public, temporary URL.</span>
   </p>
 
   <div class="m-actions" id="mActions">
     <button class="chip" type="button" data-modal-cancel disabled={$hublotManager.creating} onclick={closeModalState}>Close</button>
-    <button class="btn" type="submit" disabled={$hublotManager.creating || !$hublotManager.desc.trim()}>
+    <button class="btn" type="submit" disabled={$hublotManager.creating || !validPort}>
       {#if $hublotManager.creating}
         <span class="spin" aria-hidden="true"></span>
         <span role="status">Waiting for Cloudflare…</span>

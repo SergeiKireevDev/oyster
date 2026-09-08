@@ -53,10 +53,7 @@ async function touchDragTo(page, source, target) {
 
 async function body(page, { mobile = false } = {}) {
   const marker = `e2e-widget-${Date.now()}`;
-  const brief =
-    `Create a page with title "${marker}". Serve a minimal static web page on the local port. ` +
-    `Its HTML body must contain exactly one <button> element with the visible text "Click me". ` +
-    `No frameworks — a plain HTML response is fine. Keep the server running detached.`;
+  const brief = marker;
 
   await login(page);
   const sessionId = await waitFor(() => currentSessionId(page), {
@@ -122,15 +119,21 @@ async function body(page, { mobile = false } = {}) {
   await expect(page.getByRole("button", { name: /File explorer/ })).toHaveCount(0);
   await expectWidgetSidebarOpen(page, mobile);
 
-  // Create through the compatibility tunnel API. The resulting public service
-  // is represented by a status-aware widget tile, not an iframe preview.
-  const opened = await api("POST", "/tunnels", { label: brief, sessionId, brief });
-  expect(opened.status).toBe(201);
-  const tunnel = opened.json.tunnel;
+  // Provision the service separately, then expose its port through the form.
+  dexec(`nohup node -e 'require("http").createServer((_,res)=>res.end("<button>Click me</button>")).listen(46100,"127.0.0.1")' >/tmp/pinned-preview.log 2>&1 &`);
+  await expect(page.getByRole("button", { name: "Create live interface widget", exact: true })).toBeDisabled();
+  await page.locator("#hublotPort").fill("46100");
+  await page.locator("#hublotDescription").fill(brief);
+  const opening = page.waitForResponse((res) => res.url().endsWith("/tunnels") && res.request().method() === "POST");
+  await page.getByRole("button", { name: "Create live interface widget", exact: true }).click();
+  const opened = await opening;
+  expect(opened.status()).toBe(201);
+  expect(opened.request().postDataJSON()).toEqual({ port: 46100, label: brief, sessionId });
+  const tunnel = (await opened.json()).tunnel;
   expect(tunnel.sessionId).toEqual(sessionId);
   expect(tunnel.url).toMatch(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-  expect(tunnel.port).toBeGreaterThan(0);
-  await page.locator("#mActions .chip", { hasText: "Close" }).click();
+  expect(tunnel.port).toBe(46100);
+  await expect(page.locator("#overlay")).not.toHaveClass(/open/);
   await expectWidgetSidebarOpen(page, mobile);
 
   const liveWidget = page.locator("#hublots .pinned-widget-cell", { hasText: marker }).first();
@@ -186,6 +189,7 @@ async function body(page, { mobile = false } = {}) {
     { timeout: 30000, interval: 1000, label: "live interface to close" }
   );
   await expect(liveWidget).toHaveClass(/unavailable/);
+  expect(dexec(`curl -s --max-time 3 http://127.0.0.1:${tunnel.port}/`)).toContain("<button>Click me</button>");
 }
 
 test("pinned Markdown loads relative, absolute, and remote images privately", async ({ page, browser }) => {
