@@ -64,6 +64,7 @@ test("new-session harness selector starts a Claude Code runner", async ({ page }
   expect(runner.harness).toBe("claude-code");
   await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
   await openSessionSidebar(page);
+  await expect(page.locator("#sessions .session-sidebar-entry.current .session-sidebar-meta")).toHaveText("Last message just now · 0 msgs");
   const pill = page.locator("#sessions .session-sidebar-entry.current .harness-pill");
   await expect(pill).toHaveText("Claude Code");
   await expect(pill).toHaveAttribute("data-harness", "claude-code");

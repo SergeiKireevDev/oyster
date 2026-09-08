@@ -568,8 +568,8 @@
   }
 
   function sessionMeta(session, runner) {
-    const modifiedAt = session?.modifiedAt ?? runner?.modifiedAt;
-    const messageCount = session?.messageCount ?? runner?.messageCount;
+    const modifiedAt = session?.modifiedAt ?? runner?.modifiedAt ?? clock;
+    const messageCount = session?.messageCount ?? runner?.messageCount ?? 0;
     const parts = [];
     const relative = formatRelativeTime(modifiedAt, clock);
     if (relative) parts.push(`Last message ${relative}`);
