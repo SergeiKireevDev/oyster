@@ -68,8 +68,6 @@ function ensureRuntime(runner) {
     sessionName: runner.sessionName ?? null,
     messages: [],
     streaming: false,
-    initialized: false,
-    stateRequests: [],
     toolNames: new Map(),
     controlRequests: new Map(),
   };
@@ -167,7 +165,6 @@ export function createClaudeCodeDriver({
         }
         if (control.subtype === "success") {
           runtime.model = pending.model;
-          for (const id of runtime.stateRequests.splice(0)) events.push(response(id, "get_state", stateFor(runner, runtime)));
           events.push(response(pending.id, pending.command, {}));
         } else {
           events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code rejected the model")));
@@ -176,10 +173,9 @@ export function createClaudeCodeDriver({
       }
 
       if (record.type === "system" && record.subtype === "init") {
-        runtime.initialized = true;
         runtime.sessionId = record.session_id ?? runtime.sessionId;
         runtime.model = record.model ?? runtime.model;
-        for (const id of runtime.stateRequests.splice(0)) events.push(response(id, "get_state", stateFor(runner, runtime)));
+        events.push(response("_driver-claude-init", "get_state", stateFor(runner, runtime)));
         return events;
       }
 
@@ -217,8 +213,9 @@ export function createClaudeCodeDriver({
       const runtime = ensureRuntime(runner);
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));
       if (command.type === "get_state") {
-        if (!runtime.initialized) runtime.stateRequests.push(command.id);
-        else emit(response(command.id, "get_state", stateFor(runner, runtime)));
+        // Claude emits system/init only after a prompt. Publish the local state
+        // immediately so an idle new session can show its welcome screen.
+        emit(response(command.id, "get_state", stateFor(runner, runtime)));
         return true;
       }
       if (command.type === "get_messages") {
