@@ -74,9 +74,9 @@
   };
 
   let requestedEnvironmentId = $state(null);
-  const harnesses = Array.isArray(runtimeConfig.harnesses) && runtimeConfig.harnesses.length
+  const harnesses = (Array.isArray(runtimeConfig.harnesses) && runtimeConfig.harnesses.length
     ? runtimeConfig.harnesses
-    : [{ id: "pi", label: "pi" }];
+    : [{ id: "pi", label: "pi" }]).filter((harness) => harness.id !== "gemini");
   let selectedHarness = $state(harnesses.some((harness) => harness.id === settingsPreferences.getNewSessionHarness())
     ? settingsPreferences.getNewSessionHarness()
     : harnesses[0].id);

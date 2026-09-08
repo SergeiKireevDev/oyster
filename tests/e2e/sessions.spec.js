@@ -59,7 +59,8 @@ test("new-session harness selector starts a Claude Code runner", async ({ page }
   await login(page);
   await openSessionSidebar(page);
   const harnessSelector = page.getByRole("combobox", { name: "New session harness" });
-  for (const label of ["Claude Code", "Codex", "Gemini CLI", "Amp"]) await expect(harnessSelector).toContainText(label);
+  for (const label of ["Claude Code", "Codex", "Amp"]) await expect(harnessSelector).toContainText(label);
+  await expect(harnessSelector.locator('option[value="gemini"]')).toHaveCount(0);
   const runner = await newSession(page, { harness: "claude-code" });
   expect(runner.harness).toBe("claude-code");
   await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
