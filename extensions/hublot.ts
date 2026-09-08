@@ -58,6 +58,9 @@ export default function hublotExtension(pi: ExtensionAPI) {
       "Open, close, or list public Cloudflare tunnels for this session. " +
       "'open' requires a port (1–65535) of a service provisioned separately; it starts only the tunnel and persists its entry in SQLite. " +
       "Provide an optional description as its label. 'close' stops the tunnel by id or port; the local service remains running. " +
+      "If creation fails, fix the underlying issue and try to revive the existing hublot, reusing its already-pinned widget. " +
+      "Find its hublotId in pinned_widget list results (not the widget id), then send an authenticated POST to " +
+      "/tunnels/reopen with {id: hublotId}. Do not create or pin a new hublot for a retry. " +
       "Use only when public access is required. Quick-tunnel URLs are ephemeral.",
     parameters: Type.Object({
       action: StringEnum(["open", "close", "list"] as const),
