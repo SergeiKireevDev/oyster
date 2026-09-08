@@ -21,7 +21,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
     await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
-  const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs")); const { createClaudeTranscriptSink } = await import(bust("persistence/claudeTranscriptSink.mjs"));
+  const { createMcpSettings, createMcpSettingsRoutes } = await import(bust("mcp-settings.mjs")); const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs")); const { createClaudeTranscriptSink } = await import(bust("persistence/claudeTranscriptSink.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createClaudeOAuthCredentialSink } = await import(bust("claude-oauth-credential-sink.mjs")); const { createCodexOAuthCredentialSink } = await import(bust("codex-oauth-credential-sink.mjs")); const { createGeminiOAuthCredentialSink } = await import(bust("gemini-oauth-credential-sink.mjs")); const { createAmpOAuthCredentialSink } = await import(bust("amp-oauth-credential-sink.mjs")); const { createClaudeOAuthRefreshService } = await import(bust("claude-oauth-refresh-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
@@ -57,7 +57,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     activation = (async () => {
       const state = createCandidateState(stableState);
       try {
-  const { config, appStore } = state;
+  const { config, appStore } = state; const mcpSettings = createMcpSettings(join(config.PI_AGENT_DIR, "mcp-servers.json"));
   const hydratedStore = await validateRepositoryAvailability(appStore);
   const checkpointRepository = appStore.repositories.checkpoints;
 
@@ -102,7 +102,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
   const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const webPushService = await createWebPushService({ repository: appStore.repositories.webPush });
-  const { createOpenRouterRouting } = await import(bust("openrouter-routing.mjs")); const openRouterRouting = await createOpenRouterRouting({ repository: appStore.repositories.settings, config }); const runnerDrivers = createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses, openRouterRouting });
+  const { createOpenRouterRouting } = await import(bust("openrouter-routing.mjs")); const openRouterRouting = await createOpenRouterRouting({ repository: appStore.repositories.settings, config }); const runnerDrivers = createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses, openRouterRouting, mcpSettings });
   const claudeTranscriptSink = config.CLAUDE_CODE_BIN && config.SQLITE_PATH ? createClaudeTranscriptSink({ projectsDir: config.CLAUDE_CODE_PROJECTS_DIR, sqlitePath: config.SQLITE_PATH, piBin: config.PI_BIN }) : null;
   const oauthRefreshByHarness = new Map(); // populated below after credential services are composed
   const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), onHarnessAuthFailure: (runner, event) => oauthRefreshByHarness.get(runner.harness)?.recover({ reason: `${event.reason}:${runner.id}` }), runnerDrivers, guardCallback: scope.guard });
@@ -198,7 +198,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
   const openRouteKeys = new Set(Object.keys(openRoutes)); const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
 
   // ---------------------------------------------------------------- dispatch

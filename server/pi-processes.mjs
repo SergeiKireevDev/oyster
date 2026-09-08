@@ -1,3 +1,6 @@
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createMcpSettings } from "./mcp-settings.mjs";
 import { spawn } from "node:child_process";
 
 function nonEmptyString(value, name) {
@@ -50,6 +53,15 @@ export function createPiProcessLauncher({ config, spawnImpl = spawn } = {}) {
     else env.OYSTER_TOKEN = token;
     env.PERSISTENT_STORE = persistentStore;
     env.OYSTER_URL = uiUrl;
+    // Include ephemeral pi agents as well as interactive runners.
+    const servers = config.PI_AGENT_DIR ? createMcpSettings(join(config.PI_AGENT_DIR, "mcp-servers.json")).snapshot() : [];
+    delete env.OYSTER_MCP_SERVERS;
+    delete env.OYSTER_MCP_MODULE;
+    if (servers.length) {
+      env.OYSTER_MCP_SERVERS = JSON.stringify(servers);
+      env.OYSTER_MCP_MODULE = fileURLToPath(new URL("./mcp-connections.mjs", import.meta.url));
+      normalizedArgs.push("--extension", fileURLToPath(new URL("../extensions/mcp-servers.ts", import.meta.url)));
+    }
 
     return spawnImpl(bin, normalizedArgs, { ...normalizedOptions, env });
   }

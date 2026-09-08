@@ -1,3 +1,4 @@
+import { RUNNER_MCP } from "../../mcp-connections.mjs";
 import { spawn } from "node:child_process";
 import { isAbsolute, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -415,6 +416,16 @@ export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = s
       };
       // Stateless mode: one server and transport per request, torn down with the response.
       const server = createOysterMcpServer(context, { dispatch, spawnImpl });
+      const additionalTools = await activeRunner?.[RUNNER_MCP]?.tools() ?? [];
+      for (const tool of additionalTools) {
+        server.registerTool(tool.name, {
+          description: tool.description ?? tool.name,
+          // Preserve the upstream JSON Schema verbatim, including keywords Zod
+          // cannot represent. The upstream MCP server owns argument validation.
+          inputSchema: z.looseObject({}).meta(tool.inputSchema),
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
+        }, (args, extra) => tool.call(args, extra.signal));
+      }
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.once("close", () => { void server.close().catch(() => {}); });
       await server.connect(transport);
