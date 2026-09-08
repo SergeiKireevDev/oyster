@@ -135,9 +135,24 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
   const localEvents = [];
   runner.driverEmit = (event) => localEvents.push(event);
 
-  assert.equal(driver.sendCommand(runner, child, { id: "state-before", type: "get_state" }), true);
-  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "system", subtype: "init", session_id: "cc-1", model: "claude-sonnet-4-5" })), [{
+  driver.launch({ runner, cwd: "/work", systemPrompt: "" });
+  const startup = driver.startup({ requestId: "state-before" });
+  assert.equal(driver.sendCommand(runner, child, startup.commands[0]), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(localEvents.length, 1, "startup state must arrive without child output or a user prompt");
+  assert.deepEqual(localEvents[0], {
     type: "response", id: "state-before", command: "get_state", success: true,
+    data: {
+      sessionId: runner.driverRuntime.sessionId, sessionName: null, sessionFile: null,
+      model: null, thinkingLevel: "off", messageCount: 0, pendingMessageCount: 0,
+      isStreaming: false, isCompacting: false,
+    },
+  });
+  assert.ok(localEvents[0].data.sessionId);
+  assert.equal(child.stdin.read(), null, "reading state must not submit a prompt");
+  localEvents.length = 0;
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "system", subtype: "init", session_id: "cc-1", model: "claude-sonnet-4-5" })), [{
+    type: "response", id: "_driver-claude-init", command: "get_state", success: true,
     data: {
       sessionId: "cc-1", sessionName: null, sessionFile: null,
       model: { provider: "anthropic", id: "claude-sonnet-4-5" }, thinkingLevel: "off",
