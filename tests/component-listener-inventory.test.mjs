@@ -44,6 +44,8 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
     'components/HublotSidebar.svelte:<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines" use:blockingSurface={{ drawer: true, media: "(max-width: 1200px)", onClose: closeDrawer }}>',
+    // The MCP browser regression verifies that failed saves focus the visible error.
+    "components/McpSettings.svelte:use:focusError",
     "components/Menu.svelte:<svelte:document onclick={close} />",
     "components/Menu.svelte:<button type=\"button\" role=\"menuitem\" tabindex=\"-1\" data-action=\"analytics\" use:focusWhenOpened={$menuOpen} onclick={openAnalytics}>",
     "components/OptionPickerItem.svelte:use:scrollIntoViewWhen={active}",
