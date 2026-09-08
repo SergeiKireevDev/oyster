@@ -422,6 +422,14 @@ export const APP_MIGRATIONS = Object.freeze([
       CREATE INDEX runners_harness_idx ON runners(harness);
     `,
   }),
+  Object.freeze({
+    version: 19,
+    name: "runner_session_initialized",
+    sql: `
+      ALTER TABLE runners ADD COLUMN session_initialized INTEGER NOT NULL DEFAULT 1
+        CHECK (session_initialized IN (0, 1));
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

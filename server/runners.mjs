@@ -186,6 +186,7 @@ export async function createRunnerManager(state, {
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
       sessionName: persisted.session_name,
+      sessionInitialized: persisted.session_initialized !== 0,
       attentionStatus: persisted.attention_status ?? null,
       attentionUnread: persisted.attention_unread === 1,
       startCount: persisted.start_count,
@@ -455,7 +456,10 @@ export async function createRunnerManager(state, {
         const nextReference = extractedReference ? sessionReferences.validate(extractedReference) : null;
         const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
         const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
-        const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName;
+        const provisionalReference = sessionChanged && runner.sessionInitialized === false ? runner.sessionRef : null;
+        const sessionInitialized = d.sessionInitialized !== false;
+        const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName
+          || runner.sessionInitialized !== sessionInitialized;
         if (sessionChanged) {
           try { runner.titleProcess?.kill("SIGTERM"); } catch {}
           runner.titleProcess = null;
@@ -465,7 +469,11 @@ export async function createRunnerManager(state, {
         runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
         runner.sessionId = d.sessionId ?? runner.sessionId;
         runner.sessionName = d.sessionName ?? null;
+        runner.sessionInitialized = sessionInitialized;
         if (changed) {
+          if (provisionalReference && nextReference) {
+            await appStore?.repositories?.sessions?.reidentify?.(provisionalReference, nextReference);
+          }
           const owner = nextReference ? await ensureSessionOwner(nextReference) : null;
           await runnerRepository?.update(runner.id, {
             owner_id: owner?.id ?? null,
@@ -473,6 +481,7 @@ export async function createRunnerManager(state, {
             session_id: nextReference?.id ?? null,
             session_storage_path: nextReference?.storagePath ?? null,
             session_name: runner.sessionName,
+            session_initialized: sessionInitialized ? 1 : 0,
           });
         }
         runner.busy = !!(d.isStreaming || d.isCompacting);

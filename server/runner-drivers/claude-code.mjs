@@ -68,6 +68,7 @@ function ensureRuntime(runner) {
     sessionName: runner.sessionName ?? null,
     messages: [],
     streaming: false,
+    initialized: Boolean(runner.sessionRef) && runner.sessionInitialized !== false,
     toolNames: new Map(),
     controlRequests: new Map(),
   };
@@ -80,6 +81,7 @@ function stateFor(runner, runtime) {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
     sessionName: runtime.sessionName ?? runner.sessionName ?? null,
     sessionFile: null,
+    sessionInitialized: runtime.initialized,
     model: runtime.model ? { provider: runtime.provider ?? "anthropic", id: runtime.model } : null,
     thinkingLevel: "off",
     messageCount: runtime.messages.length,
@@ -122,7 +124,7 @@ export function createClaudeCodeDriver({
         "--input-format", "stream-json",
         "--output-format", "stream-json",
         "--permission-mode", permissionMode,
-        ...(runner.sessionRef ? ["--resume", sessionId] : ["--session-id", sessionId]),
+        ...(runtime.initialized ? ["--resume", sessionId] : ["--session-id", sessionId]),
         "--allowedTools", OYSTER_MCP_TOOLS,
         "--mcp-config", JSON.stringify(oysterMcpConfig({ runnerId: runner.id ?? null, sessionId, workdir: cwd, uiUrl: mcpUrl })),
         ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
@@ -173,6 +175,7 @@ export function createClaudeCodeDriver({
       }
 
       if (record.type === "system" && record.subtype === "init") {
+        runtime.initialized = true;
         runtime.sessionId = record.session_id ?? runtime.sessionId;
         runtime.model = record.model ?? runtime.model;
         events.push(response("_driver-claude-init", "get_state", stateFor(runner, runtime)));

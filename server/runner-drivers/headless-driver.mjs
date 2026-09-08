@@ -40,7 +40,7 @@ function runtimeFor(runner, defaults) {
     model: defaults.model ?? null,
     messages: [],
     streaming: false,
-    initialized: Boolean(runner.sessionRef),
+    initialized: Boolean(runner.sessionRef) && runner.sessionInitialized !== false,
     systemPrompt: defaults.systemPrompt ?? "",
     currentMessage: null,
     toolNames: new Map(),
@@ -58,6 +58,7 @@ function stateFor(runner, runtime, provider) {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
     sessionName: runtime.sessionName ?? runner.sessionName ?? null,
     sessionFile: null,
+    sessionInitialized: runtime.initialized,
     model: (runtime.selectedModel ?? runtime.model) ? { provider: runtime.provider ?? provider, id: runtime.selectedModel ?? runtime.model } : null,
     thinkingLevel: "off",
     messageCount: runtime.messages.length,
@@ -260,7 +261,9 @@ export function createHeadlessDriver({
   if (!bridgeOptions || typeof bridgeOptions !== "object" || Array.isArray(bridgeOptions)) throw new TypeError(`${label ?? id} bridge options must be an object`);
 
   function persistTranscript(runner, runtime) {
-    if (!transcriptSink || !runtime.sessionId) return;
+    // Provisional IDs belong to the runner record only. Wait for the native
+    // identity before creating transcript rows, including queued user messages.
+    if (!transcriptSink || !runtime.sessionId || !runtime.initialized) return;
     runtime.transcriptIds ??= new WeakMap();
     runtime.transcriptQueued ??= new Set();
     runtime.transcriptBatches ??= [];
@@ -295,8 +298,8 @@ export function createHeadlessDriver({
     isSessionCompatible(reference) { return !reference || reference.backend === id || (Boolean(sqlitePath) && reference.backend === "sqlite"); },
 
     launch({ runner, cwd, systemPrompt }) {
-      const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? (generateSessionId ? randomUUID() : runner.id ?? randomUUID());
-      const runtime = runtimeFor(runner, { sessionId: generateSessionId ? provisionalId : runner.sessionRef?.id ?? null, model: defaultModel, systemPrompt });
+      const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? randomUUID();
+      const runtime = runtimeFor(runner, { sessionId: provisionalId, model: defaultModel, systemPrompt });
       runtime.cwd = cwd;
       const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
       const route = resolveRoute();
@@ -404,7 +407,7 @@ export function createHeadlessDriver({
         const steer = runtime.streaming;
         runtime.streaming = true;
         emit({ type: "message_start", message });
-        child.stdin.write(`${JSON.stringify({ type: "run", prompt: text, sessionId: runtime.sessionId, resume: runtime.initialized, steer, model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model })}\n`);
+        child.stdin.write(`${JSON.stringify({ type: "run", prompt: text, sessionId: generateSessionId || runtime.initialized ? runtime.sessionId : null, resume: runtime.initialized, steer, model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model })}\n`);
         emit(response(command.id, "prompt", {}));
         return true;
       }

@@ -32,7 +32,7 @@ test("numbered migrations apply once and report stable status", async (t) => {
   const second = await applyMigrations(database, { now });
 
   assert.equal(clockCalls, APP_MIGRATIONS.length);
-  assert.deepEqual(first, { currentVersion: 18, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] });
+  assert.deepEqual(first, { currentVersion: 19, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19] });
   assert.deepEqual(second, first);
   assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations", "web_push_subscriptions", "web_push_vapid"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
@@ -54,6 +54,7 @@ test("numbered migrations apply once and report stable status", async (t) => {
     { version: 16, name: "web_push", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 17, name: "runner_attention_status", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 18, name: "runner_harness", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 19, name: "runner_session_initialized", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 
@@ -156,4 +157,18 @@ test("migration dependencies and clock are validated", async (t) => {
   }), /clock must return a timestamp string/);
   assert.deepEqual(tableNames(database), ["schema_migrations"]);
   assert.equal(database.isTransaction, false);
+});
+
+test("runner initialization migration preserves existing resumable sessions", async (t) => {
+  const database = databaseFixture(t);
+  await applyMigrations(database, { migrations: APP_MIGRATIONS.filter((migration) => migration.version < 19) });
+  database.prepare(`
+    INSERT INTO runners(id, dir, session_backend, session_id, created_at, desired_state, last_status)
+    VALUES ('existing', '/work', 'sqlite', 'native-session', 'before-upgrade', 'stopped', 'stopped')
+  `).run();
+  await applyMigrations(database);
+  const row = database.prepare("SELECT session_id, session_initialized FROM runners WHERE id = 'existing'").get();
+  assert.equal(row.session_id, "native-session");
+  assert.equal(row.session_initialized, 1, "existing native IDs must remain resumable");
+  assert.throws(() => database.prepare("UPDATE runners SET session_initialized = 2").run(), /CHECK constraint failed/);
 });

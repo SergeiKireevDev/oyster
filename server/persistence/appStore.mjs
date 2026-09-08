@@ -159,6 +159,26 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       }),
     }),
     sessions: Object.freeze({
+      // Promote a provisional runner identity without detaching its widgets,
+      // routines, or other owned records from the native conversation.
+      reidentify: (previous, next) => writeAtomically(async () => {
+        const owner = await database.get(
+          "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?",
+          previous.backend, previous.id, previous.storagePath);
+        if (!owner) return;
+        const target = await database.get(
+          "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?",
+          next.backend, next.id, next.storagePath);
+        if (target && target.id !== owner.id) {
+          for (const table of ["operations", "checkpoints", "routines", "hublots", "runners", "pinned_widget_groups", "pinned_widgets"]) {
+            await database.run(`UPDATE ${table} SET owner_id = ? WHERE owner_id = ?`, target.id, owner.id);
+          }
+          await database.run("DELETE FROM app_sessions WHERE id = ?", owner.id);
+        } else {
+          await database.run("UPDATE app_sessions SET backend = ?, session_id = ?, storage_path = ? WHERE id = ?",
+            next.backend, next.id, next.storagePath, owner.id);
+        }
+      }),
       upsert: async ({ backend, sessionId, storagePath = null, createdAt }) => {
         await database.run(`
           INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?)
@@ -492,7 +512,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       },
       update: async (id, changes) => {
         const allowed = new Set([
-          "owner_id", "dir", "harness", "session_backend", "session_id", "session_storage_path", "session_name", "attention_status", "attention_unread",
+          "owner_id", "dir", "harness", "session_backend", "session_id", "session_storage_path", "session_name", "session_initialized", "attention_status", "attention_unread",
           "is_default", "desired_state", "last_status", "start_count", "last_started_at", "last_stopped_at",
         ]);
         const entries = Object.entries(changes ?? {});
