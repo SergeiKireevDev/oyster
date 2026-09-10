@@ -120,3 +120,40 @@ test("Amp bridge uses the browser-managed settings and environment-expanded MCP 
   assert.equal(input.steer, false);
   assert.equal(input.message.content[0].text, "policy\n\nwork");
 });
+
+test("Codex bridge retrieves models from new and resumed native rollouts", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "oyster-codex-model-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bin = join(directory, "codex.mjs");
+  writeFileSync(bin, `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+mkdirSync(join(process.env.CODEX_HOME, "sessions"), { recursive: true });
+writeFileSync(join(process.env.CODEX_HOME, "sessions", "rollout-date-thread-1.jsonl"), JSON.stringify({ type: "turn_context", payload: { model: "native-default" } }) + "\\n");
+console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "done" } }));
+`, { mode: 0o700 });
+  for (const resume of [false, true]) {
+    const child = spawn(process.execPath, [BRIDGE], {
+      env: { ...process.env, CODEX_HOME: directory, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify({ kind: "codex", bin, cwd: directory, mcpUrl: "http://localhost/mcp", ...(resume ? { resumeSessionId: "thread-1" } : {}) }) },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const records = [];
+    const lines = createInterface({ input: child.stdout });
+    lines.on("line", (line) => records.push(JSON.parse(line)));
+    try {
+      if (!resume) child.stdin.write(JSON.stringify({ type: "run", prompt: "hi" }) + "\n");
+      const deadline = Date.now() + 5000;
+      while (!records.some((record) => record.type === (resume ? "oyster.bridge.session_model" : "oyster.bridge.turn_exit")) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(records.find((record) => record.type === "oyster.bridge.session_model")?.model, "native-default");
+      if (!resume) {
+        const types = records.map((record) => record.type);
+        assert.ok(types.indexOf("thread.started") < types.indexOf("oyster.bridge.session_model"));
+        assert.ok(types.indexOf("oyster.bridge.session_model") < types.indexOf("item.completed"));
+      }
+    } finally {
+      child.kill("SIGTERM");
+      await once(child, "close");
+    }
+  }
+});

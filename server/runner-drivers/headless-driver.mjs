@@ -127,7 +127,10 @@ function endTool(runtime, events, { id, name, text, isError, at }) {
 
 function decodeCodex(runtime, record) {
   const events = [];
-  if (record.type === "thread.started" && record.thread_id) {
+  if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
+    runtime.model = record.model;
+    runtime.selectedModel = null;
+  } else if (record.type === "thread.started" && record.thread_id) {
     runtime.sessionId = record.thread_id;
     runtime.initialized = true;
   } else if (record.type === "item.started") {
@@ -310,7 +313,7 @@ export function createHeadlessDriver({
         runtime.availableModels = [];
       }
       runtime.provider = nextProvider;
-      const bridgeConfig = { kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions, ...(route ? { provider: route.provider } : {}) };
+      const bridgeConfig = { ...(kind === "codex" && runtime.initialized ? { resumeSessionId: runtime.sessionId } : {}), kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions, ...(route ? { provider: route.provider } : {}) };
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
       const childProcess = spawnImpl(globalThis.process.execPath, [BRIDGE], { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
       redactChildOutput(childProcess, [route?.env?.OPENROUTER_API_KEY]);

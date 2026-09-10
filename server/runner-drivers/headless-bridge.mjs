@@ -10,7 +10,8 @@ import {
   chmodSync, closeSync, constants, fstatSync, mkdtempSync, openSync,
   readFileSync, rmSync, writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { createCodexSessionModelReader } from "./codex-session-model.mjs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createCodexOAuthCredentialSink } from "../codex-oauth-credential-sink.mjs";
@@ -185,8 +186,32 @@ function spawnChild(run) {
   const env = nativeEnvironment();
   output({ type: "oyster.bridge.turn_start" });
   child = spawn(config.bin, args, { cwd: config.cwd, stdio: [config.kind === "amp" ? "pipe" : "ignore", "pipe", "pipe"], env });
+  let readModel = null;
+  let reportedModel = null;
+  const reportModel = () => {
+    const model = readModel?.();
+    if (model && model !== reportedModel) {
+      reportedModel = model;
+      output({ type: "oyster.bridge.session_model", model });
+    }
+  };
+  const modelTimer = config.kind === "codex" ? setInterval(reportModel, 250) : null;
   const childOutput = createInterface({ input: child.stdout });
-  childOutput.on("line", (line) => process.stdout.write(`${line}\n`));
+  childOutput.on("line", (line) => {
+    if (config.kind === "codex") {
+      try {
+        const record = JSON.parse(line);
+        if (record.type === "thread.started" && record.thread_id) {
+          process.stdout.write(`${line}\n`);
+          readModel = createCodexSessionModelReader(env.CODEX_HOME || join(homedir(), ".codex"), record.thread_id);
+          reportModel();
+          return;
+        }
+      } catch { /* Forward non-JSON output unchanged. */ }
+      reportModel();
+    }
+    process.stdout.write(`${line}\n`);
+  });
   child.stderr.on("data", (chunk) => {
     const text = String(chunk);
     childStderr = `${childStderr}${text}`.slice(-16_384);
@@ -197,6 +222,8 @@ function spawnChild(run) {
   // `close` follows drained stdout/stderr and also fires after spawn errors;
   // `exit` alone has neither guarantee.
   child.on("close", (code, signal) => {
+    if (modelTimer) clearInterval(modelTimer);
+    reportModel();
     const wasAmp = childKind === "amp";
     child = null;
     childKind = null;
@@ -247,6 +274,11 @@ function runPrompt(message) {
 function abortTurn() {
   queue.length = 0;
   if (child) child.kill("SIGINT");
+}
+
+if (config.kind === "codex" && config.resumeSessionId) {
+  const model = createCodexSessionModelReader(nativeEnvironment().CODEX_HOME || join(homedir(), ".codex"), config.resumeSessionId)();
+  if (model) output({ type: "oyster.bridge.session_model", model });
 }
 
 const input = createInterface({ input: process.stdin });
