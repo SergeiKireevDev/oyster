@@ -608,6 +608,8 @@
     </button>
     {#if runner?.alive}
       <button type="button" class="session-sidebar-action stop" title="Stop this session's process" aria-label="Stop this session's process" onclick={() => stopSession(runner)}></button>
+    {:else if !session && runner && !runner.busy && !runner.sessionRef && !runner.sessionId && !runnerSessionIdentity(runner)}
+      <button type="button" class="session-sidebar-action delete" title="Delete empty session" aria-label="Delete empty session" onclick={() => deleteSession(runner)}>✕</button>
     {:else if archived && !current}
       <button type="button" class="session-sidebar-action delete" title="Delete archived session" aria-label="Delete archived session" onclick={() => deleteSession(session ?? runner)}>✕</button>
     {:else if !archived && session}

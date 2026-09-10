@@ -513,3 +513,43 @@ test("constructing reloaded runner routes leaves old SSE responses state-owned a
   assert.equal(state.sseClients.has(res), true);
   assert.ok(res.chunks.at(-1).includes('"type":"after_reload"'));
 });
+
+test("empty runner deletion removes durable state and broadcasts the removal", async () => {
+  const { runner, state, dependencies } = setup();
+  const deleted = [];
+  const defaults = [];
+  let broadcasts = 0;
+  state.defaultRunnerId = runner.id;
+  state.appStore = { repositories: { runners: { delete: async (id) => deleted.push(id) } } };
+  state.appSettings = { setDefaultRunnerId: async (id) => defaults.push(id) };
+  dependencies.runnersChanged = () => { broadcasts++; };
+  dependencies.listRunnerInfo = () => [...state.runners.values()];
+  const route = createRunnerRoutes(dependencies)["DELETE /runner/empty"];
+  const res = response();
+  await route({}, res, new URL(`http://localhost/runner/empty?id=${runner.id}`));
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { deleted: runner.id, runners: [] });
+  assert.deepEqual(deleted, [runner.id]);
+  assert.deepEqual(defaults, [null]);
+  assert.equal(state.defaultRunnerId, null);
+  assert.equal(broadcasts, 1);
+  const missing = response();
+  await route({}, missing, new URL(`http://localhost/runner/empty?id=${runner.id}`));
+  assert.equal(missing.status, 404);
+});
+
+test("empty runner deletion refuses live, busy, or saved sessions", async () => {
+  for (const protectedState of [
+    { proc: { pid: 42 } }, { busy: true },
+    { sessionRef: { backend: "codex", id: "saved" } },
+    { sessionId: "saved" }, { sessionKey: "ps1_saved" }, { sessionFile: "/saved.jsonl" },
+  ]) {
+    const { runner, state, dependencies } = setup();
+    Object.assign(runner, protectedState);
+    const route = createRunnerRoutes(dependencies)["DELETE /runner/empty"];
+    const res = response();
+    await route({}, res, new URL(`http://localhost/runner/empty?id=${runner.id}`));
+    assert.equal(res.status, 409);
+    assert.equal(state.runners.has(runner.id), true);
+  }
+});

@@ -1,3 +1,4 @@
+import { runnerHasSessionIdentity } from "../../session-references.mjs";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeLastEventId, sseDataFrame } from "../../sse.mjs";
@@ -31,6 +32,7 @@ export function createRunnerRoutes({
   acknowledgeRunnerAttention,
   stopRunner,
   stopRunnerFamily = stopRunner,
+  runnersChanged = () => {},
   spawnRunner,
   observeRunner,
   runnerInfo,
@@ -219,6 +221,26 @@ export function createRunnerRoutes({
       }
       await stopRunnerFamily(runner);
       json(res, 200, { stopped: runner.id });
+    },
+
+    "DELETE /runner/empty": async (_req, res, url) => {
+      const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
+      if (!runner) {
+        json(res, 404, { error: "no such runner" });
+        return;
+      }
+      if (runner.proc || runner.busy || runnerHasSessionIdentity(runner)) {
+        json(res, 409, { error: "only stopped runners without a saved session can be deleted" });
+        return;
+      }
+      await state.appStore?.repositories?.runners?.delete(runner.id);
+      state.runners.delete(runner.id);
+      if (state.defaultRunnerId === runner.id) {
+        state.defaultRunnerId = null;
+        await state.appSettings?.setDefaultRunnerId(null);
+      }
+      runnersChanged();
+      json(res, 200, { deleted: runner.id, runners: listRunnerInfo() });
     },
 
     "POST /restart": async (_req, res, url) => {

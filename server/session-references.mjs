@@ -166,3 +166,8 @@ export function createSessionRequestResolver({ codec, sessionFileParam, sessionF
   };
   return Object.freeze({ referenceFor, targetFromSearch, referenceFromSearch, referenceParam });
 }
+
+/** Includes legacy JSONL identities when deciding whether a runner owns a session. */
+export function runnerHasSessionIdentity(runner) {
+  return Boolean(runner.sessionRef || runner.sessionId || runner.sessionKey || runner.sessionFile);
+}

@@ -882,6 +882,12 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     if (!response.ok) throw new Error(data.error || `archive failed (${response.status})`);
     return data;
   },
+  async removeEmptyRunner(id) {
+    const response = await fetch(`/runner/empty?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `delete failed (${response.status})`);
+    setRunnersNow(getRunners().filter((runner) => runner.id !== id));
+  },
   async removeSession(sessionQuery) {
     const response = await fetch(`/session?${sessionQuery}`, { method: "DELETE" });
     const data = await response.json().catch(() => ({}));
