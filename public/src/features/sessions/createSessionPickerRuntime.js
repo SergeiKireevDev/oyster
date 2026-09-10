@@ -161,7 +161,7 @@ export function createSessionPickerRuntime(deps) {
     },
     deleteSession: async (session) => {
       const runner = deps.getRunners().find((item) => item.id === session?.id);
-      if (runner && !runner.alive && !runner.busy && !runner.sessionRef && !runner.sessionId && !runnerSessionIdentity(runner)) {
+      if (runner && !runner.alive && !runner.busy && !sessions.some((item) => sessionIdentity(item) === runnerSessionIdentity(runner))) {
         try {
           await deps.removeEmptyRunner(runner.id);
           deps.toast("empty session deleted");

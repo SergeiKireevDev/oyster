@@ -38,7 +38,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
   const created = [];
   const archived = [];
   const switched = [];
-  let emptyRunners = [{ id: "empty-runner", alive: false }];
+  let emptyRunners = [{ id: "empty-runner", alive: false }, { id: "stale-runner", alive: false, sessionId: "missing", sessionKey: "ps1_missing", sessionRef: { backend: "sqlite", id: "missing" } }];
   const removedRunners = [];
   const pickerUpdates = [];
   const modalEvents = [];
@@ -58,7 +58,7 @@ test("session picker runtime owns picker actions and search-hit construction", a
     fetchSearch: async () => ({ ok: true, status: 200, data: { results: [] } }),
     fetchSessions: async () => [],
     getRunners: () => emptyRunners,
-    removeEmptyRunner: async (id) => { removedRunners.push(id); emptyRunners = []; },
+    removeEmptyRunner: async (id) => { removedRunners.push(id); emptyRunners = emptyRunners.filter((runner) => runner.id !== id); },
     toast: (message) => toasts.push(message),
     createSessionInCwd: async (cwd) => created.push(["cwd", cwd]),
     showFolderBrowser: async (workspace) => created.push(["folder", workspace]),
@@ -128,7 +128,8 @@ test("session picker runtime owns picker actions and search-hit construction", a
   assert.equal(pickerUpdates.at(-1).loading, false);
   assert.equal(runnersHandler, "unset");
   await registered.get(actionNames.SESSION_PICKER_DELETE_ACTION)({ id: "empty-runner", alive: false });
-  assert.deepEqual(removedRunners, ["empty-runner"]);
+  await registered.get(actionNames.SESSION_PICKER_DELETE_ACTION)({ id: "stale-runner" });
+  assert.deepEqual(removedRunners, ["empty-runner", "stale-runner"]);
   assert.equal(toasts.at(-1), "empty session deleted");
   runtime.detachActions();
   runtime.detachActions();

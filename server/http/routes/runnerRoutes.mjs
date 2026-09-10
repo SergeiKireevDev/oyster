@@ -229,7 +229,13 @@ export function createRunnerRoutes({
         json(res, 404, { error: "no such runner" });
         return;
       }
-      if (runner.proc || runner.busy || runnerHasSessionIdentity(runner)) {
+      // Older runners can retain an identity after their agent session disappeared.
+      // Only the matching catalog can establish that the saved session is absent.
+      let missingSession = false;
+      if (!runner.proc && !runner.busy && runner.sessionRef?.backend === state.sessionCatalog?.backend && state.sessionCatalog?.findById) {
+        missingSession = (await state.sessionCatalog.findById(runner.sessionRef.id)) == null;
+      }
+      if (runner.proc || runner.busy || (runnerHasSessionIdentity(runner) && !missingSession)) {
         json(res, 409, { error: "only stopped runners without a saved session can be deleted" });
         return;
       }
