@@ -128,6 +128,23 @@ function endTool(runtime, events, { id, name, text, isError, at }) {
   events.push({ type: "message_end", message });
 }
 
+function codexTool(item) {
+  const { id, type, status, ...details } = item;
+  if (!id || typeof type !== "string") return null;
+  let name = type;
+  let args = details;
+  if (type === "command_execution") { name = "shell"; args = { command: item.command }; }
+  else if (type === "mcp_tool_call") { name = item.tool ?? "mcp"; args = item.arguments; }
+  else if (type === "web_search") args = { query: item.query };
+  else if (type === "file_change") args = { changes: item.changes ?? [] };
+  else if (type !== "todo_list" && !type.endsWith("_tool_call")) return null;
+  const text = item.aggregated_output ?? item.error?.message ?? item.result?.content ?? item.result
+    ?? (type === "todo_list" ? (item.items ?? []).map((entry) => `${entry.completed ? "[x]" : "[ ]"} ${entry.text}`).join("\n")
+      : type === "file_change" ? JSON.stringify(item.changes ?? [], null, 2)
+        : type.endsWith("_tool_call") && type !== "mcp_tool_call" ? JSON.stringify(details, null, 2) : status);
+  return { id, name, args, text, isError: ["failed", "declined"].includes(status) || Boolean(item.error), provider: "openai", api: "codex", model: undefined };
+}
+
 function decodeCodex(runtime, record) {
   const events = [];
   if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
@@ -136,27 +153,25 @@ function decodeCodex(runtime, record) {
   } else if (record.type === "thread.started" && record.thread_id) {
     runtime.sessionId = record.thread_id;
     runtime.initialized = true;
-  } else if (record.type === "item.started") {
-    const item = record.item ?? {};
-    if (item.type === "command_execution") startTool(runtime, events, { id: item.id, name: "shell", args: { command: item.command }, provider: "openai", api: "codex", model: runtime.model });
-    else if (item.type === "mcp_tool_call") startTool(runtime, events, { id: item.id, name: item.tool ?? "mcp", args: item.arguments, provider: "openai", api: "codex", model: runtime.model });
-    else if (item.type === "web_search") startTool(runtime, events, { id: item.id, name: "web_search", args: { query: item.query }, provider: "openai", api: "codex", model: runtime.model });
+  } else if (record.type === "item.started" || record.type === "item.updated") {
+    const tool = codexTool(record.item ?? {});
+    if (tool) {
+      if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
+      if (record.type === "item.updated" || ["file_change", "todo_list"].includes(record.item.type)) {
+        events.push({ type: "tool_execution_update", toolCallId: tool.id, toolName: tool.name,
+          partialResult: { content: [{ type: "text", text: resultText(tool.text) }] } });
+      }
+    }
   } else if (record.type === "item.completed") {
     const item = record.item ?? {};
     if (item.type === "agent_message" || item.type === "reasoning") {
       const content = item.type === "reasoning" ? [{ type: "thinking", thinking: String(item.text ?? "") }] : [{ type: "text", text: String(item.text ?? "") }];
       const message = assistant(runtime, { provider: "openai", api: "codex", model: runtime.model, content });
       events.push({ type: "message_start", message }, { type: "message_end", message });
-    } else if (["command_execution", "mcp_tool_call", "web_search"].includes(item.type)) {
-      const name = item.type === "command_execution" ? "shell" : item.type === "web_search" ? "web_search" : item.tool ?? "mcp";
-      if (!runtime.toolNames.has(item.id)) startTool(runtime, events, { id: item.id, name, args: item.arguments ?? (item.command ? { command: item.command } : { query: item.query }), provider: "openai", api: "codex", model: runtime.model });
-      const failed = ["failed", "declined"].includes(item.status) || Boolean(item.error);
-      endTool(runtime, events, { id: item.id, name, isError: failed, text: item.aggregated_output ?? item.error?.message ?? item.result?.content ?? item.result ?? item.status });
-    } else if (item.type === "file_change") {
-      const id = item.id ?? `file-change-${runtime.messages.length}`;
-      const args = { changes: item.changes ?? [] };
-      startTool(runtime, events, { id, name: "file_change", args, provider: "openai", api: "codex", model: runtime.model });
-      endTool(runtime, events, { id, name: "file_change", isError: item.status === "failed", text: item.status ?? "completed" });
+    } else if (codexTool(item)) {
+      const tool = codexTool(item);
+      if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
+      endTool(runtime, events, tool);
     } else if (item.type === "error") {
       events.push({ type: "pi_error", error: String(item.message ?? "Codex reported an error") });
     }

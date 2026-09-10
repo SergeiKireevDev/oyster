@@ -102,6 +102,37 @@ test("Codex driver translates JSONL turns, tools, messages, state, resume identi
   assert.deepEqual(driver.sessionReference({ sessionId: "codex-thread" }), { backend: "codex", id: "codex-thread", storagePath: null });
 });
 
+test("Codex intermediate tools update one card and retain their final results", () => {
+  const { driver, runner } = launchDriver(createCodexDriver, { kind: "codex" });
+  const decode = (type, item) => driver.decodeLine(runner, JSON.stringify({ type, item }));
+  for (const item of [
+    { id: "cmd", type: "command_execution", command: "npm test", aggregated_output: "running" },
+    { id: "edit", type: "file_change", changes: [{ path: "a.js", kind: "update" }] },
+    { id: "plan", type: "todo_list", items: [{ text: "Test", completed: false }] },
+    { id: "delegate", type: "collab_tool_call", tool: "spawn_agent", agents_states: { worker: { status: "running" } } },
+    { id: "mcp", type: "mcp_tool_call", tool: "lookup", arguments: { q: "test" }, result: { content: [{ type: "text", text: "partial" }] } },
+    { id: "web", type: "web_search", query: "test" },
+  ]) {
+    const started = decode("item.started", item);
+    assert.equal(started.filter((e) => e.type === "tool_execution_start").length, 1);
+    assert.equal(decode("item.started", item).filter((e) => e.type === "tool_execution_start").length, 0);
+    const updated = decode("item.updated", item);
+    assert.deepEqual(updated.map((e) => e.type), ["tool_execution_update"]);
+    assert.equal(updated[0].toolCallId, item.id);
+    assert.equal(updated[0].partialResult.content[0].type, "text");
+    const completed = decode("item.completed", { ...item, status: "completed" });
+    assert.deepEqual(completed.map((e) => e.type), ["tool_execution_end", "message_end"]);
+    if (item.type === "todo_list") assert.equal(completed[1].message.content[0].text, "[ ] Test");
+    if (item.type === "file_change") assert.match(completed[1].message.content[0].text, /a.js/);
+  }
+  const missingStart = decode("item.updated", { id: "late", type: "command_execution", command: "ls", aggregated_output: "a.js" });
+  assert.equal(missingStart.filter((e) => e.type === "tool_execution_start").length, 1);
+  assert.equal(missingStart.at(-1).partialResult.content[0].text, "a.js");
+  const failed = decode("item.completed", { id: "late", type: "command_execution", status: "failed", error: { message: "oops" } });
+  assert.equal(failed[0].isError, true);
+  assert.deepEqual(decode("item.updated", { type: "unknown", id: "ignored" }), []);
+});
+
 test("Gemini CLI driver accumulates stream deltas and translates tool results", async () => {
   const { driver, runner, launch } = launchDriver(createGeminiDriver, { kind: "gemini" });
   const emitted = [];
