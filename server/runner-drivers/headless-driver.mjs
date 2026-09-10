@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createCodexSessionModelReader } from "./codex-session-model.mjs";
 import { spawn } from "node:child_process";
 import { antigravityEvents } from "./antigravity-events.mjs";
 import { redactChildOutput } from "./secret-output.mjs";
@@ -313,6 +316,10 @@ export function createHeadlessDriver({
         runtime.availableModels = [];
       }
       runtime.provider = nextProvider;
+      if (kind === "codex" && runtime.initialized && !runtime.model) {
+        const home = bridgeOptions.codexHome || env.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), ".codex");
+        runtime.model = createCodexSessionModelReader(home, runtime.sessionId)();
+      }
       const bridgeConfig = { ...(kind === "codex" && runtime.initialized ? { resumeSessionId: runtime.sessionId } : {}), kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions, ...(route ? { provider: route.provider } : {}) };
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
       const childProcess = spawnImpl(globalThis.process.execPath, [BRIDGE], { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });

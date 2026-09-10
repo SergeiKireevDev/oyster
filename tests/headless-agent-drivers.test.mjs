@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -172,4 +175,21 @@ test("Codex reports the resolved session model in state and assistant messages",
   driver.sendCommand(runner, launch.child, { type: "set_model", provider: "openai", modelId: "alias" });
   const resolved = driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.session_model", model: "resolved-model" }));
   assert.deepEqual(resolved[0].data.model, { provider: "openai", id: "resolved-model" });
+});
+
+
+test("Codex initial get_state includes the saved model before bridge stdout arrives", async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "codex-initial-state-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(join(home, "sessions"));
+  writeFileSync(join(home, "sessions", "rollout-date-saved-thread.jsonl"), '{"type":"turn_context","payload":{"model":"saved-model"}}\n');
+  const child = fakeProcess();
+  const driver = createCodexDriver({ bin: "/opt/codex", bridgeOptions: { codexHome: home }, spawnImpl: () => child });
+  const emitted = [];
+  const runner = { sessionRef: { backend: "codex", id: "saved-thread" }, driverEmit: (event) => emitted.push(event) };
+  driver.launch({ runner, cwd: home });
+  driver.sendCommand(runner, child, { type: "get_state", id: "initial" });
+  await tick();
+  assert.deepEqual(emitted[0].data.model, { provider: "openai", id: "saved-model" });
+  assert.equal(child.stdin.read(), null);
 });
