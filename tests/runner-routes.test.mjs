@@ -553,3 +553,29 @@ test("empty runner deletion refuses live, busy, or saved sessions", async () => 
     assert.equal(state.runners.has(runner.id), true);
   }
 });
+
+
+test("empty runner deletion permits stale identities only after catalog confirms absence", async () => {
+  for (const found of [null, { id: "saved" }]) {
+    const { runner, state, dependencies } = setup();
+    runner.sessionRef = { backend: "sqlite", id: "saved", storagePath: "/agent/sessions.sqlite" };
+    runner.sessionId = "saved";
+    const lookedUp = [];
+    state.sessionCatalog = { backend: "sqlite", findById: async (id) => { lookedUp.push(id); return found; } };
+    const route = createRunnerRoutes(dependencies)["DELETE /runner/empty"];
+    const res = response();
+    await route({}, res, new URL(`http://localhost/runner/empty?id=${runner.id}`));
+    assert.deepEqual(lookedUp, ["saved"]);
+    assert.equal(res.status, found ? 409 : 200);
+    assert.equal(state.runners.has(runner.id), Boolean(found));
+  }
+});
+
+test("empty runner deletion preserves stale identities when catalog lookup fails", async () => {
+  const { runner, state, dependencies } = setup();
+  runner.sessionRef = { backend: "sqlite", id: "saved" };
+  state.sessionCatalog = { backend: "sqlite", findById: async () => { throw new Error("database unavailable"); } };
+  const route = createRunnerRoutes(dependencies)["DELETE /runner/empty"];
+  await assert.rejects(route({}, response(), new URL(`http://localhost/runner/empty?id=${runner.id}`)), /database unavailable/);
+  assert.equal(state.runners.has(runner.id), true);
+});
