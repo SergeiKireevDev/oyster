@@ -219,10 +219,10 @@ test("canonical transcript controller reads dormant sessions without calling pi"
   const calls = [];
   const controller = createCanonicalTranscriptController({
     rpc: async () => { throw new Error("dormant runner must not receive RPC"); },
-    applyState: () => calls.push("state"),
+    applyState: (state) => { assert.deepEqual(state.model, { provider: "openai", id: "saved-codex-model" }); calls.push("state"); },
     fetchImpl: async (url) => {
       calls.push(["fetch", url]);
-      return { ok: true, json: async () => ({ messages: [{ role: "user", content: "saved" }] }) };
+      return { ok: true, json: async () => ({ state: { model: { provider: "openai", id: "saved-codex-model" } }, messages: [{ role: "user", content: "saved" }] }) };
     },
     sessionFileQuery: (identity) => `key=${identity}`,
     getSessionIdentity: () => "ps1_saved",

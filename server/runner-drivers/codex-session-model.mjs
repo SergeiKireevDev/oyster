@@ -18,11 +18,12 @@ function findRollout(directory, sessionId) {
 
 // exec --json omits the model; Codex records the resolved model in each
 // rollout's turn_context. Read only appended bytes, including partial writes.
-export function createCodexSessionModelReader(home, sessionId) {
+export function createCodexSessionStateReader(home, sessionId) {
   let path = null;
   let offset = 0;
   let pending = "";
   let model = null;
+  let provider = "openai";
   let decoder = new StringDecoder("utf8");
   return () => {
     if (typeof sessionId !== "string" || !/^[a-zA-Z0-9-]+$/.test(sessionId)) return null;
@@ -43,12 +44,18 @@ export function createCodexSessionModelReader(home, sessionId) {
           pending = pending.slice(end + 1);
           try {
             const record = JSON.parse(line);
+            if (record.type === "session_meta" && typeof record.payload?.model_provider === "string" && record.payload.model_provider.trim()) provider = record.payload.model_provider;
             if (record.type === "turn_context" && typeof record.payload?.model === "string" && record.payload.model.trim()) model = record.payload.model;
           } catch { /* Ignore malformed records without losing later context. */ }
         }
       }
     } catch { /* Metadata may not exist yet; never interrupt the turn. */ }
     finally { if (fd !== undefined) closeSync(fd); }
-    return model;
+    return model ? { model: { provider, id: model } } : null;
   };
+}
+
+export function createCodexSessionModelReader(home, sessionId) {
+  const readState = createCodexSessionStateReader(home, sessionId);
+  return () => readState()?.model.id ?? null;
 }

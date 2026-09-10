@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { createCodexSessionStateReader } from "../../runner-drivers/codex-session-model.mjs";
 import { unlinkSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -448,6 +450,13 @@ export function createSessionRoutes({
       }
       try {
         const transcript = await catalog.messages(identity);
+        const saved = transcript.sessionId ? await catalog.findById?.(transcript.sessionId) : null;
+        if (saved?.harness === "codex") {
+          const home = state.config?.CODEX_HOME || process.env.CODEX_HOME || resolve(homedir(), ".codex");
+          const nativeState = createCodexSessionStateReader(home, transcript.sessionId)();
+          const lastAssistant = transcript.messages?.findLast((message) => message.role === "assistant" && message.model && message.model !== "openai");
+          transcript.state = nativeState ?? { model: lastAssistant ? { provider: lastAssistant.provider || "openai", id: lastAssistant.model } : null };
+        }
         if (limit === null) { json(res, 200, transcript); return; }
         const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
         const end = before === null ? messages.length : Math.min(before, messages.length);

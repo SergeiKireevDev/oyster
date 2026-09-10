@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSessionRoutes } from "../server/http/routes/sessionRoutes.mjs";
@@ -208,4 +211,29 @@ test("SQLite routes reject file identities and unsupported mutation before side 
   const deletion = response();
   await routes["DELETE /session"]({}, deletion, new URL(`http://localhost/session?key=${key}`));
   assert.equal(deletion.status, 409);
+});
+
+
+test("opening a saved Codex transcript includes native model state without starting a runner", async (t) => {
+  const { routes, codec, sessions, state, lifecycle } = setup();
+  const home = mkdtempSync(join(tmpdir(), "codex-open-state-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  state.config = { CODEX_HOME: home };
+  sessions[0].harness = "codex";
+  state.runners.get("r1").proc = null;
+  mkdirSync(join(home, "sessions"));
+  writeFileSync(join(home, "sessions", "rollout-date-root.jsonl"), [
+    { type: "session_meta", payload: { model_provider: "openrouter" } },
+    { type: "turn_context", payload: { model: "old-model" } },
+    { type: "turn_context", payload: { model: "actual-model" } },
+  ].map((record) => JSON.stringify(record) + "\n").join(""));
+  const key = codec.serialize({ backend: "sqlite", id: "root", storagePath: "/agent/sessions.sqlite" });
+  for (const pagination of ["", "&limit=1"]) {
+    const res = response();
+    await routes["GET /session-messages"]({}, res, new URL(`http://localhost/session-messages?key=${encodeURIComponent(key)}${pagination}`));
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.state.model, { provider: "openrouter", id: "actual-model" });
+    assert.equal(state.runners.get("r1").proc, null);
+    assert.deepEqual(lifecycle, []);
+  }
 });

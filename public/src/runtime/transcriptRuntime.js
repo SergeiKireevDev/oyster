@@ -319,7 +319,7 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
           sessionName: runner.sessionName ?? null,
           messageCount: messages.length,
           pendingMessageCount: 0,
-          model: null,
+          model: durable.state?.model ?? null,
           isStreaming: false,
           isCompacting: false,
         });
