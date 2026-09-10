@@ -159,3 +159,17 @@ test("headless bridge health probes produce a native stdout round trip and exits
   driver.decodeLine(runner, '{"type":"oyster.bridge.turn_start"}');
   assert.deepEqual(driver.decodeLine(runner, '{"type":"oyster.bridge.turn_exit","code":1,"signal":null,"stderr":"auth failed"}').map((event) => event.type), ["pi_error", "agent_end", "agent_settled"]);
 });
+
+test("Codex reports the resolved session model in state and assistant messages", async () => {
+  const { driver, runner, launch } = launchDriver(createCodexDriver, { kind: "codex" });
+  driver.decodeLine(runner, JSON.stringify({ type: "thread.started", thread_id: "model-thread" }));
+  const state = driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.session_model", model: "configured-model" }));
+  assert.deepEqual(state[0].data.model, { provider: "openai", id: "configured-model" });
+  const answer = driver.decodeLine(runner, JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "hello" } }));
+  assert.equal(answer[0].message.model, "configured-model");
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.session_model", model: null })), []);
+  driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.models", models: [{ provider: "openai", id: "alias" }] }));
+  driver.sendCommand(runner, launch.child, { type: "set_model", provider: "openai", modelId: "alias" });
+  const resolved = driver.decodeLine(runner, JSON.stringify({ type: "oyster.bridge.session_model", model: "resolved-model" }));
+  assert.deepEqual(resolved[0].data.model, { provider: "openai", id: "resolved-model" });
+});
