@@ -139,7 +139,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     readSessionHeaderInfo,
   });
   const runnerRoutes = createRunnerRoutes({
-    state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo,
+    state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo, runnersChanged,
     sendToRunner, requestRunnerUi, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner, stopRunner }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
     runnerHarnesses: () => runnerDrivers.list(),

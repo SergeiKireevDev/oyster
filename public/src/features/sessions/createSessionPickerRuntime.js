@@ -159,7 +159,20 @@ export function createSessionPickerRuntime(deps) {
         deps.toast(`archive failed: ${error.message}`, "error");
       }
     },
-    deleteSession: deletion.deleteSession,
+    deleteSession: async (session) => {
+      const runner = deps.getRunners().find((item) => item.id === session?.id);
+      if (runner && !runner.alive && !runner.busy && !runner.sessionRef && !runner.sessionId && !runnerSessionIdentity(runner)) {
+        try {
+          await deps.removeEmptyRunner(runner.id);
+          deps.toast("empty session deleted");
+          await refreshSidebar();
+        } catch (error) {
+          deps.toast(`delete failed: ${error.message}`, "error");
+        }
+        return;
+      }
+      return deletion.deleteSession(session);
+    },
     openSearchHit: (identity, hit) => {
       resolvePicker?.(null);
       deps.openSessionAtSearchHit(identity, hit);
