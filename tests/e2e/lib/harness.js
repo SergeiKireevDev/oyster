@@ -213,6 +213,7 @@ export async function forceNewSession(page) {
     for (let attempt = 0; attempt < 3 && !(await page.locator("#sessions").isVisible()); attempt += 1) await swipe(page, "right");
   }
   await page.locator("#newSessionHere").click();
+  await page.getByRole("button", { name: "New pi session", exact: true }).click();
   // wait for the id to flip to something new (or null on a truly fresh one)
   await page.waitForFunction(
     (b) => {

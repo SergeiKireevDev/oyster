@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import SearchHitSnippet from "./SearchHitSnippet.svelte";
   import HarnessPill from "./HarnessPill.svelte";
+  import { createHarnessChooser } from "../lib/harnessChooser.js";
   import { blockingSurface } from "../lib/blockingSurface.js";
   import { appSession } from "../stores/appSession.js";
   import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
@@ -81,9 +82,14 @@
     ? settingsPreferences.getNewSessionHarness()
     : harnesses[0].id);
 
-  function chooseHarness(event) {
-    selectedHarness = event.currentTarget.value;
+  const harnessChooser = createHarnessChooser();
+  const attachHarnessChooser = harnessChooser.attach;
+  const requestHarness = harnessChooser.open;
+
+  function chooseHarness(harness) {
+    selectedHarness = harness;
     settingsPreferences.setNewSessionHarness(selectedHarness);
+    harnessChooser.choose();
   }
 
   const switchRunner = (id) => {
@@ -667,7 +673,8 @@
         class="session-sidebar-placeholder"
         title={`Add session in ${group.cwd}`}
         aria-label={`Add session in ${group.cwd}`}
-        onclick={() => createSessionInGroup(group)}
+        aria-haspopup="dialog"
+        onclick={(event) => requestHarness(event, () => createSessionInGroup(group))}
       >
         <span class="session-sidebar-placeholder-icon" aria-hidden="true">+</span>
         <span class="session-sidebar-copy">
@@ -819,7 +826,8 @@
       title={online ? `New session in ${workspace.workspaceName}` : `${workspace.workspaceName} is ${statusLabel(status).toLowerCase()}`}
       aria-label={`New session in ${workspace.workspaceName}`}
       disabled={!online}
-      onclick={() => createSessionInFolder({ id: workspace.workspaceId, name: workspace.workspaceName })}
+      aria-haspopup="dialog"
+      onclick={(event) => requestHarness(event, () => createSessionInFolder({ id: workspace.workspaceId, name: workspace.workspaceName }))}
     >+</button>
   </div>
 {/snippet}
@@ -827,6 +835,13 @@
 <aside id="sessions" aria-label="Sessions" use:blockingSurface={{ drawer: true, media: "(max-width: 960px)", onClose: closeDrawer }}>
   <button class="chip drawer-close sessions-close" type="button" onclick={closeDrawer} aria-label="Close sessions">← Back to chat</button>
   <div class="side-head">Sessions</div>
+  <div use:attachHarnessChooser class="session-harness-popover" popover="auto" role="dialog" aria-label="Choose session harness">
+    {#each harnesses as harness (harness.id)}
+      <button type="button" title={`New ${harness.label} session`} aria-label={`New ${harness.label} session`} onclick={() => chooseHarness(harness.id)}>
+        <HarnessPill harness={harness.id} />
+      </button>
+    {/each}
+  </div>
   <form role="search" onsubmit={(event) => {
     event.preventDefault();
     runSearch();
@@ -842,21 +857,14 @@
     />
   </form>
   {#if !hubMode && !searching}
-    <label class="session-sidebar-harness">
-      <span>Harness</span>
-      <select aria-label="New session harness" value={selectedHarness} onchange={chooseHarness}>
-        {#each harnesses as harness (harness.id)}
-          <option value={harness.id}>{harness.label}</option>
-        {/each}
-      </select>
-    </label>
     <div class="session-sidebar-new">
       <button
         type="button"
         class="session-sidebar-create"
         id="newSessionHere"
         disabled={!currentCwd}
-        onclick={() => currentCwd && createSessionInCwd(currentCwd)}
+        aria-haspopup="dialog"
+        onclick={(event) => requestHarness(event, () => currentCwd && createSessionInCwd(currentCwd))}
       >
         <span class="session-sidebar-create-icon" aria-hidden="true">+</span>
         <span class="session-sidebar-create-copy">
@@ -870,7 +878,8 @@
         id="newSessionFolder"
         title="Choose another folder"
         aria-label="Choose another folder for a new session"
-        onclick={() => createSessionInFolder()}
+        aria-haspopup="dialog"
+        onclick={(event) => requestHarness(event, () => createSessionInFolder())}
       ><span class="session-sidebar-create-chevron" aria-hidden="true"></span></button>
     </div>
   {/if}
@@ -1056,27 +1065,31 @@
   }
   .session-sidebar-search[aria-busy="true"] { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 
-  .session-sidebar-harness {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 8px;
-    padding: 0 2px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 650;
+  .session-harness-popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 6px;
+    max-width: calc(100vw - 16px);
+    border: 0;
+    background: transparent;
+    overflow: visible;
   }
-  .session-sidebar-harness select {
-    min-width: 0;
-    min-height: 34px;
-    padding: 5px 28px 5px 9px;
+  .session-harness-popover:popover-open { display: flex; flex-wrap: wrap; gap: 8px; }
+  .session-harness-popover button {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--border);
-    border-radius: 9px;
+    border-radius: 50%;
     background: var(--panel-2);
     color: var(--text);
-    font: inherit;
+    box-shadow: 0 4px 16px #0004;
+    cursor: pointer;
   }
-  .session-sidebar-harness select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+  .session-harness-popover button:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--panel-2)); }
+  .session-harness-popover button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .session-sidebar-new { display: flex; width: 100%; filter: drop-shadow(0 7px 18px color-mix(in srgb, var(--bg) 35%, transparent)); }
   .session-sidebar-create,
   .session-sidebar-create-folder {

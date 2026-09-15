@@ -126,6 +126,7 @@ test("Hub mobile session creation starts from its workspace card", async ({ page
   await expect(newSession).toHaveAttribute("aria-label", "New session in Local E2E");
 
   await newSession.click();
+  await page.getByRole("button", { name: "New pi session", exact: true }).click();
   await expect(page.locator("#mTitle")).toHaveText("New session in Local E2E");
   await expect(page.locator("#mBody .m-path").first()).toHaveText("/workspace");
 

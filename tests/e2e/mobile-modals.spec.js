@@ -73,6 +73,7 @@ test("every modal keeps all buttons entirely visible on mobile", async ({ page }
       open: async () => {
         await page.evaluate(() => document.getElementById("sessions")?.classList.add("open"));
         await page.locator("#newSessionFolder").click();
+        await page.getByRole("button", { name: "New pi session", exact: true }).click();
         await expect(page.locator("#mTitle")).toHaveText("New session in folder");
       },
     },

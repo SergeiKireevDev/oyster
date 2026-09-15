@@ -60,6 +60,7 @@ test("mobile navigation works without gestures and nested dialogs restore drawer
   await expect(page.locator("#chatcol")).toHaveAttribute("inert", "");
   for (let i = 0; i < 16; i++) { await page.keyboard.press("Tab"); await expectFocusInside(page, "#sessions"); }
   await page.locator("#newSessionFolder").click();
+  await page.getByRole("button", { name: "New pi session", exact: true }).click();
   const folder = page.getByRole("dialog", { name: "New session in folder", exact: true });
   await expect(folder).toBeVisible();
   for (let i = 0; i < 10; i++) { await page.keyboard.press("Tab"); await expectFocusInside(page, "#modal"); }
@@ -134,6 +135,7 @@ test("both themes retain contrast and Settings owns its actual grid layout", asy
 test("compact navigation does not push notification toasts over the composer", async ({ page }) => {
   await login(page);
   await page.locator("#newSessionHere").click();
+  await page.getByRole("button", { name: "New pi session", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   const toast = page.locator(".toast", { hasText: "new pi session" });
   await expect(toast).toBeVisible();
