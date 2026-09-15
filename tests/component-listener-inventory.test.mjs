@@ -56,6 +56,8 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/PinnedWidgetGrid.svelte:<span class={`pinned-widget-icon kind-${widget.kind}`} aria-hidden=\"true\" use:monitorPreview={widget}>",
     "components/SessionPickerModal.svelte:use:focusOnMount",
     'components/SessionSidebar.svelte:<aside id="sessions" aria-label="Sessions" use:blockingSurface={{ drawer: true, media: "(max-width: 960px)", onClose: closeDrawer }}>',
+    // Native popover positioning/focus is covered by harness-chooser and sessions E2E tests.
+    'components/SessionSidebar.svelte:<div use:attachHarnessChooser class="session-harness-popover" popover="auto" role="dialog" aria-label="Choose session harness">',
     "components/Tutorial.svelte:use:tutorialPresentation={{",
     "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={empty} data-role={role} bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<details class=\"block tool interface-message\" class:ckpt-frozen={restore !== null} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",

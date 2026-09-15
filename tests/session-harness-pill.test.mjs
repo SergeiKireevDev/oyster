@@ -11,7 +11,7 @@ test("session lists render an accessible harness pill for saved, live, loop, and
   const pill = component("HarnessPill.svelte");
 
   assert.match(sidebar, /function sessionHarness\(session, runner\)[\s\S]*?runner\?\.harness \|\| session\?\.harness \|\| "pi"/);
-  assert.equal((sidebar.match(/<HarnessPill /g) ?? []).length, 3);
+  assert.equal((sidebar.match(/<HarnessPill /g) ?? []).length, 4);
   assert.equal((modal.match(/<HarnessPill /g) ?? []).length, 3);
   assert.match(pill, /data-harness=\{harnessId\}/);
   assert.match(pill, /aria-label=\{`Harness: \$\{label\}`\}/);

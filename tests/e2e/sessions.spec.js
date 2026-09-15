@@ -28,7 +28,6 @@ const tag = (base) => `${base}-${RUN}`;
 async function newSession(page, { harness = null } = {}) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
-  if (harness) await page.getByRole("combobox", { name: "New session harness" }).selectOption(harness);
   const opened = page.waitForResponse((response) =>
     response.request().method() === "POST" && new URL(response.url()).pathname === "/open-session"
   );
@@ -37,6 +36,7 @@ async function newSession(page, { harness = null } = {}) {
     return url.pathname === "/events" && url.searchParams.get("replay") === "0";
   });
   await page.locator("#newSessionHere").click();
+  await page.locator(`.session-harness-popover button:has([data-harness="${harness || "pi"}"])`).click();
   const [response, eventRequest] = await Promise.all([opened, connected]);
   expect(response.ok()).toBe(true);
   const { runner } = await response.json();
@@ -58,9 +58,16 @@ async function newSession(page, { harness = null } = {}) {
 test("new-session harness selector starts a Claude Code runner", async ({ page }) => {
   await login(page);
   await openSessionSidebar(page);
-  const harnessSelector = page.getByRole("combobox", { name: "New session harness" });
-  for (const label of ["Claude Code", "Codex", "Amp"]) await expect(harnessSelector).toContainText(label);
-  await expect(harnessSelector.locator('option[value="gemini"]')).toHaveCount(0);
+  await page.locator("#newSessionHere").click();
+  const harnessSelector = page.getByRole("dialog", { name: "Choose session harness" });
+  for (const label of ["Claude Code", "Codex", "Amp"]) await expect(harnessSelector.getByRole("button", { name: `New ${label} session` })).toBeVisible();
+  await expect(harnessSelector.locator('[data-harness="gemini"]')).toHaveCount(0);
+  await page.locator("#newSessionHere").click();
+  await expect(harnessSelector).not.toBeVisible();
+  await page.locator("#newSessionHere").click();
+  await expect(harnessSelector).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(harnessSelector).not.toBeVisible();
   const runner = await newSession(page, { harness: "claude-code" });
   expect(runner.harness).toBe("claude-code");
   await expect.poll(async () => (await api("GET", "/runners")).json.runners.find((candidate) => candidate.id === runner.id)?.harness).toBe("claude-code");
@@ -128,6 +135,7 @@ async function newSessionInFolder(page, folderName) {
   const mobile = await page.evaluate(() => innerWidth <= 760);
   await openSessionSidebar(page, mobile);
   await page.locator("#newSessionFolder").click();
+  await page.getByRole("button", { name: "New pi session", exact: true }).click();
   await expect(page.locator("#mTitle")).toHaveText("New session in folder");
   await page.locator("#mBody .m-option.dir", { hasText: folderName }).click();
   await expect(page.locator("#mBody .m-path", { hasText: `/workspace/${folderName}` }).first()).toHaveText(`/workspace/${folderName}`);

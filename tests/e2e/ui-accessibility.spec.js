@@ -10,9 +10,10 @@ test("folder intent renders an accessible dialog with trapped and restored focus
 
   const opener = page.locator("#newSessionFolder");
   await expect(opener).toBeVisible();
+  await opener.click();
   await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === "/browse" && response.ok()),
-    opener.click(),
+    page.getByRole("button", { name: "New pi session", exact: true }).click(),
   ]);
 
   const dialog = page.getByRole("dialog", { name: "New session in folder" });

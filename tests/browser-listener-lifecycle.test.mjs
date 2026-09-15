@@ -25,6 +25,7 @@ test("every imperative browser or element listener module includes a cleanup pat
     "lib/blockingSurface.js",
     "lib/commandController.js",
     "lib/fileExplorerController.js",
+    "lib/harnessChooser.js",
     "lib/modalDomAdapters.js",
     "lib/modalHistoryController.js",
     "lib/tutorialDomAdapters.js",
