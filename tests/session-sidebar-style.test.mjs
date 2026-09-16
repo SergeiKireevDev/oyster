@@ -58,6 +58,7 @@ test("session sidebar retains explicit state and control semantics", () => {
   assert.match(source, /requestHarness\(event, \(\) => createSessionInGroup\(group\)\)/);
   assert.match(source, /popover="auto" role="dialog" aria-label="Choose session harness"/);
   assert.doesNotMatch(source, /<select aria-label="New session harness"/);
+  assert.match(source, /\.session-harness-popover\s*\{[^}]*border-radius: 18px;[^}]*background: color-mix\([^;]*transparent\);[^}]*backdrop-filter: blur\(8px\);/, "harness choices share a translucent, softly blurred container");
   assert.match(source, /<span class="session-sidebar-name">Add session<\/span>/);
   assert.match(source, /const createSessionInGroup/);
   assert.match(source, /function isCurrentCwd\(group\)[\s\S]*?group\.environmentId[\s\S]*?currentRunner\.environmentId[\s\S]*?group\.workspaceId[\s\S]*?currentRunner\.workspaceId/, "identical paths in different hub workspaces must retain their creation actions");

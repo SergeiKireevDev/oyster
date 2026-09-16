@@ -1069,10 +1069,14 @@
     position: fixed;
     inset: auto;
     margin: 0;
-    padding: 6px;
+    padding: 8px;
     max-width: calc(100vw - 16px);
-    border: 0;
-    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--panel-2) 78%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px #0003;
     overflow: visible;
   }
   .session-harness-popover:popover-open { display: flex; flex-wrap: wrap; gap: 8px; }
