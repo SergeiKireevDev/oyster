@@ -416,11 +416,9 @@ export function sessionTree(path) {
   };
 }
 
-/** Ordered user/assistant message entries of a session's ACTIVE branch
- *  (the chain from the last entry up to the root). These entry ids are the
- *  stable anchors used by message permalinks: the client zips them against
- *  its rendered transcript. */
-export function sessionEntries(path) {
+/** Read the active branch in root-to-leaf order, tolerating missing parents
+ *  and stopping at repeated ids. Forking has a different cycle-error policy. */
+function readActiveBranch(path) {
   const { header, entries, byId } = parseSessionFile(path);
   let leafId = null;
   for (const e of entries) if (typeof e.id === "string" && e.id) leafId = e.id;
@@ -431,6 +429,13 @@ export function sessionEntries(path) {
     chain.push(cur);
   }
   chain.reverse();
+  return { header, leafId, chain };
+}
+
+/** Ordered user/assistant message entries of a session's ACTIVE branch.
+ *  These entry ids are the stable anchors used by message permalinks. */
+export function sessionEntries(path) {
+  const { header, leafId, chain } = readActiveBranch(path);
   const out = [];
   for (const e of chain) {
     if (e.type !== "message") continue;
@@ -470,16 +475,7 @@ export function transcriptMessage(entry) {
 }
 
 export function sessionMessages(path) {
-  const { header, entries, byId } = parseSessionFile(path);
-  let leafId = null;
-  for (const e of entries) if (typeof e.id === "string" && e.id) leafId = e.id;
-  const chain = [];
-  const seen = new Set();
-  for (let cur = leafId ? byId.get(leafId) : null; cur && !seen.has(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : null) {
-    seen.add(cur.id);
-    chain.push(cur);
-  }
-  chain.reverse();
+  const { header, chain } = readActiveBranch(path);
   return {
     sessionId: header?.id ?? null,
     messages: chain.map(transcriptMessage).filter(Boolean),
