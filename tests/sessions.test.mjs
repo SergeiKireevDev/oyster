@@ -209,6 +209,41 @@ test("active-branch readers terminate on corrupt parent cycles", () => {
   assert.throws(() => forkSessionAt(path, "y"), /cycle detected/);
 });
 
+test("active-branch readers preserve empty and missing-parent behavior", () => {
+  const empty = writeSession("empty-branch.jsonl", []);
+  assert.deepEqual(sessionEntries(empty), { sessionId: null, leafId: null, entries: [] });
+  assert.deepEqual(sessionMessages(empty), { sessionId: null, messages: [] });
+  const path = writeSession("missing-parent.jsonl", [
+    { type: "session", id: "orphan-session" },
+    { type: "message", id: "orphan", parentId: "missing", message: { role: "user", content: "orphan" } },
+    { type: "message", id: "", message: { role: "user", content: "ignore empty id" } },
+    { type: "message", id: 42, message: { role: "user", content: "ignore numeric id" } },
+  ]);
+  assert.equal(sessionEntries(path).leafId, "orphan");
+  assert.deepEqual(sessionEntries(path).entries.map((e) => e.id), ["orphan"]);
+  assert.deepEqual(sessionMessages(path).messages.map((m) => m.content), ["orphan"]);
+});
+
+test("active-branch readers keep their distinct permalink and transcript projections", () => {
+  const path = writeSession("branch-projections.jsonl", [
+    { type: "session", id: "projections" },
+    { type: "message", id: "u", parentId: null, message: { role: "user", content: "x".repeat(250) } },
+    { type: "message", id: "t", parentId: "u", message: { role: "toolResult", content: "tool output" } },
+    { type: "compaction", id: "c", parentId: "t", timestamp: "2026-01-01T00:00:00Z", summary: "summary", tokensBefore: 42 },
+    { type: "message", id: "a", parentId: "c", message: { role: "assistant", content: [{ type: "image", data: "base64", mimeType: "image/png" }] } },
+  ]);
+  const entries = sessionEntries(path);
+  assert.equal(entries.leafId, "a");
+  assert.deepEqual(entries.entries.map((e) => e.id), ["u", "a"]);
+  assert.equal(entries.entries[0].text.length, 200);
+  const messages = sessionMessages(path).messages;
+  assert.deepEqual(messages.map((m) => m.role), ["user", "toolResult", "compactionSummary", "assistant"]);
+  assert.equal(messages[0].content.length, 250);
+  assert.equal(messages[2].summary, "summary");
+  assert.deepEqual(messages[3].content, [{ type: "image", mimeType: "image/png" }]);
+  assert.equal(parseSessionFile(path).byId.get("a").message.content[0].data, "base64", "projection must not mutate the cached source");
+});
+
 // ---------------------------------------------------------------- forking
 
 test("forkSessionAt copies the chain, sets lineage, keeps entry ids", () => {

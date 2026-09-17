@@ -474,6 +474,32 @@ export async function closeAllTunnels(state) {
   for (const row of await hublotRepository(state).list({ excludeStatus: "closed" })) await closeTunnel(state, row.id);
 }
 
+/** Stop verified targets with bounded TERM/KILL escalation. Callers retain
+ *  ownership of target selection, persistence, and the policy for survivors. */
+export async function stopVerifiedProcesses(targets, {
+  termTimeoutMs, killTimeoutMs, pollIntervalMs, verifyIdentity, signalProcess, clock, sleep,
+}) {
+  const live = () => targets.filter((processRow) => verifyIdentity(processRow));
+  const signalAll = (signal) => {
+    for (const processRow of live()) {
+      try { signalProcess(processRow.pid, signal); } catch (error) { if (error?.code !== "ESRCH") throw error; }
+    }
+  };
+  const awaitExit = async (timeoutMs) => {
+    const deadline = clock() + timeoutMs;
+    while (live().length && clock() < deadline) await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - clock())));
+  };
+
+  signalAll("SIGTERM");
+  await awaitExit(termTimeoutMs);
+  const escalated = live().length;
+  if (escalated) {
+    signalAll("SIGKILL");
+    await awaitExit(killTimeoutMs);
+  }
+  return { remaining: live(), escalated };
+}
+
 /** Graceful server shutdown: stop owned processes and retire ephemeral quick tunnels. */
 export async function shutdownHublots(state, {
   termTimeoutMs = 3_000,
@@ -501,25 +527,9 @@ export async function shutdownHublots(state, {
     }
   }
 
-  const live = () => targets.filter((processRow) => verifyIdentity(processRow));
-  const signalAll = (signal) => {
-    for (const processRow of live()) {
-      try { signalProcess(processRow.pid, signal); } catch (error) { if (error?.code !== "ESRCH") throw error; }
-    }
-  };
-  const awaitExit = async (timeoutMs) => {
-    const deadline = clock() + timeoutMs;
-    while (live().length && clock() < deadline) await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - clock())));
-  };
-
-  signalAll("SIGTERM");
-  await awaitExit(termTimeoutMs);
-  const escalated = live().length;
-  if (escalated) {
-    signalAll("SIGKILL");
-    await awaitExit(killTimeoutMs);
-  }
-  const remaining = live();
+  const { remaining, escalated } = await stopVerifiedProcesses(targets, {
+    termTimeoutMs, killTimeoutMs, pollIntervalMs, verifyIdentity, signalProcess, clock, sleep,
+  });
   const stoppedAt = new Date().toISOString();
   for (const processRow of targets) {
     if (remaining.some((entry) => entry.id === processRow.id)) continue;
@@ -558,20 +568,9 @@ export async function closeSessionHublots(state, sessionId, {
       if (processRow.role === "tunnel" && !processRow.ended_at && ["running", "starting"].includes(processRow.status) && verifyIdentity(processRow)) targets.push(processRow);
     }
   }
-  const live = () => targets.filter((processRow) => verifyIdentity(processRow));
-  const signalAll = (signal) => {
-    for (const processRow of live()) {
-      try { signalProcess(processRow.pid, signal); } catch (error) { if (error?.code !== "ESRCH") throw error; }
-    }
-  };
-  const awaitExit = async (timeoutMs) => {
-    const deadline = clock() + timeoutMs;
-    while (live().length && clock() < deadline) await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - clock())));
-  };
-  signalAll("SIGTERM");
-  await awaitExit(termTimeoutMs);
-  if (live().length) { signalAll("SIGKILL"); await awaitExit(killTimeoutMs); }
-  const remaining = live();
+  const { remaining } = await stopVerifiedProcesses(targets, {
+    termTimeoutMs, killTimeoutMs, pollIntervalMs, verifyIdentity, signalProcess, clock, sleep,
+  });
   if (remaining.length) throw new Error(`could not stop ${remaining.length} hublot process(es) for session ${sessionId}`);
   const stoppedAt = new Date().toISOString();
   for (const processRow of targets) {

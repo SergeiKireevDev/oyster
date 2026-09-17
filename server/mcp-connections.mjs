@@ -5,6 +5,13 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 export const RUNNER_MCP = Symbol.for("oyster.runner.mcp");
 
+/** Construct a transport without owning its client's connection or lifetime. */
+export function createMcpTransport(config, cwd) {
+  return config.type === "stdio"
+    ? new StdioClientTransport({ command: config.command, args: config.args, env: { ...process.env, ...config.env }, cwd, stderr: "ignore" })
+    : new (config.type === "sse" ? SSEClientTransport : StreamableHTTPClientTransport)(new URL(config.url), { requestInit: { headers: config.headers } });
+}
+
 /** Probe unsaved settings without invoking tools or retaining a connection. */
 export async function scanMcpTools(config, { signal, cwd = process.cwd() } = {}) {
   const client = new Client({ name: "oyster-credentials", version: "1.0.0" });
@@ -14,9 +21,7 @@ export async function scanMcpTools(config, { signal, cwd = process.cwd() } = {})
   combined.addEventListener("abort", close, { once: true });
   try {
     combined.throwIfAborted();
-    const transport = config.type === "stdio"
-      ? new StdioClientTransport({ command: config.command, args: config.args, env: { ...process.env, ...config.env }, cwd, stderr: "ignore" })
-      : new (config.type === "sse" ? SSEClientTransport : StreamableHTTPClientTransport)(new URL(config.url), { requestInit: { headers: config.headers } });
+    const transport = createMcpTransport(config, cwd);
     await client.connect(transport, { signal: combined, timeout: 10000 });
     const tools = [];
     let cursor;
@@ -52,9 +57,7 @@ export function createMcpConnections(servers, cwd) {
         const client = new Client({ name: "oyster", version: "1.0.0" });
         clients.add(client);
         try {
-          const transport = config.type === "stdio"
-            ? new StdioClientTransport({ command: config.command, args: config.args, env: { ...process.env, ...config.env }, cwd, stderr: "ignore" })
-            : new (config.type === "sse" ? SSEClientTransport : StreamableHTTPClientTransport)(new URL(config.url), { requestInit: { headers: config.headers } });
+          const transport = createMcpTransport(config, cwd);
           if (closed) return [];
           await client.connect(transport, { timeout: 10000 });
           const tools = [];
