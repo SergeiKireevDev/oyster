@@ -15,13 +15,8 @@
 const DEFAULT_MARGIN_MS = 30 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-}
+import { errorMessage } from "./errors.mjs";
+import { assertFunction as requireFunction } from "./validation.mjs";
 
 function requirePositive(value, name) {
   if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${name} must be a positive number`);

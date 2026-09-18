@@ -8,17 +8,9 @@ const MAX_PARENT_SESSION_ID_BYTES = 512;
 const MAX_SUBAGENT_NAME_BYTES = 256;
 const MAX_UI_REQUEST_TEXT_BYTES = 4096;
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function disableCaching(res) {
-  res.setHeader?.("cache-control", "no-store");
-}
-
-function isJsonObject(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
+import { errorMessage } from "../../errors.mjs";
+import { disableCaching } from "../createRequestContext.mjs";
+import { isNonArrayObject as isJsonObject } from "../../valuePredicates.mjs";
 
 /** Build runner process, SSE, and RPC routes from stable-state operations. */
 export function createRunnerRoutes({

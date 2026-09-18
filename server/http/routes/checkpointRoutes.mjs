@@ -7,9 +7,7 @@ function optionalMetadata(value) {
   return value ? String(value).slice(0, MAX_METADATA_LENGTH) : null;
 }
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
+import { errorMessage } from "../../errors.mjs";
 
 function workdirLockKey(dir) {
   if (typeof dir !== "string" || !dir) return null;

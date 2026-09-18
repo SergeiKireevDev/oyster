@@ -1,7 +1,4 @@
-function finite(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : 0;
-}
+import { nonNegativeUsageNumber as finite } from "./usageValues.mjs";
 
 export function recordTimestamp(value, fallback = Date.now()) {
   const parsed = Date.parse(value ?? "");

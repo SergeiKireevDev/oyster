@@ -6,10 +6,7 @@ import { join, resolve } from "node:path";
 export const LEGACY_ROUTINES_DIR = join(homedir(), ".pi", "routines");
 export const LEGACY_ROUTINE_BINDINGS_PATH = join(LEGACY_ROUTINES_DIR, "bindings.json");
 
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
+import { requireFunction } from "../validation.mjs";
 
 function callHook(hook, value, name) {
   const result = hook(value);

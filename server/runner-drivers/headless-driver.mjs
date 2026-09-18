@@ -11,20 +11,14 @@ import { validateRunnerDriver } from "./contract.mjs";
 const BRIDGE = fileURLToPath(new URL("./headless-bridge.mjs", import.meta.url));
 const DEFAULT_UI_URL = "http://127.0.0.1:8080";
 
-function nonEmpty(value, name) {
-  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
-  return value.trim();
-}
+import { requireTrimmedNonEmptyString as nonEmpty } from "../validation.mjs";
 
 function timestamp(value) {
   const parsed = Date.parse(value ?? "");
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-function finite(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : 0;
-}
+import { nonNegativeUsageNumber as finite } from "./usageValues.mjs";
 
 function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };

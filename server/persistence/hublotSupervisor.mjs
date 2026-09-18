@@ -2,17 +2,9 @@ import { verifyPersistedProcessIdentity } from "./processIdentity.mjs";
 
 const EMPTY_REPORT = Object.freeze({ skipped: true, checked: 0, interrupted: 0 });
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function logError(logger, message) {
-  try { logger.error(message); } catch {}
-}
-
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-}
+import { errorMessage } from "../errors.mjs";
+import { logError } from "../logging.mjs";
+import { assertFunction as requireFunction } from "../validation.mjs";
 
 function requirePositiveInteger(value, name) {
   if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} must be a positive integer`);

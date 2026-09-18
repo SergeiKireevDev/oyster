@@ -1,13 +1,8 @@
 const MAX_LABEL_LENGTH = 200;
 const MAX_SESSION_ID_LENGTH = 100;
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function disableCaching(res) {
-  res.setHeader?.("cache-control", "no-store");
-}
+import { errorMessage } from "../../errors.mjs";
+import { disableCaching } from "../createRequestContext.mjs";
 
 function emitServerEvent(state, event) {
   try {

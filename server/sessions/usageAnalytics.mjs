@@ -5,9 +5,7 @@ function emptyUsage() {
   return { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, totalTokens: 0, cost: 0 };
 }
 
-function isObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+import { isNonArrayObject as isObject } from "../valuePredicates.mjs";
 
 function nonnegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;

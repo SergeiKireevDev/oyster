@@ -5,10 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 
 export const LEGACY_CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
 
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
+import { requireFunction } from "../validation.mjs";
 
 function validCheckpointIdentity(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 512 && value === value.trim()

@@ -26,9 +26,7 @@ function syncError(message, cause) {
   return error;
 }
 
-function plainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+import { isNonArrayObject as plainObject } from "./valuePredicates.mjs";
 
 function validatedCredential(credential) {
   if (credential?.type !== "oauth"
