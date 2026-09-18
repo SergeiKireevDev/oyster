@@ -272,6 +272,87 @@ function sendError(json, res, error) {
   json(res, status, { error: message });
 }
 
+async function materializePinnedWidgetTarget(body, {
+  state, resolveSafePath, ensurePinnedHublot, monitorRoot, widgetId,
+}) {
+  if (body.previewScript !== undefined || body.contentScript !== undefined) {
+    const cwd = resolveSafePath(resolve(String(body.cwd || state.config.PI_DIR)));
+    if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring cwd is outside the allowed roots or is not a directory"), { statusCode: 403 });
+    if (body.format !== undefined && body.format !== "text" && body.format !== "diff") {
+      throw Object.assign(new Error("monitoring format must be text or diff"), { statusCode: 400 });
+    }
+    const target = materializeMonitoringScripts({
+      id: widgetId,
+      previewScript: body.previewScript,
+      contentScript: body.contentScript,
+      cwd,
+      root: monitorRoot,
+    });
+    return {
+      kind: "monitoring",
+      target,
+      mimeType: body.format === "diff" ? "text/x-diff" : "text/plain; charset=utf-8",
+      size: null,
+      mtimeMs: null,
+      fallbackLabel: "Monitor",
+      cleanupTarget: target,
+    };
+  }
+  if (body.path) {
+    const target = resolveSafePath(resolve(String(body.path)));
+    if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
+    let stat;
+    try { stat = statSync(target); }
+    catch (error) {
+      throw Object.assign(new Error("pinned path is unavailable"), { statusCode: 404, cause: error });
+    }
+    if (!stat.isDirectory() && !stat.isFile()) {
+      throw Object.assign(new Error("pinned path must be a regular file or directory"), { statusCode: 415 });
+    }
+    const { kind, mimeType } = classifyPinnedPath(target, stat);
+    return { kind, target, mimeType, size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs), fallbackLabel: basename(target) };
+  }
+  if (body.hublotId) {
+    const hublot = await state.appStore.repositories.hublots.find(String(body.hublotId));
+    if (!hublot) throw Object.assign(new Error("no such live interface"), { statusCode: 404 });
+    return { pinnedWidget: await ensurePinnedHublot(state, hublot) };
+  }
+  if (body.url) {
+    let url;
+    try { url = new URL(String(body.url)); }
+    catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
+    if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
+    if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
+    if (url.href.length > 8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
+    return { kind: "link", target: url.href, mimeType: null, size: null, mtimeMs: null, fallbackLabel: url.hostname };
+  }
+  throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
+}
+
+async function findDuplicatePinnedWidget(repository, identity, materialized) {
+  return (await repository.list({
+    scope: identity.scope, ownerId: identity.ownerId, kind: materialized.kind, target: materialized.target,
+  })).find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId
+    && item.kind === materialized.kind && item.target === materialized.target);
+}
+
+async function createPinnedWidgetRecord(repository, identity, materialized, body, widgetId) {
+  const groupId = body.groupId ? String(body.groupId) : null;
+  await assertGroup(repository, groupId, identity);
+  const now = new Date().toISOString();
+  return repository.create({
+    id: widgetId, ...identity, groupId, kind: materialized.kind,
+    label: normalizeLabel(body.label, materialized.fallbackLabel),
+    position: await repository.nextPosition({ ...identity, groupId }), target: materialized.target,
+    mimeType: materialized.mimeType, size: materialized.size, mtimeMs: materialized.mtimeMs,
+    createdAt: now,
+  });
+}
+
+function cleanupMaterializedTargetOnFailure(materialized, widgetCreated) {
+  if (materialized?.cleanupTarget && !widgetCreated) rmSync(materialized.cleanupTarget, { recursive: true, force: true });
+}
+
 function parseRange(header, size) {
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
@@ -521,91 +602,38 @@ export function createPinnedWidgetRoutes({
     "POST /pinned-widgets": async (req, res) => {
       const parsedBody = await readJsonBody(req, res);
       if (parsedBody === undefined) return;
-      let materializedTarget = null;
+      let materialized = null;
       let widgetCreated = false;
       try {
         const body = assertRequestBody(parsedBody);
         const identity = await scopeIdentity(body, ensureSessionOwner);
-        let kind;
-        let target = null;
-        let mimeType = null;
-        let size = null;
-        let mtimeMs = null;
-        let fallbackLabel;
         const widgetId = id("widget");
-        if (body.previewScript !== undefined || body.contentScript !== undefined) {
-          const cwd = resolveSafePath(resolve(String(body.cwd || state.config.PI_DIR)));
-          if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring cwd is outside the allowed roots or is not a directory"), { statusCode: 403 });
-          if (body.format !== undefined && body.format !== "text" && body.format !== "diff") {
-            throw Object.assign(new Error("monitoring format must be text or diff"), { statusCode: 400 });
-          }
-          kind = "monitoring";
-          mimeType = body.format === "diff" ? "text/x-diff" : "text/plain; charset=utf-8";
-          target = materializeMonitoringScripts({
-            id: widgetId,
-            previewScript: body.previewScript,
-            contentScript: body.contentScript,
-            cwd,
-            root: monitorRoot,
+        materialized = await materializePinnedWidgetTarget(body, {
+          state,
+          resolveSafePath,
+          ensurePinnedHublot,
+          monitorRoot,
+          widgetId,
+        });
+        if (materialized.pinnedWidget) {
+          json(res, 200, {
+            widget: await pinnedWidgetDto(state, materialized.pinnedWidget, { resolveSafePath, activeTunnels: await listTunnels(state) }),
+            ...await currentCollection(body),
           });
-          materializedTarget = target;
-          fallbackLabel = "Monitor";
-        } else if (body.path) {
-          target = resolveSafePath(resolve(String(body.path)));
-          if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
-          let stat;
-          try { stat = statSync(target); }
-          catch (error) {
-            throw Object.assign(new Error("pinned path is unavailable"), { statusCode: 404, cause: error });
-          }
-          if (!stat.isDirectory() && !stat.isFile()) {
-            throw Object.assign(new Error("pinned path must be a regular file or directory"), { statusCode: 415 });
-          }
-          ({ kind, mimeType } = classifyPinnedPath(target, stat));
-          size = stat.size;
-          mtimeMs = Math.trunc(stat.mtimeMs);
-          fallbackLabel = basename(target);
-        } else if (body.hublotId) {
-          const hublot = await state.appStore.repositories.hublots.find(String(body.hublotId));
-          if (!hublot) throw Object.assign(new Error("no such live interface"), { statusCode: 404 });
-          const pinned = await ensurePinnedHublot(state, hublot);
-          json(res, 200, { widget: await pinnedWidgetDto(state, pinned, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
-        } else if (body.url) {
-          let url;
-          try { url = new URL(String(body.url)); }
-          catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
-          if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
-          if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
-          if (url.href.length > 8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
-          kind = "link";
-          target = url.href;
-          fallbackLabel = url.hostname;
-        } else {
-          throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
         }
-        const duplicate = (await repository.list({
-          scope: identity.scope, ownerId: identity.ownerId, kind, target,
-        })).find((item) => item.scope === identity.scope && item.owner_id === identity.ownerId && item.kind === kind && item.target === target);
+        const duplicate = await findDuplicatePinnedWidget(repository, identity, materialized);
         if (duplicate) {
           json(res, 200, { widget: await pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
         }
-        const groupId = body.groupId ? String(body.groupId) : null;
-        assertGroup(repository, groupId, identity);
-        const now = new Date().toISOString();
-        const widget = await repository.create({
-          id: widgetId, ...identity, groupId, kind,
-          label: normalizeLabel(body.label, fallbackLabel),
-          position: await repository.nextPosition({ ...identity, groupId }), target, mimeType,
-          size, mtimeMs, createdAt: now,
-        });
+        const widget = await createPinnedWidgetRecord(repository, identity, materialized, body, widgetId);
         widgetCreated = true;
         const dto = await pinnedWidgetDto(state, widget, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_created", { widget: dto });
         json(res, 201, { widget: dto, ...await currentCollection(body) });
       } catch (error) {
-        if (materializedTarget && !widgetCreated) rmSync(materializedTarget, { recursive: true, force: true });
+        cleanupMaterializedTargetOnFailure(materialized, widgetCreated);
         sendError(json, res, error);
       }
     },
