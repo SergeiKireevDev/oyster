@@ -57,7 +57,6 @@ const manifest = createReloadManifest({
     "application-candidate.mjs",
   ],
   domain: [
-    "checkpoints.mjs",
     "amp-oauth-credential-sink.mjs",
     "claude-oauth-credential-sink.mjs",
     "claude-oauth-refresh-service.mjs",
@@ -94,7 +93,6 @@ const manifest = createReloadManifest({
     "http/createRequestContext.mjs",
     "http/createRouteTable.mjs",
     "http/internalDispatch.mjs",
-    "http/routes/checkpointRoutes.mjs",
     "http/routes/credentialRoutes.mjs",
     "http/routes/fileRoutes.mjs",
     "http/routes/mcpRoutes.mjs",
@@ -108,7 +106,6 @@ const manifest = createReloadManifest({
     "http/routes/workdirRoutes.mjs",
   ],
   persistence: [
-    "persistence/checkpointRollbackJournal.mjs",
     "persistence/claudeTranscriptSink.mjs",
     "persistence/nativeTranscriptSink.mjs",
     "persistence/hublotSupervisor.mjs",

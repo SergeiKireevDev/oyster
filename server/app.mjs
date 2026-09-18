@@ -50,18 +50,16 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const { listRoutines, createRoutine, deleteRoutine, startRoutine, stopRoutine, teardownRoutine, releaseRoutine, stopSessionRoutines, deleteSessionRoutines, stopAllRoutines, routinesDir, spawnRoutineAgent } =
     await import(bust("routines.mjs"));
   const {
-    SESSIONS_ROOT, forkSessionAt, readSessionHeaderInfo,
+    SESSIONS_ROOT, readSessionHeaderInfo,
     sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
-  const { recordCheckpoint, checkpointTree, git, checkpointWorkdir } =
-    await import(bust("checkpoints.mjs"));
   const { createRunnerManager } = await import(bust("runners.mjs"));
   const { createMcpSettings, createMcpSettingsRoutes } = await import(bust("mcp-settings.mjs")); const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs")); const { createClaudeTranscriptSink } = await import(bust("persistence/claudeTranscriptSink.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
   const { createPiCredentialService } = await import(bust("pi-credential-service.mjs")); const { createClaudeOAuthCredentialSink } = await import(bust("claude-oauth-credential-sink.mjs")); const { createCodexOAuthCredentialSink } = await import(bust("codex-oauth-credential-sink.mjs")); const { createGeminiOAuthCredentialSink } = await import(bust("gemini-oauth-credential-sink.mjs")); const { createAmpOAuthCredentialSink } = await import(bust("amp-oauth-credential-sink.mjs")); const { createClaudeOAuthRefreshService } = await import(bust("claude-oauth-refresh-service.mjs")); const { createPiOAuthFlowService } = await import(bust("pi-oauth-flow-service.mjs")); const { createRestartActiveRunners } = await import(bust("runner-restart-service.mjs"));
   const { createSessionOwnerResolver } = await import(bust("persistence/sessionOwners.mjs")); const { createSessionDeletionWorkflow } = await import(bust("persistence/sessionDeletion.mjs"));
-  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs")); const { createCheckpointRollbackJournal } = await import(bust("persistence/checkpointRollbackJournal.mjs"));
+  const { reconcileSessionDeletions } = await import(bust("persistence/sessionDeletionReconciler.mjs"));
   const { createPiProcessLauncher } = await import(bust("pi-processes.mjs")); const { createHublotSupervisor, scheduleHublotStartupReconciliation } = await import(bust("persistence/hublotSupervisor.mjs"));
   const { createPinnedWidgetRoutes, ensurePinnedHublot } = await import(bust("pinned-widgets.mjs"));
   const { createWebPushService } = await import(bust("web-push-service.mjs"));
@@ -69,13 +67,13 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     { createRequestContext }, { createRouteTable }, { dispatchRoute },
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
     { createSessionRoutes, setSessionFamilyArchived, stopSessionFamilyRunners }, { createFileRoutes }, { createWorkdirRoutes },
-    { createTunnelRoutes }, { createRoutineRoutes }, { createCheckpointRoutes },
+    { createTunnelRoutes }, { createRoutineRoutes },
     { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes }, { createMcpRoutes },
   ] = await Promise.all([
     "http/createRequestContext.mjs", "http/createRouteTable.mjs", "http/internalDispatch.mjs",
     ...[
       "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
-      "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes", "mcpRoutes",
+      "workdirRoutes", "tunnelRoutes", "routineRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes", "mcpRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
 
@@ -94,8 +92,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
       try {
   const { config, appStore } = state; const mcpSettings = createMcpSettings(join(config.PI_AGENT_DIR, "mcp-servers.json"));
   const hydratedStore = await validateRepositoryAvailability(appStore);
-  const checkpointRepository = appStore.repositories.checkpoints;
-
   migrateCandidateState(state);
 
   const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${moduleVersion(catalogModule)}`;
@@ -126,7 +122,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
-  const checkpointRollbackJournal = createCheckpointRollbackJournal({ appStore, ensureSessionOwner });
   const webPushService = await createWebPushService({ repository: appStore.repositories.webPush });
   const { createOpenRouterRouting } = await import(bust("openrouter-routing.mjs")); const openRouterRouting = await createOpenRouterRouting({ repository: appStore.repositories.settings, config }); const runnerDrivers = createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses, openRouterRouting, mcpSettings });
   const claudeTranscriptSink = config.CLAUDE_CODE_BIN && config.SQLITE_PATH ? createClaudeTranscriptSink({ projectsDir: config.CLAUDE_CODE_PROJECTS_DIR, sqlitePath: config.SQLITE_PATH, piBin: config.PI_BIN }) : null;
@@ -153,7 +148,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const {
     referenceFor: sessionReferenceFor,
     targetFromSearch: sessionTargetFromSearch,
-    referenceFromSearch: sessionReferenceFromSearch,
     referenceParam: sessionReferenceParam,
   } = createSessionRequestResolver({
     codec: state.sessionReferences,
@@ -191,12 +185,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners, openRouterRouting, getAmpAuthStatus: () => ampOAuthCredentialSink?.status().configured === true });
   state.oauthFlows ??= new Map(); const oauthRegistry = new Map(); state.oauthFlows.set(generation, oauthRegistry); scope.defer(() => state.oauthFlows.delete(generation));
   const oauthFlowService = createPiOAuthFlowService({ registry: oauthRegistry, credentialService, restartActiveRunners, setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); scope.defer(() => oauthFlowService.shutdown()); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });
-  const checkpointRoutes = createCheckpointRoutes({
-    state, appStore, config, requestContext, runnerFromReq, checkpointWorkdir,
-    recordCheckpoint, checkpointRepository, checkpointRollbackJournal, checkpointTree, sessionReferenceFromSearch, ensureSessionOwner,
-    git, forkSessionAt, openSessionRunner, sendToRunner,
-    srvId, runnerInfo,
-  });
   const routineRoutes = createRoutineRoutes({
     state, appStore, requestContext, ensureSessionOwner,
     routines: {
@@ -221,7 +209,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     deleteOwnedSession,
   });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
   const { handleRequest } = createApplicationHandlers({ routeTable, openRoutes, requestContext });
 
   scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });

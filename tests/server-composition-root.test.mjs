@@ -45,7 +45,7 @@ test("composition injects the narrow app store into persistent domains", () => {
   assert.match(source, /if \(!state\.sessionDeletionReconciled\)[\s\S]*await reconcileSessionDeletions[\s\S]*state\.sessionDeletionReconciled = true/);
   assert.ok(source.indexOf("await reconcileSessionDeletions") < source.indexOf("createRunnerManager(state"));
   assert.match(source, /createRunnerManager\(state, \{ appStore, ensureSessionOwner,[\s\S]*notifyRunnerEvent:[\s\S]*unarchiveSession:[\s\S]*setSessionFamilyArchived[\s\S]*guardCallback: scope\.guard \}\)/);
-  assert.match(source, /createCheckpointRoutes\(\{[\s\S]*?state, appStore,/);
+  assert.doesNotMatch(source, /createCheckpointRoutes/);
   assert.match(source, /createRoutineRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createTunnelRoutes\(\{[\s\S]*?state, appStore,/);
   assert.match(source, /createSessionRoutes\(\{[\s\S]*?state,[\s\S]*?appStore,/);

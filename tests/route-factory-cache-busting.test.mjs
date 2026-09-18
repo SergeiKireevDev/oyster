@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 const source = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
 
 test("app cache-busts every extracted route-factory import", () => {
-  for (const name of ["openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes", "workdirRoutes", "tunnelRoutes", "routineRoutes", "checkpointRoutes"]) {
+  for (const name of ["openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes", "workdirRoutes", "tunnelRoutes", "routineRoutes"]) {
     assert.ok(source.includes(`"${name}"`), `missing dynamic route factory ${name}`);
     assert.equal(source.includes(`from "./http/routes/${name}.mjs"`), false);
   }

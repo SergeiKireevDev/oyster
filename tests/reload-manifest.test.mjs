@@ -33,18 +33,16 @@ test("reload manifest covers high-risk candidate boundaries and every route", ()
     "runners.mjs",
     "tunnels.mjs",
     "routines.mjs",
-    "checkpoints.mjs",
     "sessions.mjs",
     "sessions/jsonlCatalog.mjs",
     "sessions/sqliteCatalog.mjs",
-    "persistence/checkpointRollbackJournal.mjs",
     "persistence/hublotSupervisor.mjs",
     "persistence/sessionDeletion.mjs",
   ];
   for (const module of required) assert.ok(RELOADABLE_SERVER_MODULES.includes(module), module);
 
   const expectedRoutes = [
-    "checkpoint", "credential", "file", "mcp", "oauth", "open", "routine", "runner",
+    "credential", "file", "mcp", "oauth", "open", "routine", "runner",
     "session", "static", "tunnel", "workdir",
   ].map((name) => `http/routes/${name}Routes.mjs`);
   assert.deepEqual(RELOADABLE_MODULE_GRAPH.http.filter((module) => module.includes("/routes/")), expectedRoutes);
