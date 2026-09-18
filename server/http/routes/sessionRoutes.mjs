@@ -1,23 +1,13 @@
 import { homedir } from "node:os";
 import { createCodexSessionStateReader } from "../../runner-drivers/codex-session-model.mjs";
 import { unlinkSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const NATIVE_SESSION_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp", "antigravity"]);
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isWithin(path, root) {
-  const relationship = relative(root, path);
-  return relationship === ""
-    || (!isAbsolute(relationship) && relationship !== ".." && !relationship.startsWith(`..${sep}`));
-}
+import { errorMessage } from "../../errors.mjs";
+import { isNonArrayObject as isRecord } from "../../valuePredicates.mjs";
+import { isWithin } from "../pathContainment.mjs";
 
 /** Resolve a root session and every transitive child across catalog folders. */
 export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {

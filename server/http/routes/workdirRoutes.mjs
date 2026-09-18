@@ -3,9 +3,7 @@ import { resolve } from "node:path";
 
 const MAX_PATH_BYTES = 16 * 1024;
 
-function isJsonObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+import { isNonArrayObject as isJsonObject } from "../../valuePredicates.mjs";
 
 /** Build the route that selects and persists the active working directory. */
 export function createWorkdirRoutes({ state, requestContext, spawnRunner, runnerInfo, logger = console } = {}) {

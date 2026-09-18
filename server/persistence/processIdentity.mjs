@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readlinkSync } from "node:fs";
 
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
+import { requireFunction } from "../validation.mjs";
 
 function positiveSafeInteger(value) {
   if (typeof value === "number") return Number.isSafeInteger(value) && value > 0 ? value : null;

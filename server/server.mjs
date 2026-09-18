@@ -20,7 +20,7 @@
 import { randomBytes } from "node:crypto";
 import {
   accessSync, closeSync, constants, existsSync, fsyncSync, openSync,
-  readFileSync, readdirSync, statSync, unlinkSync, watch, writeFileSync,
+  readFileSync, statSync, unlinkSync, watch, writeFileSync,
 } from "node:fs";
 import http from "node:http";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -30,6 +30,7 @@ import { openAppStore } from "./persistence/appStore.mjs";
 import { createAppSettings } from "./persistence/appSettings.mjs";
 import { assertStableStateInventory, createStableEphemeralState } from "./persistence/stateInventory.mjs";
 import { RELOADABLE_SERVER_MODULES } from "./reload-manifest.mjs";
+import { validateLocalPiBuild } from "./startup/piBuildCheck.mjs";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SERVER_DIR, "..");
@@ -121,16 +122,6 @@ function detectExecutable(value) {
   catch { return null; }
 }
 
-function newestMtime(path) {
-  let newest = 0;
-  for (const entry of readdirSync(path, { withFileTypes: true })) {
-    const target = join(path, entry.name);
-    if (entry.isDirectory()) newest = Math.max(newest, newestMtime(target));
-    else newest = Math.max(newest, statSync(target).mtimeMs);
-  }
-  return newest;
-}
-
 function validateConfig(config) {
   const currentNode = process.versions.node.split(".").map(Number);
   const supportedNode = MIN_NODE_VERSION.every((part, index) =>
@@ -188,13 +179,7 @@ function validateConfig(config) {
     try { accessSync(executable, constants.X_OK); }
     catch { throw new Error(`${label} executable is missing or not executable: ${executable}`); }
   }
-  if (config.PI_BIN === DEFAULT_LOCAL_PI) {
-    const sourceRoot = resolve(dirname(config.PI_BIN), "..", "src");
-    if (!existsSync(sourceRoot)) throw new Error(`local pi source is missing: ${sourceRoot}`);
-    if (newestMtime(sourceRoot) > statSync(config.PI_BIN).mtimeMs) {
-      throw new Error(`local pi build is stale: ${config.PI_BIN}. Run npm run build:pi.`);
-    }
-  }
+  validateLocalPiBuild(config.PI_BIN, DEFAULT_LOCAL_PI);
 }
 
 const piExtraArgs = (argValue("--pi-args") ?? process.env.PI_ARGS ?? "").split(" ").filter(Boolean);

@@ -25,9 +25,7 @@ const OPERATION_STATUSES = Object.freeze({
   credential_service_unavailable: 503,
 });
 
-function objectBody(body) {
-  return body && typeof body === "object" && !Array.isArray(body);
-}
+import { objectBody } from "../../valuePredicates.mjs";
 
 function providerInput(body) {
   if (!objectBody(body)) return { error: "JSON object required" };

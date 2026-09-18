@@ -9,9 +9,11 @@ import { spawn } from "node:child_process";
 
 async function copyStableServer(root) {
   await mkdir(join(root, "server", "persistence"), { recursive: true });
+  await mkdir(join(root, "server", "startup"), { recursive: true });
   await symlink(new URL("../node_modules", import.meta.url), join(root, "node_modules"), "dir");
   await Promise.all([
     copyFile(new URL("../server/server.mjs", import.meta.url), join(root, "server", "server.mjs")),
+    copyFile(new URL("../server/startup/piBuildCheck.mjs", import.meta.url), join(root, "server", "startup", "piBuildCheck.mjs")),
     copyFile(new URL("../server/reload-manifest.mjs", import.meta.url), join(root, "server", "reload-manifest.mjs")),
     copyFile(new URL("../server/persistence/appStore.mjs", import.meta.url), join(root, "server", "persistence", "appStore.mjs")),
     copyFile(new URL("../server/persistence/sqliteDatabase.mjs", import.meta.url), join(root, "server", "persistence", "sqliteDatabase.mjs")),

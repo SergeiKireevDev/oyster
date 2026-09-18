@@ -1,12 +1,4 @@
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
-
-function requireNonEmptyString(value, name) {
-  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
-  return value;
-}
+import { requireFunction, requireNonBlankString as requireNonEmptyString } from "../validation.mjs";
 
 function failureMessage(error) {
   if (error instanceof Error && error.message) return error.message;
@@ -18,9 +10,7 @@ function requireSingleUpdate(changes, context) {
   if (changes !== undefined && changes !== 1) throw new Error(context);
 }
 
-function reportFailure(logger, message) {
-  try { logger.error(message); } catch {}
-}
+import { logError as reportFailure } from "../logging.mjs";
 
 function requireMatchingOwner(operation, owner) {
   if (operation.owner_id == null) return;

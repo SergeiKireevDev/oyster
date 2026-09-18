@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
+import { isWithin as within } from "./pathContainment.mjs";
 
 const DEFAULT_BODY_LIMIT = 5 * 1024 * 1024;
 const DEFAULT_RAW_BODY_LIMIT = 100 * 1024 * 1024;
@@ -24,10 +25,9 @@ const MIME_TYPES = new Map([
   [".wasm", "application/wasm"],
 ]);
 
-function within(path, root) {
-  const relationship = relative(root, path);
-  return relationship === ""
-    || (!isAbsolute(relationship) && relationship !== ".." && !relationship.startsWith(`..${sep}`));
+/** Opt-in no-store policy; static assets retain their own caching behavior. */
+export function disableCaching(res) {
+  res.setHeader?.("cache-control", "no-store");
 }
 
 /** Resolve symlinks in the existing portion of a path without requiring its leaf to exist. */
@@ -227,6 +227,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
   return {
     json,
     text,
+    disableCaching,
     readBody,
     readRawBody,
     readJsonBody,

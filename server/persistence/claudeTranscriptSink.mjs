@@ -4,10 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { claudeRecordsToSessionEntries, parseClaudeJsonl } from "../runner-drivers/claude-transcript.mjs";
 
-function requiredString(value, name) {
-  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
-  return value.trim();
-}
+import { requireTrimmedNonEmptyString as requiredString } from "../validation.mjs";
 
 function repositoryModuleCandidates(piBin) {
   const executable = realpathSync(requiredString(piBin, "pi executable"));

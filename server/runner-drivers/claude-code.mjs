@@ -24,10 +24,7 @@ export function oysterMcpConfig({ runnerId = null, sessionId, workdir, uiUrl = D
   return { mcpServers: { oyster: { type: "http", url, headers: { Authorization: "Bearer ${OYSTER_TOKEN}" } } } };
 }
 
-function nonEmpty(value, name) {
-  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
-  return value.trim();
-}
+import { requireTrimmedNonEmptyString as nonEmpty } from "../validation.mjs";
 
 function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };

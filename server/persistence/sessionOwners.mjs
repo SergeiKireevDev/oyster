@@ -1,7 +1,4 @@
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
+import { requireFunction } from "../validation.mjs";
 
 function requireSessionId(value) {
   if (typeof value !== "string" || !value || value !== value.trim()

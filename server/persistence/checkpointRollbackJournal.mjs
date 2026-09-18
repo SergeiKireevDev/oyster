@@ -10,15 +10,7 @@ const NEXT_STAGE = Object.freeze({
 });
 const IDENTITY_FIELDS = new Set(["reference", "hash", "dir"]);
 
-function requireFunction(value, name) {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-  return value;
-}
-
-function requireNonEmptyString(value, name) {
-  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} must be a non-empty string`);
-  return value;
-}
+import { requireFunction, requireNonBlankString as requireNonEmptyString } from "../validation.mjs";
 
 function snapshotPayload(value, context) {
   try {

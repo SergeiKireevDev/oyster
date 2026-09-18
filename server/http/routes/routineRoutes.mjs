@@ -4,13 +4,8 @@ const MAX_SESSION_ID_LENGTH = 100;
 const MAX_BRIEF_BYTES = 20_000;
 const MAX_SCRIPT_BYTES = 256 * 1024;
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function disableCaching(res) {
-  res.setHeader?.("cache-control", "no-store");
-}
+import { errorMessage } from "../../errors.mjs";
+import { disableCaching } from "../createRequestContext.mjs";
 
 function sessionIdFromBody(body) {
   if (body.sessionId === undefined || body.sessionId === null || body.sessionId === "") return null;

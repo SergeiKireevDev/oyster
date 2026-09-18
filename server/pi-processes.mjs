@@ -3,12 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createMcpSettings } from "./mcp-settings.mjs";
 import { spawn } from "node:child_process";
 
-function nonEmptyString(value, name) {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError(`${name} must be a non-empty string`);
-  }
-  return value;
-}
+import { requireNonBlankString as nonEmptyString } from "./validation.mjs";
 
 function normalizeArgs(args) {
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
