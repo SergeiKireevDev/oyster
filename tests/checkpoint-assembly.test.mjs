@@ -70,11 +70,12 @@ test("checkpoint assembly registers scoped tree actions until teardown", async (
   assert.equal(switches.length, 1);
 });
 
-test("checkpoint assembly receives session transcript fetch modal and toast interfaces", () => {
+test("application root leaves checkpoint assembly disconnected with checkpoint routes removed", () => {
   const root = readFileSync(new URL("../public/src/runtime/appCompositionRoot.js", import.meta.url), "utf8");
   const source = readFileSync(new URL("../public/src/features/checkpoints/createCheckpointAssembly.js", import.meta.url), "utf8");
-  assert.match(root, /createCheckpointAssembly\(\{[\s\S]*transcript: \{[\s\S]*session: \{[\s\S]*layout: \{/);
-  assert.doesNotMatch(root, /createCheckpointFeature|configureCheckpointTreeActions|openModelPicker\(/);
+  assert.doesNotMatch(root, /createCheckpointAssembly\(/);
+  assert.match(root, /Checkpoint HTTP routes have been removed/);
+  assert.match(root, /const refreshCheckpointMarkers = async \(\) => \{\};/);
   assert.match(source, /fetchImpl: deps\.fetchImpl/);
   assert.match(source, /getSessionId: deps\.session\.getSessionId/);
   assert.match(source, /chatElements: deps\.transcript\.chatElements/);

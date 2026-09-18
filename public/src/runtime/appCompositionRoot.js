@@ -23,9 +23,8 @@ import { analytics, updateAnalytics } from "../stores/analytics.js";
 import { updateCredentialsState } from "../stores/credentials.js";
 import { updateTutorialState } from "../stores/tutorial.js";
 import { updateAppSession } from "../stores/appSession.js";
-import { setCheckpointBusy, setCheckpointTarget } from "../stores/checkpointMarker.js";
-import { setCheckpointRestoreBusy, setCheckpointRestores } from "../stores/checkpointRestores.js";
-import { setCheckpointTreeState } from "../stores/checkpointTree.js";
+import { setCheckpointTarget } from "../stores/checkpointMarker.js";
+import { setCheckpointRestores } from "../stores/checkpointRestores.js";
 import { setCommandPaletteState, closeCommandPaletteState } from "../stores/commandPalette.js";
 import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
 import { filePicker, updateFilePicker } from "../stores/filePicker.js";
@@ -39,7 +38,6 @@ import { routineCurrentSessionId, routineScopeAll, routines, routinesError, rout
 import { resetRoutineManager, updateRoutineManager } from "../stores/routineManager.js";
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
-import { createCheckpointAssembly } from "../features/checkpoints/createCheckpointAssembly.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
 import { createTutorialAssembly } from "../features/tutorial/createTutorialAssembly.js";
@@ -62,7 +60,7 @@ import { chooseOnlineWorkspace, ensureActiveWorkspace, getActiveWorkspace, isHub
 
 export function createApplicationRuntimeDependencies(browser, stores = {}) {
   const { window, document, location, history, storage, find } = browser;
-  const { uiActions, dialogs: dialogService, browserActions, checkpointModelPicker } = stores;
+  const { uiActions, dialogs: dialogService, browserActions } = stores;
   // Resolve at request time: authenticated fetch is installed when the runtime
   // starts, after this composition graph has already been constructed.
   const runtimeFetch = (...args) => window.fetch(...args);
@@ -170,44 +168,16 @@ const renderTranscript = transcriptOperations.renderTranscript;
 
 // ------------------------------------------------------------ checkpoints
 //
-// The iceberg on the LATEST message commits every pending change in the
-// runner's workdir (server-side `git add -A && git commit`), freezing the
-// state the conversation reached at that point.
+// Checkpoint HTTP routes have been removed from the server composition. Keep
+// the transcript integration points inert so the UI does not call removed
+// `/checkpoint`, `/checkpoints`, `/checkpoint-tree`, or `/rollback` endpoints.
 
-const checkpointAssembly = createCheckpointAssembly({
-  uiActions,
-  checkpointModelPicker,
-  fetchImpl: fetch,
-  tick,
-  rpc,
-  setTarget: setCheckpointTarget,
-  setRestores: setCheckpointRestores,
-  setTreeState: setCheckpointTreeState,
-  setBusy: setCheckpointBusy,
-  setRestoreBusy: setCheckpointRestoreBusy,
-  transcript: {
-    chatElements: () => transcriptOperations.chatElements(),
-    fetchSessionEntries,
-  },
-  session: {
-    getSessionId: () => getSessionState()?.sessionId,
-    getState: () => getSessionState(),
-    getRunners: () => getRunners(),
-    getCurrentRunner: () => getCurrentRunner(),
-    getWorkdir: () => getWorkdir(),
-    openAndSwitchSession: (...args) => getSessionRuntime().openAndSwitchSession(...args),
-    switchRunner: (id) => getSessionRuntime().switchRunner(id),
-  },
-  layout: { isTreeOpen: () => layoutDom.isTreeOpen() },
-  toast: addToast,
-});
-const checkpointOperations = checkpointAssembly.operations;
-const placeCheckpointBtn = checkpointOperations.placeMarker;
-const refreshCheckpointMarkers = checkpointOperations.refreshMarkers;
-const refreshTreeIfOpen = checkpointOperations.refreshTreeIfOpen;
-const handleCheckpointClick = checkpointOperations.freeze;
-const rollbackToCheckpoint = checkpointOperations.rollback;
-const detachCheckpointTreeActions = () => checkpointAssembly.teardown();
+const placeCheckpointBtn = () => {};
+const refreshCheckpointMarkers = async () => {};
+const refreshTreeIfOpen = () => {};
+const handleCheckpointClick = () => {};
+const rollbackToCheckpoint = () => {};
+const detachCheckpointTreeActions = () => {};
 
 // ------------------------------------------------------------ state / header
 
