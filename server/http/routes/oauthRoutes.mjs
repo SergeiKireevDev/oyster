@@ -60,6 +60,59 @@ function publicRestartResult(result) {
   };
 }
 
+async function removeOAuthCredential(credentialService, input) {
+  return credentialService.logoutOAuth(input.provider, { harness: input.harness });
+}
+
+async function fallbackSourceForProvider(credentialService, input) {
+  try {
+    const providers = await credentialService.listProviders();
+    if (!Array.isArray(providers)) throw new TypeError("invalid provider list");
+    const candidate = providers.find((item) => item?.provider === input.provider && providerHarness(item) === input.harness)?.source;
+    return FALLBACK_SOURCES.has(candidate) ? candidate : "not_configured";
+  } catch {
+    // Logout is already durable. Failure to refresh safe fallback metadata
+    // must not trigger an unsafe credential rollback.
+    return "not_configured";
+  }
+}
+
+function safeCredentialRemovalResult(input, source) {
+  // Never forward credential-service return data: an adapter must not be
+  // able to expose removed OAuth tokens through this HTTP boundary.
+  return {
+    credential: {
+      provider: input.provider,
+      ...(input.harness !== "pi" ? { harness: input.harness } : {}),
+      removed: true,
+    },
+    source,
+    upstreamRevoked: false,
+  };
+}
+
+async function restartHarnesses(restartActiveRunners, harnesses) {
+  const rawRestarts = await Promise.all(harnesses.map((harness) => restartActiveRunners({ harness })));
+  const restarts = rawRestarts.map(publicRestartResult);
+  if (restarts.some((item) => !item)) throw new TypeError("invalid runner restart result");
+  const restart = publicRestartResult({
+    status: restarts.some((item) => item.status !== "restarted") ? "partial" : "restarted",
+    runnerIds: restarts.flatMap((item) => item.runnerIds),
+    failedRunnerIds: restarts.flatMap((item) => item.failedRunnerIds ?? []),
+  });
+  if (!restart) throw new TypeError("invalid runner restart result");
+  return restart;
+}
+
+function sendOAuthRemovalRestartFailure(json, res, result) {
+  json(res, 503, {
+    error: "OAuth credential removed but harness runners could not be restarted",
+    code: "runner_restart_failed",
+    ...result,
+    restart: { status: "failed", runnerIds: [] },
+  });
+}
+
 /** Authenticated OAuth routes; authentication remains owned by app dispatch. */
 export function createOAuthRoutes({ requestContext, credentialService, flowService, restartActiveRunners } = {}) {
   if (typeof requestContext?.json !== "function" || typeof requestContext?.readBody !== "function") {
@@ -180,47 +233,21 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         json(res, 503, { error: "OAuth service unavailable" });
         return;
       }
+
       let removedCredential;
       try {
-        removedCredential = await credentialService.logoutOAuth(input.provider, { harness: input.harness });
+        removedCredential = await removeOAuthCredential(credentialService, input);
       } catch (error) {
         operationError(res, error);
         return;
       }
 
-      let source = "not_configured";
+      const source = await fallbackSourceForProvider(credentialService, input);
+      const result = safeCredentialRemovalResult(input, source);
+      const harnesses = Array.isArray(removedCredential?.harnesses) && removedCredential.harnesses.length
+        ? [...new Set(removedCredential.harnesses)] : [input.harness];
       try {
-        const providers = await credentialService.listProviders();
-        if (!Array.isArray(providers)) throw new TypeError("invalid provider list");
-        const candidate = providers.find((item) => item?.provider === input.provider && providerHarness(item) === input.harness)?.source;
-        if (FALLBACK_SOURCES.has(candidate)) source = candidate;
-      } catch {
-        // Logout is already durable. Failure to refresh safe fallback metadata
-        // must not trigger an unsafe credential rollback.
-      }
-      // Never forward credential-service return data: an adapter must not be
-      // able to expose removed OAuth tokens through this HTTP boundary.
-      const result = {
-        credential: {
-          provider: input.provider,
-          ...(input.harness !== "pi" ? { harness: input.harness } : {}),
-          removed: true,
-        },
-        source,
-        upstreamRevoked: false,
-      };
-      try {
-        const harnesses = Array.isArray(removedCredential?.harnesses) && removedCredential.harnesses.length
-          ? [...new Set(removedCredential.harnesses)] : [input.harness];
-        const rawRestarts = await Promise.all(harnesses.map((harness) => restartActiveRunners({ harness })));
-        const restarts = rawRestarts.map(publicRestartResult);
-        if (restarts.some((item) => !item)) throw new TypeError("invalid runner restart result");
-        const restart = publicRestartResult({
-          status: restarts.some((item) => item.status !== "restarted") ? "partial" : "restarted",
-          runnerIds: restarts.flatMap((item) => item.runnerIds),
-          failedRunnerIds: restarts.flatMap((item) => item.failedRunnerIds ?? []),
-        });
-        if (!restart) throw new TypeError("invalid runner restart result");
+        const restart = await restartHarnesses(restartActiveRunners, harnesses);
         if (restart.status === "partial") {
           json(res, 503, {
             error: "OAuth credential removed but some harness runners failed to restart",
@@ -232,12 +259,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
         }
         json(res, 200, { ...result, restart });
       } catch {
-        json(res, 503, {
-          error: "OAuth credential removed but harness runners could not be restarted",
-          code: "runner_restart_failed",
-          ...result,
-          restart: { status: "failed", runnerIds: [] },
-        });
+        sendOAuthRemovalRestartFailure(json, res, result);
       }
     },
   };

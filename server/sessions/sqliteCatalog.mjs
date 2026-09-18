@@ -321,82 +321,100 @@ export function createSqliteSessionCatalog({
     }, []);
   }
 
+  async function selectSearchSessions({ scope, path, cwd }) {
+    return scope === "session" ? [await findById(identityId(path))].filter(Boolean)
+      : scope === "all" ? await list() : await list({ cwd });
+  }
+
+  async function findIndexedSearchCandidates(database, { selected, terms, operator, scope, path, cwd, includeTools }) {
+    // Pi's FTS index uses the trigram tokenizer. Terms shorter than three
+    // characters cannot be represented by MATCH, so scan in that case to
+    // preserve the catalog's quoted-short-term search behavior.
+    const canUseSearchIndex = terms.every((term) => [...term].length >= 3);
+    const hasSearchIndex = canUseSearchIndex && await databaseGet(database,
+      "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'");
+    if (!hasSearchIndex) return { candidates: selected, indexedEntries: null };
+
+    const searchableFilter = includeTools
+      ? ""
+      : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
+    const scopeFilter = scope === "session"
+      ? "AND f.session_id = ?"
+      : scope === "folder"
+        ? "AND EXISTS (SELECT 1 FROM sessions scoped WHERE scoped.id = f.session_id AND scoped.cwd = ?)"
+        : "";
+    const scopeParams = scope === "session" ? [identityId(path)]
+      : scope === "folder" ? [resolve(cwd)] : [];
+    const rows = await databaseAll(database, `
+      SELECT DISTINCT f.session_id, f.entry_id
+      FROM session_search_fts f
+      WHERE session_search_fts MATCH ? ${searchableFilter} ${scopeFilter}
+    `, ftsSearchExpression(terms, operator), ...scopeParams);
+    const indexedEntries = new Map();
+    for (const row of rows) {
+      if (!indexedEntries.has(row.session_id)) indexedEntries.set(row.session_id, new Set());
+      indexedEntries.get(row.session_id).add(row.entry_id);
+    }
+    return { candidates: selected.filter((session) => indexedEntries.has(session.id)), indexedEntries };
+  }
+
+  function collectSessionHits(branch, { terms, operator, includeTools, indexedEntries, sessionId }) {
+    const hits = [];
+    for (const entry of branch) {
+      if (indexedEntries && !indexedEntries.get(sessionId)?.has(entry.id)) continue;
+      for (const part of searchableParts(entry)) {
+        const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
+        if (!includeTools && !isText) continue;
+        const match = matchSearchText(part.text, terms, operator);
+        if (!match) continue;
+        hits.push({
+          entryId: entry.id ?? null,
+          role: part.role ?? null,
+          kind: part.kind,
+          timestamp: entry.timestamp ?? null,
+          snippet: snippet(part.text, match.index, match.length),
+        });
+        if (hits.length >= 25) break;
+      }
+      if (hits.length >= 25) break;
+    }
+    return hits;
+  }
+
+  function appendLimitedSearchResults(results, hits, session, resultLimit) {
+    let truncated = false;
+    for (const hit of hits) {
+      if (results.length >= resultLimit) { truncated = true; break; }
+      results.push({
+        ...hit,
+        sessionId: session.id,
+        sessionName: session.name,
+        sessionPreview: session.preview,
+        sessionCwd: session.cwd,
+        harness: session.harness,
+        folder: session.cwd,
+        folderLabel: session.cwd,
+      });
+    }
+    return truncated;
+  }
+
   async function search({ q, scope = "folder", path, cwd = path, includeTools = false } = {}, maxResults = 200) {
     const { terms, operator } = parseSearchQuery(q);
     if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
-    const selected = scope === "session" ? [await findById(identityId(path))].filter(Boolean)
-      : scope === "all" ? await list() : await list({ cwd });
+    const selected = await selectSearchSessions({ scope, path, cwd });
     const filesSearched = selected.length;
     const resultLimit = Number.isSafeInteger(maxResults) && maxResults >= 0 ? maxResults : 0;
     const searched = await withDatabase(async (database) => {
-      let candidates = selected;
-      let indexedEntries = null;
-      // Pi's FTS index uses the trigram tokenizer. Terms shorter than three
-      // characters cannot be represented by MATCH, so scan in that case to
-      // preserve the catalog's quoted-short-term search behavior.
-      const canUseSearchIndex = terms.every((term) => [...term].length >= 3);
-      const hasSearchIndex = canUseSearchIndex && await databaseGet(database,
-        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'");
-      if (hasSearchIndex) {
-        const searchableFilter = includeTools
-          ? ""
-          : "AND (f.kind = 'name' OR (f.kind = 'text' AND f.role IN ('user', 'assistant')))";
-        const scopeFilter = scope === "session"
-          ? "AND f.session_id = ?"
-          : scope === "folder"
-            ? "AND EXISTS (SELECT 1 FROM sessions scoped WHERE scoped.id = f.session_id AND scoped.cwd = ?)"
-            : "";
-        const scopeParams = scope === "session" ? [identityId(path)]
-          : scope === "folder" ? [resolve(cwd)] : [];
-        const rows = await databaseAll(database, `
-          SELECT DISTINCT f.session_id, f.entry_id
-          FROM session_search_fts f
-          WHERE session_search_fts MATCH ? ${searchableFilter} ${scopeFilter}
-        `, ftsSearchExpression(terms, operator), ...scopeParams);
-        indexedEntries = new Map();
-        for (const row of rows) {
-          if (!indexedEntries.has(row.session_id)) indexedEntries.set(row.session_id, new Set());
-          indexedEntries.get(row.session_id).add(row.entry_id);
-        }
-        candidates = selected.filter((session) => indexedEntries.has(session.id));
-      }
-
+      const { candidates, indexedEntries } = await findIndexedSearchCandidates(database, {
+        selected, terms, operator, scope, path, cwd, includeTools,
+      });
       const results = [];
       let truncated = false;
       for (const session of candidates) {
         const loaded = await readActiveBranchFromDatabase(database, session.id);
-        const hits = [];
-        for (const entry of loaded.branch) {
-          if (indexedEntries && !indexedEntries.get(session.id)?.has(entry.id)) continue;
-          for (const part of searchableParts(entry)) {
-            const isText = part.kind === "name" || (part.kind === "text" && ["user", "assistant"].includes(part.role));
-            if (!includeTools && !isText) continue;
-            const match = matchSearchText(part.text, terms, operator);
-            if (!match) continue;
-            hits.push({
-              entryId: entry.id ?? null,
-              role: part.role ?? null,
-              kind: part.kind,
-              timestamp: entry.timestamp ?? null,
-              snippet: snippet(part.text, match.index, match.length),
-            });
-            if (hits.length >= 25) break;
-          }
-          if (hits.length >= 25) break;
-        }
-        for (const hit of hits) {
-          if (results.length >= resultLimit) { truncated = true; break; }
-          results.push({
-            ...hit,
-            sessionId: session.id,
-            sessionName: session.name,
-            sessionPreview: session.preview,
-            sessionCwd: session.cwd,
-            harness: session.harness,
-            folder: session.cwd,
-            folderLabel: session.cwd,
-          });
-        }
+        const hits = collectSessionHits(loaded.branch, { terms, operator, includeTools, indexedEntries, sessionId: session.id });
+        truncated = appendLimitedSearchResults(results, hits, session, resultLimit);
         if (truncated) break;
       }
       return { results, truncated };

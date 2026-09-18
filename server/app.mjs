@@ -9,6 +9,41 @@ import { createCandidateState, createDisposableScope, createRequestLifecycle,
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const moduleVersion = (name) => { const info = statSync(join(__dirname, name), { bigint: true }); return `${info.mtimeNs}-${info.size}`; };
 const bust = (name) => `./${name}?v=${moduleVersion(name)}`;
+
+function migrateCandidateState(state) {
+  // Patch state created by an older stable core; migrations are idempotent.
+  if (!state.eventBuffer) return;
+  delete state.eventBuffer;
+  state.broadcast = (line) => {
+    for (const res of state.sseClients) {
+      if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
+    }
+  };
+  console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
+}
+
+function createApplicationHandlers({ routeTable, openRoutes, requestContext }) {
+  const { json, checkAuth } = requestContext;
+  const openRouteKeys = new Set(Object.keys(openRoutes));
+  const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
+  async function handleRequest(req, res) {
+    let url; try { url = new URL(req.url ?? "/", "http://localhost"); } catch { json(res, 400, { error: "invalid request URL" }); return; }
+    const key = `${req.method} ${url.pathname}`;
+    const staticFallback = routeTable.get(`${req.method} /*`);
+    if (staticFallback?.(req, res, url)) return;
+    const open = openRouteKeys.has(key) ? routeTable.get(key) : undefined;
+    if (open) return open(req, res, url);
+    // Every privileged route requires an explicit credential. Loopback is not an authentication boundary.
+    const auth = checkAuth(req, url);
+    if (auth !== "ok") { json(res, auth === "throttled" ? 429 : 401, { error: auth === "throttled" ? "too many auth failures — try again later" : "unauthorized" }); return; }
+    const route = routeTable.get(key);
+    if (route) return route(req, res, url);
+    const pathKnown = knownPaths.has(url.pathname);
+    json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
+  }
+  return { handleRequest };
+}
+
 export async function buildCandidate(stableState, { generation = Symbol("application-candidate") } = {}) {
   const { listTunnels, reserveHublot, recordHublotTransition, rebindHublot, openTunnel, closeTunnel, reopenHublot, closeSessionHublots, shutdownHublots } =
     await import(bust("tunnels.mjs"));
@@ -61,16 +96,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const hydratedStore = await validateRepositoryAvailability(appStore);
   const checkpointRepository = appStore.repositories.checkpoints;
 
-  // Patch state created by an older stable core; migrations are idempotent.
-  if (state.eventBuffer) {
-    delete state.eventBuffer;
-    state.broadcast = (line) => {
-      for (const res of state.sseClients) {
-        if (!res.writableEnded && !res.destroyed) res.write(`data: ${line}\n\n`);
-      }
-    };
-    console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
-  }
+  migrateCandidateState(state);
 
   const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${moduleVersion(catalogModule)}`;
   state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
@@ -122,9 +148,6 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const reaperTimer = state.runnerReaperTimer;
   scope.defer(() => { clearInterval(reaperTimer); clearInterval(watchdogTimer); });
   const requestContext = createRequestContext(state);
-  const {
-    json, checkAuth,
-  } = requestContext;
   const openRoutes = createOpenRoutes({ state, listRunnerInfo, runnerHarnesses: () => runnerDrivers.list(), requestContext });
   const staticRoutes = createStaticRoutes({ config, requestContext });
   const {
@@ -199,37 +222,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
 
   const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, checkpoint: checkpointRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes });
-  const openRouteKeys = new Set(Object.keys(openRoutes)); const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
-
-  // ---------------------------------------------------------------- dispatch
-  async function handleRequest(req, res) {
-    let url; try { url = new URL(req.url ?? "/", "http://localhost"); }
-    catch { json(res, 400, { error: "invalid request URL" }); return; }
-    const key = `${req.method} ${url.pathname}`;
-
-    const staticFallback = routeTable.get(`${req.method} /*`);
-    if (staticFallback?.(req, res, url)) return;
-
-    const open = openRouteKeys.has(key) ? routeTable.get(key) : undefined;
-    if (open) return open(req, res, url);
-
-    // Every privileged route requires an explicit credential. Loopback is not
-    // an authentication boundary: same-host reverse proxies make remote
-    // requests appear to originate from 127.0.0.1.
-    const auth = checkAuth(req, url);
-    if (auth !== "ok") {
-      if (auth === "throttled") json(res, 429, { error: "too many auth failures — try again later" });
-      else json(res, 401, { error: "unauthorized" });
-      return;
-    }
-
-    const route = routeTable.get(key);
-    if (route) return route(req, res, url);
-
-    // same path exists under another method -> 405, otherwise 404
-    const pathKnown = knownPaths.has(url.pathname);
-    json(res, pathKnown ? 405 : 404, { error: pathKnown ? "method not allowed" : "not found" });
-  }
+  const { handleRequest } = createApplicationHandlers({ routeTable, openRoutes, requestContext });
 
   scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });
   application = {

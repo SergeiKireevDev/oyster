@@ -27,17 +27,7 @@ function callHook(hook, value, name) {
   }
 }
 
-/** Import the legacy checkpoint snapshot without modifying or renaming it. */
-export async function importLegacyCheckpoints({
-  repository,
-  sessionReferences,
-  sourcePath = LEGACY_CHECKPOINTS_PATH,
-  readFile = readFileSync,
-  sourceExists = existsSync,
-  apply = true,
-  onConflict = () => {},
-  onCandidate = () => {},
-} = {}) {
+function validateImportOptions({ repository, sessionReferences, sourcePath, readFile, sourceExists, apply, onConflict, onCandidate }) {
   if (!repository || typeof repository.listForSession !== "function" || typeof repository.record !== "function") {
     throw new TypeError("checkpoint repository with listForSession() and record() is required");
   }
@@ -50,12 +40,12 @@ export async function importLegacyCheckpoints({
   requireFunction(onConflict, "onConflict");
   requireFunction(onCandidate, "onCandidate");
   if (typeof apply !== "boolean") throw new TypeError("apply must be a boolean");
+}
 
+function readLegacyCheckpointSource(sourcePath, readFile, sourceExists) {
   const sourcePresent = sourceExists(sourcePath);
   if (typeof sourcePresent !== "boolean") throw new TypeError("sourceExists must return a boolean");
-  if (!sourcePresent) {
-    return Object.freeze({ sourcePath, sourceCount: 0, importedCount: 0, existingCount: 0, status: "missing" });
-  }
+  if (!sourcePresent) return null;
 
   let grouped;
   try {
@@ -68,7 +58,37 @@ export async function importLegacyCheckpoints({
   if (!grouped || typeof grouped !== "object" || Array.isArray(grouped)) {
     throw new Error(`cannot import legacy checkpoints from ${sourcePath}: root must be an object`);
   }
+  return grouped;
+}
 
+function referenceForLegacyCheckpoint(sessionId, checkpoint, sessionReferences) {
+  const hasExplicitReference = checkpoint.sessionRef !== undefined && checkpoint.sessionRef !== null;
+  const rawReference = hasExplicitReference
+    ? checkpoint.sessionRef
+    : (checkpoint.sessionPath ? { backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath } : null);
+  if (!rawReference) throw new Error(`cannot import legacy checkpoint ${checkpoint.hash} for ${sessionId}: session identity is missing`);
+  const validatedReference = sessionReferences.validate(rawReference);
+  if (!validatedReference || typeof validatedReference !== "object" || Array.isArray(validatedReference)) {
+    throw new TypeError("session reference codec validate() must return an object");
+  }
+  const reference = Object.freeze({
+    backend: validatedReference.backend,
+    id: validatedReference.id,
+    storagePath: validatedReference.storagePath,
+  });
+  if (reference.id !== sessionId) throw new Error(`cannot import legacy checkpoint ${checkpoint.hash}: group and session identity differ`);
+  if (checkpoint.sessionPath !== undefined) {
+    const pathReference = typeof checkpoint.sessionPath === "string"
+      ? sessionReferences.validate({ backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath })
+      : null;
+    if (!pathReference || !sessionReferences.equals(reference, pathReference)) {
+      throw new Error(`cannot import legacy checkpoint ${checkpoint.hash} for ${sessionId}: session paths differ`);
+    }
+  }
+  return reference;
+}
+
+function normalizeLegacyCheckpointCandidates(grouped, sessionReferences) {
   const candidates = [];
   const sourceIdentities = new Set();
   for (const [sessionId, checkpoints] of Object.entries(grouped)) {
@@ -78,29 +98,7 @@ export async function importLegacyCheckpoints({
         || !validCheckpointIdentity(checkpoint.hash) || !validCheckpointIdentity(checkpoint.anchorId)) {
         throw new Error(`cannot import malformed legacy checkpoint for ${sessionId}`);
       }
-      const hasExplicitReference = checkpoint.sessionRef !== undefined && checkpoint.sessionRef !== null;
-      const rawReference = hasExplicitReference
-        ? checkpoint.sessionRef
-        : (checkpoint.sessionPath ? { backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath } : null);
-      if (!rawReference) throw new Error(`cannot import legacy checkpoint ${checkpoint.hash} for ${sessionId}: session identity is missing`);
-      const validatedReference = sessionReferences.validate(rawReference);
-      if (!validatedReference || typeof validatedReference !== "object" || Array.isArray(validatedReference)) {
-        throw new TypeError("session reference codec validate() must return an object");
-      }
-      const reference = Object.freeze({
-        backend: validatedReference.backend,
-        id: validatedReference.id,
-        storagePath: validatedReference.storagePath,
-      });
-      if (reference.id !== sessionId) throw new Error(`cannot import legacy checkpoint ${checkpoint.hash}: group and session identity differ`);
-      if (checkpoint.sessionPath !== undefined) {
-        const pathReference = typeof checkpoint.sessionPath === "string"
-          ? sessionReferences.validate({ backend: "jsonl", id: sessionId, storagePath: checkpoint.sessionPath })
-          : null;
-        if (!pathReference || !sessionReferences.equals(reference, pathReference)) {
-          throw new Error(`cannot import legacy checkpoint ${checkpoint.hash} for ${sessionId}: session paths differ`);
-        }
-      }
+      const reference = referenceForLegacyCheckpoint(sessionId, checkpoint, sessionReferences);
       const normalizedCheckpoint = Object.freeze({
         ...checkpoint,
         ...(checkpoint.sessionPath !== undefined ? { sessionPath: reference.storagePath } : {}),
@@ -115,7 +113,10 @@ export async function importLegacyCheckpoints({
       candidates.push(candidate);
     }
   }
+  return candidates;
+}
 
+async function inspectCheckpointImports(repository, candidates) {
   const checkpointsBySession = new Map();
   const inspections = [];
   for (const candidate of candidates) {
@@ -130,7 +131,10 @@ export async function importLegacyCheckpoints({
     const current = currentCheckpoints.find((item) => item?.hash === checkpoint.hash && item?.anchorId === checkpoint.anchorId);
     inspections.push({ candidate, current });
   }
+  return inspections;
+}
 
+function notifyCheckpointImportObservers(inspections, { onCandidate, onConflict }) {
   let existingCount = 0;
   const imports = [];
   // Run every observer before writing so an observer failure cannot leave a
@@ -149,10 +153,38 @@ export async function importLegacyCheckpoints({
       }), "onConflict");
     }
   }
+  return { imports, existingCount };
+}
+
+async function applyCheckpointImports(repository, imports, apply) {
   if (apply) {
     for (const { reference, checkpoint } of imports) await repository.record(reference, checkpoint);
   }
-  const importedCount = imports.length;
+  return imports.length;
+}
+
+/** Import the legacy checkpoint snapshot without modifying or renaming it. */
+export async function importLegacyCheckpoints({
+  repository,
+  sessionReferences,
+  sourcePath = LEGACY_CHECKPOINTS_PATH,
+  readFile = readFileSync,
+  sourceExists = existsSync,
+  apply = true,
+  onConflict = () => {},
+  onCandidate = () => {},
+} = {}) {
+  validateImportOptions({ repository, sessionReferences, sourcePath, readFile, sourceExists, apply, onConflict, onCandidate });
+
+  const grouped = readLegacyCheckpointSource(sourcePath, readFile, sourceExists);
+  if (!grouped) {
+    return Object.freeze({ sourcePath, sourceCount: 0, importedCount: 0, existingCount: 0, status: "missing" });
+  }
+
+  const candidates = normalizeLegacyCheckpointCandidates(grouped, sessionReferences);
+  const inspections = await inspectCheckpointImports(repository, candidates);
+  const { imports, existingCount } = notifyCheckpointImportObservers(inspections, { onCandidate, onConflict });
+  const importedCount = await applyCheckpointImports(repository, imports, apply);
   return Object.freeze({
     sourcePath,
     sourceCount: candidates.length,
