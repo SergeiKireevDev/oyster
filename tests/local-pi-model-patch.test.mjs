@@ -34,10 +34,18 @@ test("patch is idempotent and refuses unexpected or duplicated source", () => {
   assert.throws(() => patchLocalPiModels(source + fixture), /Unsupported pi model generator/);
 });
 
-test("local pi Docker build applies compatibility before model generation", () => {
-  const dockerfile = readFileSync(new URL("../Dockerfile.local-pi", import.meta.url), "utf8");
-  const patch = dockerfile.indexOf("RUN node /tmp/patch-local-pi-models.mjs /src/packages/ai/scripts/generate-models.ts");
-  assert.ok(patch >= 0);
-  assert.ok(patch < dockerfile.indexOf("npm run build --workspace packages/ai"));
-  assert.match(dockerfile, /COPY scripts\/patch-local-pi-models\.mjs \/tmp\/patch-local-pi-models\.mjs/);
+test("pi Docker builds apply compatibility before model generation", () => {
+  for (const name of ["Dockerfile", "Dockerfile.local-pi"]) {
+    const dockerfile = readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+    const patch = dockerfile.indexOf("RUN node /tmp/patch-local-pi-models.mjs /src/packages/ai/scripts/generate-models.ts");
+    assert.ok(patch >= 0, `${name} applies the Kimi patch`);
+    assert.ok(patch < dockerfile.indexOf("npm run build --workspace packages/ai"), `${name} patches before build`);
+    assert.match(dockerfile, /COPY scripts\/patch-local-pi-models\.mjs \/tmp\/patch-local-pi-models\.mjs/);
+  }
+});
+
+test("bundled pi build applies compatibility before compiling the submodule", () => {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.scripts["prepare:pi-models"], "node scripts/patch-local-pi-models.mjs pi/packages/ai/scripts/generate-models.ts");
+  assert.match(packageJson.scripts["build:pi"], /^npm run prepare:pi-models && cd pi &&/);
 });
