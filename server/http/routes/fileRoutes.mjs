@@ -55,6 +55,46 @@ function writeUploadChunk(path, buffer, { append = false } = {}) {
   }
 }
 
+function uploadTempPath(dir, name, offset) {
+  const currentTmp = join(dir, `${UPLOAD_PREFIX}${name}${UPLOAD_SUFFIX}`);
+  const legacyTmp = join(dir, `.${name}.upload`);
+  return offset > 0 && !existsSync(currentTmp) && existsSync(legacyTmp) ? legacyTmp : currentTmp;
+}
+
+function continuePartialUpload({ tmp, target, offset, buf, last }) {
+  let cur = -1;
+  try { cur = statSync(tmp).size; } catch {}
+  if (cur === -1 && last && fileRangeEquals(target, offset, buf, offset + buf.length)) {
+    return { status: 200, body: { saved: target, bytes: offset + buf.length } };
+  }
+  if (cur >= offset + buf.length && fileRangeEquals(tmp, offset, buf)) {
+    if (!last) return { status: 200, body: { received: cur } };
+    if (cur !== offset + buf.length) {
+      return { status: 409, body: { error: "final chunk does not end at the current upload size", have: cur } };
+    }
+    return null;
+  }
+  if (cur !== offset) {
+    return { status: 409, body: { error: `chunk out of sequence: have ${cur} bytes, got offset ${offset}`, have: Math.max(cur, 0) } };
+  }
+  writeUploadChunk(tmp, buf, { append: true });
+  return null;
+}
+
+function applyUploadChunk({ tmp, target, offset, buf, last }) {
+  try {
+    const response = offset === 0
+      ? (writeUploadChunk(tmp, buf), null)
+      : continuePartialUpload({ tmp, target, offset, buf, last });
+    if (response) return response;
+    if (last) renameSync(tmp, target);
+    return null;
+  } catch {
+    try { unlinkSync(tmp); } catch {}
+    return { status: 500, body: { error: "upload failed" } };
+  }
+}
+
 /** Build confined file-browser routes. */
 export function createFileRoutes({ state, requestContext, logger = console } = {}) {
   if (!state || typeof state.currentDir !== "string") throw new TypeError("state.currentDir is required");
@@ -210,41 +250,10 @@ export function createFileRoutes({ state, requestContext, logger = console } = {
         return;
       }
       const target = join(dir, name);
-      const currentTmp = join(dir, `${UPLOAD_PREFIX}${name}${UPLOAD_SUFFIX}`);
-      const legacyTmp = join(dir, `.${name}.upload`);
-      // Finish partial uploads created by an older hot-reloaded route version.
-      const tmp = offset > 0 && !existsSync(currentTmp) && existsSync(legacyTmp) ? legacyTmp : currentTmp;
-      try {
-        if (offset === 0) {
-          writeUploadChunk(tmp, buf); // start fresh (truncates any stale partial)
-        } else {
-          let cur = -1;
-          try { cur = statSync(tmp).size; } catch {}
-          if (cur === -1 && last
-            && fileRangeEquals(target, offset, buf, offset + buf.length)) {
-            // Retried final chunk whose first attempt already renamed the temp file.
-            json(res, 200, { saved: target, bytes: offset + buf.length });
-            return;
-          }
-          if (cur >= offset + buf.length && fileRangeEquals(tmp, offset, buf)) {
-            // Retried chunk that was already applied (response was lost).
-            if (!last) { json(res, 200, { received: cur }); return; }
-            if (cur !== offset + buf.length) {
-              json(res, 409, { error: "final chunk does not end at the current upload size", have: cur });
-              return;
-            }
-            // The final chunk is present but was not yet renamed.
-          } else if (cur !== offset) {
-            json(res, 409, { error: `chunk out of sequence: have ${cur} bytes, got offset ${offset}`, have: Math.max(cur, 0) });
-            return;
-          } else {
-            writeUploadChunk(tmp, buf, { append: true });
-          }
-        }
-        if (last) renameSync(tmp, target);
-      } catch {
-        try { unlinkSync(tmp); } catch {}
-        json(res, 500, { error: "upload failed" });
+      const tmp = uploadTempPath(dir, name, offset);
+      const uploadResponse = applyUploadChunk({ tmp, target, offset, buf, last });
+      if (uploadResponse) {
+        json(res, uploadResponse.status, uploadResponse.body);
         return;
       }
       if (last) {

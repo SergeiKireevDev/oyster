@@ -165,7 +165,8 @@ function entryTexts(e) {
         if (b.type === "text" && typeof b.text === "string" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
         else if (b.type === "thinking" && typeof b.thinking === "string" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
         else if (b.type === "toolCall") {
-          let argumentsText = "{}";
+          let argumentsText;
+          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
           try { argumentsText = JSON.stringify(b.arguments ?? {}) ?? "{}"; } catch { argumentsText = "[unserializable arguments]"; }
           out.push({ role: m.role, kind: "toolCall", text: `${b.name ?? "?"} ${argumentsText}` });
         }
@@ -278,6 +279,7 @@ function makeSnippet(text, idx, qLen, ctx = 70) {
   };
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
   const parsedQuery = Array.isArray(query) ? { terms: query, operator: "AND" }
     : query && typeof query === "object" ? query : parseSearchQuery(query);

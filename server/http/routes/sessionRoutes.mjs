@@ -10,6 +10,7 @@ import { isNonArrayObject as isRecord } from "../../valuePredicates.mjs";
 import { isWithin } from "../pathContainment.mjs";
 
 /** Resolve a root session and every transitive child across catalog folders. */
+// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
   if (NATIVE_SESSION_BACKENDS.has(rootReference.backend)) {
     // Native harnesses own their session trees; never query Pi's catalog by a native ID.
@@ -427,6 +428,7 @@ export function createSessionRoutes({
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
+    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "GET /session-messages": async (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
@@ -479,6 +481,7 @@ export function createSessionRoutes({
       }
     },
 
+    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "GET /search": async (_req, res, url) => {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const scope = String(url.searchParams.get("scope") ?? "folder");

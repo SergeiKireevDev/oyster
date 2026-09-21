@@ -206,6 +206,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       before_id: z.string().optional().describe("For move: place the widget before this sibling id"),
       scope: z.enum(["session", "workspace"]).optional().describe("Pin scope; defaults to the current session"),
     },
+  // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
   }, async (params) => {
     const scope = params.scope ?? "session";
     if (params.action === "monitor") {

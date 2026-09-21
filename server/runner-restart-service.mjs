@@ -72,7 +72,7 @@ export function createRestartActiveRunners({
 
     for (const { runner } of captured) {
       if (failedRunnerIds.has(runner.id)) continue;
-      let stillOwned = false;
+      let stillOwned;
       try {
         const latest = runners();
         stillOwned = latest instanceof Map

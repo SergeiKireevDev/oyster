@@ -128,7 +128,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const oauthRefreshByHarness = new Map(); // populated below after credential services are composed
   const runners = await createRunnerManager(state, { appStore, ensureSessionOwner, notifyRunnerEvent: webPushService.handleRunnerEvent, unarchiveSession: (rootReference) => setSessionFamilyArchived({ state, catalog: state.sessionCatalog, rootReference, archived: false, includeAncestors: true }), onHarnessAuthFailure: (runner, event) => oauthRefreshByHarness.get(runner.harness)?.recover({ reason: `${event.reason}:${runner.id}` }), runnerDrivers, guardCallback: scope.guard });
   const {
-    srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
+    runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, requestRunnerUi, observeRunner, acknowledgeRunnerAttention,
     runnerFromReq, openSessionRunner, updateRunnerSessionReference, startPi, stopPi,
   } = runners;

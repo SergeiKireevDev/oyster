@@ -160,7 +160,7 @@ export function createSessionRequestResolver({ codec, sessionFileParam, sessionF
   };
   const referenceParam = ({ sessionKey, sessionPath } = {}) => {
     if (sessionKey !== undefined && sessionKey !== null) return parseKey(sessionKey);
-    let file = null;
+    let file;
     try { file = sessionPath ? sessionFileParam(sessionPath) : null; } catch { return null; }
     return referenceForTarget(file);
   };
