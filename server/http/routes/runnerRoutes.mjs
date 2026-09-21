@@ -215,6 +215,40 @@ export function createRunnerRoutes({
 
   const { json, readJsonBody, resolveSafePath } = requestContext;
 
+  function validateOpenSessionBody(body) {
+    if (!isJsonObject(body)) return "request body must be a JSON object";
+    for (const key of ["sessionKey", "sessionPath", "dir", "harness"]) {
+      if (body[key] !== undefined && (typeof body[key] !== "string" || !body[key].trim())) return `${key} must be a non-empty string`;
+    }
+    return body.sessionKey !== undefined && body.sessionPath !== undefined ? "provide either sessionKey or sessionPath, not both" : null;
+  }
+
+  function validateOpenSessionHarness({ harness, requestedSession }) {
+    if (harness && !runnerHarnesses().some((candidate) => candidate.id === harness)) return `unknown or unavailable harness: ${harness}`;
+    return requestedSession && harness ? "harness can only be selected for a new session" : null;
+  }
+
+  async function openSessionReference(body, requestedSession) {
+    const sessionRef = requestedSession !== undefined ? sessionReferenceParam(body) : null;
+    if (requestedSession && !sessionRef) return { error: `not a session reference: ${requestedSession}`, status: 400 };
+    const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
+    if (sessionRef && sessionRef.storagePath !== null && !persistedSession) return { error: `session not found: ${sessionRef.id}`, status: 404 };
+    return { sessionRef, persistedSession };
+  }
+
+  function resolveOpenSessionDir(body, sessionRef, persistedSession) {
+    let dir = body.dir !== undefined ? resolveSafePath(resolvePath(body.dir)) : null;
+    if (body.dir !== undefined && !dir) return { error: `path outside the allowed roots: ${body.dir}`, status: 403 };
+    if (sessionRef?.backend === "sqlite" && persistedSession?.cwd) {
+      dir = resolveSafePath(resolvePath(persistedSession.cwd));
+      if (!dir) return { error: `stored session path outside the allowed roots: ${persistedSession.cwd}`, status: 403 };
+    }
+    if (!dir) return { dir: null };
+    let validDirectory = false;
+    try { validDirectory = isDirectory(dir); } catch {}
+    return validDirectory ? { dir } : { error: `not a directory: ${dir}`, status: 400 };
+  }
+
   return {
     "GET /events": async (req, res, url) => {
       const runner = await runnerFromReq(url);
@@ -431,67 +465,21 @@ export function createRunnerRoutes({
       });
     },
 
-    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "POST /open-session": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      if (!isJsonObject(body)) {
-        json(res, 400, { error: "request body must be a JSON object" });
-        return;
-      }
-      for (const key of ["sessionKey", "sessionPath", "dir", "harness"]) {
-        if (body[key] !== undefined && (typeof body[key] !== "string" || !body[key].trim())) {
-          json(res, 400, { error: `${key} must be a non-empty string` });
-          return;
-        }
-      }
-      if (body.sessionKey !== undefined && body.sessionPath !== undefined) {
-        json(res, 400, { error: "provide either sessionKey or sessionPath, not both" });
-        return;
-      }
+      const bodyError = validateOpenSessionBody(body);
+      if (bodyError) return json(res, 400, { error: bodyError });
       const requestedSession = body.sessionKey ?? body.sessionPath;
-      const harnesses = runnerHarnesses();
       const harness = body.harness ?? null;
-      if (harness && !harnesses.some((candidate) => candidate.id === harness)) {
-        json(res, 400, { error: `unknown or unavailable harness: ${harness}` });
-        return;
-      }
-      if (requestedSession && harness) {
-        json(res, 400, { error: "harness can only be selected for a new session" });
-        return;
-      }
-      const sessionRef = requestedSession !== undefined ? sessionReferenceParam(body) : null;
-      if (requestedSession && !sessionRef) {
-        json(res, 400, { error: `not a session reference: ${requestedSession}` });
-        return;
-      }
-      const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
-      if (sessionRef && sessionRef.storagePath !== null && !persistedSession) {
-        json(res, 404, { error: `session not found: ${sessionRef.id}` });
-        return;
-      }
-      let dir = body.dir !== undefined ? resolveSafePath(resolvePath(body.dir)) : null;
-      if (body.dir !== undefined && !dir) {
-        json(res, 403, { error: `path outside the allowed roots: ${body.dir}` });
-        return;
-      }
-      if (sessionRef?.backend === "sqlite" && persistedSession?.cwd) {
-        dir = resolveSafePath(resolvePath(persistedSession.cwd));
-        if (!dir) {
-          json(res, 403, { error: `stored session path outside the allowed roots: ${persistedSession.cwd}` });
-          return;
-        }
-      }
-      if (dir) {
-        let validDirectory = false;
-        try { validDirectory = isDirectory(dir); } catch {}
-        if (!validDirectory) {
-          json(res, 400, { error: `not a directory: ${dir}` });
-          return;
-        }
-        state.currentDir = dir;
-      }
-      const runner = await openSessionRunner({ harness, sessionRef, dir });
+      const harnessError = validateOpenSessionHarness({ harness, requestedSession });
+      if (harnessError) return json(res, 400, { error: harnessError });
+      const reference = await openSessionReference(body, requestedSession);
+      if (reference.error) return json(res, reference.status, { error: reference.error });
+      const directory = resolveOpenSessionDir(body, reference.sessionRef, reference.persistedSession);
+      if (directory.error) return json(res, directory.status, { error: directory.error });
+      if (directory.dir) state.currentDir = directory.dir;
+      const runner = await openSessionRunner({ harness, sessionRef: reference.sessionRef, dir: directory.dir });
       json(res, 200, { runner: runnerInfo(runner) });
     },
   };

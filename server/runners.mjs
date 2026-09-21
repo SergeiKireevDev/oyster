@@ -123,7 +123,106 @@ function ensureRunnerRuntimeFields(runner) {
   return runner;
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
+function validateRunnerManagerInputs({ state, guardCallback, setTimer, clearTimer, notifyRunnerEvent, onHarnessAuthFailure }) {
+  if (!state || typeof state !== "object") throw new TypeError("runner state is required");
+  if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
+  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("runner timer functions are required");
+  if (typeof notifyRunnerEvent !== "function") throw new TypeError("runner notification callback is required");
+  if (onHarnessAuthFailure !== null && typeof onHarnessAuthFailure !== "function") throw new TypeError("harness auth failure handler must be a function or null");
+  if (!state.config || typeof state.config !== "object") throw new TypeError("runner config is required");
+  if (typeof state.serverEvent !== "function") throw new TypeError("serverEvent is required");
+  if (!(state.sseClients instanceof Set)) throw new TypeError("sseClients must be a Set");
+  if (!state.sessionReferences) throw new Error("session reference codec is required");
+}
+
+function runnerDriverRegistry(configuredRunnerDriver, configuredRunnerDrivers) {
+  return validateRunnerDriverRegistry(configuredRunnerDrivers ?? createRunnerDriverRegistry({
+    drivers: [validateRunnerDriver(configuredRunnerDriver)],
+    defaultId: configuredRunnerDriver.id,
+  }));
+}
+
+function persistedReference(persisted, sessionReferences) {
+  return persisted.session_backend
+    ? sessionReferences.validate({ backend: persisted.session_backend, id: persisted.session_id, storagePath: persisted.session_storage_path })
+    : null;
+}
+
+function runnerFromPersisted(persisted, reference, defaultHarness) {
+  return initializeRunnerRuntime({
+    id: persisted.id,
+    dir: persisted.dir,
+    harness: persisted.harness ?? defaultHarness,
+    sessionRef: reference,
+    sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
+    sessionId: reference?.id ?? null,
+    sessionName: persisted.session_name,
+    sessionInitialized: persisted.session_initialized !== 0,
+    attentionStatus: persisted.attention_status ?? null,
+    attentionUnread: persisted.attention_unread === 1,
+    startCount: persisted.start_count,
+  });
+}
+
+async function markPreviouslyLiveInterrupted({ appStore, runnerRepository, persistedRunners, state, now }) {
+  const previouslyLive = persistedRunners.filter((runner) => !state.runners.has(runner.id) && ["starting", "running"].includes(runner.last_status));
+  if (!previouslyLive.length) return persistedRunners;
+  const markInterrupted = async (repositories) => {
+    for (const runner of previouslyLive) await repositories.runners.update(runner.id, {
+      desired_state: "stopped", last_status: "interrupted", last_stopped_at: now(),
+    });
+  };
+  if (appStore?.transaction) await appStore.transaction(markInterrupted);
+  else await markInterrupted({ runners: runnerRepository });
+  return runnerRepository.list();
+}
+
+async function loadPersistedRunners({ state, runnerRepository, sessionReferences, runnerDrivers, appStore, now }) {
+  state.runners ??= new Map();
+  let persistedRunners = await runnerRepository?.list() ?? [];
+  persistedRunners = await markPreviouslyLiveInterrupted({ appStore, runnerRepository, persistedRunners, state, now });
+  for (const persisted of persistedRunners) {
+    if (state.runners.has(persisted.id)) continue;
+    const reference = persistedReference(persisted, sessionReferences);
+    state.runners.set(persisted.id, runnerFromPersisted(persisted, reference, runnerDrivers.defaultId));
+  }
+  return persistedRunners;
+}
+
+function runnerCompatibleWithConfiguredBackend(runner, driverFor) {
+  try { return driverFor(runner).isSessionCompatible(runner?.sessionRef ?? null); }
+  catch { return false; }
+}
+
+async function reconcileDefaultRunner({ state, persistedRunners, driverFor }) {
+  const compatible = (runner) => runnerCompatibleWithConfiguredBackend(runner, driverFor);
+  const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1 && compatible(state.runners.get(runner.id)));
+  if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId) || !compatible(state.runners.get(state.defaultRunnerId)))) {
+    state.defaultRunnerId = null;
+    await state.appSettings?.setDefaultRunnerId(null);
+  }
+  if (!state.defaultRunnerId && persistedDefault) {
+    state.defaultRunnerId = persistedDefault.id;
+    await state.appSettings?.setDefaultRunnerId(persistedDefault.id);
+  }
+}
+
+function ensureRuntimeReferences(state, sessionReferences) {
+  for (const runner of state.runners.values()) {
+    ensureRunnerRuntimeFields(runner);
+    if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
+      runner.sessionRef = sessionReferences.validate({ backend: "jsonl", id: runner.sessionId, storagePath: runner.sessionFile });
+    }
+  }
+}
+
+function retireLegacyPiProcess(state) {
+  if (!state.pi) return;
+  console.log("[oyster] retiring pre-runner pi process (multi-runner migration)");
+  try { state.pi.kill("SIGTERM"); } catch {}
+  state.pi = null;
+}
+
 export async function createRunnerManager(state, {
   ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = undefined, now = () => new Date().toISOString(),
@@ -137,96 +236,19 @@ export async function createRunnerManager(state, {
   runnerDriver: configuredRunnerDriver = null,
   runnerDrivers: configuredRunnerDrivers = null,
 } = {}) {
-  if (!state || typeof state !== "object") throw new TypeError("runner state is required");
-  if (typeof guardCallback !== "function") throw new TypeError("runner callback guard is required");
-  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("runner timer functions are required");
-  if (typeof notifyRunnerEvent !== "function") throw new TypeError("runner notification callback is required");
-  if (onHarnessAuthFailure !== null && typeof onHarnessAuthFailure !== "function") throw new TypeError("harness auth failure handler must be a function or null");
+  validateRunnerManagerInputs({ state, guardCallback, setTimer, clearTimer, notifyRunnerEvent, onHarnessAuthFailure });
   if (appStore === undefined) appStore = state.appStore;
-  const { config, serverEvent, sessionReferences } = state;
-  if (!config || typeof config !== "object") throw new TypeError("runner config is required");
-  if (typeof serverEvent !== "function") throw new TypeError("serverEvent is required");
-  if (!(state.sseClients instanceof Set)) throw new TypeError("sseClients must be a Set");
+  const { serverEvent, sessionReferences } = state;
   const runnerRepository = appStore?.repositories?.runners ?? null;
   const runnerEventRepository = appStore?.repositories?.runnerEvents ?? null;
-  const runnerDrivers = validateRunnerDriverRegistry(configuredRunnerDrivers ?? createRunnerDriverRegistry({
-    drivers: [validateRunnerDriver(configuredRunnerDriver)],
-    defaultId: configuredRunnerDriver.id,
-  }));
+  const runnerDrivers = runnerDriverRegistry(configuredRunnerDriver, configuredRunnerDrivers);
   const driverFor = (runner) => runnerDrivers.get(runner?.harness ?? runnerDrivers.defaultId);
-  if (!sessionReferences) throw new Error("session reference codec is required");
+  const compatibleWithConfiguredBackend = (runner) => runnerCompatibleWithConfiguredBackend(runner, driverFor);
 
-  if (!state.runners) state.runners = new Map(); // stable id -> runner
-  let persistedRunners = await runnerRepository?.list() ?? [];
-  const previouslyLive = persistedRunners.filter((runner) =>
-    !state.runners.has(runner.id) && ["starting", "running"].includes(runner.last_status));
-  if (previouslyLive.length) {
-    const markInterrupted = async (repositories) => {
-      for (const runner of previouslyLive) await repositories.runners.update(runner.id, {
-        desired_state: "stopped", last_status: "interrupted", last_stopped_at: now(),
-      });
-    };
-    if (appStore?.transaction) await appStore.transaction(markInterrupted);
-    else markInterrupted({ runners: runnerRepository });
-    persistedRunners = await runnerRepository.list();
-  }
-  for (const persisted of persistedRunners) {
-    if (state.runners.has(persisted.id)) continue;
-    const reference = persisted.session_backend
-      ? sessionReferences.validate({
-        backend: persisted.session_backend,
-        id: persisted.session_id,
-        storagePath: persisted.session_storage_path,
-      })
-      : null;
-    state.runners.set(persisted.id, initializeRunnerRuntime({
-      id: persisted.id,
-      dir: persisted.dir,
-      harness: persisted.harness ?? runnerDrivers.defaultId,
-      sessionRef: reference,
-      sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
-      sessionId: reference?.id ?? null,
-      sessionName: persisted.session_name,
-      sessionInitialized: persisted.session_initialized !== 0,
-      attentionStatus: persisted.attention_status ?? null,
-      attentionUnread: persisted.attention_unread === 1,
-      startCount: persisted.start_count,
-    }));
-  }
-  const compatibleWithConfiguredBackend = (runner) => {
-    try { return driverFor(runner).isSessionCompatible(runner?.sessionRef ?? null); }
-    catch { return false; }
-  };
-  const persistedDefault = persistedRunners.find((runner) => runner.is_default === 1
-    && compatibleWithConfiguredBackend(state.runners.get(runner.id)));
-  if (state.defaultRunnerId && (!state.runners.has(state.defaultRunnerId)
-    || !compatibleWithConfiguredBackend(state.runners.get(state.defaultRunnerId)))) {
-    state.defaultRunnerId = null;
-    await state.appSettings?.setDefaultRunnerId(null);
-  }
-  if (!state.defaultRunnerId && persistedDefault) {
-    state.defaultRunnerId = persistedDefault.id;
-    await state.appSettings?.setDefaultRunnerId(persistedDefault.id);
-  }
-  for (const runner of state.runners.values()) {
-    ensureRunnerRuntimeFields(runner);
-    if (!runner.sessionRef && runner.sessionFile && runner.sessionId) {
-      runner.sessionRef = sessionReferences.validate({
-        backend: "jsonl",
-        id: runner.sessionId,
-        storagePath: runner.sessionFile,
-      });
-    }
-  }
-
-  // one-time migration from the single-process era: a pre-runner pi process
-  // may survive a hot reload as state.pi; its stdout listeners belong to old
-  // code, so retire it and let runners take over
-  if (state.pi) {
-    console.log("[oyster] retiring pre-runner pi process (multi-runner migration)");
-    try { state.pi.kill("SIGTERM"); } catch {}
-    state.pi = null;
-  }
+  const persistedRunners = await loadPersistedRunners({ state, runnerRepository, sessionReferences, runnerDrivers, appStore, now });
+  await reconcileDefaultRunner({ state, persistedRunners, driverFor });
+  ensureRuntimeReferences(state, sessionReferences);
+  retireLegacyPiProcess(state);
 
   let srvSeq = 0;
   /** fresh id for server-initiated rpc commands (responses are recognizable) */
@@ -417,82 +439,110 @@ export async function createRunnerManager(state, {
     });
   }
 
-  /** Apply a canonical driver event to runner lifecycle and session metadata. */
-  // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-  async function trackRunner(runner, msg) {
-    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
+  function notifyTrackedEvent(runner, msg) {
     try { notifyRunnerEvent(runner, msg); }
     catch (error) { console.error(`[oyster] cannot notify for runner ${runner.id}: ${error?.message ?? error}`); }
-    if (msg.type === "extension_ui_request") {
-      if (msg.id) runner.pendingExtensionUiRequestIds.add(msg.id);
-      if (CLARIFICATION_METHODS.has(msg.method)) setRunnerAttention(runner, "clarification");
+  }
+
+  function handleExtensionUiRequest(runner, msg) {
+    if (msg.id) runner.pendingExtensionUiRequestIds.add(msg.id);
+    if (CLARIFICATION_METHODS.has(msg.method)) setRunnerAttention(runner, "clarification");
+  }
+
+  async function handleHarnessAuthFailure(runner, msg) {
+    if (!onHarnessAuthFailure) return;
+    try {
+      await onHarnessAuthFailure(runner, msg);
+    } catch (error) {
+      console.error(`[oyster] harness auth recovery for runner ${runner.id} failed: ${error?.message ?? error}`);
     }
-    if (msg.type === "agent_start") { setRunnerAttention(runner, null, false); runner.busy = true; runnersChanged(runner); }
-    else if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); }
-    else if (msg.type === "agent_settled") {
+  }
+
+  function resetRunnerTitleState(runner) {
+    try { runner.titleProcess?.kill("SIGTERM"); } catch {}
+    runner.titleProcess = null;
+    runner.titleSessionId = null;
+  }
+
+  function stateTransitionFor(runner, d, nextReference) {
+    const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
+    const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
+    const sessionInitialized = d.sessionInitialized !== false;
+    return {
+      sessionChanged,
+      provisionalReference: sessionChanged && runner.sessionInitialized === false ? runner.sessionRef : null,
+      sessionInitialized,
+      changed: referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName
+        || runner.sessionInitialized !== sessionInitialized,
+    };
+  }
+
+  async function persistRunnerState(runner, nextReference, sessionInitialized) {
+    const owner = nextReference ? await ensureSessionOwner(nextReference) : null;
+    await runnerRepository?.update(runner.id, {
+      owner_id: owner?.id ?? null,
+      session_backend: nextReference?.backend ?? null,
+      session_id: nextReference?.id ?? null,
+      session_storage_path: nextReference?.storagePath ?? null,
+      session_name: runner.sessionName,
+      session_initialized: sessionInitialized ? 1 : 0,
+    });
+  }
+
+  async function handleGetStateResponse(runner, d) {
+    const extractedReference = driverFor(runner).sessionReference(d, runner.sessionRef ?? null);
+    const nextReference = extractedReference ? sessionReferences.validate(extractedReference) : null;
+    const transition = stateTransitionFor(runner, d, nextReference);
+    if (transition.sessionChanged) resetRunnerTitleState(runner);
+    runner.sessionRef = nextReference;
+    runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
+    runner.sessionId = d.sessionId ?? runner.sessionId;
+    runner.sessionName = d.sessionName ?? null;
+    runner.sessionInitialized = transition.sessionInitialized;
+    if (transition.changed) {
+      if (transition.provisionalReference && nextReference) {
+        await appStore?.repositories?.sessions?.reidentify?.(transition.provisionalReference, nextReference);
+      }
+      await persistRunnerState(runner, nextReference, transition.sessionInitialized);
+    }
+    runner.busy = !!(d.isStreaming || d.isCompacting);
+    if (transition.changed) runnersChanged(runner);
+    void maybeTitleSession(runner, d);
+  }
+
+  async function handleResponseEvent(runner, msg) {
+    if (msg.id === runner.resumeId) {
+      finishResume(runner);
+      if (msg.success) requestState(runner);
+      return;
+    }
+    if (!msg.success) return;
+    if (msg.command === "get_state" && msg.data) await handleGetStateResponse(runner, msg.data);
+    else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) requestState(runner);
+  }
+
+  async function applyRunnerLifecycleEvent(runner, msg) {
+    if (msg.type === "extension_ui_request") handleExtensionUiRequest(runner, msg);
+    if (msg.type === "agent_start") { setRunnerAttention(runner, null, false); runner.busy = true; runnersChanged(runner); return; }
+    if (msg.type === "agent_end") { runner.busy = !!msg.willRetry; runnersChanged(runner); requestState(runner); return; }
+    if (msg.type === "agent_settled") {
       runner.busy = false;
       if (runner.attentionStatus !== "clarification") setRunnerAttention(runner, "completed");
       runnersChanged(runner);
       requestState(runner);
+      return;
     }
-    else if (msg.type === "compaction_start") { runner.busy = true; runnersChanged(runner); }
-    else if (msg.type === "compaction_end" && msg.reason === "manual") { runner.busy = false; runnersChanged(runner); requestState(runner); }
-    else if (msg.type === "harness_auth_failed" && onHarnessAuthFailure) {
-      // Credential recovery is best-effort background work; a failure here must
-      // not disturb the runner's own lifecycle bookkeeping.
-      try {
-        await onHarnessAuthFailure(runner, msg);
-      } catch (error) {
-        console.error(`[oyster] harness auth recovery for runner ${runner.id} failed: ${error?.message ?? error}`);
-      }
-    }
-    else if (msg.type === "response" && msg.id === runner.resumeId) {
-      // session resume finished (success or not): deliver held-back commands
-      finishResume(runner);
-      if (msg.success) requestState(runner);
-    }
-    else if (msg.type === "response" && msg.success) {
-      if (msg.command === "get_state" && msg.data) {
-        const d = msg.data;
-        const extractedReference = driverFor(runner).sessionReference(d, runner.sessionRef ?? null);
-        const nextReference = extractedReference ? sessionReferences.validate(extractedReference) : null;
-        const referenceChanged = nextReference && (!runner.sessionRef || !sessionReferences.equals(runner.sessionRef, nextReference));
-        const sessionChanged = runner.sessionId && d.sessionId && runner.sessionId !== d.sessionId;
-        const provisionalReference = sessionChanged && runner.sessionInitialized === false ? runner.sessionRef : null;
-        const sessionInitialized = d.sessionInitialized !== false;
-        const changed = referenceChanged || runner.sessionId !== d.sessionId || runner.sessionName !== d.sessionName
-          || runner.sessionInitialized !== sessionInitialized;
-        if (sessionChanged) {
-          try { runner.titleProcess?.kill("SIGTERM"); } catch {}
-          runner.titleProcess = null;
-          runner.titleSessionId = null;
-        }
-        runner.sessionRef = nextReference;
-        runner.sessionFile = nextReference?.backend === "jsonl" ? nextReference.storagePath : null;
-        runner.sessionId = d.sessionId ?? runner.sessionId;
-        runner.sessionName = d.sessionName ?? null;
-        runner.sessionInitialized = sessionInitialized;
-        if (changed) {
-          if (provisionalReference && nextReference) {
-            await appStore?.repositories?.sessions?.reidentify?.(provisionalReference, nextReference);
-          }
-          const owner = nextReference ? await ensureSessionOwner(nextReference) : null;
-          await runnerRepository?.update(runner.id, {
-            owner_id: owner?.id ?? null,
-            session_backend: nextReference?.backend ?? null,
-            session_id: nextReference?.id ?? null,
-            session_storage_path: nextReference?.storagePath ?? null,
-            session_name: runner.sessionName,
-            session_initialized: sessionInitialized ? 1 : 0,
-          });
-        }
-        runner.busy = !!(d.isStreaming || d.isCompacting);
-        if (changed) runnersChanged(runner);
-        void maybeTitleSession(runner, d);
-      } else if (["switch_session", "new_session", "set_session_name"].includes(msg.command)) {
-        requestState(runner);
-      }
-    }
+    if (msg.type === "compaction_start") { runner.busy = true; runnersChanged(runner); return; }
+    if (msg.type === "compaction_end" && msg.reason === "manual") { runner.busy = false; runnersChanged(runner); requestState(runner); return; }
+    if (msg.type === "harness_auth_failed") await handleHarnessAuthFailure(runner, msg);
+    else if (msg.type === "response") await handleResponseEvent(runner, msg);
+  }
+
+  /** Apply a canonical driver event to runner lifecycle and session metadata. */
+  async function trackRunner(runner, msg) {
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
+    notifyTrackedEvent(runner, msg);
+    await applyRunnerLifecycleEvent(runner, msg);
   }
 
   function requestState(runner) {

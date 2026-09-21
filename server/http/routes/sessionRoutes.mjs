@@ -9,19 +9,10 @@ import { errorMessage } from "../../errors.mjs";
 import { isNonArrayObject as isRecord } from "../../valuePredicates.mjs";
 import { isWithin } from "../pathContainment.mjs";
 
-/** Resolve a root session and every transitive child across catalog folders. */
-// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
-  if (NATIVE_SESSION_BACKENDS.has(rootReference.backend)) {
-    // Native harnesses own their session trees; never query Pi's catalog by a native ID.
-    return [sessionReferences.validate(rootReference)];
-  }
-  const sqlite = catalog.backend === "sqlite";
+function sessionReferenceResolver({ catalog, sessionReferences, sessionReferenceFor, sqlite }) {
   const validateReference = sessionReferences?.validate;
-  if (typeof validateReference !== "function" && (sqlite || typeof sessionReferenceFor !== "function")) {
-    throw new TypeError("a session reference validator is required");
-  }
-  const referenceFor = (session) => {
+  if (typeof validateReference !== "function" && (sqlite || typeof sessionReferenceFor !== "function")) throw new TypeError("a session reference validator is required");
+  return (session) => {
     const reference = !sqlite && typeof validateReference !== "function"
       ? sessionReferenceFor(session)
       : sessionReferences.validate(sqlite
@@ -30,22 +21,19 @@ export async function collectSessionFamilyReferences({ catalog, sessionReference
     if (!reference || typeof reference !== "object") throw new TypeError("session reference resolver returned an invalid reference");
     return reference;
   };
-  let summaries;
-  if (sqlite) {
-    summaries = typeof catalog.family === "function"
-      ? await catalog.family(rootReference.id, { includeAncestors })
-      : await catalog.list({});
-  } else {
-    const locations = new Set([dirname(rootReference.storagePath)]);
-    for (const folder of await catalog.folders?.() ?? []) {
-      const location = typeof folder === "string" ? folder : folder?.dir;
-      if (location) locations.add(location);
-    }
-    summaries = (await Promise.all([...locations].map((location) => catalog.list({ location })))).flat();
-  }
+}
 
-  const identity = (session) => sqlite ? session.id : session.path;
-  const parentIdentity = (session) => sqlite ? session.parentSessionId : session.parentSession;
+async function sessionFamilySummaries({ catalog, rootReference, includeAncestors, sqlite }) {
+  if (sqlite) return typeof catalog.family === "function" ? await catalog.family(rootReference.id, { includeAncestors }) : await catalog.list({});
+  const locations = new Set([dirname(rootReference.storagePath)]);
+  for (const folder of await catalog.folders?.() ?? []) {
+    const location = typeof folder === "string" ? folder : folder?.dir;
+    if (location) locations.add(location);
+  }
+  return (await Promise.all([...locations].map((location) => catalog.list({ location })))).flat();
+}
+
+function sessionFamilyIndexes(summaries, { identity, parentIdentity }) {
   const unique = new Map(summaries.filter((session) => identity(session)).map((session) => [identity(session), session]));
   const children = new Map();
   for (const session of unique.values()) {
@@ -54,15 +42,20 @@ export async function collectSessionFamilyReferences({ catalog, sessionReference
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent).push(session);
   }
+  return { unique, children };
+}
 
-  let rootIdentity = sqlite ? rootReference.id : rootReference.storagePath;
-  if (includeAncestors) {
-    const seenAncestors = new Set();
-    while (unique.has(rootIdentity) && parentIdentity(unique.get(rootIdentity)) && unique.has(parentIdentity(unique.get(rootIdentity))) && !seenAncestors.has(rootIdentity)) {
-      seenAncestors.add(rootIdentity);
-      rootIdentity = parentIdentity(unique.get(rootIdentity));
-    }
+function familyRootIdentity(rootIdentity, includeAncestors, { unique, parentIdentity }) {
+  if (!includeAncestors) return rootIdentity;
+  const seenAncestors = new Set();
+  while (unique.has(rootIdentity) && parentIdentity(unique.get(rootIdentity)) && unique.has(parentIdentity(unique.get(rootIdentity))) && !seenAncestors.has(rootIdentity)) {
+    seenAncestors.add(rootIdentity);
+    rootIdentity = parentIdentity(unique.get(rootIdentity));
   }
+  return rootIdentity;
+}
+
+function descendantReferences({ rootIdentity, rootReference, unique, children, identity, referenceFor }) {
   const familyRoot = unique.get(rootIdentity);
   const references = [familyRoot ? referenceFor(familyRoot) : rootReference];
   const pending = [rootIdentity];
@@ -77,6 +70,20 @@ export async function collectSessionFamilyReferences({ catalog, sessionReference
     }
   }
   return references;
+}
+
+/** Resolve a root session and every transitive child across catalog folders. */
+export async function collectSessionFamilyReferences({ catalog, sessionReferences, sessionReferenceFor = null, rootReference, includeAncestors = false }) {
+  if (NATIVE_SESSION_BACKENDS.has(rootReference.backend)) return [sessionReferences.validate(rootReference)];
+  const sqlite = catalog.backend === "sqlite";
+  const referenceFor = sessionReferenceResolver({ catalog, sessionReferences, sessionReferenceFor, sqlite });
+  const summaries = await sessionFamilySummaries({ catalog, rootReference, includeAncestors, sqlite });
+  const identity = (session) => sqlite ? session.id : session.path;
+  const parentIdentity = (session) => sqlite ? session.parentSessionId : session.parentSession;
+  const indexes = sessionFamilyIndexes(summaries, { identity, parentIdentity });
+  const initialRoot = sqlite ? rootReference.id : rootReference.storagePath;
+  const rootIdentity = familyRootIdentity(initialRoot, includeAncestors, { unique: indexes.unique, parentIdentity });
+  return descendantReferences({ rootIdentity, rootReference, ...indexes, identity, referenceFor });
 }
 
 /** Persist one archive state across a root session and every transitive child. */
@@ -206,6 +213,66 @@ export function createSessionRoutes({
       } catch { return null; }
     }
     return sqlite ? null : sessionTargetFromSearch(url);
+  }
+
+  function parseTranscriptPage(url) {
+    const rawLimit = url.searchParams.get("limit");
+    const rawBefore = url.searchParams.get("before");
+    const limit = rawLimit === null ? null : Number(rawLimit);
+    const before = rawBefore === null ? null : Number(rawBefore);
+    const invalid = (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 200))
+      || (before !== null && (!Number.isInteger(before) || before < 0));
+    return invalid ? null : { limit, before };
+  }
+
+  function attachNativeCodexState(transcript, saved) {
+    if (saved?.harness !== "codex") return;
+    const home = state.config?.CODEX_HOME || process.env.CODEX_HOME || resolve(homedir(), ".codex");
+    const nativeState = createCodexSessionStateReader(home, transcript.sessionId)();
+    const lastAssistant = transcript.messages?.findLast((message) => message.role === "assistant" && message.model && message.model !== "openai");
+    transcript.state = nativeState ?? { model: lastAssistant ? { provider: lastAssistant.provider || "openai", id: lastAssistant.model } : null };
+  }
+
+  function transcriptPage(messages, { limit, before }) {
+    if (limit === null) return { messages, page: null };
+    const end = before === null ? messages.length : Math.min(before, messages.length);
+    let start = Math.max(0, end - limit);
+    const targetStart = start;
+    while (start > 0 && messages[start]?.role !== "user") start--;
+    if (start > 0 && start < targetStart) {
+      start--;
+      while (start > 0 && messages[start]?.role !== "user") start--;
+    }
+    return { messages: messages.slice(start, end), page: { before: start > 0 ? start : null, hasMore: start > 0, total: messages.length } };
+  }
+
+  function sessionSearchIdentity(url) {
+    const key = url.searchParams.get("key");
+    if (!key) return null;
+    try {
+      const reference = state.sessionReferences.parse(key);
+      return reference.backend === catalog.backend ? (sqlite ? reference.id : reference.storagePath) : null;
+    } catch { return null; }
+  }
+
+  function validateSearchRequest({ query, scope, path, sessionIdentity }) {
+    if (query.length < 3) return "query must be at least 3 characters";
+    if (!["session", "folder", "all"].includes(scope)) return `invalid scope: ${scope}`;
+    if (scope === "session" && sqlite && !sessionIdentity) return "scope=session requires a session key";
+    if (scope === "session" && !sqlite && (!path || !isWithin(path, catalog.root) || path === catalog.root || !path.endsWith(".jsonl"))) {
+      return "scope=session requires a session file path";
+    }
+    if (scope === "folder" && !sqlite && path && !isWithin(path, catalog.root)) return "folder must be under the sessions root";
+    return null;
+  }
+
+  function decorateSearchResults(result) {
+    result.results = result.results.map((hit) => {
+      const source = sqlite ? { id: hit.sessionId } : { id: hit.sessionId, path: hit.sessionPath };
+      const sessionRef = referenceFor(source);
+      return { ...hit, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) };
+    });
+    return result;
   }
 
   return {
@@ -428,47 +495,18 @@ export function createSessionRoutes({
       catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
-    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "GET /session-messages": async (_req, res, url) => {
       const identity = requestedIdentity(url);
       if (!identity) { json(res, 404, { error: "session not found" }); return; }
-      const rawLimit = url.searchParams.get("limit");
-      const rawBefore = url.searchParams.get("before");
-      const limit = rawLimit === null ? null : Number(rawLimit);
-      const before = rawBefore === null ? null : Number(rawBefore);
-      if ((limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 200))
-        || (before !== null && (!Number.isInteger(before) || before < 0))) {
-        json(res, 400, { error: "invalid transcript page" }); return;
-      }
+      const pageRequest = parseTranscriptPage(url);
+      if (!pageRequest) { json(res, 400, { error: "invalid transcript page" }); return; }
       try {
         const transcript = await catalog.messages(identity);
         const saved = transcript.sessionId ? await catalog.findById?.(transcript.sessionId) : null;
-        if (saved?.harness === "codex") {
-          const home = state.config?.CODEX_HOME || process.env.CODEX_HOME || resolve(homedir(), ".codex");
-          const nativeState = createCodexSessionStateReader(home, transcript.sessionId)();
-          const lastAssistant = transcript.messages?.findLast((message) => message.role === "assistant" && message.model && message.model !== "openai");
-          transcript.state = nativeState ?? { model: lastAssistant ? { provider: lastAssistant.provider || "openai", id: lastAssistant.model } : null };
-        }
-        if (limit === null) { json(res, 200, transcript); return; }
-        const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
-        const end = before === null ? messages.length : Math.min(before, messages.length);
-        let start = Math.max(0, end - limit);
-        const targetStart = start;
-        // Do not expose a page beginning in the middle of an agent turn. If
-        // the target window begins with assistant/tool activity, continue
-        // backward through its user prompt. Include the preceding turn too,
-        // so a collapsed activity-heavy tail still leaves content above the
-        // prompt and the viewport can immediately scroll into older history.
-        while (start > 0 && messages[start]?.role !== "user") start--;
-        if (start > 0 && start < targetStart) {
-          start--;
-          while (start > 0 && messages[start]?.role !== "user") start--;
-        }
-        json(res, 200, {
-          ...transcript,
-          messages: messages.slice(start, end),
-          page: { before: start > 0 ? start : null, hasMore: start > 0, total: messages.length },
-        });
+        attachNativeCodexState(transcript, saved);
+        if (pageRequest.limit === null) { json(res, 200, transcript); return; }
+        const page = transcriptPage(Array.isArray(transcript.messages) ? transcript.messages : [], pageRequest);
+        json(res, 200, { ...transcript, messages: page.messages, page: page.page });
       } catch (error) { json(res, 500, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
@@ -481,34 +519,17 @@ export function createSessionRoutes({
       }
     },
 
-    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "GET /search": async (_req, res, url) => {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const scope = String(url.searchParams.get("scope") ?? "folder");
       const rawPath = url.searchParams.get("path");
-      const key = url.searchParams.get("key");
       let path = rawPath ? resolvePath(String(rawPath)) : null;
-      let sessionIdentity = null;
-      if (key) {
-        try {
-          const reference = state.sessionReferences.parse(key);
-          if (reference.backend === catalog.backend) sessionIdentity = sqlite ? reference.id : reference.storagePath;
-        } catch {}
-      }
-      if (query.length < 3) { json(res, 400, { error: "query must be at least 3 characters" }); return; }
-      if (!["session", "folder", "all"].includes(scope)) { json(res, 400, { error: `invalid scope: ${scope}` }); return; }
-      if (scope === "session") {
-        if (sqlite && !sessionIdentity) { json(res, 400, { error: "scope=session requires a session key" }); return; }
-        if (!sqlite && sessionIdentity) path = sessionIdentity;
-        if (!sqlite && (!path || !isWithin(path, catalog.root) || path === catalog.root || !path.endsWith(".jsonl"))) {
-          json(res, 400, { error: "scope=session requires a session file path" }); return;
-        }
-      }
-      if (scope === "folder" && !sqlite && path && !isWithin(path, catalog.root)) {
-        json(res, 400, { error: "folder must be under the sessions root" }); return;
-      }
+      const sessionIdentity = sessionSearchIdentity(url);
+      if (scope === "session" && !sqlite && sessionIdentity) path = sessionIdentity;
+      const error = validateSearchRequest({ query, scope, path, sessionIdentity });
+      if (error) { json(res, 400, { error }); return; }
       try {
-        const result = await catalog.search(sqlite ? {
+        const result = decorateSearchResults(await catalog.search(sqlite ? {
           q: query,
           scope,
           path: scope === "session" ? sessionIdentity : path,
@@ -520,15 +541,10 @@ export function createSessionRoutes({
           path,
           includeTools: url.searchParams.get("tools") === "1",
           defaultDir: catalog.locationForCwd(state.currentDir),
-        });
-        result.results = result.results.map((hit) => {
-          const source = sqlite ? { id: hit.sessionId } : { id: hit.sessionId, path: hit.sessionPath };
-          const sessionRef = referenceFor(source);
-          return { ...hit, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) };
-        });
+        }));
         json(res, 200, { q: query, scope, ...result });
-      } catch (error) {
-        json(res, 500, { error: `search failed: ${errorMessage(error)}` });
+      } catch (searchError) {
+        json(res, 500, { error: `search failed: ${errorMessage(searchError)}` });
       }
     },
   };

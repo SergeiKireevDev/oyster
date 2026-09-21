@@ -227,20 +227,34 @@ async function runScript(state, definition, mode) {
   await emit(state, definition, mode === "run" ? "started" : "teardown_started");
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-export async function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
+function validateRoutineCreateRequest({ name, script, sessionId, ownerId, cwd }) {
   if (typeof name !== "string" || !/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
   if (typeof script !== "string") throw new Error("routine script must be a string");
   if (cwd !== null && typeof cwd !== "string") throw new Error("routine cwd must be a string or null");
   if (sessionId && !ownerId) throw new Error("session owner is required to bind a routine");
-  const existing = await findRoutine(state, name);
+}
+
+function ensureRoutineCanBeOverwritten(state, existing, { name, sessionId }) {
   if (existing && activeRuntime(state, existing)?.proc) throw new Error(`routine "${name}" is currently running — stop it before overwriting`);
   if (existing?.session_id && sessionId && existing.session_id !== sessionId) throw new Error(`routine "${name}" exists and is bound to another session`);
-  const definition = await routineRepository(state).upsert({
+}
+
+function routineUpsertPayload({ existing, name, script, sessionId, ownerId, cwd }) {
+  return {
     id: existing?.id ?? randomUUID(),
     ownerId: sessionId ? ownerId : existing?.owner_id ?? null,
-    name, script, cwd: cwd ?? existing?.cwd ?? null, now: new Date().toISOString(),
-  });
+    name,
+    script,
+    cwd: cwd ?? existing?.cwd ?? null,
+    now: new Date().toISOString(),
+  };
+}
+
+export async function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
+  validateRoutineCreateRequest({ name, script, sessionId, ownerId, cwd });
+  const existing = await findRoutine(state, name);
+  ensureRoutineCanBeOverwritten(state, existing, { name, sessionId });
+  const definition = await routineRepository(state).upsert(routineUpsertPayload({ existing, name, script, sessionId, ownerId, cwd }));
   console.log(`[oyster] routine ${existing ? "updated" : "created"}: ${join(ROUTINES_DIR, name)} (session ${definition.session_id ?? "-"})`);
   await emit(state, definition, existing ? "updated" : "created");
   return routineView(state, definition);

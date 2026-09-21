@@ -30,32 +30,43 @@ function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-function availableModels(records, currentModel = null, provider = "anthropic") {
-  const models = [];
-  const seen = new Set();
-  const resolved = new Set();
-  for (const record of Array.isArray(records) ? records : []) {
-    if (!record || typeof record !== "object") continue;
-    const id = typeof record.value === "string" ? record.value.trim() : "";
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const resolvedModel = typeof record.resolvedModel === "string" && record.resolvedModel.trim()
-      ? record.resolvedModel.trim()
-      : null;
-    if (resolvedModel) resolved.add(resolvedModel);
-    models.push({
+function claudeModelRecord(record, provider) {
+  if (!record || typeof record !== "object") return null;
+  const id = typeof record.value === "string" ? record.value.trim() : "";
+  if (!id) return null;
+  const resolvedModel = typeof record.resolvedModel === "string" && record.resolvedModel.trim()
+    ? record.resolvedModel.trim()
+    : null;
+  return {
+    model: {
       provider,
       id,
       ...(typeof record.displayName === "string" && record.displayName.trim() ? { name: record.displayName.trim() } : {}),
       ...(typeof record.description === "string" && record.description.trim() ? { description: record.description.trim() } : {}),
       ...(resolvedModel ? { resolvedModel } : {}),
       ...(record.disabled === true ? { disabled: true } : {}),
-    });
+    },
+    resolvedModel,
+  };
+}
+
+function appendCurrentModel(models, seen, resolved, currentModel, provider) {
+  const id = typeof currentModel === "string" ? currentModel.trim() : "";
+  if (id && !seen.has(id) && !resolved.has(id)) models.push({ provider, id });
+}
+
+function availableModels(records, currentModel = null, provider = "anthropic") {
+  const models = [];
+  const seen = new Set();
+  const resolved = new Set();
+  for (const record of Array.isArray(records) ? records : []) {
+    const parsed = claudeModelRecord(record, provider);
+    if (!parsed || seen.has(parsed.model.id)) continue;
+    seen.add(parsed.model.id);
+    if (parsed.resolvedModel) resolved.add(parsed.resolvedModel);
+    models.push(parsed.model);
   }
-  if (typeof currentModel === "string" && currentModel.trim() && !seen.has(currentModel.trim()) && !resolved.has(currentModel.trim())) {
-    models.push({ provider, id: currentModel.trim() });
-  }
+  appendCurrentModel(models, seen, resolved, currentModel, provider);
   return models;
 }
 
@@ -87,6 +98,132 @@ function stateFor(runner, runtime) {
     isStreaming: runtime.streaming,
     isCompacting: false,
   };
+}
+
+function parseRecord(line) {
+  try {
+    const record = JSON.parse(String(line));
+    return record && typeof record === "object" ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeControlResponse(runtime, record) {
+  const control = record.response ?? {};
+  const pending = runtime.controlRequests.get(control.request_id);
+  if (!pending) return [];
+  runtime.controlRequests.delete(control.request_id);
+  if (pending.command === "health_probe") return [];
+  if (pending.command === "get_available_models") return [control.subtype === "success"
+    ? response(pending.id, pending.command, { models: availableModels(control.response?.models, runtime.model, runtime.provider) })
+    : response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models"))];
+  if (control.subtype === "success") {
+    runtime.model = pending.model;
+    return [response(pending.id, pending.command, {})];
+  }
+  return [response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code rejected the model"))];
+}
+
+function decodeInitRecord(runner, runtime, record) {
+  runtime.initialized = true;
+  runtime.sessionId = record.session_id ?? runtime.sessionId;
+  runtime.model = record.model ?? runtime.model;
+  return [response("_driver-claude-init", "get_state", stateFor(runner, runtime))];
+}
+
+function decodeAssistantRecord(runtime, record) {
+  const message = assistantMessage(record);
+  runtime.model = message.model;
+  runtime.streaming = true;
+  runtime.messages.push(message);
+  for (const block of message.content) if (block.type === "toolCall") runtime.toolNames.set(block.id, block.name);
+  return [{ type: "message_start", message }, { type: "message_end", message }];
+}
+
+function claudeUserEvent(message) {
+  return message.role === "toolResult"
+    ? [{ type: "tool_execution_end", toolCallId: message.toolCallId, result: message, isError: message.isError }, { type: "message_end", message }]
+    : [{ type: "message_start", message }];
+}
+
+function decodeUserRecord(runtime, record) {
+  const events = [];
+  for (const message of claudeRecordMessages(record, runtime.toolNames)) {
+    runtime.messages.push(message);
+    events.push(...claudeUserEvent(message));
+  }
+  return events;
+}
+
+function decodeResultRecord(runtime, record) {
+  runtime.streaming = false;
+  const error = record.is_error ? String(record.result ?? record.terminal_reason ?? "Claude Code failed") : null;
+  const events = error === null ? [] : [{ type: "pi_error", error }];
+  events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+  if (runtime.provider !== "openrouter" && error !== null && OAUTH_FAILURE_RE.test(error)) {
+    events.push({ type: "harness_auth_failed", reason: "oauth_expired", error });
+  }
+  return events;
+}
+
+function sendStateCommand(runner, runtime, command, emit) {
+  emit(response(command.id, "get_state", stateFor(runner, runtime)));
+  return true;
+}
+
+function sendMessagesCommand(runtime, command, emit) {
+  emit(response(command.id, "get_messages", { messages: [...runtime.messages] }));
+  return true;
+}
+
+function sendListModelsControl(runtime, child, command) {
+  if (!child?.stdin?.writable) return false;
+  const prefix = command.type === "health_probe" ? "oyster-health" : "oyster-models";
+  const requestId = `${prefix}-${command.id}`;
+  runtime.controlRequests.set(requestId, { id: command.id, command: command.type });
+  child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "list_models" } })}\n`);
+  return true;
+}
+
+function sendSetModelCommand(runtime, child, command, emit) {
+  if (!child?.stdin?.writable) return false;
+  if (command.provider !== (runtime.provider ?? "anthropic") || typeof command.modelId !== "string" || !command.modelId.trim()) {
+    emit(response(command.id, "set_model", null, false, "Claude Code requires a model from its selected provider"));
+    return true;
+  }
+  const requestId = `oyster-model-${command.id}`;
+  const model = command.modelId.trim();
+  runtime.controlRequests.set(requestId, { id: command.id, command: command.type, model });
+  child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "set_model", model } })}\n`);
+  return true;
+}
+
+function sendPromptCommand(runtime, child, command, emit) {
+  if (!child?.stdin?.writable) return false;
+  const message = { role: "user", content: String(command.message ?? "") };
+  const canonical = { role: "user", content: message.content, timestamp: Date.now() };
+  if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, 80) || "Claude Code session";
+  runtime.messages.push(canonical);
+  runtime.streaming = true;
+  emit({ type: "message_start", message: canonical });
+  emit({ type: "agent_start" });
+  child.stdin.write(`${JSON.stringify({ type: "user", message, session_id: runtime.sessionId, parent_tool_use_id: null })}\n`);
+  emit(response(command.id, "prompt", {}));
+  return true;
+}
+
+function sendAbortCommand(runtime, child, command, emit) {
+  child?.kill?.("SIGINT");
+  runtime.streaming = false;
+  emit(response(command.id, "abort", {}));
+  return true;
+}
+
+function sendSetSessionNameCommand(runtime, command, emit) {
+  runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName;
+  emit(response(command.id, "set_session_name", {}));
+  return true;
 }
 
 /** Translate Claude Code's headless stream-json protocol into Oyster's canonical runner protocol. */
@@ -138,136 +275,33 @@ export function createClaudeCodeDriver({
       return { process, description: `${executable} ${args.join(" ")}` };
     },
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     decodeLine(runner, line) {
-      let record;
-      try { record = JSON.parse(String(line)); } catch { return []; }
-      if (!record || typeof record !== "object") return [];
+      const record = parseRecord(line);
+      if (!record) return [];
       const runtime = ensureRuntime(runner);
-      const events = [];
-
-      if (record.type === "control_response") {
-        const control = record.response ?? {};
-        const pending = runtime.controlRequests.get(control.request_id);
-        if (!pending) return [];
-        runtime.controlRequests.delete(control.request_id);
-        // The runner manager has already counted this native child-process line
-        // as proof of life. Health probes are deliberately invisible to clients.
-        if (pending.command === "health_probe") return [];
-        if (pending.command === "get_available_models") {
-          if (control.subtype === "success") {
-            events.push(response(pending.id, pending.command, {
-              models: availableModels(control.response?.models, runtime.model, runtime.provider),
-            }));
-          } else {
-            events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models")));
-          }
-          return events;
-        }
-        if (control.subtype === "success") {
-          runtime.model = pending.model;
-          events.push(response(pending.id, pending.command, {}));
-        } else {
-          events.push(response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code rejected the model")));
-        }
-        return events;
-      }
-
-      if (record.type === "system" && record.subtype === "init") {
-        runtime.initialized = true;
-        runtime.sessionId = record.session_id ?? runtime.sessionId;
-        runtime.model = record.model ?? runtime.model;
-        events.push(response("_driver-claude-init", "get_state", stateFor(runner, runtime)));
-        return events;
-      }
-
+      if (record.type === "control_response") return decodeControlResponse(runtime, record);
+      if (record.type === "system" && record.subtype === "init") return decodeInitRecord(runner, runtime, record);
       if (record.session_id) runtime.sessionId = record.session_id;
-      if (record.type === "assistant") {
-        const message = assistantMessage(record);
-        runtime.model = message.model;
-        runtime.streaming = true;
-        runtime.messages.push(message);
-        for (const block of message.content) if (block.type === "toolCall") runtime.toolNames.set(block.id, block.name);
-        events.push({ type: "message_start", message }, { type: "message_end", message });
-      } else if (record.type === "user") {
-        const messages = claudeRecordMessages(record, runtime.toolNames);
-        for (const message of messages) {
-          runtime.messages.push(message);
-          if (message.role === "toolResult") {
-            events.push({ type: "tool_execution_end", toolCallId: message.toolCallId, result: message, isError: message.isError });
-            events.push({ type: "message_end", message });
-          } else {
-            events.push({ type: "message_start", message });
-          }
-        }
-      } else if (record.type === "result") {
-        runtime.streaming = false;
-        const error = record.is_error ? String(record.result ?? record.terminal_reason ?? "Claude Code failed") : null;
-        if (error !== null) events.push({ type: "pi_error", error });
-        events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-        // Emitted after settlement so recovery sees an idle runner it may restart.
-        if (runtime.provider !== "openrouter" && error !== null && OAUTH_FAILURE_RE.test(error)) events.push({ type: "harness_auth_failed", reason: "oauth_expired", error });
-      }
-      return events;
+      if (record.type === "assistant") return decodeAssistantRecord(runtime, record);
+      if (record.type === "user") return decodeUserRecord(runtime, record);
+      return record.type === "result" ? decodeResultRecord(runtime, record) : [];
     },
 
-    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     sendCommand(runner, child, command) {
       const runtime = ensureRuntime(runner);
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));
-      if (command.type === "get_state") {
-        // Claude emits system/init only after a prompt. Publish the local state
-        // immediately so an idle new session can show its welcome screen.
-        emit(response(command.id, "get_state", stateFor(runner, runtime)));
-        return true;
-      }
-      if (command.type === "get_messages") {
-        emit(response(command.id, "get_messages", { messages: [...runtime.messages] }));
-        return true;
-      }
-      if (command.type === "health_probe" || command.type === "get_available_models") {
-        if (!child?.stdin?.writable) return false;
-        const prefix = command.type === "health_probe" ? "oyster-health" : "oyster-models";
-        const requestId = `${prefix}-${command.id}`;
-        runtime.controlRequests.set(requestId, { id: command.id, command: command.type });
-        child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "list_models" } })}\n`);
-        return true;
-      }
-      if (command.type === "set_model") {
-        if (!child?.stdin?.writable) return false;
-        if (command.provider !== (runtime.provider ?? "anthropic") || typeof command.modelId !== "string" || !command.modelId.trim()) {
-          emit(response(command.id, "set_model", null, false, "Claude Code requires a model from its selected provider"));
-          return true;
-        }
-        const requestId = `oyster-model-${command.id}`;
-        runtime.controlRequests.set(requestId, { id: command.id, command: command.type, model: command.modelId.trim() });
-        child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "set_model", model: command.modelId.trim() } })}\n`);
-        return true;
-      }
-      if (command.type === "prompt") {
-        if (!child?.stdin?.writable) return false;
-        const message = { role: "user", content: String(command.message ?? "") };
-        const canonical = { role: "user", content: message.content, timestamp: Date.now() };
-        if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, 80) || "Claude Code session";
-        runtime.messages.push(canonical);
-        runtime.streaming = true;
-        emit({ type: "message_start", message: canonical });
-        emit({ type: "agent_start" });
-        child.stdin.write(`${JSON.stringify({ type: "user", message, session_id: runtime.sessionId, parent_tool_use_id: null })}\n`);
-        emit(response(command.id, "prompt", {}));
-        return true;
-      }
-      if (command.type === "abort") {
-        child?.kill?.("SIGINT");
-        runtime.streaming = false;
-        emit(response(command.id, "abort", {}));
-        return true;
-      }
-      if (command.type === "set_session_name") {
-        runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName;
-        emit(response(command.id, "set_session_name", {}));
-        return true;
-      }
+      const handlers = {
+        get_state: () => sendStateCommand(runner, runtime, command, emit),
+        get_messages: () => sendMessagesCommand(runtime, command, emit),
+        health_probe: () => sendListModelsControl(runtime, child, command),
+        get_available_models: () => sendListModelsControl(runtime, child, command),
+        set_model: () => sendSetModelCommand(runtime, child, command, emit),
+        prompt: () => sendPromptCommand(runtime, child, command, emit),
+        abort: () => sendAbortCommand(runtime, child, command, emit),
+        set_session_name: () => sendSetSessionNameCommand(runtime, command, emit),
+      };
+      const handler = handlers[command.type];
+      if (handler) return handler();
       emit(response(command.id, command.type, null, false, `${command.type} is not supported by Claude Code`));
       return true;
     },

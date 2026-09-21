@@ -272,61 +272,52 @@ function sendError(json, res, error) {
   json(res, status, { error: message });
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-async function materializePinnedWidgetTarget(body, {
-  state, resolveSafePath, ensurePinnedHublot, monitorRoot, widgetId,
-}) {
-  if (body.previewScript !== undefined || body.contentScript !== undefined) {
-    const cwd = resolveSafePath(resolve(String(body.cwd || state.config.PI_DIR)));
-    if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring cwd is outside the allowed roots or is not a directory"), { statusCode: 403 });
-    if (body.format !== undefined && body.format !== "text" && body.format !== "diff") {
-      throw Object.assign(new Error("monitoring format must be text or diff"), { statusCode: 400 });
-    }
-    const target = materializeMonitoringScripts({
-      id: widgetId,
-      previewScript: body.previewScript,
-      contentScript: body.contentScript,
-      cwd,
-      root: monitorRoot,
-    });
-    return {
-      kind: "monitoring",
-      target,
-      mimeType: body.format === "diff" ? "text/x-diff" : "text/plain; charset=utf-8",
-      size: null,
-      mtimeMs: null,
-      fallbackLabel: "Monitor",
-      cleanupTarget: target,
-    };
+function materializeMonitoringTarget(body, { state, resolveSafePath, monitorRoot, widgetId }) {
+  const cwd = resolveSafePath(resolve(String(body.cwd || state.config.PI_DIR)));
+  if (!cwd || !statSync(cwd).isDirectory()) throw Object.assign(new Error("monitoring cwd is outside the allowed roots or is not a directory"), { statusCode: 403 });
+  if (body.format !== undefined && body.format !== "text" && body.format !== "diff") {
+    throw Object.assign(new Error("monitoring format must be text or diff"), { statusCode: 400 });
   }
-  if (body.path) {
-    const target = resolveSafePath(resolve(String(body.path)));
-    if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
-    let stat;
-    try { stat = statSync(target); }
-    catch (error) {
-      throw Object.assign(new Error("pinned path is unavailable"), { statusCode: 404, cause: error });
-    }
-    if (!stat.isDirectory() && !stat.isFile()) {
-      throw Object.assign(new Error("pinned path must be a regular file or directory"), { statusCode: 415 });
-    }
-    const { kind, mimeType } = classifyPinnedPath(target, stat);
-    return { kind, target, mimeType, size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs), fallbackLabel: basename(target) };
-  }
-  if (body.hublotId) {
-    const hublot = await state.appStore.repositories.hublots.find(String(body.hublotId));
-    if (!hublot) throw Object.assign(new Error("no such live interface"), { statusCode: 404 });
-    return { pinnedWidget: await ensurePinnedHublot(state, hublot) };
-  }
-  if (body.url) {
-    let url;
-    try { url = new URL(String(body.url)); }
-    catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
-    if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
-    if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
-    if (url.href.length > 8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
-    return { kind: "link", target: url.href, mimeType: null, size: null, mtimeMs: null, fallbackLabel: url.hostname };
-  }
+  const target = materializeMonitoringScripts({ id: widgetId, previewScript: body.previewScript, contentScript: body.contentScript, cwd, root: monitorRoot });
+  return {
+    kind: "monitoring", target,
+    mimeType: body.format === "diff" ? "text/x-diff" : "text/plain; charset=utf-8",
+    size: null, mtimeMs: null, fallbackLabel: "Monitor", cleanupTarget: target,
+  };
+}
+
+function materializePathTarget(body, resolveSafePath) {
+  const target = resolveSafePath(resolve(String(body.path)));
+  if (!target) throw Object.assign(new Error("path is outside the allowed workspace roots"), { statusCode: 403 });
+  let stat;
+  try { stat = statSync(target); }
+  catch (error) { throw Object.assign(new Error("pinned path is unavailable"), { statusCode: 404, cause: error }); }
+  if (!stat.isDirectory() && !stat.isFile()) throw Object.assign(new Error("pinned path must be a regular file or directory"), { statusCode: 415 });
+  const { kind, mimeType } = classifyPinnedPath(target, stat);
+  return { kind, target, mimeType, size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs), fallbackLabel: basename(target) };
+}
+
+async function materializeHublotTarget(body, { state, ensurePinnedHublot }) {
+  const hublot = await state.appStore.repositories.hublots.find(String(body.hublotId));
+  if (!hublot) throw Object.assign(new Error("no such live interface"), { statusCode: 404 });
+  return { pinnedWidget: await ensurePinnedHublot(state, hublot) };
+}
+
+function materializeUrlTarget(body) {
+  let url;
+  try { url = new URL(String(body.url)); }
+  catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
+  if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
+  if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
+  if (url.href.length > 8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
+  return { kind: "link", target: url.href, mimeType: null, size: null, mtimeMs: null, fallbackLabel: url.hostname };
+}
+
+async function materializePinnedWidgetTarget(body, options) {
+  if (body.previewScript !== undefined || body.contentScript !== undefined) return materializeMonitoringTarget(body, options);
+  if (body.path) return materializePathTarget(body, options.resolveSafePath);
+  if (body.hublotId) return materializeHublotTarget(body, options);
+  if (body.url) return materializeUrlTarget(body);
   throw Object.assign(new Error("path, hublotId, https url, or monitoring scripts are required"), { statusCode: 400 });
 }
 
@@ -401,7 +392,7 @@ async function mediaTarget(state, widgetId, resolveSafePath, imageSource = null)
   return { row, target, stat, mimeType: classification.mimeType, displayName: basename(target) };
 }
 
-function markdownImageTarget(row, source, resolveSafePath) {
+function markdownDocumentTarget(row, resolveSafePath) {
   if (row.kind !== "markdown") throw Object.assign(new Error("widget is not a Markdown artifact"), { statusCode: 415 });
   const document = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!document) throw Object.assign(new Error("pinned Markdown is unavailable"), { statusCode: 404 });
@@ -409,17 +400,22 @@ function markdownImageTarget(row, source, resolveSafePath) {
   if (documentType.kind !== "markdown" || documentType.mimeType !== row.mime_type) {
     throw Object.assign(new Error("pinned Markdown type changed; re-pin it before display"), { statusCode: 415 });
   }
-  // Markdown destinations are URL-encoded paths. Strip URL suffixes before
-  // decoding so encoded # and ? characters remain part of the filename.
+  return document;
+}
+
+function markdownImagePath(source) {
   let path;
   try { path = decodeURIComponent(source.split(/[?#]/, 1)[0]); }
   catch { throw Object.assign(new Error("invalid image path"), { statusCode: 400 }); }
   if (!path || /[\x00-\x1f\x7f\\]/.test(path) || /^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith("//")) {
     throw Object.assign(new Error("invalid image path"), { statusCode: 400 });
   }
-  // Apply the same canonical-root and denied-path checks as pinned files,
-  // including symlink targets. Never fetch remote URLs on the server.
-  const target = resolveSafePath(resolve(dirname(document), path));
+  return path;
+}
+
+function markdownImageTarget(row, source, resolveSafePath) {
+  const document = markdownDocumentTarget(row, resolveSafePath);
+  const target = resolveSafePath(resolve(dirname(document), markdownImagePath(source)));
   if (!target) throw Object.assign(new Error("image path outside the allowed roots"), { statusCode: 403 });
   const stat = statArtifact(target, "Markdown image is unavailable");
   const classification = classifyPinnedPath(target, stat);
@@ -474,38 +470,51 @@ export function formatMonitoringPreview(value, limit = MONITOR_PREVIEW_CHARACTER
   return `${graphemes.slice(0, Math.max(0, limit - 1)).join("")}…`;
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
+function monitoringTarget(row, resolveSafePath) {
   if (row?.kind !== "monitoring") throw Object.assign(new Error("widget is not a monitoring widget"), { statusCode: 415 });
-  if (mode !== "preview" && mode !== "content") throw Object.assign(new Error("monitoring mode must be preview or content"), { statusCode: 400 });
   const target = row.target ? resolveSafePath(resolve(row.target)) : null;
   if (!target) throw Object.assign(new Error("monitoring scripts are unavailable"), { statusCode: 404 });
-  const script = join(target, mode === "content" ? "content.sh" : "preview.sh");
-  let cwd;
+  return target;
+}
+
+function normalizeMonitoringCwd(value) {
+  if (value.endsWith("\r\n")) return value.slice(0, -2);
+  if (value.endsWith("\n")) return value.slice(0, -1);
+  return value;
+}
+
+function readMonitoringCwd(target, resolveSafePath) {
   try {
     const cwdPath = join(target, "cwd");
     const cwdStat = statSync(cwdPath);
     if (!cwdStat.isFile() || cwdStat.size > 16 * 1024) throw new Error("invalid monitoring cwd metadata");
-    let cwdValue = readFileSync(cwdPath, "utf8");
-    // Monitoring widgets created before hardened metadata writes include one
-    // trailing line ending. Accept that exact legacy encoding without letting
-    // arbitrary control characters become part of the execution directory.
-    if (cwdValue.endsWith("\r\n")) cwdValue = cwdValue.slice(0, -2);
-    else if (cwdValue.endsWith("\n")) cwdValue = cwdValue.slice(0, -1);
+    const cwdValue = normalizeMonitoringCwd(readFileSync(cwdPath, "utf8"));
     if (!cwdValue || /[\0\r\n]/.test(cwdValue)) throw new Error("invalid monitoring cwd metadata");
-    cwd = resolveSafePath(resolve(cwdValue));
+    const cwd = resolveSafePath(resolve(cwdValue));
     if (!cwd || !statSync(cwd).isDirectory()) throw new Error("invalid monitoring cwd");
+    return cwd;
   } catch (error) {
     throw Object.assign(new Error("monitoring working directory is unavailable"), { statusCode: 404, cause: error });
   }
+}
+
+function monitoringExecOptions(mode, cwd) {
+  return {
+    cwd,
+    timeout: mode === "content" ? 30_000 : 8_000,
+    maxBuffer: mode === "content" ? MONITOR_CONTENT_LIMIT : MONITOR_PREVIEW_LIMIT,
+    encoding: "utf8",
+    env: { ...process.env, NO_COLOR: "1", TERM: "dumb" },
+  };
+}
+
+export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
+  if (mode !== "preview" && mode !== "content") throw Object.assign(new Error("monitoring mode must be preview or content"), { statusCode: 400 });
+  const target = monitoringTarget(row, resolveSafePath);
+  const script = join(target, mode === "content" ? "content.sh" : "preview.sh");
+  const cwd = readMonitoringCwd(target, resolveSafePath);
   try {
-    const result = await execFileImpl(script, [], {
-      cwd,
-      timeout: mode === "content" ? 30_000 : 8_000,
-      maxBuffer: mode === "content" ? MONITOR_CONTENT_LIMIT : MONITOR_PREVIEW_LIMIT,
-      encoding: "utf8",
-      env: { ...process.env, NO_COLOR: "1", TERM: "dumb" },
-    });
+    const result = await execFileImpl(script, [], monitoringExecOptions(mode, cwd));
     return String(result?.stdout ?? "").replace(/\s+$/, "");
   } catch (error) {
     const detail = String(error?.stderr || error?.message || error).trim().slice(0, 1000);
