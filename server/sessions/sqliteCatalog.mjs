@@ -39,28 +39,23 @@ function snippet(text, index, length, context = 70) {
   };
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
+function searchableBlockPart(block, role) {
+  if (!block || typeof block !== "object") return null;
+  if (block.type === "text" && typeof block.text === "string" && block.text) return { role, kind: "text", text: block.text };
+  if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) return { role, kind: "thinking", text: block.thinking };
+  if (block.type !== "toolCall") return null;
+  const name = typeof block.name === "string" && block.name ? block.name : "?";
+  return { role, kind: "toolCall", text: `${name} ${JSON.stringify(block.arguments ?? {})}` };
+}
+
 function searchableParts(entry) {
-  if (entry.type === "session_info" && typeof entry.name === "string" && entry.name) {
-    return [{ role: "meta", kind: "name", text: entry.name }];
-  }
+  if (entry.type === "session_info" && typeof entry.name === "string" && entry.name) return [{ role: "meta", kind: "name", text: entry.name }];
   if (entry.type !== "message" || !entry.message || typeof entry.message !== "object") return [];
   const message = entry.message;
   if (typeof message.content === "string") return [{ role: message.role, kind: "text", text: message.content }];
-  if (!Array.isArray(message.content)) return [];
-  const parts = [];
-  for (const block of message.content) {
-    if (!block || typeof block !== "object") continue;
-    if (block.type === "text" && typeof block.text === "string" && block.text) {
-      parts.push({ role: message.role, kind: "text", text: block.text });
-    } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
-      parts.push({ role: message.role, kind: "thinking", text: block.thinking });
-    } else if (block.type === "toolCall") {
-      const name = typeof block.name === "string" && block.name ? block.name : "?";
-      parts.push({ role: message.role, kind: "toolCall", text: `${name} ${JSON.stringify(block.arguments ?? {})}` });
-    }
-  }
-  return parts;
+  return Array.isArray(message.content)
+    ? message.content.map((block) => searchableBlockPart(block, message.role)).filter(Boolean)
+    : [];
 }
 
 function openAsyncDatabase(path) {

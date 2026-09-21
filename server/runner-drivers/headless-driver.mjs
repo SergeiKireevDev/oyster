@@ -122,96 +122,123 @@ function endTool(runtime, events, { id, name, text, isError, at }) {
   events.push({ type: "message_end", message });
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
+function codexToolShape(item, details) {
+  if (item.type === "command_execution") return { name: "shell", args: { command: item.command } };
+  if (item.type === "mcp_tool_call") return { name: item.tool ?? "mcp", args: item.arguments };
+  if (item.type === "web_search") return { name: item.type, args: { query: item.query } };
+  if (item.type === "file_change") return { name: item.type, args: { changes: item.changes ?? [] } };
+  if (item.type === "todo_list" || item.type.endsWith("_tool_call")) return { name: item.type, args: details };
+  return null;
+}
+
+function codexFallbackText(item, details) {
+  if (item.type === "todo_list") return (item.items ?? []).map((entry) => `${entry.completed ? "[x]" : "[ ]"} ${entry.text}`).join("\n");
+  if (item.type === "file_change") return JSON.stringify(item.changes ?? [], null, 2);
+  return item.type.endsWith("_tool_call") && item.type !== "mcp_tool_call"
+    ? JSON.stringify(details, null, 2)
+    : item.status;
+}
+
 function codexTool(item) {
   const { id, type, status, ...details } = item;
   if (!id || typeof type !== "string") return null;
-  let name = type;
-  let args = details;
-  if (type === "command_execution") { name = "shell"; args = { command: item.command }; }
-  else if (type === "mcp_tool_call") { name = item.tool ?? "mcp"; args = item.arguments; }
-  else if (type === "web_search") args = { query: item.query };
-  else if (type === "file_change") args = { changes: item.changes ?? [] };
-  else if (type !== "todo_list" && !type.endsWith("_tool_call")) return null;
-  const text = item.aggregated_output ?? item.error?.message ?? item.result?.content ?? item.result
-    ?? (type === "todo_list" ? (item.items ?? []).map((entry) => `${entry.completed ? "[x]" : "[ ]"} ${entry.text}`).join("\n")
-      : type === "file_change" ? JSON.stringify(item.changes ?? [], null, 2)
-        : type.endsWith("_tool_call") && type !== "mcp_tool_call" ? JSON.stringify(details, null, 2) : status);
-  return { id, name, args, text, isError: ["failed", "declined"].includes(status) || Boolean(item.error), provider: "openai", api: "codex", model: undefined };
+  const shape = codexToolShape(item, details);
+  if (!shape) return null;
+  const text = item.aggregated_output ?? item.error?.message ?? item.result?.content ?? item.result ?? codexFallbackText(item, details);
+  return { id, ...shape, text, isError: ["failed", "declined"].includes(status) || Boolean(item.error), provider: "openai", api: "codex", model: undefined };
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-function decodeCodex(runtime, record) {
+function codexAssistantMessage(runtime, item) {
+  const content = item.type === "reasoning"
+    ? [{ type: "thinking", thinking: String(item.text ?? "") }]
+    : [{ type: "text", text: String(item.text ?? "") }];
+  const message = assistant(runtime, { provider: "openai", api: "codex", model: runtime.model, content });
+  return [{ type: "message_start", message }, { type: "message_end", message }];
+}
+
+function decodeCodexToolProgress(runtime, record) {
   const events = [];
-  if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
-    runtime.model = record.model;
-    runtime.selectedModel = null;
-  } else if (record.type === "thread.started" && record.thread_id) {
-    runtime.sessionId = record.thread_id;
-    runtime.initialized = true;
-  } else if (record.type === "item.started" || record.type === "item.updated") {
-    const tool = codexTool(record.item ?? {});
-    if (tool) {
-      if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
-      if (record.type === "item.updated" || ["file_change", "todo_list"].includes(record.item.type)) {
-        events.push({ type: "tool_execution_update", toolCallId: tool.id, toolName: tool.name,
-          partialResult: { content: [{ type: "text", text: resultText(tool.text) }] } });
-      }
-    }
-  } else if (record.type === "item.completed") {
-    const item = record.item ?? {};
-    if (item.type === "agent_message" || item.type === "reasoning") {
-      const content = item.type === "reasoning" ? [{ type: "thinking", thinking: String(item.text ?? "") }] : [{ type: "text", text: String(item.text ?? "") }];
-      const message = assistant(runtime, { provider: "openai", api: "codex", model: runtime.model, content });
-      events.push({ type: "message_start", message }, { type: "message_end", message });
-    } else if (codexTool(item)) {
-      const tool = codexTool(item);
-      if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
-      endTool(runtime, events, tool);
-    } else if (item.type === "error") {
-      events.push({ type: "pi_error", error: String(item.message ?? "Codex reported an error") });
-    }
-  } else if (record.type === "turn.completed") {
-    runtime.streaming = false;
-    events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-  } else if (record.type === "turn.failed") {
-    runtime.streaming = false;
-    events.push({ type: "pi_error", error: String(record.error?.message ?? "Codex failed") });
-    events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-  } else if (record.type === "error") {
-    // Codex also uses top-level error records for retry notices. Keep the turn
-    // active until turn.failed, turn.completed, or the bridge reports exit.
-    events.push({ type: "pi_error", error: String(record.message ?? "Codex reported an error") });
+  const tool = codexTool(record.item ?? {});
+  if (!tool) return events;
+  if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
+  if (record.type === "item.updated" || ["file_change", "todo_list"].includes(record.item.type)) {
+    events.push({ type: "tool_execution_update", toolCallId: tool.id, toolName: tool.name,
+      partialResult: { content: [{ type: "text", text: resultText(tool.text) }] } });
   }
   return events;
 }
 
-function decodeGemini(runtime, record, provider = "google", api = "gemini-cli") {
+function decodeCodexCompletedItem(runtime, item) {
+  if (item.type === "agent_message" || item.type === "reasoning") return codexAssistantMessage(runtime, item);
+  if (item.type === "error") return [{ type: "pi_error", error: String(item.message ?? "Codex reported an error") }];
+  const tool = codexTool(item);
+  if (!tool) return [];
   const events = [];
+  if (!runtime.toolNames.has(tool.id)) startTool(runtime, events, tool);
+  endTool(runtime, events, tool);
+  return events;
+}
+
+function settleCodex(runtime, extraEvents = []) {
+  runtime.streaming = false;
+  return [...extraEvents, { type: "agent_end", willRetry: false }, { type: "agent_settled" }];
+}
+
+function decodeCodex(runtime, record) {
+  if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
+    runtime.model = record.model;
+    runtime.selectedModel = null;
+    return [];
+  }
+  if (record.type === "thread.started" && record.thread_id) {
+    runtime.sessionId = record.thread_id;
+    runtime.initialized = true;
+    return [];
+  }
+  if (record.type === "item.started" || record.type === "item.updated") return decodeCodexToolProgress(runtime, record);
+  if (record.type === "item.completed") return decodeCodexCompletedItem(runtime, record.item ?? {});
+  if (record.type === "turn.completed") return settleCodex(runtime);
+  if (record.type === "turn.failed") return settleCodex(runtime, [{ type: "pi_error", error: String(record.error?.message ?? "Codex failed") }]);
+  return record.type === "error" ? [{ type: "pi_error", error: String(record.message ?? "Codex reported an error") }] : [];
+}
+
+function geminiAssistantDelta(runtime, record, provider, api) {
+  const events = [];
+  const delta = String(record.content ?? "");
+  if (!runtime.currentMessage) {
+    runtime.currentMessage = assistant(runtime, { provider, api, model: runtime.model, at: record.timestamp, content: [{ type: "text", text: "" }] });
+    events.push({ type: "message_start", message: runtime.currentMessage });
+  }
+  runtime.currentMessage.content[0].text += delta;
+  events.push({ type: "message_update", message: runtime.currentMessage, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta, partial: runtime.currentMessage } });
+  return events;
+}
+
+function decodeGemini(runtime, record, provider = "google", api = "gemini-cli") {
   if (record.type === "init") {
     runtime.sessionId = record.session_id ?? runtime.sessionId;
     runtime.model = record.model ?? runtime.model;
     runtime.initialized = true;
-  } else if (record.type === "message" && record.role === "assistant") {
-    const delta = String(record.content ?? "");
-    if (!runtime.currentMessage) {
-      runtime.currentMessage = assistant(runtime, { provider, api, model: runtime.model, at: record.timestamp, content: [{ type: "text", text: "" }] });
-      events.push({ type: "message_start", message: runtime.currentMessage });
-    }
-    runtime.currentMessage.content[0].text += delta;
-    events.push({ type: "message_update", message: runtime.currentMessage, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta, partial: runtime.currentMessage } });
-  } else if (record.type === "tool_use") {
-    startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider, api, model: runtime.model, at: record.timestamp });
-  } else if (record.type === "tool_result") {
-    endTool(runtime, events, { id: String(record.tool_id ?? "tool"), text: record.output ?? record.error?.message, isError: record.status === "error", at: record.timestamp });
-  } else if (record.type === "error") {
-    events.push({ type: "pi_error", error: String(record.message ?? "Gemini CLI reported an error") });
-  } else if (record.type === "result") {
-    finishStreamingMessage(runtime, events, record.status === "error" ? "error" : "stop");
-    runtime.streaming = false;
-    if (record.status === "error") events.push({ type: "pi_error", error: String(record.error?.message ?? "Gemini CLI failed") });
-    events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+    return [];
   }
+  if (record.type === "message" && record.role === "assistant") return geminiAssistantDelta(runtime, record, provider, api);
+  if (record.type === "tool_use") {
+    const events = [];
+    startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider, api, model: runtime.model, at: record.timestamp });
+    return events;
+  }
+  if (record.type === "tool_result") {
+    const events = [];
+    endTool(runtime, events, { id: String(record.tool_id ?? "tool"), text: record.output ?? record.error?.message, isError: record.status === "error", at: record.timestamp });
+    return events;
+  }
+  if (record.type === "error") return [{ type: "pi_error", error: String(record.message ?? "Gemini CLI reported an error") }];
+  if (record.type !== "result") return [];
+  const events = [];
+  finishStreamingMessage(runtime, events, record.status === "error" ? "error" : "stop");
+  runtime.streaming = false;
+  if (record.status === "error") events.push({ type: "pi_error", error: String(record.error?.message ?? "Gemini CLI failed") });
+  events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
   return events;
 }
 
@@ -230,38 +257,230 @@ function ampAssistant(runtime, record) {
   });
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-function decodeAmp(runtime, record) {
+function ampStopSettles(record) {
+  return Boolean(record.message?.stop_reason) && record.message.stop_reason !== "tool_use" && record.message.stop_reason !== "pause_turn";
+}
+
+function decodeAmpAssistant(runtime, record) {
   const events = [];
+  const message = ampAssistant(runtime, record);
+  events.push({ type: "message_start", message }, { type: "message_end", message });
+  for (const block of message.content) if (block.type === "toolCall") {
+    runtime.toolNames.set(block.id, block.name);
+    events.push({ type: "tool_execution_start", toolCallId: block.id, toolName: block.name, args: block.arguments });
+  }
+  if (ampStopSettles(record)) {
+    runtime.streaming = false;
+    events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+  }
+  return events;
+}
+
+function decodeAmpUser(runtime, record) {
+  const events = [];
+  const blocks = Array.isArray(record.message?.content) ? record.message.content : [];
+  for (const block of blocks) if (block?.type === "tool_result" && block.tool_use_id) {
+    endTool(runtime, events, { id: String(block.tool_use_id), text: block.content, isError: block.is_error, at: record.timestamp });
+  }
+  return events;
+}
+
+function decodeAmpResult(runtime, record) {
+  const events = record.is_error ? [{ type: "pi_error", error: String(record.error ?? record.result ?? "Amp failed") }] : [];
+  if (runtime.streaming) {
+    runtime.streaming = false;
+    events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+  }
+  return events;
+}
+
+function decodeAmp(runtime, record) {
   if (record.type === "system" && record.subtype === "init") {
     runtime.sessionId = record.session_id ?? runtime.sessionId;
     runtime.initialized = true;
-  } else if (record.type === "assistant") {
-    const message = ampAssistant(runtime, record);
-    events.push({ type: "message_start", message }, { type: "message_end", message });
-    for (const block of message.content) if (block.type === "toolCall") {
-      runtime.toolNames.set(block.id, block.name);
-      events.push({ type: "tool_execution_start", toolCallId: block.id, toolName: block.name, args: block.arguments });
-    }
-    if (record.message?.stop_reason && record.message.stop_reason !== "tool_use" && record.message.stop_reason !== "pause_turn") {
-      runtime.streaming = false;
-      events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-    }
-  } else if (record.type === "user") {
-    const blocks = Array.isArray(record.message?.content) ? record.message.content : [];
-    for (const block of blocks) if (block?.type === "tool_result" && block.tool_use_id) {
-      endTool(runtime, events, { id: String(block.tool_use_id), text: block.content, isError: block.is_error, at: record.timestamp });
-    }
-  } else if (record.type === "system" && record.error) {
-    events.push({ type: "pi_error", error: String(record.error) });
-  } else if (record.type === "result") {
-    if (record.is_error) events.push({ type: "pi_error", error: String(record.error ?? record.result ?? "Amp failed") });
-    if (runtime.streaming) {
-      runtime.streaming = false;
-      events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-    }
+    return [];
   }
+  if (record.type === "assistant") return decodeAmpAssistant(runtime, record);
+  if (record.type === "user") return decodeAmpUser(runtime, record);
+  if (record.type === "system" && record.error) return [{ type: "pi_error", error: String(record.error) }];
+  return record.type === "result" ? decodeAmpResult(runtime, record) : [];
+}
+
+function validateHeadlessOptions({ id, label, kind, extraArgs, spawnImpl, env, bridgeOptions }) {
+  if (!["codex", "gemini", "amp", "antigravity"].includes(kind)) throw new TypeError(`unsupported headless bridge kind: ${kind}`);
+  if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError(`${label ?? id} arguments must be strings`);
+  if (typeof spawnImpl !== "function") throw new TypeError(`${label ?? id} spawn implementation must be a function`);
+  if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError(`${label ?? id} environment must be an object`);
+  if (!bridgeOptions || typeof bridgeOptions !== "object" || Array.isArray(bridgeOptions)) throw new TypeError(`${label ?? id} bridge options must be an object`);
+}
+
+function routeProviderChanged(runtime, provider) {
+  return (runtime.provider ?? provider) !== provider;
+}
+
+function maybeLoadCodexResumeModel({ kind, runtime, bridgeOptions, env }) {
+  if (kind !== "codex" || !runtime.initialized || runtime.model) return;
+  const home = bridgeOptions.codexHome || env.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), ".codex");
+  runtime.model = createCodexSessionModelReader(home, runtime.sessionId)();
+}
+
+function bridgeConfigFor({ kind, executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, bridgeOptions, runtime, route }) {
+  return {
+    ...(kind === "codex" && runtime.initialized ? { resumeSessionId: runtime.sessionId } : {}),
+    kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode,
+    ...bridgeOptions,
+    ...(route ? { provider: route.provider } : {}),
+  };
+}
+
+function decodeHeadlessRecord({ kind, runtime, record }) {
+  if (kind === "codex") return decodeCodex(runtime, record);
+  if (kind === "gemini") return decodeGemini(runtime, record);
+  if (kind === "antigravity") return antigravityEvents(runtime, record).flatMap((event) => decodeGemini(runtime, event, "antigravity", "antigravity-cli"));
+  return decodeAmp(runtime, record);
+}
+
+function parseBridgeRecord(line) {
+  try {
+    const record = JSON.parse(String(line));
+    return record && typeof record === "object" && !Array.isArray(record) ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+function modelResponseEvents(runtime, record, kind) {
+  if (record.error) return [response(record.id, "get_available_models", null, false, record.error)];
+  runtime.availableModels = Array.isArray(record.models) ? record.models : [];
+  return [response(record.id, "get_available_models", { models: runtime.availableModels, selectionLabel: kind === "amp" ? "mode" : "model" })];
+}
+
+function turnStartEvents(runtime) {
+  runtime.bridgeTurnCompleted = false;
+  runtime.streaming = true;
+  return [{ type: "agent_start" }];
+}
+
+function turnExitError({ record, label, id }) {
+  return record.error || (record.code !== 0 ? String(record.stderr || `${label ?? id} exited with code ${record.code}`).trim() : null);
+}
+
+function turnExitEvents({ runner, runtime, record, kind, label, id, persistTranscript }) {
+  if (runtime.bridgeTurnCompleted) {
+    runtime.bridgeTurnCompleted = false;
+    return [];
+  }
+  if (!runtime.streaming) return [];
+  runtime.streaming = false;
+  const error = turnExitError({ record, label, id });
+  const events = [];
+  finishStreamingMessage(runtime, events, error ? "error" : "stop");
+  persistTranscript(runner, runtime);
+  if (error) events.push({ type: "pi_error", error });
+  if (error && runtime.provider !== "openrouter" && kind !== "amp" && isAuthenticationFailure(error)) events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
+  events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
   return events;
+}
+
+function appendHeadlessStateChanges({ events, kind, runner, runtime, previous, provider }) {
+  if (events.some((event) => event.type === "agent_settled")) runtime.bridgeTurnCompleted = true;
+  if ((!previous.initialized && runtime.initialized) || previous.sessionId !== runtime.sessionId || previous.model !== runtime.model) {
+    events.push(response(`_driver-${kind}-state`, "get_state", stateFor(runner, runtime, provider)));
+  }
+}
+
+function appendHeadlessAuthFailure({ events, kind, runtime, record }) {
+  const explicitError = record.type === "error" || record.type === "turn.failed" || record.is_error === true
+    ? record.error ?? record.message ?? record.result : null;
+  if (runtime.provider !== "openrouter" && kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
+    events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
+  }
+}
+
+function writeBridgeCommand(child, payload) {
+  if (!child?.stdin?.writable) return false;
+  child.stdin.write(`${JSON.stringify(payload)}\n`);
+  return true;
+}
+
+function sendHeadlessState({ runner, command, runtime, emit, provider }) {
+  emit(response(command.id, "get_state", stateFor(runner, runtime, provider)));
+  return true;
+}
+
+function sendHeadlessMessages({ command, runtime, emit }) {
+  emit(response(command.id, "get_messages", { messages: [...runtime.messages] }));
+  return true;
+}
+
+function canSelectHeadlessModel(runtime, provider, command) {
+  return command.provider === (runtime.provider ?? provider)
+    && typeof command.modelId === "string"
+    && runtime.availableModels?.some((model) => model.provider === (runtime.provider ?? provider) && model.id === command.modelId && !model.disabled);
+}
+
+function sendHeadlessSetModel({ command, runtime, emit, provider, label, id }) {
+  if (runtime.streaming) {
+    emit(response(command.id, "set_model", null, false, "Wait for the current turn before changing models"));
+    return true;
+  }
+  if (!canSelectHeadlessModel(runtime, provider, command)) {
+    emit(response(command.id, "set_model", null, false, `${label ?? id} requires a ${provider} model`));
+    return true;
+  }
+  runtime.selectedModel = command.modelId;
+  runtime.model = command.modelId;
+  emit(response(command.id, "set_model", {}));
+  return true;
+}
+
+function promptPayload({ text, generateSessionId, runtime, kind }) {
+  return {
+    type: "run",
+    prompt: text,
+    sessionId: generateSessionId || runtime.initialized ? runtime.sessionId : null,
+    resume: runtime.initialized,
+    steer: runtime.streaming,
+    model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model,
+  };
+}
+
+function sendHeadlessPrompt({ runner, child, command, runtime, emit, label, id, kind, generateSessionId, persistTranscript }) {
+  if (!child?.stdin?.writable) return false;
+  const text = String(command.message ?? "");
+  const message = { role: "user", content: text, timestamp: Date.now() };
+  if (!runtime.sessionName) runtime.sessionName = text.trim().split("\n")[0].slice(0, 80) || `${label ?? id} session`;
+  runtime.messages.push(message);
+  persistTranscript(runner, runtime);
+  const payload = promptPayload({ text, generateSessionId, runtime, kind });
+  runtime.streaming = true;
+  emit({ type: "message_start", message });
+  child.stdin.write(`${JSON.stringify(payload)}\n`);
+  emit(response(command.id, "prompt", {}));
+  return true;
+}
+
+function sendHeadlessAbort({ runner, child, command, runtime, emit, persistTranscript }) {
+  if (!writeBridgeCommand(child, { type: "abort" })) return false;
+  if (runtime.streaming) {
+    const completed = [];
+    finishStreamingMessage(runtime, completed, "aborted");
+    for (const event of completed) emit(event);
+    persistTranscript(runner, runtime);
+    runtime.streaming = false;
+    runtime.bridgeTurnCompleted = true;
+    emit({ type: "agent_end", willRetry: false });
+    emit({ type: "agent_settled" });
+  }
+  emit(response(command.id, "abort", {}));
+  return true;
+}
+
+function sendHeadlessSessionName({ runner, command, runtime, emit, persistTranscript }) {
+  runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName;
+  persistTranscript(runner, runtime);
+  emit(response(command.id, "set_session_name", {}));
+  return true;
 }
 
 export function createHeadlessDriver({
@@ -272,11 +491,7 @@ export function createHeadlessDriver({
   id = nonEmpty(id, "headless driver id");
   const executable = nonEmpty(bin, `${label ?? id} executable`);
   provider = nonEmpty(provider, `${label ?? id} provider`);
-  if (!["codex", "gemini", "amp", "antigravity"].includes(kind)) throw new TypeError(`unsupported headless bridge kind: ${kind}`);
-  if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) throw new TypeError(`${label ?? id} arguments must be strings`);
-  if (typeof spawnImpl !== "function") throw new TypeError(`${label ?? id} spawn implementation must be a function`);
-  if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError(`${label ?? id} environment must be an object`);
-  if (!bridgeOptions || typeof bridgeOptions !== "object" || Array.isArray(bridgeOptions)) throw new TypeError(`${label ?? id} bridge options must be an object`);
+  validateHeadlessOptions({ id, label, kind, extraArgs, spawnImpl, env, bridgeOptions });
 
   function persistTranscript(runner, runtime) {
     // Provisional IDs belong to the runner record only. Wait for the native
@@ -319,138 +534,55 @@ export function createHeadlessDriver({
       const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? randomUUID();
       const runtime = runtimeFor(runner, { sessionId: provisionalId, model: defaultModel, systemPrompt });
       runtime.cwd = cwd;
-      const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
       const route = resolveRoute();
       const nextProvider = route?.provider ?? provider;
-      if ((runtime.provider ?? provider) !== nextProvider) {
+      if (routeProviderChanged(runtime, nextProvider)) {
         runtime.selectedModel = null;
         runtime.model = null;
         runtime.availableModels = [];
       }
       runtime.provider = nextProvider;
-      if (kind === "codex" && runtime.initialized && !runtime.model) {
-        const home = bridgeOptions.codexHome || env.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), ".codex");
-        runtime.model = createCodexSessionModelReader(home, runtime.sessionId)();
-      }
-      const bridgeConfig = { ...(kind === "codex" && runtime.initialized ? { resumeSessionId: runtime.sessionId } : {}), kind, bin: executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, ...bridgeOptions, ...(route ? { provider: route.provider } : {}) };
+      maybeLoadCodexResumeModel({ kind, runtime, bridgeOptions, env });
+      const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
+      const bridgeConfig = bridgeConfigFor({ kind, executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, bridgeOptions, runtime, route });
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };
       const childProcess = spawnImpl(globalThis.process.execPath, [BRIDGE], { cwd, stdio: ["pipe", "pipe", "pipe"], env: environment });
       redactChildOutput(childProcess, [route?.env?.OPENROUTER_API_KEY]);
       return { process: childProcess, description: `${label ?? id} bridge (${executable})` };
     },
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     decodeLine(runner, line) {
-      let record;
-      try { record = JSON.parse(String(line)); } catch { return []; }
-      if (!record || typeof record !== "object" || Array.isArray(record)) return [];
+      const record = parseBridgeRecord(line);
+      if (!record) return [];
       const runtime = runtimeFor(runner, { model: defaultModel });
       if (record.type === "oyster.bridge.pong") return [];
-      if (record.type === "oyster.bridge.models") {
-        if (record.error) return [response(record.id, "get_available_models", null, false, record.error)];
-        runtime.availableModels = Array.isArray(record.models) ? record.models : [];
-        return [response(record.id, "get_available_models", { models: runtime.availableModels, selectionLabel: kind === "amp" ? "mode" : "model" })];
-      }
-      if (record.type === "oyster.bridge.turn_start") {
-        runtime.bridgeTurnCompleted = false;
-        runtime.streaming = true;
-        return [{ type: "agent_start" }];
-      }
-      if (record.type === "oyster.bridge.turn_exit") {
-        // A new prompt may already be queued while the previous native process
-        // drains after its result. Its exit must not settle that next prompt.
-        if (runtime.bridgeTurnCompleted) { runtime.bridgeTurnCompleted = false; return []; }
-        if (!runtime.streaming) return [];
-        runtime.streaming = false;
-        const error = record.error || (record.code !== 0 ? String(record.stderr || `${label ?? id} exited with code ${record.code}`).trim() : null);
-        const events = [];
-        finishStreamingMessage(runtime, events, error ? "error" : "stop");
-        persistTranscript(runner, runtime);
-        return [
-          ...events,
-          ...(error ? [{ type: "pi_error", error }] : []),
-          ...(error && runtime.provider !== "openrouter" && kind !== "amp" && isAuthenticationFailure(error) ? [{ type: "harness_auth_failed", reason: `${kind}_oauth` }] : []),
-          { type: "agent_end", willRetry: false }, { type: "agent_settled" },
-        ];
-      }
-      const previousSessionId = runtime.sessionId;
-      const previousModel = runtime.model;
-      const wasInitialized = runtime.initialized;
-      const events = kind === "codex" ? decodeCodex(runtime, record)
-        : kind === "gemini" ? decodeGemini(runtime, record)
-          : kind === "antigravity" ? antigravityEvents(runtime, record).flatMap((event) => decodeGemini(runtime, event, "antigravity", "antigravity-cli"))
-            : decodeAmp(runtime, record);
-      if (events.some((event) => event.type === "agent_settled")) runtime.bridgeTurnCompleted = true;
-      // Persist a native session identity as soon as the CLI announces it,
-      // rather than waiting for a possibly long-running first turn to settle.
-      if ((!wasInitialized && runtime.initialized) || previousSessionId !== runtime.sessionId || previousModel !== runtime.model) {
-        events.push(response(`_driver-${kind}-state`, "get_state", stateFor(runner, runtime, provider)));
-      }
-      const explicitError = record.type === "error" || record.type === "turn.failed" || record.is_error === true
-        ? record.error ?? record.message ?? record.result : null;
-      if (runtime.provider !== "openrouter" && kind !== "amp" && explicitError && isAuthenticationFailure(explicitError)) {
-        events.push({ type: "harness_auth_failed", reason: `${kind}_oauth` });
-      }
+      if (record.type === "oyster.bridge.models") return modelResponseEvents(runtime, record, kind);
+      if (record.type === "oyster.bridge.turn_start") return turnStartEvents(runtime);
+      if (record.type === "oyster.bridge.turn_exit") return turnExitEvents({ runner, runtime, record, kind, label, id, persistTranscript });
+      const previous = { sessionId: runtime.sessionId, model: runtime.model, initialized: runtime.initialized };
+      const events = decodeHeadlessRecord({ kind, runtime, record });
+      appendHeadlessStateChanges({ events, kind, runner, runtime, previous, provider });
+      appendHeadlessAuthFailure({ events, kind, runtime, record });
       persistTranscript(runner, runtime);
       return events;
     },
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     sendCommand(runner, child, command) {
       const runtime = runtimeFor(runner, { model: defaultModel });
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));
-      if (command.type === "get_state") { emit(response(command.id, "get_state", stateFor(runner, runtime, provider))); return true; }
-      if (command.type === "get_messages") { emit(response(command.id, "get_messages", { messages: [...runtime.messages] })); return true; }
-      if (command.type === "health_probe") {
-        if (!child?.stdin?.writable) return false;
-        child.stdin.write(`${JSON.stringify({ type: "health", id: command.id })}\n`);
-        return true;
-      }
-      if (command.type === "get_available_models") {
-        if (!child?.stdin?.writable) return false;
-        child.stdin.write(`${JSON.stringify({ type: "models", id: command.id })}\n`);
-        return true;
-      }
-      if (command.type === "set_model") {
-        if (runtime.streaming) { emit(response(command.id, "set_model", null, false, "Wait for the current turn before changing models")); return true; }
-        if (command.provider !== (runtime.provider ?? provider) || typeof command.modelId !== "string" || !runtime.availableModels?.some((model) => model.provider === (runtime.provider ?? provider) && model.id === command.modelId && !model.disabled)) {
-          emit(response(command.id, "set_model", null, false, `${label ?? id} requires a ${provider} model`)); return true;
-        }
-        runtime.selectedModel = command.modelId;
-        runtime.model = command.modelId;
-        emit(response(command.id, "set_model", {}));
-        return true;
-      }
-      if (command.type === "prompt") {
-        if (!child?.stdin?.writable) return false;
-        const text = String(command.message ?? "");
-        const message = { role: "user", content: text, timestamp: Date.now() };
-        if (!runtime.sessionName) runtime.sessionName = text.trim().split("\n")[0].slice(0, 80) || `${label ?? id} session`;
-        runtime.messages.push(message);
-        persistTranscript(runner, runtime);
-        const steer = runtime.streaming;
-        runtime.streaming = true;
-        emit({ type: "message_start", message });
-        child.stdin.write(`${JSON.stringify({ type: "run", prompt: text, sessionId: generateSessionId || runtime.initialized ? runtime.sessionId : null, resume: runtime.initialized, steer, model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model })}\n`);
-        emit(response(command.id, "prompt", {}));
-        return true;
-      }
-      if (command.type === "abort") {
-        if (!child?.stdin?.writable) return false;
-        child.stdin.write(`${JSON.stringify({ type: "abort" })}\n`);
-        if (runtime.streaming) {
-          const completed = [];
-          finishStreamingMessage(runtime, completed, "aborted");
-          for (const event of completed) emit(event);
-          persistTranscript(runner, runtime);
-          runtime.streaming = false;
-          runtime.bridgeTurnCompleted = true;
-          emit({ type: "agent_end", willRetry: false }); emit({ type: "agent_settled" });
-        }
-        emit(response(command.id, "abort", {}));
-        return true;
-      }
-      if (command.type === "set_session_name") { runtime.sessionName = typeof command.name === "string" ? command.name : runtime.sessionName; persistTranscript(runner, runtime); emit(response(command.id, "set_session_name", {})); return true; }
+      const context = { runner, child, command, runtime, emit, provider, label, id, kind, generateSessionId, persistTranscript };
+      const handlers = {
+        get_state: () => sendHeadlessState(context),
+        get_messages: () => sendHeadlessMessages(context),
+        health_probe: () => writeBridgeCommand(child, { type: "health", id: command.id }),
+        get_available_models: () => writeBridgeCommand(child, { type: "models", id: command.id }),
+        set_model: () => sendHeadlessSetModel(context),
+        prompt: () => sendHeadlessPrompt(context),
+        abort: () => sendHeadlessAbort(context),
+        set_session_name: () => sendHeadlessSessionName(context),
+      };
+      const handler = handlers[command.type];
+      if (handler) return handler();
       emit(response(command.id, command.type, null, false, `${command.type} is not supported by ${label ?? id}`));
       return true;
     },

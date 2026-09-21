@@ -153,29 +153,28 @@ export function labelOf(message) {
 }
 
 /** Pull searchable text blocks out of one entry. */
-function entryTexts(e) {
-  const out = [];
-  if (e.type === "message") {
-    const m = e.message ?? {};
-    const c = m.content;
-    if (typeof c === "string") out.push({ role: m.role, kind: "text", text: c });
-    else if (Array.isArray(c)) {
-      for (const b of c) {
-        if (!b || typeof b !== "object") continue;
-        if (b.type === "text" && typeof b.text === "string" && b.text) out.push({ role: m.role, kind: "text", text: b.text });
-        else if (b.type === "thinking" && typeof b.thinking === "string" && b.thinking) out.push({ role: m.role, kind: "thinking", text: b.thinking });
-        else if (b.type === "toolCall") {
-          let argumentsText;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-          try { argumentsText = JSON.stringify(b.arguments ?? {}) ?? "{}"; } catch { argumentsText = "[unserializable arguments]"; }
-          out.push({ role: m.role, kind: "toolCall", text: `${b.name ?? "?"} ${argumentsText}` });
-        }
-      }
-    }
-  } else if (e.type === "session_info" && e.name) {
-    out.push({ role: "meta", kind: "name", text: e.name });
-  }
-  return out;
+function toolArgumentsText(block) {
+  try { return JSON.stringify(block.arguments ?? {}) ?? "{}"; }
+  catch { return "[unserializable arguments]"; }
+}
+
+function entryTextBlock(block, role) {
+  if (!block || typeof block !== "object") return null;
+  if (block.type === "text" && typeof block.text === "string" && block.text) return { role, kind: "text", text: block.text };
+  if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) return { role, kind: "thinking", text: block.thinking };
+  return block.type === "toolCall" ? { role, kind: "toolCall", text: `${block.name ?? "?"} ${toolArgumentsText(block)}` } : null;
+}
+
+function messageEntryTexts(entry) {
+  const message = entry.message ?? {};
+  const content = message.content;
+  if (typeof content === "string") return [{ role: message.role, kind: "text", text: content }];
+  return Array.isArray(content) ? content.map((block) => entryTextBlock(block, message.role)).filter(Boolean) : [];
+}
+
+function entryTexts(entry) {
+  if (entry.type === "message") return messageEntryTexts(entry);
+  return entry.type === "session_info" && entry.name ? [{ role: "meta", kind: "name", text: entry.name }] : [];
 }
 
 // ---------------------------------------------------------------- summaries & listing
@@ -279,19 +278,16 @@ function makeSnippet(text, idx, qLen, ctx = 70) {
   };
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
+function normalizedSearchQuery(query) {
   const parsedQuery = Array.isArray(query) ? { terms: query, operator: "AND" }
     : query && typeof query === "object" ? query : parseSearchQuery(query);
-  const terms = Array.isArray(parsedQuery.terms)
-    ? parsedQuery.terms.filter((term) => typeof term === "string" && term)
-    : [];
-  const operator = parsedQuery.operator === "OR" ? "OR" : "AND";
-  const hitLimit = Number.isSafeInteger(maxHitsPerFile) && maxHitsPerFile > 0 ? maxHitsPerFile : 0;
-  if (!terms.length || !hitLimit) return [];
-  let parsed;
-  try { parsed = parseSessionFile(path); } catch { return []; }
-  const { header, name, entries, byId } = parsed;
+  return {
+    terms: Array.isArray(parsedQuery.terms) ? parsedQuery.terms.filter((term) => typeof term === "string" && term) : [],
+    operator: parsedQuery.operator === "OR" ? "OR" : "AND",
+  };
+}
+
+function activeSessionEntries(entries, byId) {
   let leafId = null;
   for (const entry of entries) if (typeof entry.id === "string" && entry.id) leafId = entry.id;
   const activeEntries = [];
@@ -300,33 +296,41 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
     seen.add(entry.id);
     activeEntries.push(entry);
   }
-  activeEntries.reverse();
-  const activeIds = new Set(activeEntries.map((entry) => entry.id));
+  return activeEntries.reverse();
+}
+
+function isDefaultSearchText(part) {
+  return part.kind === "name" || (part.kind === "text" && (part.role === "user" || part.role === "assistant"));
+}
+
+function searchEntry(entry, { terms, operator, includeTools, meta }) {
+  const hits = [];
+  for (const part of entryTexts(entry)) {
+    if (!meta.preview && part.role === "user" && part.kind === "text") meta.preview = part.text.slice(0, 120);
+    if (!includeTools && !isDefaultSearchText(part)) continue;
+    const match = matchSearchText(part.text, terms, operator);
+    if (!match) continue;
+    hits.push({ entryId: entry.id ?? null, role: part.role ?? null, kind: part.kind, timestamp: entry.timestamp ?? null, snippet: makeSnippet(part.text, match.index, match.length) });
+  }
+  return hits;
+}
+
+export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools = false) {
+  const { terms, operator } = normalizedSearchQuery(query);
+  const hitLimit = Number.isSafeInteger(maxHitsPerFile) && maxHitsPerFile > 0 ? maxHitsPerFile : 0;
+  if (!terms.length || !hitLimit) return [];
+  let parsed;
+  try { parsed = parseSessionFile(path); } catch { return []; }
+  const { header, name, entries, byId } = parsed;
+  const activeIds = new Set(activeSessionEntries(entries, byId).map((entry) => entry.id));
   const searchableEntries = entries.filter((entry) => entry.type === "session_info" || activeIds.has(entry.id));
   const meta = { id: header?.id ?? null, name, preview: null, cwd: header?.cwd ?? null, harness: "pi" };
   const hits = [];
-  outer: for (const e of searchableEntries) {
-    for (const t of entryTexts(e)) {
-      if (!meta.preview && t.role === "user" && t.kind === "text") meta.preview = t.text.slice(0, 120);
-      // default: only real text responses (user/assistant) and session
-      // names; tool calls, tool RESULTS (role toolResult, kind text) and
-      // thinking blocks are opt-in
-      const isTextResponse = t.kind === "name" ||
-        (t.kind === "text" && (t.role === "user" || t.role === "assistant"));
-      if (!includeTools && !isTextResponse) continue;
-      const match = matchSearchText(t.text, terms, operator);
-      if (!match) continue;
-      hits.push({
-        entryId: e.id ?? null,
-        role: t.role ?? null,
-        kind: t.kind,
-        timestamp: e.timestamp ?? null,
-        snippet: makeSnippet(t.text, match.index, match.length),
-      });
-      if (hits.length >= hitLimit) break outer;
-    }
+  for (const entry of searchableEntries) {
+    hits.push(...searchEntry(entry, { terms, operator, includeTools, meta }).slice(0, hitLimit - hits.length));
+    if (hits.length >= hitLimit) break;
   }
-  return hits.map((h) => ({ ...h, sessionMeta: meta }));
+  return hits.map((hit) => ({ ...hit, sessionMeta: meta }));
 }
 
 /**

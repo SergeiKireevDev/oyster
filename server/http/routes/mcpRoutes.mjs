@@ -74,6 +74,65 @@ function describeRoutine(r) {
   return `${r.name}: ${bits.join(" ")}`;
 }
 
+async function createMonitorWidget({ params, scope, api, text: renderText, workdir, sessionId }) {
+  if (!params.label?.trim()) throw new Error("'monitor' requires a label");
+  if (!params.preview_script || !params.content_script) throw new Error("'monitor' requires preview_script and content_script");
+  const { widget } = await api("POST", "/pinned-widgets", {
+    label: params.label,
+    previewScript: params.preview_script,
+    contentScript: params.content_script,
+    cwd: resolve(workdir, params.cwd ?? "."),
+    format: params.format ?? "text",
+    groupId: params.group_id,
+    sessionId,
+    scope,
+  });
+  return renderText(`Created monitoring widget ${widget.label} (id=${widget.id}). Its permanent scripts are stored in ${widget.scriptDirectory}.`, widget);
+}
+
+async function pinWidget({ params, scope, api, text: renderText, workdir, sessionId }) {
+  if (!!params.path === !!params.url) throw new Error("'pin' requires exactly one of path or url");
+  const { widget } = await api("POST", "/pinned-widgets", {
+    ...(params.path ? { path: resolve(workdir, params.path) } : { url: params.url }),
+    label: params.label,
+    groupId: params.group_id,
+    sessionId,
+    scope,
+  });
+  return renderText(`Pinned ${widget.kind}: ${widget.label} (id=${widget.id}). It is private and opens in Oyster's native artifact display.`, widget);
+}
+
+async function unpinWidget({ params, api, text: renderText }) {
+  if (!params.id) throw new Error("'unpin' requires id");
+  await api("DELETE", `/pinned-widgets?id=${encodeURIComponent(params.id)}`);
+  return renderText(`Unpinned widget ${params.id}. The underlying artifact was not changed.`, { id: params.id });
+}
+
+async function createWidgetGroup({ params, scope, api, text: renderText, sessionId }) {
+  if (!params.group?.trim()) throw new Error("'group' requires a name");
+  const { group } = await api("POST", "/pinned-widget-groups", { name: params.group, sessionId, scope });
+  return renderText(`Created widget group ${group.name} (id=${group.id}).`, group);
+}
+
+async function moveWidget({ params, api, text: renderText, sessionId }) {
+  if (!params.id) throw new Error("'move' requires id");
+  const { widget } = await api("PATCH", "/pinned-widgets", { id: params.id, groupId: params.group_id ?? null, beforeId: params.before_id ?? null, sessionId });
+  return renderText(`Moved ${widget.label}${widget.groupId ? ` into group ${widget.groupId}` : " to the top level"}.`, widget);
+}
+
+async function listPinnedWidgets({ scope, api, text: renderText, sessionId }) {
+  const query = new URLSearchParams({ scope });
+  if (sessionId) query.set("sessionId", sessionId);
+  const data = await api("GET", `/pinned-widgets?${query}`);
+  const all = data.widgets ?? [];
+  const widgets = all.slice(0, 100);
+  const groups = data.groups ?? [];
+  const lines = widgets.map((widget) =>
+    `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${widget.groupId ? ` group=${widget.groupId}` : ""} status=${widget.availability}`);
+  if (all.length > widgets.length) lines.push(`… ${all.length - widgets.length} more widgets omitted`);
+  return renderText(lines.length ? `Pinned Widgets (${groups.length} groups):\n${lines.join("\n")}` : "No pinned widgets.", { widgets, groups, total: all.length });
+}
+
 import { progressionWarnings } from "../../routine-progress-policy.mjs";
 
 /**
@@ -183,6 +242,19 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
     return text(lines.length ? `Hublots for this session:\n${lines.join("\n")}` : "No hublots open for this session.", { tunnels: mine });
   });
 
+  async function runPinnedWidgetTool(params) {
+    const scope = params.scope ?? "session";
+    const actions = {
+      monitor: () => createMonitorWidget({ params, scope, api, text, workdir, sessionId }),
+      pin: () => pinWidget({ params, scope, api, text, workdir, sessionId }),
+      unpin: () => unpinWidget({ params, api, text }),
+      group: () => createWidgetGroup({ params, scope, api, text, sessionId }),
+      move: () => moveWidget({ params, api, text, sessionId }),
+      list: () => listPinnedWidgets({ scope, api, text, sessionId }),
+    };
+    return actions[params.action]();
+  }
+
   server.registerTool("pinned_widget", {
     title: "Pinned Widget",
     description:
@@ -206,66 +278,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       before_id: z.string().optional().describe("For move: place the widget before this sibling id"),
       scope: z.enum(["session", "workspace"]).optional().describe("Pin scope; defaults to the current session"),
     },
-  // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-  }, async (params) => {
-    const scope = params.scope ?? "session";
-    if (params.action === "monitor") {
-      if (!params.label?.trim()) throw new Error("'monitor' requires a label");
-      if (!params.preview_script || !params.content_script) throw new Error("'monitor' requires preview_script and content_script");
-      const { widget } = await api("POST", "/pinned-widgets", {
-        label: params.label,
-        previewScript: params.preview_script,
-        contentScript: params.content_script,
-        cwd: resolve(workdir, params.cwd ?? "."),
-        format: params.format ?? "text",
-        groupId: params.group_id,
-        sessionId,
-        scope,
-      });
-      return text(`Created monitoring widget ${widget.label} (id=${widget.id}). Its permanent scripts are stored in ${widget.scriptDirectory}.`, widget);
-    }
-    if (params.action === "pin") {
-      if (!!params.path === !!params.url) throw new Error("'pin' requires exactly one of path or url");
-      const { widget } = await api("POST", "/pinned-widgets", {
-        ...(params.path ? { path: resolve(workdir, params.path) } : { url: params.url }),
-        label: params.label,
-        groupId: params.group_id,
-        sessionId,
-        scope,
-      });
-      return text(`Pinned ${widget.kind}: ${widget.label} (id=${widget.id}). It is private and opens in Oyster's native artifact display.`, widget);
-    }
-    if (params.action === "unpin") {
-      if (!params.id) throw new Error("'unpin' requires id");
-      await api("DELETE", `/pinned-widgets?id=${encodeURIComponent(params.id)}`);
-      return text(`Unpinned widget ${params.id}. The underlying artifact was not changed.`, { id: params.id });
-    }
-    if (params.action === "group") {
-      if (!params.group?.trim()) throw new Error("'group' requires a name");
-      const { group } = await api("POST", "/pinned-widget-groups", { name: params.group, sessionId, scope });
-      return text(`Created widget group ${group.name} (id=${group.id}).`, group);
-    }
-    if (params.action === "move") {
-      if (!params.id) throw new Error("'move' requires id");
-      const { widget } = await api("PATCH", "/pinned-widgets", {
-        id: params.id,
-        groupId: params.group_id ?? null,
-        beforeId: params.before_id ?? null,
-        sessionId,
-      });
-      return text(`Moved ${widget.label}${widget.groupId ? ` into group ${widget.groupId}` : " to the top level"}.`, widget);
-    }
-    const query = new URLSearchParams({ scope: "session" });
-    if (sessionId) query.set("sessionId", sessionId);
-    const data = await api("GET", `/pinned-widgets?${query}`);
-    const all = data.widgets ?? [];
-    const widgets = all.slice(0, 100);
-    const groups = data.groups ?? [];
-    const lines = widgets.map((widget) =>
-      `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${widget.groupId ? ` group=${widget.groupId}` : ""} status=${widget.availability}`);
-    if (all.length > widgets.length) lines.push(`… ${all.length - widgets.length} more widgets omitted`);
-    return text(lines.length ? `Pinned Widgets (${groups.length} groups):\n${lines.join("\n")}` : "No pinned widgets.", { widgets, groups, total: all.length });
-  });
+  }, runPinnedWidgetTool);
 
   server.registerTool("group_pinned_widgets", {
     title: "Group Pinned Widgets",

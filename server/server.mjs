@@ -122,64 +122,60 @@ function detectExecutable(value) {
   catch { return null; }
 }
 
-// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
-function validateConfig(config) {
-  const currentNode = process.versions.node.split(".").map(Number);
-  const supportedNode = MIN_NODE_VERSION.every((part, index) =>
+function nodeVersionSupported(currentNode) {
+  return MIN_NODE_VERSION.every((part, index) =>
     currentNode[index] === part || currentNode[index] > part || currentNode.slice(0, index).some((value, prior) => value > MIN_NODE_VERSION[prior]));
-  if (!supportedNode) {
-    throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
-  }
-  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) {
-    throw new Error("PORT/--port must be an integer from 0 to 65535");
-  }
-  if (typeof config.HOST !== "string" || config.HOST.trim() === "") {
-    throw new Error("HOST/--host must not be empty");
-  }
+}
+
+function validateConfiguredWorkdir(config) {
   try {
     if (!statSync(config.PI_DIR).isDirectory()) throw new Error("not a directory");
     accessSync(config.PI_DIR, constants.R_OK | constants.X_OK);
   } catch (error) {
     throw new Error(`PI_DIR/--dir must be an accessible directory: ${config.PI_DIR} (${error.message})`);
   }
-  if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
-    throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
-  }
-  const configuredSessionDir = config.PI_EXTRA_ARGS.indexOf("--session-dir");
-  if (configuredSessionDir >= 0 && !config.PI_EXTRA_ARGS[configuredSessionDir + 1]) {
-    throw new Error("--session-dir in PI_ARGS/--pi-args requires a directory");
-  }
-  if (!config.OYSTER_DB_PATH.endsWith(".sqlite")) {
-    throw new Error(`OYSTER_DB_PATH must name a .sqlite file: ${config.OYSTER_DB_PATH}`);
-  }
-  if (config.SQLITE_PATH && config.OYSTER_DB_PATH === config.SQLITE_PATH) {
-    throw new Error("OYSTER_DB_PATH must be separate from the coding-agent sessions database");
-  }
-  if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) {
-    throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
-  }
-  if (!new Set(["read-only", "workspace-write", "danger-full-access"]).has(config.CODEX_SANDBOX)) {
-    throw new Error(`Invalid CODEX_SANDBOX value "${config.CODEX_SANDBOX}"`);
-  }
-  if (!new Set(["default", "auto_edit", "yolo", "plan"]).has(config.GEMINI_APPROVAL_MODE)) {
-    throw new Error(`Invalid GEMINI_APPROVAL_MODE value "${config.GEMINI_APPROVAL_MODE}"`);
-  }
-  try {
-    accessSync(config.PI_BIN, constants.X_OK);
-  } catch {
-    throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Initialize and build the pi submodule or set PI_BIN/--pi explicitly.`);
-  }
+}
+
+function validateExecutable(label, executable) {
+  if (!executable) return;
+  try { accessSync(executable, constants.X_OK); }
+  catch { throw new Error(`${label} executable is missing or not executable: ${executable}`); }
+}
+
+function validatePiExecutable(config) {
+  try { accessSync(config.PI_BIN, constants.X_OK); }
+  catch { throw new Error(`pi executable is missing or not executable: ${config.PI_BIN}. Initialize and build the pi submodule or set PI_BIN/--pi explicitly.`); }
+}
+
+function validateHarnessExecutables(config) {
   for (const [label, executable] of [
     ["Claude Code", config.CLAUDE_CODE_BIN],
     ["Codex", config.CODEX_BIN],
     ["Gemini CLI", config.GEMINI_BIN],
     ["Antigravity CLI", config.ANTIGRAVITY_BIN],
     ["Amp", config.AMP_BIN],
-  ]) {
-    if (!executable) continue;
-    try { accessSync(executable, constants.X_OK); }
-    catch { throw new Error(`${label} executable is missing or not executable: ${executable}`); }
+  ]) validateExecutable(label, executable);
+}
+
+function validateConfig(config) {
+  if (!nodeVersionSupported(process.versions.node.split(".").map(Number))) {
+    throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
+  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) throw new Error("PORT/--port must be an integer from 0 to 65535");
+  if (typeof config.HOST !== "string" || config.HOST.trim() === "") throw new Error("HOST/--host must not be empty");
+  validateConfiguredWorkdir(config);
+  if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
+    throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
+  }
+  const configuredSessionDir = config.PI_EXTRA_ARGS.indexOf("--session-dir");
+  if (configuredSessionDir >= 0 && !config.PI_EXTRA_ARGS[configuredSessionDir + 1]) throw new Error("--session-dir in PI_ARGS/--pi-args requires a directory");
+  if (!config.OYSTER_DB_PATH.endsWith(".sqlite")) throw new Error(`OYSTER_DB_PATH must name a .sqlite file: ${config.OYSTER_DB_PATH}`);
+  if (config.SQLITE_PATH && config.OYSTER_DB_PATH === config.SQLITE_PATH) throw new Error("OYSTER_DB_PATH must be separate from the coding-agent sessions database");
+  if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
+  if (!new Set(["read-only", "workspace-write", "danger-full-access"]).has(config.CODEX_SANDBOX)) throw new Error(`Invalid CODEX_SANDBOX value "${config.CODEX_SANDBOX}"`);
+  if (!new Set(["default", "auto_edit", "yolo", "plan"]).has(config.GEMINI_APPROVAL_MODE)) throw new Error(`Invalid GEMINI_APPROVAL_MODE value "${config.GEMINI_APPROVAL_MODE}"`);
+  validatePiExecutable(config);
+  validateHarnessExecutables(config);
   validateLocalPiBuild(config.PI_BIN, DEFAULT_LOCAL_PI);
 }
 

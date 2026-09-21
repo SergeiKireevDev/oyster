@@ -6,6 +6,38 @@ import { LEGACY_ROUTINES_DIR, importLegacyRoutines } from "./routineImporter.mjs
 import { runLegacyMigration } from "./legacyMigration.mjs";
 import { retainLegacyFileAsReadOnlyBackup } from "./legacyBackup.mjs";
 
+function migrationCounts(report, apply) {
+  return {
+    sourceCount: report.sourceCount,
+    destinationCount: report.existingCount + (apply ? report.importedCount : 0),
+  };
+}
+
+function legacyRoutineConflict(report) {
+  return report.orphanBindingCount ? {
+    key: "bindings.json",
+    reason: `${report.orphanBindingCount} binding(s) have no executable routine definition`,
+  } : null;
+}
+
+async function validateLegacyRoutineCandidates({ candidates, appStore, resolveOwner }) {
+  for (const candidate of candidates) {
+    const stored = await appStore.repositories.routines.findByName(candidate.name);
+    const expectedOwner = candidate.binding.sessionId ? await resolveOwner(candidate.binding.sessionId) : null;
+    const matches = stored && stored.script === candidate.script
+      && (stored.cwd ?? null) === (candidate.binding.cwd ?? null)
+      && (stored.session_id ?? null) === (candidate.binding.sessionId ?? null)
+      && (stored.owner_id ?? null) === (expectedOwner?.id ?? null);
+    if (!matches) throw new Error(`routine validation failed for ${candidate.name}`);
+  }
+}
+
+function addValidatedRoutineSources({ candidates, routineBindingsPath, routineSourceDir, validatedSourcePaths }) {
+  for (const candidate of candidates) validatedSourcePaths.add(candidate.sourcePath);
+  const bindingsPath = routineBindingsPath ?? join(routineSourceDir ?? LEGACY_ROUTINES_DIR, "bindings.json");
+  if (existsSync(bindingsPath)) validatedSourcePaths.add(bindingsPath);
+}
+
 /** Import every supported legacy source under one stopped-service migration ledger entry. */
 export async function importLegacyAppData({
   appStore,
@@ -72,7 +104,6 @@ export async function importLegacyAppData({
           conflicts,
         };
       },
-      // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
       routines: async () => {
         const conflicts = [];
         const candidates = [];
@@ -86,28 +117,12 @@ export async function importLegacyAppData({
           onConflict: (conflict) => conflicts.push(conflict),
           onCandidate: (candidate) => candidates.push(candidate),
         });
-        if (apply) for (const candidate of candidates) {
-          const stored = await appStore.repositories.routines.findByName(candidate.name);
-          const expectedOwner = candidate.binding.sessionId ? await resolveOwner(candidate.binding.sessionId) : null;
-          if (!stored || stored.script !== candidate.script || (stored.cwd ?? null) !== (candidate.binding.cwd ?? null)
-            || (stored.session_id ?? null) !== (candidate.binding.sessionId ?? null)
-            || (stored.owner_id ?? null) !== (expectedOwner?.id ?? null)) {
-            throw new Error(`routine validation failed for ${candidate.name}`);
-          }
-        }
-        for (const candidate of candidates) validatedSourcePaths.add(candidate.sourcePath);
-        const bindingsPath = routineBindingsPath ?? join(routineSourceDir ?? LEGACY_ROUTINES_DIR, "bindings.json");
-        if (existsSync(bindingsPath)) validatedSourcePaths.add(bindingsPath);
-        if (report.orphanBindingCount) conflicts.push({
-          key: "bindings.json",
-          reason: `${report.orphanBindingCount} binding(s) have no executable routine definition`,
-        });
+        if (apply) await validateLegacyRoutineCandidates({ candidates, appStore, resolveOwner });
+        addValidatedRoutineSources({ candidates, routineBindingsPath, routineSourceDir, validatedSourcePaths });
+        const orphanConflict = legacyRoutineConflict(report);
+        if (orphanConflict) conflicts.push(orphanConflict);
         retainValidatedSources();
-        return {
-          sourceCount: report.sourceCount,
-          destinationCount: report.existingCount + (apply ? report.importedCount : 0),
-          conflicts,
-        };
+        return { ...migrationCounts(report, apply), conflicts };
       },
     },
   });
